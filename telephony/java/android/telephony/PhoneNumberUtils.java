@@ -25,13 +25,12 @@ import android.annotation.IntDef;
 import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
-import android.content.res.Resources;
 import android.database.Cursor;
 import android.location.Country;
 import android.location.CountryDetector;
 import android.net.Uri;
-import android.os.SystemProperties;
 import android.os.PersistableBundle;
+import android.os.SystemProperties;
 import android.provider.Contacts;
 import android.provider.ContactsContract;
 import android.telecom.PhoneAccount;
@@ -1740,7 +1739,7 @@ public class PhoneNumberUtils {
      * @return true if the number is in the list of emergency numbers
      *         listed in the RIL / SIM, otherwise return false.
      *
-     * @deprecated Please use {@link TelephonyManager#isCurrentEmergencyNumber(String)} instead.
+     * @deprecated Please use {@link TelephonyManager#isEmergencyNumber(String)} instead.
      */
     @Deprecated
     public static boolean isEmergencyNumber(String number) {
@@ -1756,7 +1755,7 @@ public class PhoneNumberUtils {
      * @return true if the number is in the list of emergency numbers
      *         listed in the RIL / SIM, otherwise return false.
      *
-     * @deprecated Please use {@link TelephonyManager#isCurrentEmergencyNumber(String)}
+     * @deprecated Please use {@link TelephonyManager#isEmergencyNumber(String)}
      *             instead.
      *
      * @hide
@@ -1787,7 +1786,7 @@ public class PhoneNumberUtils {
      *         listed in the RIL / SIM, *or* if the number starts with the
      *         same digits as any of those emergency numbers.
      *
-     * @deprecated Please use {@link TelephonyManager#isCurrentPotentialEmergencyNumber(String)}
+     * @deprecated Please use {@link TelephonyManager#isPotentialEmergencyNumber(String)}
      *             instead.
      *
      * @hide
@@ -1816,7 +1815,7 @@ public class PhoneNumberUtils {
      *         listed in the RIL / SIM, *or* if the number starts with the
      *         same digits as any of those emergency numbers.
      *
-     * @deprecated Please use {@link TelephonyManager#isCurrentPotentialEmergencyNumber(String)}
+     * @deprecated Please use {@link TelephonyManager#isPotentialEmergencyNumber(String)}
      *             instead.
      *
      * @hide
@@ -1885,7 +1884,7 @@ public class PhoneNumberUtils {
      * @return if the number is an emergency number for the specific country, then return true,
      * otherwise false
      *
-     * @deprecated Please use {@link TelephonyManager#isCurrentEmergencyNumber(String)}
+     * @deprecated Please use {@link TelephonyManager#isEmergencyNumber(String)}
      *             instead.
      *
      * @hide
@@ -1905,7 +1904,7 @@ public class PhoneNumberUtils {
      * @return if the number is an emergency number for the specific country, then return true,
      * otherwise false
      *
-     * @deprecated Please use {@link TelephonyManager#isCurrentEmergencyNumber(String)}
+     * @deprecated Please use {@link TelephonyManager#isEmergencyNumber(String)}
      *             instead.
      *
      * @hide
@@ -1936,7 +1935,7 @@ public class PhoneNumberUtils {
      *         country, *or* if the number starts with the same digits as
      *         any of those emergency numbers.
      *
-     * @deprecated Please use {@link TelephonyManager#isCurrentPotentialEmergencyNumber(String)}
+     * @deprecated Please use {@link TelephonyManager#isPotentialEmergencyNumber(String)}
      *             instead.
      *
      * @hide
@@ -1966,7 +1965,7 @@ public class PhoneNumberUtils {
      *         country, *or* if the number starts with the same digits as
      *         any of those emergency numbers.
      *
-     * @deprecated Please use {@link TelephonyManager#isCurrentPotentialEmergencyNumber(String)}
+     * @deprecated Please use {@link TelephonyManager#isPotentialEmergencyNumber(String)}
      *             instead.
      *
      * @hide
@@ -2019,7 +2018,16 @@ public class PhoneNumberUtils {
     private static boolean isEmergencyNumberInternal(int subId, String number,
                                                      String defaultCountryIso,
                                                      boolean useExactMatch) {
-        return TelephonyManager.getDefault().isCurrentEmergencyNumber(number);
+        try {
+            if (useExactMatch) {
+                return TelephonyManager.getDefault().isEmergencyNumber(number);
+            } else {
+                return TelephonyManager.getDefault().isPotentialEmergencyNumber(number);
+            }
+        } catch (RuntimeException ex) {
+            Rlog.e(LOG_TAG, "isEmergencyNumberInternal: RuntimeException: " + ex);
+        }
+        return false;
     }
 
     /**
@@ -2030,7 +2038,7 @@ public class PhoneNumberUtils {
      * @return true if the specified number is an emergency number for the country the user
      * is currently in.
      *
-     * @deprecated Please use {@link TelephonyManager#isCurrentEmergencyNumber(String)}
+     * @deprecated Please use {@link TelephonyManager#isEmergencyNumber(String)}
      *             instead.
      */
     @Deprecated
@@ -2047,7 +2055,7 @@ public class PhoneNumberUtils {
      * @return true if the specified number is an emergency number for the country the user
      * is currently in.
      *
-     * @deprecated Please use {@link TelephonyManager#isCurrentEmergencyNumber(String)}
+     * @deprecated Please use {@link TelephonyManager#isEmergencyNumber(String)}
      *             instead.
      *
      * @hide
@@ -2081,7 +2089,7 @@ public class PhoneNumberUtils {
      *
      * @see android.location.CountryDetector
      *
-     * @deprecated Please use {@link TelephonyManager#isCurrentPotentialEmergencyNumber(String)}
+     * @deprecated Please use {@link TelephonyManager#isPotentialEmergencyNumber(String)}
      *             instead.
      *
      * @hide
@@ -2112,7 +2120,7 @@ public class PhoneNumberUtils {
      * @return true if the specified number is an emergency number for a local country, based on the
      *              CountryDetector.
      *
-     * @deprecated Please use {@link TelephonyManager#isCurrentPotentialEmergencyNumber(String)}
+     * @deprecated Please use {@link TelephonyManager#isPotentialEmergencyNumber(String)}
      *             instead.
      *
      * @hide

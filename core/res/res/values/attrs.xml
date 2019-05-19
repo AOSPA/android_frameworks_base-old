@@ -2091,6 +2091,38 @@
              Corresponds to {@link android.view.Window#setNavigationBarDividerColor(int)}. -->
         <attr name="navigationBarDividerColor" format="color" />
 
+        <!-- Sets whether the system should ensure that the status bar has enough
+             contrast when a fully transparent background is requested.
+
+             <p>If set to this value, the system will determine whether a scrim is necessary
+             to ensure that the status bar has enough contrast with the contents of
+             this app, and set an appropriate effective bar background color accordingly.
+
+             <p>When the status bar color has a non-zero alpha value, the value of this
+             attribute has no effect.
+
+             <p>If the app does not target at least {@link android.os.Build.VERSION_CODES#Q Q},
+             this attribute is ignored.
+
+             @see android.view.Window#setStatusBarContrastEnforced -->
+        <attr name="enforceStatusBarContrast" format="boolean" />
+
+        <!-- Sets whether the system should ensure that the navigation bar has enough
+             contrast when a fully transparent background is requested.
+
+             <p>If set to this value, the system will determine whether a scrim is necessary
+             to ensure that the navigation bar has enough contrast with the contents of
+             this app, and set an appropriate effective bar background color accordingly.
+
+             <p>When the navigation bar color has a non-zero alpha value, the value of this
+             attribute has no effect.
+
+             <p>If the app does not target at least {@link android.os.Build.VERSION_CODES#Q Q},
+             this attribute is ignored.
+
+             @see android.view.Window#setNavigationBarContrastEnforced -->
+        <attr name="enforceNavigationBarContrast" format="boolean" />
+
         <!-- The duration, in milliseconds, of the window background fade duration
              when transitioning into or away from an Activity when called with an
              Activity Transition. Corresponds to
@@ -2348,6 +2380,12 @@
     <!-- ============================= -->
     <eat-comment />
 
+    <!-- Removed View attributes without a specified format (b/131100106) -->
+    <attr name="__removed3" />
+    <attr name="__removed4" />
+    <attr name="__removed5" />
+    <attr name="__removed6" />
+
     <!-- Attributes that can be used with {@link android.view.View} or
          any of its subclasses.  Also see {@link #ViewGroup_Layout} for
          attributes that are processed by the view's parent. -->
@@ -2453,24 +2491,7 @@
             <flag name="noExcludeDescendants" value="0x8" />
         </attr>
 
-        <!-- Hints the Android System whether the view node associated with this View should be
-             use for content capture purposes. -->
-        <attr name="importantForContentCapture">
-            <!-- Let the Android System use its heuristics to determine if the view is important for content capture. -->
-            <flag name="auto" value="0" />
-            <!-- Hint the Android System that this view is important for content capture,
-                  and its children (if any) will be traversed.. -->
-            <flag name="yes" value="0x1" />
-            <!-- Hint the Android System that this view is *not* important for content capture,
-                  but its children (if any) will be traversed.. -->
-            <flag name="no" value="0x2" />
-            <!-- Hint the Android System that this view is important for content capture,
-                 but its children (if any) will not be traversed. -->
-            <flag name="yesExcludeDescendants" value="0x4" />
-            <!-- Hint the Android System that this view is *not* important for content capture,
-                 and its children (if any) will not be traversed. -->
-            <flag name="noExcludeDescendants" value="0x8" />
-        </attr>
+        <attr name="__removed6" />
 
         <!-- Boolean that controls whether a view can take focus while in touch mode.
              If this is true for a view, that view can gain focus when clicked on, and can keep
@@ -3763,7 +3784,7 @@
              the settings for this service. -->
         <attr name="settingsActivity"/>
         <!-- Secure Element which the AIDs should be routed to -->
-        <attr name="secureElementName"/>
+        <attr name="secureElementName" format="string"/>
     </declare-styleable>
 
     <!-- Specify one or more <code>aid-group</code> elements inside a
@@ -4707,7 +4728,7 @@
         <!-- Style (normal, bold, italic, bold|italic) for the text. -->
         <attr name="textStyle" />
         <!-- Weight for the font used in the TextView. -->
-        <attr name="textFontWeight" />
+        <attr name="textFontWeight" format="integer"/>
         <!-- Font family (named by string or as a font resource reference) for the text. -->
         <attr name="fontFamily" />
         <!-- Specifies the {@link android.os.LocaleList} for the text in this TextView.
@@ -6488,6 +6509,9 @@
         <!-- Special option for window animations: show the wallpaper behind when running this
              animation. -->
         <attr name="showWallpaper" format="boolean" />
+        <!-- Special option for window animations: whether window should have rounded corners.
+             @see ScreenDecorationsUtils#getWindowCornerRadius(Resources) -->
+        <attr name="hasRoundedCorners" format="boolean" />
     </declare-styleable>
 
     <declare-styleable name="AnimationSet">
@@ -8000,7 +8024,7 @@
         <attr name="supportsAmbientMode" format="boolean" />
 
         <!-- Uri that specifies a settings Slice for this wallpaper. -->
-        <attr name="settingsSliceUri" />
+        <attr name="settingsSliceUri" format="string"/>
 
         <!-- Indicates that this wallpaper service can support multiple engines to render on each
              surface independently. An example use case is a multi-display set-up where the
@@ -8105,7 +8129,7 @@
 
     <!-- Use <code>autofill-service</code> as the root tag of the XML resource that describes a
          {@link android.service.autofill.AutofillService}, which is referenced from its
-         {@link android.service.autofill#SERVICE_META_DATA} meta-data entry.
+         {@link android.service.autofill.AutofillService#SERVICE_META_DATA} meta-data entry.
     -->
     <declare-styleable name="AutofillService">
         <!-- Fully qualified class name of an activity that allows the user to modify
@@ -8128,6 +8152,23 @@
              android.content.pm.PackageInfo#getLongVersionCode()} for the target package.
         -->
         <attr name="maxLongVersionCode" format="string" />
+    </declare-styleable>
+
+    <!-- =============================== -->
+    <!-- Content Capture attributes -->
+    <!-- =============================== -->
+    <eat-comment />
+
+    <!-- Use <code>content-capture-service</code> as the root tag of the XML resource that describes
+         a {@link android.service.contentcapture.ContentCaptureService}, which is referenced from
+         its {@link android.service.contentcapture.ContentCaptureService#SERVICE_META_DATA}
+         meta-data entry.
+         @hide @SystemApi
+    -->
+    <declare-styleable name="ContentCaptureService">
+        <!-- Fully qualified class name of an activity that allows the user to modify
+             the settings for this service. -->
+        <attr name="settingsActivity" />
     </declare-styleable>
 
     <!-- =============================== -->
@@ -8207,7 +8248,7 @@
         <!-- The activity to launch when the setting is clicked on. -->
         <attr name="settingsActivity"/>
         <!-- The user restriction for this preference. -->
-        <attr name="userRestriction"/>
+        <attr name="userRestriction" format="string"/>
     </declare-styleable>
 
     <!-- =============================== -->
@@ -8865,7 +8906,7 @@
         <attr name="layout_ignoreOffset" format="boolean" />
         <attr name="layout_gravity" />
         <attr name="layout_hasNestedScrollIndicator" format="boolean" />
-        <attr name="layout_maxHeight" />
+        <attr name="layout_maxHeight" format="dimension"/>
     </declare-styleable>
 
     <!-- @hide -->
@@ -8960,6 +9001,10 @@
         <!-- @hide From Theme.navigationBarColor, used for the TaskDescription navigation bar
                    color. -->
         <attr name="navigationBarColor"/>
+        <!-- @hide From Window.enforceStatusBarContrast -->
+        <attr name="enforceStatusBarContrast"/>
+        <!-- @hide From Window.enforceNavigationBarContrast -->
+        <attr name="enforceNavigationBarContrast"/>
     </declare-styleable>
 
     <declare-styleable name="Shortcut">
@@ -9071,4 +9116,6 @@
         <attr name="magnifierHorizontalOffset" format="dimension" />
         <attr name="magnifierColorOverlay" format="color" />
     </declare-styleable>
+
+    <attr name="autoSizePresetSizes" />
 </resources>

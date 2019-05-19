@@ -25,7 +25,10 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.util.DisplayMetrics.DENSITY_DEFAULT;
+import static android.view.Surface.ROTATION_0;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doAnswer;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
 import static org.hamcrest.Matchers.not;
@@ -35,6 +38,9 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 
 import android.app.ActivityManager;
@@ -47,6 +53,7 @@ import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
 import android.service.voice.IVoiceInteractionSession;
+import android.util.DisplayMetrics;
 import android.util.Xml;
 import android.view.DisplayInfo;
 
@@ -54,6 +61,7 @@ import androidx.test.filters.MediumTest;
 
 import com.android.internal.app.IVoiceInteractor;
 import com.android.server.wm.TaskRecord.TaskRecordFactory;
+import com.android.server.wm.utils.WmDisplayCutout;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -164,6 +172,44 @@ public class TaskRecordTests extends ActivityTestsBase {
         insetBounds.inset(5, 5, 5, 5);
         testStackBoundsConfiguration(
                 WINDOWING_MODE_FREEFORM, mParentBounds, insetBounds, insetBounds);
+    }
+
+    @Test
+    public void testFitWithinBounds() {
+        final Rect parentBounds = new Rect(10, 10, 200, 200);
+        ActivityDisplay display = mService.mRootActivityContainer.getDefaultDisplay();
+        ActivityStack stack = display.createStack(WINDOWING_MODE_FREEFORM, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
+        TaskRecord task = new TaskBuilder(mSupervisor).setStack(stack).build();
+        final Configuration parentConfig = stack.getConfiguration();
+        parentConfig.windowConfiguration.setBounds(parentBounds);
+        parentConfig.densityDpi = DisplayMetrics.DENSITY_DEFAULT;
+
+        // check top and left
+        Rect reqBounds = new Rect(-190, -190, 0, 0);
+        task.setBounds(reqBounds);
+        // Make sure part of it is exposed
+        assertTrue(task.getBounds().right > parentBounds.left);
+        assertTrue(task.getBounds().bottom > parentBounds.top);
+        // Should still be more-or-less in that corner
+        assertTrue(task.getBounds().left <= parentBounds.left);
+        assertTrue(task.getBounds().top <= parentBounds.top);
+
+        assertEquals(reqBounds.width(), task.getBounds().width());
+        assertEquals(reqBounds.height(), task.getBounds().height());
+
+        // check bottom and right
+        reqBounds = new Rect(210, 210, 400, 400);
+        task.setBounds(reqBounds);
+        // Make sure part of it is exposed
+        assertTrue(task.getBounds().left < parentBounds.right);
+        assertTrue(task.getBounds().top < parentBounds.bottom);
+        // Should still be more-or-less in that corner
+        assertTrue(task.getBounds().right >= parentBounds.right);
+        assertTrue(task.getBounds().bottom >= parentBounds.bottom);
+
+        assertEquals(reqBounds.width(), task.getBounds().width());
+        assertEquals(reqBounds.height(), task.getBounds().height());
     }
 
     /** Tests that the task bounds adjust properly to changes between FULLSCREEN and FREEFORM */
@@ -318,6 +364,7 @@ public class TaskRecordTests extends ActivityTestsBase {
         parentConfig.densityDpi = 400;
         parentConfig.screenHeightDp = 200; // 200 * 400 / 160 = 500px
         parentConfig.screenWidthDp = 100; // 100 * 400 / 160 = 250px
+        parentConfig.windowConfiguration.setRotation(ROTATION_0);
 
         // Portrait bounds.
         inOutConfig.windowConfiguration.getBounds().set(0, 0, shortSide, longSide);
@@ -331,12 +378,28 @@ public class TaskRecordTests extends ActivityTestsBase {
         inOutConfig.setToDefaults();
         // Landscape bounds.
         inOutConfig.windowConfiguration.getBounds().set(0, 0, longSide, shortSide);
+
+        // Setup the display with a top stable inset. The later assertion will ensure the inset is
+        // excluded from screenHeightDp.
+        final int statusBarHeight = 100;
+        final DisplayContent displayContent = mock(DisplayContent.class);
+        final DisplayPolicy policy = mock(DisplayPolicy.class);
+        doAnswer(invocationOnMock -> {
+            final Rect insets = invocationOnMock.<Rect>getArgument(0);
+            insets.top = statusBarHeight;
+            return null;
+        }).when(policy).convertNonDecorInsetsToStableInsets(any(), eq(ROTATION_0));
+        doReturn(policy).when(displayContent).getDisplayPolicy();
+        doReturn(mock(WmDisplayCutout.class)).when(displayContent)
+                .calculateDisplayCutoutForRotation(anyInt());
+
         // Without limiting to be inside the parent bounds, the out screen size should keep relative
         // to the input bounds.
-        task.computeConfigResourceOverrides(inOutConfig, parentConfig,
-                false /* insideParentBounds */);
+        final ActivityRecord.CompatDisplayInsets compatIntsets =
+                new ActivityRecord.CompatDisplayInsets(displayContent);
+        task.computeConfigResourceOverrides(inOutConfig, parentConfig, compatIntsets);
 
-        assertEquals(shortSide * DENSITY_DEFAULT / parentConfig.densityDpi,
+        assertEquals((shortSide - statusBarHeight) * DENSITY_DEFAULT / parentConfig.densityDpi,
                 inOutConfig.screenHeightDp);
         assertEquals(longSide * DENSITY_DEFAULT / parentConfig.densityDpi,
                 inOutConfig.screenWidthDp);

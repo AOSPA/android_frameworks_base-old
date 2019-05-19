@@ -55,6 +55,8 @@ public class Events {
     public static final int EVENT_RINGER_TOGGLE = 18; // (ringer_mode)
     public static final int EVENT_SHOW_USB_OVERHEAT_ALARM = 19; // (reason|int) (keyguard|bool)
     public static final int EVENT_DISMISS_USB_OVERHEAT_ALARM = 20; // (reason|int) (keyguard|bool)
+    public static final int EVENT_ODI_CAPTIONS_CLICK = 21;
+    public static final int EVENT_ODI_CAPTIONS_TOOLTIP_CLICK = 22;
 
     private static final String[] EVENT_TAGS = {
             "show_dialog",
@@ -77,7 +79,9 @@ public class Events {
             "zen_mode_config_changed",
             "ringer_toggle",
             "show_usb_overheat_alarm",
-            "dismiss_usb_overheat_alarm"
+            "dismiss_usb_overheat_alarm",
+            "odi_captions_click",
+            "odi_captions_tooltip_click"
     };
 
     public static final int DISMISS_REASON_UNKNOWN = 0;

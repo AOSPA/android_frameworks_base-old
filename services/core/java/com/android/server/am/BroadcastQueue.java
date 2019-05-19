@@ -309,7 +309,7 @@ public final class BroadcastQueue {
         app.forceProcessStateUpTo(ActivityManager.PROCESS_STATE_RECEIVER);
         mService.mProcessList.updateLruProcessLocked(app, false, null);
         if (!skipOomAdj) {
-            mService.updateOomAdjLocked();
+            mService.updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_NONE);
         }
 
         // Tell the application to launch this receiver.
@@ -445,7 +445,7 @@ public final class BroadcastQueue {
         final long elapsed = finishTime - r.receiverTime;
         r.state = BroadcastRecord.IDLE;
         if (state == BroadcastRecord.IDLE) {
-            Slog.w(TAG, "finishReceiver [" + mQueueName + "] called but state is IDLE");
+            Slog.w(TAG_BROADCAST, "finishReceiver [" + mQueueName + "] called but state is IDLE");
         }
         if (r.allowBackgroundActivityStarts && r.curApp != null) {
             if (elapsed > mConstants.ALLOW_BG_ACTIVITY_START_TIMEOUT) {
@@ -460,10 +460,9 @@ public final class BroadcastQueue {
                 // that request - we don't want the token to be swept from under our feet...
                 mHandler.removeCallbacksAndMessages(msgToken);
                 // ...then schedule the removal of the token after the extended timeout
+                final ProcessRecord app = r.curApp;
                 mHandler.postAtTime(() -> {
-                    if (r.curApp != null) {
-                        r.curApp.removeAllowBackgroundActivityStartsToken(r);
-                    }
+                    app.removeAllowBackgroundActivityStartsToken(r);
                 }, msgToken, (r.receiverTime + mConstants.ALLOW_BG_ACTIVITY_START_TIMEOUT));
             }
         }
@@ -477,13 +476,22 @@ public final class BroadcastQueue {
         // when processNextBroadcastLocked() next finds this uid as a receiver identity.
         if (!r.timeoutExempt) {
             if (mConstants.SLOW_TIME > 0 && elapsed > mConstants.SLOW_TIME) {
-                if (DEBUG_BROADCAST_DEFERRAL) {
-                    Slog.i(TAG, "Broadcast receiver was slow: " + receiver + " br=" + r);
-                }
-                if (r.curApp != null) {
-                    mDispatcher.startDeferring(r.curApp.uid);
+                // Core system packages are exempt from deferral policy
+                if (!UserHandle.isCore(r.curApp.uid)) {
+                    if (DEBUG_BROADCAST_DEFERRAL) {
+                        Slog.i(TAG_BROADCAST, "Broadcast receiver " + (r.nextReceiver - 1)
+                                + " was slow: " + receiver + " br=" + r);
+                    }
+                    if (r.curApp != null) {
+                        mDispatcher.startDeferring(r.curApp.uid);
+                    } else {
+                        Slog.d(TAG_BROADCAST, "finish receiver curApp is null? " + r);
+                    }
                 } else {
-                    Slog.d(TAG, "finish receiver curApp is null? " + r);
+                    if (DEBUG_BROADCAST_DEFERRAL) {
+                        Slog.i(TAG_BROADCAST, "Core uid " + r.curApp.uid
+                                + " receiver was slow but not deferring: " + receiver + " br=" + r);
+                    }
                 }
             }
         } else {
@@ -783,7 +791,8 @@ public final class BroadcastQueue {
                 // are already core system stuff so don't matter for this.
                 r.curApp = filter.receiverList.app;
                 filter.receiverList.app.curReceivers.add(r);
-                mService.updateOomAdjLocked(r.curApp, true);
+                mService.updateOomAdjLocked(r.curApp, true,
+                        OomAdjuster.OOM_ADJ_REASON_START_RECEIVER);
             }
         }
         try {
@@ -796,9 +805,7 @@ public final class BroadcastQueue {
                     skipReceiverLocked(r);
                 }
             } else {
-                if (r.receiverTime == 0) {
-                    r.receiverTime = SystemClock.uptimeMillis();
-                }
+                r.receiverTime = SystemClock.uptimeMillis();
                 maybeAddAllowBackgroundActivityStartsToken(filter.receiverList.app, r);
                 performReceiveLocked(filter.receiverList.app, filter.receiverList.receiver,
                         new Intent(r.intent), r.resultCode, r.resultData,
@@ -1022,7 +1029,7 @@ public final class BroadcastQueue {
                     // If we had finished the last ordered broadcast, then
                     // make sure all processes have correct oom and sched
                     // adjustments.
-                    mService.updateOomAdjLocked();
+                    mService.updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_START_RECEIVER);
                 }
 
                 // when we have no more ordered broadcast on this queue, stop logging
@@ -1083,16 +1090,19 @@ public final class BroadcastQueue {
                         if (newCount == 0) {
                             // done!  clear out this record's bookkeeping and deliver
                             if (DEBUG_BROADCAST_DEFERRAL) {
-                                Slog.i(TAG, "Sending broadcast completion for split token "
-                                        + r.splitToken);
+                                Slog.i(TAG_BROADCAST,
+                                        "Sending broadcast completion for split token "
+                                        + r.splitToken + " : " + r.intent.getAction());
                             }
                             mSplitRefcounts.delete(r.splitToken);
                         } else {
                             // still have some split broadcast records in flight; update refcount
                             // and hold off on the callback
                             if (DEBUG_BROADCAST_DEFERRAL) {
-                                Slog.i(TAG, "Result refcount " + newCount + " for split token "
-                                        + r.splitToken + " - not sending completion yet");
+                                Slog.i(TAG_BROADCAST,
+                                        "Result refcount now " + newCount + " for split token "
+                                        + r.splitToken + " : " + r.intent.getAction()
+                                        + " - not sending completion yet");
                             }
                             sendResult = false;
                             mSplitRefcounts.put(r.splitToken, newCount);
@@ -1155,7 +1165,7 @@ public final class BroadcastQueue {
                     BroadcastRecord defer;
                     if (r.nextReceiver + 1 == numReceivers) {
                         if (DEBUG_BROADCAST_DEFERRAL) {
-                            Slog.i(TAG, "Sole receiver of " + r
+                            Slog.i(TAG_BROADCAST, "Sole receiver of " + r
                                     + " is under deferral; setting aside and proceeding");
                         }
                         defer = r;
@@ -1185,15 +1195,25 @@ public final class BroadcastQueue {
                                 // first split of this record; refcount for 'r' and 'deferred'
                                 r.splitToken = defer.splitToken = nextSplitTokenLocked();
                                 mSplitRefcounts.put(r.splitToken, 2);
+                                if (DEBUG_BROADCAST_DEFERRAL) {
+                                    Slog.i(TAG_BROADCAST,
+                                            "Broadcast needs split refcount; using new token "
+                                            + r.splitToken);
+                                }
                             } else {
                                 // new split from an already-refcounted situation; increment count
                                 final int curCount = mSplitRefcounts.get(token);
                                 if (DEBUG_BROADCAST_DEFERRAL) {
                                     if (curCount == 0) {
-                                        Slog.wtf(TAG, "Split refcount is zero with token for " + r);
+                                        Slog.wtf(TAG_BROADCAST,
+                                                "Split refcount is zero with token for " + r);
                                     }
                                 }
                                 mSplitRefcounts.put(token, curCount + 1);
+                                if (DEBUG_BROADCAST_DEFERRAL) {
+                                    Slog.i(TAG_BROADCAST, "New split count for token " + token
+                                            + " is " + (curCount + 1));
+                                }
                             }
                         }
                     }
@@ -1529,7 +1549,7 @@ public final class BroadcastQueue {
         if (skip) {
             if (DEBUG_BROADCAST)  Slog.v(TAG_BROADCAST,
                     "Skipping delivery of ordered [" + mQueueName + "] "
-                    + r + " for whatever reason");
+                    + r + " for reason described above");
             r.delivery[recIdx] = BroadcastRecord.DELIVERY_SKIPPED;
             r.receiver = null;
             r.curFilter = null;
@@ -1604,7 +1624,7 @@ public final class BroadcastQueue {
         if ((r.curApp=mService.startProcessLocked(targetProcess,
                 info.activityInfo.applicationInfo, true,
                 r.intent.getFlags() | Intent.FLAG_FROM_BACKGROUND,
-                "broadcast", r.curComponent,
+                new HostingRecord("broadcast", r.curComponent),
                 (r.intent.getFlags()&Intent.FLAG_RECEIVER_BOOT_UPGRADE) != 0, false, false))
                         == null) {
             // Ah, this recipient is unavailable.  Finish it if necessary,
@@ -1858,7 +1878,10 @@ public final class BroadcastQueue {
     // Used by wait-for-broadcast-idle : fast-forward all current deferrals to
     // be immediately deliverable.
     void cancelDeferrals() {
-        mDispatcher.cancelDeferrals();
+        synchronized (mService) {
+            mDispatcher.cancelDeferralsLocked();
+            scheduleBroadcastsLocked();
+        }
     }
 
     String describeState() {

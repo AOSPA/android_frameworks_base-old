@@ -44,8 +44,7 @@ import java.util.UUID;
 /**
  * A builder used to build a fake context for testing.
  */
-// TODO: Consider making public.
-final class FakeContextBuilder {
+public final class FakeContextBuilder {
 
     /**
      * A component name that can be used for tests.
@@ -55,9 +54,10 @@ final class FakeContextBuilder {
     private final PackageManager mPackageManager;
     private final ContextWrapper mContext;
     private final Map<String, ComponentName> mComponents = new HashMap<>();
+    private final Map<String, CharSequence> mAppLabels = new HashMap<>();
     private @Nullable ComponentName mAllIntentComponent;
 
-    FakeContextBuilder() {
+    public FakeContextBuilder() {
         mPackageManager = mock(PackageManager.class);
         when(mPackageManager.resolveActivity(any(Intent.class), anyInt())).thenReturn(null);
         mContext = new ContextWrapper(InstrumentationRegistry.getTargetContext()) {
@@ -80,6 +80,14 @@ final class FakeContextBuilder {
         return this;
     }
 
+    /**
+     * Sets the app label res for a specified package.
+     */
+    public FakeContextBuilder setAppLabel(String packageName, @Nullable CharSequence appLabel) {
+        Preconditions.checkNotNull(packageName);
+        mAppLabels.put(packageName, appLabel);
+        return this;
+    }
 
     /**
      * Sets the component name of an activity to handle all intents.
@@ -102,6 +110,11 @@ final class FakeContextBuilder {
                             ? mComponents.get(action)
                             : mAllIntentComponent;
                     return getResolveInfo(component);
+                });
+        when(mPackageManager.getApplicationLabel(any(ApplicationInfo.class))).thenAnswer(
+                (Answer<CharSequence>) invocation -> {
+                    ApplicationInfo applicationInfo = invocation.getArgument(0);
+                    return mAppLabels.get(applicationInfo.packageName);
                 });
         return mContext;
     }
@@ -126,6 +139,7 @@ final class FakeContextBuilder {
             info.activityInfo.name = component.getClassName();
             info.activityInfo.exported = true;
             info.activityInfo.applicationInfo = new ApplicationInfo();
+            info.activityInfo.applicationInfo.packageName = component.getPackageName();
             info.activityInfo.applicationInfo.icon = 0;
         }
         return info;

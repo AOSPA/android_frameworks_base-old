@@ -22,15 +22,20 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioAttributes;
 import android.net.Uri;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.UserHandle;
+import android.provider.Settings;
+import android.provider.Settings.Global;
+import android.provider.Settings.Secure;
 import android.text.Annotation;
 import android.text.Layout;
 import android.text.SpannableString;
@@ -70,6 +75,7 @@ import javax.inject.Singleton;
  */
 @Singleton
 public class PowerNotificationWarnings implements PowerUI.WarningsUI {
+
     private static final String TAG = PowerUI.TAG + ".Notification";
     private static final boolean DEBUG = PowerUI.DEBUG;
 
@@ -119,6 +125,7 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
             .build();
+    public static final String EXTRA_CONFIRM_ONLY = "extra_confirm_only";
 
     private final Context mContext;
     private final NotificationManager mNoMan;
@@ -134,10 +141,6 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
     private int mShowing;
 
     private long mWarningTriggerTimeMs;
-
-    private Estimate mEstimate;
-    private long mLowWarningThreshold;
-    private long mSevereWarningThreshold;
     private boolean mWarning;
     private boolean mShowAutoSaverSuggestion;
     private boolean mPlaySound;
@@ -148,6 +151,7 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
     private SystemUIDialog mHighTempDialog;
     private SystemUIDialog mThermalShutdownDialog;
     @VisibleForTesting SystemUIDialog mUsbHighTempDialog;
+    private BatteryStateSnapshot mCurrentBatterySnapshot;
 
     /**
      */
@@ -195,17 +199,8 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
     }
 
     @Override
-    public void updateEstimate(Estimate estimate) {
-        mEstimate = estimate;
-        if (estimate.estimateMillis <= mLowWarningThreshold) {
-            mWarningTriggerTimeMs = System.currentTimeMillis();
-        }
-    }
-
-    @Override
-    public void updateThresholds(long lowThreshold, long severeThreshold) {
-        mLowWarningThreshold = lowThreshold;
-        mSevereWarningThreshold = severeThreshold;
+    public void updateSnapshot(BatteryStateSnapshot snapshot) {
+        mCurrentBatterySnapshot = snapshot;
     }
 
     private void updateNotification() {
@@ -254,15 +249,17 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
 
     protected void showWarningNotification() {
         final String percentage = NumberFormat.getPercentInstance()
-                .format((double) mBatteryLevel / 100.0);
+                .format((double) mCurrentBatterySnapshot.getBatteryLevel() / 100.0);
 
-        // get standard notification copy
+        // get shared standard notification copy
         String title = mContext.getString(R.string.battery_low_title);
-        String contentText = mContext.getString(R.string.battery_low_percent_format, percentage);
+        String contentText;
 
-        // override notification copy if hybrid notification enabled
-        if (mEstimate != null) {
+        // get correct content text if notification is hybrid or not
+        if (mCurrentBatterySnapshot.isHybrid()) {
             contentText = getHybridContentString(percentage);
+        } else {
+            contentText = mContext.getString(R.string.battery_low_percent_format, percentage);
         }
 
         final Notification.Builder nb =
@@ -282,8 +279,9 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
         }
         // Make the notification red if the percentage goes below a certain amount or the time
         // remaining estimate is disabled
-        if (mEstimate == null || mBucket < 0
-                || mEstimate.estimateMillis < mSevereWarningThreshold) {
+        if (!mCurrentBatterySnapshot.isHybrid() || mBucket < 0
+                || mCurrentBatterySnapshot.getTimeRemainingMillis()
+                        < mCurrentBatterySnapshot.getSevereThresholdMillis()) {
             nb.setColor(Utils.getColorAttrDefaultColor(mContext, android.R.attr.colorError));
         }
 
@@ -324,10 +322,10 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
 
     private String getHybridContentString(String percentage) {
         return PowerUtil.getBatteryRemainingStringFormatted(
-            mContext,
-            mEstimate.estimateMillis,
-            percentage,
-            mEstimate.isBasedOnUsage);
+                mContext,
+                mCurrentBatterySnapshot.getTimeRemainingMillis(),
+                percentage,
+                mCurrentBatterySnapshot.isBasedOnUsage());
     }
 
     private PendingIntent pendingBroadcast(String action) {
@@ -553,10 +551,15 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
         updateNotification();
     }
 
-    private void showStartSaverConfirmation() {
+    private void showStartSaverConfirmation(Bundle extras) {
         if (mSaverConfirmation != null) return;
         final SystemUIDialog d = new SystemUIDialog(mContext);
-        d.setTitle(R.string.battery_saver_confirmation_title);
+        final boolean confirmOnly = extras.getBoolean(BatterySaverUtils.EXTRA_CONFIRM_TEXT_ONLY);
+        final int batterySaverTriggerMode =
+                extras.getInt(BatterySaverUtils.EXTRA_POWER_SAVE_MODE_TRIGGER,
+                        PowerManager.POWER_SAVE_MODE_TRIGGER_PERCENTAGE);
+        final int batterySaverTriggerLevel =
+                extras.getInt(BatterySaverUtils.EXTRA_POWER_SAVE_MODE_TRIGGER_LEVEL, 0);
         d.setMessage(getBatterySaverDescription());
 
         // Sad hack for http://b/78261259 and http://b/78298335. Otherwise "Battery" may be split
@@ -567,9 +570,30 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
         // We need to set LinkMovementMethod to make the link clickable.
         d.setMessageMovementMethod(LinkMovementMethod.getInstance());
 
-        d.setNegativeButton(android.R.string.cancel, null);
-        d.setPositiveButton(R.string.battery_saver_confirmation_ok,
-                (dialog, which) -> setSaverMode(true, false));
+        if (confirmOnly) {
+            d.setTitle(R.string.battery_saver_confirmation_title_generic);
+            d.setPositiveButton(com.android.internal.R.string.confirm_battery_saver,
+                    (dialog, which) -> {
+                        final ContentResolver resolver = mContext.getContentResolver();
+                        Secure.putInt(
+                                resolver,
+                                Secure.LOW_POWER_WARNING_ACKNOWLEDGED,
+                                1);
+                        Settings.Global.putInt(
+                                resolver,
+                                Global.AUTOMATIC_POWER_SAVE_MODE,
+                                batterySaverTriggerMode);
+                        Settings.Global.putInt(
+                                resolver,
+                                Global.LOW_POWER_MODE_TRIGGER_LEVEL,
+                                batterySaverTriggerLevel);
+                    });
+        } else {
+            d.setTitle(R.string.battery_saver_confirmation_title);
+            d.setPositiveButton(R.string.battery_saver_confirmation_ok,
+                    (dialog, which) -> setSaverMode(true, false));
+            d.setNegativeButton(android.R.string.cancel, null);
+        }
         d.setShowForAllUsers(true);
         d.setOnDismissListener((dialog) -> mSaverConfirmation = null);
         d.show();
@@ -728,7 +752,7 @@ public class PowerNotificationWarnings implements PowerUI.WarningsUI {
                 dismissLowBatteryNotification();
             } else if (action.equals(ACTION_SHOW_START_SAVER_CONFIRMATION)) {
                 dismissLowBatteryNotification();
-                showStartSaverConfirmation();
+                showStartSaverConfirmation(intent.getExtras());
             } else if (action.equals(ACTION_DISMISSED_WARNING)) {
                 dismissLowBatteryWarning();
             } else if (ACTION_CLICKED_TEMP_WARNING.equals(action)) {

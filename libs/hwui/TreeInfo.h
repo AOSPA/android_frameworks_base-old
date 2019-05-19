@@ -20,6 +20,7 @@
 #include "utils/Macros.h"
 
 #include <utils/Timers.h>
+#include "SkSize.h"
 
 #include <string>
 
@@ -87,6 +88,7 @@ public:
 
     // Must not be null during actual usage
     DamageAccumulator* damageAccumulator = nullptr;
+    int64_t damageGenerationId = 0;
 
     LayerUpdateQueue* layerUpdateQueue = nullptr;
     ErrorHandler* errorHandler = nullptr;
@@ -94,6 +96,8 @@ public:
     bool updateWindowPositions = false;
 
     int disableForceDark;
+
+    const SkISize screenSize;
 
     struct Out {
         bool hasFunctors = false;

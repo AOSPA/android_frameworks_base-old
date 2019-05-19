@@ -145,6 +145,9 @@ public:
     // Maximum age (30 days) that files on disk can exist in seconds.
     static const int kMaxAgeSecond = 60 * 60 * 24 * 30;
 
+    // Maximum age (2 days) that local history files on disk can exist in seconds.
+    static const int kMaxLocalHistoryAgeSecond = 60 * 60 * 24 * 2;
+
     // Maximum number of files (1000) that can be in stats directory on disk.
     static const int kMaxFileNumber = 1000;
 
@@ -159,6 +162,14 @@ public:
 
     // Max platform atom tag number.
     static const int32_t kMaxPlatformAtomTag = 100000;
+
+    // Vendor pulled atom start id.
+    static const int32_t kVendorPulledAtomStartTag = 150000;
+
+    // Max accepted atom id.
+    static const int32_t kMaxAtomTag = 200000;
+
+    static const int64_t kInt64Max = 0x7fffffffffffffffLL;
 
     /**
      * Report a new config has been received and report the static stats about the config.
@@ -336,7 +347,8 @@ public:
     /**
      * Records statsd skipped an event.
      */
-    void noteLogLost(int32_t wallClockTimeSec, int32_t count, int lastError);
+    void noteLogLost(int32_t wallClockTimeSec, int32_t count, int32_t lastError,
+                     int32_t lastAtomTag, int32_t uid, int32_t pid);
 
     /**
      * Records that the pull of an atom has failed
@@ -417,6 +429,10 @@ public:
      * Number of buckets with unknown condition.
      */
     void noteBucketUnknownCondition(int64_t metricId);
+
+    /* Reports one event has been dropped due to queue overflow, and the oldest event timestamp in
+     * the queue */
+    void noteEventQueueOverflow(int64_t oldestEventTimestampNs);
 
     /**
      * Reset the historical stats. Including all stats in icebox, and the tracked stats about
@@ -503,14 +519,34 @@ private:
     std::map<int64_t, AtomMetricStats> mAtomMetricStats;
 
     struct LogLossStats {
-        LogLossStats(int32_t sec, int32_t count, int32_t error)
-            : mWallClockSec(sec), mCount(count), mLastError(error) {
+        LogLossStats(int32_t sec, int32_t count, int32_t error, int32_t tag, int32_t uid,
+                     int32_t pid)
+            : mWallClockSec(sec),
+              mCount(count),
+              mLastError(error),
+              mLastTag(tag),
+              mUid(uid),
+              mPid(pid) {
         }
         int32_t mWallClockSec;
         int32_t mCount;
         // error code defined in linux/errno.h
         int32_t mLastError;
+        int32_t mLastTag;
+        int32_t mUid;
+        int32_t mPid;
     };
+
+    // Max of {(now - oldestEventTimestamp) when overflow happens}.
+    // This number is helpful to understand how SLOW statsd can be.
+    int64_t mMaxQueueHistoryNs = 0;
+
+    // Min of {(now - oldestEventTimestamp) when overflow happens}.
+    // This number is helpful to understand how FAST the events floods to statsd.
+    int64_t mMinQueueHistoryNs = kInt64Max;
+
+    // Total number of events that are lost due to queue overflow.
+    int32_t mOverflowCount = 0;
 
     // Timestamps when we detect log loss, and the number of logs lost.
     std::list<LogLossStats> mLogLossStats;

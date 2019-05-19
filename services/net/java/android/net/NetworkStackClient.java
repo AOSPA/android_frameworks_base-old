@@ -32,6 +32,7 @@ import android.net.dhcp.IDhcpServerCallbacks;
 import android.net.ip.IIpClientCallbacks;
 import android.net.util.SharedLog;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.Process;
 import android.os.RemoteException;
@@ -42,7 +43,6 @@ import android.util.Slog;
 import com.android.internal.annotations.GuardedBy;
 
 import java.io.PrintWriter;
-import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 
 /**
@@ -53,6 +53,7 @@ public class NetworkStackClient {
     private static final String TAG = NetworkStackClient.class.getSimpleName();
 
     private static final int NETWORKSTACK_TIMEOUT_MS = 10_000;
+    private static final String IN_PROCESS_SUFFIX = ".InProcess";
 
     private static NetworkStackClient sInstance;
 
@@ -120,8 +121,7 @@ public class NetworkStackClient {
      *
      * <p>The INetworkMonitor will be returned asynchronously through the provided callbacks.
      */
-    public void makeNetworkMonitor(
-            NetworkParcelable network, String name, INetworkMonitorCallbacks cb) {
+    public void makeNetworkMonitor(Network network, String name, INetworkMonitorCallbacks cb) {
         requestConnector(connector -> {
             try {
                 connector.makeNetworkMonitor(network, name, cb);
@@ -131,17 +131,36 @@ public class NetworkStackClient {
         });
     }
 
+    /**
+     * Get an instance of the IpMemoryStore.
+     *
+     * <p>The IpMemoryStore will be returned asynchronously through the provided callbacks.
+     */
+    public void fetchIpMemoryStore(IIpMemoryStoreCallbacks cb) {
+        requestConnector(connector -> {
+            try {
+                connector.fetchIpMemoryStore(cb);
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
+            }
+        });
+    }
+
     private class NetworkStackConnection implements ServiceConnection {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            log("Network stack service connected");
+            logi("Network stack service connected");
             registerNetworkStackService(service);
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
-            // TODO: crash/reboot the system ?
-            logWtf("Lost network stack connector", null);
+            // The system has lost its network stack (probably due to a crash in the
+            // network stack process): better crash rather than stay in a bad state where all
+            // networking is broken.
+            // onServiceDisconnected is not being called on device shutdown, so this method being
+            // called always indicates a bad state for the system server.
+            maybeCrashWithTerribleFailure("Lost network stack");
         }
     };
 
@@ -165,6 +184,15 @@ public class NetworkStackClient {
     }
 
     /**
+     * Initialize the network stack. Should be called only once on device startup, before any
+     * client attempts to use the network stack.
+     */
+    public void init() {
+        log("Network stack init");
+        mNetworkStackStartRequested = true;
+    }
+
+    /**
      * Start the network stack. Should be called only once on device startup.
      *
      * <p>This method will start the network stack either in the network stack process, or inside
@@ -174,43 +202,48 @@ public class NetworkStackClient {
      */
     public void start(Context context) {
         log("Starting network stack");
-        mNetworkStackStartRequested = true;
-        // Try to bind in-process if the library is available
-        IBinder connector = null;
-        try {
-            final Class service = Class.forName(
-                    "com.android.server.NetworkStackService",
-                    true /* initialize */,
-                    context.getClassLoader());
-            connector = (IBinder) service.getMethod("makeConnector", Context.class)
-                    .invoke(null, context);
-        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
-            logWtf("Could not create network stack connector from NetworkStackService", e);
-            // TODO: crash/reboot system here ?
-            return;
-        } catch (ClassNotFoundException e) {
-            // Normal behavior if stack is provided by the app: fall through
+        final PackageManager pm = context.getPackageManager();
+
+        // Try to bind in-process if the device was shipped with an in-process version
+        Intent intent = getNetworkStackIntent(pm, true /* inSystemProcess */);
+
+        // Otherwise use the updatable module version
+        if (intent == null) {
+            intent = getNetworkStackIntent(pm, false /* inSystemProcess */);
+            log("Starting network stack process");
+        } else {
+            log("Starting network stack in-process");
         }
 
-        // In-process network stack. Add the service to the service manager here.
-        if (connector != null) {
-            log("Registering in-process network stack connector");
-            registerNetworkStackService(connector);
+        if (intent == null) {
+            maybeCrashWithTerribleFailure("Could not resolve the network stack");
             return;
         }
-        // Start the network stack process. The service will be added to the service manager in
+
+        // Start the network stack. The service will be added to the service manager in
         // NetworkStackConnection.onServiceConnected().
-        log("Starting network stack process");
-        final Intent intent = new Intent(INetworkStackConnector.class.getName());
-        final ComponentName comp = intent.resolveSystemService(context.getPackageManager(), 0);
-        intent.setComponent(comp);
+        if (!context.bindServiceAsUser(intent, new NetworkStackConnection(),
+                Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT, UserHandle.SYSTEM)) {
+            maybeCrashWithTerribleFailure(
+                    "Could not bind to network stack in-process, or in app with " + intent);
+            return;
+        }
+
+        log("Network stack service start requested");
+    }
+
+    @Nullable
+    private Intent getNetworkStackIntent(@NonNull PackageManager pm, boolean inSystemProcess) {
+        final String baseAction = INetworkStackConnector.class.getName();
+        final Intent intent =
+                new Intent(inSystemProcess ? baseAction + IN_PROCESS_SUFFIX : baseAction);
+        final ComponentName comp = intent.resolveSystemService(pm, 0);
 
         if (comp == null) {
-            logWtf("Could not resolve the network stack with " + intent, null);
-            // TODO: crash/reboot system server ?
-            return;
+            return null;
         }
-        final PackageManager pm = context.getPackageManager();
+        intent.setComponent(comp);
+
         int uid = -1;
         try {
             uid = pm.getPackageUidAsUser(comp.getPackageName(), UserHandle.USER_SYSTEM);
@@ -218,27 +251,39 @@ public class NetworkStackClient {
             logWtf("Network stack package not found", e);
             // Fall through
         }
-        if (uid != Process.NETWORK_STACK_UID) {
+
+        final int expectedUid = inSystemProcess ? Process.SYSTEM_UID : Process.NETWORK_STACK_UID;
+        if (uid != expectedUid) {
             throw new SecurityException("Invalid network stack UID: " + uid);
         }
 
+        if (!inSystemProcess) {
+            checkNetworkStackPermission(pm, comp);
+        }
+
+        return intent;
+    }
+
+    private void checkNetworkStackPermission(
+            @NonNull PackageManager pm, @NonNull ComponentName comp) {
         final int hasPermission =
                 pm.checkPermission(PERMISSION_MAINLINE_NETWORK_STACK, comp.getPackageName());
         if (hasPermission != PERMISSION_GRANTED) {
             throw new SecurityException(
                     "Network stack does not have permission " + PERMISSION_MAINLINE_NETWORK_STACK);
         }
-
-        if (!context.bindServiceAsUser(intent, new NetworkStackConnection(),
-                Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT, UserHandle.SYSTEM)) {
-            logWtf("Could not bind to network stack in-process, or in app with " + intent, null);
-            return;
-            // TODO: crash/reboot system server if no network stack after a timeout ?
-        }
-
-        log("Network stack service start requested");
     }
 
+    private void maybeCrashWithTerribleFailure(@NonNull String message) {
+        logWtf(message, null);
+        if (Build.IS_DEBUGGABLE) {
+            throw new IllegalStateException(message);
+        }
+    }
+
+    /**
+     * Log a message in the local log.
+     */
     private void log(@NonNull String message) {
         synchronized (mLog) {
             mLog.log(message);
@@ -255,6 +300,15 @@ public class NetworkStackClient {
     private void loge(@NonNull String message, @Nullable Throwable e) {
         synchronized (mLog) {
             mLog.e(message, e);
+        }
+    }
+
+    /**
+     * Log a message in the local and system logs.
+     */
+    private void logi(@NonNull String message) {
+        synchronized (mLog) {
+            mLog.i(message);
         }
     }
 
@@ -289,7 +343,8 @@ public class NetworkStackClient {
     private void requestConnector(@NonNull NetworkStackCallback request) {
         // TODO: PID check.
         final int caller = Binder.getCallingUid();
-        if (caller != Process.SYSTEM_UID && !UserHandle.isSameApp(caller, Process.BLUETOOTH_UID)) {
+        if (caller != Process.SYSTEM_UID && !UserHandle.isSameApp(caller, Process.BLUETOOTH_UID)
+                && !UserHandle.isSameApp(caller, Process.PHONE_UID)) {
             // Don't even attempt to obtain the connector and give a nice error message
             throw new SecurityException(
                     "Only the system server should try to bind to the network stack.");

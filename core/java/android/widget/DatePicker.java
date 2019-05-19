@@ -216,8 +216,8 @@ public class DatePicker extends FrameLayout {
      * @hide Visible for testing only.
      */
     @InspectableProperty(name = "datePickerMode", enumMapping = {
-            @InspectableProperty.EnumMap(value = MODE_SPINNER, name = "spinner"),
-            @InspectableProperty.EnumMap(value = MODE_CALENDAR, name = "calendar")
+            @InspectableProperty.EnumEntry(value = MODE_SPINNER, name = "spinner"),
+            @InspectableProperty.EnumEntry(value = MODE_CALENDAR, name = "calendar")
     })
     @DatePickerMode
     @TestApi
@@ -791,7 +791,7 @@ public class DatePicker extends FrameLayout {
 
             @SuppressWarnings("all")
             // suppress unused and hiding
-            public static final Parcelable.Creator<SavedState> CREATOR = new Creator<SavedState>() {
+            public static final @android.annotation.NonNull Parcelable.Creator<SavedState> CREATOR = new Creator<SavedState>() {
 
                 public SavedState createFromParcel(Parcel in) {
                     return new SavedState(in);

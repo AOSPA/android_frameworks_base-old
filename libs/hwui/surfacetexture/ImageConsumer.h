@@ -26,12 +26,18 @@
 #include <gui/BufferItem.h>
 #include <system/graphics.h>
 
+namespace GrAHardwareBufferUtils {
+typedef void* DeleteImageCtx;
+typedef void (*DeleteImageProc)(DeleteImageCtx);
+}
+
 namespace android {
 
 namespace uirenderer {
 class RenderState;
 }
 
+class AutoBackendTextureRelease;
 class SurfaceTexture;
 
 /*
@@ -67,12 +73,22 @@ private:
      * ImageSlot contains the information and object references that
      * ImageConsumer maintains about a BufferQueue buffer slot.
      */
-    struct ImageSlot {
+    class ImageSlot {
+    public:
         ImageSlot() : mDataspace(HAL_DATASPACE_UNKNOWN), mEglFence(EGL_NO_SYNC_KHR) {}
 
-        // mImage is the SkImage created from mGraphicBuffer.
-        sk_sp<SkImage> mImage;
+        ~ImageSlot() { clear(); }
 
+        void createIfNeeded(sp<GraphicBuffer> graphicBuffer, android_dataspace dataspace,
+                            bool forceCreate, GrContext* context);
+
+        void clear();
+
+        inline EGLSyncKHR& eglFence() { return mEglFence; }
+
+        sk_sp<SkImage> getImage();
+
+    private:
         // the dataspace associated with the current image
         android_dataspace mDataspace;
 
@@ -82,8 +98,11 @@ private:
          */
         EGLSyncKHR mEglFence;
 
-        void createIfNeeded(sp<GraphicBuffer> graphicBuffer, android_dataspace dataspace,
-                            bool forceCreate);
+        /**
+         * mTextureRelease may outlive ImageConsumer, if the last ref is held by an SkImage.
+         * ImageConsumer holds one ref to mTextureRelease, which is decremented by "clear".
+         */
+        AutoBackendTextureRelease* mTextureRelease = nullptr;
     };
 
     /**

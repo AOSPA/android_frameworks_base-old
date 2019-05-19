@@ -16,6 +16,7 @@
 
 package com.android.server.am;
 
+import android.annotation.NonNull;
 import android.content.ContentResolver;
 import android.database.ContentObserver;
 import android.net.Uri;
@@ -78,12 +79,13 @@ public class SettingsToPropertiesMapper {
     // permission in the corresponding .te file your feature belongs to.
     @VisibleForTesting
     static final String[] sDeviceConfigScopes = new String[] {
-        DeviceConfig.ActivityManagerNativeBoot.NAMESPACE,
-        DeviceConfig.MediaNative.NAMESPACE,
+        DeviceConfig.NAMESPACE_ACTIVITY_MANAGER_NATIVE_BOOT,
         DeviceConfig.NAMESPACE_INPUT_NATIVE_BOOT,
+        DeviceConfig.NAMESPACE_INTELLIGENCE_CONTENT_SUGGESTIONS,
+        DeviceConfig.NAMESPACE_MEDIA_NATIVE,
         DeviceConfig.NAMESPACE_NETD_NATIVE,
-        DeviceConfig.RuntimeNativeBoot.NAMESPACE,
-        DeviceConfig.RuntimeNative.NAMESPACE,
+        DeviceConfig.NAMESPACE_RUNTIME_NATIVE,
+        DeviceConfig.NAMESPACE_RUNTIME_NATIVE_BOOT,
     };
 
     private final String[] mGlobalSettings;
@@ -131,16 +133,20 @@ public class SettingsToPropertiesMapper {
         }
 
         for (String deviceConfigScope : mDeviceConfigScopes) {
-            DeviceConfig.addOnPropertyChangedListener(
+            DeviceConfig.addOnPropertiesChangedListener(
                     deviceConfigScope,
                     AsyncTask.THREAD_POOL_EXECUTOR,
-                    (String scope, String name, String value) -> {
-                        String propertyName = makePropertyName(scope, name);
-                        if (propertyName == null) {
-                            log("unable to construct system property for " + scope + "/" + name);
-                            return;
+                    (DeviceConfig.Properties properties) -> {
+                        String scope = properties.getNamespace();
+                        for (String key : properties.getKeyset()) {
+                            String propertyName = makePropertyName(scope, key);
+                            if (propertyName == null) {
+                                log("unable to construct system property for " + scope + "/"
+                                        + key);
+                                return;
+                            }
+                            setProperty(propertyName, properties.getString(key, null));
                         }
-                        setProperty(propertyName, value);
                     });
         }
     }
@@ -167,7 +173,7 @@ public class SettingsToPropertiesMapper {
      * booting.
      * @return
      */
-    public static String[] getResetNativeCategories() {
+    public static @NonNull String[] getResetNativeCategories() {
         if (!isNativeFlagsResetPerformed()) {
             return new String[0];
         }

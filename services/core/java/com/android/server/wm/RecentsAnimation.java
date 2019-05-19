@@ -17,8 +17,6 @@
 package com.android.server.wm;
 
 import static android.app.ActivityManager.START_TASK_TO_FRONT;
-import static android.app.AppOpsManager.OP_ASSIST_STRUCTURE;
-import static android.app.AppOpsManager.OP_NONE;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
@@ -28,29 +26,23 @@ import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
 import static android.view.WindowManager.TRANSIT_NONE;
 
 import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
+import static com.android.server.wm.BoundsAnimationController.BOUNDS;
+import static com.android.server.wm.BoundsAnimationController.FADE_IN;
 import static com.android.server.wm.RecentsAnimationController.REORDER_KEEP_IN_PLACE;
 import static com.android.server.wm.RecentsAnimationController.REORDER_MOVE_TO_ORIGINAL_POSITION;
 import static com.android.server.wm.RecentsAnimationController.REORDER_MOVE_TO_TOP;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_RECENTS_ANIMATIONS;
 
 import android.app.ActivityOptions;
-import android.app.AppOpsManager;
 import android.app.IAssistDataReceiver;
 import android.content.ComponentName;
-import android.content.Context;
 import android.content.Intent;
-import android.os.Bundle;
-import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.Trace;
 import android.util.Slog;
 import android.view.IRecentsAnimationRunner;
 
-import com.android.server.LocalServices;
-import com.android.server.am.AssistDataRequester;
-import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.wm.RecentsAnimationController.RecentsAnimationCallbacks;
-
-import java.util.List;
 
 /**
  * Manages the recents animation, including the reordering of the stacks for the transition and
@@ -59,7 +51,7 @@ import java.util.List;
 class RecentsAnimation implements RecentsAnimationCallbacks,
         ActivityDisplay.OnStackOrderChangedListener {
     private static final String TAG = RecentsAnimation.class.getSimpleName();
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG = DEBUG_RECENTS_ANIMATIONS;
 
     private final ActivityTaskManagerService mService;
     private final ActivityStackSupervisor mStackSupervisor;
@@ -69,7 +61,6 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
     private final int mCallingPid;
 
     private int mTargetActivityType;
-    private AssistDataRequester mAssistDataRequester;
 
     // The stack to restore the target stack behind when the animation is finished
     private ActivityStack mRestoreTargetBehindStack;
@@ -134,9 +125,6 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
 
         mWindowManager.deferSurfaceLayout();
         try {
-            // Kick off the assist data request in the background before showing the target activity
-            requestAssistData(recentsComponent, recentsUid, assistDataReceiver);
-
             if (hasExistingActivity) {
                 // Move the recents activity into place for the animation if it is not top most
                 mDefaultDisplay.moveStackBehindBottomMostVisibleStack(targetStack);
@@ -215,77 +203,12 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
         }
     }
 
-    /**
-     * Requests assist data for the top visible activities.
-     */
-    private void requestAssistData(ComponentName recentsComponent, int recentsUid,
-            @Deprecated IAssistDataReceiver assistDataReceiver) {
-        final AppOpsManager appOpsManager = (AppOpsManager)
-                mService.mContext.getSystemService(Context.APP_OPS_SERVICE);
-        final List<IBinder> topActivities =
-                mService.mRootActivityContainer.getTopVisibleActivities();
-        final AssistDataRequester.AssistDataRequesterCallbacks assistDataCallbacks;
-        if (assistDataReceiver != null) {
-            assistDataCallbacks = new AssistDataReceiverProxy(assistDataReceiver,
-                    recentsComponent.getPackageName()) {
-                @Override
-                public void onAssistDataReceivedLocked(Bundle data, int activityIndex,
-                        int activityCount) {
-                    // Try to notify the intelligence service first
-                    final ContentCaptureManagerInternal imService =
-                            LocalServices.getService(ContentCaptureManagerInternal.class);
-                    final IBinder activityToken = topActivities.get(activityIndex);
-                    final ActivityRecord r = ActivityRecord.forTokenLocked(activityToken);
-                    if (r != null && (imService == null
-                            || !imService.sendActivityAssistData(r.mUserId, activityToken, data))) {
-                        // Otherwise, use the provided assist data receiver
-                        super.onAssistDataReceivedLocked(data, activityIndex, activityCount);
-                    }
-                }
-            };
-        } else {
-            final ContentCaptureManagerInternal imService =
-                    LocalServices.getService(ContentCaptureManagerInternal.class);
-            if (imService == null) {
-                // There is no intelligence service, so there is no point requesting assist data
-                return;
-            }
-
-            assistDataCallbacks = new AssistDataRequester.AssistDataRequesterCallbacks() {
-                @Override
-                public boolean canHandleReceivedAssistDataLocked() {
-                    return true;
-                }
-
-                @Override
-                public void onAssistDataReceivedLocked(Bundle data, int activityIndex,
-                        int activityCount) {
-                    // Try to notify the intelligence service
-                    final IBinder activityToken = topActivities.get(activityIndex);
-                    final ActivityRecord r = ActivityRecord.forTokenLocked(activityToken);
-                    if (r != null) {
-                        imService.sendActivityAssistData(r.mUserId, activityToken, data);
-                    }
-                }
-            };
-        }
-        mAssistDataRequester = new AssistDataRequester(mService.mContext, mWindowManager,
-                appOpsManager, assistDataCallbacks, this, OP_ASSIST_STRUCTURE, OP_NONE);
-        mAssistDataRequester.requestAutofillData(topActivities,
-                recentsUid, recentsComponent.getPackageName());
-    }
-
-    private void finishAnimation(@RecentsAnimationController.ReorderMode int reorderMode) {
+    private void finishAnimation(@RecentsAnimationController.ReorderMode int reorderMode,
+            boolean sendUserLeaveHint) {
         synchronized (mService.mGlobalLock) {
             if (DEBUG) Slog.d(TAG, "onAnimationFinished(): controller="
                     + mWindowManager.getRecentsAnimationController()
                     + " reorderMode=" + reorderMode);
-
-            // Cancel the associated assistant data request
-            if (mAssistDataRequester != null) {
-                mAssistDataRequester.cancel();
-                mAssistDataRequester = null;
-            }
 
             // Unregister for stack order changes
             mDefaultDisplay.unregisterStackOrderChangedListener(this);
@@ -326,7 +249,18 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
                     if (reorderMode == REORDER_MOVE_TO_TOP) {
                         // Bring the target stack to the front
                         mStackSupervisor.mNoAnimActivities.add(targetActivity);
-                        targetStack.moveToFront("RecentsAnimation.onAnimationFinished()");
+
+                        if (sendUserLeaveHint) {
+                            // Setting this allows the previous app to PiP.
+                            mStackSupervisor.mUserLeaving = true;
+                            targetStack.moveTaskToFrontLocked(targetActivity.getTaskRecord(),
+                                    true /* noAnimation */, null /* activityOptions */,
+                                    targetActivity.appTimeTracker,
+                                    "RecentsAnimation.onAnimationFinished()");
+                        } else {
+                            targetStack.moveToFront("RecentsAnimation.onAnimationFinished()");
+                        }
+
                         if (DEBUG) {
                             final ActivityStack topStack = getTopNonAlwaysOnTopStack();
                             if (topStack != targetStack) {
@@ -380,11 +314,11 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
 
     @Override
     public void onAnimationFinished(@RecentsAnimationController.ReorderMode int reorderMode,
-            boolean runSychronously) {
+            boolean runSychronously, boolean sendUserLeaveHint) {
         if (runSychronously) {
-            finishAnimation(reorderMode);
+            finishAnimation(reorderMode, sendUserLeaveHint);
         } else {
-            mService.mH.post(() -> finishAnimation(reorderMode));
+            mService.mH.post(() -> finishAnimation(reorderMode, sendUserLeaveHint));
         }
     }
 
@@ -395,11 +329,27 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
             // The stack is not visible, so ignore this change
             return;
         }
+        final RecentsAnimationController controller =
+                mWindowManager.getRecentsAnimationController();
+        final DisplayContent dc =
+                mService.mRootActivityContainer.getDefaultDisplay().mDisplayContent;
+        dc.mBoundsAnimationController.setAnimationType(
+                controller.shouldCancelWithDeferredScreenshot() ? FADE_IN : BOUNDS);
 
-        // If the activity display stack order changes, cancel any running recents animation in
-        // place
-        mWindowManager.cancelRecentsAnimationSynchronously(REORDER_KEEP_IN_PLACE,
-                "stackOrderChanged");
+        // Cancel running recents animation and screenshot previous task when the next
+        // transition starts in below cases:
+        // 1) The next launching task is not in recents animation task.
+        // 2) The next task is home activity. (i.e. pressing home key to back home in recents).
+        if ((!controller.isAnimatingTask(stack.getTaskStack().getTopChild())
+                || controller.isTargetApp(stack.getTopActivity().mAppWindowToken))
+                && controller.shouldCancelWithDeferredScreenshot()) {
+            controller.cancelOnNextTransitionStart();
+        } else {
+            // Just cancel directly to unleash from launcher when the next launching task is the
+            // current top task.
+            mWindowManager.cancelRecentsAnimationSynchronously(REORDER_KEEP_IN_PLACE,
+                    "stackOrderChanged");
+        }
     }
 
     /**
@@ -407,7 +357,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
      */
     private void notifyAnimationCancelBeforeStart(IRecentsAnimationRunner recentsAnimationRunner) {
         try {
-            recentsAnimationRunner.onAnimationCanceled();
+            recentsAnimationRunner.onAnimationCanceled(false /* deferredWithScreenshot */);
         } catch (RemoteException e) {
             Slog.e(TAG, "Failed to cancel recents animation before start", e);
         }

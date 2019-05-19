@@ -14,28 +14,31 @@
 
 package com.android.systemui.qs;
 
+import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.testing.TestableLooper.RunWithLooper;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import androidx.test.filters.SmallTest;
+
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.SysuiTestCase;
-import com.android.systemui.plugins.qs.QSTile;
 import com.android.systemui.plugins.qs.QSTileView;
 import com.android.systemui.qs.customize.QSCustomizer;
+import com.android.systemui.qs.tileimpl.QSTileImpl;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -43,6 +46,9 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.Collections;
 
 @RunWith(AndroidTestingRunner.class)
@@ -58,10 +64,12 @@ public class QSPanelTest extends SysuiTestCase {
     @Mock
     private QSCustomizer mCustomizer;
     @Mock
-    private QSTile dndTile;
+    private QSTileImpl dndTile;
     private ViewGroup mParentView;
     @Mock
     private QSDetail.Callback mCallback;
+    @Mock
+    private QSTileView mQSTileView;
 
     @Before
     public void setup() throws Exception {
@@ -77,7 +85,7 @@ public class QSPanelTest extends SysuiTestCase {
 
             when(dndTile.getTileSpec()).thenReturn("dnd");
             when(mHost.getTiles()).thenReturn(Collections.emptyList());
-            when(mHost.createTileView(any(), anyBoolean())).thenReturn(mock(QSTileView.class));
+            when(mHost.createTileView(any(), anyBoolean())).thenReturn(mQSTileView);
 
             mQsPanel.setHost(mHost, mCustomizer);
             mQsPanel.addTile(dndTile, true);
@@ -119,4 +127,27 @@ public class QSPanelTest extends SysuiTestCase {
 
         verify(mCallback, never()).onShowingDetail(any(), anyInt(), anyInt());
     }
+
+    @Test
+    public void testDump() {
+        String mockTileViewString = "Mock Tile View";
+        String mockTileString = "Mock Tile";
+        doAnswer(invocation -> {
+            PrintWriter pw = invocation.getArgument(1);
+            pw.println(mockTileString);
+            return null;
+        }).when(dndTile).dump(any(FileDescriptor.class), any(PrintWriter.class),
+                any(String[].class));
+        when(mQSTileView.toString()).thenReturn(mockTileViewString);
+
+        StringWriter w = new StringWriter();
+        PrintWriter pw = new PrintWriter(w);
+        mQsPanel.dump(mock(FileDescriptor.class), pw, new String[]{});
+        String expected = "QSPanel:\n"
+                + "  Tile records:\n"
+                + "    " + mockTileString + "\n"
+                + "    " + mockTileViewString + "\n";
+        assertEquals(expected, w.getBuffer().toString());
+    }
+
 }

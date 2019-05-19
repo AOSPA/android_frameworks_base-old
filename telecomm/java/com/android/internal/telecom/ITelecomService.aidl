@@ -182,6 +182,7 @@ interface ITelecomService {
     /**
      * @see TelecomServiceImpl#getCallState
      */
+    @UnsupportedAppUsage
     int getCallState();
 
     /**
@@ -285,8 +286,6 @@ interface ITelecomService {
      */
     boolean isInEmergencyCall();
 
-    oneway void reportNuisanceCallStatus(in Uri address, boolean isNuisance, String callingPackage);
-
     /**
      * @see TelecomServiceImpl#handleCallIntent
      */
@@ -301,5 +300,10 @@ interface ITelecomService {
     void addOrRemoveTestCallCompanionApp(String packageName, boolean isAdded);
 
     void setTestAutoModeApp(String packageName);
+
+    /**
+     * @see TelecomServiceImpl#setTestDefaultDialer
+     */
+    void setTestDefaultDialer(in String packageName);
 
 }

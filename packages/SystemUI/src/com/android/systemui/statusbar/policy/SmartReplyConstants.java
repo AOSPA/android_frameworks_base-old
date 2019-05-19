@@ -47,6 +47,7 @@ public final class SmartReplyConstants {
     private final boolean mDefaultShowInHeadsUp;
     private final int mDefaultMinNumSystemGeneratedReplies;
     private final int mDefaultMaxNumActions;
+    private final int mDefaultOnClickInitDelay;
 
     // These fields are updated on the UI thread but can be accessed on both the UI thread and
     // background threads. We use the volatile keyword here instead of synchronization blocks since
@@ -59,6 +60,7 @@ public final class SmartReplyConstants {
     private volatile boolean mShowInHeadsUp;
     private volatile int mMinNumSystemGeneratedReplies;
     private volatile int mMaxNumActions;
+    private volatile long mOnClickInitDelay;
 
     private final Handler mHandler;
     private final Context mContext;
@@ -83,16 +85,18 @@ public final class SmartReplyConstants {
                 R.integer.config_smart_replies_in_notifications_min_num_system_generated_replies);
         mDefaultMaxNumActions = resources.getInteger(
                 R.integer.config_smart_replies_in_notifications_max_num_actions);
+        mDefaultOnClickInitDelay = resources.getInteger(
+                R.integer.config_smart_replies_in_notifications_onclick_init_delay);
 
         registerDeviceConfigListener();
         updateConstants();
     }
 
     private void registerDeviceConfigListener() {
-        DeviceConfig.addOnPropertyChangedListener(
+        DeviceConfig.addOnPropertiesChangedListener(
                 DeviceConfig.NAMESPACE_SYSTEMUI,
                 this::postToHandler,
-                this::onDeviceConfigPropertyChanged);
+                (properties) -> onDeviceConfigPropertiesChanged(properties.getNamespace()));
     }
 
     private void postToHandler(Runnable r) {
@@ -100,10 +104,10 @@ public final class SmartReplyConstants {
     }
 
     @VisibleForTesting
-    void onDeviceConfigPropertyChanged(String namespace, String name, String value) {
+    void onDeviceConfigPropertiesChanged(String namespace) {
         if (!DeviceConfig.NAMESPACE_SYSTEMUI.equals(namespace)) {
             Log.e(TAG, "Received update from DeviceConfig for unrelated namespace: "
-                    + namespace + " " + name + "=" + value);
+                    + namespace);
             return;
         }
 
@@ -118,7 +122,8 @@ public final class SmartReplyConstants {
             mRequiresTargetingP = readDeviceConfigBooleanOrDefaultIfEmpty(
                     SystemUiDeviceConfigFlags.SSIN_REQUIRES_TARGETING_P,
                     mDefaultRequiresP);
-            mMaxSqueezeRemeasureAttempts = readDeviceConfigIntegerOrDefaultIfEmpty(
+            mMaxSqueezeRemeasureAttempts = DeviceConfig.getInt(
+                    DeviceConfig.NAMESPACE_SYSTEMUI,
                     SystemUiDeviceConfigFlags.SSIN_MAX_SQUEEZE_REMEASURE_ATTEMPTS,
                     mDefaultMaxSqueezeRemeasureAttempts);
             mEditChoicesBeforeSending = readDeviceConfigBooleanOrDefaultIfEmpty(
@@ -127,12 +132,18 @@ public final class SmartReplyConstants {
             mShowInHeadsUp = readDeviceConfigBooleanOrDefaultIfEmpty(
                     SystemUiDeviceConfigFlags.SSIN_SHOW_IN_HEADS_UP,
                     mDefaultShowInHeadsUp);
-            mMinNumSystemGeneratedReplies = readDeviceConfigIntegerOrDefaultIfEmpty(
+            mMinNumSystemGeneratedReplies = DeviceConfig.getInt(
+                    DeviceConfig.NAMESPACE_SYSTEMUI,
                     SystemUiDeviceConfigFlags.SSIN_MIN_NUM_SYSTEM_GENERATED_REPLIES,
                     mDefaultMinNumSystemGeneratedReplies);
-            mMaxNumActions = readDeviceConfigIntegerOrDefaultIfEmpty(
+            mMaxNumActions = DeviceConfig.getInt(
+                    DeviceConfig.NAMESPACE_SYSTEMUI,
                     SystemUiDeviceConfigFlags.SSIN_MAX_NUM_ACTIONS,
                     mDefaultMaxNumActions);
+            mOnClickInitDelay = DeviceConfig.getInt(
+                    DeviceConfig.NAMESPACE_SYSTEMUI,
+                    SystemUiDeviceConfigFlags.SSIN_ONCLICK_INIT_DELAY,
+                    mDefaultOnClickInitDelay);
         }
     }
 
@@ -150,21 +161,6 @@ public final class SmartReplyConstants {
         }
         // For invalid configs we return the default value.
         return defaultValue;
-    }
-
-    private static int readDeviceConfigIntegerOrDefaultIfEmpty(String propertyName,
-            int defaultValue) {
-        String value = DeviceConfig.getProperty(DeviceConfig.NAMESPACE_SYSTEMUI, propertyName);
-        if (TextUtils.isEmpty(value)) {
-            return defaultValue;
-        }
-        try {
-            return Integer.parseInt(value);
-        } catch (NumberFormatException e) {
-            Log.e(TAG, "Tried to read an integer flag, property name="
-                    + propertyName + ", value=" + value);
-            return defaultValue;
-        }
     }
 
     /** Returns whether smart replies in notifications are enabled. */
@@ -229,5 +225,13 @@ public final class SmartReplyConstants {
      */
     public int getMaxNumActions() {
         return mMaxNumActions;
+    }
+
+    /**
+     * Returns the amount of time (ms) before smart suggestions are clickable, since the suggestions
+     * were added.
+     */
+    public long getOnClickInitDelay() {
+        return mOnClickInitDelay;
     }
 }

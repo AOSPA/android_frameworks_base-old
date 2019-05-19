@@ -19,13 +19,11 @@
 #include <sstream>
 #include <string>
 
+#include "TestHelpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-
 #include "idmap2/Idmap.h"
 #include "idmap2/RawPrintVisitor.h"
-
-#include "TestHelpers.h"
 
 using ::testing::NotNull;
 
@@ -40,19 +38,18 @@ TEST(RawPrintVisitorTests, CreateRawPrintVisitor) {
   std::unique_ptr<const ApkAssets> overlay_apk = ApkAssets::Load(overlay_apk_path);
   ASSERT_THAT(overlay_apk, NotNull());
 
-  std::stringstream error;
-  std::unique_ptr<const Idmap> idmap =
+  const auto idmap =
       Idmap::FromApkAssets(target_apk_path, *target_apk, overlay_apk_path, *overlay_apk,
-                           PolicyFlags::POLICY_PUBLIC, /* enforce_overlayable */ true, error);
-  ASSERT_THAT(idmap, NotNull());
+                           PolicyFlags::POLICY_PUBLIC, /* enforce_overlayable */ true);
+  ASSERT_TRUE(idmap);
 
   std::stringstream stream;
   RawPrintVisitor visitor(stream);
-  idmap->accept(&visitor);
+  (*idmap)->accept(&visitor);
 
   ASSERT_NE(stream.str().find("00000000: 504d4449  magic\n"), std::string::npos);
   ASSERT_NE(stream.str().find("00000004: 00000001  version\n"), std::string::npos);
-  ASSERT_NE(stream.str().find("00000008: d513ca1b  target crc\n"), std::string::npos);
+  ASSERT_NE(stream.str().find("00000008: 76a20829  target crc\n"), std::string::npos);
   ASSERT_NE(stream.str().find("0000000c: 8635c2ed  overlay crc\n"), std::string::npos);
   ASSERT_NE(stream.str().find("0000021c: 00000000  0x7f010000 -> 0x7f010000 integer/int1\n"),
             std::string::npos);
@@ -64,13 +61,12 @@ TEST(RawPrintVisitorTests, CreateRawPrintVisitorWithoutAccessToApks) {
   std::string raw(reinterpret_cast<const char*>(idmap_raw_data), idmap_raw_data_len);
   std::istringstream raw_stream(raw);
 
-  std::stringstream error;
-  std::unique_ptr<const Idmap> idmap = Idmap::FromBinaryStream(raw_stream, error);
-  ASSERT_THAT(idmap, NotNull());
+  const auto idmap = Idmap::FromBinaryStream(raw_stream);
+  ASSERT_TRUE(idmap);
 
   std::stringstream stream;
   RawPrintVisitor visitor(stream);
-  idmap->accept(&visitor);
+  (*idmap)->accept(&visitor);
 
   ASSERT_NE(stream.str().find("00000000: 504d4449  magic\n"), std::string::npos);
   ASSERT_NE(stream.str().find("00000004: 00000001  version\n"), std::string::npos);

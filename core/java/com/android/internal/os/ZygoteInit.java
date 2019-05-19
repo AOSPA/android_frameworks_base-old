@@ -19,6 +19,9 @@ package com.android.internal.os;
 import static android.system.OsConstants.S_IRWXG;
 import static android.system.OsConstants.S_IRWXO;
 
+import android.annotation.UnsupportedAppUsage;
+import android.app.ApplicationLoaders;
+import android.content.pm.SharedLibraryInfo;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.os.Build;
@@ -41,7 +44,6 @@ import android.system.OsConstants;
 import android.system.StructCapUserData;
 import android.system.StructCapUserHeader;
 import android.text.Hyphenator;
-import android.text.TextUtils;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
@@ -83,10 +85,9 @@ public class ZygoteInit {
     // TODO (chriswailes): Change this so it is set with Zygote or ZygoteSecondary as appropriate
     private static final String TAG = "Zygote";
 
-    private static final String PROPERTY_DISABLE_OPENGL_PRELOADING = "ro.zygote.disable_gl_preload";
+    private static final String PROPERTY_DISABLE_GRAPHICS_DRIVER_PRELOADING =
+            "ro.zygote.disable_gl_preload";
     private static final String PROPERTY_GFX_DRIVER = "ro.gfx.driver.0";
-    private static final String PROPERTY_USE_APP_IMAGE_STARTUP_CACHE =
-            "persist.device_config.runtime_native.use_app_image_startup_cache";
 
     private static final int LOG_BOOT_PROGRESS_PRELOAD_START = 3020;
     private static final int LOG_BOOT_PROGRESS_PRELOAD_END = 3030;
@@ -99,12 +100,13 @@ public class ZygoteInit {
     private static final String ABI_LIST_ARG = "--abi-list=";
 
     // TODO (chriswailes): Re-name this --zygote-socket-name= and then add a
-    // --blastula-socket-name parameter.
+    // --usap-socket-name parameter.
     private static final String SOCKET_NAME_ARG = "--socket-name=";
 
     /**
      * Used to pre-load resources.
      */
+    @UnsupportedAppUsage
     private static Resources mResources;
 
     /**
@@ -125,6 +127,12 @@ public class ZygoteInit {
 
     private static boolean sPreloadComplete;
 
+    /**
+     * Cached classloader to use for the system server. Will only be populated in the system
+     * server process.
+     */
+    private static ClassLoader sCachedSystemServerClassLoader = null;
+
     static void preload(TimingsTraceLog bootTimingsTraceLog) {
         Log.d(TAG, "begin preload");
         bootTimingsTraceLog.traceBegin("BeginPreload");
@@ -133,14 +141,17 @@ public class ZygoteInit {
         bootTimingsTraceLog.traceBegin("PreloadClasses");
         preloadClasses();
         bootTimingsTraceLog.traceEnd(); // PreloadClasses
+        bootTimingsTraceLog.traceBegin("CacheNonBootClasspathClassLoaders");
+        cacheNonBootClasspathClassLoaders();
+        bootTimingsTraceLog.traceEnd(); // CacheNonBootClasspathClassLoaders
         bootTimingsTraceLog.traceBegin("PreloadResources");
         preloadResources();
         bootTimingsTraceLog.traceEnd(); // PreloadResources
         Trace.traceBegin(Trace.TRACE_TAG_DALVIK, "PreloadAppProcessHALs");
         nativePreloadAppProcessHALs();
         Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
-        Trace.traceBegin(Trace.TRACE_TAG_DALVIK, "PreloadOpenGL");
-        preloadOpenGL();
+        Trace.traceBegin(Trace.TRACE_TAG_DALVIK, "PreloadGraphicsDriver");
+        maybePreloadGraphicsDriver();
         Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
         preloadSharedLibraries();
         preloadTextResources();
@@ -182,13 +193,20 @@ public class ZygoteInit {
 
     native private static void nativePreloadAppProcessHALs();
 
-    native private static void nativePreloadOpenGL();
+    /**
+     * This call loads the graphics driver by making an OpenGL or Vulkan call.  If the driver is
+     * not currently in memory it will load and initialize it.  The OpenGL call itself is relatively
+     * cheap and pure.  This means that it is a low overhead on the initial call, and is safe and
+     * cheap to call later.  Calls after the initial invocation will effectively be no-ops for the
+     * system.
+     */
+    static native void nativePreloadGraphicsDriver();
 
-    private static void preloadOpenGL() {
+    private static void maybePreloadGraphicsDriver() {
         String driverPackageName = SystemProperties.get(PROPERTY_GFX_DRIVER);
-        if (!SystemProperties.getBoolean(PROPERTY_DISABLE_OPENGL_PRELOADING, false) &&
-                (driverPackageName == null || driverPackageName.isEmpty())) {
-            nativePreloadOpenGL();
+        if (!SystemProperties.getBoolean(PROPERTY_DISABLE_GRAPHICS_DRIVER_PRELOADING, false)
+                && (driverPackageName == null || driverPackageName.isEmpty())) {
+            nativePreloadGraphicsDriver();
         }
     }
 
@@ -339,6 +357,32 @@ public class ZygoteInit {
     }
 
     /**
+     * Load in things which are used by many apps but which cannot be put in the boot
+     * classpath.
+     */
+    private static void cacheNonBootClasspathClassLoaders() {
+        // These libraries used to be part of the bootclasspath, but had to be removed.
+        // Old system applications still get them for backwards compatibility reasons,
+        // so they are cached here in order to preserve performance characteristics.
+        SharedLibraryInfo hidlBase = new SharedLibraryInfo(
+                "/system/framework/android.hidl.base-V1.0-java.jar", null /*packageName*/,
+                null /*codePaths*/, null /*name*/, 0 /*version*/, SharedLibraryInfo.TYPE_BUILTIN,
+                null /*declaringPackage*/, null /*dependentPackages*/, null /*dependencies*/);
+        SharedLibraryInfo hidlManager = new SharedLibraryInfo(
+                "/system/framework/android.hidl.manager-V1.0-java.jar", null /*packageName*/,
+                null /*codePaths*/, null /*name*/, 0 /*version*/, SharedLibraryInfo.TYPE_BUILTIN,
+                null /*declaringPackage*/, null /*dependentPackages*/, null /*dependencies*/);
+        hidlManager.addDependency(hidlBase);
+
+        ApplicationLoaders.getDefault().createAndCacheNonBootclasspathSystemClassLoaders(
+                new SharedLibraryInfo[]{
+                    // ordered dependencies first
+                    hidlBase,
+                    hidlManager,
+                });
+    }
+
+    /**
      * Load in commonly used resources, so they can be shared across processes.
      *
      * These tend to be a few Kbytes, but are frequently in the 20-40K range, and occasionally even
@@ -446,7 +490,13 @@ public class ZygoteInit {
 
         final String systemServerClasspath = Os.getenv("SYSTEMSERVERCLASSPATH");
         if (systemServerClasspath != null) {
-            performSystemServerDexOpt(systemServerClasspath);
+            if (performSystemServerDexOpt(systemServerClasspath)) {
+                // Throw away the cached classloader. If we compiled here, the classloader would
+                // not have had AoT-ed artifacts.
+                // Note: This only works in a very special environment where selinux enforcement is
+                // disabled, e.g., Mac builds.
+                sCachedSystemServerClassLoader = null;
+            }
             // Capturing profiles is only supported for debug or eng builds since selinux normally
             // prevents it.
             boolean profileSystemServer = SystemProperties.getBoolean(
@@ -479,10 +529,9 @@ public class ZygoteInit {
 
             throw new IllegalStateException("Unexpected return from WrapperInit.execApplication");
         } else {
-            ClassLoader cl = null;
-            if (systemServerClasspath != null) {
-                cl = createPathClassLoader(systemServerClasspath, parsedArgs.mTargetSdkVersion);
-
+            createSystemServerClassLoader();
+            ClassLoader cl = sCachedSystemServerClassLoader;
+            if (cl != null) {
                 Thread.currentThread().setContextClassLoader(cl);
             }
 
@@ -494,6 +543,24 @@ public class ZygoteInit {
         }
 
         /* should never reach here */
+    }
+
+    /**
+     * Create the classloader for the system server and store it in
+     * {@link sCachedSystemServerClassLoader}. This function may be called through JNI in
+     * system server startup, when the runtime is in a critically low state. Do not do
+     * extended computation etc here.
+     */
+    private static void createSystemServerClassLoader() {
+        if (sCachedSystemServerClassLoader != null) {
+            return;
+        }
+        final String systemServerClasspath = Os.getenv("SYSTEMSERVERCLASSPATH");
+        // TODO: Should we run optimization here?
+        if (systemServerClasspath != null) {
+            sCachedSystemServerClassLoader = createPathClassLoader(systemServerClasspath,
+                    VMRuntime.SDK_VERSION_CUR_DEVELOPMENT);
+        }
     }
 
     /**
@@ -560,15 +627,16 @@ public class ZygoteInit {
 
     /**
      * Performs dex-opt on the elements of {@code classPath}, if needed. We choose the instruction
-     * set of the current runtime.
+     * set of the current runtime. If something was compiled, return true.
      */
-    private static void performSystemServerDexOpt(String classPath) {
+    private static boolean performSystemServerDexOpt(String classPath) {
         final String[] classPathElements = classPath.split(":");
         final IInstalld installd = IInstalld.Stub
                 .asInterface(ServiceManager.getService("installd"));
         final String instructionSet = VMRuntime.getRuntime().vmInstructionSet();
 
         String classPathForElement = "";
+        boolean compiledSomething = false;
         for (String classPathElement : classPathElements) {
             // System server is fully AOTed and never profiled
             // for profile guided compilation.
@@ -610,6 +678,7 @@ public class ZygoteInit {
                             uuid, classLoaderContext, seInfo, false /* downgrade */,
                             targetSdkVersion, /*profileName*/ null, /*dexMetadataPath*/ null,
                             "server-dexopt");
+                    compiledSomething = true;
                 } catch (RemoteException | ServiceSpecificException e) {
                     // Ignore (but log), we need this on the classpath for fallback mode.
                     Log.w(TAG, "Failed compiling classpath element for system server: "
@@ -620,6 +689,8 @@ public class ZygoteInit {
             classPathForElement = encodeSystemServerClassPath(
                     classPathForElement, classPathElement);
         }
+
+        return compiledSomething;
     }
 
     /**
@@ -708,13 +779,6 @@ public class ZygoteInit {
                 parsedArgs.mRuntimeFlags |= Zygote.PROFILE_SYSTEM_SERVER;
             }
 
-            String use_app_image_cache = SystemProperties.get(
-                    PROPERTY_USE_APP_IMAGE_STARTUP_CACHE, "");
-            // Property defaults to true currently.
-            if (!TextUtils.isEmpty(use_app_image_cache) && !use_app_image_cache.equals("false")) {
-                parsedArgs.mRuntimeFlags |= Zygote.USE_APP_IMAGE_STARTUP_CACHE;
-            }
-
             /* Request to fork the system server process */
             pid = Zygote.forkSystemServer(
                     parsedArgs.mUid, parsedArgs.mGid,
@@ -754,6 +818,7 @@ public class ZygoteInit {
         return result;
     }
 
+    @UnsupportedAppUsage
     public static void main(String argv[]) {
         ZygoteServer zygoteServer = null;
 
@@ -806,8 +871,6 @@ public class ZygoteInit {
                 throw new RuntimeException("No ABI list supplied.");
             }
 
-            Zygote.getSocketFDs(isPrimaryZygote);
-
             // In some configurations, we avoid preloading resources and classes eagerly.
             // In such cases, we will preload things prior to our first fork.
             if (!enableLazyPreload) {
@@ -832,10 +895,8 @@ public class ZygoteInit {
             // Zygote.
             Trace.setTracingEnabled(false, 0);
 
-            Zygote.nativeSecurityInit();
 
-            // Zygote process unmounts root storage spaces.
-            Zygote.nativeUnmountStorageOnInit();
+            Zygote.initNativeState(isPrimaryZygote);
 
             ZygoteHooks.stopZygoteNoThreadCreation();
 

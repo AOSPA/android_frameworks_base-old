@@ -26,7 +26,6 @@ import static android.view.WindowManager.TRANSIT_NONE;
 
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_ANIM;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
-import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_FREEFORM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT_REPEATS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ORIENTATION;
@@ -257,7 +256,7 @@ class WindowStateAnimator {
 
         mWin.checkPolicyVisibilityChange();
         final DisplayContent displayContent = mWin.getDisplayContent();
-        if (mAttrType == LayoutParams.TYPE_STATUS_BAR && mWin.mPolicyVisibility) {
+        if (mAttrType == LayoutParams.TYPE_STATUS_BAR && mWin.isVisibleByPolicy()) {
             // Upon completion of a not-visible to visible status bar animation a relayout is
             // required.
             if (displayContent != null) {
@@ -487,6 +486,8 @@ class WindowStateAnimator {
             mSurfaceController = new WindowSurfaceController(mSession.mSurfaceSession,
                     attrs.getTitle().toString(), width, height, format, flags, this,
                     windowType, ownerUid);
+            mSurfaceController.setColorSpaceAgnostic((attrs.privateFlags
+                    & WindowManager.LayoutParams.PRIVATE_FLAG_COLOR_SPACE_AGNOSTIC) != 0);
 
             setOffsetPositionForStackResize(false);
             mSurfaceFormat = format;
@@ -790,16 +791,10 @@ class WindowStateAnimator {
         if (DEBUG_WINDOW_CROP) Slog.d(TAG, "Applying decor to crop win=" + w + " mDecorFrame="
                 + w.getDecorFrame() + " mSystemDecorRect=" + mSystemDecorRect);
 
-        final Task task = w.getTask();
-        final boolean fullscreen = w.fillsDisplay() || (task != null && task.isFullscreen());
-        final boolean isFreeformResizing =
-                w.isDragResizing() && w.getResizeMode() == DRAG_RESIZE_MODE_FREEFORM;
-
         // We use the clip rect as provided by the tranformation for non-fullscreen windows to
         // avoid premature clipping with the system decor rect.
         clipRect.set(mSystemDecorRect);
-        if (DEBUG_WINDOW_CROP) Slog.d(TAG, "win=" + w + " Initial clip rect: " + clipRect
-                + " fullscreen=" + fullscreen);
+        if (DEBUG_WINDOW_CROP) Slog.d(TAG, "win=" + w + " Initial clip rect: " + clipRect);
 
         w.expandForSurfaceInsets(clipRect);
 
@@ -1256,6 +1251,13 @@ class WindowStateAnimator {
             return;
         }
         mSurfaceController.setSecure(isSecure);
+    }
+
+    void setColorSpaceAgnosticLocked(boolean agnostic) {
+        if (mSurfaceController == null) {
+            return;
+        }
+        mSurfaceController.setColorSpaceAgnostic(agnostic);
     }
 
     /**

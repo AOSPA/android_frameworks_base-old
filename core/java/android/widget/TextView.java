@@ -55,6 +55,7 @@ import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
 import android.graphics.BaseCanvas;
+import android.graphics.BlendMode;
 import android.graphics.Canvas;
 import android.graphics.Insets;
 import android.graphics.Paint;
@@ -161,8 +162,6 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.animation.AnimationUtils;
 import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillValue;
-import android.view.contentcapture.ContentCaptureManager;
-import android.view.contentcapture.ContentCaptureSession;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.CorrectionInfo;
@@ -173,8 +172,8 @@ import android.view.inputmethod.ExtractedTextRequest;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 import android.view.inspector.InspectableProperty;
-import android.view.inspector.InspectableProperty.EnumMap;
-import android.view.inspector.InspectableProperty.FlagMap;
+import android.view.inspector.InspectableProperty.EnumEntry;
+import android.view.inspector.InspectableProperty.FlagEntry;
 import android.view.textclassifier.TextClassification;
 import android.view.textclassifier.TextClassificationContext;
 import android.view.textclassifier.TextClassificationManager;
@@ -491,7 +490,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         final Drawable[] mShowing = new Drawable[4];
 
         ColorStateList mTintList;
-        PorterDuff.Mode mTintMode;
+        BlendMode mBlendMode;
         boolean mHasTint;
         boolean mHasTintMode;
 
@@ -978,9 +977,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (getImportantForAutofill() == IMPORTANT_FOR_AUTOFILL_AUTO) {
             setImportantForAutofill(IMPORTANT_FOR_AUTOFILL_YES);
         }
-        if (getImportantForContentCapture() == IMPORTANT_FOR_CONTENT_CAPTURE_AUTO) {
-            setImportantForContentCapture(IMPORTANT_FOR_CONTENT_CAPTURE_YES);
-        }
 
         setTextInternal("");
 
@@ -1041,7 +1037,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         Drawable drawableLeft = null, drawableTop = null, drawableRight = null,
                 drawableBottom = null, drawableStart = null, drawableEnd = null;
         ColorStateList drawableTint = null;
-        PorterDuff.Mode drawableTintMode = null;
+        BlendMode drawableTintMode = null;
         int drawablePadding = 0;
         int ellipsize = ELLIPSIZE_NOT_SET;
         boolean singleLine = false;
@@ -1144,7 +1140,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     break;
 
                 case com.android.internal.R.styleable.TextView_drawableTintMode:
-                    drawableTintMode = Drawable.parseTintMode(a.getInt(attr, -1), drawableTintMode);
+                    drawableTintMode = Drawable.parseBlendMode(a.getInt(attr, -1),
+                            drawableTintMode);
                     break;
 
                 case com.android.internal.R.styleable.TextView_drawablePadding:
@@ -1548,7 +1545,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 mDrawables.mHasTint = true;
             }
             if (drawableTintMode != null) {
-                mDrawables.mTintMode = drawableTintMode;
+                mDrawables.mBlendMode = drawableTintMode;
                 mDrawables.mHasTintMode = true;
             }
         }
@@ -1900,8 +1897,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @see #setAutoSizeTextTypeUniformWithPresetSizes(int[], int)
      */
     @InspectableProperty(enumMapping = {
-            @EnumMap(name = "none", value = AUTO_SIZE_TEXT_TYPE_NONE),
-            @EnumMap(name = "uniform", value = AUTO_SIZE_TEXT_TYPE_UNIFORM)
+            @EnumEntry(name = "none", value = AUTO_SIZE_TEXT_TYPE_NONE),
+            @EnumEntry(name = "uniform", value = AUTO_SIZE_TEXT_TYPE_UNIFORM)
     })
     @AutoSizeTextType
     public int getAutoSizeTextType() {
@@ -3304,10 +3301,26 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @see Drawable#setTintMode(PorterDuff.Mode)
      */
     public void setCompoundDrawableTintMode(@Nullable PorterDuff.Mode tintMode) {
+        setCompoundDrawableTintBlendMode(tintMode != null
+                ? BlendMode.fromValue(tintMode.nativeInt) : null);
+    }
+
+    /**
+     * Specifies the blending mode used to apply the tint specified by
+     * {@link #setCompoundDrawableTintList(ColorStateList)} to the compound
+     * drawables. The default mode is {@link PorterDuff.Mode#SRC_IN}.
+     *
+     * @param blendMode the blending mode used to apply the tint, may be
+     *                 {@code null} to clear tint
+     * @attr ref android.R.styleable#TextView_drawableTintMode
+     * @see #setCompoundDrawableTintList(ColorStateList)
+     * @see Drawable#setTintBlendMode(BlendMode)
+     */
+    public void setCompoundDrawableTintBlendMode(@Nullable BlendMode blendMode) {
         if (mDrawables == null) {
             mDrawables = new Drawables(getContext());
         }
-        mDrawables.mTintMode = tintMode;
+        mDrawables.mBlendMode = blendMode;
         mDrawables.mHasTintMode = true;
 
         applyCompoundDrawableTint();
@@ -3321,10 +3334,27 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *         drawables
      * @attr ref android.R.styleable#TextView_drawableTintMode
      * @see #setCompoundDrawableTintMode(PorterDuff.Mode)
+     *
      */
     @InspectableProperty(name = "drawableTintMode")
     public PorterDuff.Mode getCompoundDrawableTintMode() {
-        return mDrawables != null ? mDrawables.mTintMode : null;
+        BlendMode mode = getCompoundDrawableTintBlendMode();
+        return mode != null ? BlendMode.blendModeToPorterDuffMode(mode) : null;
+    }
+
+    /**
+     * Returns the blending mode used to apply the tint to the compound
+     * drawables, if specified.
+     *
+     * @return the blending mode used to apply the tint to the compound
+     *         drawables
+     * @attr ref android.R.styleable#TextView_drawableTintMode
+     * @see #setCompoundDrawableTintBlendMode(BlendMode)
+     */
+    @InspectableProperty(name = "drawableBlendMode",
+            attributeId = com.android.internal.R.styleable.TextView_drawableTintMode)
+    public @Nullable BlendMode getCompoundDrawableTintBlendMode() {
+        return mDrawables != null ? mDrawables.mBlendMode : null;
     }
 
     private void applyCompoundDrawableTint() {
@@ -3334,7 +3364,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         if (mDrawables.mHasTint || mDrawables.mHasTintMode) {
             final ColorStateList tintList = mDrawables.mTintList;
-            final PorterDuff.Mode tintMode = mDrawables.mTintMode;
+            final BlendMode blendMode = mDrawables.mBlendMode;
             final boolean hasTint = mDrawables.mHasTint;
             final boolean hasTintMode = mDrawables.mHasTintMode;
             final int[] state = getDrawableState();
@@ -3358,7 +3388,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 }
 
                 if (hasTintMode) {
-                    dr.setTintMode(tintMode);
+                    dr.setTintBlendMode(blendMode);
                 }
 
                 // The drawable (or one of its children) may not have been
@@ -3527,10 +3557,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @attr ref android.R.styleable#TextView_autoLink
      */
     @InspectableProperty(name = "autoLink", flagMapping = {
-            @FlagMap(name = "web", target = Linkify.WEB_URLS),
-            @FlagMap(name = "email", target = Linkify.EMAIL_ADDRESSES),
-            @FlagMap(name = "phone", target = Linkify.PHONE_NUMBERS),
-            @FlagMap(name = "map", target = Linkify.MAP_ADDRESSES)
+            @FlagEntry(name = "web", target = Linkify.WEB_URLS),
+            @FlagEntry(name = "email", target = Linkify.EMAIL_ADDRESSES),
+            @FlagEntry(name = "phone", target = Linkify.PHONE_NUMBERS),
+            @FlagEntry(name = "map", target = Linkify.MAP_ADDRESSES)
     })
     public final int getAutoLinkMask() {
         return mAutoLinkMask;
@@ -4515,9 +4545,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @see #setBreakStrategy(int)
      */
     @InspectableProperty(enumMapping = {
-            @EnumMap(name = "simple", value = Layout.BREAK_STRATEGY_SIMPLE),
-            @EnumMap(name = "high_quality", value = Layout.BREAK_STRATEGY_HIGH_QUALITY),
-            @EnumMap(name = "balanced", value = Layout.BREAK_STRATEGY_BALANCED)
+            @EnumEntry(name = "simple", value = Layout.BREAK_STRATEGY_SIMPLE),
+            @EnumEntry(name = "high_quality", value = Layout.BREAK_STRATEGY_HIGH_QUALITY),
+            @EnumEntry(name = "balanced", value = Layout.BREAK_STRATEGY_BALANCED)
     })
     @Layout.BreakStrategy
     public int getBreakStrategy() {
@@ -4566,9 +4596,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @see #setHyphenationFrequency(int)
      */
     @InspectableProperty(enumMapping = {
-            @EnumMap(name = "none", value = Layout.HYPHENATION_FREQUENCY_NONE),
-            @EnumMap(name = "normal", value = Layout.HYPHENATION_FREQUENCY_NORMAL),
-            @EnumMap(name = "full", value = Layout.HYPHENATION_FREQUENCY_FULL)
+            @EnumEntry(name = "none", value = Layout.HYPHENATION_FREQUENCY_NONE),
+            @EnumEntry(name = "normal", value = Layout.HYPHENATION_FREQUENCY_NORMAL),
+            @EnumEntry(name = "full", value = Layout.HYPHENATION_FREQUENCY_FULL)
     })
     @Layout.HyphenationFrequency
     public int getHyphenationFrequency() {
@@ -4628,8 +4658,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @see #setJustificationMode(int)
      */
     @InspectableProperty(enumMapping = {
-            @EnumMap(name = "none", value = Layout.JUSTIFICATION_MODE_NONE),
-            @EnumMap(name = "inter_word", value = Layout.JUSTIFICATION_MODE_INTER_WORD)
+            @EnumEntry(name = "none", value = Layout.JUSTIFICATION_MODE_NONE),
+            @EnumEntry(name = "inter_word", value = Layout.JUSTIFICATION_MODE_INTER_WORD)
     })
     public @Layout.JustificationMode int getJustificationMode() {
         return mJustificationMode;
@@ -6667,142 +6697,142 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @see android.text.InputType
      */
     @InspectableProperty(flagMapping = {
-            @FlagMap(name = "none", mask = 0xffffffff, target = InputType.TYPE_NULL),
-            @FlagMap(
+            @FlagEntry(name = "none", mask = 0xffffffff, target = InputType.TYPE_NULL),
+            @FlagEntry(
                     name = "text",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_NORMAL),
-            @FlagMap(
+            @FlagEntry(
                     name = "textUri",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI),
-            @FlagMap(
+            @FlagEntry(
                     name = "textEmailAddress",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT
                             | InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS),
-            @FlagMap(
+            @FlagEntry(
                     name = "textEmailSubject",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT
                             | InputType.TYPE_TEXT_VARIATION_EMAIL_SUBJECT),
-            @FlagMap(
+            @FlagEntry(
                     name = "textShortMessage",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT
                             | InputType.TYPE_TEXT_VARIATION_SHORT_MESSAGE),
-            @FlagMap(
+            @FlagEntry(
                     name = "textLongMessage",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT
                             | InputType.TYPE_TEXT_VARIATION_LONG_MESSAGE),
-            @FlagMap(
+            @FlagEntry(
                     name = "textPersonName",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT
                             | InputType.TYPE_TEXT_VARIATION_PERSON_NAME),
-            @FlagMap(
+            @FlagEntry(
                     name = "textPostalAddress",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT
                             | InputType.TYPE_TEXT_VARIATION_POSTAL_ADDRESS),
-            @FlagMap(
+            @FlagEntry(
                     name = "textPassword",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD),
-            @FlagMap(
+            @FlagEntry(
                     name = "textVisiblePassword",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT
                             | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD),
-            @FlagMap(
+            @FlagEntry(
                     name = "textWebEditText",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT
                             | InputType.TYPE_TEXT_VARIATION_WEB_EDIT_TEXT),
-            @FlagMap(
+            @FlagEntry(
                     name = "textFilter",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_FILTER),
-            @FlagMap(
+            @FlagEntry(
                     name = "textPhonetic",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PHONETIC),
-            @FlagMap(
+            @FlagEntry(
                     name = "textWebEmailAddress",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT
                             | InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS),
-            @FlagMap(
+            @FlagEntry(
                     name = "textWebPassword",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_TEXT
                             | InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD),
-            @FlagMap(
+            @FlagEntry(
                     name = "number",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_NORMAL),
-            @FlagMap(
+            @FlagEntry(
                     name = "numberPassword",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_NUMBER
                             | InputType.TYPE_NUMBER_VARIATION_PASSWORD),
-            @FlagMap(
+            @FlagEntry(
                     name = "phone",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_PHONE),
-            @FlagMap(
+            @FlagEntry(
                     name = "datetime",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_DATETIME
                             | InputType.TYPE_DATETIME_VARIATION_NORMAL),
-            @FlagMap(
+            @FlagEntry(
                     name = "date",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_DATETIME
                             | InputType.TYPE_DATETIME_VARIATION_DATE),
-            @FlagMap(
+            @FlagEntry(
                     name = "time",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_VARIATION,
                     target = InputType.TYPE_CLASS_DATETIME
                             | InputType.TYPE_DATETIME_VARIATION_TIME),
-            @FlagMap(
+            @FlagEntry(
                     name = "textCapCharacters",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_FLAGS,
                     target = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS),
-            @FlagMap(
+            @FlagEntry(
                     name = "textCapWords",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_FLAGS,
                     target = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS),
-            @FlagMap(
+            @FlagEntry(
                     name = "textCapSentences",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_FLAGS,
                     target = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES),
-            @FlagMap(
+            @FlagEntry(
                     name = "textAutoCorrect",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_FLAGS,
                     target = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_AUTO_CORRECT),
-            @FlagMap(
+            @FlagEntry(
                     name = "textAutoComplete",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_FLAGS,
                     target = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_AUTO_COMPLETE),
-            @FlagMap(
+            @FlagEntry(
                     name = "textMultiLine",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_FLAGS,
                     target = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE),
-            @FlagMap(
+            @FlagEntry(
                     name = "textImeMultiLine",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_FLAGS,
                     target = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_IME_MULTI_LINE),
-            @FlagMap(
+            @FlagEntry(
                     name = "textNoSuggestions",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_FLAGS,
                     target = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS),
-            @FlagMap(
+            @FlagEntry(
                     name = "numberSigned",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_FLAGS,
                     target = InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_SIGNED),
-            @FlagMap(
+            @FlagEntry(
                     name = "numberDecimal",
                     mask = InputType.TYPE_MASK_CLASS | InputType.TYPE_MASK_FLAGS,
                     target = InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL),
@@ -6832,49 +6862,51 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @see EditorInfo
      */
     @InspectableProperty(flagMapping = {
-            @FlagMap(name = "normal", mask = 0xffffffff, target = EditorInfo.IME_NULL),
-            @FlagMap(
+            @FlagEntry(name = "normal", mask = 0xffffffff, target = EditorInfo.IME_NULL),
+            @FlagEntry(
                     name = "actionUnspecified",
                     mask = EditorInfo.IME_MASK_ACTION,
                     target = EditorInfo.IME_ACTION_UNSPECIFIED),
-            @FlagMap(
+            @FlagEntry(
                     name = "actionNone",
                     mask = EditorInfo.IME_MASK_ACTION,
                     target = EditorInfo.IME_ACTION_NONE),
-            @FlagMap(
+            @FlagEntry(
                     name = "actionGo",
                     mask = EditorInfo.IME_MASK_ACTION,
                     target = EditorInfo.IME_ACTION_GO),
-            @FlagMap(
+            @FlagEntry(
                     name = "actionSearch",
                     mask = EditorInfo.IME_MASK_ACTION,
                     target = EditorInfo.IME_ACTION_SEARCH),
-            @FlagMap(
+            @FlagEntry(
                     name = "actionSend",
                     mask = EditorInfo.IME_MASK_ACTION,
                     target = EditorInfo.IME_ACTION_SEND),
-            @FlagMap(
+            @FlagEntry(
                     name = "actionNext",
                     mask = EditorInfo.IME_MASK_ACTION,
                     target = EditorInfo.IME_ACTION_NEXT),
-            @FlagMap(
+            @FlagEntry(
                     name = "actionDone",
                     mask = EditorInfo.IME_MASK_ACTION,
                     target = EditorInfo.IME_ACTION_DONE),
-            @FlagMap(
+            @FlagEntry(
                     name = "actionPrevious",
                     mask = EditorInfo.IME_MASK_ACTION,
                     target = EditorInfo.IME_ACTION_PREVIOUS),
-            @FlagMap(name = "flagForceAscii", target = EditorInfo.IME_FLAG_FORCE_ASCII),
-            @FlagMap(name = "flagNavigateNext", target = EditorInfo.IME_FLAG_NAVIGATE_NEXT),
-            @FlagMap(name = "flagNavigatePrevious", target = EditorInfo.IME_FLAG_NAVIGATE_PREVIOUS),
-            @FlagMap(
+            @FlagEntry(name = "flagForceAscii", target = EditorInfo.IME_FLAG_FORCE_ASCII),
+            @FlagEntry(name = "flagNavigateNext", target = EditorInfo.IME_FLAG_NAVIGATE_NEXT),
+            @FlagEntry(
+                    name = "flagNavigatePrevious",
+                    target = EditorInfo.IME_FLAG_NAVIGATE_PREVIOUS),
+            @FlagEntry(
                     name = "flagNoAccessoryAction",
                     target = EditorInfo.IME_FLAG_NO_ACCESSORY_ACTION),
-            @FlagMap(name = "flagNoEnterAction", target = EditorInfo.IME_FLAG_NO_ENTER_ACTION),
-            @FlagMap(name = "flagNoExtractUi", target = EditorInfo.IME_FLAG_NO_EXTRACT_UI),
-            @FlagMap(name = "flagNoFullscreen", target = EditorInfo.IME_FLAG_NO_FULLSCREEN),
-            @FlagMap(
+            @FlagEntry(name = "flagNoEnterAction", target = EditorInfo.IME_FLAG_NO_ENTER_ACTION),
+            @FlagEntry(name = "flagNoExtractUi", target = EditorInfo.IME_FLAG_NO_EXTRACT_UI),
+            @FlagEntry(name = "flagNoFullscreen", target = EditorInfo.IME_FLAG_NO_FULLSCREEN),
+            @FlagEntry(
                     name = "flagNoPersonalizedLearning",
                     target = EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING),
     })
@@ -10079,7 +10111,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
-     * Return true iff there is a selection inside this text view.
+     * Return true iff there is a selection of nonzero length inside this text view.
      */
     public boolean hasSelection() {
         final int selectionStart = getSelectionStart();
@@ -10518,8 +10550,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
-     * Notify managers (such as {@link AutofillManager} and {@link ContentCaptureManager}) that are
-     * interested on text changes.
+     * Notify managers (such as {@link AutofillManager}) that are interested in text changes.
      */
     private void notifyListeningManagersAfterTextChanged() {
 
@@ -10533,22 +10564,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     Log.v(LOG_TAG, "notifyAutoFillManagerAfterTextChanged");
                 }
                 afm.notifyValueChanged(TextView.this);
-            }
-        }
-
-        // TODO(b/121045053): should use a flag / boolean to keep status of SHOWN / HIDDEN instead
-        // of using isLaidout(), so it's not called in cases where it's laid out but a
-        // notifyAppeared was not sent.
-
-        // ContentCapture
-        if (isLaidOut() && isImportantForContentCapture() && isTextEditable()) {
-            final ContentCaptureManager cm = mContext.getSystemService(ContentCaptureManager.class);
-            if (cm != null && cm.isContentCaptureEnabled()) {
-                final ContentCaptureSession session = getContentCaptureSession();
-                if (session != null) {
-                    // TODO(b/111276913): pass flags when edited by user / add CTS test
-                    session.notifyViewTextChanged(getAutofillId(), getText());
-                }
             }
         }
     }
@@ -11384,8 +11399,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         final boolean isPassword = hasPasswordTransformationMethod()
                 || isPasswordInputType(getInputType());
-        if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL
-                || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
+        if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL) {
             if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL) {
                 structure.setDataIsSensitive(!mTextSetFromXmlOrResourceId);
             }
@@ -11401,12 +11415,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             }
         }
 
-        if (!isPassword || viewFor == VIEW_STRUCTURE_FOR_AUTOFILL
-                || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
+        if (!isPassword || viewFor == VIEW_STRUCTURE_FOR_AUTOFILL) {
             if (mLayout == null) {
-                if (viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
-                    Log.w(LOG_TAG, "onProvideContentCaptureStructure(): calling assumeLayout()");
-                }
                 assumeLayout();
             }
             Layout layout = mLayout;
@@ -11494,8 +11504,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 }
             }
 
-            if (viewFor == VIEW_STRUCTURE_FOR_ASSIST
-                    || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
+            if (viewFor == VIEW_STRUCTURE_FOR_ASSIST) {
                 // Extract style information that applies to the TextView as a whole.
                 int style = 0;
                 int typefaceStyle = getTypefaceStyle();
@@ -11523,8 +11532,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 structure.setTextStyle(getTextSize(), getCurrentTextColor(),
                         AssistStructure.ViewNode.TEXT_COLOR_UNDEFINED /* bgColor */, style);
             }
-            if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL
-                    || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
+            if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL) {
                 structure.setMinTextEms(getMinEms());
                 structure.setMaxTextEms(getMaxEms());
                 int maxLength = -1;
@@ -12744,7 +12752,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * return value may not be the same as the one TextView uses if the View's layout direction is
      * not resolved or detached from parent root view.
      */
-    public TextDirectionHeuristic getTextDirectionHeuristic() {
+    public @NonNull TextDirectionHeuristic getTextDirectionHeuristic() {
         if (hasPasswordTransformationMethod()) {
             // passwords fields should be LTR
             return TextDirectionHeuristics.LTR;
@@ -13062,7 +13070,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
 
         @SuppressWarnings("hiding")
-        public static final Parcelable.Creator<SavedState> CREATOR =
+        public static final @android.annotation.NonNull Parcelable.Creator<SavedState> CREATOR =
                 new Parcelable.Creator<SavedState>() {
                     public SavedState createFromParcel(Parcel in) {
                         return new SavedState(in);

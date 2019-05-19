@@ -17,28 +17,28 @@
 #pragma once
 
 #include "DamageAccumulator.h"
-#include "Lighting.h"
 #include "FrameInfo.h"
 #include "FrameInfoVisualizer.h"
 #include "FrameMetricsReporter.h"
 #include "IContextFactory.h"
 #include "IRenderPipeline.h"
 #include "LayerUpdateQueue.h"
-#include "RenderNode.h"
+#include "Lighting.h"
 #include "ReliableSurface.h"
+#include "RenderNode.h"
 #include "renderthread/RenderTask.h"
 #include "renderthread/RenderThread.h"
-#include "thread/Task.h"
-#include "thread/TaskProcessor.h"
 
 #include <EGL/egl.h>
 #include <SkBitmap.h>
 #include <SkRect.h>
+#include <SkSize.h>
 #include <cutils/compiler.h>
 #include <gui/Surface.h>
 #include <utils/Functor.h>
 
 #include <functional>
+#include <future>
 #include <set>
 #include <string>
 #include <vector>
@@ -113,7 +113,7 @@ public:
     void setSurface(sp<Surface>&& surface);
     bool pauseSurface();
     void setStopped(bool stopped);
-    bool hasSurface() { return mNativeSurface.get(); }
+    bool hasSurface() const { return mNativeSurface.get(); }
     void allocateBuffers();
 
     void setLightAlpha(uint8_t ambientShadowAlpha, uint8_t spotShadowAlpha);
@@ -188,22 +188,16 @@ public:
         mRenderPipeline->setPictureCapturedCallback(callback);
     }
 
-    void setForceDark(bool enable) {
-        mUseForceDark = enable;
-    }
+    void setForceDark(bool enable) { mUseForceDark = enable; }
 
     bool useForceDark() {
-        // The force-dark override has the highest priority, followed by the disable setting
-        // for the feature as a whole, followed last by whether or not this context has had
-        // force dark set (typically automatically done via UIMode)
-        if (Properties::forceDarkMode) {
-            return true;
-        }
-        if (!Properties::enableForceDarkSupport) {
-            return false;
-        }
         return mUseForceDark;
     }
+
+    // Must be called before setSurface
+    void setRenderAheadDepth(int renderAhead);
+
+    SkISize getNextFrameSize() const;
 
 private:
     CanvasContext(RenderThread& thread, bool translucent, RenderNode* rootRenderNode,
@@ -217,6 +211,8 @@ private:
     void freePrefetchedLayers();
 
     bool isSwapChainStuffed();
+    bool surfaceRequiresRedraw();
+    void setPresentTime();
 
     SkRect computeDirtyRect(const Frame& frame, SkRect* dirty);
 
@@ -235,6 +231,9 @@ private:
     // painted onto its surface.
     bool mIsDirty = false;
     SwapBehavior mSwapBehavior = SwapBehavior::kSwap_default;
+    bool mFixedRenderAhead = false;
+    uint32_t mRenderAheadDepth = 0;
+    uint32_t mRenderAheadCapacity = 0;
     struct SwapHistory {
         SkRect damage;
         nsecs_t vsyncTime;
@@ -273,15 +272,7 @@ private:
     // Stores the bounds of the main content.
     Rect mContentDrawBounds;
 
-    // TODO: This is really a Task<void> but that doesn't really work
-    // when Future<> expects to be able to get/set a value
-    struct FuncTask : public Task<bool> {
-        std::function<void()> func;
-    };
-    class FuncTaskProcessor;
-
-    std::vector<sp<FuncTask>> mFrameFences;
-    sp<TaskProcessor<bool>> mFrameWorkProcessor;
+    std::vector<std::future<void>> mFrameFences;
     std::unique_ptr<IRenderPipeline> mRenderPipeline;
 
     std::vector<std::function<void(int64_t)>> mFrameCompleteCallbacks;

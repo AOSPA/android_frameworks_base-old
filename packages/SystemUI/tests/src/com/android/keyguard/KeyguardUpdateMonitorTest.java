@@ -106,6 +106,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         when(mFaceManager.hasEnrolledTemplates()).thenReturn(true);
         when(mFaceManager.hasEnrolledTemplates(anyInt())).thenReturn(true);
         when(mUserManager.isUserUnlocked(anyInt())).thenReturn(true);
+        when(mUserManager.isPrimaryUser()).thenReturn(true);
         when(mStrongAuthTracker.isUnlockingWithBiometricAllowed()).thenReturn(true);
         context.addMockSystemService(TrustManager.class, mTrustManager);
         context.addMockSystemService(FingerprintManager.class, mFingerprintManager);
@@ -287,7 +288,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         mKeyguardUpdateMonitor.sendKeyguardBouncerChanged(true);
         mTestableLooper.processAllMessages();
 
-        verify(mFaceManager).authenticate(any(), any(), anyInt(), any(), any());
+        verify(mFaceManager).authenticate(any(), any(), anyInt(), any(), any(), anyInt());
         verify(mFaceManager).isHardwareDetected();
         verify(mFaceManager).hasEnrolledTemplates(anyInt());
     }
@@ -297,7 +298,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         mKeyguardUpdateMonitor.dispatchStartedWakingUp();
         mTestableLooper.processAllMessages();
         mKeyguardUpdateMonitor.onKeyguardVisibilityChanged(true);
-        verify(mFaceManager).authenticate(any(), any(), anyInt(), any(), any());
+        verify(mFaceManager).authenticate(any(), any(), anyInt(), any(), any(), anyInt());
     }
 
     @Test
@@ -316,17 +317,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
         mKeyguardUpdateMonitor.setKeyguardOccluded(true);
         mKeyguardUpdateMonitor.setAssistantVisible(true);
 
-        verify(mFaceManager).authenticate(any(), any(), anyInt(), any(), any());
-    }
-
-    @Test
-    public void testNeverAuthenticates_whenFaceLockout() {
-        mKeyguardUpdateMonitor.mFaceAuthenticationCallback
-                .onAuthenticationError(FaceManager.FACE_ERROR_LOCKOUT, "lockout");
-        mKeyguardUpdateMonitor.sendKeyguardBouncerChanged(true);
-        mTestableLooper.processAllMessages();
-
-        verify(mFaceManager, never()).authenticate(any(), any(), anyInt(), any(), any());
+        verify(mFaceManager).authenticate(any(), any(), anyInt(), any(), any(), anyInt());
     }
 
     @Test

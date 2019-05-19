@@ -16,12 +16,13 @@
 
 package com.android.systemui.statusbar.notification.stack;
 
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.testing.TestableLooper.RunWithLooper;
 import android.view.NotificationHeaderView;
 import android.view.View;
+
+import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.NotificationTestHelper;
@@ -47,13 +48,6 @@ public class NotificationChildrenContainerTest extends SysuiTestCase {
         mNotificationTestHelper = new NotificationTestHelper(mContext);
         mGroup = mNotificationTestHelper.createGroup();
         mChildrenContainer = mGroup.getChildrenContainer();
-    }
-
-    @Test
-    public void testGetMaxAllowedVisibleChildren_ambient() {
-        mGroup.setOnAmbient(true);
-        Assert.assertEquals(mChildrenContainer.getMaxAllowedVisibleChildren(),
-            NotificationChildrenContainer.NUMBER_OF_CHILDREN_WHEN_AMBIENT);
     }
 
     @Test

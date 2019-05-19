@@ -40,11 +40,13 @@ import android.os.IRemoteCallback;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.RemoteException;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.util.Log;
 import android.util.Slog;
 
 import com.android.internal.R;
+import com.android.internal.os.SomeArgs;
 
 import java.util.List;
 
@@ -63,6 +65,8 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
     private static final int MSG_AUTHENTICATION_FAILED = 103;
     private static final int MSG_ERROR = 104;
     private static final int MSG_REMOVED = 105;
+    private static final int MSG_GET_FEATURE_COMPLETED = 106;
+    private static final int MSG_SET_FEATURE_COMPLETED = 107;
 
     private IFaceService mService;
     private final Context mContext;
@@ -70,6 +74,8 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
     private AuthenticationCallback mAuthenticationCallback;
     private EnrollmentCallback mEnrollmentCallback;
     private RemovalCallback mRemovalCallback;
+    private SetFeatureCallback mSetFeatureCallback;
+    private GetFeatureCallback mGetFeatureCallback;
     private CryptoObject mCryptoObject;
     private Face mRemovalFace;
     private Handler mHandler;
@@ -88,8 +94,8 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         }
 
         @Override // binder call
-        public void onAuthenticationSucceeded(long deviceId, Face face) {
-            mHandler.obtainMessage(MSG_AUTHENTICATION_SUCCEEDED, face).sendToTarget();
+        public void onAuthenticationSucceeded(long deviceId, Face face, int userId) {
+            mHandler.obtainMessage(MSG_AUTHENTICATION_SUCCEEDED, userId, 0, face).sendToTarget();
         }
 
         @Override // binder call
@@ -111,6 +117,20 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         @Override
         public void onEnumerated(long deviceId, int faceId, int remaining) {
             // TODO: Finish. Low priority since it's not used.
+        }
+
+        @Override
+        public void onFeatureSet(boolean success, int feature) {
+            mHandler.obtainMessage(MSG_SET_FEATURE_COMPLETED, feature, 0, success).sendToTarget();
+        }
+
+        @Override
+        public void onFeatureGet(boolean success, int feature, boolean value) {
+            SomeArgs args = SomeArgs.obtain();
+            args.arg1 = success;
+            args.argi1 = feature;
+            args.arg2 = value;
+            mHandler.obtainMessage(MSG_GET_FEATURE_COMPLETED, args).sendToTarget();
         }
     };
 
@@ -149,6 +169,44 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
     @RequiresPermission(USE_BIOMETRIC_INTERNAL)
     public void authenticate(@Nullable CryptoObject crypto, @Nullable CancellationSignal cancel,
             int flags, @NonNull AuthenticationCallback callback, @Nullable Handler handler) {
+        authenticate(crypto, cancel, flags, callback, handler, mContext.getUserId());
+    }
+
+    /**
+     * Use the provided handler thread for events.
+     */
+    private void useHandler(Handler handler) {
+        if (handler != null) {
+            mHandler = new MyHandler(handler.getLooper());
+        } else if (mHandler.getLooper() != mContext.getMainLooper()) {
+            mHandler = new MyHandler(mContext.getMainLooper());
+        }
+    }
+
+    /**
+     * Request authentication of a crypto object. This call operates the face recognition hardware
+     * and starts capturing images. It terminates when
+     * {@link AuthenticationCallback#onAuthenticationError(int, CharSequence)} or
+     * {@link AuthenticationCallback#onAuthenticationSucceeded(AuthenticationResult)} is called, at
+     * which point the object is no longer valid. The operation can be canceled by using the
+     * provided cancel object.
+     *
+     * @param crypto   object associated with the call or null if none required.
+     * @param cancel   an object that can be used to cancel authentication
+     * @param flags    optional flags; should be 0
+     * @param callback an object to receive authentication events
+     * @param handler  an optional handler to handle callback events
+     * @param userId   userId to authenticate for
+     * @throws IllegalArgumentException if the crypto operation is not supported or is not backed
+     *                                  by
+     *                                  <a href="{@docRoot}training/articles/keystore.html">Android
+     *                                  Keystore facility</a>.
+     * @throws IllegalStateException    if the crypto primitive is not initialized.
+     * @hide
+     */
+    public void authenticate(@Nullable CryptoObject crypto, @Nullable CancellationSignal cancel,
+            int flags, @NonNull AuthenticationCallback callback, @Nullable Handler handler,
+            int userId) {
         if (callback == null) {
             throw new IllegalArgumentException("Must supply an authentication callback");
         }
@@ -168,7 +226,8 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
                 mAuthenticationCallback = callback;
                 mCryptoObject = crypto;
                 long sessionId = crypto != null ? crypto.getOpId() : 0;
-                mService.authenticate(mToken, sessionId, mContext.getUserId(), mServiceReceiver,
+                Trace.beginSection("FaceManager#authenticate");
+                mService.authenticate(mToken, sessionId, userId, mServiceReceiver,
                         flags, mContext.getOpPackageName());
             } catch (RemoteException e) {
                 Log.w(TAG, "Remote exception while authenticating: ", e);
@@ -177,20 +236,11 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
                     // try again later.
                     callback.onAuthenticationError(FACE_ERROR_HW_UNAVAILABLE,
                             getErrorString(mContext, FACE_ERROR_HW_UNAVAILABLE,
-                                0 /* vendorCode */));
+                                    0 /* vendorCode */));
                 }
+            } finally {
+                Trace.endSection();
             }
-        }
-    }
-
-    /**
-     * Use the provided handler thread for events.
-     */
-    private void useHandler(Handler handler) {
-        if (handler != null) {
-            mHandler = new MyHandler(handler.getLooper());
-        } else if (mHandler.getLooper() != mContext.getMainLooper()) {
-            mHandler = new MyHandler(mContext.getMainLooper());
         }
     }
 
@@ -230,6 +280,7 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         if (mService != null) {
             try {
                 mEnrollmentCallback = callback;
+                Trace.beginSection("FaceManager#enroll");
                 mService.enroll(mToken, token, mServiceReceiver,
                         mContext.getOpPackageName(), disabledFeatures);
             } catch (RemoteException e) {
@@ -241,6 +292,8 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
                             getErrorString(mContext, FACE_ERROR_HW_UNAVAILABLE,
                                 0 /* vendorCode */));
                 }
+            } finally {
+                Trace.endSection();
             }
         }
     }
@@ -286,10 +339,12 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
      * @hide
      */
     @RequiresPermission(MANAGE_BIOMETRIC)
-    public void setFeature(int feature, boolean enabled, byte[] token) {
+    public void setFeature(int feature, boolean enabled, byte[] token,
+            SetFeatureCallback callback) {
         if (mService != null) {
             try {
-                mService.setFeature(feature, enabled, token);
+                mSetFeatureCallback = callback;
+                mService.setFeature(feature, enabled, token, mServiceReceiver);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -300,16 +355,15 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
      * @hide
      */
     @RequiresPermission(MANAGE_BIOMETRIC)
-    public boolean getFeature(int feature) {
-        boolean result = true;
+    public void getFeature(int feature, GetFeatureCallback callback) {
         if (mService != null) {
             try {
-                result = mService.getFeature(feature);
+                mGetFeatureCallback = callback;
+                mService.getFeature(feature, mServiceReceiver);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
         }
-        return result;
     }
 
     /**
@@ -633,6 +687,8 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
                 return context.getString(R.string.face_acquired_obscured);
             case FACE_ACQUIRED_START:
                 return null;
+            case FACE_ACQUIRED_SENSOR_DIRTY:
+                return context.getString(R.string.face_acquired_sensor_dirty);
             case FACE_ACQUIRED_VENDOR: {
                 String[] msgArray = context.getResources().getStringArray(
                         R.array.face_acquired_vendor);
@@ -871,6 +927,20 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         }
     }
 
+    /**
+     * @hide
+     */
+    public abstract static class SetFeatureCallback {
+        public abstract void onCompleted(boolean success, int feature);
+    }
+
+    /**
+     * @hide
+     */
+    public abstract static class GetFeatureCallback {
+        public abstract void onCompleted(boolean success, int feature, boolean value);
+    }
+
     private class OnEnrollCancelListener implements OnCancelListener {
         @Override
         public void onCancel() {
@@ -902,6 +972,7 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
 
         @Override
         public void handleMessage(android.os.Message msg) {
+            Trace.beginSection("FaceManager#handleMessage: " + Integer.toString(msg.what));
             switch (msg.what) {
                 case MSG_ENROLL_RESULT:
                     sendEnrollResult((Face) msg.obj, msg.arg1 /* remaining */);
@@ -923,9 +994,37 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
                 case MSG_REMOVED:
                     sendRemovedResult((Face) msg.obj, msg.arg1 /* remaining */);
                     break;
+                case MSG_SET_FEATURE_COMPLETED:
+                    sendSetFeatureCompleted((boolean) msg.obj /* success */,
+                            msg.arg1 /* feature */);
+                    break;
+                case MSG_GET_FEATURE_COMPLETED:
+                    SomeArgs args = (SomeArgs) msg.obj;
+                    sendGetFeatureCompleted((boolean) args.arg1 /* success */,
+                            args.argi1 /* feature */,
+                            (boolean) args.arg2 /* value */);
+                    args.recycle();
+                    break;
+                default:
+                    Log.w(TAG, "Unknown message: " + msg.what);
             }
+            Trace.endSection();
         }
-    };
+    }
+
+    private void sendSetFeatureCompleted(boolean success, int feature) {
+        if (mSetFeatureCallback == null) {
+            return;
+        }
+        mSetFeatureCallback.onCompleted(success, feature);
+    }
+
+    private void sendGetFeatureCompleted(boolean success, int feature, boolean value) {
+        if (mGetFeatureCallback == null) {
+            return;
+        }
+        mGetFeatureCallback.onCompleted(success, feature, value);
+    }
 
     private void sendRemovedResult(Face face, int remaining) {
         if (mRemovalCallback == null) {

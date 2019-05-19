@@ -43,6 +43,7 @@ import android.os.IBinder;
 import android.os.IHwBinder;
 import android.os.IRemoteCallback;
 import android.os.PowerManager;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
@@ -542,6 +543,9 @@ public abstract class BiometricServiceBase extends SystemService
                     + " failed to respond to cancel, starting client "
                     + (mPendingClient != null ? mPendingClient.getOwnerString() : "null"));
 
+            StatsLog.write(StatsLog.BIOMETRIC_SYSTEM_HEALTH_ISSUE_DETECTED,
+                    statsModality(), BiometricsProtoEnums.ISSUE_CANCEL_TIMED_OUT);
+
             mCurrentClient = null;
             startClient(mPendingClient, false);
         }
@@ -653,6 +657,7 @@ public abstract class BiometricServiceBase extends SystemService
         Slog.e(getTag(), "HAL died");
         mMetricsLogger.count(getMetrics().tagHalDied(), 1);
         mHALDeathCount++;
+        mCurrentUserId = UserHandle.USER_NULL;
         handleError(getHalDeviceId(), BiometricConstants.BIOMETRIC_ERROR_HW_UNAVAILABLE,
                 0 /*vendorCode */);
 
@@ -817,6 +822,7 @@ public abstract class BiometricServiceBase extends SystemService
         mHandler.post(() -> {
             ClientMonitor client = mCurrentClient;
             if (client instanceof EnrollClient && client.getToken() == token) {
+                if (DEBUG) Slog.v(getTag(), "Cancelling enrollment");
                 client.stop(client.getToken() == token);
             }
         });
@@ -897,9 +903,8 @@ public abstract class BiometricServiceBase extends SystemService
     }
 
     protected void setActiveUserInternal(int userId) {
-        mHandler.post(() -> {
-            updateActiveGroup(userId, null /* clientPackage */);
-        });
+        // Do not put on handler, since it should finish before returning to caller.
+        updateActiveGroup(userId, null /* clientPackage */);
     }
 
     protected void removeInternal(RemovalClient client) {
@@ -954,6 +959,10 @@ public abstract class BiometricServiceBase extends SystemService
             int pid, int userId) {
         checkUseBiometricPermission();
 
+
+        if (Binder.getCallingUid() == Process.SYSTEM_UID) {
+            return true; // System process (BiometricService, etc) is always allowed
+        }
         if (isKeyguard(opPackageName)) {
             return true; // Keyguard is always allowed
         }
@@ -1035,10 +1044,15 @@ public abstract class BiometricServiceBase extends SystemService
                 }
             } else {
                 currentClient.stop(initiatedByClient);
+
+                // Only post the reset runnable for non-cleanup clients. Cleanup clients should
+                // never be forcibly stopped since they ensure synchronization between HAL and
+                // framework. Thus, we should instead just start the pending client once cleanup
+                // finishes instead of using the reset runnable.
+                mHandler.removeCallbacks(mResetClientState);
+                mHandler.postDelayed(mResetClientState, CANCEL_TIMEOUT_LIMIT);
             }
             mPendingClient = newClient;
-            mHandler.removeCallbacks(mResetClientState);
-            mHandler.postDelayed(mResetClientState, CANCEL_TIMEOUT_LIMIT);
         } else if (newClient != null) {
             // For BiometricPrompt clients, do not start until
             // <Biometric>Service#startPreparedClient is called. BiometricService waits until all
@@ -1214,6 +1228,11 @@ public abstract class BiometricServiceBase extends SystemService
                     BiometricsProtoEnums.ISSUE_UNKNOWN_TEMPLATE_ENROLLED_HAL);
         } else {
             clearEnumerateState();
+            if (mPendingClient != null) {
+                Slog.d(getTag(), "Enumerate finished, starting pending client");
+                startClient(mPendingClient, false /* initiatedByClient */);
+                mPendingClient = null;
+            }
         }
     }
 
@@ -1239,8 +1258,6 @@ public abstract class BiometricServiceBase extends SystemService
         if (getCurrentClient() instanceof InternalRemovalClient
                 || getCurrentClient() instanceof InternalEnumerateClient) {
             Slog.w(getTag(), "User switched while performing cleanup");
-            removeClient(getCurrentClient());
-            clearEnumerateState();
         }
         updateActiveGroup(userId, null);
         doTemplateCleanupForUser(userId);

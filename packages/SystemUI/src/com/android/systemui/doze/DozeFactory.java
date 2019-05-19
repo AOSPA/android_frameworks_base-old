@@ -27,7 +27,6 @@ import android.os.Handler;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.SystemUIApplication;
 import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.dock.DockManager;
@@ -46,7 +45,7 @@ public class DozeFactory {
         Context context = dozeService;
         SensorManager sensorManager = Dependency.get(AsyncSensorManager.class);
         AlarmManager alarmManager = context.getSystemService(AlarmManager.class);
-        DockManager dockManager = SysUiServiceProvider.getComponent(context, DockManager.class);
+        DockManager dockManager = Dependency.get(DockManager.class);
 
         DozeHost host = getHost(dozeService);
         AmbientDisplayConfiguration config = new AmbientDisplayConfiguration(context);
@@ -71,7 +70,7 @@ public class DozeFactory {
                 new DozeScreenState(wrappedService, handler, params, wakeLock),
                 createDozeScreenBrightness(context, wrappedService, sensorManager, host, params,
                         handler),
-                new DozeWallpaperState(context, machine),
+                new DozeWallpaperState(context),
                 new DozeDockHandler(context, machine, host, config, handler, dockManager)
         });
 

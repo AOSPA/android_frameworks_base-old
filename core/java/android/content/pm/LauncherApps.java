@@ -22,6 +22,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
@@ -141,17 +142,6 @@ public class LauncherApps {
      */
     public static final String EXTRA_PIN_ITEM_REQUEST =
             "android.content.pm.extra.PIN_ITEM_REQUEST";
-
-    /**
-     * Metadata key that specifies vouched certs, so any apps signed by a cert in vouched certs
-     * will not show hidden icon in launcher even it does not have a launcher visible activity.
-     *
-     * If an app has this metadata in manifest, it won't be eligible to hide its icon even if its
-     * cert is in vouched certs list.
-     *
-     * @hide
-     */
-    public static final String VOUCHED_CERTS_KEY = "vouched_certs";
 
     private final Context mContext;
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
@@ -585,8 +575,8 @@ public class LauncherApps {
      * @param sourceBounds The Rect containing the source bounds of the clicked icon
      * @param opts Options to pass to startActivity
      */
-    public void startPackageInstallerSessionDetailsActivity(SessionInfo sessionInfo,
-            Rect sourceBounds, Bundle opts) {
+    public void startPackageInstallerSessionDetailsActivity(@NonNull SessionInfo sessionInfo,
+            @Nullable Rect sourceBounds, @Nullable Bundle opts) {
         try {
             mService.startSessionDetailsActivityAsUser(mContext.getIApplicationThread(),
                     mContext.getPackageName(), sessionInfo, sourceBounds, opts,
@@ -792,9 +782,11 @@ public class LauncherApps {
      *
      * @return an {@link AppUsageLimit} object describing the app time limit containing
      * the given package with the smallest time remaining, or {@code null} if none exist.
-     * @throws SecurityException when the caller is not the active launcher.
+     * @throws SecurityException when the caller is not the recents app.
+     * @hide
      */
     @Nullable
+    @SystemApi
     public LauncherApps.AppUsageLimit getAppUsageLimit(@NonNull String packageName,
             @NonNull UserHandle user) {
         try {
@@ -1503,7 +1495,7 @@ public class LauncherApps {
      * @param callback The callback to unregister.
      * @see #registerPackageInstallerSessionCallback(Executor, SessionCallback)
      */
-    public void unregisterPackageInstallerSessionCallback(SessionCallback callback) {
+    public void unregisterPackageInstallerSessionCallback(@NonNull SessionCallback callback) {
         synchronized (mDelegates) {
             for (Iterator<SessionCallbackDelegate> i = mDelegates.iterator(); i.hasNext();) {
                 final SessionCallbackDelegate delegate = i.next();
@@ -1725,7 +1717,7 @@ public class LauncherApps {
             dest.writeStrongBinder(mInner.asBinder());
         }
 
-        public static final Creator<PinItemRequest> CREATOR =
+        public static final @android.annotation.NonNull Creator<PinItemRequest> CREATOR =
                 new Creator<PinItemRequest>() {
                     public PinItemRequest createFromParcel(Parcel source) {
                         return new PinItemRequest(source);
@@ -1750,7 +1742,9 @@ public class LauncherApps {
      * in this class.
      *
      * @see #getAppUsageLimit(String, UserHandle)
+     * @hide
      */
+    @SystemApi
     public static final class AppUsageLimit implements Parcelable {
         private final long mTotalUsageLimit;
         private final long mUsageRemaining;
@@ -1785,7 +1779,7 @@ public class LauncherApps {
             mUsageRemaining = source.readLong();
         }
 
-        public static final Creator<AppUsageLimit> CREATOR = new Creator<AppUsageLimit>() {
+        public static final @android.annotation.NonNull Creator<AppUsageLimit> CREATOR = new Creator<AppUsageLimit>() {
             @Override
             public AppUsageLimit createFromParcel(Parcel source) {
                 return new AppUsageLimit(source);

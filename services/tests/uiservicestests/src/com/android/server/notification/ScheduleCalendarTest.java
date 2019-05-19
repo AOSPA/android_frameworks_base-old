@@ -23,14 +23,14 @@ import static org.junit.Assert.assertTrue;
 
 import android.service.notification.ScheduleCalendar;
 import android.service.notification.ZenModeConfig;
-import android.support.test.filters.FlakyTest;
-import android.support.test.runner.AndroidJUnit4;
 import android.test.suitebuilder.annotation.SmallTest;
+
+import androidx.test.filters.FlakyTest;
+import androidx.test.runner.AndroidJUnit4;
 
 import com.android.server.UiServiceTestCase;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -415,6 +415,39 @@ public class ScheduleCalendarTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testIsAlarmInSchedule_alarmAndNowInSchedule_sameScheduleTrigger_daylightSavings() {
+        Calendar alarm = getDaylightSavingsDay();
+        alarm.set(Calendar.HOUR_OF_DAY, 23);
+        alarm.set(Calendar.MINUTE, 15);
+        alarm.set(Calendar.SECOND, 0);
+        alarm.set(Calendar.MILLISECOND, 0);
+
+        Calendar now = getDaylightSavingsDay();
+        now.set(Calendar.HOUR_OF_DAY, 2);
+        now.set(Calendar.MINUTE, 10);
+        now.set(Calendar.SECOND, 0);
+        now.set(Calendar.MILLISECOND, 0);
+        now.add(Calendar.DATE, 1); // add a day, on daylight savings this becomes 3:10am
+
+        final Calendar tempToday = getDaylightSavingsDay();
+        final Calendar tempTomorrow = getDaylightSavingsDay();
+        tempTomorrow.add(Calendar.DATE, 1);
+        mScheduleInfo.days = new int[] {tempToday.get(Calendar.DAY_OF_WEEK),
+                tempTomorrow.get(Calendar.DAY_OF_WEEK)};
+
+        mScheduleInfo.startHour = 22;
+        mScheduleInfo.startMinute = 15;
+        mScheduleInfo.endHour = 3;
+        mScheduleInfo.endMinute = 15;
+        mScheduleCalendar.setSchedule(mScheduleInfo);
+
+        assertTrue(mScheduleCalendar.isInSchedule(alarm.getTimeInMillis()));
+        assertTrue(mScheduleCalendar.isInSchedule(now.getTimeInMillis()));
+        assertTrue(mScheduleCalendar.isAlarmInSchedule(alarm.getTimeInMillis(),
+                now.getTimeInMillis()));
+    }
+
+    @Test
     public void testIsAlarmInSchedule_alarmAndNowInSchedule_sameScheduleTrigger() {
         Calendar alarm = new GregorianCalendar();
         alarm.set(Calendar.HOUR_OF_DAY, 23);
@@ -424,10 +457,10 @@ public class ScheduleCalendarTest extends UiServiceTestCase {
 
         Calendar now = new GregorianCalendar();
         now.set(Calendar.HOUR_OF_DAY, 2);
-        now.set(Calendar.MINUTE, 15);
+        now.set(Calendar.MINUTE, 10);
         now.set(Calendar.SECOND, 0);
         now.set(Calendar.MILLISECOND, 0);
-        now.add(Calendar.DATE, 1); // add a day
+        now.add(Calendar.DATE, 1); // add a day, on daylight savings this becomes 3:10am
 
         mScheduleInfo.days = new int[] {getTodayDay(), getTodayDay(1)};
         mScheduleInfo.startHour = 22;
@@ -480,5 +513,12 @@ public class ScheduleCalendarTest extends UiServiceTestCase {
         Calendar cal = new GregorianCalendar();
         cal.add(Calendar.DATE, offset);
         return cal.get(Calendar.DAY_OF_WEEK);
+    }
+
+
+    private Calendar getDaylightSavingsDay() {
+        // the day before daylight savings in the US - March 9, 2019
+        Calendar daylightSavingsDay = new GregorianCalendar(2019, 2, 9);
+        return daylightSavingsDay;
     }
 }

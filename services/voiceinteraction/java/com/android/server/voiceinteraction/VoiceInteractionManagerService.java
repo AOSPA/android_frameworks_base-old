@@ -19,6 +19,7 @@ package com.android.server.voiceinteraction;
 import android.Manifest;
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.AppGlobals;
@@ -47,6 +48,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Parcel;
+import android.os.RemoteCallback;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.UserHandle;
@@ -712,6 +714,47 @@ public class VoiceInteractionManagerService extends SystemService {
         }
 
         @Override
+        public void requestDirectActions(@NonNull IBinder token, int taskId,
+                @NonNull IBinder assistToken, @Nullable RemoteCallback cancellationCallback,
+                @NonNull RemoteCallback resultCallback) {
+            synchronized (this) {
+                if (mImpl == null) {
+                    Slog.w(TAG, "requestDirectActions without running voice interaction service");
+                    resultCallback.sendResult(null);
+                    return;
+                }
+                final long caller = Binder.clearCallingIdentity();
+                try {
+                    mImpl.requestDirectActionsLocked(token, taskId, assistToken,
+                            cancellationCallback, resultCallback);
+                } finally {
+                    Binder.restoreCallingIdentity(caller);
+                }
+            }
+        }
+
+        @Override
+        public void performDirectAction(@NonNull IBinder token, @NonNull String actionId,
+                @NonNull Bundle arguments, int taskId, IBinder assistToken,
+                @Nullable RemoteCallback cancellationCallback,
+                @NonNull RemoteCallback resultCallback) {
+            synchronized (this) {
+                if (mImpl == null) {
+                    Slog.w(TAG, "performDirectAction without running voice interaction service");
+                    resultCallback.sendResult(null);
+                    return;
+                }
+                final long caller = Binder.clearCallingIdentity();
+                try {
+                    mImpl.performDirectActionLocked(token, actionId, arguments, taskId,
+                            assistToken, cancellationCallback, resultCallback);
+                } finally {
+                    Binder.restoreCallingIdentity(caller);
+                }
+            }
+        }
+
+        @Override
         public void setKeepAwake(IBinder token, boolean keepAwake) {
             synchronized (this) {
                 if (mImpl == null) {
@@ -1238,6 +1281,9 @@ public class VoiceInteractionManagerService extends SystemService {
 
             RoleObserver(@NonNull @CallbackExecutor Executor executor) {
                 mRm.addOnRoleHoldersChangedListenerAsUser(executor, this, UserHandle.ALL);
+                UserHandle currentUser = UserHandle.of(LocalServices.getService(
+                        ActivityManagerInternal.class).getCurrentUserId());
+                onRoleHoldersChanged(RoleManager.ROLE_ASSISTANT, currentUser);
             }
 
             private @NonNull String getDefaultRecognizer(@NonNull UserHandle user) {
@@ -1285,7 +1331,9 @@ public class VoiceInteractionManagerService extends SystemService {
                     // Try to set role holder as VoiceInteractionService
                     List<ResolveInfo> services = mPm.queryIntentServicesAsUser(
                             new Intent(VoiceInteractionService.SERVICE_INTERFACE).setPackage(pkg),
-                            PackageManager.GET_META_DATA, userId);
+                            PackageManager.GET_META_DATA
+                                    | PackageManager.MATCH_DIRECT_BOOT_AWARE
+                                    | PackageManager.MATCH_DIRECT_BOOT_UNAWARE, userId);
 
                     for (ResolveInfo resolveInfo : services) {
                         ServiceInfo serviceInfo = resolveInfo.serviceInfo;
@@ -1318,7 +1366,9 @@ public class VoiceInteractionManagerService extends SystemService {
                     // If no service could be found try to set assist activity
                     final List<ResolveInfo> activities = mPm.queryIntentActivitiesAsUser(
                             new Intent(Intent.ACTION_ASSIST).setPackage(pkg),
-                            PackageManager.MATCH_DEFAULT_ONLY, userId);
+                            PackageManager.MATCH_DEFAULT_ONLY
+                                    | PackageManager.MATCH_DIRECT_BOOT_AWARE
+                                    | PackageManager.MATCH_DIRECT_BOOT_UNAWARE, userId);
 
                     for (ResolveInfo resolveInfo : activities) {
                         ActivityInfo activityInfo = resolveInfo.activityInfo;
@@ -1331,6 +1381,7 @@ public class VoiceInteractionManagerService extends SystemService {
                         Settings.Secure.putStringForUser(getContext().getContentResolver(),
                                 Settings.Secure.VOICE_RECOGNITION_SERVICE,
                                 getDefaultRecognizer(user), userId);
+                        return;
                     }
                 }
             }
@@ -1389,6 +1440,16 @@ public class VoiceInteractionManagerService extends SystemService {
                         resetCurAssistant(userHandle);
                         initForUser(userHandle);
                         switchImplementationIfNeededLocked(true);
+
+                        Context context = getContext();
+                        context.getSystemService(RoleManager.class).clearRoleHoldersAsUser(
+                                RoleManager.ROLE_ASSISTANT, 0, UserHandle.of(userHandle),
+                                context.getMainExecutor(), successful -> {
+                                    if (!successful) {
+                                        Slog.e(TAG,
+                                                "Failed to clear default assistant for force stop");
+                                    }
+                                });
                     }
                 } else if (hitRec && doit) {
                     // We are just force-stopping the current recognizer, which is not

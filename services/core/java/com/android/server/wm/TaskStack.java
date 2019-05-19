@@ -34,6 +34,7 @@ import static android.view.WindowManager.DOCKED_LEFT;
 import static android.view.WindowManager.DOCKED_RIGHT;
 import static android.view.WindowManager.DOCKED_TOP;
 
+import static com.android.server.wm.BoundsAnimationController.FADE_IN;
 import static com.android.server.wm.BoundsAnimationController.NO_PIP_MODE_CHANGED_CALLBACKS;
 import static com.android.server.wm.BoundsAnimationController.SCHEDULE_PIP_MODE_CHANGED_ON_END;
 import static com.android.server.wm.BoundsAnimationController.SCHEDULE_PIP_MODE_CHANGED_ON_START;
@@ -148,6 +149,7 @@ public class TaskStack extends WindowContainer<Task> implements
     private boolean mCancelCurrentBoundsAnimation = false;
     private Rect mBoundsAnimationTarget = new Rect();
     private Rect mBoundsAnimationSourceHintBounds = new Rect();
+    private @BoundsAnimationController.AnimationType int mAnimationType;
 
     Rect mPreAnimationBounds = new Rect();
 
@@ -303,17 +305,6 @@ public class TaskStack extends WindowContainer<Task> implements
         return super.getBounds();
     }
 
-    /** Return true if the current bound can get outputted to the rest of the system as-is. */
-    private boolean useCurrentBounds() {
-        if (matchParentBounds()
-                || !inSplitScreenSecondaryWindowingMode()
-                || mDisplayContent == null
-                || mDisplayContent.getSplitScreenPrimaryStackIgnoringVisibility() != null) {
-            return true;
-        }
-        return false;
-    }
-
     @Override
     public void getBounds(Rect bounds) {
         bounds.set(getBounds());
@@ -321,22 +312,15 @@ public class TaskStack extends WindowContainer<Task> implements
 
     @Override
     public Rect getBounds() {
-        if (useCurrentBounds()) {
-            // If we're currently adjusting for IME or minimized docked stack, we use the adjusted
-            // bounds; otherwise, no need to adjust the output bounds if fullscreen or the docked
-            // stack is visible since it is already what we want to represent to the rest of the
-            // system.
-            if (!mAdjustedBounds.isEmpty()) {
-                return mAdjustedBounds;
-            } else {
-                return super.getBounds();
-            }
-        }
-
-        // The bounds has been adjusted to accommodate for a docked stack, but the docked stack
-        // is not currently visible. Go ahead a represent it as fullscreen to the rest of the
+        // If we're currently adjusting for IME or minimized docked stack, we use the adjusted
+        // bounds; otherwise, no need to adjust the output bounds if fullscreen or the docked
+        // stack is visible since it is already what we want to represent to the rest of the
         // system.
-        return mDisplayContent.getBounds();
+        if (!mAdjustedBounds.isEmpty()) {
+            return mAdjustedBounds;
+        } else {
+            return super.getBounds();
+        }
     }
 
     /**
@@ -404,7 +388,9 @@ public class TaskStack extends WindowContainer<Task> implements
      * @return true if bounds were updated to some non-empty value.
      */
     boolean calculatePinnedBoundsForConfigChange(Rect inOutBounds) {
+        boolean animating = false;
         if ((mBoundsAnimatingRequested || mBoundsAnimating) && !mBoundsAnimationTarget.isEmpty()) {
+            animating = true;
             getFinalAnimationBounds(mTmpRect2);
         } else {
             mTmpRect2.set(inOutBounds);
@@ -414,6 +400,13 @@ public class TaskStack extends WindowContainer<Task> implements
         if (updated) {
             inOutBounds.set(mTmpRect3);
 
+            // The final boundary is updated while there is an existing boundary animation. Let's
+            // cancel this animation to prevent the obsolete animation overwritten updated bounds.
+            if (animating && !inOutBounds.equals(mBoundsAnimationTarget)) {
+                final DisplayContent displayContent = getDisplayContent();
+                displayContent.mBoundsAnimationController.getHandler().post(() ->
+                        displayContent.mBoundsAnimationController.cancel(this));
+            }
             // Once we've set the bounds based on the rotation of the old bounds in the new
             // orientation, clear the animation target bounds since they are obsolete, and
             // cancel any currently running animations
@@ -1425,13 +1418,7 @@ public class TaskStack extends WindowContainer<Task> implements
 
     @Override
     boolean fillsParent() {
-        if (useCurrentBounds()) {
-            return matchParentBounds();
-        }
-        // The bounds has been adjusted to accommodate for a docked stack, but the docked stack
-        // is not currently visible. Go ahead a represent it as fullscreen to the rest of the
-        // system.
-        return true;
+        return matchParentBounds();
     }
 
     @Override
@@ -1482,31 +1469,6 @@ public class TaskStack extends WindowContainer<Task> implements
         return false;
     }
 
-    int taskIdFromPoint(int x, int y) {
-        getBounds(mTmpRect);
-        if (!mTmpRect.contains(x, y) || isAdjustedForMinimizedDockedStack()) {
-            return -1;
-        }
-
-        for (int taskNdx = mChildren.size() - 1; taskNdx >= 0; --taskNdx) {
-            final Task task = mChildren.get(taskNdx);
-            final WindowState win = task.getTopVisibleAppMainWindow();
-            if (win == null) {
-                continue;
-            }
-            // We need to use the task's dim bounds (which is derived from the visible bounds of its
-            // apps windows) for any touch-related tests. Can't use the task's original bounds
-            // because it might be adjusted to fit the content frame. For example, the presence of
-            // the IME adjusting the windows frames when the app window is the IME target.
-            task.getDimBounds(mTmpRect);
-            if (mTmpRect.contains(x, y)) {
-                return task.mTaskId;
-            }
-        }
-
-        return -1;
-    }
-
     void findTaskForResizePoint(int x, int y, int delta,
             DisplayContent.TaskForResizePointSearchResult results) {
         if (!getWindowConfiguration().canResizeTask()) {
@@ -1516,7 +1478,7 @@ public class TaskStack extends WindowContainer<Task> implements
 
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final Task task = mChildren.get(i);
-            if (task.isFullscreen()) {
+            if (task.getWindowingMode() == WINDOWING_MODE_FULLSCREEN) {
                 results.searchDone = true;
                 return;
             }
@@ -1621,7 +1583,8 @@ public class TaskStack extends WindowContainer<Task> implements
     }
 
     @Override  // AnimatesBounds
-    public boolean onAnimationStart(boolean schedulePipModeChangedCallback, boolean forceUpdate) {
+    public boolean onAnimationStart(boolean schedulePipModeChangedCallback, boolean forceUpdate,
+            @BoundsAnimationController.AnimationType int animationType) {
         // Hold the lock since this is called from the BoundsAnimator running on the UiThread
         synchronized (mWmService.mGlobalLock) {
             if (!isAttached()) {
@@ -1631,7 +1594,7 @@ public class TaskStack extends WindowContainer<Task> implements
 
             mBoundsAnimatingRequested = false;
             mBoundsAnimating = true;
-            mCancelCurrentBoundsAnimation = false;
+            mAnimationType = animationType;
 
             // If we are changing UI mode, as in the PiP to fullscreen
             // transition, then we need to wait for the window to draw.
@@ -1648,7 +1611,8 @@ public class TaskStack extends WindowContainer<Task> implements
                 // I don't believe you...
             }
 
-            if (schedulePipModeChangedCallback && mActivityStack != null) {
+            if ((schedulePipModeChangedCallback || animationType == FADE_IN)
+                    && mActivityStack != null) {
                 // We need to schedule the PiP mode change before the animation up. It is possible
                 // in this case for the animation down to not have been completed, so always
                 // force-schedule and update to the client to ensure that it is notified that it
@@ -1663,6 +1627,21 @@ public class TaskStack extends WindowContainer<Task> implements
     @Override  // AnimatesBounds
     public void onAnimationEnd(boolean schedulePipModeChangedCallback, Rect finalStackSize,
             boolean moveToFullscreen) {
+        if (mAnimationType == BoundsAnimationController.FADE_IN) {
+            setPinnedStackAlpha(1f);
+            try {
+                mWmService.mActivityTaskManager.notifyPinnedStackAnimationEnded();
+            } catch (RemoteException e) {
+                // I don't believe you...
+            }
+            return;
+        }
+
+        onBoundAnimationEnd(schedulePipModeChangedCallback, finalStackSize, moveToFullscreen);
+    }
+
+    private void onBoundAnimationEnd(boolean schedulePipModeChangedCallback, Rect finalStackSize,
+            boolean moveToFullscreen) {
         if (inPinnedWindowingMode()) {
             // Update to the final bounds if requested. This is done here instead of in the bounds
             // animator to allow us to coordinate this after we notify the PiP mode changed
@@ -1674,7 +1653,7 @@ public class TaskStack extends WindowContainer<Task> implements
                         mBoundsAnimationTarget, false /* forceUpdate */);
             }
 
-            if (finalStackSize != null) {
+            if (finalStackSize != null && !mCancelCurrentBoundsAnimation) {
                 setPinnedStackSize(finalStackSize, null);
             } else {
                 // We have been canceled, so the final stack size is null, still run the
@@ -1774,10 +1753,24 @@ public class TaskStack extends WindowContainer<Task> implements
         final @SchedulePipModeChangedState int finalSchedulePipModeChangedState =
                 schedulePipModeChangedState;
         final DisplayContent displayContent = getDisplayContent();
+        @BoundsAnimationController.AnimationType int intendedAnimationType =
+                displayContent.mBoundsAnimationController.getAnimationType();
+        if (intendedAnimationType == FADE_IN) {
+            if (fromFullscreen) {
+                setPinnedStackAlpha(0f);
+            }
+            if (toBounds.width() == fromBounds.width()
+                    && toBounds.height() == fromBounds.height()) {
+                intendedAnimationType = BoundsAnimationController.BOUNDS;
+            }
+        }
+
+        final @BoundsAnimationController.AnimationType int animationType = intendedAnimationType;
+        mCancelCurrentBoundsAnimation = false;
         displayContent.mBoundsAnimationController.getHandler().post(() -> {
             displayContent.mBoundsAnimationController.animateBounds(this, fromBounds,
                     finalToBounds, animationDuration, finalSchedulePipModeChangedState,
-                    fromFullscreen, toFullscreen);
+                    fromFullscreen, toFullscreen, animationType);
         });
     }
 
@@ -1952,6 +1945,20 @@ public class TaskStack extends WindowContainer<Task> implements
         if (mDimmer.updateDims(getPendingTransaction(), mTmpDimBoundsRect)) {
             scheduleAnimation();
         }
+    }
+
+    @Override
+    public boolean setPinnedStackAlpha(float alpha) {
+        // Hold the lock since this is called from the BoundsAnimator running on the UiThread
+        synchronized (mWmService.mGlobalLock) {
+            if (mCancelCurrentBoundsAnimation) {
+                return false;
+            }
+            getPendingTransaction().setAlpha(getSurfaceControl(), alpha);
+            scheduleAnimation();
+        }
+
+        return true;
     }
 
     public DisplayInfo getDisplayInfo() {

@@ -22,6 +22,7 @@ import android.accessibilityservice.AccessibilityServiceInfo;
 import android.accessibilityservice.IAccessibilityServiceClient;
 import android.accessibilityservice.IAccessibilityServiceConnection;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.graphics.Bitmap;
@@ -390,10 +391,12 @@ public final class UiAutomation {
      * <strong>Note:<strong/> Calling this method adopts only the specified shell permissions
      * and overrides all adopted permissions via {@link #adoptShellPermissionIdentity()}.
      *
+     * @param permissions The permissions to adopt or <code>null</code> to adopt all.
+     *
      * @see #adoptShellPermissionIdentity()
      * @see #dropShellPermissionIdentity()
      */
-    public void adoptShellPermissionIdentity(String... permissions) {
+    public void adoptShellPermissionIdentity(@Nullable String... permissions) {
         synchronized (mLock) {
             throwIfNotConnectedLocked();
         }
@@ -596,6 +599,25 @@ public final class UiAutomation {
             Log.e(LOG_TAG, "Error while injecting input event!", re);
         }
         return false;
+    }
+
+    /**
+     * A request for WindowManagerService to wait until all animations have completed and input
+     * information has been sent from WindowManager to native InputManager.
+     *
+     * @hide
+     */
+    @TestApi
+    public void syncInputTransactions() {
+        synchronized (mLock) {
+            throwIfNotConnectedLocked();
+        }
+        try {
+            // Calling out without a lock held.
+            mUiAutomationConnection.syncInputTransactions();
+        } catch (RemoteException re) {
+            Log.e(LOG_TAG, "Error while syncing input transactions!", re);
+        }
     }
 
     /**

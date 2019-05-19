@@ -20,6 +20,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -43,8 +44,11 @@ import android.os.ServiceManager;
 import android.util.Log;
 import android.util.Slog;
 
+import com.android.internal.annotations.GuardedBy;
+
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -52,6 +56,7 @@ import java.util.List;
  * @hide
  * AudioPolicy provides access to the management of audio routing and audio focus.
  */
+@TestApi
 @SystemApi
 public class AudioPolicy {
 
@@ -72,6 +77,20 @@ public class AudioPolicy {
     private String mRegistrationId;
     private AudioPolicyStatusListener mStatusListener;
     private boolean mIsFocusPolicy;
+    private boolean mIsTestFocusPolicy;
+
+    /**
+     * The list of AudioTrack instances created to inject audio into the associated mixes
+     * Lazy initialization in {@link #createAudioTrackSource(AudioMix)}
+     */
+    @GuardedBy("mLock")
+    @Nullable private ArrayList<WeakReference<AudioTrack>> mInjectors;
+    /**
+     * The list AudioRecord instances created to capture audio from the associated mixes
+     * Lazy initialization in {@link #createAudioRecordSink(AudioMix)}
+     */
+    @GuardedBy("mLock")
+    @Nullable private ArrayList<WeakReference<AudioRecord>> mCaptors;
 
     /**
      * The behavior of a policy with regards to audio focus where it relies on the application
@@ -105,6 +124,10 @@ public class AudioPolicy {
     /** @hide */
     public boolean isFocusPolicy() { return mIsFocusPolicy; }
     /** @hide */
+    public boolean isTestFocusPolicy() {
+        return mIsTestFocusPolicy;
+    }
+    /** @hide */
     public boolean isVolumeController() { return mVolCb != null; }
     /** @hide */
     public @Nullable MediaProjection getMediaProjection() {
@@ -112,10 +135,11 @@ public class AudioPolicy {
     }
 
     /**
-     * The parameter is guaranteed non-null through the Builder
+     * The parameters are guaranteed non-null through the Builder
      */
     private AudioPolicy(AudioPolicyConfig config, Context context, Looper looper,
-            AudioPolicyFocusListener fl, AudioPolicyStatusListener sl, boolean isFocusPolicy,
+            AudioPolicyFocusListener fl, AudioPolicyStatusListener sl,
+            boolean isFocusPolicy, boolean isTestFocusPolicy,
             AudioPolicyVolumeCallback vc, @Nullable MediaProjection projection) {
         mConfig = config;
         mStatus = POLICY_STATUS_UNREGISTERED;
@@ -132,6 +156,7 @@ public class AudioPolicy {
         mFocusListener = fl;
         mStatusListener = sl;
         mIsFocusPolicy = isFocusPolicy;
+        mIsTestFocusPolicy = isTestFocusPolicy;
         mVolCb = vc;
         mProjection = projection;
     }
@@ -147,6 +172,7 @@ public class AudioPolicy {
         private AudioPolicyFocusListener mFocusListener;
         private AudioPolicyStatusListener mStatusListener;
         private boolean mIsFocusPolicy = false;
+        private boolean mIsTestFocusPolicy = false;
         private AudioPolicyVolumeCallback mVolCb;
         private MediaProjection mProjection;
 
@@ -165,6 +191,7 @@ public class AudioPolicy {
          * @return the same Builder instance.
          * @throws IllegalArgumentException
          */
+        @NonNull
         public Builder addMix(@NonNull AudioMix mix) throws IllegalArgumentException {
             if (mix == null) {
                 throw new IllegalArgumentException("Illegal null AudioMix argument");
@@ -179,6 +206,7 @@ public class AudioPolicy {
          * @return the same Builder instance.
          * @throws IllegalArgumentException
          */
+        @NonNull
         public Builder setLooper(@NonNull Looper looper) throws IllegalArgumentException {
             if (looper == null) {
                 throw new IllegalArgumentException("Illegal null Looper argument");
@@ -204,8 +232,26 @@ public class AudioPolicy {
          * @param enforce true if the policy will govern audio focus decisions.
          * @return the same Builder instance.
          */
+        @NonNull
         public Builder setIsAudioFocusPolicy(boolean isFocusPolicy) {
             mIsFocusPolicy = isFocusPolicy;
+            return this;
+        }
+
+        /**
+         * @hide
+         * Test method to declare whether this audio focus policy is for test purposes only.
+         * Having a test policy registered will disable the current focus policy and replace it
+         * with this test policy. When unregistered, the previous focus policy will be restored.
+         * <p>A value of <code>true</code> will be ignored if the AudioPolicy is not also
+         * focus policy.
+         * @param isTestFocusPolicy true if the focus policy to register is for testing purposes.
+         * @return the same Builder instance
+         */
+        @TestApi
+        @NonNull
+        public Builder setIsTestFocusPolicy(boolean isTestFocusPolicy) {
+            mIsTestFocusPolicy = isTestFocusPolicy;
             return this;
         }
 
@@ -224,6 +270,7 @@ public class AudioPolicy {
          * @param vc
          * @return the same Builder instance.
          */
+        @NonNull
         public Builder setAudioPolicyVolumeCallback(@NonNull AudioPolicyVolumeCallback vc) {
             if (vc == null) {
                 throw new IllegalArgumentException("Invalid null volume callback");
@@ -240,6 +287,7 @@ public class AudioPolicy {
          *
          * @hide
          */
+        @NonNull
         public Builder setMediaProjection(@NonNull MediaProjection projection) {
             if (projection == null) {
                 throw new IllegalArgumentException("Invalid null volume callback");
@@ -257,6 +305,7 @@ public class AudioPolicy {
          *     {@link AudioPolicy.AudioPolicyStatusListener} but the policy was configured
          *     as an audio focus policy with {@link #setIsAudioFocusPolicy(boolean)}.
          */
+        @NonNull
         public AudioPolicy build() {
             if (mStatusListener != null) {
                 // the AudioPolicy status listener includes updates on each mix activity state
@@ -269,7 +318,8 @@ public class AudioPolicy {
                         + "an AudioPolicyFocusListener");
             }
             return new AudioPolicy(new AudioPolicyConfig(mMixes), mContext, mLooper,
-                    mFocusListener, mStatusListener, mIsFocusPolicy, mVolCb, mProjection);
+                    mFocusListener, mStatusListener, mIsFocusPolicy, mIsTestFocusPolicy,
+                    mVolCb, mProjection);
         }
     }
 
@@ -366,6 +416,7 @@ public class AudioPolicy {
      * @param devices list of devices to which the audio stream of the application may be routed.
      * @return true if the change was successful, false otherwise.
      */
+    @TestApi
     @SystemApi
     public boolean setUidDeviceAffinity(int uid, @NonNull List<AudioDeviceInfo> devices) {
         if (devices == null) {
@@ -407,6 +458,7 @@ public class AudioPolicy {
      * @param uid UID of the application affected.
      * @return true if the change was successful, false otherwise.
      */
+    @TestApi
     @SystemApi
     public boolean removeUidDeviceAffinity(int uid) {
         synchronized (mLock) {
@@ -606,6 +658,12 @@ public class AudioPolicy {
                         AudioFormat.CHANNEL_IN_STEREO, mix.getFormat().getEncoding()),
                 AudioManager.AUDIO_SESSION_ID_GENERATE
                 );
+        synchronized (mLock) {
+            if (mCaptors == null) {
+                mCaptors = new ArrayList<>(1);
+            }
+            mCaptors.add(new WeakReference<AudioRecord>(ar));
+        }
         return ar;
     }
 
@@ -638,7 +696,45 @@ public class AudioPolicy {
                 AudioTrack.MODE_STREAM,
                 AudioManager.AUDIO_SESSION_ID_GENERATE
                 );
+        synchronized (mLock) {
+            if (mInjectors == null) {
+                mInjectors = new ArrayList<>(1);
+            }
+            mInjectors.add(new WeakReference<AudioTrack>(at));
+        }
         return at;
+    }
+
+    /**
+     * @hide
+     */
+    public void invalidateCaptorsAndInjectors() {
+        if (!policyReadyToUse()) {
+            return;
+        }
+        synchronized (mLock) {
+            if (mInjectors != null) {
+                for (final WeakReference<AudioTrack> weakTrack : mInjectors) {
+                    final AudioTrack track = weakTrack.get();
+                    if (track == null) {
+                        break;
+                    }
+                    // TODO: add synchronous versions
+                    track.stop();
+                    track.flush();
+                }
+            }
+            if (mCaptors != null) {
+                for (final WeakReference<AudioRecord> weakRecord : mCaptors) {
+                    final AudioRecord record = weakRecord.get();
+                    if (record == null) {
+                        break;
+                    }
+                    // TODO: if needed: implement an invalidate method
+                    record.stop();
+                }
+            }
+        }
     }
 
     public int getStatus() {

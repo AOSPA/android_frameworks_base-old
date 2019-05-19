@@ -23,7 +23,8 @@ import android.content.Context;
 import com.android.internal.util.Preconditions;
 
 /**
- * TODO (b/111701043) : Add java doc
+ * Class that provides methods to create prediction clients.
+ *
  * @hide
  */
 @SystemApi
@@ -42,6 +43,7 @@ public final class AppPredictionManager {
     /**
      * Creates a new app prediction session.
      */
+    @NonNull
     public AppPredictor createAppPredictionSession(
             @NonNull AppPredictionContext predictionContext) {
         return new AppPredictor(mContext, predictionContext);

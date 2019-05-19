@@ -11,6 +11,7 @@
 package com.android.settingslib.wifi;
 
 import static android.net.NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_PARTIAL_CONNECTIVITY;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED;
 
 import android.content.Context;
@@ -73,6 +74,9 @@ public class WifiStatusTracker extends ConnectivityManager.NetworkCallback {
     public int rssi;
     public int level;
     public String statusLabel;
+    public int wifiGeneration;
+    public boolean vhtMax8SpatialStreamsSupport;
+    public boolean twtSupport;
 
     public WifiStatusTracker(Context context, WifiManager wifiManager,
             NetworkScoreManager networkScoreManager, ConnectivityManager connectivityManager,
@@ -117,9 +121,16 @@ public class WifiStatusTracker extends ConnectivityManager.NetworkCallback {
             if (connected) {
                 mWifiInfo = mWifiManager.getConnectionInfo();
                 if (mWifiInfo != null) {
-                    ssid = getValidSsid(mWifiInfo);
+                    if (mWifiInfo.isPasspointAp() || mWifiInfo.isOsuAp()) {
+                        ssid = mWifiInfo.getPasspointProviderFriendlyName();
+                    } else {
+                        ssid = getValidSsid(mWifiInfo);
+                    }
                     updateRssi(mWifiInfo.getRssi());
                     maybeRequestNetworkScore();
+                    wifiGeneration = mWifiInfo.getWifiGeneration();
+                    vhtMax8SpatialStreamsSupport = mWifiInfo.isVhtMax8SpatialStreamsSupported();
+                    twtSupport = mWifiInfo.isTwtSupported();
                 }
             }
             updateStatusLabel();
@@ -153,6 +164,9 @@ public class WifiStatusTracker extends ConnectivityManager.NetworkCallback {
         if (networkCapabilities != null) {
             if (networkCapabilities.hasCapability(NET_CAPABILITY_CAPTIVE_PORTAL)) {
                 statusLabel = mContext.getString(R.string.wifi_status_sign_in_required);
+                return;
+            } else if (networkCapabilities.hasCapability(NET_CAPABILITY_PARTIAL_CONNECTIVITY)) {
+                statusLabel = mContext.getString(R.string.wifi_limited_connection);
                 return;
             } else if (!networkCapabilities.hasCapability(NET_CAPABILITY_VALIDATED)) {
                 statusLabel = mContext.getString(R.string.wifi_status_no_internet);

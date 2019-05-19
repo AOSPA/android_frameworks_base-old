@@ -129,6 +129,8 @@ message ValueBucketInfo {
   optional int64 start_bucket_elapsed_millis = 5;
 
   optional int64 end_bucket_elapsed_millis = 6;
+
+  optional int64 condition_true_nanos = 10;
 }
 
 message ValueMetricData {
@@ -455,8 +457,19 @@ message StatsdStatsReport {
         optional int32 detected_time_sec = 1;
         optional int32 count = 2;
         optional int32 last_error = 3;
+        optional int32 last_tag = 4;
+        optional int32 uid = 5;
+        optional int32 pid = 6;
     }
     repeated LogLossStats detected_log_loss = 16;
+
+    message EventQueueOverflow {
+        optional int32 count = 1;
+        optional int64 max_queue_history_ns = 2;
+        optional int64 min_queue_history_ns = 3;
+    }
+
+    optional EventQueueOverflow queue_overflow = 18;
 }
 
 message AlertTriggerDetails {

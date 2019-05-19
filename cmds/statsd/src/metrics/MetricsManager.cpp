@@ -54,6 +54,11 @@ const int FIELD_ID_ANNOTATIONS = 7;
 const int FIELD_ID_ANNOTATIONS_INT64 = 1;
 const int FIELD_ID_ANNOTATIONS_INT32 = 2;
 
+// for ActiveConfig
+const int FIELD_ID_ACTIVE_CONFIG_ID = 1;
+const int FIELD_ID_ACTIVE_CONFIG_UID = 2;
+const int FIELD_ID_ACTIVE_CONFIG_METRIC = 3;
+
 MetricsManager::MetricsManager(const ConfigKey& key, const StatsdConfig& config,
                                const int64_t timeBaseNs, const int64_t currentTimeNs,
                                const sp<UidMap>& uidMap,
@@ -65,7 +70,8 @@ MetricsManager::MetricsManager(const ConfigKey& key, const StatsdConfig& config,
       mTtlNs(config.has_ttl_in_seconds() ? config.ttl_in_seconds() * NS_PER_SEC : -1),
       mTtlEndNs(-1),
       mLastReportTimeNs(currentTimeNs),
-      mLastReportWallClockNs(getWallClockNs()) {
+      mLastReportWallClockNs(getWallClockNs()),
+      mShouldPersistHistory(config.persist_locally()) {
     // Init the ttl end timestamp.
     refreshTtl(timeBaseNs);
 
@@ -74,7 +80,8 @@ MetricsManager::MetricsManager(const ConfigKey& key, const StatsdConfig& config,
             timeBaseNs, currentTimeNs, mTagIds, mAllAtomMatchers, mAllConditionTrackers,
             mAllMetricProducers, mAllAnomalyTrackers, mAllPeriodicAlarmTrackers,
             mConditionToMetricMap, mTrackerToMetricMap, mTrackerToConditionMap,
-            mActivationAtomTrackerToMetricMap, mMetricIndexesWithActivation, mNoReportMetricIds);
+            mActivationAtomTrackerToMetricMap, mDeactivationAtomTrackerToMetricMap,
+            mMetricIndexesWithActivation, mNoReportMetricIds);
 
     mHashStringsInReport = config.hash_strings_in_metric_report();
     mVersionStringsInReport = config.version_strings_in_metric_report();
@@ -255,7 +262,7 @@ void MetricsManager::onDumpReport(const int64_t dumpTimeStampNs,
 
 bool MetricsManager::checkLogCredentials(const LogEvent& event) {
     if (android::util::AtomsInfo::kWhitelistedAtoms.find(event.GetTagId()) !=
-      android::util::AtomsInfo::kWhitelistedAtoms.end()) 
+      android::util::AtomsInfo::kWhitelistedAtoms.end())
     {
         return true;
     }
@@ -344,24 +351,61 @@ void MetricsManager::onLogEvent(const LogEvent& event) {
     int64_t eventTimeNs = event.GetElapsedTimestampNs();
 
     bool isActive = mIsAlwaysActive;
-    for (int metric : mMetricIndexesWithActivation) {
-        mAllMetricProducers[metric]->flushIfExpire(eventTimeNs);
-        isActive |= mAllMetricProducers[metric]->isActive();
+
+    // Set of metrics that are still active after flushing.
+    unordered_set<int> activeMetricsIndices;
+
+    // Update state of all metrics w/ activation conditions as of eventTimeNs.
+    for (int metricIndex : mMetricIndexesWithActivation) {
+        const sp<MetricProducer>& metric = mAllMetricProducers[metricIndex];
+        metric->flushIfExpire(eventTimeNs);
+        if (metric->isActive()) {
+            // If this metric w/ activation condition is still active after
+            // flushing, remember it.
+            activeMetricsIndices.insert(metricIndex);
+        }
     }
 
-    mIsActive = isActive;
+    mIsActive = isActive || !activeMetricsIndices.empty();
 
     if (mTagIds.find(tagId) == mTagIds.end()) {
-        // not interesting...
+        // Not interesting...
         return;
     }
 
     vector<MatchingState> matcherCache(mAllAtomMatchers.size(), MatchingState::kNotComputed);
 
+    // Evaluate all atom matchers.
     for (auto& matcher : mAllAtomMatchers) {
         matcher->onLogEvent(event, mAllAtomMatchers, matcherCache);
     }
 
+    // Set of metrics that received an activation cancellation.
+    unordered_set<int> metricIndicesWithCanceledActivations;
+
+    // Determine which metric activations received a cancellation and cancel them.
+    for (const auto& it : mDeactivationAtomTrackerToMetricMap) {
+        if (matcherCache[it.first] == MatchingState::kMatched) {
+            for (int metricIndex : it.second) {
+                mAllMetricProducers[metricIndex]->cancelEventActivation(it.first);
+                metricIndicesWithCanceledActivations.insert(metricIndex);
+            }
+        }
+    }
+
+    // Determine whether any metrics are no longer active after cancelling metric activations.
+    for (const int metricIndex : metricIndicesWithCanceledActivations) {
+        const sp<MetricProducer>& metric = mAllMetricProducers[metricIndex];
+        metric->flushIfExpire(eventTimeNs);
+        if (!metric->isActive()) {
+            activeMetricsIndices.erase(metricIndex);
+        }
+    }
+
+    isActive |= !activeMetricsIndices.empty();
+
+
+    // Determine which metric activations should be turned on and turn them on
     for (const auto& it : mActivationAtomTrackerToMetricMap) {
         if (matcherCache[it.first] == MatchingState::kMatched) {
             for (int metricIndex : it.second) {
@@ -406,12 +450,12 @@ void MetricsManager::onLogEvent(const LogEvent& event) {
         if (pair != mConditionToMetricMap.end()) {
             auto& metricList = pair->second;
             for (auto metricIndex : metricList) {
-                // metric cares about non sliced condition, and it's changed.
+                // Metric cares about non sliced condition, and it's changed.
                 // Push the new condition to it directly.
                 if (!mAllMetricProducers[metricIndex]->isConditionSliced()) {
                     mAllMetricProducers[metricIndex]->onConditionChanged(conditionCache[i],
                                                                          eventTimeNs);
-                    // metric cares about sliced conditions, and it may have changed. Send
+                    // Metric cares about sliced conditions, and it may have changed. Send
                     // notification, and the metric can query the sliced conditions that are
                     // interesting to it.
                 } else {
@@ -464,24 +508,40 @@ size_t MetricsManager::byteSize() {
     return totalSize;
 }
 
-void MetricsManager::setActiveMetrics(ActiveConfig config, int64_t currentTimeNs) {
-    if (config.active_metric_size() == 0) {
+void MetricsManager::loadActiveConfig(const ActiveConfig& config, int64_t currentTimeNs) {
+    if (config.metric_size() == 0) {
         ALOGW("No active metric for config %s", mConfigKey.ToString().c_str());
         return;
     }
 
-    for (int i = 0; i < config.active_metric_size(); i++) {
-        for (int metric : mMetricIndexesWithActivation) {
-            if (mAllMetricProducers[metric]->getMetricId() == config.active_metric(i).metric_id()) {
-                VLOG("Setting active metric: %lld",
-                     (long long)mAllMetricProducers[metric]->getMetricId());
-                mAllMetricProducers[metric]->setActive(
-                        currentTimeNs, config.active_metric(i).time_to_live_nanos());
-                mIsActive = true;
+    for (int i = 0; i < config.metric_size(); i++) {
+        const auto& activeMetric = config.metric(i);
+        for (int metricIndex : mMetricIndexesWithActivation) {
+            const auto& metric = mAllMetricProducers[metricIndex];
+            if (metric->getMetricId() == activeMetric.id()) {
+                VLOG("Setting active metric: %lld", (long long)metric->getMetricId());
+                metric->loadActiveMetric(activeMetric, currentTimeNs);
+                mIsActive |= metric->isActive();
             }
         }
     }
 }
+
+void MetricsManager::writeActiveConfigToProtoOutputStream(
+        int64_t currentTimeNs, ProtoOutputStream* proto) {
+    proto->write(FIELD_TYPE_INT64 | FIELD_ID_ACTIVE_CONFIG_ID, (long long)mConfigKey.GetId());
+    proto->write(FIELD_TYPE_INT32 | FIELD_ID_ACTIVE_CONFIG_UID, mConfigKey.GetUid());
+    for (int metricIndex : mMetricIndexesWithActivation) {
+        const auto& metric = mAllMetricProducers[metricIndex];
+        const uint64_t metricToken = proto->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED |
+                FIELD_ID_ACTIVE_CONFIG_METRIC);
+        metric->writeActiveMetricToProtoOutputStream(currentTimeNs, proto);
+        proto->end(metricToken);
+    }
+}
+
+
+
 
 }  // namespace statsd
 }  // namespace os

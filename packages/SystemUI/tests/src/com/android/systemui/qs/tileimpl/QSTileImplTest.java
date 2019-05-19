@@ -38,10 +38,11 @@ import static java.lang.Thread.sleep;
 
 import android.content.Intent;
 import android.metrics.LogMaker;
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.testing.TestableLooper.RunWithLooper;
+
+import androidx.test.filters.SmallTest;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.systemui.Dependency;

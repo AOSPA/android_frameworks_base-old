@@ -31,10 +31,10 @@ import androidx.annotation.Nullable;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.settingslib.fuelgauge.BatterySaverUtils;
+import com.android.settingslib.fuelgauge.Estimate;
 import com.android.settingslib.utils.PowerUtil;
 import com.android.systemui.Dependency;
 import com.android.systemui.power.EnhancedEstimates;
-import com.android.systemui.power.Estimate;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -73,7 +73,6 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
     private boolean mTestmode = false;
     private boolean mHasReceivedBattery = false;
     private Estimate mEstimate;
-    private long mLastEstimateTimestamp = -1;
     private boolean mFetchingEstimate = false;
 
     @Inject
@@ -203,13 +202,6 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
 
     @Override
     public void getEstimatedTimeRemainingString(EstimateFetchCompletion completion) {
-        if (mEstimate != null
-                && mLastEstimateTimestamp > System.currentTimeMillis() - UPDATE_GRANULARITY_MSEC) {
-            String percentage = generateTimeRemainingString();
-            completion.onBatteryRemainingEstimateRetrieved(percentage);
-            return;
-        }
-
         // Need to fetch or refresh the estimate, but it may involve binder calls so offload the
         // work
         synchronized (mFetchCallbacks) {
@@ -220,13 +212,15 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
 
     @Nullable
     private String generateTimeRemainingString() {
-        if (mEstimate == null) {
-            return null;
-        }
+        synchronized (mFetchCallbacks) {
+            if (mEstimate == null) {
+                return null;
+            }
 
-        String percentage = NumberFormat.getPercentInstance().format((double) mLevel / 100.0);
-        return PowerUtil.getBatteryRemainingShortStringFormatted(
-                mContext, mEstimate.estimateMillis);
+            String percentage = NumberFormat.getPercentInstance().format((double) mLevel / 100.0);
+            return PowerUtil.getBatteryRemainingShortStringFormatted(
+                    mContext, mEstimate.getEstimateMillis());
+        }
     }
 
     private void updateEstimateInBackground() {
@@ -237,18 +231,21 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
 
         mFetchingEstimate = true;
         Dependency.get(Dependency.BG_HANDLER).post(() -> {
-            mEstimate = mEstimates.getEstimate();
-            mLastEstimateTimestamp = System.currentTimeMillis();
+            // Only fetch the estimate if they are enabled
+            synchronized (mFetchCallbacks) {
+                mEstimate = null;
+                if (mEstimates.isHybridNotificationEnabled()) {
+                    updateEstimate();
+                }
+            }
             mFetchingEstimate = false;
-
             Dependency.get(Dependency.MAIN_HANDLER).post(this::notifyEstimateFetchCallbacks);
         });
     }
 
     private void notifyEstimateFetchCallbacks() {
-        String estimate = generateTimeRemainingString();
-
         synchronized (mFetchCallbacks) {
+            String estimate = generateTimeRemainingString();
             for (EstimateFetchCompletion completion : mFetchCallbacks) {
                 completion.onBatteryRemainingEstimateRetrieved(estimate);
             }
@@ -258,8 +255,15 @@ public class BatteryControllerImpl extends BroadcastReceiver implements BatteryC
     }
 
     private void updateEstimate() {
-        mEstimate = mEstimates.getEstimate();
-        mLastEstimateTimestamp = System.currentTimeMillis();
+        // if the estimate has been cached we can just use that, otherwise get a new one and
+        // throw it in the cache.
+        mEstimate = Estimate.getCachedEstimateIfAvailable(mContext);
+        if (mEstimate == null) {
+            mEstimate = mEstimates.getEstimate();
+            if (mEstimate != null) {
+                Estimate.storeCachedEstimate(mContext, mEstimate);
+            }
+        }
     }
 
     private void updatePowerSave() {

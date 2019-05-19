@@ -1951,6 +1951,23 @@ public final class InputMethodManager {
     }
 
     /**
+     * Unregister for IME state callbacks and applying visibility in
+     * {@link android.view.ImeInsetsSourceConsumer}.
+     * @hide
+     */
+    public void unregisterImeConsumer(@NonNull ImeInsetsSourceConsumer imeInsetsConsumer) {
+        if (imeInsetsConsumer == null) {
+            throw new IllegalStateException("ImeInsetsSourceConsumer cannot be null.");
+        }
+
+        synchronized (mH) {
+            if (mImeInsetsConsumer == imeInsetsConsumer) {
+                mImeInsetsConsumer = null;
+            }
+        }
+    }
+
+    /**
      * Call showSoftInput with currently focused view.
      * @return {@code true} if IME can be shown.
      * @hide
@@ -2559,6 +2576,12 @@ public final class InputMethodManager {
         mPendingEventPool.release(p);
     }
 
+    /**
+     * Show IME picker popup window.
+     *
+     * <p>Requires the {@link PackageManager#FEATURE_INPUT_METHODS} feature which can be detected
+     * using {@link PackageManager#hasSystemFeature(String)}.
+     */
     public void showInputMethodPicker() {
         synchronized (mH) {
             showInputMethodPickerLocked();

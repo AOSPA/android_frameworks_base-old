@@ -28,7 +28,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.IBinder.DeathRecipient;
 import android.os.IInterface;
-import android.os.Looper;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.UserHandle;
@@ -83,7 +82,7 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
     private final VultureCallback<S> mVultureCallback;
     private final int mUserId;
     private final ServiceConnection mServiceConnection = new RemoteServiceConnection();
-    private final boolean mBindInstantServiceAllowed;
+    private final int mBindingFlags;
     protected I mService;
 
     private boolean mBinding;
@@ -114,15 +113,15 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
     // NOTE: must be package-protected so this class is not extended outside
     AbstractRemoteService(@NonNull Context context, @NonNull String serviceInterface,
             @NonNull ComponentName componentName, int userId, @NonNull VultureCallback<S> callback,
-            boolean bindInstantServiceAllowed, boolean verbose) {
+            @NonNull Handler handler, int bindingFlags, boolean verbose) {
         mContext = context;
         mVultureCallback = callback;
         mVerbose = verbose;
         mComponentName = componentName;
         mIntent = new Intent(serviceInterface).setComponent(mComponentName);
         mUserId = userId;
-        mHandler = new Handler(Looper.getMainLooper());
-        mBindInstantServiceAllowed = bindInstantServiceAllowed;
+        mHandler = new Handler(handler.getLooper());
+        mBindingFlags = bindingFlags;
     }
 
     /**
@@ -265,7 +264,7 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
             }
         }
         pw.println();
-        pw.append(prefix).append("mBindInstantServiceAllowed=").println(mBindInstantServiceAllowed);
+        pw.append(prefix).append("mBindingFlags=").println(mBindingFlags);
         pw.append(prefix).append("idleTimeout=")
             .append(Long.toString(idleTimeout / 1000)).append("s\n");
         pw.append(prefix).append("requestTimeout=");
@@ -345,11 +344,19 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
      * {@link #getTimeoutIdleBindMillis() idle timeout} expires.
      */
     protected void scheduleUnbind() {
-        final long unbindDelay = getTimeoutIdleBindMillis();
+        scheduleUnbind(true);
+    }
 
-        if (unbindDelay <= 0) {
+    private void scheduleUnbind(boolean delay) {
+        long unbindDelay = getTimeoutIdleBindMillis();
+
+        if (unbindDelay <= PERMANENT_BOUND_TIMEOUT_MS) {
             if (mVerbose) Slog.v(mTag, "not scheduling unbind when value is " + unbindDelay);
             return;
+        }
+
+        if (!delay) {
+            unbindDelay = 0;
         }
 
         cancelScheduledUnbind();
@@ -398,6 +405,11 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
     abstract void handlePendingRequestWhileUnBound(
             @NonNull BasePendingRequest<S, I> pendingRequest);
 
+    /**
+     * Called if {@link Context#bindServiceAsUser} returns {@code false}.
+     */
+    abstract void handleBindFailure();
+
     private boolean handleIsBound() {
         return mService != null;
     }
@@ -408,10 +420,8 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
         if (mVerbose) Slog.v(mTag, "ensureBound()");
         mBinding = true;
 
-        int flags = Context.BIND_AUTO_CREATE | Context.BIND_FOREGROUND_SERVICE;
-        if (mBindInstantServiceAllowed) {
-            flags |= Context.BIND_ALLOW_INSTANT;
-        }
+        final int flags = Context.BIND_AUTO_CREATE | Context.BIND_FOREGROUND_SERVICE
+                | mBindingFlags;
 
         final boolean willBind = mContext.bindServiceAsUser(mIntent, mServiceConnection, flags,
                 mHandler, new UserHandle(mUserId));
@@ -421,6 +431,8 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
             mBinding = false;
 
             if (!mServiceDied) {
+                // TODO(b/126266412): merge these 2 calls?
+                handleBindFailure();
                 handleBinderDied();
             }
         }
@@ -452,21 +464,28 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
                 return;
             }
             mBinding = false;
-            mService = getServiceInterface(service);
             try {
                 service.linkToDeath(AbstractRemoteService.this, 0);
             } catch (RemoteException re) {
                 handleBinderDied();
                 return;
             }
+            mService = getServiceInterface(service);
             handleOnConnectedStateChangedInternal(true);
             mServiceDied = false;
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
+            if (mVerbose) Slog.v(mTag, "onServiceDisconnected()");
             mBinding = true;
             mService = null;
+        }
+
+        @Override
+        public void onBindingDied(ComponentName name) {
+            if (mVerbose) Slog.v(mTag, "onBindingDied()");
+            scheduleUnbind(false);
         }
     }
 
@@ -478,6 +497,15 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
             }
         }
         return mDestroyed;
+    }
+
+    @Override
+    public String toString() {
+        return getClass().getSimpleName() + "[" + mComponentName
+                + " " + System.identityHashCode(this)
+                + (mService != null ? " (bound)" : " (unbound)")
+                + (mDestroyed ? " (destroyed)" : "")
+                + "]";
     }
 
     /**
@@ -541,6 +569,12 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
         void onFinished() { }
 
         /**
+         * Called when request fails due to reasons internal to {@link AbstractRemoteService},
+         * e.g. failure to bind to service.
+         */
+        protected void onFailed() { }
+
+        /**
          * Checks whether this request was cancelled.
          */
         @GuardedBy("mLock")
@@ -572,6 +606,12 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
          */
         protected boolean isFinal() {
             return false;
+        }
+
+        protected boolean isRequestCompleted() {
+            synchronized (mLock) {
+                return mCompleted;
+            }
         }
     }
 
@@ -610,6 +650,7 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
                 if (remoteService != null) {
                     // TODO(b/117779333): we should probably ignore it if service is destroyed.
                     Slog.w(mTag, "timed out after " + service.getRemoteRequestMillis() + " ms");
+                    remoteService.finishRequest(this);
                     onTimeout(remoteService);
                 } else {
                     Slog.w(mTag, "timed out (no service)");

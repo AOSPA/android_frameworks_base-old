@@ -33,7 +33,10 @@ public abstract class AutofillManagerInternal {
     public abstract void onBackKeyPressed();
 
     /**
-     * Gets autofill options for a package
+     * Gets autofill options for a package.
+     *
+     * <p><b>NOTE: </b>this method is called by the {@code ActivityManager} service and hence cannot
+     * hold the main service lock.
      *
      * @param packageName The package for which to query.
      * @param versionCode The package version code.
@@ -42,4 +45,12 @@ public abstract class AutofillManagerInternal {
     @Nullable
     public abstract AutofillOptions getAutofillOptions(@NonNull String packageName,
             long versionCode, @UserIdInt int userId);
+
+    /**
+     * Checks whether the given {@code uid} owns the
+     * {@link android.service.autofill.augmented.AugmentedAutofillService} implementation associated
+     * with the given {@code userId}.
+     */
+    public abstract boolean isAugmentedAutofillServiceForUser(@NonNull int callingUid,
+            @UserIdInt int userId);
 }

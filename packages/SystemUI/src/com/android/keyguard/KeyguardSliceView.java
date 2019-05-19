@@ -20,6 +20,8 @@ import static android.app.slice.Slice.HINT_LIST_ITEM;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 
+import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
+
 import android.animation.LayoutTransition;
 import android.animation.ObjectAnimator;
 import android.animation.PropertyValuesHolder;
@@ -60,13 +62,19 @@ import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.keyguard.KeyguardSliceProvider;
+import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.util.wakelock.KeepAwakeAnimationListener;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+
+import javax.inject.Inject;
+import javax.inject.Named;
 
 /**
  * View visible under the clock on the lock screen and AoD.
@@ -78,6 +86,8 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
     public static final int DEFAULT_ANIM_DURATION = 550;
 
     private final HashMap<View, PendingIntent> mClickActions;
+    private final ActivityStarter mActivityStarter;
+    private final ConfigurationController mConfigurationController;
     private Uri mKeyguardSliceUri;
     @VisibleForTesting
     TextView mTitle;
@@ -97,16 +107,10 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
     private final int mRowWithHeaderPadding;
     private final int mRowPadding;
 
-    public KeyguardSliceView(Context context) {
-        this(context, null, 0);
-    }
-
-    public KeyguardSliceView(Context context, AttributeSet attrs) {
-        this(context, attrs, 0);
-    }
-
-    public KeyguardSliceView(Context context, AttributeSet attrs, int defStyle) {
-        super(context, attrs, defStyle);
+    @Inject
+    public KeyguardSliceView(@Named(VIEW_CONTEXT) Context context, AttributeSet attrs,
+            ActivityStarter activityStarter, ConfigurationController configurationController) {
+        super(context, attrs);
 
         TunerService tunerService = Dependency.get(TunerService.class);
         tunerService.addTunable(this, Settings.Secure.KEYGUARD_SLICE_URI);
@@ -115,6 +119,8 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         mRowPadding = context.getResources().getDimensionPixelSize(R.dimen.subtitle_clock_padding);
         mRowWithHeaderPadding = context.getResources()
                 .getDimensionPixelSize(R.dimen.header_subtitle_padding);
+        mActivityStarter = activityStarter;
+        mConfigurationController = configurationController;
 
         LayoutTransition transition = new LayoutTransition();
         transition.setStagger(LayoutTransition.CHANGE_APPEARING, DEFAULT_ANIM_DURATION / 2);
@@ -135,6 +141,7 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         mRow = findViewById(R.id.row);
         mTextColor = Utils.getColorAttrDefaultColor(mContext, R.attr.wallpaperTextColor);
         mIconSize = (int) mContext.getResources().getDimension(R.dimen.widget_icon_size);
+        mTitle.setOnClickListener(this);
     }
 
     @Override
@@ -144,7 +151,7 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         mDisplayId = getDisplay().getDisplayId();
         // Make sure we always have the most current slice
         mLiveData.observeForever(this);
-        Dependency.get(ConfigurationController.class).addCallback(this);
+        mConfigurationController.addCallback(this);
     }
 
     @Override
@@ -155,7 +162,7 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         if (mDisplayId == DEFAULT_DISPLAY) {
             mLiveData.removeObserver(this);
         }
-        Dependency.get(ConfigurationController.class).removeCallback(this);
+        mConfigurationController.removeCallback(this);
     }
 
     /**
@@ -174,8 +181,10 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
             if (mContentChangeListener != null) {
                 mContentChangeListener.run();
             }
+            Trace.endSection();
             return;
         }
+        mClickActions.clear();
 
         ListContent lc = new ListContent(getContext(), mSlice);
         SliceContent headerContent = lc.getHeader();
@@ -198,9 +207,12 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
             SliceItem mainTitle = header.getTitleItem();
             CharSequence title = mainTitle != null ? mainTitle.getText() : null;
             mTitle.setText(title);
+            if (header.getPrimaryAction() != null
+                    && header.getPrimaryAction().getAction() != null) {
+                mClickActions.put(mTitle, header.getPrimaryAction().getAction());
+            }
         }
 
-        mClickActions.clear();
         final int subItemsCount = subItems.size();
         final int blendedColor = getTextColor();
         final int startIndex = mHasHeader ? 1 : 0; // First item is header; skip it
@@ -286,11 +298,7 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
     public void onClick(View v) {
         final PendingIntent action = mClickActions.get(v);
         if (action != null) {
-            try {
-                action.send();
-            } catch (PendingIntent.CanceledException e) {
-                Log.i(TAG, "Pending intent cancelled, nothing to launch", e);
-            }
+            mActivityStarter.startPendingIntentDismissingKeyguard(action);
         }
     }
 
@@ -373,6 +381,17 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         }
         onChanged(slice);
         Trace.endSection();
+    }
+
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        pw.println("KeyguardSliceView:");
+        pw.println("  mClickActions: " + mClickActions);
+        pw.println("  mTitle: " + (mTitle == null ? "null" : mTitle.getVisibility() == VISIBLE));
+        pw.println("  mRow: " + (mRow == null ? "null" : mRow.getVisibility() == VISIBLE));
+        pw.println("  mTextColor: " + Integer.toHexString(mTextColor));
+        pw.println("  mDarkAmount: " + mDarkAmount);
+        pw.println("  mSlice: " + mSlice);
+        pw.println("  mHasHeader: " + mHasHeader);
     }
 
     public static class Row extends LinearLayout {

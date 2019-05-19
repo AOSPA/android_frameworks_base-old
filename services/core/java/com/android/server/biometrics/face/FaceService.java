@@ -23,7 +23,12 @@ import static android.Manifest.permission.USE_BIOMETRIC_INTERNAL;
 
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.UserInfo;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricConstants;
@@ -32,21 +37,26 @@ import android.hardware.biometrics.IBiometricServiceLockoutResetCallback;
 import android.hardware.biometrics.IBiometricServiceReceiverInternal;
 import android.hardware.biometrics.face.V1_0.IBiometricsFace;
 import android.hardware.biometrics.face.V1_0.IBiometricsFaceClientCallback;
+import android.hardware.biometrics.face.V1_0.OptionalBool;
 import android.hardware.biometrics.face.V1_0.Status;
 import android.hardware.face.Face;
 import android.hardware.face.FaceManager;
 import android.hardware.face.IFaceService;
 import android.hardware.face.IFaceServiceReceiver;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Environment;
 import android.os.IBinder;
+import android.os.NativeHandle;
 import android.os.RemoteException;
 import android.os.SELinux;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 
+import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.util.DumpUtils;
@@ -54,7 +64,6 @@ import com.android.server.SystemServerInitThreadPool;
 import com.android.server.biometrics.AuthenticationClient;
 import com.android.server.biometrics.BiometricServiceBase;
 import com.android.server.biometrics.BiometricUtils;
-import com.android.server.biometrics.ClientMonitor;
 import com.android.server.biometrics.EnumerateClient;
 import com.android.server.biometrics.Metrics;
 import com.android.server.biometrics.RemovalClient;
@@ -65,8 +74,11 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileDescriptor;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -117,6 +129,49 @@ public class FaceService extends BiometricServiceBase {
             // but let's leave it as-is for now.
             return result || !authenticated;
         }
+
+        @Override
+        public boolean onAcquired(int acquireInfo, int vendorCode) {
+
+            if (acquireInfo == FaceManager.FACE_ACQUIRED_RECALIBRATE) {
+                final String name =
+                        getContext().getString(R.string.face_recalibrate_notification_name);
+                final String title =
+                        getContext().getString(R.string.face_recalibrate_notification_title);
+                final String content =
+                        getContext().getString(R.string.face_recalibrate_notification_content);
+
+                final Intent intent = new Intent("android.settings.FACE_SETTINGS");
+                intent.setPackage("com.android.settings");
+
+                final PendingIntent pendingIntent = PendingIntent.getActivityAsUser(getContext(),
+                        0 /* requestCode */, intent, 0 /* flags */, null /* options */,
+                        UserHandle.CURRENT);
+
+                final String id = "FaceService";
+
+                NotificationManager nm =
+                        getContext().getSystemService(NotificationManager.class);
+                NotificationChannel channel = new NotificationChannel(id, name,
+                        NotificationManager.IMPORTANCE_HIGH);
+                Notification notification = new Notification.Builder(getContext(), id)
+                        .setSmallIcon(R.drawable.ic_lock)
+                        .setContentTitle(title)
+                        .setContentText(content)
+                        .setSubText(name)
+                        .setOnlyAlertOnce(true)
+                        .setLocalOnly(true)
+                        .setAutoCancel(true)
+                        .setCategory(Notification.CATEGORY_SYSTEM)
+                        .setContentIntent(pendingIntent)
+                        .build();
+
+                nm.createNotificationChannel(channel);
+                nm.notifyAsUser(null /* tag */, 0 /* id */, notification, UserHandle.CURRENT);
+            }
+
+            return super.onAcquired(acquireInfo, vendorCode);
+        }
     }
 
     /**
@@ -161,7 +216,7 @@ public class FaceService extends BiometricServiceBase {
                 }
             };
 
-            enrollInternal(client, UserHandle.getCallingUserId());
+            enrollInternal(client, mCurrentUserId);
         }
 
         @Override // Binder call
@@ -281,7 +336,9 @@ public class FaceService extends BiometricServiceBase {
 
             final long ident = Binder.clearCallingIdentity();
             try {
-                if (args.length > 0 && "--proto".equals(args[0])) {
+                if (args.length > 1 && "--hal".equals(args[0])) {
+                    dumpHal(fd, Arrays.copyOfRange(args, 1, args.length, args.getClass()));
+                } else if (args.length > 0 && "--proto".equals(args[0])) {
                     dumpProto(fd);
                 } else {
                     dumpInternal(pw);
@@ -377,6 +434,12 @@ public class FaceService extends BiometricServiceBase {
         @Override // Binder call
         public void resetLockout(byte[] token) {
             checkPermission(MANAGE_BIOMETRIC);
+
+            if (!FaceService.this.hasEnrolledBiometrics(mCurrentUserId)) {
+                Slog.w(TAG, "Ignoring lockout reset, no templates enrolled");
+                return;
+            }
+
             try {
                 mDaemonWrapper.resetLockout(token);
             } catch (RemoteException e) {
@@ -385,38 +448,62 @@ public class FaceService extends BiometricServiceBase {
         }
 
         @Override
-        public int setFeature(int feature, boolean enabled, final byte[] token) {
+        public void setFeature(int feature, boolean enabled, final byte[] token,
+                IFaceServiceReceiver receiver) {
             checkPermission(MANAGE_BIOMETRIC);
 
-            final ArrayList<Byte> byteToken = new ArrayList<>();
-            for (int i = 0; i < token.length; i++) {
-                byteToken.add(token[i]);
-            }
+            mHandler.post(() -> {
+                if (!FaceService.this.hasEnrolledBiometrics(mCurrentUserId)) {
+                    Slog.e(TAG, "No enrolled biometrics while setting feature: " + feature);
+                    return;
+                }
 
-            int result;
-            try {
-                result = mDaemon != null ? mDaemon.setFeature(feature, enabled, byteToken)
-                        : Status.INTERNAL_ERROR;
-            } catch (RemoteException e) {
-                Slog.e(getTag(), "Unable to set feature: " + feature + " to enabled:" + enabled,
-                        e);
-                result = Status.INTERNAL_ERROR;
-            }
+                final ArrayList<Byte> byteToken = new ArrayList<>();
+                for (int i = 0; i < token.length; i++) {
+                    byteToken.add(token[i]);
+                }
 
-            return result;
+                // TODO: Support multiple faces
+                final int faceId = getFirstTemplateForUser(mCurrentUserId);
+
+                if (mDaemon != null) {
+                    try {
+                        final int result = mDaemon.setFeature(feature, enabled, byteToken, faceId);
+                        receiver.onFeatureSet(result == Status.OK, feature);
+                    } catch (RemoteException e) {
+                        Slog.e(getTag(), "Unable to set feature: " + feature
+                                        + " to enabled:" + enabled, e);
+                    }
+                }
+            });
+
         }
 
         @Override
-        public boolean getFeature(int feature) {
+        public void getFeature(int feature, IFaceServiceReceiver receiver) {
             checkPermission(MANAGE_BIOMETRIC);
 
-            boolean result = true;
-            try {
-                result = mDaemon != null ? mDaemon.getFeature(feature) : true;
-            } catch (RemoteException e) {
-                Slog.e(getTag(), "Unable to getRequireAttention", e);
-            }
-            return result;
+            mHandler.post(() -> {
+                // This should ideally return tri-state, but the user isn't shown settings unless
+                // they are enrolled so it's fine for now.
+                if (!FaceService.this.hasEnrolledBiometrics(mCurrentUserId)) {
+                    Slog.e(TAG, "No enrolled biometrics while getting feature: " + feature);
+                    return;
+                }
+
+                // TODO: Support multiple faces
+                final int faceId = getFirstTemplateForUser(mCurrentUserId);
+
+                if (mDaemon != null) {
+                    try {
+                        OptionalBool result = mDaemon.getFeature(feature, faceId);
+                        receiver.onFeatureGet(result.status == Status.OK, feature, result.value);
+                    } catch (RemoteException e) {
+                        Slog.e(getTag(), "Unable to getRequireAttention", e);
+                    }
+                }
+            });
+
         }
 
         @Override
@@ -430,6 +517,15 @@ public class FaceService extends BiometricServiceBase {
                     Slog.e(getTag(), "Unable to send userActivity", e);
                 }
             }
+        }
+
+        // TODO: Support multiple faces
+        private int getFirstTemplateForUser(int user) {
+            final List<Face> faces = FaceService.this.getEnrolledTemplates(user);
+            if (!faces.isEmpty()) {
+                return faces.get(0).getBiometricId();
+            }
+            return 0;
         }
     }
 
@@ -500,7 +596,8 @@ public class FaceService extends BiometricServiceBase {
                 throws RemoteException {
             if (mFaceServiceReceiver != null) {
                 if (biometric == null || biometric instanceof Face) {
-                    mFaceServiceReceiver.onAuthenticationSucceeded(deviceId, (Face)biometric);
+                    mFaceServiceReceiver.onAuthenticationSucceeded(deviceId, (Face) biometric,
+                            userId);
                 } else {
                     Slog.e(TAG, "onAuthenticationSucceeded received non-face biometric");
                 }
@@ -601,11 +698,19 @@ public class FaceService extends BiometricServiceBase {
         }
 
         @Override
-        public void onRemoved(final long deviceId, final int faceId, final int userId,
-                final int remaining) {
+        public void onRemoved(final long deviceId, ArrayList<Integer> faceIds, final int userId) {
             mHandler.post(() -> {
-                final Face face = new Face("", faceId, deviceId);
-                FaceService.super.handleRemoved(face, remaining);
+                if (!faceIds.isEmpty()) {
+                    for (int i = 0; i < faceIds.size(); i++) {
+                        final Face face = new Face("", faceIds.get(i), deviceId);
+                        // Convert to old behavior
+                        FaceService.super.handleRemoved(face, faceIds.size() - i - 1);
+                    }
+                } else {
+                    final Face face = new Face("", 0 /* identifier */, deviceId);
+                    FaceService.super.handleRemoved(face, 0 /* remaining */);
+                }
+
             });
         }
 
@@ -760,7 +865,7 @@ public class FaceService extends BiometricServiceBase {
                 com.android.internal.R.integer.config_faceMaxTemplatesPerUser);
         final int enrolled = FaceService.this.getEnrolledTemplates(userId).size();
         if (enrolled >= limit) {
-            Slog.w(TAG, "Too many faces registered");
+            Slog.w(TAG, "Too many faces registered, user: " + userId);
             return true;
         }
         return false;
@@ -782,7 +887,7 @@ public class FaceService extends BiometricServiceBase {
             try {
                 userId = getUserOrWorkProfileId(clientPackage, userId);
                 if (userId != mCurrentUserId) {
-                    final File baseDir = Environment.getDataVendorDeDirectory(userId);
+                    final File baseDir = Environment.getDataVendorCeDirectory(userId);
                     final File faceDir = new File(baseDir, FACE_DATA_DIR);
                     if (!faceDir.exists()) {
                         if (!faceDir.mkdir()) {
@@ -1022,5 +1127,51 @@ public class FaceService extends BiometricServiceBase {
         proto.flush();
         mPerformanceMap.clear();
         mCryptoPerformanceMap.clear();
+    }
+
+    private void dumpHal(FileDescriptor fd, String[] args) {
+        // WARNING: CDD restricts image data from leaving TEE unencrypted on
+        //          production devices:
+        // [C-1-10] MUST not allow unencrypted access to identifiable biometric
+        //          data or any data derived from it (such as embeddings) to the
+        //         Application Processor outside the context of the TEE.
+        //  As such, this API should only be enabled for testing purposes on
+        //  engineering and userdebug builds.  All modules in the software stack
+        //  MUST enforce final build products do NOT have this functionality.
+        //  Additionally, the following check MUST NOT be removed.
+        if (!(Build.IS_ENG || Build.IS_USERDEBUG)) {
+            return;
+        }
+
+        // Additionally, this flag allows turning off face for a device
+        // (either permanently through the build or on an individual device).
+        if (SystemProperties.getBoolean("ro.face.disable_debug_data", false)
+                || SystemProperties.getBoolean("persist.face.disable_debug_data", false)) {
+            return;
+        }
+
+        // The debug method takes two file descriptors. The first is for text
+        // output, which we will drop.  The second is for binary data, which
+        // will be the protobuf data.
+        final IBiometricsFace daemon = getFaceDaemon();
+        if (daemon != null) {
+            FileOutputStream devnull = null;
+            try {
+                devnull = new FileOutputStream("/dev/null");
+                final NativeHandle handle = new NativeHandle(
+                        new FileDescriptor[] { devnull.getFD(), fd },
+                        new int[0], false);
+                daemon.debug(handle, new ArrayList<String>(Arrays.asList(args)));
+            } catch (IOException | RemoteException ex) {
+                Slog.d(TAG, "error while reading face debugging data", ex);
+            } finally {
+                if (devnull != null) {
+                    try {
+                        devnull.close();
+                    } catch (IOException ex) {
+                    }
+                }
+            }
+        }
     }
 }

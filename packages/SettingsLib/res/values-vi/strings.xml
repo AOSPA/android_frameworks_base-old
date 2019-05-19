@@ -42,6 +42,7 @@
     <string name="available_via_passpoint" msgid="1617440946846329613">"Có sẵn qua %1$s"</string>
     <string name="tap_to_sign_up" msgid="6449724763052579434">"Nhấn để đăng ký"</string>
     <string name="wifi_connected_no_internet" msgid="8202906332837777829">"Đã kết nối, không có Internet"</string>
+    <string name="wifi_limited_connection" msgid="7717855024753201527">"Kết nối giới hạn"</string>
     <string name="wifi_status_no_internet" msgid="5784710974669608361">"Không có Internet"</string>
     <string name="wifi_status_sign_in_required" msgid="123517180404752756">"Yêu cầu đăng nhập"</string>
     <string name="wifi_ap_unable_to_handle_new_sta" msgid="5348824313514404541">"Điểm truy cập tạm thời đã đạt đến giới hạn số lượng thiết bị truy cập."</string>
@@ -73,7 +74,9 @@
     <string name="bluetooth_connected_no_a2dp_battery_level" msgid="3908466636369853652">"Đã kết nối (không có phương tiện), mức pin <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g><xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g>"</string>
     <string name="bluetooth_connected_no_headset_no_a2dp_battery_level" msgid="1163440823807659316">"Đã kết nối (không có điện thoại hoặc phương tiện), mức pin <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g><xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g>"</string>
     <string name="bluetooth_active_battery_level" msgid="3149689299296462009">"Đang hoạt động, mức pin <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
+    <string name="bluetooth_active_battery_level_untethered" msgid="6662649951391456747">"Đang hoạt động, Trái: Mức pin <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_0">%1$s</xliff:g>, Phải: Mức pin <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_1">%2$s</xliff:g>"</string>
     <string name="bluetooth_battery_level" msgid="1447164613319663655">"Mức pin <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
+    <string name="bluetooth_battery_level_untethered" msgid="5974406100211667177">"Trái: Mức pin <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_0">%1$s</xliff:g>, Phải: Mức pin <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_1">%2$s</xliff:g>"</string>
     <string name="bluetooth_active_no_battery_level" msgid="8380223546730241956">"Đang hoạt động"</string>
     <string name="bluetooth_profile_a2dp" msgid="2031475486179830674">"Âm thanh của phương tiện"</string>
     <string name="bluetooth_profile_headset" msgid="7815495680863246034">"Cuộc gọi điện thoại"</string>
@@ -148,7 +151,7 @@
     <string name="running_process_item_user_label" msgid="3129887865552025943">"Người dùng: <xliff:g id="USER_NAME">%1$s</xliff:g>"</string>
     <string name="launch_defaults_some" msgid="313159469856372621">"Đã đặt một số ứng dụng chạy mặc định"</string>
     <string name="launch_defaults_none" msgid="4241129108140034876">"Chưa đặt mặc định"</string>
-    <string name="tts_settings" msgid="8186971894801348327">"Cài đặt chuyển văn bản thành giọng nói"</string>
+    <string name="tts_settings" msgid="8186971894801348327">"Cài đặt chuyển văn bản sang lời nói"</string>
     <string name="tts_settings_title" msgid="1237820681016639683">"Đầu ra văn bản thành giọng nói"</string>
     <string name="tts_default_rate_title" msgid="6030550998379310088">"Tốc độ nói"</string>
     <string name="tts_default_rate_summary" msgid="4061815292287182801">"Tốc độ đọc văn bản"</string>
@@ -160,7 +163,7 @@
     <string name="tts_default_lang_summary" msgid="5219362163902707785">"Đặt giọng nói ngôn ngữ cụ thể cho văn bản nói"</string>
     <string name="tts_play_example_title" msgid="7094780383253097230">"Nghe ví dụ"</string>
     <string name="tts_play_example_summary" msgid="8029071615047894486">"Phát minh hoạ ngắn về tổng hợp giọng nói"</string>
-    <string name="tts_install_data_title" msgid="4264378440508149986">"Cài đặt dữ liệu thoại"</string>
+    <string name="tts_install_data_title" msgid="4264378440508149986">"Cài đặt dữ liệu giọng nói"</string>
     <string name="tts_install_data_summary" msgid="5742135732511822589">"Cài đặt dữ liệu thoại bắt buộc cho tổng hợp tiếng nói"</string>
     <string name="tts_engine_security_warning" msgid="8786238102020223650">"Công cụ tổng hợp tiếng nói này có thể thu thập tất cả nội dụng sẽ được nói, bao gồm dữ liệu cá nhân như mật khẩu và số thẻ tín dụng. Công cụ này xuất phát từ công cụ <xliff:g id="TTS_PLUGIN_ENGINE_NAME">%s</xliff:g>. Cho phép sử dụng công cụ tổng hợp tiếng nói này?"</string>
     <string name="tts_engine_network_required" msgid="1190837151485314743">"Ngôn ngữ này yêu cầu phải có kết nối mạng hoạt động để có thể phát âm thanh được chuyển từ văn bản sang giọng nói."</string>
@@ -198,10 +201,10 @@
     <string name="tethering_settings_not_available" msgid="6765770438438291012">"Cài đặt chia sẻ kết nối không khả dụng cho người dùng này"</string>
     <string name="apn_settings_not_available" msgid="7873729032165324000">"Cài đặt tên điểm truy cập không khả dụng cho người dùng này"</string>
     <string name="enable_adb" msgid="7982306934419797485">"Gỡ lỗi USB"</string>
-    <string name="enable_adb_summary" msgid="4881186971746056635">"Chế độ gỡ lỗi khi USB được kết nối"</string>
+    <string name="enable_adb_summary" msgid="4881186971746056635">"Bật chế độ gỡ lỗi khi kết nối USB"</string>
     <string name="clear_adb_keys" msgid="4038889221503122743">"Thu hồi ủy quyền gỡ lỗi USB"</string>
     <string name="bugreport_in_power" msgid="7923901846375587241">"Phím tắt báo cáo lỗi"</string>
-    <string name="bugreport_in_power_summary" msgid="1778455732762984579">"Hiển thị một nút trong menu nguồn để thêm báo cáo lỗi"</string>
+    <string name="bugreport_in_power_summary" msgid="1778455732762984579">"Hiển thị một nút trong menu nguồn để báo cáo lỗi"</string>
     <string name="keep_screen_on" msgid="1146389631208760344">"Không khóa màn hình"</string>
     <string name="keep_screen_on_summary" msgid="2173114350754293009">"Màn hình sẽ không bao giờ chuyển sang chế độ nghỉ khi sạc"</string>
     <string name="bt_hci_snoop_log" msgid="3340699311158865670">"Bật nhật ký theo dõi HCI Bluetooth"</string>
@@ -217,7 +220,7 @@
     <string name="wifi_display_certification" msgid="8611569543791307533">"Chứng nhận hiển thị không dây"</string>
     <string name="wifi_verbose_logging" msgid="4203729756047242344">"Bật ghi nhật ký chi tiết Wi‑Fi"</string>
     <string name="mobile_data_always_on" msgid="8774857027458200434">"Dữ liệu di động luôn hoạt động"</string>
-    <string name="tethering_hardware_offload" msgid="7470077827090325814">"Tăng tốc phần cứng cho chia sẻ kết nối"</string>
+    <string name="tethering_hardware_offload" msgid="7470077827090325814">"Tăng tốc phần cứng khi chia sẻ kết nối"</string>
     <string name="bluetooth_show_devices_without_names" msgid="4708446092962060176">"Hiển thị các thiết bị Bluetooth không có tên"</string>
     <string name="bluetooth_disable_absolute_volume" msgid="2660673801947898809">"Vô hiệu hóa âm lượng tuyệt đối"</string>
     <string name="bluetooth_select_avrcp_version_string" msgid="3750059931120293633">"Phiên bản Bluetooth AVRCP"</string>
@@ -248,15 +251,15 @@
     <string name="select_logd_size_dialog_title" msgid="1206769310236476760">"Chọn kích thước Trình ghi nhật ký trên mỗi bộ đệm nhật ký"</string>
     <string name="dev_logpersist_clear_warning_title" msgid="684806692440237967">"Xóa bộ nhớ ổn định trong trình ghi nhật ký?"</string>
     <string name="dev_logpersist_clear_warning_message" msgid="2256582531342994562">"Khi chúng tôi không còn theo dõi bằng trình ghi nhật ký ổn định nữa, chúng tôi sẽ được yêu cầu xóa dữ liệu trong trình ghi nhật ký nằm trên thiết bị của bạn."</string>
-    <string name="select_logpersist_title" msgid="7530031344550073166">"Liên tục lưu dữ liệu của trình ghi nhật ký trên thiết bị"</string>
+    <string name="select_logpersist_title" msgid="7530031344550073166">"Liên tục lưu dữ liệu của trình ghi nhật ký"</string>
     <string name="select_logpersist_dialog_title" msgid="4003400579973269060">"Chọn lần tải nhật ký để lưu trữ ổn định trên thiết bị"</string>
     <string name="select_usb_configuration_title" msgid="2649938511506971843">"Chọn cấu hình USB"</string>
     <string name="select_usb_configuration_dialog_title" msgid="6385564442851599963">"Chọn cấu hình USB"</string>
     <string name="allow_mock_location" msgid="2787962564578664888">"Cho phép vị trí mô phỏng"</string>
     <string name="allow_mock_location_summary" msgid="317615105156345626">"Cho phép vị trí mô phỏng"</string>
     <string name="debug_view_attributes" msgid="6485448367803310384">"Cho phép kiểm tra thuộc tính của chế độ xem"</string>
-    <string name="mobile_data_always_on_summary" msgid="8149773901431697910">"Luôn giữ cho dữ liệu di động hoạt động, ngay cả khi Wi-Fi đang hoạt động (để chuyển đổi mạng nhanh)."</string>
-    <string name="tethering_hardware_offload_summary" msgid="7726082075333346982">"Sử dụng tăng tốc phần cứng cho chia sẻ kết nối nếu được"</string>
+    <string name="mobile_data_always_on_summary" msgid="8149773901431697910">"Luôn bật dữ liệu di động ngay cả khi Wi-Fi đang hoạt động (để chuyển đổi mạng nhanh)."</string>
+    <string name="tethering_hardware_offload_summary" msgid="7726082075333346982">"Sử dụng tính năng tăng tốc phần cứng khi chia sẻ kết nối nếu có"</string>
     <string name="adb_warning_title" msgid="6234463310896563253">"Cho phép gỡ lỗi USB?"</string>
     <string name="adb_warning_message" msgid="7316799925425402244">"Gỡ lỗi USB chỉ dành cho mục đích phát triển. Hãy sử dụng tính năng này để sao chép dữ liệu giữa máy tính và thiết bị của bạn, cài đặt ứng dụng trên thiết bị của bạn mà không thông báo và đọc dữ liệu nhật ký."</string>
     <string name="adb_keys_warning_message" msgid="5659849457135841625">"Thu hồi quyền truy cập gỡ lỗi USB từ tất cả máy tính mà bạn đã ủy quyền trước đó?"</string>
@@ -377,12 +380,14 @@
     <string name="power_discharging_duration" msgid="8848256785736335185">"Còn khoảng <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_remaining_duration_only_enhanced" msgid="4189311599812296592">"Còn khoảng <xliff:g id="TIME_REMAINING">%1$s</xliff:g> dựa trên mức sử dụng của bạn"</string>
     <string name="power_discharging_duration_enhanced" msgid="1992003260664804080">"Còn khoảng <xliff:g id="TIME_REMAINING">%1$s</xliff:g> dựa trên mức sử dụng của bạn (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_duration_only_short" msgid="3463575350656389957">"Còn <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
+    <!-- no translation found for power_remaining_duration_only_short (9183070574408359726) -->
+    <skip />
     <string name="power_discharge_by_enhanced" msgid="2095821536747992464">"Sẽ hết pin cho tới khoảng <xliff:g id="TIME">%1$s</xliff:g> dựa trên mức sử dụng của bạn (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_discharge_by_only_enhanced" msgid="2175151772952365149">"Sẽ hết pin cho tới khoảng <xliff:g id="TIME">%1$s</xliff:g> dựa trên mức sử dụng của bạn"</string>
     <string name="power_discharge_by" msgid="6453537733650125582">"Sẽ hết pin cho tới khoảng <xliff:g id="TIME">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_discharge_by_only" msgid="107616694963545745">"Sẽ hết pin cho tới khoảng <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_discharge_by_only_short" msgid="1372817269546888804">"Cho đến <xliff:g id="TIME">%1$s</xliff:g>"</string>
+    <string name="power_suggestion_extend_battery" msgid="4401408879069551485">"Kéo dài thời lượng pin qua <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_remaining_less_than_duration_only" msgid="5996752448813295329">"Còn lại không đến <xliff:g id="THRESHOLD">%1$s</xliff:g>"</string>
     <string name="power_remaining_less_than_duration" msgid="5751885147712659423">"Còn lại không đến <xliff:g id="THRESHOLD">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_remaining_more_than_subtext" msgid="3176771815132876675">"Còn lại hơn <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
@@ -456,5 +461,5 @@
     <string name="zen_mode_duration_always_prompt_title" msgid="6478923750878945501">"Luôn hỏi"</string>
     <string name="zen_mode_forever" msgid="2704305038191592967">"Cho đến khi bạn tắt"</string>
     <string name="time_unit_just_now" msgid="6363336622778342422">"Vừa xong"</string>
-    <string name="media_transfer_phone_device_name" msgid="1003823744105758574">"Loa điện thoại"</string>
+    <string name="media_transfer_this_device_name" msgid="1636276898262571213">"Thiết bị này"</string>
 </resources>

@@ -37,6 +37,7 @@
 #include "cmd/Link.h"
 #include "cmd/Optimize.h"
 #include "io/FileStream.h"
+#include "trace/TraceBuffer.h"
 #include "util/Files.h"
 #include "util/Util.h"
 
@@ -44,12 +45,6 @@ using ::android::StringPiece;
 using ::android::base::StringPrintf;
 
 namespace aapt {
-
-// DO NOT UPDATE, this is more of a marketing version.
-static const char* sMajorVersion = "2";
-
-// Update minor version whenever a feature or flag is added.
-static const char* sMinorVersion = "19";
 
 /** Prints the version information of AAPT2. */
 class VersionCommand : public Command {
@@ -59,8 +54,7 @@ class VersionCommand : public Command {
   }
 
   int Action(const std::vector<std::string>& /* args */) override {
-    std::cerr << StringPrintf("Android Asset Packaging Tool (aapt) %s:%s", sMajorVersion,
-                              sMinorVersion)
+    std::cerr << StringPrintf("%s %s", util::GetToolName(), util::GetToolFingerprint().c_str())
               << std::endl;
     return 0;
   }
@@ -107,9 +101,12 @@ class DaemonCommand : public Command {
       : Command("daemon", "m"), out_(out), diagnostics_(diagnostics) {
     SetDescription("Runs aapt in daemon mode. Each subsequent line is a single parameter to the\n"
         "command. The end of an invocation is signaled by providing an empty line.");
+    AddOptionalFlag("--trace_folder", "Generate systrace json trace fragment to specified folder.",
+                    &trace_folder_);
   }
 
-  int Action(const std::vector<std::string>& /* args */) override {
+  int Action(const std::vector<std::string>& arguments) override {
+    TRACE_FLUSH_ARGS(trace_folder_ ? trace_folder_.value() : "", "daemon", arguments);
     text::Printer printer(out_);
     std::cout << "Ready" << std::endl;
 
@@ -150,6 +147,7 @@ class DaemonCommand : public Command {
  private:
   io::FileOutputStream* out_;
   IDiagnostics* diagnostics_;
+  Maybe<std::string> trace_folder_;
 };
 
 }  // namespace aapt

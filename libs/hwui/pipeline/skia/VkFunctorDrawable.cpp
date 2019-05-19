@@ -17,15 +17,16 @@
 #include "VkFunctorDrawable.h"
 #include <private/hwui/DrawVkInfo.h>
 
-#include "renderthread/VulkanManager.h"
-#include "renderthread/RenderThread.h"
 #include <GrBackendDrawableInfo.h>
+#include <SkAndroidFrameworkUtils.h>
 #include <SkImage.h>
 #include <utils/Color.h>
 #include <utils/Trace.h>
 #include <utils/TraceUtils.h>
 #include <vk/GrVkTypes.h>
 #include <thread>
+#include "renderthread/RenderThread.h"
+#include "renderthread/VulkanManager.h"
 #include "thread/ThreadBase.h"
 #include "utils/TimeUtils.h"
 
@@ -63,14 +64,13 @@ void VkFunctorDrawHandler::draw(const GrBackendDrawableInfo& info) {
 
     SkMatrix44 mat4(mMatrix);
     VkFunctorDrawParams params{
-      .width = mImageInfo.width(),
-      .height = mImageInfo.height(),
-      .is_layer = false,  // TODO(boliu): Populate is_layer.
-      .color_space_ptr = mImageInfo.colorSpace(),
-      .clip_left = mClip.fLeft,
-      .clip_top = mClip.fTop,
-      .clip_right = mClip.fRight,
-      .clip_bottom = mClip.fBottom,
+            .width = mImageInfo.width(),
+            .height = mImageInfo.height(),
+            .color_space_ptr = mImageInfo.colorSpace(),
+            .clip_left = mClip.fLeft,
+            .clip_top = mClip.fTop,
+            .clip_right = mClip.fRight,
+            .clip_bottom = mClip.fBottom,
     };
     mat4.asColMajorf(&params.transform[0]);
     params.secondary_command_buffer = vulkan_info.fSecondaryCommandBuffer;
@@ -87,12 +87,30 @@ void VkFunctorDrawHandler::draw(const GrBackendDrawableInfo& info) {
     vulkan_info.fDrawBounds->extent.height = mClip.fBottom - mClip.fTop;
 }
 
-VkFunctorDrawable::~VkFunctorDrawable() {
-}
+VkFunctorDrawable::~VkFunctorDrawable() {}
 
-void VkFunctorDrawable::onDraw(SkCanvas* /*canvas*/) {
-    LOG_ALWAYS_FATAL("VkFunctorDrawable::onDraw() should never be called.");
-    // Instead of calling onDraw(), the call should come from onSnapGpuDrawHandler.
+void VkFunctorDrawable::onDraw(SkCanvas* canvas) {
+    // "canvas" is either SkNWayCanvas created by SkiaPipeline::tryCapture (SKP capture use case) or
+    // AlphaFilterCanvas (used by RenderNodeDrawable to apply alpha in certain cases).
+    // "VkFunctorDrawable::onDraw" is not invoked for the most common case, when drawing in a GPU
+    // canvas.
+
+    if (canvas->getGrContext() == nullptr) {
+        // We're dumping a picture, render a light-blue rectangle instead
+        SkPaint paint;
+        paint.setColor(0xFF81D4FA);
+        canvas->drawRect(mBounds, paint);
+    } else {
+        // Handle the case when "canvas" is AlphaFilterCanvas. Find the wrapped GPU canvas.
+        SkCanvas* gpuCanvas = SkAndroidFrameworkUtils::getBaseWrappedCanvas(canvas);
+        // Enforce "canvas" must be an AlphaFilterCanvas. For GPU canvas, the call should come from
+        // onSnapGpuDrawHandler.
+        LOG_ALWAYS_FATAL_IF(gpuCanvas == canvas,
+                            "VkFunctorDrawable::onDraw() should not be called with a GPU canvas!");
+
+        // This will invoke onSnapGpuDrawHandler and regular draw flow.
+        gpuCanvas->drawDrawable(this);
+    }
 }
 
 std::unique_ptr<FunctorDrawable::GpuDrawHandler> VkFunctorDrawable::onSnapGpuDrawHandler(

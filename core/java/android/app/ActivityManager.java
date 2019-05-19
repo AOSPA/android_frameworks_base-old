@@ -513,71 +513,75 @@ public class ActivityManager {
     /** @hide Process is hosting a foreground service with location type. */
     public static final int PROCESS_STATE_FOREGROUND_SERVICE_LOCATION = 3;
 
+    /** @hide Process is bound to a TOP app. This is ranked below SERVICE_LOCATION so that
+     * it doesn't get the capability of location access while-in-use. */
+    public static final int PROCESS_STATE_BOUND_TOP = 4;
+
     /** @hide Process is hosting a foreground service. */
     @UnsupportedAppUsage
-    public static final int PROCESS_STATE_FOREGROUND_SERVICE = 4;
+    public static final int PROCESS_STATE_FOREGROUND_SERVICE = 5;
 
     /** @hide Process is hosting a foreground service due to a system binding. */
     @UnsupportedAppUsage
-    public static final int PROCESS_STATE_BOUND_FOREGROUND_SERVICE = 5;
+    public static final int PROCESS_STATE_BOUND_FOREGROUND_SERVICE = 6;
 
     /** @hide Process is important to the user, and something they are aware of. */
-    public static final int PROCESS_STATE_IMPORTANT_FOREGROUND = 6;
+    public static final int PROCESS_STATE_IMPORTANT_FOREGROUND = 7;
 
     /** @hide Process is important to the user, but not something they are aware of. */
     @UnsupportedAppUsage
-    public static final int PROCESS_STATE_IMPORTANT_BACKGROUND = 7;
+    public static final int PROCESS_STATE_IMPORTANT_BACKGROUND = 8;
 
     /** @hide Process is in the background transient so we will try to keep running. */
-    public static final int PROCESS_STATE_TRANSIENT_BACKGROUND = 8;
+    public static final int PROCESS_STATE_TRANSIENT_BACKGROUND = 9;
 
     /** @hide Process is in the background running a backup/restore operation. */
-    public static final int PROCESS_STATE_BACKUP = 9;
+    public static final int PROCESS_STATE_BACKUP = 10;
 
     /** @hide Process is in the background running a service.  Unlike oom_adj, this level
      * is used for both the normal running in background state and the executing
      * operations state. */
     @UnsupportedAppUsage
-    public static final int PROCESS_STATE_SERVICE = 10;
+    public static final int PROCESS_STATE_SERVICE = 11;
 
     /** @hide Process is in the background running a receiver.   Note that from the
      * perspective of oom_adj, receivers run at a higher foreground level, but for our
      * prioritization here that is not necessary and putting them below services means
      * many fewer changes in some process states as they receive broadcasts. */
     @UnsupportedAppUsage
-    public static final int PROCESS_STATE_RECEIVER = 11;
+    public static final int PROCESS_STATE_RECEIVER = 12;
 
     /** @hide Same as {@link #PROCESS_STATE_TOP} but while device is sleeping. */
-    public static final int PROCESS_STATE_TOP_SLEEPING = 12;
+    public static final int PROCESS_STATE_TOP_SLEEPING = 13;
 
     /** @hide Process is in the background, but it can't restore its state so we want
      * to try to avoid killing it. */
-    public static final int PROCESS_STATE_HEAVY_WEIGHT = 13;
+    public static final int PROCESS_STATE_HEAVY_WEIGHT = 14;
 
     /** @hide Process is in the background but hosts the home activity. */
     @UnsupportedAppUsage
-    public static final int PROCESS_STATE_HOME = 14;
+    public static final int PROCESS_STATE_HOME = 15;
 
     /** @hide Process is in the background but hosts the last shown activity. */
-    public static final int PROCESS_STATE_LAST_ACTIVITY = 15;
+    public static final int PROCESS_STATE_LAST_ACTIVITY = 16;
 
     /** @hide Process is being cached for later use and contains activities. */
     @UnsupportedAppUsage
-    public static final int PROCESS_STATE_CACHED_ACTIVITY = 16;
+    public static final int PROCESS_STATE_CACHED_ACTIVITY = 17;
 
     /** @hide Process is being cached for later use and is a client of another cached
      * process that contains activities. */
-    public static final int PROCESS_STATE_CACHED_ACTIVITY_CLIENT = 17;
+    public static final int PROCESS_STATE_CACHED_ACTIVITY_CLIENT = 18;
 
     /** @hide Process is being cached for later use and has an activity that corresponds
      * to an existing recent task. */
-    public static final int PROCESS_STATE_CACHED_RECENT = 18;
+    public static final int PROCESS_STATE_CACHED_RECENT = 19;
 
     /** @hide Process is being cached for later use and is empty. */
-    public static final int PROCESS_STATE_CACHED_EMPTY = 19;
+    public static final int PROCESS_STATE_CACHED_EMPTY = 20;
 
     /** @hide Process does not exist. */
-    public static final int PROCESS_STATE_NONEXISTENT = 20;
+    public static final int PROCESS_STATE_NONEXISTENT = 21;
 
     // NOTE: If PROCESS_STATEs are added, then new fields must be added
     // to frameworks/base/core/proto/android/app/enums.proto and the following method must
@@ -602,6 +606,8 @@ public class ActivityManager {
                 return AppProtoEnums.PROCESS_STATE_PERSISTENT_UI;
             case PROCESS_STATE_TOP:
                 return AppProtoEnums.PROCESS_STATE_TOP;
+            case PROCESS_STATE_BOUND_TOP:
+                return AppProtoEnums.PROCESS_STATE_BOUND_TOP;
             case PROCESS_STATE_FOREGROUND_SERVICE_LOCATION:
             case PROCESS_STATE_FOREGROUND_SERVICE:
                 return AppProtoEnums.PROCESS_STATE_FOREGROUND_SERVICE;
@@ -980,6 +986,8 @@ public class ActivityManager {
         private int mColorBackground;
         private int mStatusBarColor;
         private int mNavigationBarColor;
+        private boolean mEnsureStatusBarContrastWhenTransparent;
+        private boolean mEnsureNavigationBarContrastWhenTransparent;
 
         /**
          * Creates the TaskDescription to the specified values.
@@ -992,7 +1000,7 @@ public class ActivityManager {
          */
         @Deprecated
         public TaskDescription(String label, Bitmap icon, int colorPrimary) {
-            this(label, icon, 0, null, colorPrimary, 0, 0, 0);
+            this(label, icon, 0, null, colorPrimary, 0, 0, 0, false, false);
             if ((colorPrimary != 0) && (Color.alpha(colorPrimary) != 255)) {
                 throw new RuntimeException("A TaskDescription's primary color should be opaque");
             }
@@ -1008,7 +1016,7 @@ public class ActivityManager {
          *                     opaque.
          */
         public TaskDescription(String label, @DrawableRes int iconRes, int colorPrimary) {
-            this(label, null, iconRes, null, colorPrimary, 0, 0, 0);
+            this(label, null, iconRes, null, colorPrimary, 0, 0, 0, false, false);
             if ((colorPrimary != 0) && (Color.alpha(colorPrimary) != 255)) {
                 throw new RuntimeException("A TaskDescription's primary color should be opaque");
             }
@@ -1023,7 +1031,7 @@ public class ActivityManager {
          */
         @Deprecated
         public TaskDescription(String label, Bitmap icon) {
-            this(label, icon, 0, null, 0, 0, 0, 0);
+            this(label, icon, 0, null, 0, 0, 0, 0, false, false);
         }
 
         /**
@@ -1034,7 +1042,7 @@ public class ActivityManager {
          *                activity.
          */
         public TaskDescription(String label, @DrawableRes int iconRes) {
-            this(label, null, iconRes, null, 0, 0, 0, 0);
+            this(label, null, iconRes, null, 0, 0, 0, 0, false, false);
         }
 
         /**
@@ -1043,19 +1051,21 @@ public class ActivityManager {
          * @param label A label and description of the current state of this activity.
          */
         public TaskDescription(String label) {
-            this(label, null, 0, null, 0, 0, 0, 0);
+            this(label, null, 0, null, 0, 0, 0, 0, false, false);
         }
 
         /**
          * Creates an empty TaskDescription.
          */
         public TaskDescription() {
-            this(null, null, 0, null, 0, 0, 0, 0);
+            this(null, null, 0, null, 0, 0, 0, 0, false, false);
         }
 
         /** @hide */
         public TaskDescription(String label, Bitmap bitmap, int iconRes, String iconFilename,
-                int colorPrimary, int colorBackground, int statusBarColor, int navigationBarColor) {
+                int colorPrimary, int colorBackground, int statusBarColor, int navigationBarColor,
+                boolean ensureStatusBarContrastWhenTransparent,
+                boolean ensureNavigationBarContrastWhenTransparent) {
             mLabel = label;
             mIcon = bitmap;
             mIconRes = iconRes;
@@ -1064,6 +1074,9 @@ public class ActivityManager {
             mColorBackground = colorBackground;
             mStatusBarColor = statusBarColor;
             mNavigationBarColor = navigationBarColor;
+            mEnsureStatusBarContrastWhenTransparent = ensureStatusBarContrastWhenTransparent;
+            mEnsureNavigationBarContrastWhenTransparent =
+                    ensureNavigationBarContrastWhenTransparent;
         }
 
         /**
@@ -1086,6 +1099,9 @@ public class ActivityManager {
             mColorBackground = other.mColorBackground;
             mStatusBarColor = other.mStatusBarColor;
             mNavigationBarColor = other.mNavigationBarColor;
+            mEnsureStatusBarContrastWhenTransparent = other.mEnsureStatusBarContrastWhenTransparent;
+            mEnsureNavigationBarContrastWhenTransparent =
+                    other.mEnsureNavigationBarContrastWhenTransparent;
         }
 
         /**
@@ -1108,6 +1124,9 @@ public class ActivityManager {
             if (other.mNavigationBarColor != 0) {
                 mNavigationBarColor = other.mNavigationBarColor;
             }
+            mEnsureStatusBarContrastWhenTransparent = other.mEnsureStatusBarContrastWhenTransparent;
+            mEnsureNavigationBarContrastWhenTransparent =
+                    other.mEnsureNavigationBarContrastWhenTransparent;
         }
 
         private TaskDescription(Parcel source) {
@@ -1266,6 +1285,37 @@ public class ActivityManager {
             return mNavigationBarColor;
         }
 
+        /**
+         * @hide
+         */
+        public boolean getEnsureStatusBarContrastWhenTransparent() {
+            return mEnsureStatusBarContrastWhenTransparent;
+        }
+
+        /**
+         * @hide
+         */
+        public void setEnsureStatusBarContrastWhenTransparent(
+                boolean ensureStatusBarContrastWhenTransparent) {
+            mEnsureStatusBarContrastWhenTransparent = ensureStatusBarContrastWhenTransparent;
+        }
+
+        /**
+         * @hide
+         */
+        public boolean getEnsureNavigationBarContrastWhenTransparent() {
+            return mEnsureNavigationBarContrastWhenTransparent;
+        }
+
+        /**
+         * @hide
+         */
+        public void setEnsureNavigationBarContrastWhenTransparent(
+                boolean ensureNavigationBarContrastWhenTransparent) {
+            mEnsureNavigationBarContrastWhenTransparent =
+                    ensureNavigationBarContrastWhenTransparent;
+        }
+
         /** @hide */
         public void saveToXml(XmlSerializer out) throws IOException {
             if (mLabel != null) {
@@ -1326,6 +1376,8 @@ public class ActivityManager {
             dest.writeInt(mColorBackground);
             dest.writeInt(mStatusBarColor);
             dest.writeInt(mNavigationBarColor);
+            dest.writeBoolean(mEnsureStatusBarContrastWhenTransparent);
+            dest.writeBoolean(mEnsureNavigationBarContrastWhenTransparent);
             if (mIconFilename == null) {
                 dest.writeInt(0);
             } else {
@@ -1342,10 +1394,12 @@ public class ActivityManager {
             mColorBackground = source.readInt();
             mStatusBarColor = source.readInt();
             mNavigationBarColor = source.readInt();
+            mEnsureStatusBarContrastWhenTransparent = source.readBoolean();
+            mEnsureNavigationBarContrastWhenTransparent = source.readBoolean();
             mIconFilename = source.readInt() > 0 ? source.readString() : null;
         }
 
-        public static final Creator<TaskDescription> CREATOR
+        public static final @android.annotation.NonNull Creator<TaskDescription> CREATOR
                 = new Creator<TaskDescription>() {
             public TaskDescription createFromParcel(Parcel source) {
                 return new TaskDescription(source);
@@ -1360,8 +1414,11 @@ public class ActivityManager {
             return "TaskDescription Label: " + mLabel + " Icon: " + mIcon +
                     " IconRes: " + mIconRes + " IconFilename: " + mIconFilename +
                     " colorPrimary: " + mColorPrimary + " colorBackground: " + mColorBackground +
-                    " statusBarColor: " + mColorBackground +
-                    " navigationBarColor: " + mNavigationBarColor;
+                    " statusBarColor: " + mStatusBarColor + (
+                    mEnsureStatusBarContrastWhenTransparent ? " (contrast when transparent)"
+                            : "") + " navigationBarColor: " + mNavigationBarColor + (
+                    mEnsureNavigationBarContrastWhenTransparent
+                            ? " (contrast when transparent)" : "");
         }
     }
 
@@ -1431,7 +1488,7 @@ public class ActivityManager {
             super.writeToParcel(dest, flags);
         }
 
-        public static final Creator<RecentTaskInfo> CREATOR
+        public static final @android.annotation.NonNull Creator<RecentTaskInfo> CREATOR
                 = new Creator<RecentTaskInfo>() {
             public RecentTaskInfo createFromParcel(Parcel source) {
                 return new RecentTaskInfo(source);
@@ -1601,7 +1658,7 @@ public class ActivityManager {
             super.writeToParcel(dest, flags);
         }
 
-        public static final Creator<RunningTaskInfo> CREATOR = new Creator<RunningTaskInfo>() {
+        public static final @android.annotation.NonNull Creator<RunningTaskInfo> CREATOR = new Creator<RunningTaskInfo>() {
             public RunningTaskInfo createFromParcel(Parcel source) {
                 return new RunningTaskInfo(source);
             }
@@ -1781,17 +1838,17 @@ public class ActivityManager {
         private final float mScale;
         private final int mSystemUiVisibility;
         private final boolean mIsTranslucent;
-
-        // TODO(b/116112787) TaskSnapshot must also book keep the color space from hardware bitmap
-        // when created.
-        private final ColorSpace mColorSpace = ColorSpace.get(ColorSpace.Named.SRGB);
+        // Must be one of the named color spaces, otherwise, always use SRGB color space.
+        private final ColorSpace mColorSpace;
 
         public TaskSnapshot(@NonNull ComponentName topActivityComponent, GraphicBuffer snapshot,
-                int orientation, Rect contentInsets, boolean reducedResolution, float scale,
-                boolean isRealSnapshot, int windowingMode, int systemUiVisibility,
-                boolean isTranslucent) {
+                @NonNull ColorSpace colorSpace, int orientation, Rect contentInsets,
+                boolean reducedResolution, float scale, boolean isRealSnapshot, int windowingMode,
+                int systemUiVisibility, boolean isTranslucent) {
             mTopActivityComponent = topActivityComponent;
             mSnapshot = snapshot;
+            mColorSpace = colorSpace.getId() < 0
+                    ? ColorSpace.get(ColorSpace.Named.SRGB) : colorSpace;
             mOrientation = orientation;
             mContentInsets = new Rect(contentInsets);
             mReducedResolution = reducedResolution;
@@ -1805,6 +1862,10 @@ public class ActivityManager {
         private TaskSnapshot(Parcel source) {
             mTopActivityComponent = ComponentName.readFromParcel(source);
             mSnapshot = source.readParcelable(null /* classLoader */);
+            int colorSpaceId = source.readInt();
+            mColorSpace = colorSpaceId >= 0 && colorSpaceId < ColorSpace.Named.values().length
+                    ? ColorSpace.get(ColorSpace.Named.values()[colorSpaceId])
+                    : ColorSpace.get(ColorSpace.Named.SRGB);
             mOrientation = source.readInt();
             mContentInsets = source.readParcelable(null /* classLoader */);
             mReducedResolution = source.readBoolean();
@@ -1911,6 +1972,7 @@ public class ActivityManager {
         public void writeToParcel(Parcel dest, int flags) {
             ComponentName.writeToParcel(mTopActivityComponent, dest);
             dest.writeParcelable(mSnapshot, 0);
+            dest.writeInt(mColorSpace.getId());
             dest.writeInt(mOrientation);
             dest.writeParcelable(mContentInsets, 0);
             dest.writeBoolean(mReducedResolution);
@@ -1928,6 +1990,7 @@ public class ActivityManager {
             return "TaskSnapshot{"
                     + " mTopActivityComponent=" + mTopActivityComponent.flattenToShortString()
                     + " mSnapshot=" + mSnapshot + " (" + width + "x" + height + ")"
+                    + " mColorSpace=" + mColorSpace.toString()
                     + " mOrientation=" + mOrientation
                     + " mContentInsets=" + mContentInsets.toShortString()
                     + " mReducedResolution=" + mReducedResolution + " mScale=" + mScale
@@ -1936,7 +1999,7 @@ public class ActivityManager {
                     + " mIsTranslucent=" + mIsTranslucent;
         }
 
-        public static final Creator<TaskSnapshot> CREATOR = new Creator<TaskSnapshot>() {
+        public static final @android.annotation.NonNull Creator<TaskSnapshot> CREATOR = new Creator<TaskSnapshot>() {
             public TaskSnapshot createFromParcel(Parcel source) {
                 return new TaskSnapshot(source);
             }
@@ -1995,7 +2058,10 @@ public class ActivityManager {
     @RequiresPermission(android.Manifest.permission.REORDER_TASKS)
     public void moveTaskToFront(int taskId, @MoveTaskFlags int flags, Bundle options) {
         try {
-            getTaskService().moveTaskToFront(taskId, flags, options);
+            ActivityThread thread = ActivityThread.currentActivityThread();
+            IApplicationThread appThread = thread.getApplicationThread();
+            String packageName = mContext.getPackageName();
+            getTaskService().moveTaskToFront(appThread, packageName, taskId, flags, options);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2018,7 +2084,8 @@ public class ActivityManager {
      * @return {@code true} if a call to start an activity on the target display is allowed for the
      * provided context and no {@link SecurityException} will be thrown, {@code false} otherwise.
      */
-    public boolean isActivityStartAllowedOnDisplay(Context context, int displayId, Intent intent) {
+    public boolean isActivityStartAllowedOnDisplay(@NonNull Context context, int displayId,
+            @NonNull Intent intent) {
         try {
             return getTaskService().isActivityStartAllowedOnDisplay(displayId, intent,
                     intent.resolveTypeIfNeeded(context.getContentResolver()), context.getUserId());
@@ -2177,7 +2244,7 @@ public class ActivityManager {
             clientLabel = source.readInt();
         }
 
-        public static final Creator<RunningServiceInfo> CREATOR = new Creator<RunningServiceInfo>() {
+        public static final @android.annotation.NonNull Creator<RunningServiceInfo> CREATOR = new Creator<RunningServiceInfo>() {
             public RunningServiceInfo createFromParcel(Parcel source) {
                 return new RunningServiceInfo(source);
             }
@@ -2309,7 +2376,7 @@ public class ActivityManager {
             foregroundAppThreshold = source.readLong();
         }
 
-        public static final Creator<MemoryInfo> CREATOR
+        public static final @android.annotation.NonNull Creator<MemoryInfo> CREATOR
                 = new Creator<MemoryInfo>() {
             public MemoryInfo createFromParcel(Parcel source) {
                 return new MemoryInfo(source);
@@ -2440,7 +2507,7 @@ public class ActivityManager {
             configuration.readFromParcel(source);
         }
 
-        public static final Creator<StackInfo> CREATOR = new Creator<StackInfo>() {
+        public static final @android.annotation.NonNull Creator<StackInfo> CREATOR = new Creator<StackInfo>() {
             @Override
             public StackInfo createFromParcel(Parcel source) {
                 return new StackInfo(source);
@@ -2646,7 +2713,7 @@ public class ActivityManager {
             stackTrace = source.readString();
         }
 
-        public static final Creator<ProcessErrorStateInfo> CREATOR =
+        public static final @android.annotation.NonNull Creator<ProcessErrorStateInfo> CREATOR =
                 new Creator<ProcessErrorStateInfo>() {
             public ProcessErrorStateInfo createFromParcel(Parcel source) {
                 return new ProcessErrorStateInfo(source);
@@ -3110,7 +3177,7 @@ public class ActivityManager {
             lastActivityTime = source.readLong();
         }
 
-        public static final Creator<RunningAppProcessInfo> CREATOR =
+        public static final @android.annotation.NonNull Creator<RunningAppProcessInfo> CREATOR =
             new Creator<RunningAppProcessInfo>() {
             public RunningAppProcessInfo createFromParcel(Parcel source) {
                 return new RunningAppProcessInfo(source);
@@ -4036,7 +4103,7 @@ public class ActivityManager {
      * continues running even if the process is killed and restarted.  To remove the watch,
      * use {@link #clearWatchHeapLimit()}.
      *
-     * <p>This API only work if the calling process has been marked as
+     * <p>This API only works if the calling process has been marked as
      * {@link ApplicationInfo#FLAG_DEBUGGABLE} or this is running on a debuggable
      * (userdebug or eng) build.</p>
      *
@@ -4205,7 +4272,10 @@ public class ActivityManager {
          */
         public void moveToFront() {
             try {
-                mAppTaskImpl.moveToFront();
+                ActivityThread thread = ActivityThread.currentActivityThread();
+                IApplicationThread appThread = thread.getApplicationThread();
+                String packageName = ActivityThread.currentPackageName();
+                mAppTaskImpl.moveToFront(appThread, packageName);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }

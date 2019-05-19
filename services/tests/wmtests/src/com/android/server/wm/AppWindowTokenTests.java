@@ -17,12 +17,13 @@
 package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
-import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
-import static android.content.ActivityInfoProto.SCREEN_ORIENTATION_UNSPECIFIED;
+import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
@@ -36,25 +37,33 @@ import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentat
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
+import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_AFTER_ANIM;
+import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_BEFORE_ANIM;
+import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_NONE;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
+import static org.mockito.Mockito.verify;
 
 import android.content.res.Configuration;
-import android.graphics.Point;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
+import android.view.Display;
 import android.view.Surface;
 import android.view.WindowManager;
 
+import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 /**
  * Tests for the {@link AppWindowToken} class.
@@ -76,8 +85,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
     public void setUp() throws Exception {
         mStack = createTaskStackOnDisplay(mDisplayContent);
         mTask = createTaskInStack(mStack, 0 /* userId */);
-        mToken = WindowTestUtils.createTestAppWindowToken(mDisplayContent,
-                false /* skipOnParentChanged */);
+        mToken = WindowTestUtils.createTestAppWindowToken(mDisplayContent);
 
         mTask.addChild(mToken, 0);
     }
@@ -214,12 +222,10 @@ public class AppWindowTokenTests extends WindowTestsBase {
 
     @Test
     public void testSizeCompatBounds() {
-        // The real surface transaction is unnecessary.
-        mToken.setSkipPrepareSurfaces(true);
-
         final Rect fixedBounds = mToken.getRequestedOverrideConfiguration().windowConfiguration
                 .getBounds();
         fixedBounds.set(0, 0, 1200, 1600);
+        mToken.getRequestedOverrideConfiguration().windowConfiguration.setAppBounds(fixedBounds);
         final Configuration newParentConfig = mTask.getConfiguration();
 
         // Change the size of the container to two times smaller with insets.
@@ -332,6 +338,46 @@ public class AppWindowTokenTests extends WindowTestsBase {
     }
 
     @Test
+    public void testReportOrientationChangeOnVisibilityChange() {
+        synchronized (mWm.mGlobalLock) {
+            mToken.setOrientation(SCREEN_ORIENTATION_LANDSCAPE);
+
+            mDisplayContent.getDisplayRotation().setFixedToUserRotation(
+                    DisplayRotation.FIXED_TO_USER_ROTATION_ENABLED);
+
+            doReturn(Configuration.ORIENTATION_LANDSCAPE).when(mToken.mActivityRecord)
+                    .getRequestedConfigurationOrientation();
+
+            mTask.mTaskRecord = Mockito.mock(TaskRecord.class, RETURNS_DEEP_STUBS);
+            mToken.commitVisibility(null, false /* visible */, TRANSIT_UNSET,
+                    true /* performLayout */, false /* isVoiceInteraction */);
+        }
+
+        verify(mTask.mTaskRecord).onConfigurationChanged(any(Configuration.class));
+    }
+
+    @Test
+    public void testReportOrientationChangeOnOpeningClosingAppChange() {
+        synchronized (mWm.mGlobalLock) {
+            mToken.setOrientation(SCREEN_ORIENTATION_LANDSCAPE);
+
+            mDisplayContent.getDisplayRotation().setFixedToUserRotation(
+                    DisplayRotation.FIXED_TO_USER_ROTATION_ENABLED);
+            mDisplayContent.getDisplayInfo().state = Display.STATE_ON;
+            mDisplayContent.prepareAppTransition(WindowManager.TRANSIT_ACTIVITY_CLOSE,
+                    false /* alwaysKeepCurrent */, 0 /* flags */, true /* forceOverride */);
+
+            doReturn(Configuration.ORIENTATION_LANDSCAPE).when(mToken.mActivityRecord)
+                    .getRequestedConfigurationOrientation();
+
+            mTask.mTaskRecord = Mockito.mock(TaskRecord.class, RETURNS_DEEP_STUBS);
+            mToken.setVisibility(false, false);
+        }
+
+        verify(mTask.mTaskRecord).onConfigurationChanged(any(Configuration.class));
+    }
+
+    @Test
     public void testCreateRemoveStartingWindow() {
         mToken.addStartingWindow(mPackageName,
                 android.R.style.Theme, null, "Test", 0, 0, 0, 0, null, true, true, false, true,
@@ -344,6 +390,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
     }
 
     @Test
+    @FlakyTest(bugId = 130392471)
     public void testAddRemoveRace() {
         // There was once a race condition between adding and removing starting windows
         for (int i = 0; i < 1000; i++) {
@@ -435,29 +482,24 @@ public class AppWindowTokenTests extends WindowTestsBase {
     }
 
     @Test
-    public void testTransitionAnimationPositionAndBounds() {
-        final Rect stackBounds = new Rect(
-                0/* left */, 0 /* top */, 1000 /* right */, 1000 /* bottom */);
-        final Rect taskBounds = new Rect(
-                100/* left */, 200 /* top */, 600 /* right */, 600 /* bottom */);
+    public void testTransitionAnimationBounds() {
+        final Rect stackBounds = new Rect(0, 0, 1000, 600);
+        final Rect taskBounds = new Rect(100, 400, 600, 800);
         mStack.setBounds(stackBounds);
         mTask.setBounds(taskBounds);
 
+        // Check that anim bounds for freeform window match task bounds
         mTask.setWindowingMode(WINDOWING_MODE_FREEFORM);
-        assertTransitionAnimationPositionAndBounds(taskBounds.left, taskBounds.top, stackBounds);
+        assertEquals(taskBounds, mToken.getAnimationBounds(STACK_CLIP_NONE));
 
-        mTask.setWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
-        assertTransitionAnimationPositionAndBounds(stackBounds.left, stackBounds.top, stackBounds);
-    }
+        // STACK_CLIP_AFTER_ANIM should use task bounds since they will be clipped by
+        // bounds animation layer.
+        mTask.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
+        assertEquals(taskBounds, mToken.getAnimationBounds(STACK_CLIP_AFTER_ANIM));
 
-    private void assertTransitionAnimationPositionAndBounds(int expectedX, int expectedY,
-            Rect expectedBounds) {
-        final Point outPosition = new Point();
-        final Rect outBounds = new Rect();
-        mToken.getAnimationBounds(outPosition, outBounds);
-        assertEquals(expectedX, outPosition.x);
-        assertEquals(expectedY, outPosition.y);
-        assertEquals(expectedBounds, outBounds);
+        // STACK_CLIP_BEFORE_ANIM should use stack bounds since it won't be clipped later.
+        mTask.setWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
+        assertEquals(stackBounds, mToken.getAnimationBounds(STACK_CLIP_BEFORE_ANIM));
     }
 
     private void assertHasStartingWindow(AppWindowToken atoken) {

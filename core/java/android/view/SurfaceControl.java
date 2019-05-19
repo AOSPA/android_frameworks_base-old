@@ -41,7 +41,6 @@ import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.Region;
-import android.hardware.HardwareBuffer;
 import android.hardware.display.DisplayedContentSample;
 import android.hardware.display.DisplayedContentSamplingAttributes;
 import android.os.Build;
@@ -63,6 +62,7 @@ import libcore.util.NativeAllocationRegistry;
 import java.io.Closeable;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Objects;
 
 /**
  * Handle to an on-screen Surface managed by the system compositor. The SurfaceControl is
@@ -87,11 +87,11 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeDestroy(long nativeObject);
     private static native void nativeDisconnect(long nativeObject);
 
-    private static native GraphicBuffer nativeScreenshot(IBinder displayToken,
+    private static native ScreenshotGraphicBuffer nativeScreenshot(IBinder displayToken,
             Rect sourceCrop, int width, int height, boolean useIdentityTransform, int rotation,
             boolean captureSecureLayers);
-    private static native GraphicBuffer nativeCaptureLayers(IBinder layerHandleToken,
-            Rect sourceCrop, float frameScale);
+    private static native ScreenshotGraphicBuffer nativeCaptureLayers(IBinder displayToken,
+            IBinder layerHandleToken, Rect sourceCrop, float frameScale, IBinder[] excludeLayers);
 
     private static native long nativeCreateTransaction();
     private static native long nativeGetNativeTransactionFinalizer();
@@ -117,6 +117,8 @@ public final class SurfaceControl implements Parcelable {
             float dtdy, float dsdy);
     private static native void nativeSetColorTransform(long transactionObj, long nativeObject,
             float[] matrix, float[] translation);
+    private static native void nativeSetColorSpaceAgnostic(long transactionObj, long nativeObject,
+            boolean agnostic);
     private static native void nativeSetGeometry(long transactionObj, long nativeObject,
             Rect sourceCrop, Rect dest, long orientation);
     private static native void nativeSetColor(long transactionObj, long nativeObject, float[] color);
@@ -160,6 +162,7 @@ public final class SurfaceControl implements Parcelable {
     private static native boolean nativeSetActiveConfig(IBinder displayToken, int id);
     private static native boolean nativeSetAllowedDisplayConfigs(IBinder displayToken,
                                                                  int[] allowedConfigs);
+    private static native int[] nativeGetAllowedDisplayConfigs(IBinder displayToken);
     private static native int[] nativeGetDisplayColorModes(IBinder displayToken);
     private static native SurfaceControl.DisplayPrimaries nativeGetDisplayNativePrimaries(
             IBinder displayToken);
@@ -191,8 +194,12 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeTransferTouchFocus(long transactionObj, IBinder fromToken,
             IBinder toToken);
     private static native boolean nativeGetProtectedContentSupport();
-    private static native void nativeSetMetadata(long transactionObj, int key, Parcel data);
+    private static native void nativeSetMetadata(long transactionObj, long nativeObject, int key,
+            Parcel data);
     private static native void nativeSyncInputWindows(long transactionObj);
+    private static native boolean nativeGetDisplayBrightnessSupport(IBinder displayToken);
+    private static native boolean nativeSetDisplayBrightness(IBinder displayToken,
+            float brightness);
 
     private final CloseGuard mCloseGuard = CloseGuard.get();
     private String mName;
@@ -339,34 +346,6 @@ public final class SurfaceControl implements Parcelable {
     /* built-in physical display ids (keep in sync with ISurfaceComposer.h)
      * these are different from the logical display ids used elsewhere in the framework */
 
-    /**
-     * Built-in physical display id: Main display.
-     * Use only with {@link SurfaceControl#getBuiltInDisplay(int)}.
-     * @hide
-     */
-    public static final int BUILT_IN_DISPLAY_ID_MAIN = 0;
-
-    /**
-     * Built-in physical display id: Attached HDMI display.
-     * Use only with {@link SurfaceControl#getBuiltInDisplay(int)}.
-     * @hide
-     */
-    public static final int BUILT_IN_DISPLAY_ID_HDMI = 1;
-
-    /**
-     * Built-in physical display id: Additional Built-in display id range.
-     * HDMI display ID range will be HDMI ID to EXT_MIN ID.
-     * Built-in display ID range will bee EXT_MIN ID to EXT_MAX ID.
-     * Use only with {@link SurfaceControl#getBuiltInDisplay(int)}.
-     *
-     * @hide
-     */
-    public static final int BUILT_IN_DISPLAY_ID_EXT_MIN = 5;
-    /**
-     * @hide
-     */
-    public static final int BUILT_IN_DISPLAY_ID_EXT_MAX = 7;
-
     // Display power modes.
     /**
      * Display power mode off: used while blanking the screen.
@@ -455,7 +434,62 @@ public final class SurfaceControl implements Parcelable {
     public static final int METADATA_TASK_ID = 3;
 
     /**
+     * A wrapper around GraphicBuffer that contains extra information about how to
+     * interpret the screenshot GraphicBuffer.
+     * @hide
+     */
+    public static class ScreenshotGraphicBuffer {
+        private final GraphicBuffer mGraphicBuffer;
+        private final ColorSpace mColorSpace;
+        private final boolean mContainsSecureLayers;
+
+        public ScreenshotGraphicBuffer(GraphicBuffer graphicBuffer, ColorSpace colorSpace,
+                boolean containsSecureLayers) {
+            mGraphicBuffer = graphicBuffer;
+            mColorSpace = colorSpace;
+            mContainsSecureLayers = containsSecureLayers;
+        }
+
+       /**
+        * Create ScreenshotGraphicBuffer from existing native GraphicBuffer object.
+        * @param width The width in pixels of the buffer
+        * @param height The height in pixels of the buffer
+        * @param format The format of each pixel as specified in {@link PixelFormat}
+        * @param usage Hint indicating how the buffer will be used
+        * @param unwrappedNativeObject The native object of GraphicBuffer
+        * @param namedColorSpace Integer value of a named color space {@link ColorSpace.Named}
+        * @param containsSecureLayer Indicates whether this graphic buffer contains captured contents
+        *        of secure layers, in which case the screenshot should not be persisted.
+        */
+        private static ScreenshotGraphicBuffer createFromNative(int width, int height, int format,
+                int usage, long unwrappedNativeObject, int namedColorSpace,
+                boolean containsSecureLayers) {
+            GraphicBuffer graphicBuffer = GraphicBuffer.createFromExisting(width, height, format,
+                    usage, unwrappedNativeObject);
+            ColorSpace colorSpace = ColorSpace.get(ColorSpace.Named.values()[namedColorSpace]);
+            return new ScreenshotGraphicBuffer(graphicBuffer, colorSpace, containsSecureLayers);
+        }
+
+        public ColorSpace getColorSpace() {
+            return mColorSpace;
+        }
+
+        public GraphicBuffer getGraphicBuffer() {
+            return mGraphicBuffer;
+        }
+
+        public boolean containsSecureLayers() {
+            return mContainsSecureLayers;
+        }
+    }
+
+    /**
      * Builder class for {@link SurfaceControl} objects.
+     *
+     * By default the surface will be hidden, and have "unset" bounds, meaning it can
+     * be as large as the bounds of its parent if a buffer or child so requires.
+     *
+     * It is necessary to set at least a name via {@link Builder#setName}
      */
     public static class Builder {
         private SurfaceSession mSession;
@@ -487,13 +521,14 @@ public final class SurfaceControl implements Parcelable {
          * Construct a new {@link SurfaceControl} with the set parameters. The builder
          * remains valid.
          */
+        @NonNull
         public SurfaceControl build() {
             if (mWidth < 0 || mHeight < 0) {
-                throw new IllegalArgumentException(
+                throw new IllegalStateException(
                         "width and height must be positive or unset");
             }
             if ((mWidth > 0 || mHeight > 0) && (isColorLayerSet() || isContainerLayerSet())) {
-                throw new IllegalArgumentException(
+                throw new IllegalStateException(
                         "Only buffer layers can set a valid buffer size.");
             }
             return new SurfaceControl(
@@ -505,7 +540,8 @@ public final class SurfaceControl implements Parcelable {
          *
          * @param name A name to identify the Surface in debugging.
          */
-        public Builder setName(String name) {
+        @NonNull
+        public Builder setName(@NonNull String name) {
             mName = name;
             return this;
         }
@@ -516,6 +552,7 @@ public final class SurfaceControl implements Parcelable {
          * @param width The buffer width in pixels.
          * @param height The buffer height in pixels.
          */
+        @NonNull
         public Builder setBufferSize(@IntRange(from = 0) int width,
                 @IntRange(from = 0) int height) {
             if (width < 0 || height < 0) {
@@ -849,7 +886,7 @@ public final class SurfaceControl implements Parcelable {
         proto.end(token);
     }
 
-    public static final Creator<SurfaceControl> CREATOR
+    public static final @android.annotation.NonNull Creator<SurfaceControl> CREATOR
             = new Creator<SurfaceControl>() {
         public SurfaceControl createFromParcel(Parcel in) {
             return new SurfaceControl(in);
@@ -881,7 +918,9 @@ public final class SurfaceControl implements Parcelable {
      * Release the local reference to the server-side surface. The surface
      * may continue to exist on-screen as long as its parent continues
      * to exist. To explicitly remove a surface from the screen use
-     * {@link Transaction#reparent} with a null-parent.
+     * {@link Transaction#reparent} with a null-parent. After release,
+     * {@link #isValid} will return false and other methods will throw
+     * an exception.
      *
      * Always call release() when you're done with a SurfaceControl.
      */
@@ -923,7 +962,8 @@ public final class SurfaceControl implements Parcelable {
 
     /**
      * Check whether this instance points to a valid layer with the system-compositor. For
-     * example this may be false if construction failed, or the layer was released.
+     * example this may be false if construction failed, or the layer was released
+     * ({@link #release}).
      *
      * @return Whether this SurfaceControl is valid.
      */
@@ -951,17 +991,6 @@ public final class SurfaceControl implements Parcelable {
         }
     }
 
-    private static void closeTransaction(boolean sync) {
-        synchronized(SurfaceControl.class) {
-            if (sTransactionNestCount == 0) {
-                Log.e(TAG, "Call to SurfaceControl.closeTransaction without matching openTransaction");
-            } else if (--sTransactionNestCount > 0) {
-                return;
-            }
-            sGlobalTransaction.apply(sync);
-        }
-    }
-
     /**
      * Merge the supplied transaction in to the deprecated "global" transaction.
      * This clears the supplied transaction in an identical fashion to {@link Transaction#merge}.
@@ -981,14 +1010,15 @@ public final class SurfaceControl implements Parcelable {
      */
     @UnsupportedAppUsage
     public static void closeTransaction() {
-        closeTransaction(false);
-    }
-
-    /**
-     * @hide
-     */
-    public static void closeTransactionSync() {
-        closeTransaction(true);
+        synchronized(SurfaceControl.class) {
+            if (sTransactionNestCount == 0) {
+                Log.e(TAG,
+                        "Call to SurfaceControl.closeTransaction without matching openTransaction");
+            } else if (--sTransactionNestCount > 0) {
+                return;
+            }
+            sGlobalTransaction.apply();
+        }
     }
 
     /**
@@ -1233,6 +1263,19 @@ public final class SurfaceControl implements Parcelable {
         checkNotReleased();
         synchronized (SurfaceControl.class) {
             sGlobalTransaction.setColorTransform(this, matrix, translation);
+        }
+    }
+
+    /**
+     * Sets the Surface to be color space agnostic. If a surface is color space agnostic,
+     * the color can be interpreted in any color space.
+     * @param agnostic A boolean to indicate whether the surface is color space agnostic
+     * @hide
+     */
+    public void setColorSpaceAgnostic(boolean agnostic) {
+        checkNotReleased();
+        synchronized (SurfaceControl.class) {
+            sGlobalTransaction.setColorSpaceAgnostic(this, agnostic);
         }
     }
 
@@ -1569,6 +1612,16 @@ public final class SurfaceControl implements Parcelable {
     /**
      * @hide
      */
+    public static int[] getAllowedDisplayConfigs(IBinder displayToken) {
+        if (displayToken == null) {
+            throw new IllegalArgumentException("displayToken must not be null");
+        }
+        return nativeGetAllowedDisplayConfigs(displayToken);
+    }
+
+    /**
+     * @hide
+     */
     public static int[] getDisplayColorModes(IBinder displayToken) {
         if (displayToken == null) {
             throw new IllegalArgumentException("displayToken must not be null");
@@ -1813,10 +1866,10 @@ public final class SurfaceControl implements Parcelable {
             throw new IllegalArgumentException("consumer must not be null");
         }
 
-        final GraphicBuffer buffer = screenshotToBuffer(display, sourceCrop, width, height,
-                useIdentityTransform, rotation);
+        final ScreenshotGraphicBuffer buffer = screenshotToBuffer(display, sourceCrop, width,
+                height, useIdentityTransform, rotation);
         try {
-            consumer.attachAndQueueBuffer(buffer);
+            consumer.attachAndQueueBuffer(buffer.getGraphicBuffer());
         } catch (RuntimeException e) {
             Log.w(TAG, "Failed to take screenshot - " + e.getMessage());
         }
@@ -1859,17 +1912,14 @@ public final class SurfaceControl implements Parcelable {
         }
 
         SurfaceControl.rotateCropForSF(sourceCrop, rotation);
-        final GraphicBuffer buffer = screenshotToBuffer(displayToken, sourceCrop, width, height,
-                useIdentityTransform, rotation);
+        final ScreenshotGraphicBuffer buffer = screenshotToBuffer(displayToken, sourceCrop, width,
+                height, useIdentityTransform, rotation);
 
         if (buffer == null) {
             Log.w(TAG, "Failed to take screenshot");
             return null;
         }
-        // TODO(b/116112787) Now that hardware bitmap creation can take color space, we
-        // should continue to fix screenshot.
-        return Bitmap.wrapHardwareBuffer(HardwareBuffer.createFromGraphicBuffer(buffer),
-                ColorSpace.get(ColorSpace.Named.SRGB));
+        return Bitmap.wrapHardwareBuffer(buffer.getGraphicBuffer(), buffer.getColorSpace());
     }
 
     /**
@@ -1895,8 +1945,8 @@ public final class SurfaceControl implements Parcelable {
      * @return Returns a GraphicBuffer that contains the captured content.
      * @hide
      */
-    public static GraphicBuffer screenshotToBuffer(IBinder display, Rect sourceCrop, int width,
-            int height, boolean useIdentityTransform, int rotation) {
+    public static ScreenshotGraphicBuffer screenshotToBuffer(IBinder display, Rect sourceCrop,
+            int width, int height, boolean useIdentityTransform, int rotation) {
         if (display == null) {
             throw new IllegalArgumentException("displayToken must not be null");
         }
@@ -1915,7 +1965,7 @@ public final class SurfaceControl implements Parcelable {
      *
      * @hide
      */
-    public static GraphicBuffer screenshotToBufferWithSecureLayersUnsafe(IBinder display,
+    public static ScreenshotGraphicBuffer screenshotToBufferWithSecureLayersUnsafe(IBinder display,
             Rect sourceCrop, int width, int height, boolean useIdentityTransform,
             int rotation) {
         if (display == null) {
@@ -1949,9 +1999,20 @@ public final class SurfaceControl implements Parcelable {
      * @return Returns a GraphicBuffer that contains the layer capture.
      * @hide
      */
-    public static GraphicBuffer captureLayers(IBinder layerHandleToken, Rect sourceCrop,
+    public static ScreenshotGraphicBuffer captureLayers(IBinder layerHandleToken, Rect sourceCrop,
             float frameScale) {
-        return nativeCaptureLayers(layerHandleToken, sourceCrop, frameScale);
+        final IBinder displayToken = SurfaceControl.getInternalDisplayToken();
+        return nativeCaptureLayers(displayToken, layerHandleToken, sourceCrop, frameScale, null);
+    }
+
+    /**
+     * Like {@link captureLayers} but with an array of layer handles to exclude.
+     * @hide
+     */
+    public static ScreenshotGraphicBuffer captureLayersExcluding(IBinder layerHandleToken,
+            Rect sourceCrop, float frameScale, IBinder[] exclude) {
+        final IBinder displayToken = SurfaceControl.getInternalDisplayToken();
+        return nativeCaptureLayers(displayToken, layerHandleToken, sourceCrop, frameScale, exclude);
     }
 
     /**
@@ -1960,6 +2021,47 @@ public final class SurfaceControl implements Parcelable {
      */
     public static boolean getProtectedContentSupport() {
         return nativeGetProtectedContentSupport();
+    }
+
+    /**
+     * Returns whether brightness operations are supported on a display.
+     *
+     * @param displayToken
+     *      The token for the display.
+     *
+     * @return Whether brightness operations are supported on the display.
+     *
+     * @hide
+     */
+    public static boolean getDisplayBrightnessSupport(IBinder displayToken) {
+        return nativeGetDisplayBrightnessSupport(displayToken);
+    }
+
+    /**
+     * Sets the brightness of a display.
+     *
+     * @param displayToken
+     *      The token for the display whose brightness is set.
+     * @param brightness
+     *      A number between 0.0f (minimum brightness) and 1.0f (maximum brightness), or -1.0f to
+     *      turn the backlight off.
+     *
+     * @return Whether the method succeeded or not.
+     *
+     * @throws IllegalArgumentException if:
+     *      - displayToken is null;
+     *      - brightness is NaN or greater than 1.0f.
+     *
+     * @hide
+     */
+    public static boolean setDisplayBrightness(IBinder displayToken, float brightness) {
+        Objects.requireNonNull(displayToken);
+        if (Float.isNaN(brightness) || brightness > 1.0f
+                || (brightness < 0.0f && brightness != -1.0f)) {
+            throw new IllegalArgumentException("brightness must be a number between 0.0f and 1.0f,"
+                    + " or -1 to turn the backlight off.");
+        }
+        return nativeSetDisplayBrightness(displayToken, brightness);
     }
 
     /**
@@ -1999,8 +2101,7 @@ public final class SurfaceControl implements Parcelable {
         }
 
         /**
-         * Close the transaction, if the transaction was not already applied this will cancel the
-         * transaction.
+         * Release the native transaction object, without applying it.
          */
         @Override
         public void close() {
@@ -2085,8 +2186,8 @@ public final class SurfaceControl implements Parcelable {
         }
 
         /**
-         * Set the default buffer size for the SurfaceControl, if there is an
-         * {@link Surface} assosciated with the control, then
+         * Set the default buffer size for the SurfaceControl, if there is a
+         * {@link Surface} associated with the control, then
          * this will be the default size for buffers dequeued from it.
          * @param sc The surface to set the buffer size for.
          * @param w The default width
@@ -2243,6 +2344,18 @@ public final class SurfaceControl implements Parcelable {
                 @Size(3) float[] translation) {
             sc.checkNotReleased();
             nativeSetColorTransform(mNativeObject, sc.mNativeObject, matrix, translation);
+            return this;
+        }
+
+        /**
+         * Sets the Surface to be color space agnostic. If a surface is color space agnostic,
+         * the color can be interpreted in any color space.
+         * @param agnostic A boolean to indicate whether the surface is color space agnostic
+         * @hide
+         */
+        public Transaction setColorSpaceAgnostic(SurfaceControl sc, boolean agnostic) {
+            sc.checkNotReleased();
+            nativeSetColorSpaceAgnostic(mNativeObject, sc.mNativeObject, agnostic);
             return this;
         }
 
@@ -2521,11 +2634,11 @@ public final class SurfaceControl implements Parcelable {
          * Sets an arbitrary piece of metadata on the surface. This is a helper for int data.
          * @hide
          */
-        public Transaction setMetadata(int key, int data) {
+        public Transaction setMetadata(SurfaceControl sc, int key, int data) {
             Parcel parcel = Parcel.obtain();
             parcel.writeInt(data);
             try {
-                setMetadata(key, parcel);
+                setMetadata(sc, key, parcel);
             } finally {
                 parcel.recycle();
             }
@@ -2536,8 +2649,8 @@ public final class SurfaceControl implements Parcelable {
          * Sets an arbitrary piece of metadata on the surface.
          * @hide
          */
-        public Transaction setMetadata(int key, Parcel data) {
-            nativeSetMetadata(mNativeObject, key, data);
+        public Transaction setMetadata(SurfaceControl sc, int key, Parcel data) {
+            nativeSetMetadata(mNativeObject, sc.mNativeObject, key, data);
             return this;
         }
 

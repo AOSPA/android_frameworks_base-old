@@ -128,6 +128,7 @@ extern int register_android_app_admin_SecurityLog(JNIEnv* env);
 extern int register_android_content_AssetManager(JNIEnv* env);
 extern int register_android_util_EventLog(JNIEnv* env);
 extern int register_android_util_StatsLog(JNIEnv* env);
+extern int register_android_util_StatsLogInternal(JNIEnv* env);
 extern int register_android_util_Log(JNIEnv* env);
 extern int register_android_util_MemoryIntArray(JNIEnv* env);
 extern int register_android_util_PathParser(JNIEnv* env);
@@ -174,7 +175,6 @@ extern int register_android_database_CursorWindow(JNIEnv* env);
 extern int register_android_database_SQLiteConnection(JNIEnv* env);
 extern int register_android_database_SQLiteGlobal(JNIEnv* env);
 extern int register_android_database_SQLiteDebug(JNIEnv* env);
-extern int register_android_nio_utils(JNIEnv* env);
 extern int register_android_os_Debug(JNIEnv* env);
 extern int register_android_os_GraphicsEnvironment(JNIEnv* env);
 extern int register_android_os_HidlSupport(JNIEnv* env);
@@ -227,7 +227,6 @@ extern int register_android_content_res_Configuration(JNIEnv* env);
 extern int register_android_animation_PropertyValuesHolder(JNIEnv *env);
 extern int register_android_security_Scrypt(JNIEnv *env);
 extern int register_com_android_internal_content_NativeLibraryHelper(JNIEnv *env);
-extern int register_com_android_internal_net_NetworkStatsFactory(JNIEnv *env);
 extern int register_com_android_internal_os_AtomicDirectory(JNIEnv *env);
 extern int register_com_android_internal_os_ClassLoaderFactory(JNIEnv* env);
 extern int register_com_android_internal_os_FuseAppLoop(JNIEnv* env);
@@ -681,6 +680,7 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
     char lockProfThresholdBuf[sizeof("-Xlockprofthreshold:")-1 + PROPERTY_VALUE_MAX];
     char nativeBridgeLibrary[sizeof("-XX:NativeBridge=") + PROPERTY_VALUE_MAX];
     char cpuAbiListBuf[sizeof("--cpu-abilist=") + PROPERTY_VALUE_MAX];
+    char corePlatformApiPolicyBuf[sizeof("-Xcore-platform-api-policy:") + PROPERTY_VALUE_MAX];
     char methodTraceFileBuf[sizeof("-Xmethod-trace-file:") + PROPERTY_VALUE_MAX];
     char methodTraceFileSizeBuf[sizeof("-Xmethod-trace-file-size:") + PROPERTY_VALUE_MAX];
     std::string fingerprintBuf;
@@ -1027,6 +1027,16 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
         addOption("--generate-mini-debug-info");
     }
 
+    // If set, the property below can be used to enable core platform API violation reporting.
+    property_get("persist.debug.dalvik.vm.core_platform_api_policy", propBuf, "");
+    if (propBuf[0] != '\0') {
+      snprintf(corePlatformApiPolicyBuf,
+               sizeof(corePlatformApiPolicyBuf),
+               "-Xcore-platform-api-policy:%s",
+               propBuf);
+      addOption(corePlatformApiPolicyBuf);
+    }
+
     /*
      * Retrieve the build fingerprint and provide it to the runtime. That way, ANR dumps will
      * contain the fingerprint and can be parsed.
@@ -1125,6 +1135,12 @@ void AndroidRuntime::start(const char* className, const Vector<String8>& options
     const char* runtimeRootDir = getenv("ANDROID_RUNTIME_ROOT");
     if (runtimeRootDir == NULL) {
         LOG_FATAL("No runtime directory specified with ANDROID_RUNTIME_ROOT environment variable.");
+        return;
+    }
+
+    const char* tzdataRootDir = getenv("ANDROID_TZDATA_ROOT");
+    if (tzdataRootDir == NULL) {
+        LOG_FATAL("No tz data directory specified with ANDROID_TZDATA_ROOT environment variable.");
         return;
     }
 
@@ -1397,6 +1413,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_util_MemoryIntArray),
     REG_JNI(register_android_util_PathParser),
     REG_JNI(register_android_util_StatsLog),
+    REG_JNI(register_android_util_StatsLogInternal),
     REG_JNI(register_android_app_admin_SecurityLog),
     REG_JNI(register_android_content_AssetManager),
     REG_JNI(register_android_content_StringBlock),
@@ -1418,7 +1435,6 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_os_NativeHandle),
     REG_JNI(register_android_os_VintfObject),
     REG_JNI(register_android_os_VintfRuntimeInfo),
-    REG_JNI(register_android_nio_utils),
     REG_JNI(register_android_graphics_Canvas),
     // This needs to be before register_android_graphics_Graphics, or the latter
     // will not be able to find the jmethodID for ColorSpace.get().
@@ -1564,7 +1580,6 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_animation_PropertyValuesHolder),
     REG_JNI(register_android_security_Scrypt),
     REG_JNI(register_com_android_internal_content_NativeLibraryHelper),
-    REG_JNI(register_com_android_internal_net_NetworkStatsFactory),
     REG_JNI(register_com_android_internal_os_AtomicDirectory),
     REG_JNI(register_com_android_internal_os_FuseAppLoop),
     REG_JNI(register_com_android_internal_app_ActivityTrigger),

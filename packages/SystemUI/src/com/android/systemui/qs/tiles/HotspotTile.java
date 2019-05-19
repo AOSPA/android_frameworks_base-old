@@ -20,14 +20,12 @@ import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.os.UserManager;
-import android.provider.Settings.Global;
 import android.service.quicksettings.Tile;
 import android.widget.Switch;
 
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.R;
-import com.android.systemui.plugins.qs.QSTile.AirplaneBooleanState;
-import com.android.systemui.qs.GlobalSetting;
+import com.android.systemui.plugins.qs.QSTile.BooleanState;
 import com.android.systemui.qs.QSHost;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 import com.android.systemui.statusbar.policy.DataSaverController;
@@ -36,17 +34,20 @@ import com.android.systemui.statusbar.policy.HotspotController;
 import javax.inject.Inject;
 
 /** Quick settings tile: Hotspot **/
-public class HotspotTile extends QSTileImpl<AirplaneBooleanState> {
+public class HotspotTile extends QSTileImpl<BooleanState> {
     private static final Intent TETHER_SETTINGS = new Intent().setComponent(new ComponentName(
             "com.android.settings", "com.android.settings.TetherSettings"));
 
     private final Icon mEnabledStatic = ResourceIcon.get(R.drawable.ic_hotspot);
+    private final Icon mWifi5EnabledStatic = ResourceIcon.get(R.drawable.ic_wifi_5_hotspot);
+    private final Icon mWifi6EnabledStatic = ResourceIcon.get(R.drawable.ic_wifi_6_hotspot);
+    private final boolean mIeee80211acSupport;
+    private final boolean mIeee80211axSupport;
 
     private final HotspotController mHotspotController;
     private final DataSaverController mDataSaverController;
 
     private final HotspotAndDataSaverCallbacks mCallbacks = new HotspotAndDataSaverCallbacks();
-    private final GlobalSetting mAirplaneMode;
     private boolean mListening;
 
     @Inject
@@ -55,14 +56,12 @@ public class HotspotTile extends QSTileImpl<AirplaneBooleanState> {
         super(host);
         mHotspotController = hotspotController;
         mDataSaverController = dataSaverController;
-        mAirplaneMode = new GlobalSetting(mContext, mHandler, Global.AIRPLANE_MODE_ON) {
-            @Override
-            protected void handleValueChanged(int value) {
-                refreshState();
-            }
-        };
         mHotspotController.observe(this, mCallbacks);
         mDataSaverController.observe(this, mCallbacks);
+        mIeee80211acSupport =
+            mContext.getResources().getBoolean(com.android.internal.R.bool.config_wifi_softap_ieee80211ac_supported);
+        mIeee80211axSupport =
+            mContext.getResources().getBoolean(com.android.internal.R.bool.config_wifi_softap_ieee80211ax_supported);
     }
 
     @Override
@@ -76,18 +75,12 @@ public class HotspotTile extends QSTileImpl<AirplaneBooleanState> {
     }
 
     @Override
-    public AirplaneBooleanState newTileState() {
-        return new AirplaneBooleanState();
-    }
-
-    @Override
     public void handleSetListening(boolean listening) {
         if (mListening == listening) return;
         mListening = listening;
         if (listening) {
             refreshState();
         }
-        mAirplaneMode.setListening(listening);
     }
 
     @Override
@@ -96,10 +89,14 @@ public class HotspotTile extends QSTileImpl<AirplaneBooleanState> {
     }
 
     @Override
+    public BooleanState newTileState() {
+        return new BooleanState();
+    }
+
+    @Override
     protected void handleClick() {
         final boolean isEnabled = mState.value;
-        if (!isEnabled &&
-                (mAirplaneMode.getValue() != 0 || mDataSaverController.isDataSaverEnabled())) {
+        if (!isEnabled && mDataSaverController.isDataSaverEnabled()) {
             return;
         }
         // Immediately enter transient enabling state when turning hotspot on.
@@ -113,7 +110,7 @@ public class HotspotTile extends QSTileImpl<AirplaneBooleanState> {
     }
 
     @Override
-    protected void handleUpdateState(AirplaneBooleanState state, Object arg) {
+    protected void handleUpdateState(BooleanState state, Object arg) {
         final boolean transientEnabling = arg == ARG_SHOW_TRANSIENT_ENABLING;
         if (state.slash == null) {
             state.slash = new SlashState();
@@ -138,16 +135,21 @@ public class HotspotTile extends QSTileImpl<AirplaneBooleanState> {
 
         state.icon = mEnabledStatic;
         state.label = mContext.getString(R.string.quick_settings_hotspot_label);
-        state.isAirplaneMode = mAirplaneMode.getValue() != 0;
         state.isTransient = isTransient;
         state.slash.isSlashed = !state.value && !state.isTransient;
         if (state.isTransient) {
             state.icon = ResourceIcon.get(R.drawable.ic_hotspot_transient_animation);
+        } else if (state.value) {
+            if (mIeee80211axSupport) {
+                state.icon = mWifi6EnabledStatic;
+            } else if (mIeee80211acSupport) {
+                state.icon = mWifi5EnabledStatic;
+            }
         }
         state.expandedAccessibilityClassName = Switch.class.getName();
         state.contentDescription = state.label;
 
-        final boolean isTileUnavailable = (state.isAirplaneMode || isDataSaverEnabled);
+        final boolean isTileUnavailable = isDataSaverEnabled;
         final boolean isTileActive = (state.value || state.isTransient);
 
         if (isTileUnavailable) {

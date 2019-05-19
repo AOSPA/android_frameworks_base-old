@@ -300,7 +300,8 @@ public class ActivityStack extends ConfigurationContainer {
         STOPPED,
         FINISHING,
         DESTROYING,
-        DESTROYED
+        DESTROYED,
+        RESTARTING_PROCESS
     }
 
     @VisibleForTesting
@@ -434,6 +435,9 @@ public class ActivityStack extends ConfigurationContainer {
     final Handler mHandler;
 
     static final ActivityTrigger mActivityTrigger = new ActivityTrigger();
+
+    private static final ActivityPluginDelegate mActivityPluginDelegate =
+        new ActivityPluginDelegate();
 
     private class ActivityStackHandler extends Handler {
         ActivityStackHandler(Looper looper) {
@@ -706,6 +710,14 @@ public class ActivityStack extends ConfigurationContainer {
      */
     void setWindowingMode(int preferredWindowingMode, boolean animate, boolean showRecents,
             boolean enteringSplitScreenMode, boolean deferEnsuringVisibility, boolean creating) {
+        mWindowManager.inSurfaceTransaction(() -> setWindowingModeInSurfaceTransaction(
+                preferredWindowingMode, animate, showRecents, enteringSplitScreenMode,
+                deferEnsuringVisibility, creating));
+    }
+
+    private void setWindowingModeInSurfaceTransaction(int preferredWindowingMode, boolean animate,
+            boolean showRecents, boolean enteringSplitScreenMode, boolean deferEnsuringVisibility,
+            boolean creating) {
         final int currentMode = getWindowingMode();
         final int currentOverrideMode = getRequestedOverrideWindowingMode();
         final ActivityDisplay display = getDisplay();
@@ -749,7 +761,7 @@ public class ActivityStack extends ConfigurationContainer {
                 // warning toast about it.
                 mService.getTaskChangeNotificationController().notifyActivityDismissingDockedStack();
                 final ActivityStack primarySplitStack = display.getSplitScreenPrimaryStack();
-                primarySplitStack.setWindowingMode(WINDOWING_MODE_UNDEFINED,
+                primarySplitStack.setWindowingModeInSurfaceTransaction(WINDOWING_MODE_UNDEFINED,
                         false /* animate */, false /* showRecents */,
                         false /* enteringSplitScreenMode */, true /* deferEnsuringVisibility */,
                         primarySplitStack == this ? creating : false);
@@ -1685,6 +1697,10 @@ public class ActivityStack extends ConfigurationContainer {
             mActivityTrigger.activityPauseTrigger(prev.intent, prev.info, prev.appInfo);
         }
 
+        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
+            mActivityPluginDelegate.activitySuspendNotification
+                (prev.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, true);
+        }
         mPausingActivity = prev;
         mLastPausedActivity = prev;
         mLastNoHistoryActivity = (prev.intent.getFlags() & Intent.FLAG_ACTIVITY_NO_HISTORY) != 0
@@ -1804,14 +1820,10 @@ public class ActivityStack extends ConfigurationContainer {
             if (prev.finishing) {
                 if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Executing finish of activity: " + prev);
                 prev = finishCurrentActivityLocked(prev, FINISH_AFTER_VISIBLE, false,
-                        "completedPausedLocked");
+                        "completePausedLocked");
             } else if (prev.hasProcess()) {
                 if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Enqueue pending stop if needed: " + prev
                         + " wasStopping=" + wasStopping + " visible=" + prev.visible);
-                if (mStackSupervisor.mActivitiesWaitingForVisibleActivity.remove(prev)) {
-                    if (DEBUG_SWITCH || DEBUG_PAUSE) Slog.v(TAG_PAUSE,
-                            "Complete pause, no longer waiting: " + prev);
-                }
                 if (prev.deferRelaunchUntilPaused) {
                     // Complete the deferred relaunch that was waiting for pause to complete.
                     if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Re-launching after pause: " + prev);
@@ -1891,16 +1903,6 @@ public class ActivityStack extends ConfigurationContainer {
     private void addToStopping(ActivityRecord r, boolean scheduleIdle, boolean idleDelayed) {
         if (!mStackSupervisor.mStoppingActivities.contains(r)) {
             mStackSupervisor.mStoppingActivities.add(r);
-
-            // Some activity is waiting for another activity to become visible before it's being
-            // stopped, which means that we also want to wait with stopping this one to avoid
-            // flickers.
-            if (!mStackSupervisor.mActivitiesWaitingForVisibleActivity.isEmpty()
-                    && !mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(r)) {
-                if (DEBUG_SWITCH) Slog.i(TAG_SWITCH, "adding to waiting visible activity=" + r
-                        + " existing=" + mStackSupervisor.mActivitiesWaitingForVisibleActivity);
-                mStackSupervisor.mActivitiesWaitingForVisibleActivity.add(r);
-            }
         }
 
         // If we already have a few activities waiting to stop, then give up
@@ -2585,7 +2587,6 @@ public class ActivityStack extends ConfigurationContainer {
             // Protect against recursion.
             mInResumeTopActivity = true;
             result = resumeTopActivityInnerLocked(prev, options);
-            mRootActivityContainer.updateTopResumedActivityIfNeeded();
 
             // When resuming the top activity, it may be necessary to pause the top activity (for
             // example, returning to the lock screen. We suppress the normal pause logic in
@@ -2620,6 +2621,7 @@ public class ActivityStack extends ConfigurationContainer {
         if (DEBUG_STACK) Slog.d(TAG_STACK, "setResumedActivity stack:" + this + " + from: "
                 + mResumedActivity + " to:" + r + " reason:" + reason);
         mResumedActivity = r;
+        mStackSupervisor.updateTopResumedActivityIfNeeded();
     }
 
     @GuardedBy("mService")
@@ -2716,7 +2718,6 @@ public class ActivityStack extends ConfigurationContainer {
         mStackSupervisor.mStoppingActivities.remove(next);
         mStackSupervisor.mGoingToSleepActivities.remove(next);
         next.sleeping = false;
-        mStackSupervisor.mActivitiesWaitingForVisibleActivity.remove(next);
         next.launching = true;
 
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
@@ -2726,16 +2727,16 @@ public class ActivityStack extends ConfigurationContainer {
                     next.fullscreen);
         }
 
+        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
+            mActivityPluginDelegate.activityInvokeNotification
+                (next.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN);
+        }
+
         // If we are currently pausing an activity, then don't do anything until that is done.
         if (!mRootActivityContainer.allPausedActivitiesComplete()) {
             if (DEBUG_SWITCH || DEBUG_PAUSE || DEBUG_STATES) Slog.v(TAG_PAUSE,
                     "resumeTopActivityLocked: Skip resume: some activity pausing.");
 
-            // Adding previous activity to the waiting visible list, or it would be stopped
-            // before top activity being visible.
-            if (prev != null && !next.nowVisible) {
-                mStackSupervisor.mActivitiesWaitingForVisibleActivity.add(prev);
-            }
             return false;
         }
 
@@ -2780,7 +2781,7 @@ public class ActivityStack extends ConfigurationContainer {
             // happens to be sitting towards the end.
             if (next.attachedToProcess()) {
                 next.app.updateProcessInfo(false /* updateServiceConnectionActivities */,
-                        true /* updateLru */, true /* activityChange */, false /* updateOomAdj */);
+                        true /* activityChange */, false /* updateOomAdj */);
             }
             if (lastResumed != null) {
                 lastResumed.setWillCloseOrEnterPip(true);
@@ -2811,35 +2812,27 @@ public class ActivityStack extends ConfigurationContainer {
             mLastNoHistoryActivity = null;
         }
 
-        if (prev != null && prev != next) {
-            if (!mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(prev)
-                    && !next.nowVisible) {
-                mStackSupervisor.mActivitiesWaitingForVisibleActivity.add(prev);
+        if (prev != null && prev != next && next.nowVisible) {
+
+            // The next activity is already visible, so hide the previous
+            // activity's windows right now so we can show the new one ASAP.
+            // We only do this if the previous is finishing, which should mean
+            // it is on top of the one being resumed so hiding it quickly
+            // is good.  Otherwise, we want to do the normal route of allowing
+            // the resumed activity to be shown so we can decide if the
+            // previous should actually be hidden depending on whether the
+            // new one is found to be full-screen or not.
+            if (prev.finishing) {
+                prev.setVisibility(false);
                 if (DEBUG_SWITCH) Slog.v(TAG_SWITCH,
-                        "Resuming top, waiting visible to hide: " + prev);
+                        "Not waiting for visible to hide: " + prev
+                        + ", nowVisible=" + next.nowVisible);
             } else {
-                // The next activity is already visible, so hide the previous
-                // activity's windows right now so we can show the new one ASAP.
-                // We only do this if the previous is finishing, which should mean
-                // it is on top of the one being resumed so hiding it quickly
-                // is good.  Otherwise, we want to do the normal route of allowing
-                // the resumed activity to be shown so we can decide if the
-                // previous should actually be hidden depending on whether the
-                // new one is found to be full-screen or not.
-                if (prev.finishing) {
-                    prev.setVisibility(false);
-                    if (DEBUG_SWITCH) Slog.v(TAG_SWITCH,
-                            "Not waiting for visible to hide: " + prev + ", waitingVisible="
-                            + mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(prev)
-                            + ", nowVisible=" + next.nowVisible);
-                } else {
-                    if (DEBUG_SWITCH) Slog.v(TAG_SWITCH,
-                            "Previous already visible but still waiting to hide: " + prev
-                            + ", waitingVisible="
-                            + mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(prev)
-                            + ", nowVisible=" + next.nowVisible);
-                }
+                if (DEBUG_SWITCH) Slog.v(TAG_SWITCH,
+                        "Previous already visible but still waiting to hide: " + prev
+                        + ", nowVisible=" + next.nowVisible);
             }
+
         }
 
         // Launching this app's activity, make sure the app is no longer
@@ -2955,7 +2948,7 @@ public class ActivityStack extends ConfigurationContainer {
             next.setState(RESUMED, "resumeTopActivityInnerLocked");
 
             next.app.updateProcessInfo(false /* updateServiceConnectionActivities */,
-                    true /* updateLru */, true /* activityChange */, true /* updateOomAdj */);
+                    true /* activityChange */, true /* updateOomAdj */);
             updateLRUListLocked(next);
 
             // Have the window manager re-evaluate the orientation of
@@ -3013,8 +3006,7 @@ public class ActivityStack extends ConfigurationContainer {
                 }
 
                 if (next.newIntents != null) {
-                    transaction.addCallback(NewIntentItem.obtain(next.newIntents,
-                            false /* andPause */));
+                    transaction.addCallback(NewIntentItem.obtain(next.newIntents));
                 }
 
                 // Well the app will no longer be stopped.
@@ -3104,7 +3096,21 @@ public class ActivityStack extends ConfigurationContainer {
         ActivityOptions.abort(options);
         if (DEBUG_STATES) Slog.d(TAG_STATES,
                 "resumeTopActivityInNextFocusableStack: " + reason + ", go home");
-        return mRootActivityContainer.resumeHomeActivity(prev, reason, mDisplayId);
+        if (isActivityTypeHome()) {
+            // resumeTopActivityUncheckedLocked has been prevented to run recursively. Post a
+            // runnable to resume home since we are currently in the process of resuming top
+            // activity in home stack.
+            // See {@link #mInResumeTopActivity}.
+            mService.mH.post(
+                    () -> {
+                        synchronized (mService.mGlobalLock) {
+                            mRootActivityContainer.resumeHomeActivity(prev, reason, mDisplayId);
+                        }
+                    });
+            return true;
+        } else {
+            return mRootActivityContainer.resumeHomeActivity(prev, reason, mDisplayId);
+        }
     }
 
     /** Returns the position the input task should be placed in this stack. */
@@ -3234,6 +3240,11 @@ public class ActivityStack extends ConfigurationContainer {
         }
 
         task.setFrontOfTask();
+
+        if (mActivityPluginDelegate != null) {
+            mActivityPluginDelegate.activityInvokeNotification
+                (r.appInfo.packageName, r.fullscreen);
+        }
 
         if (!isHomeOrRecentsStack() || numActivities() > 0) {
             final DisplayContent dc = getDisplay().mDisplayContent;
@@ -3804,6 +3815,11 @@ public class ActivityStack extends ConfigurationContainer {
                 if (DEBUG_STATES) Slog.v(TAG_STATES,
                         "Moving to STOPPING: " + r + " (stop requested)");
                 r.setState(STOPPING, "stopActivityLocked");
+
+                if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
+                    mActivityPluginDelegate.activitySuspendNotification
+                        (r.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, false);
+                }
                 if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY,
                         "Stopping visible=" + r.visible + " for " + r);
 
@@ -4120,9 +4136,6 @@ public class ActivityStack extends ConfigurationContainer {
         dc.prepareAppTransition(transit, false);
         r.setVisibility(false);
         dc.executeAppTransition();
-        if (!mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(r)) {
-            mStackSupervisor.mActivitiesWaitingForVisibleActivity.add(r);
-        }
     }
 
     static final int FINISH_IMMEDIATELY = 0;
@@ -4138,17 +4151,23 @@ public class ActivityStack extends ConfigurationContainer {
         // The activity that we are finishing may be over the lock screen. In this case, we do not
         // want to consider activities that cannot be shown on the lock screen as running and should
         // proceed with finishing the activity if there is no valid next top running activity.
+        // Note that if this finishing activity is floating task, we don't need to wait the
+        // next activity resume and can destroy it directly.
         final ActivityDisplay display = getDisplay();
         final ActivityRecord next = display.topRunningActivity(true /* considerKeyguardState */);
+        final boolean isFloating = r.getConfiguration().windowConfiguration.tasksAreFloating();
 
         if (mode == FINISH_AFTER_VISIBLE && (r.visible || r.nowVisible)
-                && next != null && !next.nowVisible) {
+                && next != null && !next.nowVisible && !isFloating) {
             if (!mStackSupervisor.mStoppingActivities.contains(r)) {
                 addToStopping(r, false /* scheduleIdle */, false /* idleDelayed */);
             }
             if (DEBUG_STATES) Slog.v(TAG_STATES,
                     "Moving to STOPPING: "+ r + " (finish requested)");
-
+            if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
+                mActivityPluginDelegate.activitySuspendNotification
+                    (r.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, false);
+            }
             r.setState(STOPPING, "finishCurrentActivityLocked");
             if (oomAdj) {
                 mService.updateOomAdj();
@@ -4159,14 +4178,25 @@ public class ActivityStack extends ConfigurationContainer {
         // make sure the record is cleaned out of other places.
         mStackSupervisor.mStoppingActivities.remove(r);
         mStackSupervisor.mGoingToSleepActivities.remove(r);
-        mStackSupervisor.mActivitiesWaitingForVisibleActivity.remove(r);
         final ActivityState prevState = r.getState();
         if (DEBUG_STATES) Slog.v(TAG_STATES, "Moving to FINISHING: " + r);
 
+        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
+            mActivityPluginDelegate.activitySuspendNotification
+                (r.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, false);
+        }
+
         r.setState(FINISHING, "finishCurrentActivityLocked");
+
+        // Don't destroy activity immediately if the display contains home stack, although there is
+        // no next activity at the moment but another home activity should be started later. Keep
+        // this activity alive until next home activity is resumed then user won't see a temporary
+        // black screen.
+        final boolean noRunningStack = next == null && display.topRunningActivity() == null
+                && display.getHomeStack() == null;
+        final boolean noFocusedStack = r.getActivityStack() != display.getFocusedStack();
         final boolean finishingInNonFocusedStackOrNoRunning = mode == FINISH_AFTER_VISIBLE
-                && prevState == PAUSED && (r.getActivityStack() != display.getFocusedStack()
-                        || (next == null && display.topRunningActivity() == null));
+                && prevState == PAUSED && (noFocusedStack || noRunningStack);
 
         if (mode == FINISH_IMMEDIATELY
                 || (prevState == PAUSED
@@ -4644,7 +4674,8 @@ public class ActivityStack extends ConfigurationContainer {
                     // Update any services we are bound to that might care about whether
                     // their client may have activities.
                     // No longer have activities, so update LRU list and oom adj.
-                    r.app.updateProcessInfo(true, true, false, true);
+                    r.app.updateProcessInfo(true /* updateServiceConnectionActivities */,
+                            false /* activityChange */, true /* updateOomAdj */);
                 }
             }
 
@@ -4765,8 +4796,6 @@ public class ActivityStack extends ConfigurationContainer {
                 "mStoppingActivities");
         removeHistoryRecordsForAppLocked(mStackSupervisor.mGoingToSleepActivities, app,
                 "mGoingToSleepActivities");
-        removeHistoryRecordsForAppLocked(mStackSupervisor.mActivitiesWaitingForVisibleActivity, app,
-                "mActivitiesWaitingForVisibleActivity");
         removeHistoryRecordsForAppLocked(mStackSupervisor.mFinishingActivities, app,
                 "mFinishingActivities");
 
@@ -4807,7 +4836,8 @@ public class ActivityStack extends ConfigurationContainer {
                         // it has failed more than twice. Skip activities that's already finishing
                         // cleanly by itself.
                         remove = false;
-                    } else if ((!r.haveState && !r.stateNotNeeded) || r.finishing) {
+                    } else if ((!r.haveState && !r.stateNotNeeded
+                            && !r.isState(ActivityState.RESTARTING_PROCESS)) || r.finishing) {
                         // Don't currently have state for the activity, or
                         // it is finishing -- always remove it.
                         remove = true;
@@ -5479,7 +5509,7 @@ public class ActivityStack extends ConfigurationContainer {
             if (isAttached()) {
                 getDisplay().positionChildAtBottom(this);
             }
-            if (!isActivityTypeHome() || getDisplay().isRemoved()) {
+            if (!isActivityTypeHome() || !isAttached()) {
                 remove();
             }
         }

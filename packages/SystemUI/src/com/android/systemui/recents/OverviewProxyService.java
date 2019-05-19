@@ -16,19 +16,23 @@
 
 package com.android.systemui.recents;
 
-import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_UNAWARE;
+import static android.content.pm.PackageManager.MATCH_SYSTEM_ONLY;
+import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.MotionEvent.ACTION_CANCEL;
 import static android.view.MotionEvent.ACTION_DOWN;
 import static android.view.MotionEvent.ACTION_UP;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON;
 
-import static com.android.systemui.shared.system.NavigationBarCompat.FLAG_DISABLE_SWIPE_UP;
-import static com.android.systemui.shared.system.NavigationBarCompat.FLAG_SHOW_OVERVIEW_BUTTON;
-import static com.android.systemui.shared.system.NavigationBarCompat.InteractionType;
-import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_INPUT_CHANNEL;
+import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_INPUT_MONITOR;
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SUPPORTS_WINDOW_CORNERS;
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SYSUI_PROXY;
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_WINDOW_CORNER_RADIUS;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_BOUNCER_SHOWING;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_NAV_BAR_HIDDEN;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED;
 
+import android.annotation.FloatRange;
+import android.app.ActivityTaskManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -37,6 +41,7 @@ import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.graphics.Rect;
 import android.graphics.Region;
+import android.hardware.input.InputManager;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
@@ -45,21 +50,25 @@ import android.os.Looper;
 import android.os.PatternMatcher;
 import android.os.RemoteException;
 import android.os.UserHandle;
-import android.provider.Settings;
 import android.util.Log;
-import android.view.InputChannel;
+import android.view.InputMonitor;
 import android.view.MotionEvent;
+import android.view.accessibility.AccessibilityManager;
 
 import com.android.internal.policy.ScreenDecorationsUtils;
+import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
-import com.android.systemui.Prefs;
 import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.recents.OverviewProxyService.OverviewProxyListener;
 import com.android.systemui.shared.recents.IOverviewProxy;
 import com.android.systemui.shared.recents.ISystemUiProxy;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
-import com.android.systemui.shared.system.InputChannelCompat.InputEventDispatcher;
+import com.android.systemui.shared.system.QuickStepContract;
+import com.android.systemui.shared.system.QuickStepContract.SystemUiStateFlags;
 import com.android.systemui.stackdivider.Divider;
+import com.android.systemui.statusbar.NavigationBarController;
+import com.android.systemui.statusbar.phone.NavigationBarFragment;
+import com.android.systemui.statusbar.phone.NavigationModeController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.CallbackController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
@@ -77,7 +86,8 @@ import javax.inject.Singleton;
  * Class to send information from overview to launcher with a binder.
  */
 @Singleton
-public class OverviewProxyService implements CallbackController<OverviewProxyListener>, Dumpable {
+public class OverviewProxyService implements CallbackController<OverviewProxyListener>,
+        NavigationModeController.ModeChangedListener, Dumpable {
 
     private static final String ACTION_QUICKSTEP = "android.intent.action.QUICKSTEP_SERVICE";
 
@@ -88,10 +98,6 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
 
     // Max backoff caps at 5 mins
     private static final long MAX_BACKOFF_MILLIS = 10 * 60 * 1000;
-
-    // Default interaction flags if swipe up is disabled before connecting to launcher
-    private static final int DEFAULT_DISABLE_SWIPE_UP_STATE = FLAG_DISABLE_SWIPE_UP
-            | FLAG_SHOW_OVERVIEW_BUTTON;
 
     private final Context mContext;
     private final Handler mHandler;
@@ -105,18 +111,19 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
 
     private IOverviewProxy mOverviewProxy;
     private int mConnectionBackoffAttempts;
-    private @InteractionType int mInteractionFlags;
+    private @SystemUiStateFlags int mSysUiStateFlags;
+    private boolean mBound;
     private boolean mIsEnabled;
     private int mCurrentBoundedUserId = -1;
     private float mBackButtonAlpha;
     private MotionEvent mStatusBarGestureDownEvent;
     private float mWindowCornerRadius;
     private boolean mSupportsRoundedCornersOnWindows;
-
-    private InputEventDispatcher mInputEventDispatcher;
+    private int mNavBarMode = NAV_BAR_MODE_3BUTTON;
 
     private ISystemUiProxy mSysUiProxy = new ISystemUiProxy.Stub() {
 
+        @Override
         public void startScreenPinning(int taskId) {
             if (!verifyCaller("startScreenPinning")) {
                 return;
@@ -135,6 +142,26 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             }
         }
 
+        @Override
+        public void stopScreenPinning() {
+            if (!verifyCaller("stopScreenPinning")) {
+                return;
+            }
+            long token = Binder.clearCallingIdentity();
+            try {
+                mHandler.post(() -> {
+                    try {
+                        ActivityTaskManager.getService().stopSystemLockTaskMode();
+                    } catch (RemoteException e) {
+                        Log.e(TAG_OPS, "Failed to stop screen pinning");
+                    }
+                });
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
         public void onStatusBarMotionEvent(MotionEvent event) {
             if (!verifyCaller("onStatusBarMotionEvent")) {
                 return;
@@ -163,6 +190,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             }
         }
 
+        @Override
         public void onSplitScreenInvoked() {
             if (!verifyCaller("onSplitScreenInvoked")) {
                 return;
@@ -178,6 +206,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             }
         }
 
+        @Override
         public void onOverviewShown(boolean fromHome) {
             if (!verifyCaller("onOverviewShown")) {
                 return;
@@ -194,26 +223,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             }
         }
 
-        public void setInteractionState(@InteractionType int flags) {
-            if (!verifyCaller("setInteractionState")) {
-                return;
-            }
-            long token = Binder.clearCallingIdentity();
-            try {
-                if (mInteractionFlags != flags) {
-                    mInteractionFlags = flags;
-                    mHandler.post(() -> {
-                        for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
-                            mConnectionCallbacks.get(i).onInteractionFlagsChanged(flags);
-                        }
-                    });
-                }
-            } finally {
-                Prefs.putInt(mContext, Prefs.Key.QUICK_STEP_INTERACTION_FLAGS, mInteractionFlags);
-                Binder.restoreCallingIdentity(token);
-            }
-        }
-
+        @Override
         public Rect getNonMinimizedSplitScreenSecondaryBounds() {
             if (!verifyCaller("getNonMinimizedSplitScreenSecondaryBounds")) {
                 return null;
@@ -230,6 +240,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             }
         }
 
+        @Override
         public void setBackButtonAlpha(float alpha, boolean animate) {
             if (!verifyCaller("setBackButtonAlpha")) {
                 return;
@@ -245,25 +256,73 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             }
         }
 
-        public float getWindowCornerRadius() {
-            if (!verifyCaller("getWindowCornerRadius")) {
-                return 0;
+        @Override
+        public void onAssistantProgress(@FloatRange(from = 0.0, to = 1.0) float progress) {
+            if (!verifyCaller("onAssistantProgress")) {
+                return;
             }
             long token = Binder.clearCallingIdentity();
             try {
-                return mWindowCornerRadius;
+                mHandler.post(() -> notifyAssistantProgress(progress));
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
         }
 
-        public boolean supportsRoundedCornersOnWindows() {
-            if (!verifyCaller("supportsRoundedCornersOnWindows")) {
-                return false;
+        @Override
+        public void startAssistant(Bundle bundle) {
+            if (!verifyCaller("startAssistant")) {
+                return;
             }
             long token = Binder.clearCallingIdentity();
             try {
-                return mSupportsRoundedCornersOnWindows;
+                mHandler.post(() -> notifyStartAssistant(bundle));
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public Bundle monitorGestureInput(String name, int displayId) {
+            if (!verifyCaller("monitorGestureInput")) {
+                return null;
+            }
+            long token = Binder.clearCallingIdentity();
+            try {
+                InputMonitor monitor =
+                        InputManager.getInstance().monitorGestureInput(name, displayId);
+                Bundle result = new Bundle();
+                result.putParcelable(KEY_EXTRA_INPUT_MONITOR, monitor);
+                return result;
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public void notifyAccessibilityButtonClicked(int displayId) {
+            if (!verifyCaller("notifyAccessibilityButtonClicked")) {
+                return;
+            }
+            long token = Binder.clearCallingIdentity();
+            try {
+                AccessibilityManager.getInstance(mContext)
+                        .notifyAccessibilityButtonClicked(displayId);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public void notifyAccessibilityButtonLongClicked() {
+            if (!verifyCaller("notifyAccessibilityButtonLongClicked")) {
+                return;
+            }
+            long token = Binder.clearCallingIdentity();
+            try {
+                Intent intent = new Intent(AccessibilityManager.ACTION_CHOOSE_ACCESSIBILITY_BUTTON);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                mContext.startActivityAsUser(intent, UserHandle.CURRENT);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -291,12 +350,6 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         public void onReceive(Context context, Intent intent) {
             updateEnabledState();
 
-            // When launcher service is disabled, reset interaction flags because it is inactive
-            if (!isEnabled()) {
-                mInteractionFlags = getDefaultInteractionFlags();
-                Prefs.remove(mContext, Prefs.Key.QUICK_STEP_INTERACTION_FLAGS);
-            }
-
             // Reconnect immediately, instead of waiting for resume to arrive.
             startConnectionToCurrentUser();
         }
@@ -305,35 +358,36 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     private final ServiceConnection mOverviewServiceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            mHandler.removeCallbacks(mDeferredConnectionCallback);
-            mCurrentBoundedUserId = mDeviceProvisionedController.getCurrentUser();
             mConnectionBackoffAttempts = 0;
-            mOverviewProxy = IOverviewProxy.Stub.asInterface(service);
-            // Listen for launcher's death
+            mHandler.removeCallbacks(mDeferredConnectionCallback);
             try {
                 service.linkToDeath(mOverviewServiceDeathRcpt, 0);
             } catch (RemoteException e) {
+                // Failed to link to death (process may have died between binding and connecting),
+                // just unbind the service for now and retry again
                 Log.e(TAG_OPS, "Lost connection to launcher service", e);
+                disconnectFromLauncherService();
+                retryConnectionWithBackoff();
+                return;
             }
-            try {
-                mOverviewProxy.onBind(mSysUiProxy);
-            } catch (RemoteException e) {
-                mCurrentBoundedUserId = -1;
-                Log.e(TAG_OPS, "Failed to call onBind()", e);
-            }
+
+            mCurrentBoundedUserId = mDeviceProvisionedController.getCurrentUser();
+            mOverviewProxy = IOverviewProxy.Stub.asInterface(service);
 
             Bundle params = new Bundle();
             params.putBinder(KEY_EXTRA_SYSUI_PROXY, mSysUiProxy.asBinder());
-            params.putParcelable(KEY_EXTRA_INPUT_CHANNEL, createNewInputDispatcher());
             params.putFloat(KEY_EXTRA_WINDOW_CORNER_RADIUS, mWindowCornerRadius);
             params.putBoolean(KEY_EXTRA_SUPPORTS_WINDOW_CORNERS, mSupportsRoundedCornersOnWindows);
             try {
                 mOverviewProxy.onInitialize(params);
             } catch (RemoteException e) {
-                // Ignore error until the migration is complete.
-                Log.e(TAG_OPS, "Failed to call onBind()", e);
+                mCurrentBoundedUserId = -1;
+                Log.e(TAG_OPS, "Failed to call onInitialize()", e);
             }
             dispatchNavButtonBounds();
+
+            // Update the systemui state flags
+            updateSystemUiStateFlags();
 
             notifyConnectionChanged();
         }
@@ -343,7 +397,6 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             Log.w(TAG_OPS, "Null binding of '" + name + "', try reconnecting");
             mCurrentBoundedUserId = -1;
             retryConnectionWithBackoff();
-            disposeInputDispatcher();
         }
 
         @Override
@@ -351,47 +404,30 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             Log.w(TAG_OPS, "Binding died of '" + name + "', try reconnecting");
             mCurrentBoundedUserId = -1;
             retryConnectionWithBackoff();
-            disposeInputDispatcher();
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
             // Do nothing
             mCurrentBoundedUserId = -1;
-            disposeInputDispatcher();
         }
     };
 
-    private void disposeInputDispatcher() {
-        if (mInputEventDispatcher != null) {
-            mInputEventDispatcher.dispose();
-            mInputEventDispatcher = null;
-        }
-    }
-
-    private InputChannel createNewInputDispatcher() {
-        disposeInputDispatcher();
-
-        InputChannel[] channels = InputChannel.openInputChannelPair("overview-proxy-service");
-        mInputEventDispatcher = new InputEventDispatcher(channels[0], Looper.getMainLooper());
-        return channels[1];
-    }
-
     private final DeviceProvisionedListener mDeviceProvisionedCallback =
                 new DeviceProvisionedListener() {
-            @Override
-            public void onUserSetupChanged() {
-                if (mDeviceProvisionedController.isCurrentUserSetup()) {
-                    internalConnectToCurrentUser();
-                }
-            }
-
-            @Override
-            public void onUserSwitched() {
-                mConnectionBackoffAttempts = 0;
+        @Override
+        public void onUserSetupChanged() {
+            if (mDeviceProvisionedController.isCurrentUserSetup()) {
                 internalConnectToCurrentUser();
             }
-        };
+        }
+
+        @Override
+        public void onUserSwitched() {
+            mConnectionBackoffAttempts = 0;
+            internalConnectToCurrentUser();
+        }
+    };
 
     // This is the death handler for the binder from the launcher service
     private final IBinder.DeathRecipient mOverviewServiceDeathRcpt
@@ -407,11 +443,14 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
                 com.android.internal.R.string.config_recentsComponentName));
         mQuickStepIntent = new Intent(ACTION_QUICKSTEP)
                 .setPackage(mRecentsComponentName.getPackageName());
-        mInteractionFlags = Prefs.getInt(mContext, Prefs.Key.QUICK_STEP_INTERACTION_FLAGS,
-                getDefaultInteractionFlags());
         mWindowCornerRadius = ScreenDecorationsUtils.getWindowCornerRadius(mContext.getResources());
         mSupportsRoundedCornersOnWindows = ScreenDecorationsUtils
                 .supportsRoundedCornersOnWindows(mContext.getResources());
+
+        // Assumes device always starts with back button until launcher tells it that it does not
+        mBackButtonAlpha = 1.0f;
+
+        mNavBarMode = Dependency.get(NavigationModeController.class).addListener(this);
 
         // Listen for the package update changes.
         if (mDeviceProvisionedController.getCurrentUser() == UserHandle.USER_SYSTEM) {
@@ -422,7 +461,69 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             filter.addDataSchemeSpecificPart(mRecentsComponentName.getPackageName(),
                     PatternMatcher.PATTERN_LITERAL);
             filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+            // TODO: Shouldn't this be per-user?
             mContext.registerReceiver(mLauncherStateChangedReceiver, filter);
+        }
+    }
+
+    public void notifyBackAction(boolean completed, int downX, int downY, boolean isButton,
+            boolean gestureSwipeLeft) {
+        try {
+            if (mOverviewProxy != null) {
+                mOverviewProxy.onBackAction(completed, downX, downY, isButton, gestureSwipeLeft);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG_OPS, "Failed to notify back action", e);
+        }
+    }
+
+    public void setSystemUiStateFlag(int flag, boolean enabled, int displayId) {
+        if (displayId != DEFAULT_DISPLAY) {
+            // Ignore non-default displays for now
+            return;
+        }
+
+        int newState = mSysUiStateFlags;
+        if (enabled) {
+            newState |= flag;
+        } else {
+            newState &= ~flag;
+        }
+        if (mSysUiStateFlags != newState) {
+            mSysUiStateFlags = newState;
+            notifySystemUiStateFlags(mSysUiStateFlags);
+        }
+    }
+
+    public int getSystemUiStateFlags() {
+        return mSysUiStateFlags;
+    }
+
+    private void updateSystemUiStateFlags() {
+        final NavigationBarController navBar = Dependency.get(NavigationBarController.class);
+        final NavigationBarFragment navBarFragment = navBar.getDefaultNavigationBarFragment();
+        final StatusBar statusBar = SysUiServiceProvider.getComponent(mContext, StatusBar.class);
+        final boolean panelExpanded = statusBar != null && statusBar.getPanel() != null
+                && statusBar.getPanel().isFullyExpanded();
+        final boolean bouncerShowing = statusBar != null && statusBar.isBouncerShowing();
+        mSysUiStateFlags = 0;
+        mSysUiStateFlags |= (navBarFragment != null && !navBarFragment.isNavBarWindowVisible())
+                ? SYSUI_STATE_NAV_BAR_HIDDEN : 0;
+        mSysUiStateFlags |= panelExpanded
+                ? SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED : 0;
+        mSysUiStateFlags |= bouncerShowing
+                ? SYSUI_STATE_BOUNCER_SHOWING : 0;
+        mSysUiStateFlags |= navBarFragment != null ? navBarFragment.getA11yButtonState(null) : 0;
+        notifySystemUiStateFlags(mSysUiStateFlags);
+    }
+
+    private void notifySystemUiStateFlags(int flags) {
+        try {
+            if (mOverviewProxy != null) {
+                mOverviewProxy.onSystemUiStateChanged(flags);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG_OPS, "Failed to notify sysui state change", e);
         }
     }
 
@@ -453,7 +554,6 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             mHandler.post(()-> {
                 StatusBar bar = SysUiServiceProvider.getComponent(mContext, StatusBar.class);
                 if (bar != null) {
-                    System.out.println("MERONG dispatchNotificationPanelTouchEvent");
                     mStatusBarGestureDownEvent.setAction(MotionEvent.ACTION_CANCEL);
                     bar.dispatchNotificationsPanelTouchEvent(mStatusBarGestureDownEvent);
                     mStatusBarGestureDownEvent.recycle();
@@ -485,16 +585,15 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         mHandler.removeCallbacks(mConnectionRunnable);
         Intent launcherServiceIntent = new Intent(ACTION_QUICKSTEP)
                 .setPackage(mRecentsComponentName.getPackageName());
-        boolean bound = false;
         try {
-            bound = mContext.bindServiceAsUser(launcherServiceIntent,
+            mBound = mContext.bindServiceAsUser(launcherServiceIntent,
                     mOverviewServiceConnection,
                     Context.BIND_AUTO_CREATE | Context.BIND_FOREGROUND_SERVICE_WHILE_AWAKE,
                     UserHandle.of(mDeviceProvisionedController.getCurrentUser()));
         } catch (SecurityException e) {
             Log.e(TAG_OPS, "Unable to bind because of security error", e);
         }
-        if (bound) {
+        if (mBound) {
             // Ensure that connection has been established even if it thinks it is bound
             mHandler.postDelayed(mDeferredConnectionCallback, DEFERRED_CALLBACK_MILLIS);
         } else {
@@ -519,7 +618,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     public void addCallback(OverviewProxyListener listener) {
         mConnectionCallbacks.add(listener);
         listener.onConnectionChanged(mOverviewProxy != null);
-        listener.onInteractionFlagsChanged(mInteractionFlags);
+        listener.onBackButtonAlphaChanged(mBackButtonAlpha, false);
     }
 
     @Override
@@ -528,7 +627,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     }
 
     public boolean shouldShowSwipeUpUI() {
-        return isEnabled() && ((mInteractionFlags & FLAG_DISABLE_SWIPE_UP) == 0);
+        return isEnabled() && !QuickStepContract.isLegacyMode(mNavBarMode);
     }
 
     public boolean isEnabled() {
@@ -539,31 +638,19 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         return mOverviewProxy;
     }
 
-    public InputEventDispatcher getInputEventDispatcher() {
-        return mInputEventDispatcher;
-    }
-
-    public int getInteractionFlags() {
-        return mInteractionFlags;
-    }
-
     private void disconnectFromLauncherService() {
+        if (mBound) {
+            // Always unbind the service (ie. if called through onNullBinding or onBindingDied)
+            mContext.unbindService(mOverviewServiceConnection);
+            mBound = false;
+        }
+
         if (mOverviewProxy != null) {
             mOverviewProxy.asBinder().unlinkToDeath(mOverviewServiceDeathRcpt, 0);
-            mContext.unbindService(mOverviewServiceConnection);
             mOverviewProxy = null;
             notifyBackButtonAlphaChanged(1f, false /* animate */);
             notifyConnectionChanged();
         }
-    }
-
-    private int getDefaultInteractionFlags() {
-        // If there is no settings available use device default or get it from settings
-        final boolean defaultState = getSwipeUpDefaultValue();
-        final boolean swipeUpEnabled = getSwipeUpSettingAvailable()
-                ? getSwipeUpEnabledFromSettings(defaultState)
-                : defaultState;
-        return swipeUpEnabled ? 0 : DEFAULT_DISABLE_SWIPE_UP_STATE;
     }
 
     private void notifyBackButtonAlphaChanged(float alpha, boolean animate) {
@@ -590,25 +677,37 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         }
     }
 
+    private void notifyAssistantProgress(@FloatRange(from = 0.0, to = 1.0) float progress) {
+        for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
+            mConnectionCallbacks.get(i).onAssistantProgress(progress);
+        }
+    }
+
+    private void notifyStartAssistant(Bundle bundle) {
+        for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
+            mConnectionCallbacks.get(i).startAssistant(bundle);
+        }
+    }
+
+    public void notifyAssistantVisibilityChanged(float visibility) {
+        try {
+            if (mOverviewProxy != null) {
+                mOverviewProxy.onAssistantVisibilityChanged(visibility);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG_OPS, "Failed to call onAssistantVisibilityChanged()", e);
+        }
+    }
+
     private void updateEnabledState() {
         mIsEnabled = mContext.getPackageManager().resolveServiceAsUser(mQuickStepIntent,
-                MATCH_DIRECT_BOOT_UNAWARE,
+                MATCH_SYSTEM_ONLY,
                 ActivityManagerWrapper.getInstance().getCurrentUserId()) != null;
     }
 
-    private boolean getSwipeUpDefaultValue() {
-        return mContext.getResources()
-                .getBoolean(com.android.internal.R.bool.config_swipe_up_gesture_default);
-    }
-
-    private boolean getSwipeUpSettingAvailable() {
-        return mContext.getResources()
-                .getBoolean(com.android.internal.R.bool.config_swipe_up_gesture_setting_available);
-    }
-
-    private boolean getSwipeUpEnabledFromSettings(boolean defaultValue) {
-        return Settings.Secure.getInt(mContext.getContentResolver(),
-                Settings.Secure.SWIPE_UP_TO_SWITCH_APPS_ENABLED, defaultValue ? 1 : 0) == 1;
+    @Override
+    public void onNavigationModeChanged(int mode) {
+        mNavBarMode = mode;
     }
 
     @Override
@@ -619,23 +718,19 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         pw.print("  isCurrentUserSetup="); pw.println(mDeviceProvisionedController
                 .isCurrentUserSetup());
         pw.print("  connectionBackoffAttempts="); pw.println(mConnectionBackoffAttempts);
-        pw.print("  interactionFlags="); pw.println(mInteractionFlags);
 
         pw.print("  quickStepIntent="); pw.println(mQuickStepIntent);
         pw.print("  quickStepIntentResolved="); pw.println(isEnabled());
-
-        final boolean swipeUpDefaultValue = getSwipeUpDefaultValue();
-        final boolean swipeUpEnabled = getSwipeUpEnabledFromSettings(swipeUpDefaultValue);
-        pw.print("  swipeUpSetting="); pw.println(swipeUpEnabled);
-        pw.print("  swipeUpSettingDefault="); pw.println(swipeUpDefaultValue);
+        pw.print("  mSysUiStateFlags="); pw.println(mSysUiStateFlags);
     }
 
     public interface OverviewProxyListener {
         default void onConnectionChanged(boolean isConnected) {}
         default void onQuickStepStarted() {}
-        default void onInteractionFlagsChanged(@InteractionType int flags) {}
         default void onOverviewShown(boolean fromHome) {}
         default void onQuickScrubStarted() {}
         default void onBackButtonAlphaChanged(float alpha, boolean animate) {}
+        default void onAssistantProgress(@FloatRange(from = 0.0, to = 1.0) float progress) {}
+        default void startAssistant(Bundle bundle) {}
     }
 }

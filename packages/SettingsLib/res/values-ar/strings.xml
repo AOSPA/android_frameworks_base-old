@@ -21,7 +21,7 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="wifi_fail_to_scan" msgid="1265540342578081461">"لا يمكن فحص الشبكات"</string>
-    <string name="wifi_security_none" msgid="7985461072596594400">"بدون"</string>
+    <string name="wifi_security_none" msgid="7985461072596594400">"بلا أمان"</string>
     <string name="wifi_remembered" msgid="4955746899347821096">"تم الحفظ"</string>
     <string name="wifi_disabled_generic" msgid="4259794910584943386">"غير مفعّلة"</string>
     <string name="wifi_disabled_network_failure" msgid="2364951338436007124">"‏تعذّرت تهيئة عنوان IP"</string>
@@ -42,6 +42,7 @@
     <string name="available_via_passpoint" msgid="1617440946846329613">"‏متوفرة عبر %1$s"</string>
     <string name="tap_to_sign_up" msgid="6449724763052579434">"انقر للاشتراك."</string>
     <string name="wifi_connected_no_internet" msgid="8202906332837777829">"متصلة ولكن بلا إنترنت"</string>
+    <string name="wifi_limited_connection" msgid="7717855024753201527">"اتصال محدود"</string>
     <string name="wifi_status_no_internet" msgid="5784710974669608361">"لا يتوفر اتصال إنترنت."</string>
     <string name="wifi_status_sign_in_required" msgid="123517180404752756">"يلزم تسجيل الدخول"</string>
     <string name="wifi_ap_unable_to_handle_new_sta" msgid="5348824313514404541">"نقطة الدخول ممتلئة مؤقتًا"</string>
@@ -73,7 +74,9 @@
     <string name="bluetooth_connected_no_a2dp_battery_level" msgid="3908466636369853652">"الجهاز متصل (من دون وسائط)، ومستوى طاقة البطارية <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g><xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g>"</string>
     <string name="bluetooth_connected_no_headset_no_a2dp_battery_level" msgid="1163440823807659316">"الجهاز متّصل (من دون هاتف أو وسائط)، ومستوى طاقة البطارية <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g><xliff:g id="ACTIVE_DEVICE">%2$s</xliff:g>"</string>
     <string name="bluetooth_active_battery_level" msgid="3149689299296462009">"نشط، ومستوى طاقة البطارية <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
+    <string name="bluetooth_active_battery_level_untethered" msgid="6662649951391456747">"مفعّلة، مستوى البطارية: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_0">%1$s</xliff:g>، المعدّل: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_1">%2$s</xliff:g>"</string>
     <string name="bluetooth_battery_level" msgid="1447164613319663655">"مستوى طاقة البطارية <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%1$s</xliff:g>"</string>
+    <string name="bluetooth_battery_level_untethered" msgid="5974406100211667177">"مستوى البطارية: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_0">%1$s</xliff:g>، المعدّل: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE_1">%2$s</xliff:g>"</string>
     <string name="bluetooth_active_no_battery_level" msgid="8380223546730241956">"نشط"</string>
     <string name="bluetooth_profile_a2dp" msgid="2031475486179830674">"الإعدادات الصوتية للوسائط"</string>
     <string name="bluetooth_profile_headset" msgid="7815495680863246034">"المكالمات الهاتفية"</string>
@@ -137,9 +140,9 @@
     <string name="data_usage_uninstalled_apps" msgid="614263770923231598">"التطبيقات المزالة"</string>
     <string name="data_usage_uninstalled_apps_users" msgid="7986294489899813194">"التطبيقات والمستخدمون الذين تمت إزالتهم"</string>
     <string name="data_usage_ota" msgid="5377889154805560860">"تحديثات النظام"</string>
-    <string name="tether_settings_title_usb" msgid="6688416425801386511">"‏ربط USB"</string>
+    <string name="tether_settings_title_usb" msgid="6688416425801386511">"‏التوصيل عبر USB"</string>
     <string name="tether_settings_title_wifi" msgid="3277144155960302049">"نقطة اتصال محمولة"</string>
-    <string name="tether_settings_title_bluetooth" msgid="355855408317564420">"ربط البلوتوث"</string>
+    <string name="tether_settings_title_bluetooth" msgid="355855408317564420">"التوصيل عبر البلوتوث"</string>
     <string name="tether_settings_title_usb_bluetooth" msgid="5355828977109785001">"ربط"</string>
     <string name="tether_settings_title_all" msgid="8356136101061143841">"الربط ونقطة الاتصال المحمولة"</string>
     <string name="managed_user_title" msgid="8109605045406748842">"كل تطبيقات العمل"</string>
@@ -222,7 +225,7 @@
     <string name="bluetooth_disable_absolute_volume" msgid="2660673801947898809">"إيقاف مستوى الصوت المطلق"</string>
     <string name="bluetooth_select_avrcp_version_string" msgid="3750059931120293633">"‏إصدار Bluetooth AVRCP"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7277329668298705702">"‏اختيار إصدار Bluetooth AVRCP"</string>
-    <string name="bluetooth_select_a2dp_codec_type" msgid="90597356942154882">"ترميز صوت بلوتوث"</string>
+    <string name="bluetooth_select_a2dp_codec_type" msgid="90597356942154882">"برنامج ترميز صوت بلوتوث"</string>
     <string name="bluetooth_select_a2dp_codec_type_dialog_title" msgid="8436224899475822557">"اختيار برنامج ترميز الصوت لمشغّل\nالبلوتوث"</string>
     <string name="bluetooth_select_a2dp_codec_sample_rate" msgid="4788245703824623062">"معدّل عيّنة صوت بلوتوث"</string>
     <string name="bluetooth_select_a2dp_codec_sample_rate_dialog_title" msgid="8010380028880963535">"اختيار برنامج ترميز الصوت لمشغّل\nالبلوتوث: معدّل العيّنة"</string>
@@ -303,7 +306,7 @@
     <string name="usb_audio_disable_routing" msgid="8114498436003102671">"‏إيقاف توجيه الصوت عبر USB"</string>
     <string name="usb_audio_disable_routing_summary" msgid="980282760277312264">"‏إيقاف التوجيه التلقائي إلى أجهزة الصوت الطرفية عبر USB"</string>
     <string name="debug_layout" msgid="5981361776594526155">"عرض حدود المخطط"</string>
-    <string name="debug_layout_summary" msgid="2001775315258637682">"عرض حدود وهوامش المقطع وما إلى ذلك."</string>
+    <string name="debug_layout_summary" msgid="2001775315258637682">"عرض حدود وهوامش المقطع وما إلى ذلك"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"فرض اتجاه التنسيق ليكون من اليمين إلى اليسار"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"فرض اتجاه تنسيق الشاشة ليكون من اليمين إلى اليسار لجميع اللغات"</string>
     <string name="force_msaa" msgid="7920323238677284387">"‏فرض 4x MSAA"</string>
@@ -323,7 +326,7 @@
     <string name="show_all_anrs" msgid="4924885492787069007">"‏عرض أخطاء ANR في الخلفية"</string>
     <string name="show_all_anrs_summary" msgid="6636514318275139826">"عرض مربع الحوار \"التطبيق لا يستجيب\" مع تطبيقات الخلفية"</string>
     <string name="show_notification_channel_warnings" msgid="1399948193466922683">"عرض تحذيرات قناة الإشعار"</string>
-    <string name="show_notification_channel_warnings_summary" msgid="5536803251863694895">"عرض تحذير على الشاشة عند ينشر تطبيق ما إشعارًا بدون قناة صالحة"</string>
+    <string name="show_notification_channel_warnings_summary" msgid="5536803251863694895">"عرض تحذير على الشاشة عندما ينشر تطبيق إشعارًا بدون قناة صالحة"</string>
     <string name="force_allow_on_external" msgid="3215759785081916381">"السماح بإدراج التطبيقات في وحدة تخزين خارجية"</string>
     <string name="force_allow_on_external_summary" msgid="3640752408258034689">"تأهيل أي تطبيق بحيث تتم كتابته على وحدة تخزين خارجية، بغض النظر عن قيم البيان"</string>
     <string name="force_resizable_activities" msgid="8615764378147824985">"فرض إمكانية تغيير حجم الأنشطة"</string>
@@ -377,12 +380,14 @@
     <string name="power_discharging_duration" msgid="8848256785736335185">"يتبقى <xliff:g id="TIME_REMAINING">%1$s</xliff:g> تقريبًا (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_remaining_duration_only_enhanced" msgid="4189311599812296592">"يتبقى <xliff:g id="TIME_REMAINING">%1$s</xliff:g> تقريبًا، بناءً على استخدامك"</string>
     <string name="power_discharging_duration_enhanced" msgid="1992003260664804080">"يتبقى <xliff:g id="TIME_REMAINING">%1$s</xliff:g> تقريبًا، بناءً على استخدامك (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_duration_only_short" msgid="3463575350656389957">"الوقت المتبقي: <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
+    <!-- no translation found for power_remaining_duration_only_short (9183070574408359726) -->
+    <skip />
     <string name="power_discharge_by_enhanced" msgid="2095821536747992464">"قد تكفي طاقة البطارية حتى حوالي الساعة <xliff:g id="TIME">%1$s</xliff:g> حسب استخدامك (<xliff:g id="LEVEL">%2$s</xliff:g>)."</string>
     <string name="power_discharge_by_only_enhanced" msgid="2175151772952365149">"قد تكفي طاقة البطارية حتى حوالي الساعة <xliff:g id="TIME">%1$s</xliff:g> حسب استخدامك."</string>
     <string name="power_discharge_by" msgid="6453537733650125582">"قد تكفي طاقة البطارية حتى حوالي الساعة <xliff:g id="TIME">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)."</string>
     <string name="power_discharge_by_only" msgid="107616694963545745">"قد تكفي طاقة البطارية حتى حوالي الساعة <xliff:g id="TIME">%1$s</xliff:g>."</string>
     <string name="power_discharge_by_only_short" msgid="1372817269546888804">"حتى <xliff:g id="TIME">%1$s</xliff:g>"</string>
+    <string name="power_suggestion_extend_battery" msgid="4401408879069551485">"إطالة عمر البطارية لما بعد <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_remaining_less_than_duration_only" msgid="5996752448813295329">"يتبقى أقل من <xliff:g id="THRESHOLD">%1$s</xliff:g>."</string>
     <string name="power_remaining_less_than_duration" msgid="5751885147712659423">"يتبقى أقل من <xliff:g id="THRESHOLD">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)."</string>
     <string name="power_remaining_more_than_subtext" msgid="3176771815132876675">"يتبقى أكثر من <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)."</string>
@@ -416,7 +421,7 @@
     <string name="charge_length_format" msgid="8978516217024434156">"قبل <xliff:g id="ID_1">%1$s</xliff:g>"</string>
     <string name="remaining_length_format" msgid="7886337596669190587">"يتبقى <xliff:g id="ID_1">%1$s</xliff:g>"</string>
     <string name="screen_zoom_summary_small" msgid="5867245310241621570">"صغير"</string>
-    <string name="screen_zoom_summary_default" msgid="2247006805614056507">"تلقائي"</string>
+    <string name="screen_zoom_summary_default" msgid="2247006805614056507">"الإعداد التلقائي"</string>
     <string name="screen_zoom_summary_large" msgid="4835294730065424084">"كبير"</string>
     <string name="screen_zoom_summary_very_large" msgid="7108563375663670067">"أكبر"</string>
     <string name="screen_zoom_summary_extremely_large" msgid="7427320168263276227">"أكبر مستوى"</string>
@@ -460,5 +465,5 @@
     <string name="zen_mode_duration_always_prompt_title" msgid="6478923750878945501">"الطلب في كل مرة"</string>
     <string name="zen_mode_forever" msgid="2704305038191592967">"إلى أن توقف الوضع يدويًا"</string>
     <string name="time_unit_just_now" msgid="6363336622778342422">"للتو"</string>
-    <string name="media_transfer_phone_device_name" msgid="1003823744105758574">"مكبر صوت الهاتف"</string>
+    <string name="media_transfer_this_device_name" msgid="1636276898262571213">"هذا الجهاز"</string>
 </resources>

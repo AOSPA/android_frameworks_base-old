@@ -419,6 +419,12 @@ public class FingerprintService extends BiometricServiceBase {
         @Override // Binder call
         public void resetTimeout(byte [] token) {
             checkPermission(RESET_FINGERPRINT_LOCKOUT);
+
+            if (!FingerprintService.this.hasEnrolledBiometrics(mCurrentUserId)) {
+                Slog.w(TAG, "Ignoring lockout reset, no templates enrolled");
+                return;
+            }
+
             // TODO: confirm security token when we move timeout management into the HAL layer.
             mHandler.post(mResetFailedAttemptsForCurrentUserRunnable);
         }
@@ -849,6 +855,9 @@ public class FingerprintService extends BiometricServiceBase {
 
     @Override
     protected List<Fingerprint> getEnrolledTemplates(int userId) {
+        if (userId != UserHandle.getCallingUserId()) {
+            checkPermission(INTERACT_ACROSS_USERS);
+        }
         return getBiometricUtils().getBiometricsForUser(getContext(), userId);
     }
 

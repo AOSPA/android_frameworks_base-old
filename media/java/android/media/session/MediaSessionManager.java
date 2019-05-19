@@ -24,6 +24,7 @@ import android.annotation.SystemService;
 import android.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.pm.ParceledListSlice;
 import android.media.AudioManager;
 import android.media.IRemoteVolumeController;
 import android.media.MediaSession2;
@@ -107,7 +108,7 @@ public final class MediaSessionManager {
      * @hide
      */
     @NonNull
-    public SessionLink createSession(@NonNull SessionCallbackLink cbStub, @NonNull String tag,
+    public ISession createSession(@NonNull MediaSession.CallbackStub cbStub, @NonNull String tag,
             @Nullable Bundle sessionInfo) {
         try {
             return mService.createSession(mContext.getPackageName(), cbStub, tag, sessionInfo,
@@ -218,7 +219,8 @@ public final class MediaSessionManager {
     @NonNull
     public List<Session2Token> getSession2Tokens(int userId) {
         try {
-            return mService.getSession2Tokens(userId);
+            ParceledListSlice slice = mService.getSession2Tokens(userId);
+            return slice == null ? new ArrayList<>() : slice.getList();
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to get session tokens", e);
         }
@@ -424,17 +426,33 @@ public final class MediaSessionManager {
     }
 
     /**
-     * Set the remote volume controller to receive volume updates on. Only for
-     * use by system UI.
+     * Set the remote volume controller to receive volume updates on.
+     * Only for use by System UI and Settings application.
      *
      * @param rvc The volume controller to receive updates on.
      * @hide
      */
-    public void setRemoteVolumeController(IRemoteVolumeController rvc) {
+    public void registerRemoteVolumeController(IRemoteVolumeController rvc) {
         try {
-            mService.setRemoteVolumeController(rvc);
+            mService.registerRemoteVolumeController(rvc);
         } catch (RemoteException e) {
-            Log.e(TAG, "Error in setRemoteVolumeController.", e);
+            Log.e(TAG, "Error in registerRemoteVolumeController.", e);
+        }
+    }
+
+    /**
+     * Unregisters the remote volume controller which was previously registered with
+     * {@link #registerRemoteVolumeController(IRemoteVolumeController)}.
+     * Only for use by System UI and Settings application.
+     *
+     * @param rvc The volume controller which was registered.
+     * @hide
+     */
+    public void unregisterRemoteVolumeController(IRemoteVolumeController rvc) {
+        try {
+            mService.unregisterRemoteVolumeController(rvc);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error in unregisterRemoteVolumeController.", e);
         }
     }
 

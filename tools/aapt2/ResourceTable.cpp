@@ -30,6 +30,7 @@
 #include "NameMangler.h"
 #include "ResourceValues.h"
 #include "ValueVisitor.h"
+#include "trace/TraceBuffer.h"
 #include "text/Unicode.h"
 #include "util/Util.h"
 
@@ -79,6 +80,7 @@ ResourceTablePackage* ResourceTable::FindPackageById(uint8_t id) const {
 }
 
 ResourceTablePackage* ResourceTable::CreatePackage(const StringPiece& name, Maybe<uint8_t> id) {
+  TRACE_CALL();
   ResourceTablePackage* package = FindOrCreatePackage(name);
   if (id && !package->id) {
     package->id = id;
@@ -265,7 +267,8 @@ bool ResourceEntry::HasDefaultValue() const {
 // A DECL will override a USE without error. Two DECLs must match in their format for there to be
 // no error.
 ResourceTable::CollisionResult ResourceTable::ResolveValueCollision(Value* existing,
-                                                                    Value* incoming) {
+                                                                    Value* incoming,
+                                                                    bool overlay) {
   Attribute* existing_attr = ValueCast<Attribute>(existing);
   Attribute* incoming_attr = ValueCast<Attribute>(incoming);
   if (!incoming_attr) {
@@ -279,7 +282,7 @@ ResourceTable::CollisionResult ResourceTable::ResolveValueCollision(Value* exist
     }
     // The existing and incoming values are strong, this is an error
     // if the values are not both attributes.
-    return CollisionResult::kConflict;
+    return overlay ? CollisionResult::kTakeNew : CollisionResult::kConflict;
   }
 
   if (!existing_attr) {
@@ -290,7 +293,7 @@ ResourceTable::CollisionResult ResourceTable::ResolveValueCollision(Value* exist
     }
     // The existing value is not an attribute and it is strong,
     // so the incoming attribute value is an error.
-    return CollisionResult::kConflict;
+    return overlay ? CollisionResult::kTakeNew : CollisionResult::kConflict;
   }
 
   CHECK(incoming_attr != nullptr && existing_attr != nullptr);
@@ -321,8 +324,9 @@ ResourceTable::CollisionResult ResourceTable::ResolveValueCollision(Value* exist
   return CollisionResult::kConflict;
 }
 
-ResourceTable::CollisionResult ResourceTable::IgnoreCollision(Value* /** existing **/,
-                                                              Value* /** incoming **/) {
+ResourceTable::CollisionResult ResourceTable::IgnoreCollision(Value* /* existing */,
+                                                              Value* /* incoming */,
+                                                              bool /* overlay */) {
   return CollisionResult::kKeepBoth;
 }
 
@@ -353,37 +357,6 @@ bool ResourceTable::AddResourceWithId(const ResourceNameRef& name, const Resourc
   return AddResourceImpl(name, res_id, config, product, std::move(value),
                          (validate_resources_ ? ResourceNameValidator : SkipNameValidator),
                          (validate_resources_ ? ResolveValueCollision : IgnoreCollision), diag);
-}
-
-bool ResourceTable::AddFileReference(const ResourceNameRef& name,
-                                     const ConfigDescription& config,
-                                     const Source& source,
-                                     const StringPiece& path,
-                                     IDiagnostics* diag) {
-  return AddFileReferenceImpl(name, config, source, path, nullptr,
-                              (validate_resources_ ? ResourceNameValidator : SkipNameValidator),
-                              diag);
-}
-
-bool ResourceTable::AddFileReferenceMangled(const ResourceNameRef& name,
-                                            const ConfigDescription& config, const Source& source,
-                                            const StringPiece& path, io::IFile* file,
-                                            IDiagnostics* diag) {
-  return AddFileReferenceImpl(name, config, source, path, file,
-                              (validate_resources_ ? ResourceNameValidator : SkipNameValidator),
-                              diag);
-}
-
-bool ResourceTable::AddFileReferenceImpl(const ResourceNameRef& name,
-                                         const ConfigDescription& config, const Source& source,
-                                         const StringPiece& path, io::IFile* file,
-                                         NameValidator name_validator, IDiagnostics* diag) {
-  std::unique_ptr<FileReference> fileRef =
-      util::make_unique<FileReference>(string_pool.MakeRef(path));
-  fileRef->SetSource(source);
-  fileRef->file = file;
-  return AddResourceImpl(name, ResourceId{}, config, StringPiece{}, std::move(fileRef),
-                         name_validator, ResolveValueCollision, diag);
 }
 
 bool ResourceTable::AddResourceMangled(const ResourceNameRef& name, const ConfigDescription& config,
@@ -469,7 +442,7 @@ bool ResourceTable::AddResourceImpl(const ResourceNameRef& name, const ResourceI
     // Resource does not exist, add it now.
     config_value->value = std::move(value);
   } else {
-    switch (conflict_resolver(config_value->value.get(), value.get())) {
+    switch (conflict_resolver(config_value->value.get(), value.get(), false /* overlay */)) {
       case CollisionResult::kKeepBoth:
         // Insert the value ignoring for duplicate configurations
         entry->values.push_back(util::make_unique<ResourceConfigValue>(config, product));
@@ -508,11 +481,6 @@ bool ResourceTable::GetValidateResources() {
 bool ResourceTable::SetVisibility(const ResourceNameRef& name, const Visibility& visibility,
                                   IDiagnostics* diag) {
   return SetVisibilityImpl(name, visibility, {}, ResourceNameValidator, diag);
-}
-
-bool ResourceTable::SetVisibilityMangled(const ResourceNameRef& name, const Visibility& visibility,
-                                         IDiagnostics* diag) {
-  return SetVisibilityImpl(name, visibility, {}, SkipNameValidator, diag);
 }
 
 bool ResourceTable::SetVisibilityWithId(const ResourceNameRef& name, const Visibility& visibility,
@@ -630,11 +598,6 @@ bool ResourceTable::SetAllowNewImpl(const ResourceNameRef& name, const AllowNew&
 bool ResourceTable::SetOverlayable(const ResourceNameRef& name, const OverlayableItem& overlayable,
                                    IDiagnostics* diag) {
   return SetOverlayableImpl(name, overlayable, ResourceNameValidator, diag);
-}
-
-bool ResourceTable::SetOverlayableMangled(const ResourceNameRef& name,
-                                          const OverlayableItem& overlayable, IDiagnostics* diag) {
-  return SetOverlayableImpl(name, overlayable, SkipNameValidator, diag);
 }
 
 bool ResourceTable::SetOverlayableImpl(const ResourceNameRef& name,

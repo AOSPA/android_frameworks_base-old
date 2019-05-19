@@ -23,6 +23,7 @@ import static android.view.Display.INVALID_DISPLAY;
 import static com.android.server.am.ActivityManagerService.MY_PID;
 import static com.android.server.wm.ActivityStack.ActivityState.DESTROYED;
 import static com.android.server.wm.ActivityStack.ActivityState.DESTROYING;
+import static com.android.server.wm.ActivityStack.ActivityState.INITIALIZING;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSED;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSING;
 import static com.android.server.wm.ActivityStack.ActivityState.RESUMED;
@@ -44,6 +45,7 @@ import android.app.IApplicationThread;
 import android.app.ProfilerInfo;
 import android.app.servertransaction.ConfigurationChangeItem;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.res.Configuration;
 import android.os.Message;
@@ -97,7 +99,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     private final ActivityTaskManagerService mAtm;
     // The actual proc...  may be null only if 'persistent' is true (in which case we are in the
     // process of launching the app)
-    private volatile IApplicationThread mThread;
+    private IApplicationThread mThread;
     // Currently desired scheduling class
     private volatile int mCurSchedGroup;
     // Currently computed process state
@@ -149,6 +151,8 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     // Set to true if this process is currently temporarily whitelisted to start activities even if
     // it's not in the foreground
     private volatile boolean mAllowBackgroundActivityStarts;
+    // Set of UIDs of clients currently bound to this process
+    private volatile ArraySet<Integer> mBoundClientUids = new ArraySet<Integer>();
 
     // Thread currently set for VR scheduling
     int mVrThreadTid;
@@ -189,8 +193,11 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         return mPid;
     }
 
+    @HotPath(caller = HotPath.PROCESS_CHANGE)
     public void setThread(IApplicationThread thread) {
-        mThread = thread;
+        synchronized (mAtm.mGlobalLockWithoutBoost) {
+            mThread = thread;
+        }
     }
 
     IApplicationThread getThread() {
@@ -297,6 +304,11 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         return mPendingUiClean;
     }
 
+    /** @return {@code true} if the process registered to a display as a config listener. */
+    boolean registeredForDisplayConfigChanges() {
+        return mDisplayId != INVALID_DISPLAY;
+    }
+
     void postPendingUiCleanMsg(boolean pendingUiClean) {
         if (mListener == null) return;
         // Posting on handler so WM lock isn't held when we call into AM.
@@ -364,8 +376,37 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         mAllowBackgroundActivityStarts = allowBackgroundActivityStarts;
     }
 
-    public boolean areBackgroundActivityStartsAllowed() {
-        return mAllowBackgroundActivityStarts;
+    boolean areBackgroundActivityStartsAllowed() {
+        // allow if the whitelisting flag was explicitly set
+        if (mAllowBackgroundActivityStarts) {
+            return true;
+        }
+        // allow if the proc is instrumenting with background activity starts privs
+        if (mInstrumentingWithBackgroundActivityStartPrivileges) {
+            return true;
+        }
+        // allow if the caller has an activity in any foreground task
+        if (hasActivityInVisibleTask()) {
+            return true;
+        }
+        // allow if the caller is bound by a UID that's currently foreground
+        if (isBoundByForegroundUid()) {
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isBoundByForegroundUid() {
+        for (int i = mBoundClientUids.size() - 1; i >= 0; --i) {
+            if (mAtm.isUidForeground(mBoundClientUids.valueAt(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void setBoundClientUids(ArraySet<Integer> boundClientUids) {
+        mBoundClientUids = boundClientUids;
     }
 
     public void setInstrumenting(boolean instrumenting,
@@ -376,14 +417,6 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
 
     boolean isInstrumenting() {
         return mInstrumenting;
-    }
-
-    /**
-     * @return true if the instrumentation was started by a holder of
-     * START_ACTIVITIES_FROM_BACKGROUND permission
-     */
-    boolean isInstrumentingWithBackgroundActivityStartPrivileges() {
-        return mInstrumentingWithBackgroundActivityStartPrivileges;
     }
 
     public void setPerceptible(boolean perceptible) {
@@ -469,6 +502,27 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         synchronized (mAtm.mGlobalLockWithoutBoost) {
             return !mActivities.isEmpty() || !mRecentTasks.isEmpty();
         }
+    }
+
+    private boolean hasActivityInVisibleTask() {
+        for (int i = mActivities.size() - 1; i >= 0; --i) {
+            TaskRecord task = mActivities.get(i).getTaskRecord();
+            if (task == null) {
+                continue;
+            }
+            ActivityRecord topActivity = task.getTopActivity();
+            if (topActivity == null) {
+                continue;
+            }
+            // If an activity has just been started it will not yet be visible, but
+            // is expected to be soon. We treat this as if it were already visible.
+            // This ensures a subsequent activity can be started even before this one
+            // becomes visible.
+            if (topActivity.visible || topActivity.isState(INITIALIZING)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -742,13 +796,12 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
                 WindowProcessListener::clearProfilerIfNeeded, mListener));
     }
 
-    void updateProcessInfo(boolean updateServiceConnectionActivities, boolean updateLru,
-            boolean activityChange, boolean updateOomAdj) {
+    void updateProcessInfo(boolean updateServiceConnectionActivities, boolean activityChange,
+            boolean updateOomAdj) {
         if (mListener == null) return;
         // Posting on handler so WM lock isn't held when we call into AM.
         final Message m = PooledLambda.obtainMessage(WindowProcessListener::updateProcessInfo,
-                mListener, updateServiceConnectionActivities, updateLru, activityChange,
-                updateOomAdj);
+                mListener, updateServiceConnectionActivities, activityChange, updateOomAdj);
         mAtm.mH.sendMessage(m);
     }
 
@@ -772,53 +825,44 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         return mListener == null ? false : mListener.isRemoved();
     }
 
-    void clearWaitingToKill() {
-        if (mListener == null) return;
-        // Posting on handler so WM lock isn't held when we call into AM.
-        final Message m = PooledLambda.obtainMessage(
-                WindowProcessListener::clearWaitingToKill, mListener);
-        mAtm.mH.sendMessage(m);
+    private boolean shouldSetProfileProc() {
+        return mAtm.mProfileApp != null && mAtm.mProfileApp.equals(mName)
+                && (mAtm.mProfileProc == null || mAtm.mProfileProc == this);
     }
 
-    void addPackage(String pkg, long versionCode) {
-        if (mListener == null) return;
-        // Posting on handler so WM lock isn't held when we call into AM.
-        final Message m = PooledLambda.obtainMessage(
-                WindowProcessListener::addPackage, mListener, pkg, versionCode);
-        mAtm.mH.sendMessage(m);
-    }
-
-    ProfilerInfo onStartActivity(int topProcessState) {
-        ProfilerInfo profilerInfo = null;
-        boolean setProfileProc = false;
-        if (mAtm.mProfileApp != null
-                && mAtm.mProfileApp.equals(mName)) {
-            if (mAtm.mProfileProc == null || mAtm.mProfileProc == this) {
-                setProfileProc = true;
-                final ProfilerInfo profilerInfoSvc = mAtm.mProfilerInfo;
-                if (profilerInfoSvc != null && profilerInfoSvc.profileFile != null) {
-                    if (profilerInfoSvc.profileFd != null) {
-                        try {
-                            profilerInfoSvc.profileFd = profilerInfoSvc.profileFd.dup();
-                        } catch (IOException e) {
-                            profilerInfoSvc.closeFd();
-                        }
-                    }
-
-                    profilerInfo = new ProfilerInfo(profilerInfoSvc);
-                }
+    ProfilerInfo createProfilerInfoIfNeeded() {
+        final ProfilerInfo currentProfilerInfo = mAtm.mProfilerInfo;
+        if (currentProfilerInfo == null || currentProfilerInfo.profileFile == null
+                || !shouldSetProfileProc()) {
+            return null;
+        }
+        if (currentProfilerInfo.profileFd != null) {
+            try {
+                currentProfilerInfo.profileFd = currentProfilerInfo.profileFd.dup();
+            } catch (IOException e) {
+                currentProfilerInfo.closeFd();
             }
         }
+        return new ProfilerInfo(currentProfilerInfo);
+    }
 
-
-        if (mListener != null) {
-            // Posting on handler so WM lock isn't held when we call into AM.
-            final Message m = PooledLambda.obtainMessage(WindowProcessListener::onStartActivity,
-                    mListener, topProcessState, setProfileProc);
-            mAtm.mH.sendMessage(m);
+    void onStartActivity(int topProcessState, ActivityInfo info) {
+        if (mListener == null) return;
+        String packageName = null;
+        if ((info.flags & ActivityInfo.FLAG_MULTIPROCESS) == 0
+                || !"android".equals(info.packageName)) {
+            // Don't add this if it is a platform component that is marked to run in multiple
+            // processes, because this is actually part of the framework so doesn't make sense
+            // to track as a separate apk in the process.
+            packageName = info.packageName;
         }
-
-        return profilerInfo;
+        // Posting the message at the front of queue so WM lock isn't held when we call into AM,
+        // and the process state of starting activity can be updated quicker which will give it a
+        // higher scheduling group.
+        final Message m = PooledLambda.obtainMessage(WindowProcessListener::onStartActivity,
+                mListener, topProcessState, shouldSetProfileProc(), packageName,
+                info.applicationInfo.longVersionCode);
+        mAtm.mH.sendMessageAtFrontOfQueue(m);
     }
 
     public void appDied() {

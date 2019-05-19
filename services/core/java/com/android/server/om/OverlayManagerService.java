@@ -166,6 +166,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *     . . . .  . . . . . . . . . . . . . . . . . .
  * </pre>
  *
+ * <p>To test the OMS, execute:
+ * <code>
+ * atest FrameworksServicesTests:com.android.server.om  # internal tests
+ * atest OverlayDeviceTests OverlayHostTests            # public API tests
+ * </code>
+ * </p>
+ *
  * <p>Finally, here is a list of keywords used in the OMS context.</p>
  *
  * <ul>
@@ -232,7 +239,7 @@ public final class OverlayManagerService extends SystemService {
                     new File(Environment.getDataSystemDirectory(), "overlays.xml"), "overlays");
             mPackageManager = new PackageManagerHelper();
             mUserManager = UserManagerService.getInstance();
-            IdmapManager im = new IdmapManager(installer);
+            IdmapManager im = new IdmapManager(installer, mPackageManager);
             mSettings = new OverlayManagerSettings();
             mImpl = new OverlayManagerServiceImpl(mPackageManager, im, mSettings,
                     getDefaultOverlayPackages(), new OverlayChangeListener());
@@ -345,7 +352,7 @@ public final class OverlayManagerService extends SystemService {
             switch (action) {
                 case ACTION_PACKAGE_ADDED:
                     if (replacing) {
-                        onPackageUpgraded(packageName, userIds);
+                        onPackageReplaced(packageName, userIds);
                     } else {
                         onPackageAdded(packageName, userIds);
                     }
@@ -355,7 +362,7 @@ public final class OverlayManagerService extends SystemService {
                     break;
                 case ACTION_PACKAGE_REMOVED:
                     if (replacing) {
-                        onPackageUpgrading(packageName, userIds);
+                        onPackageReplacing(packageName, userIds);
                     } else {
                         onPackageRemoved(packageName, userIds);
                     }
@@ -374,7 +381,7 @@ public final class OverlayManagerService extends SystemService {
                     synchronized (mLock) {
                         final PackageInfo pi = mPackageManager.getPackageInfo(packageName, userId,
                                 false);
-                        if (pi != null) {
+                        if (pi != null && !pi.applicationInfo.isInstantApp()) {
                             mPackageManager.cachePackageInfo(packageName, userId, pi);
                             if (pi.isOverlayPackage()) {
                                 mImpl.onOverlayPackageAdded(packageName, userId);
@@ -397,7 +404,7 @@ public final class OverlayManagerService extends SystemService {
                     synchronized (mLock) {
                         final PackageInfo pi = mPackageManager.getPackageInfo(packageName, userId,
                                 false);
-                        if (pi != null) {
+                        if (pi != null && pi.applicationInfo.isInstantApp()) {
                             mPackageManager.cachePackageInfo(packageName, userId, pi);
                             if (pi.isOverlayPackage()) {
                                 mImpl.onOverlayPackageChanged(packageName, userId);
@@ -412,18 +419,16 @@ public final class OverlayManagerService extends SystemService {
             }
         }
 
-        private void onPackageUpgrading(@NonNull final String packageName,
+        private void onPackageReplacing(@NonNull final String packageName,
                 @NonNull final int[] userIds) {
             try {
-                traceBegin(TRACE_TAG_RRO, "OMS#onPackageUpgrading " + packageName);
+                traceBegin(TRACE_TAG_RRO, "OMS#onPackageReplacing " + packageName);
                 for (int userId : userIds) {
                     synchronized (mLock) {
                         mPackageManager.forgetPackageInfo(packageName, userId);
                         final OverlayInfo oi = mImpl.getOverlayInfo(packageName, userId);
                         if (oi != null) {
-                            mImpl.onOverlayPackageUpgrading(packageName, userId);
-                        } else {
-                            mImpl.onTargetPackageUpgrading(packageName, userId);
+                            mImpl.onOverlayPackageReplacing(packageName, userId);
                         }
                     }
                 }
@@ -432,20 +437,20 @@ public final class OverlayManagerService extends SystemService {
             }
         }
 
-        private void onPackageUpgraded(@NonNull final String packageName,
+        private void onPackageReplaced(@NonNull final String packageName,
                 @NonNull final int[] userIds) {
             try {
-                traceBegin(TRACE_TAG_RRO, "OMS#onPackageUpgraded " + packageName);
+                traceBegin(TRACE_TAG_RRO, "OMS#onPackageReplaced " + packageName);
                 for (int userId : userIds) {
                     synchronized (mLock) {
                         final PackageInfo pi = mPackageManager.getPackageInfo(packageName, userId,
                                 false);
-                        if (pi != null) {
+                        if (pi != null && !pi.applicationInfo.isInstantApp()) {
                             mPackageManager.cachePackageInfo(packageName, userId, pi);
                             if (pi.isOverlayPackage()) {
-                                mImpl.onOverlayPackageUpgraded(packageName, userId);
+                                mImpl.onOverlayPackageReplaced(packageName, userId);
                             } else {
-                                mImpl.onTargetPackageUpgraded(packageName, userId);
+                                mImpl.onTargetPackageReplaced(packageName, userId);
                             }
                         }
                     }
@@ -715,6 +720,26 @@ public final class OverlayManagerService extends SystemService {
         }
 
         @Override
+        public String[] getDefaultOverlayPackages() throws RemoteException {
+            try {
+                traceBegin(TRACE_TAG_RRO, "OMS#getDefaultOverlayPackages");
+                getContext().enforceCallingOrSelfPermission(
+                        android.Manifest.permission.MODIFY_THEME_OVERLAY, null);
+
+                final long ident = Binder.clearCallingIdentity();
+                try {
+                    synchronized (mLock) {
+                        return mImpl.getDefaultOverlayPackages();
+                    }
+                } finally {
+                    Binder.restoreCallingIdentity(ident);
+                }
+            } finally {
+                traceEnd(TRACE_TAG_RRO);
+            }
+        }
+
+        @Override
         public void onShellCommand(@NonNull final FileDescriptor in,
                 @NonNull final FileDescriptor out, @NonNull final FileDescriptor err,
                 @NonNull final String[] args, @NonNull final ShellCallback callback,
@@ -758,7 +783,7 @@ public final class OverlayManagerService extends SystemService {
          * @throws SecurityException if the permission check fails
          */
         private void enforceChangeOverlayPackagesPermission(@NonNull final String message) {
-            getContext().enforceCallingPermission(
+            getContext().enforceCallingOrSelfPermission(
                     android.Manifest.permission.CHANGE_OVERLAY_PACKAGES, message);
         }
 
@@ -769,7 +794,7 @@ public final class OverlayManagerService extends SystemService {
          * @throws SecurityException if the permission check fails
          */
         private void enforceDumpPermission(@NonNull final String message) {
-            getContext().enforceCallingPermission(android.Manifest.permission.DUMP, message);
+            getContext().enforceCallingOrSelfPermission(android.Manifest.permission.DUMP, message);
         }
     };
 

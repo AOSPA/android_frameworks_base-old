@@ -23,29 +23,30 @@ import static android.view.WindowManager.TRANSIT_ACTIVITY_OPEN;
 import static android.view.WindowManager.TRANSIT_CRASHING_ACTIVITY_CLOSE;
 import static android.view.WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
 import static android.view.WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
-
+import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyBoolean;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
 import android.view.Display;
 
-import androidx.test.filters.SmallTest;
-
 import org.junit.Before;
 import org.junit.Test;
+
+import androidx.test.filters.FlakyTest;
+import androidx.test.filters.SmallTest;
 
 /**
  * Test class for {@link AppTransition}.
  *
  * Build/Install/Run:
- *  atest FrameworksServicesTests:AppTransitionTests
+ *  atest WmTests:AppTransitionTests
  */
 @SmallTest
 @Presubmit
@@ -78,6 +79,7 @@ public class AppTransitionTests extends WindowTestsBase {
     }
 
     @Test
+    @FlakyTest(bugId = 131005232)
     public void testForceOverride() {
         mWm.prepareAppTransition(TRANSIT_KEYGUARD_UNOCCLUDE, false /* alwaysKeepCurrent */);
         mDc.prepareAppTransition(TRANSIT_ACTIVITY_OPEN,
@@ -93,6 +95,7 @@ public class AppTransitionTests extends WindowTestsBase {
     }
 
     @Test
+    @FlakyTest(bugId = 131005232)
     public void testKeepKeyguard_withCrashing() {
         mWm.prepareAppTransition(TRANSIT_KEYGUARD_GOING_AWAY, false /* alwaysKeepCurrent */);
         mWm.prepareAppTransition(TRANSIT_CRASHING_ACTIVITY_CLOSE, false /* alwaysKeepCurrent */);
@@ -100,6 +103,7 @@ public class AppTransitionTests extends WindowTestsBase {
     }
 
     @Test
+    @FlakyTest(bugId = 131005232)
     public void testAppTransitionStateForMultiDisplay() {
         // Create 2 displays & presume both display the state is ON for ready to display & animate.
         final DisplayContent dc1 = createNewDisplay(Display.STATE_ON);
@@ -165,6 +169,13 @@ public class AppTransitionTests extends WindowTestsBase {
         // Verify if token are cleared from both pending transition list in former display.
         assertFalse(dc1.mOpeningApps.contains(token1));
         assertFalse(dc1.mOpeningApps.contains(token1));
+    }
+
+    @Test
+    public void testLoadAnimationSafely() {
+        DisplayContent dc = createNewDisplay(Display.STATE_ON);
+        assertNull(dc.mAppTransition.loadAnimationSafely(
+                getInstrumentation().getTargetContext(), -1));
     }
 
 }

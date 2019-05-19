@@ -19,6 +19,7 @@ package android.media.audiopolicy;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.media.AudioDeviceInfo;
 import android.media.AudioFormat;
@@ -31,6 +32,7 @@ import java.util.Objects;
 /**
  * @hide
  */
+@TestApi
 @SystemApi
 public class AudioMix {
 
@@ -142,7 +144,8 @@ public class AudioMix {
         return mFormat;
     }
 
-    AudioMixingRule getRule() {
+    /** @hide */
+    public AudioMixingRule getRule() {
         return mRule;
     }
 

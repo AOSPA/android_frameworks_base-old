@@ -45,9 +45,12 @@ import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.StringRes;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityTaskManager;
+import android.app.ActivityThread;
+import android.app.ResourcesManager;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -68,6 +71,7 @@ import android.os.FileUtils;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.PatternMatcher;
+import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
@@ -91,6 +95,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.TypedValue;
 import android.util.apk.ApkSignatureVerifier;
+import android.view.Display;
 import android.view.Gravity;
 
 import com.android.internal.R;
@@ -164,6 +169,9 @@ public class PackageParser {
     private static final float DEFAULT_PRE_O_MAX_ASPECT_RATIO = 1.86f;
     private static final float DEFAULT_PRE_Q_MIN_ASPECT_RATIO = 1.333f;
     private static final float DEFAULT_PRE_Q_MIN_ASPECT_RATIO_WATCH = 1f;
+
+    private static final int DEFAULT_MIN_SDK_VERSION = 1;
+    private static final int DEFAULT_TARGET_SDK_VERSION = 0;
 
     // TODO: switch outError users to PackageParserException
     // TODO: refactor "codePath" to "apkPath"
@@ -316,6 +324,8 @@ public class PackageParser {
     private int mParseError = PackageManager.INSTALL_SUCCEEDED;
 
     private static boolean sCompatibilityModeEnabled = true;
+    private static boolean sUseRoundIcon = false;
+
     private static final int PARSE_DEFAULT_INSTALL_LOCATION =
             PackageInfo.INSTALL_LOCATION_UNSPECIFIED;
     private static final int PARSE_DEFAULT_TARGET_SANDBOX = 1;
@@ -465,6 +475,8 @@ public class PackageParser {
         public final int versionCodeMajor;
         public final int revisionCode;
         public final int installLocation;
+        public final int minSdkVersion;
+        public final int targetSdkVersion;
         public final VerifierInfo[] verifiers;
         public final SigningDetails signingDetails;
         public final boolean coreApp;
@@ -483,7 +495,8 @@ public class PackageParser {
                 int revisionCode, int installLocation, List<VerifierInfo> verifiers,
                 SigningDetails signingDetails, boolean coreApp,
                 boolean debuggable, boolean multiArch, boolean use32bitAbi,
-                boolean useEmbeddedDex, boolean extractNativeLibs, boolean isolatedSplits) {
+                boolean useEmbeddedDex, boolean extractNativeLibs, boolean isolatedSplits,
+                int minSdkVersion, int targetSdkVersion) {
             this.codePath = codePath;
             this.packageName = packageName;
             this.splitName = splitName;
@@ -504,6 +517,8 @@ public class PackageParser {
             this.extractNativeLibs = extractNativeLibs;
             this.isolatedSplits = isolatedSplits;
             this.isSplitRequired = isSplitRequired;
+            this.minSdkVersion = minSdkVersion;
+            this.targetSdkVersion = targetSdkVersion;
         }
 
         public long getLongVersionCode() {
@@ -688,7 +703,7 @@ public class PackageParser {
         pi.restrictedAccountType = p.mRestrictedAccountType;
         pi.requiredAccountType = p.mRequiredAccountType;
         pi.overlayTarget = p.mOverlayTarget;
-        pi.overlayTargetName = p.mOverlayTargetName;
+        pi.targetOverlayableName = p.mOverlayTargetName;
         pi.overlayCategory = p.mOverlayCategory;
         pi.overlayPriority = p.mOverlayPriority;
         pi.mOverlayIsStatic = p.mOverlayIsStatic;
@@ -1587,8 +1602,8 @@ public class PackageParser {
         final String apkPath = fd != null ? debugPathName : apkFile.getAbsolutePath();
 
         XmlResourceParser parser = null;
+        ApkAssets apkAssets = null;
         try {
-            final ApkAssets apkAssets;
             try {
                 apkAssets = fd != null
                         ? ApkAssets.loadFromFd(fd, debugPathName, false, false)
@@ -1617,7 +1632,7 @@ public class PackageParser {
             }
 
             final AttributeSet attrs = parser;
-            return parseApkLite(apkPath, parser, attrs, signingDetails, flags);
+            return parseApkLite(apkPath, parser, attrs, signingDetails);
 
         } catch (XmlPullParserException | IOException | RuntimeException e) {
             Slog.w(TAG, "Failed to parse " + apkPath, e);
@@ -1625,7 +1640,13 @@ public class PackageParser {
                     "Failed to parse " + apkPath, e);
         } finally {
             IoUtils.closeQuietly(parser);
-            // TODO(b/72056911): Implement and call close() on ApkAssets.
+            if (apkAssets != null) {
+                try {
+                    apkAssets.close();
+                } catch (Throwable ignored) {
+                }
+            }
+            // TODO(b/72056911): Implement AutoCloseable on ApkAssets.
         }
     }
 
@@ -1704,20 +1725,21 @@ public class PackageParser {
     }
 
     private static ApkLite parseApkLite(String codePath, XmlPullParser parser, AttributeSet attrs,
-            SigningDetails signingDetails, int flags)
+            SigningDetails signingDetails)
             throws IOException, XmlPullParserException, PackageParserException {
         final Pair<String, String> packageSplit = parsePackageSplitNames(parser, attrs);
 
         int installLocation = PARSE_DEFAULT_INSTALL_LOCATION;
         int versionCode = 0;
         int versionCodeMajor = 0;
+        int targetSdkVersion = DEFAULT_TARGET_SDK_VERSION;
+        int minSdkVersion = DEFAULT_MIN_SDK_VERSION;
         int revisionCode = 0;
-        int targetSdkVersion = 0;
         boolean coreApp = false;
         boolean debuggable = false;
         boolean multiArch = false;
         boolean use32bitAbi = false;
-        Boolean extractNativeLibsProvided = null;
+        boolean extractNativeLibs = true;
         boolean isolatedSplits = false;
         boolean isFeatureSplit = false;
         boolean isSplitRequired = false;
@@ -1749,7 +1771,7 @@ public class PackageParser {
             }
         }
 
-        // Only search the tree when the tag is directly below <manifest>
+        // Only search the tree when the tag is the direct child of <manifest> tag
         int type;
         final int searchDepth = parser.getDepth() + 1;
 
@@ -1782,8 +1804,7 @@ public class PackageParser {
                         use32bitAbi = attrs.getAttributeBooleanValue(i, false);
                     }
                     if ("extractNativeLibs".equals(attr)) {
-                        extractNativeLibsProvided = Boolean.valueOf(
-                                attrs.getAttributeBooleanValue(i, true));
+                        extractNativeLibs = attrs.getAttributeBooleanValue(i, true);
                     }
                     if ("useEmbeddedDex".equals(attr)) {
                         useEmbeddedDex = attrs.getAttributeBooleanValue(i, false);
@@ -1802,54 +1823,24 @@ public class PackageParser {
                             "<uses-split> tag requires 'android:name' attribute");
                 }
             } else if (TAG_USES_SDK.equals(parser.getName())) {
-                final String[] errorMsg = new String[1];
-                Pair<Integer, Integer> versions = deriveSdkVersions(new AbstractVersionsAccessor() {
-                    @Override public String getMinSdkVersionCode() {
-                        return getAttributeAsString("minSdkVersion");
+                for (int i = 0; i < attrs.getAttributeCount(); ++i) {
+                    final String attr = attrs.getAttributeName(i);
+                    if ("targetSdkVersion".equals(attr)) {
+                        targetSdkVersion = attrs.getAttributeIntValue(i,
+                                DEFAULT_TARGET_SDK_VERSION);
                     }
-
-                    @Override public int getMinSdkVersion() {
-                        return getAttributeAsInt("minSdkVersion");
+                    if ("minSdkVersion".equals(attr)) {
+                        minSdkVersion = attrs.getAttributeIntValue(i, DEFAULT_MIN_SDK_VERSION);
                     }
-
-                    @Override public String getTargetSdkVersionCode() {
-                        return getAttributeAsString("targetSdkVersion");
-                    }
-
-                    @Override public int getTargetSdkVersion() {
-                        return getAttributeAsInt("targetSdkVersion");
-                    }
-
-                    private String getAttributeAsString(String name) {
-                        return attrs.getAttributeValue(ANDROID_RESOURCES, name);
-                    }
-
-                    private int getAttributeAsInt(String name) {
-                        try {
-                            return attrs.getAttributeIntValue(ANDROID_RESOURCES, name, -1);
-                        } catch (NumberFormatException e) {
-                            return -1;
-                        }
-                    }
-                }, flags, errorMsg);
-
-                if (versions == null) {
-                    throw new PackageParserException(
-                            PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED, errorMsg[0]);
                 }
-
-                targetSdkVersion = versions.second;
             }
         }
-
-        final boolean extractNativeLibsDefault = targetSdkVersion < Build.VERSION_CODES.Q;
-        final boolean extractNativeLibs = (extractNativeLibsProvided != null)
-                ? extractNativeLibsProvided : extractNativeLibsDefault;
 
         return new ApkLite(codePath, packageSplit.first, packageSplit.second, isFeatureSplit,
                 configForSplit, usesSplitName, isSplitRequired, versionCode, versionCodeMajor,
                 revisionCode, installLocation, verifiers, signingDetails, coreApp, debuggable,
-                multiArch, use32bitAbi, useEmbeddedDex, extractNativeLibs, isolatedSplits);
+                multiArch, use32bitAbi, useEmbeddedDex, extractNativeLibs, isolatedSplits,
+                minSdkVersion, targetSdkVersion);
     }
 
     /**
@@ -2151,6 +2142,9 @@ public class PackageParser {
                     return null;
                 }
 
+                pkg.applicationInfo.privateFlags |=
+                    ApplicationInfo.PRIVATE_FLAG_IS_RESOURCE_OVERLAY;
+
                 XmlUtils.skipCurrentTag(parser);
 
             } else if (tagName.equals(TAG_KEY_SETS)) {
@@ -2251,60 +2245,64 @@ public class PackageParser {
 
             } else if (tagName.equals(TAG_USES_SDK)) {
                 if (SDK_VERSION > 0) {
-                    sa = res.obtainAttributes(parser, R.styleable.AndroidManifestUsesSdk);
-                    final TypedArray saFinal = sa;
-                    Pair<Integer, Integer> versions = deriveSdkVersions(
-                            new AbstractVersionsAccessor() {
-                                @Override public String getMinSdkVersionCode() {
-                                    return getAttributeAsString(
-                                            R.styleable.AndroidManifestUsesSdk_minSdkVersion);
-                                }
+                    sa = res.obtainAttributes(parser,
+                            com.android.internal.R.styleable.AndroidManifestUsesSdk);
 
-                                @Override public int getMinSdkVersion() {
-                                    return getAttributeAsInt(
-                                            R.styleable.AndroidManifestUsesSdk_minSdkVersion);
-                                }
+                    int minVers = 1;
+                    String minCode = null;
+                    int targetVers = 0;
+                    String targetCode = null;
 
-                                @Override public String getTargetSdkVersionCode() {
-                                    return getAttributeAsString(
-                                            R.styleable.AndroidManifestUsesSdk_targetSdkVersion);
-                                }
+                    TypedValue val = sa.peekValue(
+                            com.android.internal.R.styleable.AndroidManifestUsesSdk_minSdkVersion);
+                    if (val != null) {
+                        if (val.type == TypedValue.TYPE_STRING && val.string != null) {
+                            minCode = val.string.toString();
+                        } else {
+                            // If it's not a string, it's an integer.
+                            minVers = val.data;
+                        }
+                    }
 
-                                @Override public int getTargetSdkVersion() {
-                                    return getAttributeAsInt(
-                                            R.styleable.AndroidManifestUsesSdk_targetSdkVersion);
-                                }
+                    val = sa.peekValue(
+                            com.android.internal.R.styleable.AndroidManifestUsesSdk_targetSdkVersion);
+                    if (val != null) {
+                        if (val.type == TypedValue.TYPE_STRING && val.string != null) {
+                            targetCode = val.string.toString();
+                            if (minCode == null) {
+                                minCode = targetCode;
+                            }
+                        } else {
+                            // If it's not a string, it's an integer.
+                            targetVers = val.data;
+                        }
+                    } else {
+                        targetVers = minVers;
+                        targetCode = minCode;
+                    }
 
-                                private String getAttributeAsString(int index) {
-                                    TypedValue val = saFinal.peekValue(index);
-                                    if (val != null && val.type == TypedValue.TYPE_STRING
-                                            && val.string != null) {
-                                        return val.string.toString();
-                                    }
-                                    return null;
-                                }
+                    sa.recycle();
 
-                                private int getAttributeAsInt(int index) {
-                                    TypedValue val = saFinal.peekValue(index);
-                                    if (val != null && val.type != TypedValue.TYPE_STRING) {
-                                        // If it's not a string, it's an integer.
-                                        return val.data;
-                                    }
-                                    return -1;
-                                }
-                            }, flags, outError);
-
-                    if (versions == null) {
+                    final int minSdkVersion = PackageParser.computeMinSdkVersion(minVers, minCode,
+                            SDK_VERSION, SDK_CODENAMES, outError);
+                    if (minSdkVersion < 0) {
                         mParseError = PackageManager.INSTALL_FAILED_OLDER_SDK;
                         return null;
                     }
 
-                    pkg.applicationInfo.minSdkVersion = versions.first;
-                    pkg.applicationInfo.targetSdkVersion = versions.second;
+                    final int targetSdkVersion = PackageParser.computeTargetSdkVersion(targetVers,
+                            targetCode, SDK_CODENAMES, outError);
+                    if (targetSdkVersion < 0) {
+                        mParseError = PackageManager.INSTALL_FAILED_OLDER_SDK;
+                        return null;
+                    }
 
-                    sa.recycle();
+                    pkg.applicationInfo.minSdkVersion = minSdkVersion;
+                    pkg.applicationInfo.targetSdkVersion = targetSdkVersion;
                 }
+
                 XmlUtils.skipCurrentTag(parser);
+
             } else if (tagName.equals(TAG_SUPPORT_SCREENS)) {
                 sa = res.obtainAttributes(parser,
                         com.android.internal.R.styleable.AndroidManifestSupportsScreens);
@@ -2561,46 +2559,26 @@ public class PackageParser {
         // STOPSHIP(b/112545973): remove once feature enabled by default
         if (!StorageManager.hasIsolatedStorage()) {
             if ("android".equals(pkg.packageName)) {
-                final ArraySet<String> newGroups = new ArraySet<>();
-                newGroups.add(android.Manifest.permission_group.MEDIA_AURAL);
-                newGroups.add(android.Manifest.permission_group.MEDIA_VISUAL);
-
-                for (int i = pkg.permissionGroups.size() - 1; i >= 0; i--) {
-                    final PermissionGroup pg = pkg.permissionGroups.get(i);
-                    if (newGroups.contains(pg.info.name)) {
-                        pkg.permissionGroups.remove(i);
-                    }
-                }
-
                 final ArraySet<String> newPermissions = new ArraySet<>();
-                newPermissions.add(android.Manifest.permission.READ_MEDIA_AUDIO);
-                newPermissions.add(android.Manifest.permission.READ_MEDIA_VIDEO);
-                newPermissions.add(android.Manifest.permission.READ_MEDIA_IMAGES);
                 newPermissions.add(android.Manifest.permission.ACCESS_MEDIA_LOCATION);
                 newPermissions.add(android.Manifest.permission.WRITE_OBB);
-
-                final ArraySet<String> removedPermissions = new ArraySet<>();
-                removedPermissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE);
-                removedPermissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE);
 
                 for (int i = pkg.permissions.size() - 1; i >= 0; i--) {
                     final Permission p = pkg.permissions.get(i);
                     if (newPermissions.contains(p.info.name)) {
                         pkg.permissions.remove(i);
-                    } else if (removedPermissions.contains(p.info.name)) {
-                        p.info.flags &= ~PermissionInfo.FLAG_REMOVED;
                     }
                 }
             }
         } else {
             if (FORCE_AUDIO_PACKAGES.contains(pkg.packageName)) {
-                pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_AUDIO);
+                pkg.requestedPermissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE);
             }
             if (FORCE_VIDEO_PACKAGES.contains(pkg.packageName)) {
-                pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_VIDEO);
+                pkg.requestedPermissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE);
             }
             if (FORCE_IMAGES_PACKAGES.contains(pkg.packageName)) {
-                pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_IMAGES);
+                pkg.requestedPermissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE);
             }
         }
 
@@ -2713,66 +2691,6 @@ public class PackageParser {
                     + " but this is a release platform.";
         }
         return -1;
-    }
-
-    private interface AbstractVersionsAccessor {
-        /** Returns minimum SDK version code string, or null if absent. */
-        String getMinSdkVersionCode();
-
-        /** Returns minimum SDK version code, or -1 if absent. */
-        int getMinSdkVersion();
-
-        /** Returns target SDK version code string, or null if absent. */
-        String getTargetSdkVersionCode();
-
-        /** Returns target SDK version code, or -1 if absent. */
-        int getTargetSdkVersion();
-    }
-
-    private static @Nullable Pair<Integer, Integer> deriveSdkVersions(
-            @NonNull AbstractVersionsAccessor accessor, int flags, String[] outError) {
-        int minVers = 1;
-        String minCode = null;
-        int targetVers = 0;
-        String targetCode = null;
-
-        String code = accessor.getMinSdkVersionCode();
-        int version = accessor.getMinSdkVersion();
-        // Check integer first since code is almost never a null string (e.g. "28").
-        if (version >= 0) {
-            minVers = version;
-        } else if (code != null) {
-            minCode = code;
-        }
-
-        code = accessor.getTargetSdkVersionCode();
-        version = accessor.getTargetSdkVersion();
-        // Check integer first since code is almost never a null string (e.g. "28").
-        if (version >= 0) {
-            targetVers = version;
-        } else if (code != null) {
-            targetCode = code;
-            if (minCode == null) {
-                minCode = targetCode;
-            }
-        } else {
-            targetVers = minVers;
-            targetCode = minCode;
-        }
-
-        final int minSdkVersion = computeMinSdkVersion(minVers, minCode,
-                SDK_VERSION, SDK_CODENAMES, outError);
-        if (minSdkVersion < 0) {
-            return null;
-        }
-
-        final int targetSdkVersion = computeTargetSdkVersion(targetVers,
-                targetCode, SDK_CODENAMES, outError);
-        if (targetSdkVersion < 0) {
-            return null;
-        }
-
-        return Pair.create(minSdkVersion, targetSdkVersion);
     }
 
     /**
@@ -3260,10 +3178,21 @@ public class PackageParser {
     private boolean parsePermissionGroup(Package owner, int flags, Resources res,
             XmlResourceParser parser, String[] outError)
             throws XmlPullParserException, IOException {
-        PermissionGroup perm = new PermissionGroup(owner);
-
         TypedArray sa = res.obtainAttributes(parser,
                 com.android.internal.R.styleable.AndroidManifestPermissionGroup);
+
+        int requestDetailResourceId = sa.getResourceId(
+                com.android.internal.R.styleable.AndroidManifestPermissionGroup_requestDetail, 0);
+        int backgroundRequestResourceId = sa.getResourceId(
+                com.android.internal.R.styleable.AndroidManifestPermissionGroup_backgroundRequest,
+                0);
+        int backgroundRequestDetailResourceId = sa.getResourceId(
+                com.android.internal.R.styleable
+                        .AndroidManifestPermissionGroup_backgroundRequestDetail, 0);
+
+        PermissionGroup perm = new PermissionGroup(owner, requestDetailResourceId,
+                backgroundRequestResourceId, backgroundRequestDetailResourceId);
+
         if (!parsePackageItemInfo(owner, perm.info, outError,
                 "<permission-group>", sa, true /*nameRequired*/,
                 com.android.internal.R.styleable.AndroidManifestPermissionGroup_name,
@@ -3282,14 +3211,6 @@ public class PackageParser {
                 0);
         perm.info.requestRes = sa.getResourceId(
                 com.android.internal.R.styleable.AndroidManifestPermissionGroup_request, 0);
-        perm.info.requestDetailResourceId = sa.getResourceId(
-                com.android.internal.R.styleable.AndroidManifestPermissionGroup_requestDetail, 0);
-        perm.info.backgroundRequestResourceId = sa.getResourceId(
-                com.android.internal.R.styleable.AndroidManifestPermissionGroup_backgroundRequest,
-                0);
-        perm.info.backgroundRequestDetailResourceId = sa.getResourceId(
-                com.android.internal.R.styleable
-                        .AndroidManifestPermissionGroup_backgroundRequestDetail, 0);
         perm.info.flags = sa.getInt(
                 com.android.internal.R.styleable.AndroidManifestPermissionGroup_permissionGroupFlags, 0);
         perm.info.priority = sa.getInt(
@@ -3315,7 +3236,20 @@ public class PackageParser {
         TypedArray sa = res.obtainAttributes(parser,
                 com.android.internal.R.styleable.AndroidManifestPermission);
 
-        Permission perm = new Permission(owner);
+        String backgroundPermission = null;
+        if (sa.hasValue(
+                com.android.internal.R.styleable.AndroidManifestPermission_backgroundPermission)) {
+            if ("android".equals(owner.packageName)) {
+                backgroundPermission = sa.getNonResourceString(
+                        com.android.internal.R.styleable
+                                .AndroidManifestPermission_backgroundPermission);
+            } else {
+                Slog.w(TAG, owner.packageName + " defines a background permission. Only the "
+                        + "'android' package can do that.");
+            }
+        }
+
+        Permission perm = new Permission(owner, backgroundPermission);
         if (!parsePackageItemInfo(owner, perm.info, outError,
                 "<permission>", sa, true /*nameRequired*/,
                 com.android.internal.R.styleable.AndroidManifestPermission_name,
@@ -3344,25 +3278,25 @@ public class PackageParser {
         perm.info.requestRes = sa.getResourceId(
                 com.android.internal.R.styleable.AndroidManifestPermission_request, 0);
 
-        if (sa.hasValue(
-                com.android.internal.R.styleable.AndroidManifestPermission_backgroundPermission)) {
-            if ("android".equals(owner.packageName)) {
-                perm.info.backgroundPermission = sa.getNonResourceString(
-                        com.android.internal.R.styleable
-                                .AndroidManifestPermission_backgroundPermission);
-            } else {
-                Slog.w(TAG, owner.packageName + " defines permission '" + perm.info.name
-                        + "' with a background permission. Only the 'android' package can do "
-                        + "that.");
-            }
-        }
-
         perm.info.protectionLevel = sa.getInt(
                 com.android.internal.R.styleable.AndroidManifestPermission_protectionLevel,
                 PermissionInfo.PROTECTION_NORMAL);
 
         perm.info.flags = sa.getInt(
                 com.android.internal.R.styleable.AndroidManifestPermission_permissionFlags, 0);
+
+        // For now only platform runtime permissions can be restricted
+        if (!perm.info.isRuntime() || !"android".equals(perm.info.packageName)) {
+            perm.info.flags &= ~PermissionInfo.FLAG_HARD_RESTRICTED;
+            perm.info.flags &= ~PermissionInfo.FLAG_SOFT_RESTRICTED;
+        } else {
+            // The platform does not get to specify conflicting permissions
+            if ((perm.info.flags & PermissionInfo.FLAG_HARD_RESTRICTED) != 0
+                    && (perm.info.flags & PermissionInfo.FLAG_SOFT_RESTRICTED) != 0) {
+                throw new IllegalStateException("Permission cannot be both soft and hard"
+                        + " restricted: " + perm.info.name);
+            }
+        }
 
         sa.recycle();
 
@@ -3399,7 +3333,7 @@ public class PackageParser {
     private boolean parsePermissionTree(Package owner, Resources res,
             XmlResourceParser parser, String[] outError)
         throws XmlPullParserException, IOException {
-        Permission perm = new Permission(owner);
+        Permission perm = new Permission(owner, (String) null);
 
         TypedArray sa = res.obtainAttributes(parser,
                 com.android.internal.R.styleable.AndroidManifestPermissionTree);
@@ -3527,6 +3461,11 @@ public class PackageParser {
 
         TypedArray sa = res.obtainAttributes(parser,
                 com.android.internal.R.styleable.AndroidManifestApplication);
+
+        ai.iconRes = sa.getResourceId(
+            com.android.internal.R.styleable.AndroidManifestApplication_icon, 0);
+        ai.roundIconRes = sa.getResourceId(
+            com.android.internal.R.styleable.AndroidManifestApplication_roundIcon, 0);
 
         if (!parsePackageItemInfo(owner, ai, outError,
                 "<application>", sa, false /*nameRequired*/,
@@ -3714,11 +3653,9 @@ public class PackageParser {
             ai.flags |= ApplicationInfo.FLAG_MULTIARCH;
         }
 
-        final boolean extractNativeLibsDefault =
-                owner.applicationInfo.targetSdkVersion < Build.VERSION_CODES.Q;
         if (sa.getBoolean(
                 com.android.internal.R.styleable.AndroidManifestApplication_extractNativeLibs,
-                extractNativeLibsDefault)) {
+                true)) {
             ai.flags |= ApplicationInfo.FLAG_EXTRACT_NATIVE_LIBS;
         }
 
@@ -3754,6 +3691,18 @@ public class PackageParser {
                         .AndroidManifestApplication_allowClearUserDataOnFailedRestore,
                 true)) {
             ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_ALLOW_CLEAR_USER_DATA_ON_FAILED_RESTORE;
+        }
+
+        if (sa.getBoolean(
+                R.styleable.AndroidManifestApplication_allowAudioPlaybackCapture,
+                owner.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.Q)) {
+            ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_ALLOW_AUDIO_PLAYBACK_CAPTURE;
+        }
+
+        if (sa.getBoolean(
+                R.styleable.AndroidManifestApplication_requestLegacyExternalStorage,
+                owner.applicationInfo.targetSdkVersion < Build.VERSION_CODES.Q)) {
+            ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_REQUEST_LEGACY_EXTERNAL_STORAGE;
         }
 
         ai.maxAspectRatio = sa.getFloat(R.styleable.AndroidManifestApplication_maxAspectRatio, 0);
@@ -4085,8 +4034,6 @@ public class PackageParser {
         setMaxAspectRatio(owner);
         setMinAspectRatio(owner);
 
-        PackageBackwardCompatibility.modifySharedLibraries(owner);
-
         if (hasDomainURLs(owner)) {
             owner.applicationInfo.privateFlags |= ApplicationInfo.PRIVATE_FLAG_HAS_DOMAIN_URLS;
         } else {
@@ -4323,9 +4270,7 @@ public class PackageParser {
             }
         }
 
-        final boolean useRoundIcon =
-                Resources.getSystem().getBoolean(com.android.internal.R.bool.config_useRoundIcon);
-        int roundIconVal = useRoundIcon ? sa.getResourceId(roundIconRes, 0) : 0;
+        int roundIconVal = sUseRoundIcon ? sa.getResourceId(roundIconRes, 0) : 0;
         if (roundIconVal != 0) {
             outInfo.icon = roundIconVal;
             outInfo.nonLocalizedLabel = null;
@@ -4865,7 +4810,7 @@ public class PackageParser {
             // except for watches which always supported 1:1.
             minAspectRatio = owner.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.Q
                     ? 0
-                    : mCallback.hasFeature(FEATURE_WATCH)
+                    : (mCallback != null && mCallback.hasFeature(FEATURE_WATCH))
                             ? DEFAULT_PRE_Q_MIN_ASPECT_RATIO_WATCH
                             : DEFAULT_PRE_Q_MIN_ASPECT_RATIO;
         }
@@ -5833,9 +5778,7 @@ public class PackageParser {
             outInfo.nonLocalizedLabel = v.coerceToString();
         }
 
-        final boolean useRoundIcon =
-                Resources.getSystem().getBoolean(com.android.internal.R.bool.config_useRoundIcon);
-        int roundIconVal = useRoundIcon ? sa.getResourceId(
+        int roundIconVal = sUseRoundIcon ? sa.getResourceId(
                 com.android.internal.R.styleable.AndroidManifestIntentFilter_roundIcon, 0) : 0;
         if (roundIconVal != 0) {
             outInfo.icon = roundIconVal;
@@ -6402,7 +6345,7 @@ public class PackageParser {
             this.pastSigningCertificates = in.createTypedArray(Signature.CREATOR);
         }
 
-        public static final Creator<SigningDetails> CREATOR = new Creator<SigningDetails>() {
+        public static final @android.annotation.NonNull Creator<SigningDetails> CREATOR = new Creator<SigningDetails>() {
             @Override
             public SigningDetails createFromParcel(Parcel source) {
                 if (source.readBoolean()) {
@@ -7000,6 +6943,11 @@ public class PackageParser {
         /** @hide */
         public boolean isProductServices() {
             return applicationInfo.isProductServices();
+        }
+
+        /** @hide */
+        public boolean isOdm() {
+            return applicationInfo.isOdm();
         }
 
         /** @hide */
@@ -7603,9 +7551,12 @@ public class PackageParser {
         @UnsupportedAppUsage
         public PermissionGroup group;
 
-        public Permission(Package _owner) {
-            super(_owner);
-            info = new PermissionInfo();
+        /**
+         * @hide
+         */
+        public Permission(Package owner, @Nullable String backgroundPermission) {
+            super(owner);
+            info = new PermissionInfo(backgroundPermission);
         }
 
         @UnsupportedAppUsage
@@ -7670,9 +7621,12 @@ public class PackageParser {
         @UnsupportedAppUsage
         public final PermissionGroupInfo info;
 
-        public PermissionGroup(Package _owner) {
-            super(_owner);
-            info = new PermissionGroupInfo();
+        public PermissionGroup(Package owner, @StringRes int requestDetailResourceId,
+                @StringRes int backgroundRequestResourceId,
+                @StringRes int backgroundRequestDetailResourceId) {
+            super(owner);
+            info = new PermissionGroupInfo(requestDetailResourceId, backgroundRequestResourceId,
+                    backgroundRequestDetailResourceId);
         }
 
         public PermissionGroup(Package _owner, PermissionGroupInfo _info) {
@@ -7816,6 +7770,7 @@ public class PackageParser {
         }
         ai.seInfoUser = SELinuxUtil.assignSeinfoUser(state);
         ai.resourceDirs = state.overlayPaths;
+        ai.icon = (sUseRoundIcon && ai.roundIconRes != 0) ? ai.roundIconRes : ai.iconRes;
     }
 
     @UnsupportedAppUsage
@@ -8421,6 +8376,39 @@ public class PackageParser {
         sCompatibilityModeEnabled = compatibilityModeEnabled;
     }
 
+    /**
+     * @hide
+     */
+    public static void readConfigUseRoundIcon(Resources r) {
+        if (r != null) {
+            sUseRoundIcon = r.getBoolean(com.android.internal.R.bool.config_useRoundIcon);
+            return;
+        }
+
+        ApplicationInfo androidAppInfo;
+        try {
+            androidAppInfo = ActivityThread.getPackageManager().getApplicationInfo(
+                    "android", 0 /* flags */,
+                UserHandle.myUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        Resources systemResources = Resources.getSystem();
+
+        // Create in-flight as this overlayable resource is only used when config changes
+        Resources overlayableRes = ResourcesManager.getInstance().getResources(null,
+                null,
+                null,
+                androidAppInfo.resourceDirs,
+                androidAppInfo.sharedLibraryFiles,
+                Display.DEFAULT_DISPLAY,
+                null,
+                systemResources.getCompatibilityInfo(),
+                systemResources.getClassLoader());
+
+        sUseRoundIcon = overlayableRes.getBoolean(com.android.internal.R.bool.config_useRoundIcon);
+    }
+
     public static class PackageParserException extends Exception {
         public final int error;
 
@@ -8435,55 +8423,51 @@ public class PackageParser {
         }
     }
 
-    public static PackageInfo generatePackageInfoFromApex(File apexFile, boolean collectCerts)
+    // TODO(b/129261524): Clean up API
+    /**
+     * PackageInfo parser specifically for apex files.
+     * NOTE: It will collect certificates
+     *
+     * @param apexFile
+     * @return PackageInfo
+     * @throws PackageParserException
+     */
+    public static PackageInfo generatePackageInfoFromApex(File apexFile, int flags)
             throws PackageParserException {
-        PackageInfo pi = new PackageInfo();
+        PackageParser pp = new PackageParser();
+        final Package p = pp.parsePackage(apexFile, flags, false);
+        PackageUserState state = new PackageUserState();
+        PackageInfo pi = generatePackageInfo(p, EmptyArray.INT, flags, 0, 0,
+                Collections.emptySet(), state);
 
-        // TODO(b/123086053) properly fill in the ApplicationInfo with data from AndroidManifest
-        // Add ApplicationInfo to the PackageInfo.
-        ApplicationInfo ai = new ApplicationInfo();
-        ai.sourceDir = apexFile.getPath();
-        ai.flags = ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_INSTALLED;
-        ai.enabled = true;
-        ai.targetSdkVersion = 28;
-        ai.targetSandboxVersion = 0;
-        pi.applicationInfo = ai;
+        pi.applicationInfo.sourceDir = apexFile.getPath();
+        pi.applicationInfo.flags |= ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_INSTALLED;
+        pi.isApex = true;
 
-
-        // TODO(b/123052859): We should avoid these repeated calls to parseApkLite each time
-        // we want to generate information for APEX modules.
-        PackageParser.ApkLite apk = PackageParser.parseApkLite(apexFile,
-            collectCerts ? PackageParser.PARSE_COLLECT_CERTIFICATES : 0);
-
-        pi.packageName = apk.packageName;
-        ai.packageName = apk.packageName;
-        pi.setLongVersionCode(apk.getLongVersionCode());
-        ai.setVersionCode(apk.getLongVersionCode());
-
-        if (collectCerts) {
-            if (apk.signingDetails.hasPastSigningCertificates()) {
+        // Collect certificates
+        if ((flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
+            collectCertificates(p, apexFile, false);
+            // Keep legacy mechanism for handling signatures. While this is deprecated, it's
+            // still part of the public API and needs to be maintained
+            if (p.mSigningDetails.hasPastSigningCertificates()) {
                 // Package has included signing certificate rotation information.  Return
                 // the oldest cert so that programmatic checks keep working even if unaware
                 // of key rotation.
                 pi.signatures = new Signature[1];
-                pi.signatures[0] = apk.signingDetails.pastSigningCertificates[0];
-            } else if (apk.signingDetails.hasSignatures()) {
+                pi.signatures[0] = p.mSigningDetails.pastSigningCertificates[0];
+            } else if (p.mSigningDetails.hasSignatures()) {
                 // otherwise keep old behavior
-                int numberOfSigs = apk.signingDetails.signatures.length;
+                int numberOfSigs = p.mSigningDetails.signatures.length;
                 pi.signatures = new Signature[numberOfSigs];
-                System.arraycopy(apk.signingDetails.signatures, 0, pi.signatures, 0,
-                    numberOfSigs);
+                System.arraycopy(p.mSigningDetails.signatures, 0, pi.signatures, 0, numberOfSigs);
             }
-
-            if (apk.signingDetails != SigningDetails.UNKNOWN) {
+            if (p.mSigningDetails != SigningDetails.UNKNOWN) {
                 // only return a valid SigningInfo if there is signing information to report
-                pi.signingInfo = new SigningInfo(apk.signingDetails);
+                pi.signingInfo = new SigningInfo(p.mSigningDetails);
             } else {
                 pi.signingInfo = null;
             }
         }
-
-        pi.isApex = true;
         return pi;
     }
 }

@@ -66,8 +66,8 @@ public:
     virtual bool swapBuffers(const Frame& frame, bool drew, const SkRect& screenDirty,
                              FrameInfo* currentFrameInfo, bool* requireSwap) = 0;
     virtual DeferredLayerUpdater* createTextureLayer() = 0;
-    virtual bool setSurface(ANativeWindow* window, SwapBehavior swapBehavior,
-                            ColorMode colorMode) = 0;
+    virtual bool setSurface(ANativeWindow* window, SwapBehavior swapBehavior, ColorMode colorMode,
+                            uint32_t extraBuffers) = 0;
     virtual void onStop() = 0;
     virtual bool isSurfaceReady() = 0;
     virtual bool isContextReady() = 0;
@@ -75,7 +75,6 @@ public:
     virtual void renderLayers(const LightGeometry& lightGeometry,
                               LayerUpdateQueue* layerUpdateQueue, bool opaque,
                               const LightInfo& lightInfo) = 0;
-    virtual TaskManager* getTaskManager() = 0;
     virtual bool createOrUpdateLayer(RenderNode* node, const DamageAccumulator& damageAccumulator,
                                      ErrorHandler* errorHandler) = 0;
     virtual bool pinImages(std::vector<SkImage*>& mutableImages) = 0;

@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.WindowManager.INPUT_CONSUMER_NAVIGATION;
 import static android.view.WindowManager.INPUT_CONSUMER_PIP;
 import static android.view.WindowManager.INPUT_CONSUMER_RECENTS_ANIMATION;
@@ -25,7 +26,6 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_DISABLE_WALLP
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_KEYGUARD;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_DRAG;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS_LIGHT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_INPUT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TASK_POSITIONING;
@@ -63,6 +63,7 @@ final class InputMonitor {
     // When true, need to call updateInputWindowsLw().
     private boolean mUpdateInputWindowsNeeded = true;
     private boolean mUpdateInputWindowsPending;
+    private boolean mApplyImmediately;
 
     // Currently focused input window handle.
     private InputWindowHandle mFocusedInputWindowHandle;
@@ -129,15 +130,6 @@ final class InputMonitor {
 
                 // If there's a drag in flight, provide a pseudo-window to catch drag input
                 final boolean inDrag = mService.mDragDropController.dragDropActiveLocked();
-                if (inDrag) {
-                    if (DEBUG_DRAG) {
-                        Log.d(TAG_WM, "Inserting drag window");
-                    }
-                    mService.mDragDropController.showInputSurface(mInputTransaction, mDisplayId);
-                } else {
-                    mService.mDragDropController.hideInputSurface(mInputTransaction, mDisplayId);
-                }
-
                 final boolean inPositioning =
                         mService.mTaskPositioningController.isPositioningLocked();
                 if (inPositioning) {
@@ -161,13 +153,14 @@ final class InputMonitor {
         mService = service;
         mDisplayContent = mService.mRoot.getDisplayContent(displayId);
         mDisplayId = displayId;
-        mInputTransaction = mDisplayContent.getPendingTransaction();
+        mInputTransaction = mService.mTransactionFactory.make();
         mHandler = AnimationThread.getHandler();
         mUpdateInputForAllWindowsConsumer = new UpdateInputForAllWindowsConsumer();
     }
 
     void onDisplayRemoved() {
         mHandler.removeCallbacks(mUpdateInputWindows);
+        mService.mInputManager.onDisplayRemoved(mDisplayId);
         mDisplayRemoved = true;
     }
 
@@ -199,8 +192,13 @@ final class InputMonitor {
     }
 
     void layoutInputConsumers(int dw, int dh) {
-        for (int i = mInputConsumers.size() - 1; i >= 0; i--) {
-            mInputConsumers.valueAt(i).layout(mInputTransaction, dw, dh);
+        try {
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "layoutInputConsumer");
+            for (int i = mInputConsumers.size() - 1; i >= 0; i--) {
+                mInputConsumers.valueAt(i).layout(mInputTransaction, dw, dh);
+            }
+        } finally {
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
     }
 
@@ -254,7 +252,7 @@ final class InputMonitor {
             final boolean hasFocus, final boolean hasWallpaper) {
         // Add a window to our list of input windows.
         inputWindowHandle.name = child.toString();
-        flags = child.getSurfaceTouchableRegion(inputWindowHandle.touchableRegion, flags);
+        flags = child.getSurfaceTouchableRegion(inputWindowHandle, flags);
         inputWindowHandle.layoutParamsFlags = flags;
         inputWindowHandle.layoutParamsType = type;
         inputWindowHandle.dispatchingTimeoutNanos = child.getInputDispatchingTimeoutNanos();
@@ -319,6 +317,14 @@ final class InputMonitor {
         if (!mUpdateInputWindowsPending) {
             mUpdateInputWindowsPending = true;
             mHandler.post(mUpdateInputWindows);
+        }
+    }
+
+    void updateInputWindowsImmediately() {
+        if (mUpdateInputWindowsPending) {
+            mApplyImmediately = true;
+            mUpdateInputWindows.run();
+            mApplyImmediately = false;
         }
     }
 
@@ -410,7 +416,7 @@ final class InputMonitor {
         final InputWindowHandle mInvalidInputWindow = new InputWindowHandle(null, null, mDisplayId);
 
         private void updateInputWindows(boolean inDrag) {
-            Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "updateInputWindows");
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "updateInputWindows");
 
             navInputConsumer = getInputConsumer(INPUT_CONSUMER_NAVIGATION);
             pipInputConsumer = getInputConsumer(INPUT_CONSUMER_PIP);
@@ -436,9 +442,14 @@ final class InputMonitor {
                 wallpaperInputConsumer.show(mInputTransaction, 0);
             }
 
-            mDisplayContent.scheduleAnimation();
+            if (mApplyImmediately) {
+                mInputTransaction.apply();
+            } else {
+                mDisplayContent.getPendingTransaction().merge(mInputTransaction);
+                mDisplayContent.scheduleAnimation();
+            }
 
-            Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
 
         @Override

@@ -63,7 +63,7 @@ public class UiccSlotInfo implements Parcelable {
     private final boolean mIsExtendedApduSupported;
     private final boolean mIsRemovable;
 
-    public static final Creator<UiccSlotInfo> CREATOR = new Creator<UiccSlotInfo>() {
+    public static final @android.annotation.NonNull Creator<UiccSlotInfo> CREATOR = new Creator<UiccSlotInfo>() {
         @Override
         public UiccSlotInfo createFromParcel(Parcel in) {
             return new UiccSlotInfo(in);
@@ -140,6 +140,10 @@ public class UiccSlotInfo implements Parcelable {
         return mIsEuicc;
     }
 
+    /**
+     * Returns the ICCID of a the UICC in the given slot, or the EID if it is an eUICC. Note that if
+     * the value is unavailble this will return null.
+     */
     public String getCardId() {
         return mCardId;
     }

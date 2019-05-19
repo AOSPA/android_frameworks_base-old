@@ -27,25 +27,26 @@
           "exclude-annotation": "androidx.test.filters.FlakyTest"
         }
       ]
+    },
+    {
+      "name": "FrameworksMockingServicesTests",
+      "file_patterns": ["AppCompactor\\.java"],
+      "options": [
+        {
+          "include-filter": "com.android.server.am."
+        },
+        {
+          "include-annotation": "android.platform.test.annotations.Presubmit"
+        },
+        {
+          "exclude-annotation": "androidx.test.filters.FlakyTest"
+        }
+      ]
     }
   ],
   "postsubmit": [
     {
-      "name": "CtsActivityManagerDeviceTestCases"
-    },
-    {
-      "name": "CtsActivityManagerDeviceSdk25TestCases"
-    },
-    {
       "name": "FrameworksServicesTests",
-      "options": [
-        {
-          "include-filter": "com.android.server.am."
-        }
-      ]
-    },
-    {
-      "name": "WmTests",
       "options": [
         {
           "include-filter": "com.android.server.am."

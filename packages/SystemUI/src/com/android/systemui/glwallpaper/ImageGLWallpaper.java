@@ -34,7 +34,6 @@ import static android.opengl.GLES20.glVertexAttribPointer;
 
 import android.graphics.Bitmap;
 import android.opengl.GLUtils;
-import android.os.Build;
 import android.util.Log;
 
 import java.nio.ByteBuffer;
@@ -50,7 +49,7 @@ class ImageGLWallpaper {
 
     static final String A_POSITION = "aPosition";
     static final String A_TEXTURE_COORDINATES = "aTextureCoordinates";
-    static final String U_CENTER_REVEAL = "uCenterReveal";
+    static final String U_PER85 = "uPer85";
     static final String U_REVEAL = "uReveal";
     static final String U_AOD2OPACITY = "uAod2Opacity";
     static final String U_TEXTURE = "uTexture";
@@ -87,7 +86,7 @@ class ImageGLWallpaper {
     private int mAttrPosition;
     private int mAttrTextureCoordinates;
     private int mUniAod2Opacity;
-    private int mUniCenterReveal;
+    private int mUniPer85;
     private int mUniReveal;
     private int mUniTexture;
     private int mTextureId;
@@ -110,9 +109,10 @@ class ImageGLWallpaper {
         mTextureBuffer.position(0);
     }
 
-    void setup() {
+    void setup(Bitmap bitmap) {
         setupAttributes();
         setupUniforms();
+        setupTexture(bitmap);
     }
 
     private void setupAttributes() {
@@ -131,7 +131,7 @@ class ImageGLWallpaper {
 
     private void setupUniforms() {
         mUniAod2Opacity = mProgram.getUniformHandle(U_AOD2OPACITY);
-        mUniCenterReveal = mProgram.getUniformHandle(U_CENTER_REVEAL);
+        mUniPer85 = mProgram.getUniformHandle(U_PER85);
         mUniReveal = mProgram.getUniformHandle(U_REVEAL);
         mUniTexture = mProgram.getUniformHandle(U_TEXTURE);
     }
@@ -144,8 +144,8 @@ class ImageGLWallpaper {
                 return mAttrTextureCoordinates;
             case U_AOD2OPACITY:
                 return mUniAod2Opacity;
-            case U_CENTER_REVEAL:
-                return mUniCenterReveal;
+            case U_PER85:
+                return mUniPer85;
             case U_REVEAL:
                 return mUniReveal;
             case U_TEXTURE:
@@ -159,7 +159,7 @@ class ImageGLWallpaper {
         glDrawArrays(GL_TRIANGLES, 0, VERTICES.length / 2);
     }
 
-    void setupTexture(Bitmap bitmap) {
+    private void setupTexture(Bitmap bitmap) {
         final int[] tids = new int[1];
 
         if (bitmap == null) {
@@ -174,7 +174,7 @@ class ImageGLWallpaper {
             return;
         }
 
-        // Bind a named texture to a texturing target.
+        // Bind a named texture to a target.
         glBindTexture(GL_TEXTURE_2D, tids[0]);
         // Load the bitmap data and copy it over into the texture object that is currently bound.
         GLUtils.texImage2D(GL_TEXTURE_2D, 0, bitmap, 0);
@@ -195,65 +195,76 @@ class ImageGLWallpaper {
         glUniform1i(mUniTexture, 0);
     }
 
-    void adjustTextureCoordinates(Bitmap bitmap, int surfaceWidth, int surfaceHeight,
-            float xOffset, float yOffset) {
-        if (bitmap == null) {
-            Log.d(TAG, "adjustTextureCoordinates: invalid bitmap");
-            return;
-        }
+    /**
+     * This method adjust s(x-axis), t(y-axis) texture coordinates
+     * to prevent the wallpaper from being stretched.
+     * The adjustment happens if either the width or height of the bitmap is larger than
+     * corresponding size of the surface.
+     * If both width and height are larger than corresponding size of the surface,
+     * the adjustment will happen at both s, t side.
+     *
+     * @param bitmapWidth The width of the bitmap.
+     * @param bitmapHeight The height of the bitmap.
+     * @param surfaceWidth The width of the surface.
+     * @param surfaceHeight The height of the surface.
+     * @param xOffset The offset amount along s axis.
+     * @param yOffset The offset amount along t axis.
+     */
+    void adjustTextureCoordinates(int bitmapWidth, int bitmapHeight,
+            int surfaceWidth, int surfaceHeight, float xOffset, float yOffset) {
+        float[] coordinates = TEXTURES.clone();
 
-        int bitmapWidth = bitmap.getWidth();
-        int bitmapHeight = bitmap.getHeight();
-        float ratioW = 1f;
-        float ratioH = 1f;
-        float rX = 0f;
-        float rY = 0f;
-        float[] coordinates = null;
-
-        final boolean adjustWidth = bitmapWidth > surfaceWidth;
-        final boolean adjustHeight = bitmapHeight > surfaceHeight;
-
-        if (adjustWidth || adjustHeight) {
-            coordinates = TEXTURES.clone();
-        }
-
-        if (adjustWidth) {
-            float x = (float) Math.round((bitmapWidth - surfaceWidth) * xOffset) / bitmapWidth;
-            ratioW = (float) surfaceWidth / bitmapWidth;
-            float referenceX = x + ratioW > 1f ? 1f - ratioW : x;
+        if (bitmapWidth > surfaceWidth) {
+            // Calculate the new s pos in pixels.
+            float pixelS = (float) Math.round((bitmapWidth - surfaceWidth) * xOffset);
+            // Calculate the s pos in texture coordinate.
+            float coordinateS = pixelS / bitmapWidth;
+            // Calculate the percentage occupied by the surface width in bitmap width.
+            float surfacePercentageW = (float) surfaceWidth / bitmapWidth;
+            // Need also consider the case if bitmap height is smaller than surface height.
+            if (bitmapHeight < surfaceHeight) {
+                // We will narrow the surface percentage to keep aspect ratio.
+                surfacePercentageW *= (float) bitmapHeight / surfaceHeight;
+            }
+            // Determine the final s pos, also limit the legal s pos to prevent from out of range.
+            float s = coordinateS + surfacePercentageW > 1f ? 1f - surfacePercentageW : coordinateS;
+            // Traverse the s pos in texture coordinates array and adjust the s pos accordingly.
             for (int i = 0; i < coordinates.length; i += 2) {
+                // indices 2, 4 and 6 are the end of s coordinates.
                 if (i == 2 || i == 4 || i == 6) {
-                    coordinates[i] = Math.min(1f, referenceX + ratioW);
+                    coordinates[i] = Math.min(1f, s + surfacePercentageW);
                 } else {
-                    coordinates[i] = referenceX;
+                    coordinates[i] = s;
                 }
             }
-            rX = referenceX;
         }
 
-
-        if (adjustHeight) {
-            float y = (float) Math.round((bitmapHeight - surfaceHeight) * yOffset) / bitmapHeight;
-            ratioH = (float) surfaceHeight / bitmapHeight;
-            float referenceY = y + ratioH > 1f ? 1f - ratioH : y;
+        if (bitmapHeight > surfaceHeight) {
+            // Calculate the new t pos in pixels.
+            float pixelT = (float) Math.round((bitmapHeight - surfaceHeight) * yOffset);
+            // Calculate the t pos in texture coordinate.
+            float coordinateT = pixelT / bitmapHeight;
+            // Calculate the percentage occupied by the surface height in bitmap height.
+            float surfacePercentageH = (float) surfaceHeight / bitmapHeight;
+            // Need also consider the case if bitmap width is smaller than surface width.
+            if (bitmapWidth < surfaceWidth) {
+                // We will narrow the surface percentage to keep aspect ratio.
+                surfacePercentageH *= (float) bitmapWidth / surfaceWidth;
+            }
+            // Determine the final t pos, also limit the legal t pos to prevent from out of range.
+            float t = coordinateT + surfacePercentageH > 1f ? 1f - surfacePercentageH : coordinateT;
+            // Traverse the t pos in texture coordinates array and adjust the t pos accordingly.
             for (int i = 1; i < coordinates.length; i += 2) {
+                // indices 1, 3 and 11 are the end of t coordinates.
                 if (i == 1 || i == 3 || i == 11) {
-                    coordinates[i] = Math.min(1f, referenceY + ratioH);
+                    coordinates[i] = Math.min(1f, t + surfacePercentageH);
                 } else {
-                    coordinates[i] = referenceY;
+                    coordinates[i] = t;
                 }
             }
-            rY = referenceY;
         }
 
-        if (adjustWidth || adjustHeight) {
-            if (Build.IS_DEBUGGABLE) {
-                Log.d(TAG, "adjustTextureCoordinates: sW=" + surfaceWidth + ", sH=" + surfaceHeight
-                        + ", bW=" + bitmapWidth + ", bH=" + bitmapHeight
-                        + ", rW=" + ratioW + ", rH=" + ratioH + ", rX=" + rX + ", rY=" + rY);
-            }
-            mTextureBuffer.put(coordinates);
-            mTextureBuffer.position(0);
-        }
+        mTextureBuffer.put(coordinates);
+        mTextureBuffer.position(0);
     }
 }

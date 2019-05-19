@@ -56,6 +56,7 @@ class TelephonyIcons {
     static final int ICON_3G = R.drawable.ic_3g_mobiledata;
     static final int ICON_4G = R.drawable.ic_4g_mobiledata;
     static final int ICON_4G_PLUS = R.drawable.ic_4g_plus_mobiledata;
+    static final int ICON_5G_E = R.drawable.ic_5g_e_mobiledata;
     static final int ICON_1X = R.drawable.ic_1x_mobiledata;
     static final int ICON_5G = R.drawable.ic_5g_mobiledata;
     static final int ICON_5G_PLUS = R.drawable.ic_5g_plus_mobiledata;
@@ -228,6 +229,19 @@ class TelephonyIcons {
             TelephonyIcons.ICON_LTE_PLUS,
             true);
 
+    static final MobileIconGroup LTE_CA_5G_E = new MobileIconGroup(
+            "5Ge",
+            null,
+            null,
+            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
+            0, 0,
+            0,
+            0,
+            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
+            R.string.data_connection_5ge,
+            TelephonyIcons.ICON_5G_E,
+            true);
+
     static final MobileIconGroup NR_5G = new MobileIconGroup(
             "5G",
             null,
@@ -269,6 +283,22 @@ class TelephonyIcons {
             0,
             false);
 
+    static final MobileIconGroup NOT_DEFAULT_DATA = new MobileIconGroup(
+            "NotDefaultData",
+            null,
+            null,
+            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH,
+            0, 0,
+            0,
+            0,
+            AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0],
+            R.string.not_default_data_content_description,
+            0,
+            false);
+
+    // When adding a new MobileIconGround, check if the dataContentDescription has to be filtered
+    // in QSCarrier#hasValidTypeContentDescription
+    //
     static final MobileIconGroup FIVE_G = new MobileIconGroup(
             "5G",
             null,
@@ -738,11 +768,13 @@ class TelephonyIcons {
         ICON_NAME_TO_ICON.put("h+", H_PLUS);
         ICON_NAME_TO_ICON.put("4g", FOUR_G);
         ICON_NAME_TO_ICON.put("4g+", FOUR_G_PLUS);
+        ICON_NAME_TO_ICON.put("5ge", LTE_CA_5G_E);
         ICON_NAME_TO_ICON.put("lte", LTE);
         ICON_NAME_TO_ICON.put("lte+", LTE_PLUS);
         ICON_NAME_TO_ICON.put("5g", NR_5G);
         ICON_NAME_TO_ICON.put("5g_plus", NR_5G_PLUS);
         ICON_NAME_TO_ICON.put("datadisable", DATA_DISABLED);
+        ICON_NAME_TO_ICON.put("notdefaultdata", NOT_DEFAULT_DATA);
     }
 }
 

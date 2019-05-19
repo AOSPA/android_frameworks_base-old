@@ -17,6 +17,7 @@
 package android.content;
 
 import android.annotation.AttrRes;
+import android.annotation.CallbackExecutor;
 import android.annotation.CheckResult;
 import android.annotation.ColorInt;
 import android.annotation.ColorRes;
@@ -69,6 +70,7 @@ import android.view.View;
 import android.view.ViewDebug;
 import android.view.WindowManager;
 import android.view.autofill.AutofillManager.AutofillClient;
+import android.view.contentcapture.ContentCaptureManager.ContentCaptureClient;
 import android.view.textclassifier.TextClassificationManager;
 
 import java.io.File;
@@ -336,6 +338,33 @@ public abstract class Context {
     public static final int BIND_ADJUST_BELOW_PERCEPTIBLE = 0x0100;
 
     /**
+     * Flag for {@link #bindService}: If binding from an app that has specific capabilities
+     * due to its foreground state such as an activity or foreground service, then this flag will
+     * allow the bound app to get the same capabilities, as long as it has the required permissions
+     * as well.
+     */
+    public static final int BIND_INCLUDE_CAPABILITIES = 0x00001000;
+
+    /**
+     * Flag for {@link #bindService}: This flag is intended to be used only by the system to adjust
+     * the scheduling policy for IMEs (and any other out-of-process user-visible components that
+     * work closely with the top app) so that UI hosted in such services can have the same
+     * scheduling policy (e.g. SCHED_FIFO when it is enabled and TOP_APP_PRIORITY_BOOST otherwise)
+     * as the actual top-app.
+     * @hide
+     */
+    public static final int BIND_SCHEDULE_LIKE_TOP_APP = 0x00080000;
+
+    /**
+     * Flag for {@link #bindService}: allow background activity starts from the bound service's
+     * process.
+     * This flag is only respected if the caller is holding
+     * {@link android.Manifest.permission#START_ACTIVITIES_FROM_BACKGROUND}.
+     * @hide
+     */
+    public static final int BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS = 0x00100000;
+
+    /**
      * @hide Flag for {@link #bindService}: the service being bound to represents a
      * protected system component, so must have association restrictions applied to it.
      * That is, a system config must have one or more allow-association tags limiting
@@ -398,7 +427,7 @@ public abstract class Context {
      * invisible background activities.  This will impact the number of
      * recent activities the user can switch between without having them
      * restart.  There is no guarantee this will be respected, as the system
-     * tries to balance such requests from one app vs. the importantance of
+     * tries to balance such requests from one app vs. the importance of
      * keeping other apps around.
      */
     public static final int BIND_VISIBLE = 0x10000000;
@@ -770,6 +799,7 @@ public abstract class Context {
      * <p>
      * This is not generally intended for third party application developers.
      */
+    @NonNull
     public String getOpPackageName() {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
@@ -1741,7 +1771,8 @@ public abstract class Context {
      */
     @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
     @SystemApi
-    public void startActivityAsUser(@RequiresPermission Intent intent, UserHandle user) {
+    public void startActivityAsUser(@RequiresPermission @NonNull Intent intent,
+            @NonNull UserHandle user) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 
@@ -2964,26 +2995,51 @@ public abstract class Context {
             @NonNull ServiceConnection conn, @BindServiceFlags int flags);
 
     /**
+     * Same as {@link #bindService(Intent, ServiceConnection, int)} with executor to control
+     * ServiceConnection callbacks.
+     * @param executor Callbacks on ServiceConnection will be called on executor. Must use same
+     *      instance for the same instance of ServiceConnection.
+     */
+    public boolean bindService(@RequiresPermission @NonNull Intent service,
+            @BindServiceFlags int flags, @NonNull @CallbackExecutor Executor executor,
+            @NonNull ServiceConnection conn) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
      * Variation of {@link #bindService} that, in the specific case of isolated
      * services, allows the caller to generate multiple instances of a service
-     * from a single component declaration.
+     * from a single component declaration.  In other words, you can use this to bind
+     * to a service that has specified {@link android.R.attr#isolatedProcess} and, in
+     * addition to the existing behavior of running in an isolated process, you can
+     * also through the arguments here have the system bring up multiple concurrent
+     * processes hosting their own instances of that service.  The <var>instanceName</var>
+     * you provide here identifies the different instances, and you can use
+     * {@link #updateServiceGroup(ServiceConnection, int, int)} to tell the system how it
+     * should manage each of these instances.
      *
      * @param service Identifies the service to connect to.  The Intent must
      *      specify an explicit component name.
-     * @param conn Receives information as the service is started and stopped.
-     *      This must be a valid ServiceConnection object; it must not be null.
      * @param flags Operation options for the binding as per {@link #bindService}.
      * @param instanceName Unique identifier for the service instance.  Each unique
-     *      name here will result in a different service instance being created.
+     *      name here will result in a different service instance being created.  Identifiers
+     *      must only contain ASCII letters, digits, underscores, and periods.
      * @return Returns success of binding as per {@link #bindService}.
+     * @param executor Callbacks on ServiceConnection will be called on executor.
+     *      Must use same instance for the same instance of ServiceConnection.
+     * @param conn Receives information as the service is started and stopped.
+     *      This must be a valid ServiceConnection object; it must not be null.
      *
      * @throws SecurityException If the caller does not have permission to access the service
+     * @throws IllegalArgumentException If the instanceName is invalid.
      *
      * @see #bindService
+     * @see #updateServiceGroup
+     * @see android.R.attr#isolatedProcess
      */
-    public boolean bindIsolatedService(@RequiresPermission Intent service,
-            @NonNull ServiceConnection conn, @BindServiceFlags int flags,
-            @NonNull String instanceName) {
+    public boolean bindIsolatedService(@RequiresPermission @NonNull Intent service,
+            @BindServiceFlags int flags, @NonNull String instanceName,
+            @NonNull @CallbackExecutor Executor executor, @NonNull ServiceConnection conn) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 
@@ -3035,10 +3091,16 @@ public abstract class Context {
      *              are considered to be related.  Supplying 0 reverts to the default behavior
      *              of not grouping.
      * @param importance Additional importance of the processes within a group.  Upon calling
-     *                   here, this will override any previous group that was set for that
-     *                   process.  This fine-tunes process killing of all processes within
-     *                   a related groups -- higher importance values will be killed before
-     *                   lower ones.
+     *                   here, this will override any previous importance that was set for that
+     *                   process.  The most important process is 0, and higher values are
+     *                   successively less important.  You can view this as describing how
+     *                   to order the processes in an array, with the processes at the end of
+     *                   the array being the least important.  This value has no meaning besides
+     *                   indicating how processes should be ordered in that array one after the
+     *                   other.  This provides a way to fine-tune the system's process killing,
+     *                   guiding it to kill processes at the end of the array first.
+     *
+     * @see #bindIsolatedService
      */
     public void updateServiceGroup(@NonNull ServiceConnection conn, int group,
             int importance) {
@@ -3109,6 +3171,7 @@ public abstract class Context {
             CONNECTIVITY_SERVICE,
             //@hide: IP_MEMORY_STORE_SERVICE,
             IPSEC_SERVICE,
+            TEST_NETWORK_SERVICE,
             //@hide: UPDATE_LOCK_SERVICE,
             //@hide: NETWORKMANAGEMENT_SERVICE,
             NETWORK_STATS_SERVICE,
@@ -3158,6 +3221,7 @@ public abstract class Context {
             RESTRICTIONS_SERVICE,
             APP_OPS_SERVICE,
             ROLE_SERVICE,
+            //@hide ROLE_CONTROLLER_SERVICE,
             CAMERA_SERVICE,
             PRINT_SERVICE,
             CONSUMER_IR_SERVICE,
@@ -3270,11 +3334,16 @@ public abstract class Context {
      * {@link #USB_SERVICE}, {@link #WALLPAPER_SERVICE}, {@link #WIFI_P2P_SERVICE},
      * {@link #WIFI_SERVICE}, {@link #WIFI_AWARE_SERVICE}. For these services this method will
      * return <code>null</code>.  Generally, if you are running as an instant app you should always
-     * check whether the result of this method is null.
+     * check whether the result of this method is {@code null}.
+     *
+     * <p>Note: When implementing this method, keep in mind that new services can be added on newer
+     * Android releases, so if you're looking for just the explicit names mentioned above, make sure
+     * to return {@code null} when you don't recognize the name &mdash; if you throw a
+     * {@link RuntimeException} exception instead, you're app might break on new Android releases.
      *
      * @param name The name of the desired service.
      *
-     * @return The service or null if the name does not exist.
+     * @return The service or {@code null} if the name does not exist.
      *
      * @see #WINDOW_SERVICE
      * @see android.view.WindowManager
@@ -3348,7 +3417,9 @@ public abstract class Context {
      * {@link android.app.UiModeManager}, {@link android.app.DownloadManager},
      * {@link android.os.BatteryManager}, {@link android.app.job.JobScheduler},
      * {@link android.app.usage.NetworkStatsManager}.
-     * </p><p>
+     * </p>
+     *
+     * <p>
      * Note: System services obtained via this API may be closely associated with
      * the Context in which they are obtained from.  In general, do not share the
      * service objects between various different contexts (Activities, Applications,
@@ -3360,11 +3431,13 @@ public abstract class Context {
      * {@link #FINGERPRINT_SERVICE}, {@link #KEYGUARD_SERVICE}, {@link #SHORTCUT_SERVICE},
      * {@link #USB_SERVICE}, {@link #WALLPAPER_SERVICE}, {@link #WIFI_P2P_SERVICE},
      * {@link #WIFI_SERVICE}, {@link #WIFI_AWARE_SERVICE}. For these services this method will
-     * return <code>null</code>.  Generally, if you are running as an instant app you should always
-     * check whether the result of this method is null.
+     * return {@code null}. Generally, if you are running as an instant app you should always
+     * check whether the result of this method is {@code null}.
+     * </p>
      *
      * @param serviceClass The class of the desired service.
-     * @return The service or null if the class is not a supported system service.
+     * @return The service or {@code null} if the class is not a supported system service. Note:
+     * <b>never</b> throw a {@link RuntimeException} if the name is not supported.
      */
     @SuppressWarnings("unchecked")
     public final @Nullable <T> T getSystemService(@NonNull Class<T> serviceClass) {
@@ -3623,6 +3696,7 @@ public abstract class Context {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static final String STATUS_BAR_SERVICE = "statusbar";
 
     /**
@@ -3655,20 +3729,21 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
-     * {@link android.net.IpMemoryStore} to store and read information about
-     * known networks.
-     * @hide
-     */
-    public static final String IP_MEMORY_STORE_SERVICE = "ipmemorystore";
-
-    /**
-     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.net.IpSecManager} for encrypting Sockets or Networks with
      * IPSec.
      *
      * @see #getSystemService(String)
      */
     public static final String IPSEC_SERVICE = "ipsec";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a {@link
+     * android.net.TestNetworkManager} for building TUNs and limited-use Networks
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    @TestApi public static final String TEST_NETWORK_SERVICE = "test_network";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a {@link
@@ -3763,10 +3838,7 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a {@link
-     * android.net.wifi.rtt.WifiRttManager} for ranging devices with wifi
-     *
-     * Note: this is a replacement for WIFI_RTT_SERVICE above. It will
-     * be renamed once final implementation in place.
+     * android.net.wifi.rtt.WifiRttManager} for ranging devices with wifi.
      *
      * @see #getSystemService(String)
      * @see android.net.wifi.rtt.WifiRttManager
@@ -3959,6 +4031,16 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link com.android.server.attention.AttentionManagerService} for attention services.
+     *
+     * @see #getSystemService(String)
+     * @see android.server.attention.AttentionManagerService
+     * @hide
+     */
+    public static final String ATTENTION_SERVICE = "attention";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.view.inputmethod.InputMethodManager} for accessing input
      * methods.
      *
@@ -4070,7 +4152,7 @@ public abstract class Context {
      * @see #getSystemService(String)
      * @hide
      */
-    @SystemApi
+    @SystemApi @TestApi
     public static final String ROLLBACK_SERVICE = "rollback";
 
     /**
@@ -4265,6 +4347,16 @@ public abstract class Context {
      * @see android.app.role.RoleManager
      */
     public static final String ROLE_SERVICE = "role";
+
+    /**
+     * Official published name of the (internal) role controller service.
+     *
+     * @see #getSystemService(String)
+     * @see android.app.role.RoleControllerService
+     *
+     * @hide
+     */
+    public static final String ROLE_CONTROLLER_SERVICE = "role_controller";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
@@ -4490,8 +4582,7 @@ public abstract class Context {
      * @see android.os.BugreportManager
      * @hide
      */
-    // TODO: Expose API when the implementation is more complete.
-    // @SystemApi
+    @SystemApi @TestApi
     public static final String BUGREPORT_SERVICE = "bugreport";
 
     /**
@@ -4575,11 +4666,10 @@ public abstract class Context {
 
      /**
      * Use with {@link #getSystemService(String)} to retrieve an
-     * {@link android.os.DynamicAndroidManager}.
+     * {@link android.os.image.DynamicSystemManager}.
      * @hide
      */
-    @SystemApi
-    public static final String DYNAMIC_ANDROID_SERVICE = "dynamic_android";
+    public static final String DYNAMIC_SYSTEM_SERVICE = "dynamic_system";
 
     /**
      * Determine whether the given permission is allowed for a particular
@@ -5253,6 +5343,7 @@ public abstract class Context {
      * @return display ID associated with this {@link Context}.
      * @hide
      */
+    @TestApi
     public abstract int getDisplayId();
 
     /**
@@ -5336,6 +5427,14 @@ public abstract class Context {
      * @hide
      */
     public void setAutofillClient(@SuppressWarnings("unused") AutofillClient client) {
+    }
+
+    /**
+     * @hide
+     */
+    @Nullable
+    public ContentCaptureClient getContentCaptureClient() {
+        return null;
     }
 
     /**

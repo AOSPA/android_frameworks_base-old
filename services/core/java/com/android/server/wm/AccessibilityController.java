@@ -607,6 +607,13 @@ final class AccessibilityController {
                         availableBounds.op(windowBounds, Region.Op.DIFFERENCE);
                     }
 
+                    // Count letterbox into nonMagnifiedBounds
+                    if (windowState.isLetterboxedForDisplayCutoutLw()) {
+                        Region letterboxBounds = getLetterboxBounds(windowState);
+                        nonMagnifiedBounds.op(letterboxBounds, Region.Op.UNION);
+                        availableBounds.op(letterboxBounds, Region.Op.DIFFERENCE);
+                    }
+
                     // Update accounted bounds
                     Region accountedBounds = mTempRegion2;
                     accountedBounds.set(mMagnificationRegion);
@@ -656,6 +663,25 @@ final class AccessibilityController {
                             MyHandler.MESSAGE_NOTIFY_MAGNIFICATION_REGION_CHANGED, args)
                             .sendToTarget();
                 }
+            }
+
+            private Region getLetterboxBounds(WindowState windowState) {
+                final AppWindowToken appToken = windowState.mAppToken;
+                if (appToken == null) {
+                    return new Region();
+                }
+
+                mDisplay.getRealSize(mTempPoint);
+                final Rect letterboxInsets = appToken.getLetterboxInsets();
+                final int screenWidth = mTempPoint.x;
+                final int screenHeight = mTempPoint.y;
+                final Rect nonLetterboxRect = mTempRect1;
+                final Region letterboxBounds = mTempRegion3;
+                nonLetterboxRect.set(0, 0, screenWidth, screenHeight);
+                nonLetterboxRect.inset(letterboxInsets);
+                letterboxBounds.set(0, 0, screenWidth, screenHeight);
+                letterboxBounds.op(nonLetterboxRect, Region.Op.DIFFERENCE);
+                return letterboxBounds;
             }
 
             public void onRotationChangedLocked() {
@@ -881,7 +907,7 @@ final class AccessibilityController {
                 }
 
                 public void releaseSurface() {
-                    mSurfaceControl.release();
+                    mSurfaceControl.remove();
                     mSurface.release();
                 }
 
@@ -1106,7 +1132,7 @@ final class AccessibilityController {
                 HashSet<Integer> skipRemainingWindowsForTasks = new HashSet<>();
 
                 // Iterate until we figure out what is touchable for the entire screen.
-                for (int i = visibleWindowCount - 1; i >= 0 && !unaccountedSpace.isEmpty(); i--) {
+                for (int i = visibleWindowCount - 1; i >= 0; i--) {
                     final WindowState windowState = visibleWindows.valueAt(i);
 
                     final Rect boundsInScreen = mTempRect;
@@ -1117,6 +1143,11 @@ final class AccessibilityController {
                         addPopulatedWindowInfo(windowState, boundsInScreen, windows, addedWindows);
                         updateUnaccountedSpace(windowState, boundsInScreen, unaccountedSpace,
                                 skipRemainingWindowsForTasks);
+                        focusedWindowAdded |= windowState.isFocused();
+                    }
+
+                    if (unaccountedSpace.isEmpty() && focusedWindowAdded) {
+                        break;
                     }
                 }
 

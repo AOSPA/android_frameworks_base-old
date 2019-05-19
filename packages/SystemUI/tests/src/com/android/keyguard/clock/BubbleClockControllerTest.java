@@ -17,6 +17,7 @@ package com.android.keyguard.clock;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import android.content.res.Resources;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper.RunWithLooper;
@@ -26,10 +27,13 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.colorextraction.SysuiColorExtractor;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -37,28 +41,32 @@ import org.junit.runner.RunWith;
 public final class BubbleClockControllerTest extends SysuiTestCase {
 
     private BubbleClockController mClockController;
+    @Mock SysuiColorExtractor mMockColorExtractor;
 
     @Before
     public void setUp() {
+        MockitoAnnotations.initMocks(this);
+
+        Resources res = getContext().getResources();
         LayoutInflater layoutInflater = LayoutInflater.from(getContext());
-        mClockController = BubbleClockController.build(layoutInflater);
+        mClockController = new BubbleClockController(res, layoutInflater, mMockColorExtractor);
     }
 
     @Test
-    public void setDarkAmount_fadeIn() {
+    public void setDarkAmount_AOD() {
         ViewGroup smallClockFrame = (ViewGroup) mClockController.getView();
         View smallClock = smallClockFrame.getChildAt(0);
         // WHEN dark amount is set to AOD
         mClockController.setDarkAmount(1f);
         // THEN small clock should not be shown.
-        assertThat(smallClock.getVisibility()).isEqualTo(View.GONE);
+        assertThat(smallClock.getVisibility()).isEqualTo(View.VISIBLE);
     }
 
     @Test
-    public void setTextColor_setDigitalClock() {
+    public void setColorPalette_setDigitalClock() {
         ViewGroup smallClock = (ViewGroup) mClockController.getView();
         // WHEN text color is set
-        mClockController.setTextColor(42);
+        mClockController.setColorPalette(true, new int[]{42});
         // THEN child of small clock should have text color set.
         TextView digitalClock = (TextView) smallClock.getChildAt(0);
         assertThat(digitalClock.getCurrentTextColor()).isEqualTo(42);

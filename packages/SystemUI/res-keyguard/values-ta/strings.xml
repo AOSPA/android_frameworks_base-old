@@ -34,7 +34,7 @@
     <string name="keyguard_password_wrong_pin_code" msgid="6535018036285012028">"தவறான பின் குறியீடு."</string>
     <string name="keyguard_sim_error_message_short" msgid="592109500618448312">"செல்லாத சிம் கார்டு."</string>
     <string name="keyguard_charged" msgid="3316115607283493413">"முழுவதுமாகச் சார்ஜ் ஆகிவிட்டது"</string>
-    <string name="keyguard_plugged_in_wireless" msgid="3004717438401575235">"<xliff:g id="PERCENTAGE">%s</xliff:g> • வயர்லெஸ் முறையில் சார்ஜாகிறது"</string>
+    <string name="keyguard_plugged_in_wireless" msgid="8404159927155454732">"<xliff:g id="PERCENTAGE">%s</xliff:g> • வயர்லெஸ் முறையில் சார்ஜாகிறது"</string>
     <string name="keyguard_plugged_in" msgid="3161102098900158923">"<xliff:g id="PERCENTAGE">%s</xliff:g> • சார்ஜாகிறது"</string>
     <string name="keyguard_plugged_in_charging_fast" msgid="3684592786276709342">"<xliff:g id="PERCENTAGE">%s</xliff:g> • வேகமாகச் சார்ஜாகிறது"</string>
     <string name="keyguard_plugged_in_charging_slowly" msgid="509533586841478405">"<xliff:g id="PERCENTAGE">%s</xliff:g> • மெதுவாகச் சார்ஜாகிறது"</string>
@@ -56,11 +56,11 @@
     <string name="keyguard_accessibility_sim_pin_area" msgid="912702510825058921">"சிம் பின்னுக்கான பகுதி"</string>
     <string name="keyguard_accessibility_sim_puk_area" msgid="136979425761438705">"சிம் PUKக்கான பகுதி"</string>
     <string name="keyguard_accessibility_next_alarm" msgid="5835196989158584991">"அடுத்த அலாரம் <xliff:g id="ALARM">%1$s</xliff:g>க்கு அமைக்கப்பட்டுள்ளது"</string>
-    <string name="keyboardview_keycode_delete" msgid="6883116827512721630">"நீக்கும் பொத்தான்"</string>
+    <string name="keyboardview_keycode_delete" msgid="6883116827512721630">"நீக்கும் பட்டன்"</string>
     <string name="disable_carrier_button_text" msgid="6914341927421916114">"இ-சிம்மை முடக்கும்"</string>
     <string name="error_disable_esim_title" msgid="4852978431156228006">"eSIMஐ முடக்க முடியவில்லை"</string>
     <string name="error_disable_esim_msg" msgid="676694908770135639">"பிழை ஏற்பட்டதால் eSIMஐ முடக்க முடியவில்லை."</string>
-    <string name="keyboardview_keycode_enter" msgid="4505833604411016668">"என்டர் பொத்தான்"</string>
+    <string name="keyboardview_keycode_enter" msgid="4505833604411016668">"என்டர் பட்டன்"</string>
     <string name="kg_forgot_pattern_button_text" msgid="534245177645252620">"பேட்டர்ன் நினைவில்லையா"</string>
     <string name="kg_wrong_pattern" msgid="2873443744087746812">"தவறான பேட்டர்ன்"</string>
     <string name="kg_wrong_password" msgid="8060364776224836597">"தவறான கடவுச்சொல்"</string>
@@ -151,84 +151,4 @@
       <item quantity="other">சிம் தற்போது முடக்கப்பட்டுள்ளது. தொடர்வதற்கு, PUK குறியீட்டை உள்ளிடவும். நீங்கள் <xliff:g id="_NUMBER_1">%d</xliff:g> முறை மட்டுமே முயற்சிக்க முடியும். அதன்பிறகு சிம் நிரந்தரமாக முடக்கப்படும். விவரங்களுக்கு, மொபைல் நிறுவனத்தைத் தொடர்புகொள்ளவும்.</item>
       <item quantity="one">சிம் தற்போது முடக்கப்பட்டுள்ளது. தொடர்வதற்கு, PUK குறியீட்டை உள்ளிடவும். நீங்கள் <xliff:g id="_NUMBER_0">%d</xliff:g> முறை மட்டுமே முயற்சிக்க முடியும். அதன்பிறகு சிம் நிரந்தரமாக முடக்கப்படும். விவரங்களுக்கு, மொபைல் நிறுவனத்தைத் தொடர்புகொள்ளவும்.</item>
     </plurals>
-    <plurals name="type_clock_header" formatted="false" msgid="6782840450655632763">
-      <item quantity="other">"<annotation name="color">"மணி இப்போது"</annotation>\n"^1\n^2</item>
-      <item quantity="one">"<annotation name="color">"மணி இப்போது"</annotation>\n"^1\n^2</item>
-    </plurals>
-  <string-array name="type_clock_hours">
-    <item msgid="3543074812389379830">"பன்னிரண்டு"</item>
-    <item msgid="7389464214252023751">"ஒன்று"</item>
-    <item msgid="8803180377002008046">"இரண்டு"</item>
-    <item msgid="8614897059944644719">"மூன்று"</item>
-    <item msgid="2293058674782619556">"நான்கு"</item>
-    <item msgid="4815402358455041664">"ஐந்து"</item>
-    <item msgid="3325754778509665687">"ஆறு"</item>
-    <item msgid="5805551341866280575">"ஏழு"</item>
-    <item msgid="203334816668238610">"எட்டு"</item>
-    <item msgid="4828052671464488923">"ஒன்பது"</item>
-    <item msgid="2233497913571137419">"பத்து"</item>
-    <item msgid="5621554266768657830">"பதினொன்று"</item>
-  </string-array>
-  <string-array name="type_clock_minutes">
-    <item msgid="8322049385467207985">"மணி"</item>
-    <item msgid="8837126587669001578">"ஒன்று"</item>
-    <item msgid="4294343372940455660">"இரண்டு"</item>
-    <item msgid="7129166637707421536">"மூன்று"</item>
-    <item msgid="7579404865008788673">"நான்கு"</item>
-    <item msgid="3873924689207380586">"ஐந்து"</item>
-    <item msgid="4849565597850069377">"ஆறு"</item>
-    <item msgid="4404219424523572364">"ஏழு"</item>
-    <item msgid="8740481214764087329">"எட்டு"</item>
-    <item msgid="1713216865806811237">"ஒன்பது"</item>
-    <item msgid="3508406095411245038">"பத்து"</item>
-    <item msgid="7161996337755311711">"பதினொன்று"</item>
-    <item msgid="4044549963329624197">"பன்னிரண்டு"</item>
-    <item msgid="333373157917379088">"பதிமூன்று"</item>
-    <item msgid="2631202907124819385">"பதினான்கு"</item>
-    <item msgid="6472396076858033453">"பதினைந்து"</item>
-    <item msgid="8656981856181581643">"பதினாறு"</item>
-    <item msgid="7289026608562030619">"பதினேழு"</item>
-    <item msgid="3881477602692646573">"பதினெட்டு"</item>
-    <item msgid="3358129827772984226">"பத்தொன்பது"</item>
-    <item msgid="3308575407402865807">"இருபது"</item>
-    <item msgid="5346560955382229629">"இருபத்து\nஒன்று"</item>
-    <item msgid="226750304761473436">"இருபத்து\nஇரண்டு"</item>
-    <item msgid="616811325336838734">"இருபத்து\nமூன்று"</item>
-    <item msgid="616346116869053440">"இருபத்து\nநான்கு"</item>
-    <item msgid="4642996410384042830">"இருபத்து\nஐந்து"</item>
-    <item msgid="7506092849993571465">"இருபத்து\nஆறு"</item>
-    <item msgid="1915078191101042031">"இருபத்து\nஏழு"</item>
-    <item msgid="4292378641900520252">"இருபத்து\nஎட்டு"</item>
-    <item msgid="5339513901773103696">"இருபத்து\nஒன்பது"</item>
-    <item msgid="3574673250891657607">"முப்பது"</item>
-    <item msgid="5796923836589110940">"முப்பத்து\nஒன்று"</item>
-    <item msgid="5859323597571702052">"முப்பத்து\nஇரண்டு"</item>
-    <item msgid="5133326723148876507">"முப்பத்து\nமூன்று"</item>
-    <item msgid="2693999494655663096">"முப்பத்து\nநான்கு"</item>
-    <item msgid="3316754944962836197">"முப்பத்து\nஐந்து"</item>
-    <item msgid="816891008836796723">"முப்பத்து\nஆறு"</item>
-    <item msgid="9158890488666520078">"முப்பத்து\nஏழு"</item>
-    <item msgid="1894769703213894011">"முப்பத்து\nஎட்டு"</item>
-    <item msgid="5638820345598572399">"முப்பத்து\nஒன்பது"</item>
-    <item msgid="8838304023017895439">"நாற்பது"</item>
-    <item msgid="1834742948932559597">"நாற்பத்து\nஒன்று"</item>
-    <item msgid="6573707308847773944">"நாற்பத்து\nஇரண்டு"</item>
-    <item msgid="2450149950652678001">"நாற்பத்து\nமூன்று"</item>
-    <item msgid="2874667401318178036">"நாற்பத்து\nநான்கு"</item>
-    <item msgid="3391101532763048862">"நாற்பத்து\nஐந்து"</item>
-    <item msgid="1671489330863254362">"நாற்பத்து\nஆறு"</item>
-    <item msgid="5916017359554531038">"நாற்பத்து\nஏழு"</item>
-    <item msgid="8205413177993059967">"நாற்பத்து\nஎட்டு"</item>
-    <item msgid="6607867415142171302">"நாற்பத்து\nஒன்பது"</item>
-    <item msgid="8358850748472089162">"ஐம்பது"</item>
-    <item msgid="3551313125255080234">"ஐம்பத்து\nஒன்று"</item>
-    <item msgid="1559678130725716542">"ஐம்பத்து\nஇரண்டு"</item>
-    <item msgid="431441994725492377">"ஐம்பத்து\nமூன்று"</item>
-    <item msgid="6345774640539623024">"ஐம்பத்து\nநான்கு"</item>
-    <item msgid="8018192990793931120">"முப்பத்து\nஐந்து"</item>
-    <item msgid="6187650843754604534">"ஐம்பத்து\nஆறு"</item>
-    <item msgid="8727240174015993259">"ஐம்பத்து\nஏழு"</item>
-    <item msgid="848339003778952950">"ஐம்பத்து\nஎட்டு"</item>
-    <item msgid="5798985802835423618">"ஐம்பத்து\nஒன்பது"</item>
-  </string-array>
 </resources>

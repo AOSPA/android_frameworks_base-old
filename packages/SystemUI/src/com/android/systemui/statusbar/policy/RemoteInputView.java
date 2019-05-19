@@ -63,6 +63,7 @@ import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry.EditedSuggestionInfo;
 import com.android.systemui.statusbar.notification.row.wrapper.NotificationViewWrapper;
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
+import com.android.systemui.statusbar.phone.LightBarController;
 
 import java.util.function.Consumer;
 
@@ -146,7 +147,11 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
         Intent fillInIntent = new Intent().addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         RemoteInput.addResultsToIntent(mRemoteInputs, fillInIntent,
                 results);
-        RemoteInput.setResultsSource(fillInIntent, RemoteInput.SOURCE_FREE_FORM_INPUT);
+        if (mEntry.editedSuggestionInfo == null) {
+            RemoteInput.setResultsSource(fillInIntent, RemoteInput.SOURCE_FREE_FORM_INPUT);
+        } else {
+            RemoteInput.setResultsSource(fillInIntent, RemoteInput.SOURCE_CHOICE);
+        }
 
         mEditText.setEnabled(false);
         mSendButton.setVisibility(INVISIBLE);
@@ -512,10 +517,12 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
         private final Drawable mBackground;
         private RemoteInputView mRemoteInputView;
         boolean mShowImeOnInputConnection;
+        private LightBarController mLightBarController;
 
         public RemoteEditText(Context context, AttributeSet attrs) {
             super(context, attrs);
             mBackground = getBackground();
+            mLightBarController = Dependency.get(LightBarController.class);
         }
 
         private void defocusIfNeeded(boolean animate) {
@@ -553,6 +560,9 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
             super.onFocusChanged(focused, direction, previouslyFocusedRect);
             if (!focused) {
                 defocusIfNeeded(true /* animate */);
+            }
+            if (!mRemoteInputView.mRemoved) {
+                mLightBarController.setDirectReplying(focused);
             }
         }
 

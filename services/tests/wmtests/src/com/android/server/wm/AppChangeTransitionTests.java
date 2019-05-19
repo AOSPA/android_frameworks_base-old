@@ -38,6 +38,7 @@ import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationDefinition;
 import android.view.RemoteAnimationTarget;
 
+import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Test;
@@ -59,7 +60,7 @@ public class AppChangeTransitionTests extends WindowTestsBase {
     public void setUpOnDisplay(DisplayContent dc) {
         mStack = createTaskStackOnDisplay(WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_STANDARD, dc);
         mTask = createTaskInStack(mStack, 0 /* userId */);
-        mToken = WindowTestUtils.createTestAppWindowToken(dc, false /* skipOnParentChanged */);
+        mToken = WindowTestUtils.createTestAppWindowToken(dc);
 
         mTask.addChild(mToken, 0);
 
@@ -96,6 +97,7 @@ public class AppChangeTransitionTests extends WindowTestsBase {
     }
 
     @Test
+    @FlakyTest(bugId = 131005232)
     public void testModeChangeRemoteAnimatorNoSnapshot() {
         // setup currently defaults to no snapshot.
         setUpOnDisplay(mDisplayContent);
@@ -113,6 +115,7 @@ public class AppChangeTransitionTests extends WindowTestsBase {
     }
 
     @Test
+    @FlakyTest(bugId = 131005232)
     public void testCancelPendingChangeOnRemove() {
         // setup currently defaults to no snapshot.
         setUpOnDisplay(mDisplayContent);
@@ -132,6 +135,7 @@ public class AppChangeTransitionTests extends WindowTestsBase {
     }
 
     @Test
+    @FlakyTest(bugId = 131005232)
     public void testNoChangeWhenMoveDisplay() {
         mDisplayContent.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
         final DisplayContent dc1 = createNewDisplay(Display.STATE_ON);

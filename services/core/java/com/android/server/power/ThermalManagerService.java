@@ -24,6 +24,7 @@ import android.hardware.thermal.V1_1.IThermalCallback;
 import android.hardware.thermal.V2_0.IThermalChangedCallback;
 import android.hardware.thermal.V2_0.ThrottlingSeverity;
 import android.os.Binder;
+import android.os.CoolingDevice;
 import android.os.HwBinder;
 import android.os.IThermalEventListener;
 import android.os.IThermalService;
@@ -49,8 +50,10 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This is a system service that listens to HAL thermal events and dispatch those to listeners.
@@ -89,15 +92,11 @@ public class ThermalManagerService extends SystemService {
     @GuardedBy("mLock")
     private ArrayMap<String, Temperature> mTemperatureMap = new ArrayMap<>();
 
-    /** Local PMS handle. */
-    private final PowerManager mPowerManager;
-
     /** HAL wrapper. */
     private ThermalHalWrapper mHalWrapper;
 
     /** Hal ready. */
-    @GuardedBy("mLock")
-    private boolean mHalReady;
+    private final AtomicBoolean mHalReady = new AtomicBoolean();
 
     /** Invalid throttling status */
     private static final int INVALID_THROTTLING = Integer.MIN_VALUE;
@@ -109,7 +108,6 @@ public class ThermalManagerService extends SystemService {
     @VisibleForTesting
     ThermalManagerService(Context context, @Nullable ThermalHalWrapper halWrapper) {
         super(context);
-        mPowerManager = context.getSystemService(PowerManager.class);
         mHalWrapper = halWrapper;
         // Initialize to invalid to send status onActivityManagerReady
         mStatus = INVALID_THROTTLING;
@@ -154,7 +152,7 @@ public class ThermalManagerService extends SystemService {
                 onTemperatureChanged(temperatures.get(i), false);
             }
             onTemperatureMapChangedLocked();
-            mHalReady = halConnected /* true */;
+            mHalReady.set(true);
         }
     }
 
@@ -254,10 +252,11 @@ public class ThermalManagerService extends SystemService {
         }
     }
 
-    private void shutdownIfNeededLocked(Temperature temperature) {
+    private void shutdownIfNeeded(Temperature temperature) {
         if (temperature.getStatus() != Temperature.THROTTLING_SHUTDOWN) {
             return;
         }
+        final PowerManager powerManager = getContext().getSystemService(PowerManager.class);
         switch (temperature.getType()) {
             case Temperature.TYPE_CPU:
                 // Fall through
@@ -266,17 +265,17 @@ public class ThermalManagerService extends SystemService {
             case Temperature.TYPE_NPU:
                 // Fall through
             case Temperature.TYPE_SKIN:
-                mPowerManager.shutdown(false, PowerManager.SHUTDOWN_THERMAL_STATE, false);
+                powerManager.shutdown(false, PowerManager.SHUTDOWN_THERMAL_STATE, false);
                 break;
             case Temperature.TYPE_BATTERY:
-                mPowerManager.shutdown(false, PowerManager.SHUTDOWN_BATTERY_THERMAL_STATE, false);
+                powerManager.shutdown(false, PowerManager.SHUTDOWN_BATTERY_THERMAL_STATE, false);
                 break;
         }
     }
 
     private void onTemperatureChanged(Temperature temperature, boolean sendStatus) {
+        shutdownIfNeeded(temperature);
         synchronized (mLock) {
-            shutdownIfNeededLocked(temperature);
             Temperature old = mTemperatureMap.put(temperature.getName(), temperature);
             if (old != null) {
                 if (old.getStatus() != temperature.getStatus()) {
@@ -301,20 +300,6 @@ public class ThermalManagerService extends SystemService {
         }
     }
 
-    private void dumpTemperaturesLocked(PrintWriter pw, String prefix,
-            Collection<Temperature> temperatures) {
-        for (Temperature t : temperatures) {
-            pw.print(prefix);
-            String out = String.format("Name: %s, Type: %d, Status: %d, Value: %f",
-                    t.getName(),
-                    t.getType(),
-                    t.getStatus(),
-                    t.getValue()
-            );
-            pw.println(out);
-        }
-    }
-
     @VisibleForTesting
     final IThermalService.Stub mService = new IThermalService.Stub() {
         @Override
@@ -327,10 +312,8 @@ public class ThermalManagerService extends SystemService {
                     if (!mThermalEventListeners.register(listener, null)) {
                         return false;
                     }
-                    if (mHalReady) {
-                        // Notify its callback after new client registered.
-                        postEventListenerCurrentTemperatures(listener, null);
-                    }
+                    // Notify its callback after new client registered.
+                    postEventListenerCurrentTemperatures(listener, null);
                     return true;
                 } finally {
                     Binder.restoreCallingIdentity(token);
@@ -349,10 +332,8 @@ public class ThermalManagerService extends SystemService {
                     if (!mThermalEventListeners.register(listener, new Integer(type))) {
                         return false;
                     }
-                    if (mHalReady) {
-                        // Notify its callback after new client registered.
-                        postEventListenerCurrentTemperatures(listener, new Integer(type));
-                    }
+                    // Notify its callback after new client registered.
+                    postEventListenerCurrentTemperatures(listener, new Integer(type));
                     return true;
                 } finally {
                     Binder.restoreCallingIdentity(token);
@@ -380,7 +361,7 @@ public class ThermalManagerService extends SystemService {
                     android.Manifest.permission.DEVICE_POWER, null);
             final long token = Binder.clearCallingIdentity();
             try {
-                if (!mHalReady) {
+                if (!mHalReady.get()) {
                     return new ArrayList<>();
                 }
                 return mHalWrapper.getCurrentTemperatures(false, 0 /* not used */);
@@ -395,7 +376,7 @@ public class ThermalManagerService extends SystemService {
                     android.Manifest.permission.DEVICE_POWER, null);
             final long token = Binder.clearCallingIdentity();
             try {
-                if (!mHalReady) {
+                if (!mHalReady.get()) {
                     return new ArrayList<>();
                 }
                 return mHalWrapper.getCurrentTemperatures(true, type);
@@ -413,10 +394,8 @@ public class ThermalManagerService extends SystemService {
                     if (!mThermalStatusListeners.register(listener)) {
                         return false;
                     }
-                    if (mHalReady) {
-                        // Notify its callback after new client registered.
-                        postStatusListener(listener);
-                    }
+                    // Notify its callback after new client registered.
+                    postStatusListener(listener);
                     return true;
                 } finally {
                     Binder.restoreCallingIdentity(token);
@@ -450,6 +429,43 @@ public class ThermalManagerService extends SystemService {
         }
 
         @Override
+        public List<CoolingDevice> getCurrentCoolingDevices() {
+            getContext().enforceCallingOrSelfPermission(
+                    android.Manifest.permission.DEVICE_POWER, null);
+            final long token = Binder.clearCallingIdentity();
+            try {
+                if (!mHalReady.get()) {
+                    return new ArrayList<>();
+                }
+                return mHalWrapper.getCurrentCoolingDevices(false, 0);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public List<CoolingDevice> getCurrentCoolingDevicesWithType(int type) {
+            getContext().enforceCallingOrSelfPermission(
+                    android.Manifest.permission.DEVICE_POWER, null);
+            final long token = Binder.clearCallingIdentity();
+            try {
+                if (!mHalReady.get()) {
+                    return new ArrayList<>();
+                }
+                return mHalWrapper.getCurrentCoolingDevices(true, type);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        private void dumpItemsLocked(PrintWriter pw, String prefix,
+                Collection<?> items) {
+            for (Iterator iterator = items.iterator(); iterator.hasNext();) {
+                pw.println(prefix + iterator.next().toString());
+            }
+        }
+
+        @Override
         public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
             if (!DumpUtils.checkDumpPermission(getContext(), TAG, pw)) {
                 return;
@@ -464,17 +480,19 @@ public class ThermalManagerService extends SystemService {
                     mThermalStatusListeners.dump(pw, "\t");
                     pw.println("Thermal Status: " + mStatus);
                     pw.println("Cached temperatures:");
-                    dumpTemperaturesLocked(pw, "\t", mTemperatureMap.values());
-                    pw.println("HAL Ready: " + mHalReady);
-                    if (mHalReady) {
+                    dumpItemsLocked(pw, "\t", mTemperatureMap.values());
+                    pw.println("HAL Ready: " + mHalReady.get());
+                    if (mHalReady.get()) {
                         pw.println("HAL connection:");
                         mHalWrapper.dump(pw, "\t");
                         pw.println("Current temperatures from HAL:");
-                        dumpTemperaturesLocked(pw, "\t",
+                        dumpItemsLocked(pw, "\t",
                                 mHalWrapper.getCurrentTemperatures(false, 0));
+                        pw.println("Current cooling devices from HAL:");
+                        dumpItemsLocked(pw, "\t",
+                                mHalWrapper.getCurrentCoolingDevices(false, 0));
                     }
                 }
-
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -591,6 +609,9 @@ public class ThermalManagerService extends SystemService {
         protected abstract List<Temperature> getCurrentTemperatures(boolean shouldFilter,
                 int type);
 
+        protected abstract List<CoolingDevice> getCurrentCoolingDevices(boolean shouldFilter,
+                int type);
+
         protected abstract boolean connectToHal();
 
         protected abstract void dump(PrintWriter pw, String prefix);
@@ -660,6 +681,42 @@ public class ThermalManagerService extends SystemService {
                             });
                 } catch (RemoteException e) {
                     Slog.e(TAG, "Couldn't getCurrentTemperatures, reconnecting...", e);
+                    connectToHal();
+                }
+                return ret;
+            }
+        }
+
+        @Override
+        protected List<CoolingDevice> getCurrentCoolingDevices(boolean shouldFilter,
+                int type) {
+            synchronized (mHalLock) {
+                List<CoolingDevice> ret = new ArrayList<>();
+                if (mThermalHal10 == null) {
+                    return ret;
+                }
+                try {
+                    mThermalHal10.getCoolingDevices((status, coolingDevices) -> {
+                        if (ThermalStatusCode.SUCCESS == status.code) {
+                            for (android.hardware.thermal.V1_0.CoolingDevice
+                                    coolingDevice : coolingDevices) {
+                                if (shouldFilter && type != coolingDevice.type) {
+                                    continue;
+                                }
+                                ret.add(new CoolingDevice(
+                                        (long) coolingDevice.currentValue,
+                                        coolingDevice.type,
+                                        coolingDevice.name));
+                            }
+                        } else {
+                            Slog.e(TAG,
+                                    "Couldn't get cooling device because of HAL error: "
+                                            + status.debugMessage);
+                        }
+
+                    });
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Couldn't getCurrentCoolingDevices, reconnecting...", e);
                     connectToHal();
                 }
                 return ret;
@@ -760,6 +817,42 @@ public class ThermalManagerService extends SystemService {
         }
 
         @Override
+        protected List<CoolingDevice> getCurrentCoolingDevices(boolean shouldFilter,
+                int type) {
+            synchronized (mHalLock) {
+                List<CoolingDevice> ret = new ArrayList<>();
+                if (mThermalHal11 == null) {
+                    return ret;
+                }
+                try {
+                    mThermalHal11.getCoolingDevices((status, coolingDevices) -> {
+                        if (ThermalStatusCode.SUCCESS == status.code) {
+                            for (android.hardware.thermal.V1_0.CoolingDevice
+                                    coolingDevice : coolingDevices) {
+                                if (shouldFilter && type != coolingDevice.type) {
+                                    continue;
+                                }
+                                ret.add(new CoolingDevice(
+                                        (long) coolingDevice.currentValue,
+                                        coolingDevice.type,
+                                        coolingDevice.name));
+                            }
+                        } else {
+                            Slog.e(TAG,
+                                    "Couldn't get cooling device because of HAL error: "
+                                            + status.debugMessage);
+                        }
+
+                    });
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Couldn't getCurrentCoolingDevices, reconnecting...", e);
+                    connectToHal();
+                }
+                return ret;
+            }
+        }
+
+        @Override
         protected boolean connectToHal() {
             synchronized (mHalLock) {
                 try {
@@ -820,9 +913,7 @@ public class ThermalManagerService extends SystemService {
                 }
                 try {
                     mThermalHal20.getCurrentTemperatures(shouldFilter, type,
-                            (ThermalStatus status,
-                                    ArrayList<android.hardware.thermal.V2_0.Temperature>
-                                            temperatures) -> {
+                            (status, temperatures) -> {
                                 if (ThermalStatusCode.SUCCESS == status.code) {
                                     for (android.hardware.thermal.V2_0.Temperature
                                             temperature : temperatures) {
@@ -840,6 +931,39 @@ public class ThermalManagerService extends SystemService {
                             });
                 } catch (RemoteException e) {
                     Slog.e(TAG, "Couldn't getCurrentTemperatures, reconnecting...", e);
+                    connectToHal();
+                }
+                return ret;
+            }
+        }
+
+        @Override
+        protected List<CoolingDevice> getCurrentCoolingDevices(boolean shouldFilter,
+                int type) {
+            synchronized (mHalLock) {
+                List<CoolingDevice> ret = new ArrayList<>();
+                if (mThermalHal20 == null) {
+                    return ret;
+                }
+                try {
+                    mThermalHal20.getCurrentCoolingDevices(shouldFilter, type,
+                            (status, coolingDevices) -> {
+                                if (ThermalStatusCode.SUCCESS == status.code) {
+                                    for (android.hardware.thermal.V2_0.CoolingDevice
+                                            coolingDevice : coolingDevices) {
+                                        ret.add(new CoolingDevice(
+                                                coolingDevice.value, coolingDevice.type,
+                                                coolingDevice.name));
+                                    }
+                                } else {
+                                    Slog.e(TAG,
+                                            "Couldn't get cooling device because of HAL error: "
+                                                    + status.debugMessage);
+                                }
+
+                            });
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Couldn't getCurrentCoolingDevices, reconnecting...", e);
                     connectToHal();
                 }
                 return ret;

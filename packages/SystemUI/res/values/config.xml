@@ -40,6 +40,9 @@
     <!-- Whether or not we show the number in the bar. -->
     <bool name="config_statusBarShowNumber">false</bool>
 
+    <!-- If the lock screen should be dismissed after biometric auth. -->
+    <bool name="config_faceAuthDismissesKeyguard">false</bool>
+
     <!-- Vibrator pattern for camera gesture launch. -->
     <integer-array translatable="false" name="config_cameraLaunchGestureVibePattern">
         <item>0</item>
@@ -106,12 +109,12 @@
 
     <!-- The default tiles to display in QuickSettings -->
     <string name="quick_settings_tiles_default" translatable="false">
-        wifi,bt,dnd,flashlight,rotation,battery,cell,airplane,cast,sensorprivacy
+        wifi,bt,dnd,flashlight,rotation,battery,cell,airplane,cast
     </string>
 
     <!-- Tiles native to System UI. Order should match "quick_settings_tiles_default" -->
     <string name="quick_settings_tiles_stock" translatable="false">
-        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,location,hotspot,inversion,saver,work,cast,night,sensorprivacy
+        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,location,hotspot,inversion,saver,dark,work,cast,night
     </string>
 
     <!-- The tiles to display in QuickSettings -->
@@ -332,6 +335,9 @@
         <item>com.android.systemui.ScreenDecorations</item>
         <item>com.android.systemui.biometrics.BiometricDialogImpl</item>
         <item>com.android.systemui.SliceBroadcastRelayHandler</item>
+        <item>com.android.systemui.SizeCompatModeActivityController</item>
+        <item>com.android.systemui.statusbar.notification.InstantAppNotifier</item>
+        <item>com.android.systemui.theme.ThemeOverlayController</item>
     </string-array>
 
     <!-- SystemUI vender service, used in config_systemUIServiceComponents. -->
@@ -346,7 +352,7 @@
     <!-- Nav bar button default ordering/layout -->
     <string name="config_navBarLayout" translatable="false">left[.5W],back[1WC];home;recent[1WC],right[.5W]</string>
     <string name="config_navBarLayoutQuickstep" translatable="false">back[1.7WC];home;contextual[1.7WC]</string>
-    <string name="config_navBarLayoutHandle" translatable="false">";home_handle;"</string>
+    <string name="config_navBarLayoutHandle" translatable="false">start_contextual[.1WC];home_handle;ime_switcher[.1WC]</string>
 
     <bool name="quick_settings_show_full_alarm">false</bool>
 
@@ -488,6 +494,10 @@
          -->
     <integer name="config_smart_replies_in_notifications_max_num_actions">-1</integer>
 
+    <!-- Smart replies in notifications: Delay (ms) before smart suggestions are clickable, since
+         they were added. -->
+    <integer name="config_smart_replies_in_notifications_onclick_init_delay">200</integer>
+
     <!-- Screenshot editing default activity.  Must handle ACTION_EDIT image/png intents.
          Blank sends the user to the Chooser first.
          This name is in the ComponentName flattened format (package/class)  -->
@@ -505,5 +515,8 @@
     </string-array>
 
     <integer name="ongoing_appops_dialog_max_apps">5</integer>
+
+    <!-- Launcher package name for overlaying icons. -->
+    <string name="launcher_overlayable_package" translatable="false">com.android.launcher3</string>
 
 </resources>

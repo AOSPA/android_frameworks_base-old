@@ -26,6 +26,7 @@
 #include <nativehelper/JNIHelp.h>
 #include "core_jni_helpers.h"
 
+#include <audiomanager/AudioManager.h>
 #include <media/AudioSystem.h>
 #include <media/AudioPolicy.h>
 #include <media/MicrophoneInfo.h>
@@ -144,6 +145,7 @@ static struct {
 static jclass gAudioMixingRuleClass;
 static struct {
     jfieldID    mCriteria;
+    jfieldID    mAllowPrivilegedPlaybackCapture;
     // other fields unused by JNI
 } gAudioMixingRuleFields;
 
@@ -352,7 +354,15 @@ android_media_AudioSystem_newAudioSessionId(JNIEnv *env, jobject thiz)
 static jint
 android_media_AudioSystem_newAudioPlayerId(JNIEnv *env, jobject thiz)
 {
-    return AudioSystem::newAudioUniqueId(AUDIO_UNIQUE_ID_USE_PLAYER);
+    int id = AudioSystem::newAudioUniqueId(AUDIO_UNIQUE_ID_USE_CLIENT);
+    return id != AUDIO_UNIQUE_ID_ALLOCATE ? id : PLAYER_PIID_INVALID;
+}
+
+static jint
+android_media_AudioSystem_newAudioRecorderId(JNIEnv *env, jobject thiz)
+{
+    int id = AudioSystem::newAudioUniqueId(AUDIO_UNIQUE_ID_USE_CLIENT);
+    return id != AUDIO_UNIQUE_ID_ALLOCATE ? id : RECORD_RIID_INVALID;
 }
 
 static jint
@@ -469,9 +479,10 @@ android_media_AudioSystem_recording_callback(int event,
 
     env->CallStaticVoidMethod(clazz,
                               gAudioPolicyEventHandlerMethods.postRecordConfigEventFromNative,
-                              event, (jint) clientInfo->uid, clientInfo->session,
-                              clientInfo->source, clientInfo->port_id, clientInfo->silenced,
-                              recParamArray, jClientEffects, jEffects, source);
+                              event, (jint) clientInfo->riid, (jint) clientInfo->uid,
+                              clientInfo->session, clientInfo->source, clientInfo->port_id,
+                              clientInfo->silenced, recParamArray, jClientEffects, jEffects,
+                              source);
     env->DeleteLocalRef(clazz);
     env->DeleteLocalRef(recParamArray);
     env->DeleteLocalRef(jClientEffects);
@@ -1868,6 +1879,8 @@ static jint convertAudioMixToNative(JNIEnv *env,
 
     jobject jRule = env->GetObjectField(jAudioMix, gAudioMixFields.mRule);
     jobject jRuleCriteria = env->GetObjectField(jRule, gAudioMixingRuleFields.mCriteria);
+    nAudioMix->mAllowPrivilegedPlaybackCapture =
+            env->GetBooleanField(jRule, gAudioMixingRuleFields.mAllowPrivilegedPlaybackCapture);
     env->DeleteLocalRef(jRule);
     jobjectArray jCriteria = (jobjectArray)env->CallObjectMethod(jRuleCriteria,
                                                                  gArrayListMethods.toArray);
@@ -2038,13 +2051,13 @@ android_media_AudioSystem_getStreamVolumeDB(JNIEnv *env, jobject thiz,
 
 static jboolean
 android_media_AudioSystem_isOffloadSupported(JNIEnv *env, jobject thiz,
-        jint encoding, jint sampleRate, jint channelMask, jint channelIndexMask)
+        jint encoding, jint sampleRate, jint channelMask, jint channelIndexMask, jint streamType)
 {
     audio_offload_info_t format = AUDIO_INFO_INITIALIZER;
     format.format = (audio_format_t) audioFormatToNative(encoding);
     format.sample_rate = (uint32_t) sampleRate;
     format.channel_mask = nativeChannelMaskFromJavaChannelMasks(channelMask, channelIndexMask);
-    format.stream_type = AUDIO_STREAM_MUSIC;
+    format.stream_type = (audio_stream_type_t) streamType;
     format.has_video = false;
     format.is_streaming = false;
     // offload duration unknown at this point:
@@ -2226,6 +2239,11 @@ android_media_AudioSystem_isHapticPlaybackSupported(JNIEnv *env, jobject thiz)
     return AudioSystem::isHapticPlaybackSupported();
 }
 
+static jint
+android_media_AudioSystem_setAllowedCapturePolicy(JNIEnv *env, jobject thiz, jint uid, jint flags) {
+    return AudioSystem::setAllowedCapturePolicy(uid, flags);
+}
+
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod gMethods[] = {
@@ -2238,6 +2256,7 @@ static const JNINativeMethod gMethods[] = {
     {"isSourceActive",      "(I)Z",     (void *)android_media_AudioSystem_isSourceActive},
     {"newAudioSessionId",   "()I",      (void *)android_media_AudioSystem_newAudioSessionId},
     {"newAudioPlayerId",    "()I",      (void *)android_media_AudioSystem_newAudioPlayerId},
+    {"newAudioRecorderId",  "()I",      (void *)android_media_AudioSystem_newAudioRecorderId},
     {"setDeviceConnectionState", "(IILjava/lang/String;Ljava/lang/String;I)I", (void *)android_media_AudioSystem_setDeviceConnectionState},
     {"getDeviceConnectionState", "(ILjava/lang/String;)I",  (void *)android_media_AudioSystem_getDeviceConnectionState},
     {"handleDeviceConfigChange", "(ILjava/lang/String;Ljava/lang/String;I)I", (void *)android_media_AudioSystem_handleDeviceConfigChange},
@@ -2292,7 +2311,7 @@ static const JNINativeMethod gMethods[] = {
                                     (void *)android_media_AudioSystem_registerRecordingCallback},
     {"systemReady", "()I", (void *)android_media_AudioSystem_systemReady},
     {"getStreamVolumeDB", "(III)F", (void *)android_media_AudioSystem_getStreamVolumeDB},
-    {"native_is_offload_supported", "(IIII)Z", (void *)android_media_AudioSystem_isOffloadSupported},
+    {"native_is_offload_supported", "(IIIII)Z", (void *)android_media_AudioSystem_isOffloadSupported},
     {"getMicrophones", "(Ljava/util/ArrayList;)I", (void *)android_media_AudioSystem_getMicrophones},
     {"getSurroundFormats", "(Ljava/util/Map;Z)I", (void *)android_media_AudioSystem_getSurroundFormats},
     {"setSurroundFormatEnabled", "(IZ)I", (void *)android_media_AudioSystem_setSurroundFormatEnabled},
@@ -2301,6 +2320,7 @@ static const JNINativeMethod gMethods[] = {
     {"isHapticPlaybackSupported", "()Z", (void *)android_media_AudioSystem_isHapticPlaybackSupported},
     {"getHwOffloadEncodingFormatsSupportedForA2DP", "(Ljava/util/ArrayList;)I",
                     (void*)android_media_AudioSystem_getHwOffloadEncodingFormatsSupportedForA2DP},
+    {"setAllowedCapturePolicy", "(II)I", (void *)android_media_AudioSystem_setAllowedCapturePolicy},
 };
 
 static const JNINativeMethod gEventHandlerMethods[] = {
@@ -2431,7 +2451,7 @@ int register_android_media_AudioSystem(JNIEnv *env)
                     "dynamicPolicyCallbackFromNative", "(ILjava/lang/String;I)V");
     gAudioPolicyEventHandlerMethods.postRecordConfigEventFromNative =
             GetStaticMethodIDOrDie(env, env->FindClass(kClassPathName),
-                    "recordingCallbackFromNative", "(IIIIIZ[I[Landroid/media/audiofx/AudioEffect$Descriptor;[Landroid/media/audiofx/AudioEffect$Descriptor;I)V");
+                    "recordingCallbackFromNative", "(IIIIIIZ[I[Landroid/media/audiofx/AudioEffect$Descriptor;[Landroid/media/audiofx/AudioEffect$Descriptor;I)V");
 
     jclass audioMixClass = FindClassOrDie(env, "android/media/audiopolicy/AudioMix");
     gAudioMixClass = MakeGlobalRefOrDie(env, audioMixClass);
@@ -2456,6 +2476,8 @@ int register_android_media_AudioSystem(JNIEnv *env)
     gAudioMixingRuleClass = MakeGlobalRefOrDie(env, audioMixingRuleClass);
     gAudioMixingRuleFields.mCriteria = GetFieldIDOrDie(env, audioMixingRuleClass, "mCriteria",
                                                        "Ljava/util/ArrayList;");
+    gAudioMixingRuleFields.mAllowPrivilegedPlaybackCapture =
+            GetFieldIDOrDie(env, audioMixingRuleClass, "mAllowPrivilegedPlaybackCapture", "Z");
 
     jclass audioMixMatchCriterionClass =
                 FindClassOrDie(env, "android/media/audiopolicy/AudioMixingRule$AudioMixMatchCriterion");

@@ -17,7 +17,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:androidprv="http://schemas.android.com/apk/prv/res/android"
     package="android.ext.services"
-    android:versionCode="1"
+    android:versionCode="210000000"
     android:versionName="1"
     coreApp="true">
 
@@ -25,6 +25,12 @@
     <uses-permission android:name="android.permission.READ_DEVICE_CONFIG" />
 
     <uses-permission android:name="android.permission.MONITOR_DEFAULT_SMS_PACKAGE" />
+    <uses-permission android:name="android.permission.REQUEST_NOTIFICATION_ASSISTANT_SERVICE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <uses-sdk
+        android:targetSdkVersion="28"
+    />
 
     <application android:label="@string/app_name"
         android:defaultToDeviceProtectedStorage="true"
@@ -72,6 +78,17 @@
                 <action android:name="android.service.sms.action.FINANCIAL_SERVICE_INTENT" />
             </intent-filter>
         </service>
+
+        <service android:name=".watchdog.ExplicitHealthCheckServiceImpl"
+                 android:permission="android.permission.BIND_EXPLICIT_HEALTH_CHECK_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.watchdog.ExplicitHealthCheckService" />
+            </intent-filter>
+        </service>
+
+        <activity android:name=".notification.CopyCodeActivity"
+                  android:exported="false"
+                  android:theme="@android:style/Theme.NoDisplay"/>
 
         <library android:name="android.ext.services"/>
     </application>

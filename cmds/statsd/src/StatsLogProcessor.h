@@ -66,7 +66,7 @@ public:
 
     void onDumpReport(const ConfigKey& key, const int64_t dumpTimeNs,
                       const bool include_current_partial_bucket, const bool erase_data,
-                      const DumpReportReason dumpReportReason, 
+                      const DumpReportReason dumpReportReason,
                       const DumpLatency dumpLatency,
                       vector<uint8_t>* outData);
     void onDumpReport(const ConfigKey& key, const int64_t dumpTimeNs,
@@ -89,11 +89,11 @@ public:
     void WriteDataToDisk(const DumpReportReason dumpReportReason,
                          const DumpLatency dumpLatency);
 
-    /* Persist metric activation status onto disk. */
-    void WriteMetricsActivationToDisk(int64_t currentTimeNs);
+    /* Persist configs containing metrics with active activations to disk. */
+    void SaveActiveConfigsToDisk(int64_t currentTimeNs);
 
-    /* Load metric activation status from disk. */
-    void LoadMetricsActivationFromDisk();
+    /* Load configs containing metrics with active activations from disk. */
+    void LoadActiveConfigsFromDisk();
 
     // Reset all configs.
     void resetConfigs();
@@ -164,12 +164,13 @@ private:
                                const DumpReportReason dumpReportReason,
                                const DumpLatency dumpLatency);
 
-    void onConfigMetricsReportLocked(const ConfigKey& key, const int64_t dumpTimeStampNs,
-                                     const bool include_current_partial_bucket,
-                                     const bool erase_data,
-                                     const DumpReportReason dumpReportReason,
-                                     const DumpLatency dumpLatency,
-                                     util::ProtoOutputStream* proto);
+    void onConfigMetricsReportLocked(
+            const ConfigKey& key, const int64_t dumpTimeStampNs,
+            const bool include_current_partial_bucket, const bool erase_data,
+            const DumpReportReason dumpReportReason, const DumpLatency dumpLatency,
+            /*if dataSavedToDisk is true, it indicates the caller will write the data to disk
+             (e.g., before reboot). So no need to further persist local history.*/
+            const bool dataSavedToDisk, vector<uint8_t>* proto);
 
     /* Check if we should send a broadcast if approaching memory limits and if we're over, we
      * actually delete the data. */
@@ -207,6 +208,9 @@ private:
     // Last time we wrote data to disk.
     int64_t mLastWriteTimeNs = 0;
 
+    // Last time we wrote active metrics to disk.
+    int64_t mLastActiveMetricsWriteNs = 0;
+
 #ifdef VERY_VERBOSE_PRINTING
     bool mPrintAllLogs = false;
 #endif
@@ -217,6 +221,9 @@ private:
     FRIEND_TEST(StatsLogProcessorTest, TestDropWhenByteSizeTooLarge);
     FRIEND_TEST(StatsLogProcessorTest, TestActiveConfigMetricDiskWriteRead);
     FRIEND_TEST(StatsLogProcessorTest, TestActivationOnBoot);
+    FRIEND_TEST(StatsLogProcessorTest, TestActivationOnBootMultipleActivations);
+    FRIEND_TEST(StatsLogProcessorTest,
+            TestActivationOnBootMultipleActivationsDifferentActivationTypes);
 
     FRIEND_TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensionsForSumDuration1);
     FRIEND_TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensionsForSumDuration2);
@@ -231,9 +238,12 @@ private:
     FRIEND_TEST(GaugeMetricE2eTest, TestMultipleFieldsForPushedEvent);
     FRIEND_TEST(GaugeMetricE2eTest, TestRandomSamplePulledEvents);
     FRIEND_TEST(GaugeMetricE2eTest, TestRandomSamplePulledEvent_LateAlarm);
+    FRIEND_TEST(GaugeMetricE2eTest, TestRandomSamplePulledEventsWithActivation);
+    FRIEND_TEST(GaugeMetricE2eTest, TestRandomSamplePulledEventsNoCondition);
     FRIEND_TEST(GaugeMetricE2eTest, TestConditionChangeToTrueSamplePulledEvents);
     FRIEND_TEST(ValueMetricE2eTest, TestPulledEvents);
     FRIEND_TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm);
+    FRIEND_TEST(ValueMetricE2eTest, TestPulledEvents_WithActivation);
 
     FRIEND_TEST(DimensionInConditionE2eTest, TestCreateCountMetric_NoLink_OR_CombinationCondition);
     FRIEND_TEST(DimensionInConditionE2eTest, TestCreateCountMetric_Link_OR_CombinationCondition);
@@ -257,6 +267,9 @@ private:
     FRIEND_TEST(AlarmE2eTest, TestMultipleAlarms);
     FRIEND_TEST(ConfigTtlE2eTest, TestCountMetric);
     FRIEND_TEST(MetricActivationE2eTest, TestCountMetric);
+    FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithOneDeactivation);
+    FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithTwoDeactivations);
+    FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithTwoMetricsTwoDeactivations);
 };
 
 }  // namespace statsd

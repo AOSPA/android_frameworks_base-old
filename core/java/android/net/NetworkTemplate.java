@@ -40,6 +40,7 @@ import android.os.Parcelable;
 import android.util.BackupUtils;
 import android.util.Log;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
 
 import java.io.ByteArrayOutputStream;
@@ -89,8 +90,20 @@ public class NetworkTemplate implements Parcelable {
 
     private static boolean sForceAllNetworkTypes = false;
 
+    /**
+     * Results in matching against all mobile network types.
+     *
+     * <p>See {@link #matchesMobile} and {@link matchesMobileWildcard}.
+     */
+    @VisibleForTesting
     public static void forceAllNetworkTypes() {
         sForceAllNetworkTypes = true;
+    }
+
+    /** Resets the affect of {@link #forceAllNetworkTypes}. */
+    @VisibleForTesting
+    public static void resetForceAllNetworkTypes() {
+        sForceAllNetworkTypes = false;
     }
 
     /**
@@ -482,7 +495,7 @@ public class NetworkTemplate implements Parcelable {
     }
 
     @UnsupportedAppUsage
-    public static final Creator<NetworkTemplate> CREATOR = new Creator<NetworkTemplate>() {
+    public static final @android.annotation.NonNull Creator<NetworkTemplate> CREATOR = new Creator<NetworkTemplate>() {
         @Override
         public NetworkTemplate createFromParcel(Parcel in) {
             return new NetworkTemplate(in);

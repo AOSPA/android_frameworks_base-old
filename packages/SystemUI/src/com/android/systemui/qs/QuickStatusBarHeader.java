@@ -15,27 +15,22 @@
 package com.android.systemui.qs;
 
 import static android.app.StatusBarManager.DISABLE2_QUICK_SETTINGS;
-import static android.provider.Settings.System.SHOW_BATTERY_PERCENT;
 
 import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
 import android.annotation.ColorInt;
 import android.app.ActivityManager;
 import android.app.AlarmManager;
-import android.app.Dialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.Resources;
-import android.database.ContentObserver;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.media.AudioManager;
-import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.AlarmClock;
@@ -45,6 +40,8 @@ import android.text.format.DateUtils;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.Pair;
+import android.util.StatsLog;
+import android.view.ContextThemeWrapper;
 import android.view.DisplayCutout;
 import android.view.View;
 import android.view.WindowInsets;
@@ -59,13 +56,12 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.settingslib.Utils;
 import com.android.systemui.BatteryMeterView;
-import com.android.systemui.Prefs;
+import com.android.systemui.DualToneHandler;
 import com.android.systemui.R;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.plugins.DarkIconDispatcher.DarkReceiver;
 import com.android.systemui.privacy.OngoingPrivacyChip;
-import com.android.systemui.privacy.OngoingPrivacyDialog;
 import com.android.systemui.privacy.PrivacyDialogBuilder;
 import com.android.systemui.privacy.PrivacyItem;
 import com.android.systemui.privacy.PrivacyItemController;
@@ -74,8 +70,6 @@ import com.android.systemui.statusbar.phone.PhoneStatusBarView;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarIconController.TintedIconManager;
 import com.android.systemui.statusbar.phone.StatusIconContainer;
-import com.android.systemui.statusbar.phone.SystemUIDialog;
-import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.Clock;
 import com.android.systemui.statusbar.policy.DateView;
 import com.android.systemui.statusbar.policy.NextAlarmController;
@@ -107,7 +101,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     public static final int MAX_TOOLTIP_SHOWN_COUNT = 2;
 
     private final Handler mHandler = new Handler();
-    private final BatteryController mBatteryController;
     private final NextAlarmController mAlarmController;
     private final ZenModeController mZenController;
     private final StatusBarIconController mStatusBarIconController;
@@ -119,20 +112,18 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     private boolean mListening;
     private boolean mQsDisabled;
 
+    private QSCarrierGroup mCarrierGroup;
     protected QuickQSPanel mHeaderQsPanel;
     protected QSTileHost mHost;
     private TintedIconManager mIconManager;
     private TouchAnimator mStatusIconsAlphaAnimator;
     private TouchAnimator mHeaderTextContainerAlphaAnimator;
     private TouchAnimator mPrivacyChipAlphaAnimator;
+    private DualToneHandler mDualToneHandler;
 
     private View mSystemIconsView;
     private View mQuickQsStatusIcons;
     private View mHeaderTextContainerView;
-    /** View containing the next alarm and ringer mode info. */
-    private View mStatusContainer;
-    /** Tooltip for educating users that they can long press on icons to see more details. */
-    private View mLongPressTooltipView;
 
     private int mRingerMode = AudioManager.RINGER_MODE_NORMAL;
     private AlarmManager.AlarmClockInfo mNextAlarm;
@@ -140,9 +131,11 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     private ImageView mNextAlarmIcon;
     /** {@link TextView} containing the actual text indicating when the next alarm will go off. */
     private TextView mNextAlarmTextView;
+    private View mNextAlarmContainer;
     private View mStatusSeparator;
     private ImageView mRingerModeIcon;
     private TextView mRingerModeTextView;
+    private View mRingerContainer;
     private Clock mClockView;
     private DateView mDateView;
     private OngoingPrivacyChip mPrivacyChip;
@@ -150,8 +143,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     private BatteryMeterView mBatteryRemainingIcon;
 
     private PrivacyItemController mPrivacyItemController;
-    /** Counts how many times the long press tooltip has been shown to the user. */
-    private int mShownCount;
 
     private final BroadcastReceiver mRingerReceiver = new BroadcastReceiver() {
         @Override
@@ -161,14 +152,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         }
     };
     private boolean mHasTopCutout = false;
-
-    private final PercentSettingObserver mPercentSettingObserver =
-            new PercentSettingObserver(new Handler(mContext.getMainLooper()));
-
-    /**
-     * Runnable for automatically fading out the long press tooltip (as if it were animating away).
-     */
-    private final Runnable mAutoFadeOutTooltipRunnable = () -> hideLongPressTooltip(false);
+    private boolean mPrivacyChipLogged = false;
 
     private PrivacyItemController.Callback mPICCallback = new PrivacyItemController.Callback() {
         @Override
@@ -181,16 +165,16 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     @Inject
     public QuickStatusBarHeader(@Named(VIEW_CONTEXT) Context context, AttributeSet attrs,
             NextAlarmController nextAlarmController, ZenModeController zenModeController,
-            BatteryController batteryController, StatusBarIconController statusBarIconController,
+            StatusBarIconController statusBarIconController,
             ActivityStarter activityStarter, PrivacyItemController privacyItemController) {
         super(context, attrs);
         mAlarmController = nextAlarmController;
         mZenController = zenModeController;
-        mBatteryController = batteryController;
         mStatusBarIconController = statusBarIconController;
         mActivityStarter = activityStarter;
         mPrivacyItemController = privacyItemController;
-        mShownCount = getStoredShownCount();
+        mDualToneHandler = new DualToneHandler(
+                new ContextThemeWrapper(context, R.style.QSHeaderTheme));
     }
 
     @Override
@@ -206,17 +190,21 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         iconContainer.setShouldRestrictIcons(false);
         mIconManager = new TintedIconManager(iconContainer);
 
-        // Views corresponding to the header info section (e.g. tooltip and next alarm).
+        // Views corresponding to the header info section (e.g. ringer and next alarm).
         mHeaderTextContainerView = findViewById(R.id.header_text_container);
-        mLongPressTooltipView = findViewById(R.id.long_press_tooltip);
-        mStatusContainer = findViewById(R.id.status_container);
         mStatusSeparator = findViewById(R.id.status_separator);
         mNextAlarmIcon = findViewById(R.id.next_alarm_icon);
         mNextAlarmTextView = findViewById(R.id.next_alarm_text);
+        mNextAlarmContainer = findViewById(R.id.alarm_container);
+        mNextAlarmContainer.setOnClickListener(this::onClick);
         mRingerModeIcon = findViewById(R.id.ringer_mode_icon);
         mRingerModeTextView = findViewById(R.id.ringer_mode_text);
+        mRingerContainer = findViewById(R.id.ringer_container);
+        mRingerContainer.setOnClickListener(this::onClick);
         mPrivacyChip = findViewById(R.id.privacy_chip);
-        mPrivacyChip.setOnClickListener(this);
+        mPrivacyChip.setOnClickListener(this::onClick);
+        mCarrierGroup = findViewById(R.id.carrier_group);
+
 
         updateResources();
 
@@ -224,13 +212,15 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         int colorForeground = Utils.getColorAttrDefaultColor(getContext(),
                 android.R.attr.colorForeground);
         float intensity = getColorIntensity(colorForeground);
-        int fillColor = fillColorForIntensity(intensity, getContext());
+        int fillColor = mDualToneHandler.getSingleColor(intensity);
 
         // Set light text on the header icons because they will always be on a black background
         applyDarkness(R.id.clock, tintArea, 0, DarkIconDispatcher.DEFAULT_ICON_TINT);
 
         // Set the correct tint for the status icons so they contrast
         mIconManager.setTint(fillColor);
+        mNextAlarmIcon.setImageTintList(ColorStateList.valueOf(fillColor));
+        mRingerModeIcon.setImageTintList(ColorStateList.valueOf(fillColor));
 
         mClockView = findViewById(R.id.clock);
         mClockView.setOnClickListener(this);
@@ -241,7 +231,11 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         mBatteryRemainingIcon = findViewById(R.id.batteryRemainingIcon);
         // Don't need to worry about tuner settings for this icon
         mBatteryRemainingIcon.setIgnoreTunerUpdates(true);
-        updateShowPercent();
+        // QS will always show the estimate, and BatteryMeterView handles the case where
+        // it's unavailable or charging
+        mBatteryRemainingIcon.setPercentShowMode(BatteryMeterView.MODE_ESTIMATE);
+        mRingerModeTextView.setSelected(true);
+        mNextAlarmTextView.setSelected(true);
     }
 
     private List<String> getIgnoredIconSlots() {
@@ -264,13 +258,19 @@ public class QuickStatusBarHeader extends RelativeLayout implements
             boolean ringerVisible = mRingerModeTextView.getVisibility() == View.VISIBLE;
             mStatusSeparator.setVisibility(alarmVisible && ringerVisible ? View.VISIBLE
                     : View.GONE);
-            updateTooltipShow();
         }
     }
 
     private void setChipVisibility(boolean chipVisible) {
         if (chipVisible) {
             mPrivacyChip.setVisibility(View.VISIBLE);
+            // Makes sure that the chip is logged as viewed at most once each time QS is opened
+            // mListening makes sure that the callback didn't return after the user closed QS
+            if (!mPrivacyChipLogged && mListening) {
+                mPrivacyChipLogged = true;
+                StatsLog.write(StatsLog.PRIVACY_INDICATORS_INTERACTED,
+                        StatsLog.PRIVACY_INDICATORS_INTERACTED__TYPE__CHIP_VIEWED);
+            }
         } else {
             mPrivacyChip.setVisibility(View.GONE);
         }
@@ -284,11 +284,11 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         if (!ZenModeConfig.isZenOverridingRinger(mZenController.getZen(),
                 mZenController.getConsolidatedPolicy())) {
             if (mRingerMode == AudioManager.RINGER_MODE_VIBRATE) {
-                mRingerModeIcon.setImageResource(R.drawable.stat_sys_ringer_vibrate);
+                mRingerModeIcon.setImageResource(R.drawable.ic_volume_ringer_vibrate);
                 mRingerModeTextView.setText(R.string.qs_status_phone_vibrate);
                 ringerVisible = true;
             } else if (mRingerMode == AudioManager.RINGER_MODE_SILENT) {
-                mRingerModeIcon.setImageResource(R.drawable.stat_sys_ringer_silent);
+                mRingerModeIcon.setImageResource(R.drawable.ic_volume_ringer_mute);
                 mRingerModeTextView.setText(R.string.qs_status_phone_muted);
                 ringerVisible = true;
             }
@@ -323,13 +323,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         }
     }
 
-    private int fillColorForIntensity(float intensity, Context context) {
-        if (intensity == 0) {
-            return context.getColor(R.color.light_mode_icon_color_single_tone);
-        }
-        return context.getColor(R.color.dark_mode_icon_color_single_tone);
-    }
-
     @Override
     protected void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
@@ -340,8 +333,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements
                 newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE;
         mClockView.useWallpaperTextColor(shouldUseWallpaperTextColor);
     }
-
-
 
     @Override
     public void onRtlPropertiesChanged(int layoutDirection) {
@@ -394,14 +385,13 @@ public class QuickStatusBarHeader extends RelativeLayout implements
 
     private void updateStatusIconAlphaAnimator() {
         mStatusIconsAlphaAnimator = new TouchAnimator.Builder()
-                .addFloat(mQuickQsStatusIcons, "alpha", 1, 0)
+                .addFloat(mQuickQsStatusIcons, "alpha", 1, 0, 0)
                 .build();
     }
 
     private void updateHeaderTextContainerAlphaAnimator() {
         mHeaderTextContainerAlphaAnimator = new TouchAnimator.Builder()
-                .addFloat(mHeaderTextContainerView, "alpha", 0, 1)
-                .setStartDelay(.5f)
+                .addFloat(mHeaderTextContainerView, "alpha", 0, 0, 1)
                 .build();
     }
 
@@ -448,21 +438,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements
             mPrivacyChip.setExpanded(expansionFraction > 0.5);
             mPrivacyChipAlphaAnimator.setPosition(keyguardExpansionFraction);
         }
-
-        // Check the original expansion fraction - we don't want to show the tooltip until the
-        // panel is pulled all the way out.
-        if (expansionFraction == 1f) {
-            // QS is fully expanded, bring in the tooltip.
-            showLongPressTooltip();
-        }
-    }
-
-    /** Returns the latest stored tooltip shown count from SharedPreferences. */
-    private int getStoredShownCount() {
-        return Prefs.getInt(
-                mContext,
-                Prefs.Key.QS_LONG_PRESS_TOOLTIP_SHOWN_COUNT,
-                TOOLTIP_NOT_YET_SHOWN_COUNT);
     }
 
     public void disable(int state1, int state2, boolean animate) {
@@ -480,9 +455,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         super.onAttachedToWindow();
         mStatusBarIconController.addIconGroup(mIconManager);
         requestApplyInsets();
-        mContext.getContentResolver().registerContentObserver(
-                Settings.System.getUriFor(SHOW_BATTERY_PERCENT), false, mPercentSettingObserver,
-                ActivityManager.getCurrentUser());
     }
 
     @Override
@@ -521,7 +493,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     public void onDetachedFromWindow() {
         setListening(false);
         mStatusBarIconController.removeIconGroup(mIconManager);
-        mContext.getContentResolver().unregisterContentObserver(mPercentSettingObserver);
         super.onDetachedFromWindow();
     }
 
@@ -531,6 +502,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         }
         mHeaderQsPanel.setListening(listening);
         mListening = listening;
+        mCarrierGroup.setListening(mListening);
 
         if (listening) {
             mZenController.addCallback(this);
@@ -543,6 +515,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
             mAlarmController.removeCallback(this);
             mPrivacyItemController.removeCallback(mPICCallback);
             mContext.unregisterReceiver(mRingerReceiver);
+            mPrivacyChipLogged = false;
         }
     }
 
@@ -550,20 +523,31 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     public void onClick(View v) {
         if (v == mClockView) {
             mActivityStarter.postStartActivityDismissingKeyguard(new Intent(
-                    AlarmClock.ACTION_SHOW_ALARMS),0);
+                    AlarmClock.ACTION_SHOW_ALARMS), 0);
+        } else if (v == mNextAlarmContainer) {
+            if (mNextAlarm.getShowIntent() != null) {
+                mActivityStarter.postStartActivityDismissingKeyguard(
+                        mNextAlarm.getShowIntent());
+            } else {
+                Log.d(TAG, "No PendingIntent for next alarm. Using default intent");
+                mActivityStarter.postStartActivityDismissingKeyguard(new Intent(
+                        AlarmClock.ACTION_SHOW_ALARMS), 0);
+            }
         } else if (v == mPrivacyChip) {
             // Makes sure that the builder is grabbed as soon as the chip is pressed
             PrivacyDialogBuilder builder = mPrivacyChip.getBuilder();
             if (builder.getAppsAndTypes().size() == 0) return;
             Handler mUiHandler = new Handler(Looper.getMainLooper());
+            StatsLog.write(StatsLog.PRIVACY_INDICATORS_INTERACTED,
+                    StatsLog.PRIVACY_INDICATORS_INTERACTED__TYPE__CHIP_CLICKED);
             mUiHandler.post(() -> {
-                Dialog mDialog = new OngoingPrivacyDialog(mContext, builder).createDialog();
-                SystemUIDialog.setShowForAllUsers(mDialog, false);
-                SystemUIDialog.registerDismissListener(mDialog);
-                SystemUIDialog.setWindowOnTop(mDialog);
-                mActivityStarter.postQSRunnableDismissingKeyguard(() -> mDialog.show());
+                mActivityStarter.postStartActivityDismissingKeyguard(
+                        new Intent(Intent.ACTION_REVIEW_ONGOING_PERMISSION_USAGE), 0);
                 mHost.collapsePanels();
             });
+        } else if (v == mRingerContainer) {
+            mActivityStarter.postStartActivityDismissingKeyguard(new Intent(
+                    Settings.ACTION_SOUND_SETTINGS), 0);
         }
     }
 
@@ -576,115 +560,11 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     @Override
     public void onZenChanged(int zen) {
         updateStatusText();
-
     }
 
     @Override
     public void onConfigChanged(ZenModeConfig config) {
         updateStatusText();
-    }
-
-    private void updateTooltipShow() {
-        if (hasStatusText()) {
-            hideLongPressTooltip(true /* shouldShowStatusText */);
-        } else {
-            hideStatusText();
-        }
-        updateHeaderTextContainerAlphaAnimator();
-    }
-
-    private boolean hasStatusText() {
-        return mNextAlarmTextView.getVisibility() == View.VISIBLE
-                || mRingerModeTextView.getVisibility() == View.VISIBLE;
-    }
-
-    /**
-     * Animates in the long press tooltip (as long as the next alarm text isn't currently occupying
-     * the space).
-     */
-    public void showLongPressTooltip() {
-        // If we have status text to show, don't bother fading in the tooltip.
-        if (hasStatusText()) {
-            return;
-        }
-
-        if (mShownCount < MAX_TOOLTIP_SHOWN_COUNT) {
-            mLongPressTooltipView.animate().cancel();
-            mLongPressTooltipView.setVisibility(View.VISIBLE);
-            mLongPressTooltipView.animate()
-                    .alpha(1f)
-                    .setDuration(FADE_ANIMATION_DURATION_MS)
-                    .setListener(new AnimatorListenerAdapter() {
-                        @Override
-                        public void onAnimationEnd(Animator animation) {
-                            mHandler.postDelayed(
-                                    mAutoFadeOutTooltipRunnable, AUTO_FADE_OUT_DELAY_MS);
-                        }
-                    })
-                    .start();
-
-            // Increment and drop the shown count in prefs for the next time we're deciding to
-            // fade in the tooltip. We first sanity check that the tooltip count hasn't changed yet
-            // in prefs (say, from a long press).
-            if (getStoredShownCount() <= mShownCount) {
-                Prefs.putInt(mContext, Prefs.Key.QS_LONG_PRESS_TOOLTIP_SHOWN_COUNT, ++mShownCount);
-            }
-        }
-    }
-
-    /**
-     * Fades out the long press tooltip if it's partially visible - short circuits any running
-     * animation. Additionally has the ability to fade in the status info text.
-     *
-     * @param shouldShowStatusText whether we should fade in the status text
-     */
-    private void hideLongPressTooltip(boolean shouldShowStatusText) {
-        mLongPressTooltipView.animate().cancel();
-        if (mLongPressTooltipView.getVisibility() == View.VISIBLE
-                && mLongPressTooltipView.getAlpha() != 0f) {
-            mHandler.removeCallbacks(mAutoFadeOutTooltipRunnable);
-            mLongPressTooltipView.animate()
-                    .alpha(0f)
-                    .setDuration(FADE_ANIMATION_DURATION_MS)
-                    .setListener(new AnimatorListenerAdapter() {
-                        @Override
-                        public void onAnimationEnd(Animator animation) {
-                            if (DEBUG) Log.d(TAG, "hideLongPressTooltip: Hid long press tip");
-                            mLongPressTooltipView.setVisibility(View.INVISIBLE);
-
-                            if (shouldShowStatusText) {
-                                showStatus();
-                            }
-                        }
-                    })
-                    .start();
-        } else {
-            mLongPressTooltipView.setVisibility(View.INVISIBLE);
-            if (shouldShowStatusText) {
-                showStatus();
-            }
-        }
-    }
-
-    /**
-     * Fades in the updated status text. Note that if there's already a status showing, this will
-     * immediately fade it out and fade in the updated status.
-     */
-    private void showStatus() {
-        mStatusContainer.setAlpha(0f);
-
-        mStatusContainer.animate()
-                .alpha(1f)
-                .setDuration(FADE_ANIMATION_DURATION_MS)
-                .start();
-    }
-
-    /** Fades out the status text. */
-    private void hideStatusText() {
-        mStatusContainer.animate()
-                .alpha(0f)
-                .setDuration(FADE_ANIMATION_DURATION_MS)
-                .start();
     }
 
     public void updateEverything() {
@@ -707,8 +587,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         int colorForeground = Utils.getColorAttrDefaultColor(getContext(),
                 android.R.attr.colorForeground);
         float intensity = getColorIntensity(colorForeground);
-        int fillColor = fillColorForIntensity(intensity, getContext());
-        mBatteryRemainingIcon.setColorsFromContext(mHost.getContext());
+        int fillColor = mDualToneHandler.getSingleColor(intensity);
         mBatteryRemainingIcon.onDarkChanged(tintArea, intensity, fillColor);
     }
 
@@ -734,34 +613,15 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     public void setMargins(int sideMargins) {
         for (int i = 0; i < getChildCount(); i++) {
             View v = getChildAt(i);
+            // Prevents these views from getting set a margin.
+            // The Icon views all have the same padding set in XML to be aligned.
             if (v == mSystemIconsView || v == mQuickQsStatusIcons || v == mHeaderQsPanel
-                    || v == mPrivacyChip) {
+                    || v == mHeaderTextContainerView) {
                 continue;
             }
             RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) v.getLayoutParams();
             lp.leftMargin = sideMargins;
             lp.rightMargin = sideMargins;
-        }
-    }
-
-    private void updateShowPercent() {
-        final boolean systemSetting = 0 != Settings.System
-                .getIntForUser(getContext().getContentResolver(),
-                        SHOW_BATTERY_PERCENT, 0, ActivityManager.getCurrentUser());
-
-        mBatteryRemainingIcon.setPercentShowMode(systemSetting
-                ? BatteryMeterView.MODE_ESTIMATE : BatteryMeterView.MODE_ON);
-    }
-
-    private final class PercentSettingObserver extends ContentObserver {
-        PercentSettingObserver(Handler handler) {
-            super(handler);
-        }
-
-        @Override
-        public void onChange(boolean selfChange, Uri uri) {
-            super.onChange(selfChange, uri);
-            updateShowPercent();
         }
     }
 }

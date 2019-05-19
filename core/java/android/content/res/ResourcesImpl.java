@@ -1303,7 +1303,7 @@ public class ResourcesImpl {
 
     @AnyRes
     static int getAttributeSetSourceResId(@Nullable AttributeSet set) {
-        if (set == null) {
+        if (set == null || !(set instanceof XmlBlock.Parser)) {
             return ID_NULL;
         }
         return ((XmlBlock.Parser) set).getSourceResId();
@@ -1507,6 +1507,7 @@ public class ResourcesImpl {
          * @param explicitStyleRes A resource identifier of an explicit style resource.
          * @return ordered list of resource ID that are considered when resolving attribute values.
          */
+        @Nullable
         public int[] getAttributeResolutionStack(@AttrRes int defStyleAttr,
                 @StyleRes int defStyleRes, @StyleRes int explicitStyleRes) {
             synchronized (mKey) {

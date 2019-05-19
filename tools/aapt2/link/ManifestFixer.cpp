@@ -21,6 +21,7 @@
 #include "android-base/logging.h"
 
 #include "ResourceUtils.h"
+#include "trace/TraceBuffer.h"
 #include "util/Util.h"
 #include "xml/XmlActionExecutor.h"
 #include "xml/XmlDom.h"
@@ -366,6 +367,7 @@ bool ManifestFixer::BuildRules(xml::XmlActionExecutor* executor,
 
   application_action["uses-library"].Action(RequiredNameIsNotEmpty);
   application_action["library"].Action(RequiredNameIsNotEmpty);
+  application_action["profileable"];
 
   xml::XmlNodeAction& static_library_action = application_action["static-library"];
   static_library_action.Action(RequiredNameIsJavaPackage);
@@ -451,6 +453,7 @@ static bool RenameManifestPackage(const StringPiece& package_override, xml::Elem
 }
 
 bool ManifestFixer::Consume(IAaptContext* context, xml::XmlResource* doc) {
+  TRACE_CALL();
   xml::Element* root = xml::FindRootElement(doc->root.get());
   if (!root || !root->namespace_uri.empty() || root->name != "manifest") {
     context->GetDiagnostics()->Error(DiagMessage(doc->file.source)

@@ -64,7 +64,6 @@
         <include layout="@layout/car_top_navigation_bar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
         />
     </LinearLayout>
 
@@ -74,6 +73,17 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout="@layout/car_fullscreen_user_switcher"/>
+
+    <include layout="@layout/notification_center_activity"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginBottom="@dimen/navigation_bar_height"
+        android:visibility="invisible"/>
+
+    <include layout="@layout/headsup_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="invisible"/>
 
     <include layout="@layout/status_bar_expanded"
         android:layout_width="match_parent"

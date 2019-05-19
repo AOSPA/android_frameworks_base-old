@@ -61,7 +61,7 @@ import android.view.animation.LayoutAnimationController;
 import android.view.animation.Transformation;
 import android.view.autofill.Helper;
 import android.view.inspector.InspectableProperty;
-import android.view.inspector.InspectableProperty.EnumMap;
+import android.view.inspector.InspectableProperty.EnumEntry;
 
 import com.android.internal.R;
 
@@ -142,7 +142,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      * This field should be made private, so it is hidden from the SDK.
      * {@hide}
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123768704)
     protected OnHierarchyChangeListener mOnHierarchyChangeListener;
 
     // The view contained within this ViewGroup that has or contains focus.
@@ -239,7 +239,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             @ViewDebug.FlagToString(mask = FLAG_PADDING_NOT_NULL, equals = FLAG_PADDING_NOT_NULL,
                     name = "PADDING_NOT_NULL")
     }, formatToHexString = true)
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123769411)
     protected int mGroupFlags;
 
     /**
@@ -300,7 +300,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123769377)
     protected static final int FLAG_USE_CHILD_DRAWING_ORDER = 0x400;
 
     /**
@@ -314,7 +314,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      *
      * {@hide}
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123769647)
     protected static final int FLAG_SUPPORT_STATIC_TRANSFORMATIONS = 0x800;
 
     // UNUSED FLAG VALUE: 0x1000;
@@ -368,7 +368,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      * When set, this ViewGroup should not intercept touch events.
      * {@hide}
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 123983692)
     protected static final int FLAG_DISALLOW_INTERCEPT = 0x80000;
 
     /**
@@ -778,9 +778,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         @ViewDebug.IntToString(from = FOCUS_BLOCK_DESCENDANTS, to = "FOCUS_BLOCK_DESCENDANTS")
     })
     @InspectableProperty(enumMapping = {
-            @EnumMap(value = FOCUS_BEFORE_DESCENDANTS, name = "beforeDescendants"),
-            @EnumMap(value = FOCUS_AFTER_DESCENDANTS, name = "afterDescendants"),
-            @EnumMap(value = FOCUS_BLOCK_DESCENDANTS, name = "blocksDescendants")
+            @EnumEntry(value = FOCUS_BEFORE_DESCENDANTS, name = "beforeDescendants"),
+            @EnumEntry(value = FOCUS_AFTER_DESCENDANTS, name = "afterDescendants"),
+            @EnumEntry(value = FOCUS_BLOCK_DESCENDANTS, name = "blocksDescendants")
     })
     public int getDescendantFocusability() {
         return mGroupFlags & FLAG_MASK_FOCUSABILITY;
@@ -2011,7 +2011,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             for (int i = childrenCount - 1; i >= 0; i--) {
                 final int childIndex = getAndVerifyPreorderedIndex(childrenCount, i, customOrder);
                 final View child = getAndVerifyPreorderedView(preorderedList, children, childIndex);
-                if (!canViewReceivePointerEvents(child)
+                if (!child.canReceivePointerEvents()
                         || !isTransformedTouchPointInView(x, y, child, null)) {
                     continue;
                 }
@@ -2094,7 +2094,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                             childrenCount, i, customOrder);
                     final View child = getAndVerifyPreorderedView(
                             preorderedList, children, childIndex);
-                    if (!canViewReceivePointerEvents(child)
+                    if (!child.canReceivePointerEvents()
                             || !isTransformedTouchPointInView(x, y, child, null)) {
                         continue;
                     }
@@ -2314,7 +2314,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                                 getAndVerifyPreorderedIndex(childrenCount, i, customOrder);
                         final View child =
                                 getAndVerifyPreorderedView(preorderedList, children, childIndex);
-                        if (!canViewReceivePointerEvents(child)
+                        if (!child.canReceivePointerEvents()
                                 || !isTransformedTouchPointInView(x, y, child, null)) {
                             continue;
                         }
@@ -2500,7 +2500,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             for (int i = childrenCount - 1; i >= 0; i--) {
                 final int childIndex = getAndVerifyPreorderedIndex(childrenCount, i, customOrder);
                 final View child = getAndVerifyPreorderedView(preorderedList, children, childIndex);
-                if (!canViewReceivePointerEvents(child)
+                if (!child.canReceivePointerEvents()
                         || !isTransformedTouchPointInView(x, y, child, null)) {
                     continue;
                 }
@@ -2680,7 +2680,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                                 i = childrenCount - 1;
                             }
 
-                            if (!canViewReceivePointerEvents(child)
+                            if (!child.canReceivePointerEvents()
                                     || !isTransformedTouchPointInView(x, y, child, null)) {
                                 ev.setTargetAccessibilityFocus(false);
                                 continue;
@@ -2968,15 +2968,6 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             predecessor = target;
             target = next;
         }
-    }
-
-    /**
-     * Returns true if a child view can receive pointer events.
-     * @hide
-     */
-    private static boolean canViewReceivePointerEvents(@NonNull View child) {
-        return (child.mViewFlags & VISIBILITY_MASK) == VISIBLE
-                || child.getAnimation() != null;
     }
 
     private float[] getTempPoint() {
@@ -3615,7 +3606,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             return;
         }
 
-        final ChildListForAutoFillOrContentCapture children = getChildrenForAutofill(flags);
+        final ChildListForAutofill children = getChildrenForAutofill(flags);
         final int childrenCount = children.size();
         structure.setChildCount(childrenCount);
         for (int i = 0; i < childrenCount; i++) {
@@ -3626,30 +3617,14 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         children.recycle();
     }
 
-    /** @hide */
-    @Override
-    public void dispatchProvideContentCaptureStructure() {
-        super.dispatchProvideContentCaptureStructure();
-
-        if (!isLaidOut()) return;
-
-        final ChildListForAutoFillOrContentCapture children = getChildrenForContentCapture();
-        final int childrenCount = children.size();
-        for (int i = 0; i < childrenCount; i++) {
-            final View child = children.get(i);
-            child.dispatchProvideContentCaptureStructure();
-        }
-        children.recycle();
-    }
-
     /**
      * Gets the children for autofill. Children for autofill are the first
      * level descendants that are important for autofill. The returned
      * child list object is pooled and the caller must recycle it once done.
      * @hide */
-    private @NonNull ChildListForAutoFillOrContentCapture getChildrenForAutofill(
+    private @NonNull ChildListForAutofill getChildrenForAutofill(
             @AutofillFlags int flags) {
-        final ChildListForAutoFillOrContentCapture children = ChildListForAutoFillOrContentCapture
+        final ChildListForAutofill children = ChildListForAutofill
                 .obtain();
         populateChildrenForAutofill(children, flags);
         return children;
@@ -3673,34 +3648,6 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                 list.add(child);
             } else if (child instanceof ViewGroup) {
                 ((ViewGroup) child).populateChildrenForAutofill(list, flags);
-            }
-        }
-    }
-
-    private @NonNull ChildListForAutoFillOrContentCapture getChildrenForContentCapture() {
-        final ChildListForAutoFillOrContentCapture children = ChildListForAutoFillOrContentCapture
-                .obtain();
-        populateChildrenForContentCapture(children);
-        return children;
-    }
-
-    /** @hide */
-    private void populateChildrenForContentCapture(ArrayList<View> list) {
-        final int childrenCount = mChildrenCount;
-        if (childrenCount <= 0) {
-            return;
-        }
-        final ArrayList<View> preorderedList = buildOrderedChildList();
-        final boolean customOrder = preorderedList == null
-                && isChildrenDrawingOrderEnabled();
-        for (int i = 0; i < childrenCount; i++) {
-            final int childIndex = getAndVerifyPreorderedIndex(childrenCount, i, customOrder);
-            final View child = (preorderedList == null)
-                    ? mChildren[childIndex] : preorderedList.get(childIndex);
-            if (child.isImportantForContentCapture()) {
-                list.add(child);
-            } else if (child instanceof ViewGroup) {
-                ((ViewGroup) child).populateChildrenForContentCapture(list);
             }
         }
     }
@@ -4284,35 +4231,38 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     }
 
     /**
-     * Returns the index of the child to draw for this iteration. Override this
+     * Converts drawing order position to container position. Override this
      * if you want to change the drawing order of children. By default, it
-     * returns i.
+     * returns drawingPosition.
      * <p>
      * NOTE: In order for this method to be called, you must enable child ordering
      * first by calling {@link #setChildrenDrawingOrderEnabled(boolean)}.
      *
-     * @param i The current iteration.
-     * @return The index of the child to draw this iteration.
+     * @param drawingPosition the drawing order position.
+     * @return the container position of a child for this drawing order position.
      *
      * @see #setChildrenDrawingOrderEnabled(boolean)
      * @see #isChildrenDrawingOrderEnabled()
      */
-    protected int getChildDrawingOrder(int childCount, int i) {
-        return i;
+    protected int getChildDrawingOrder(int childCount, int drawingPosition) {
+        return drawingPosition;
     }
 
     /**
-     * The public version of getChildDrawingOrder().
+     * Converts drawing order position to container position.
+     * <p>
+     * Children are not necessarily drawn in the order in which they appear in the container.
+     * ViewGroups can enable a custom ordering via {@link #setChildrenDrawingOrderEnabled(boolean)}.
+     * This method returns the container position of a child that appears in the given position
+     * in the current drawing order.
      *
-     * Returns the index of the child to draw for this iteration.
-     *
-     * @param i The current iteration.
-     * @return The index of the child to draw this iteration.
+     * @param drawingPosition the drawing order position.
+     * @return the container position of a child for this drawing order position.
      *
      * @see #getChildDrawingOrder(int, int)}
      */
-    public final int getChildDrawingOrder(int i) {
-        return getChildDrawingOrder(getChildCount(), i);
+    public final int getChildDrawingOrder(int drawingPosition) {
+        return getChildDrawingOrder(getChildCount(), drawingPosition);
     }
 
     private boolean hasChildWithZ() {
@@ -6571,10 +6521,10 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         @ViewDebug.IntToString(from = PERSISTENT_ALL_CACHES,      to = "ALL")
     })
     @InspectableProperty(enumMapping = {
-            @EnumMap(value = PERSISTENT_NO_CACHE, name = "none"),
-            @EnumMap(value = PERSISTENT_ANIMATION_CACHE, name = "animation"),
-            @EnumMap(value = PERSISTENT_SCROLLING_CACHE, name = "scrolling"),
-            @EnumMap(value = PERSISTENT_ALL_CACHES, name = "all"),
+            @EnumEntry(value = PERSISTENT_NO_CACHE, name = "none"),
+            @EnumEntry(value = PERSISTENT_ANIMATION_CACHE, name = "animation"),
+            @EnumEntry(value = PERSISTENT_SCROLLING_CACHE, name = "scrolling"),
+            @EnumEntry(value = PERSISTENT_ALL_CACHES, name = "all"),
     })
     public int getPersistentDrawingCache() {
         return mPersistentDrawingCache;
@@ -6654,8 +6604,8 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      * @see #setLayoutMode(int)
      */
     @InspectableProperty(enumMapping = {
-            @EnumMap(value = LAYOUT_MODE_CLIP_BOUNDS, name = "clipBounds"),
-            @EnumMap(value = LAYOUT_MODE_OPTICAL_BOUNDS, name = "opticalBounds")
+            @EnumEntry(value = LAYOUT_MODE_CLIP_BOUNDS, name = "clipBounds"),
+            @EnumEntry(value = LAYOUT_MODE_OPTICAL_BOUNDS, name = "opticalBounds")
     })
     public int getLayoutMode() {
         if (mLayoutMode == LAYOUT_MODE_UNDEFINED) {
@@ -7194,6 +7144,46 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                 mParent.requestTransparentRegion(this);
             }
         }
+    }
+
+    /**
+     * @hide
+     */
+    @Override
+    public void subtractObscuredTouchableRegion(Region touchableRegion, View view) {
+        final int childrenCount = mChildrenCount;
+        final ArrayList<View> preorderedList = buildTouchDispatchChildList();
+        final boolean customOrder = preorderedList == null && isChildrenDrawingOrderEnabled();
+        final View[] children = mChildren;
+        for (int i = childrenCount - 1; i >= 0; i--) {
+            final int childIndex = getAndVerifyPreorderedIndex(childrenCount, i, customOrder);
+            final View child = getAndVerifyPreorderedView(preorderedList, children, childIndex);
+            if (child == view) {
+                // We've reached the target view.
+                break;
+            }
+            if (!child.canReceivePointerEvents()) {
+                // This child cannot be touched. Skip it.
+                continue;
+            }
+            applyOpToRegionByBounds(touchableRegion, child, Region.Op.DIFFERENCE);
+        }
+
+        // The touchable region should not exceed the bounds of its container.
+        applyOpToRegionByBounds(touchableRegion, this, Region.Op.INTERSECT);
+
+        final ViewParent parent = getParent();
+        if (parent != null) {
+            parent.subtractObscuredTouchableRegion(touchableRegion, this);
+        }
+    }
+
+    private static void applyOpToRegionByBounds(Region region, View view, Region.Op op) {
+        final int[] locationInWindow = new int[2];
+        view.getLocationInWindow(locationInWindow);
+        final int x = locationInWindow[0];
+        final int y = locationInWindow[1];
+        region.op(x, y, x + view.getWidth(), y + view.getHeight(), op);
     }
 
     @Override
@@ -7845,6 +7835,10 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             @ViewDebug.IntToString(from = MATCH_PARENT, to = "MATCH_PARENT"),
             @ViewDebug.IntToString(from = WRAP_CONTENT, to = "WRAP_CONTENT")
         })
+        @InspectableProperty(name = "layout_width", enumMapping = {
+                @EnumEntry(name = "match_parent", value = MATCH_PARENT),
+                @EnumEntry(name = "wrap_content", value = WRAP_CONTENT)
+        })
         public int width;
 
         /**
@@ -7855,6 +7849,10 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         @ViewDebug.ExportedProperty(category = "layout", mapping = {
             @ViewDebug.IntToString(from = MATCH_PARENT, to = "MATCH_PARENT"),
             @ViewDebug.IntToString(from = WRAP_CONTENT, to = "WRAP_CONTENT")
+        })
+        @InspectableProperty(name = "layout_height", enumMapping = {
+                @EnumEntry(name = "match_parent", value = MATCH_PARENT),
+                @EnumEntry(name = "wrap_content", value = WRAP_CONTENT)
         })
         public int height;
 
@@ -8028,6 +8026,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
          * to this field.
          */
         @ViewDebug.ExportedProperty(category = "layout")
+        @InspectableProperty(name = "layout_marginLeft")
         public int leftMargin;
 
         /**
@@ -8036,6 +8035,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
          * to this field.
          */
         @ViewDebug.ExportedProperty(category = "layout")
+        @InspectableProperty(name = "layout_marginTop")
         public int topMargin;
 
         /**
@@ -8044,6 +8044,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
          * to this field.
          */
         @ViewDebug.ExportedProperty(category = "layout")
+        @InspectableProperty(name = "layout_marginRight")
         public int rightMargin;
 
         /**
@@ -8052,6 +8053,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
          * to this field.
          */
         @ViewDebug.ExportedProperty(category = "layout")
+        @InspectableProperty(name = "layout_marginBottom")
         public int bottomMargin;
 
         /**
@@ -8632,16 +8634,16 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     /**
      * Pooled class that to hold the children for autifill.
      */
-    private static class ChildListForAutoFillOrContentCapture extends ArrayList<View> {
+    private static class ChildListForAutofill extends ArrayList<View> {
         private static final int MAX_POOL_SIZE = 32;
 
-        private static final Pools.SimplePool<ChildListForAutoFillOrContentCapture> sPool =
+        private static final Pools.SimplePool<ChildListForAutofill> sPool =
                 new Pools.SimplePool<>(MAX_POOL_SIZE);
 
-        public static ChildListForAutoFillOrContentCapture obtain() {
-            ChildListForAutoFillOrContentCapture list = sPool.acquire();
+        public static ChildListForAutofill obtain() {
+            ChildListForAutofill list = sPool.acquire();
             if (list == null) {
-                list = new ChildListForAutoFillOrContentCapture();
+                list = new ChildListForAutofill();
             }
             return list;
         }

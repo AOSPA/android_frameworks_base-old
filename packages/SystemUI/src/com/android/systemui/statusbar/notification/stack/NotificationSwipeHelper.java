@@ -93,7 +93,17 @@ class NotificationSwipeHelper extends SwipeHelper
     protected Handler getHandler() { return mHandler; }
 
     @VisibleForTesting
-    protected Runnable getFalsingCheck() { return mFalsingCheck; };
+    protected Runnable getFalsingCheck() {
+        return mFalsingCheck;
+    }
+
+    @Override
+    protected void onChildSnappedBack(View animView, float targetLeft) {
+        if (mCurrMenuRow != null && targetLeft == 0) {
+            mCurrMenuRow.resetMenu();
+            clearCurrentMenuRow();
+        }
+    }
 
     @Override
     public void onDownUpdate(View currView, MotionEvent ev) {
@@ -117,8 +127,10 @@ class NotificationSwipeHelper extends SwipeHelper
     protected void initializeRow(ExpandableNotificationRow row) {
         if (row.getEntry().hasFinishedInitialization()) {
             mCurrMenuRow = row.createMenu();
-            mCurrMenuRow.setMenuClickListener(mMenuListener);
-            mCurrMenuRow.onTouchStart();
+            if (mCurrMenuRow != null) {
+                mCurrMenuRow.setMenuClickListener(mMenuListener);
+                mCurrMenuRow.onTouchStart();
+            }
         }
     }
 
@@ -231,7 +243,7 @@ class NotificationSwipeHelper extends SwipeHelper
     public void dismissChild(final View view, float velocity,
             boolean useAccelerateInterpolator) {
         superDismissChild(view, velocity, useAccelerateInterpolator);
-        if (mCallback.isExpanded()) {
+        if (mCallback.shouldDismissQuickly()) {
             // We don't want to quick-dismiss when it's a heads up as this might lead to closing
             // of the panel early.
             mCallback.handleChildViewDismissed(view);
@@ -418,7 +430,11 @@ class NotificationSwipeHelper extends SwipeHelper
     }
 
     public interface NotificationCallback extends SwipeHelper.Callback{
-        boolean isExpanded();
+        /**
+         * @return if the view should be dismissed as soon as the touch is released, otherwise its
+         *         removed when the animation finishes.
+         */
+        boolean shouldDismissQuickly();
 
         void handleChildViewDismissed(View view);
 

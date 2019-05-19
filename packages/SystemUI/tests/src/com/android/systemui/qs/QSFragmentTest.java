@@ -23,7 +23,6 @@ import android.content.Context;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.LayoutInflaterBuilder;
 import android.testing.TestableLooper;
@@ -31,9 +30,12 @@ import android.testing.TestableLooper.RunWithLooper;
 import android.view.View;
 import android.widget.FrameLayout;
 
+import androidx.test.filters.SmallTest;
+
 import com.android.internal.logging.MetricsLogger;
 import com.android.keyguard.CarrierText;
 import com.android.systemui.Dependency;
+import com.android.systemui.DumpController;
 import com.android.systemui.R;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.SysuiBaseFragmentTest;
@@ -94,7 +96,7 @@ public class QSFragmentTest extends SysuiBaseFragmentTest {
         QSTileHost host = new QSTileHost(mContext, mock(StatusBarIconController.class),
                 mock(QSFactoryImpl.class), new Handler(), Looper.myLooper(),
                 mock(PluginManager.class), mock(TunerService.class),
-                () -> mock(AutoTileManager.class));
+                () -> mock(AutoTileManager.class), mock(DumpController.class));
         qs.setHost(host);
 
         qs.setListening(true);

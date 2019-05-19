@@ -53,13 +53,14 @@ import android.net.util.SharedLog;
 import android.os.ConditionVariable;
 import android.os.Parcelable;
 import android.os.SystemClock;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.SmallTest;
-import android.support.test.runner.AndroidJUnit4;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.text.format.DateUtils;
 import android.util.Log;
+
+import androidx.test.InstrumentationRegistry;
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
 
 import com.android.internal.util.HexDump;
 import com.android.server.networkstack.tests.R;
@@ -1005,7 +1006,7 @@ public class ApfTest {
 
     private static final int IPV4_HEADER_LEN = 20;
     private static final int IPV4_VERSION_IHL_OFFSET = ETH_HEADER_LEN + 0;
-    private static final int IPV4_TOTAL_LENGTH_OFFSET  = ETH_HEADER_LEN + 2;
+    private static final int IPV4_TOTAL_LENGTH_OFFSET = ETH_HEADER_LEN + 2;
     private static final int IPV4_PROTOCOL_OFFSET = ETH_HEADER_LEN + 9;
     private static final int IPV4_SRC_ADDR_OFFSET = ETH_HEADER_LEN + 12;
     private static final int IPV4_DEST_ADDR_OFFSET = ETH_HEADER_LEN + 16;
@@ -1552,7 +1553,7 @@ public class ApfTest {
         parcel.seq = seqNum;
         parcel.ack = ackNum;
 
-        apfFilter.addKeepalivePacketFilter(slot1, parcel);
+        apfFilter.addTcpKeepalivePacketFilter(slot1, parcel);
         program = cb.getApfProgram();
 
         // Verify IPv4 keepalive ack packet is dropped
@@ -1591,7 +1592,7 @@ public class ApfTest {
             ipv6Parcel.seq = seqNum;
             ipv6Parcel.ack = ackNum;
 
-            apfFilter.addKeepalivePacketFilter(slot1, ipv6Parcel);
+            apfFilter.addTcpKeepalivePacketFilter(slot1, ipv6Parcel);
             program = cb.getApfProgram();
 
             // Verify IPv6 keepalive ack packet is dropped
@@ -1613,8 +1614,8 @@ public class ApfTest {
             apfFilter.removeKeepalivePacketFilter(slot1);
 
             // Verify multiple filters
-            apfFilter.addKeepalivePacketFilter(slot1, parcel);
-            apfFilter.addKeepalivePacketFilter(slot2, ipv6Parcel);
+            apfFilter.addTcpKeepalivePacketFilter(slot1, parcel);
+            apfFilter.addTcpKeepalivePacketFilter(slot2, ipv6Parcel);
             program = cb.getApfProgram();
 
             // Verify IPv4 keepalive ack packet is dropped

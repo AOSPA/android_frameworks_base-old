@@ -16,16 +16,21 @@
 
 package com.android.internal.widget;
 
+import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Paint.FontMetricsInt;
+import android.graphics.Path;
 import android.graphics.RectF;
+import android.graphics.Region;
 import android.hardware.input.InputManager;
 import android.hardware.input.InputManager.InputDeviceListener;
+import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.util.Log;
 import android.util.Slog;
+import android.view.ISystemGestureExclusionListener;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -34,6 +39,7 @@ import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.WindowInsets;
+import android.view.WindowManagerGlobal;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
 
 import java.util.ArrayList;
@@ -54,6 +60,7 @@ public class PointerLocationView extends View implements InputDeviceListener,
         private int mTraceCount;
         
         // True if the pointer is down.
+        @UnsupportedAppUsage
         private boolean mCurDown;
         
         // Most recent coordinates.
@@ -118,18 +125,27 @@ public class PointerLocationView extends View implements InputDeviceListener,
     private final FontMetricsInt mTextMetrics = new FontMetricsInt();
     private int mHeaderBottom;
     private int mHeaderPaddingTop = 0;
+    @UnsupportedAppUsage
     private boolean mCurDown;
+    @UnsupportedAppUsage
     private int mCurNumPointers;
+    @UnsupportedAppUsage
     private int mMaxNumPointers;
     private int mActivePointerId;
+    @UnsupportedAppUsage
     private final ArrayList<PointerState> mPointers = new ArrayList<PointerState>();
     private final PointerCoords mTempCoords = new PointerCoords();
-    
+
+    private final Region mSystemGestureExclusion = new Region();
+    private final Path mSystemGestureExclusionPath = new Path();
+    private final Paint mSystemGestureExclusionPaint;
+
     private final VelocityTracker mVelocity;
     private final VelocityTracker mAltVelocity;
 
     private final FasterStringBuilder mText = new FasterStringBuilder();
-    
+
+    @UnsupportedAppUsage
     private boolean mPrintCoords = true;
     
     public PointerLocationView(Context c) {
@@ -168,7 +184,11 @@ public class PointerLocationView extends View implements InputDeviceListener,
         mPathPaint.setARGB(255, 0, 96, 255);
         mPaint.setStyle(Paint.Style.STROKE);
         mPaint.setStrokeWidth(1);
-        
+
+        mSystemGestureExclusionPaint = new Paint();
+        mSystemGestureExclusionPaint.setARGB(25, 255, 0, 0);
+        mSystemGestureExclusionPaint.setStyle(Paint.Style.FILL_AND_STROKE);
+
         PointerState ps = new PointerState();
         mPointers.add(ps);
         mActivePointerId = 0;
@@ -235,6 +255,12 @@ public class PointerLocationView extends View implements InputDeviceListener,
         final int bottom = mHeaderBottom;
 
         final int NP = mPointers.size();
+
+        if (!mSystemGestureExclusion.isEmpty()) {
+            mSystemGestureExclusionPath.reset();
+            mSystemGestureExclusion.getBoundaryPath(mSystemGestureExclusionPath);
+            canvas.drawPath(mSystemGestureExclusionPath, mSystemGestureExclusionPaint);
+        }
 
         // Labels
         if (mActivePointerId >= 0) {
@@ -719,6 +745,12 @@ public class PointerLocationView extends View implements InputDeviceListener,
         super.onAttachedToWindow();
 
         mIm.registerInputDeviceListener(this, getHandler());
+        try {
+            WindowManagerGlobal.getWindowManagerService().registerSystemGestureExclusionListener(
+                    mSystemGestureExclusionListener, mContext.getDisplayId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
         logInputDevices();
     }
 
@@ -727,6 +759,12 @@ public class PointerLocationView extends View implements InputDeviceListener,
         super.onDetachedFromWindow();
 
         mIm.unregisterInputDeviceListener(this);
+        try {
+            WindowManagerGlobal.getWindowManagerService().unregisterSystemGestureExclusionListener(
+                    mSystemGestureExclusionListener, mContext.getDisplayId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     @Override
@@ -876,4 +914,17 @@ public class PointerLocationView extends View implements InputDeviceListener,
             return oldLength;
         }
     }
+
+    private ISystemGestureExclusionListener mSystemGestureExclusionListener =
+            new ISystemGestureExclusionListener.Stub() {
+        @Override
+        public void onSystemGestureExclusionChanged(int displayId, Region systemGestureExclusion) {
+            Region exclusion = Region.obtain(systemGestureExclusion);
+            getHandler().post(() -> {
+                mSystemGestureExclusion.set(exclusion);
+                exclusion.recycle();
+                invalidate();
+            });
+        }
+    };
 }

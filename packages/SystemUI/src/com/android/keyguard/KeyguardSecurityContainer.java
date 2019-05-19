@@ -20,6 +20,7 @@ import android.app.AlertDialog;
 import android.app.admin.DevicePolicyManager;
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.metrics.LogMaker;
 import android.os.UserHandle;
 import android.util.AttributeSet;
 import android.util.Log;
@@ -32,8 +33,13 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.VisibleForTesting;
 
+import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
+import com.android.systemui.Dependency;
+import com.android.systemui.SystemUIFactory;
+import com.android.systemui.util.InjectionInflationController;
 
 public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSecurityView {
     private static final boolean DEBUG = KeyguardConstants.DEBUG;
@@ -43,16 +49,31 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
     private static final int USER_TYPE_WORK_PROFILE = 2;
     private static final int USER_TYPE_SECONDARY_USER = 3;
 
+    // Bouncer is dismissed due to no security.
+    private static final int BOUNCER_DISMISS_NONE_SECURITY = 0;
+    // Bouncer is dismissed due to pin, password or pattern entered.
+    private static final int BOUNCER_DISMISS_PASSWORD = 1;
+    // Bouncer is dismissed due to biometric (face, fingerprint or iris) authenticated.
+    private static final int BOUNCER_DISMISS_BIOMETRIC = 2;
+    // Bouncer is dismissed due to extended access granted.
+    private static final int BOUNCER_DISMISS_EXTENDED_ACCESS = 3;
+    // Bouncer is dismissed due to sim card unlock code entered.
+    private static final int BOUNCER_DISMISS_SIM = 4;
+
     private KeyguardSecurityModel mSecurityModel;
     private LockPatternUtils mLockPatternUtils;
 
     private KeyguardSecurityViewFlipper mSecurityViewFlipper;
     private boolean mIsVerifyUnlockOnly;
     private SecurityMode mCurrentSecuritySelection = SecurityMode.Invalid;
+    private KeyguardSecurityView mCurrentSecurityView;
     private SecurityCallback mSecurityCallback;
     private AlertDialog mAlertDialog;
+    private InjectionInflationController mInjectionInflationController;
 
     private final KeyguardUpdateMonitor mUpdateMonitor;
+
+    private final MetricsLogger mMetricsLogger = Dependency.get(MetricsLogger.class);
 
     // Used to notify the container when something interesting happens.
     public interface SecurityCallback {
@@ -83,6 +104,9 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         mSecurityModel = new KeyguardSecurityModel(context);
         mLockPatternUtils = new LockPatternUtils(context);
         mUpdateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
+
+        mInjectionInflationController =  new InjectionInflationController(
+            SystemUIFactory.getInstance().getRootComponent());
     }
 
     public void setSecurityCallback(SecurityCallback callback) {
@@ -139,7 +163,8 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         if (view == null && layoutId != 0) {
             final LayoutInflater inflater = LayoutInflater.from(mContext);
             if (DEBUG) Log.v(TAG, "inflating id = " + layoutId);
-            View v = inflater.inflate(layoutId, mSecurityViewFlipper, false);
+            View v = mInjectionInflationController.injectable(inflater)
+                    .inflate(layoutId, mSecurityViewFlipper, false);
             mSecurityViewFlipper.addView(v);
             updateSecurityView(v);
             view = (KeyguardSecurityView)v;
@@ -321,12 +346,18 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         if (DEBUG) Log.d(TAG, "showNextSecurityScreenOrFinish(" + authenticated + ")");
         boolean finish = false;
         boolean strongAuth = false;
-        if (mUpdateMonitor.getUserCanSkipBouncer(targetUserId)) {
+        int eventSubtype = -1;
+        if (mUpdateMonitor.getUserHasTrust(targetUserId)) {
             finish = true;
+            eventSubtype = BOUNCER_DISMISS_EXTENDED_ACCESS;
+        } else if (mUpdateMonitor.getUserUnlockedWithBiometric(targetUserId)) {
+            finish = true;
+            eventSubtype = BOUNCER_DISMISS_BIOMETRIC;
         } else if (SecurityMode.None == mCurrentSecuritySelection) {
             SecurityMode securityMode = mSecurityModel.getSecurityMode(targetUserId);
             if (SecurityMode.None == securityMode) {
                 finish = true; // no security required
+                eventSubtype = BOUNCER_DISMISS_NONE_SECURITY;
             } else {
                 showSecurityScreen(securityMode); // switch to the alternate security view
             }
@@ -337,6 +368,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
                 case PIN:
                     strongAuth = true;
                     finish = true;
+                    eventSubtype = BOUNCER_DISMISS_PASSWORD;
                     break;
 
                 case SimPin:
@@ -346,6 +378,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
                     if (securityMode == SecurityMode.None || mLockPatternUtils.isLockScreenDisabled(
                             KeyguardUpdateMonitor.getCurrentUser())) {
                         finish = true;
+                        eventSubtype = BOUNCER_DISMISS_SIM;
                     } else {
                         showSecurityScreen(securityMode);
                     }
@@ -356,6 +389,10 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
                     showPrimarySecurityScreen(false);
                     break;
             }
+        }
+        if (eventSubtype != -1) {
+            mMetricsLogger.write(new LogMaker(MetricsEvent.BOUNCER)
+                    .setType(MetricsEvent.TYPE_DISMISS).setSubtype(eventSubtype));
         }
         if (finish) {
             mSecurityCallback.finish(strongAuth, targetUserId);
@@ -399,6 +436,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         }
 
         mCurrentSecuritySelection = securityMode;
+        mCurrentSecurityView = newView;
         mSecurityCallback.onSecurityModeChanged(securityMode,
                 securityMode != SecurityMode.None && newView.needsInput());
     }
@@ -439,6 +477,8 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
                     StatsLog.KEYGUARD_BOUNCER_PASSWORD_ENTERED__RESULT__FAILURE);
                 KeyguardSecurityContainer.this.reportFailedUnlockAttempt(userId, timeoutMs);
             }
+            mMetricsLogger.write(new LogMaker(MetricsEvent.BOUNCER)
+                    .setType(success ? MetricsEvent.TYPE_SUCCESS : MetricsEvent.TYPE_FAILURE));
         }
 
         public void reset() {
@@ -496,6 +536,10 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
 
     public SecurityMode getCurrentSecurityMode() {
         return mCurrentSecuritySelection;
+    }
+
+    public KeyguardSecurityView getCurrentSecurityView() {
+        return mCurrentSecurityView;
     }
 
     public void verifyUnlock() {

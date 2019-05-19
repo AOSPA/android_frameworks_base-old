@@ -16,6 +16,7 @@
 
 package android.telephony;
 
+import android.annotation.IntRange;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.PersistableBundle;
@@ -114,13 +115,9 @@ public final class CellSignalStrengthCdma extends CellSignalStrength implements 
         mLevel = SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
     }
 
-    /**
-     * Retrieve an abstract level value for the overall signal strength.
-     *
-     * @return a single integer from 0 to 4 representing the general signal quality.
-     *     0 represents very poor signal strength while 4 represents a very strong signal strength.
-     */
+    /** {@inheritDoc} */
     @Override
+    @IntRange(from = SIGNAL_STRENGTH_NONE_OR_UNKNOWN, to = SIGNAL_STRENGTH_GREAT)
     public int getLevel() {
         return mLevel;
     }
@@ -464,7 +461,7 @@ public final class CellSignalStrengthCdma extends CellSignalStrength implements 
 
     /** Implement the Parcelable interface */
     @SuppressWarnings("hiding")
-    public static final Parcelable.Creator<CellSignalStrengthCdma> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<CellSignalStrengthCdma> CREATOR =
             new Parcelable.Creator<CellSignalStrengthCdma>() {
         @Override
         public CellSignalStrengthCdma createFromParcel(Parcel in) {

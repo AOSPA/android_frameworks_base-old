@@ -16,21 +16,25 @@
 
 package com.android.server.am;
 
-import static android.provider.DeviceConfig.ActivityManager.KEY_MAX_CACHED_PROCESSES;
-
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_POWER_QUICK;
 
 import android.app.ActivityThread;
 import android.content.ContentResolver;
+import android.content.Context;
 import android.database.ContentObserver;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Handler;
 import android.os.SystemProperties;
 import android.os.Process;
 import android.provider.DeviceConfig;
-import android.provider.DeviceConfig.OnPropertyChangedListener;
+import android.provider.DeviceConfig.OnPropertiesChangedListener;
+import android.provider.DeviceConfig.Properties;
 import android.provider.Settings;
 import android.text.TextUtils;
+import android.text.TextUtils.SimpleStringSplitter;
+import android.util.ArraySet;
+import android.util.BoostFramework;
 import android.util.KeyValueListParser;
 import android.util.Slog;
 
@@ -40,6 +44,7 @@ import java.io.PrintWriter;
  * Settings constants that can modify the activity manager's behavior.
  */
 final class ActivityManagerConstants extends ContentObserver {
+    private static final String TAG = "ActivityManagerConstants";
 
     // Key names stored in the settings value.
     private static final String KEY_BACKGROUND_SETTLE_TIME = "background_settle_time";
@@ -71,14 +76,14 @@ final class ActivityManagerConstants extends ContentObserver {
     static final String KEY_SERVICE_MIN_RESTART_TIME_BETWEEN = "service_min_restart_time_between";
     static final String KEY_MAX_SERVICE_INACTIVITY = "service_max_inactivity";
     static final String KEY_BG_START_TIMEOUT = "service_bg_start_timeout";
+    static final String KEY_SERVICE_BG_ACTIVITY_START_TIMEOUT = "service_bg_activity_start_timeout";
     static final String KEY_BOUND_SERVICE_CRASH_RESTART_DURATION = "service_crash_restart_duration";
     static final String KEY_BOUND_SERVICE_CRASH_MAX_RETRY = "service_crash_max_retry";
     static final String KEY_PROCESS_START_ASYNC = "process_start_async";
     static final String KEY_MEMORY_INFO_THROTTLE_TIME = "memory_info_throttle_time";
     static final String KEY_TOP_TO_FGS_GRACE_DURATION = "top_to_fgs_grace_duration";
 
-    private static final int DEFAULT_MAX_CACHED_PROCESSES =
-            SystemProperties.getInt("ro.vendor.qti.sys.fw.bg_apps_limit",32);
+    private static int DEFAULT_MAX_CACHED_PROCESSES = 32;
     private static final long DEFAULT_BACKGROUND_SETTLE_TIME = 60*1000;
     private static final long DEFAULT_FGSERVICE_MIN_SHOWN_TIME = 2*1000;
     private static final long DEFAULT_FGSERVICE_MIN_REPORT_TIME = 3*1000;
@@ -102,11 +107,34 @@ final class ActivityManagerConstants extends ContentObserver {
     private static final long DEFAULT_SERVICE_MIN_RESTART_TIME_BETWEEN = 10*1000;
     private static final long DEFAULT_MAX_SERVICE_INACTIVITY = 30*60*1000;
     private static final long DEFAULT_BG_START_TIMEOUT = 15*1000;
+    private static final long DEFAULT_SERVICE_BG_ACTIVITY_START_TIMEOUT = 10_000;
     private static final long DEFAULT_BOUND_SERVICE_CRASH_RESTART_DURATION = 30*60_000;
     private static final int DEFAULT_BOUND_SERVICE_CRASH_MAX_RETRY = 16;
     private static final boolean DEFAULT_PROCESS_START_ASYNC = true;
     private static final long DEFAULT_MEMORY_INFO_THROTTLE_TIME = 5*60*1000;
     private static final long DEFAULT_TOP_TO_FGS_GRACE_DURATION = 15 * 1000;
+
+    // Flag stored in the DeviceConfig API.
+    /**
+     * Maximum number of cached processes.
+     */
+    private static final String KEY_MAX_CACHED_PROCESSES = "max_cached_processes";
+
+    /**
+     * Default value for mFlagBackgroundActivityStartsEnabled if not explicitly set in
+     * Settings.Global. This allows it to be set experimentally unless it has been
+     * enabled/disabled in developer options. Defaults to true.
+     */
+    private static final String KEY_DEFAULT_BACKGROUND_ACTIVITY_STARTS_ENABLED =
+            "default_background_activity_starts_enabled";
+
+    /**
+     * The packages temporarily whitelisted to be able to start activities from background.
+     * The list of packages is {@code ":"} colon delimited.
+     */
+    private static final String KEY_BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST =
+            "background_activity_starts_package_names_whitelist";
+
 
     // Maximum number of cached processes we will allow.
     public int MAX_CACHED_PROCESSES = DEFAULT_MAX_CACHED_PROCESSES;
@@ -209,6 +237,9 @@ final class ActivityManagerConstants extends ContentObserver {
     // allowing the next pending start to run.
     public long BG_START_TIMEOUT = DEFAULT_BG_START_TIMEOUT;
 
+    // For how long after a whitelisted service's start its process can start a background activity
+    public long SERVICE_BG_ACTIVITY_START_TIMEOUT = DEFAULT_SERVICE_BG_ACTIVITY_START_TIMEOUT;
+
     // Initial backoff delay for retrying bound foreground services
     public long BOUND_SERVICE_CRASH_RESTART_DURATION = DEFAULT_BOUND_SERVICE_CRASH_RESTART_DURATION;
 
@@ -231,8 +262,11 @@ final class ActivityManagerConstants extends ContentObserver {
     volatile boolean mFlagActivityStartsLoggingEnabled;
 
     // Indicates whether the background activity starts is enabled.
-    // Controlled by Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED
+    // Controlled by Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED.
+    // If not set explicitly the default is controlled by DeviceConfig.
     volatile boolean mFlagBackgroundActivityStartsEnabled;
+
+    volatile ArraySet<String> mPackageNamesWhitelistedForBgActivityStarts = new ArraySet<>();
 
     private final ActivityManagerService mService;
     private ContentResolver mResolver;
@@ -251,15 +285,13 @@ final class ActivityManagerConstants extends ContentObserver {
     // process limit.
     public int CUR_MAX_CACHED_PROCESSES;
 
-    static final boolean USE_TRIM_SETTINGS =
-            SystemProperties.getBoolean("ro.vendor.qti.sys.fw.use_trim_settings",true);
-    static final int EMPTY_APP_PERCENT = SystemProperties.getInt("ro.vendor.qti.sys.fw.empty_app_percent",50);
-    static final int TRIM_EMPTY_PERCENT =
-            SystemProperties.getInt("ro.vendor.qti.sys.fw.trim_empty_percent",100);
-    static final int TRIM_CACHE_PERCENT =
-            SystemProperties.getInt("ro.vendor.qti.sys.fw.trim_cache_percent",100);
-    static final long TRIM_ENABLE_MEMORY =
-            SystemProperties.getLong("ro.vendor.qti.sys.fw.trim_enable_memory",1073741824);
+    public static BoostFramework mPerf = new BoostFramework();
+
+    static boolean USE_TRIM_SETTINGS = true;
+    static int EMPTY_APP_PERCENT = 50;
+    static int TRIM_EMPTY_PERCENT = 100;
+    static int TRIM_CACHE_PERCENT = 100;
+    static long TRIM_ENABLE_MEMORY = 1073741824;
     public static boolean allowTrim() { return Process.getTotalMemory() < TRIM_ENABLE_MEMORY ; }
 
     // The maximum number of empty app processes we will let sit around.
@@ -273,6 +305,16 @@ final class ActivityManagerConstants extends ContentObserver {
     // memory trimming.
     public int CUR_TRIM_CACHED_PROCESSES;
 
+    private static final long MIN_AUTOMATIC_HEAP_DUMP_PSS_THRESHOLD_BYTES = 100 * 1024; // 100 KB
+
+    private final boolean mSystemServerAutomaticHeapDumpEnabled;
+
+    /** Package to report to when the memory usage exceeds the limit. */
+    private final String mSystemServerAutomaticHeapDumpPackageName;
+
+    /** Byte limit for dump heap monitoring. */
+    private long mSystemServerAutomaticHeapDumpPssThresholdBytes;
+
     private static final Uri ACTIVITY_MANAGER_CONSTANTS_URI = Settings.Global.getUriFor(
                 Settings.Global.ACTIVITY_MANAGER_CONSTANTS);
 
@@ -283,19 +325,56 @@ final class ActivityManagerConstants extends ContentObserver {
                 Settings.Global.getUriFor(
                         Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED);
 
-    private final OnPropertyChangedListener mOnDeviceConfigChangedListener =
-            new OnPropertyChangedListener() {
+    private static final Uri ENABLE_AUTOMATIC_SYSTEM_SERVER_HEAP_DUMPS_URI =
+            Settings.Global.getUriFor(Settings.Global.ENABLE_AUTOMATIC_SYSTEM_SERVER_HEAP_DUMPS);
+
+    private final OnPropertiesChangedListener mOnDeviceConfigChangedListener =
+            new OnPropertiesChangedListener() {
                 @Override
-                public void onPropertyChanged(String namespace, String name, String value) {
-                    if (KEY_MAX_CACHED_PROCESSES.equals(name)) {
-                        updateMaxCachedProcesses();
+                public void onPropertiesChanged(Properties properties) {
+                    for (String name : properties.getKeyset()) {
+                        if (name == null) {
+                            return;
+                        }
+                        switch (name) {
+                            case KEY_MAX_CACHED_PROCESSES:
+                                updateMaxCachedProcesses();
+                                break;
+                            case KEY_DEFAULT_BACKGROUND_ACTIVITY_STARTS_ENABLED:
+                            case KEY_BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST:
+                                updateBackgroundActivityStarts();
+                                break;
+                            default:
+                                break;
+                        }
                     }
                 }
             };
 
-    public ActivityManagerConstants(ActivityManagerService service, Handler handler) {
+    ActivityManagerConstants(Context context, ActivityManagerService service, Handler handler) {
         super(handler);
         mService = service;
+        mSystemServerAutomaticHeapDumpEnabled = Build.IS_DEBUGGABLE
+                && context.getResources().getBoolean(
+                com.android.internal.R.bool.config_debugEnableAutomaticSystemServerHeapDumps);
+        mSystemServerAutomaticHeapDumpPackageName = context.getPackageName();
+        mSystemServerAutomaticHeapDumpPssThresholdBytes = Math.max(
+                MIN_AUTOMATIC_HEAP_DUMP_PSS_THRESHOLD_BYTES,
+                context.getResources().getInteger(
+                        com.android.internal.R.integer.config_debugSystemServerPssThresholdBytes));
+
+        if (mPerf != null) {
+          // Maximum number of cached processes we will allow.
+            DEFAULT_MAX_CACHED_PROCESSES = MAX_CACHED_PROCESSES = Integer.valueOf(
+                                                 mPerf.perfGetProp("ro.vendor.qti.sys.fw.bg_apps_limit", "32"));
+
+           //Trim Settings
+            USE_TRIM_SETTINGS = Boolean.parseBoolean(mPerf.perfGetProp("ro.vendor.qti.sys.fw.use_trim_settings", "true"));
+            EMPTY_APP_PERCENT = Integer.valueOf(mPerf.perfGetProp("ro.vendor.qti.sys.fw.empty_app_percent", "50"));
+            TRIM_EMPTY_PERCENT = Integer.valueOf(mPerf.perfGetProp("ro.vendor.qti.sys.fw.trim_empty_percent", "100"));
+            TRIM_CACHE_PERCENT = Integer.valueOf(mPerf.perfGetProp("ro.vendor.qti.sys.fw.trim_cache_percent", "100"));
+            TRIM_ENABLE_MEMORY = Long.valueOf(mPerf.perfGetProp("ro.vendor.qti.sys.fw.trim_enable_memory", "1073741824"));
+        }
     }
 
     public void start(ContentResolver resolver) {
@@ -303,14 +382,20 @@ final class ActivityManagerConstants extends ContentObserver {
         mResolver.registerContentObserver(ACTIVITY_MANAGER_CONSTANTS_URI, false, this);
         mResolver.registerContentObserver(ACTIVITY_STARTS_LOGGING_ENABLED_URI, false, this);
         mResolver.registerContentObserver(BACKGROUND_ACTIVITY_STARTS_ENABLED_URI, false, this);
+        if (mSystemServerAutomaticHeapDumpEnabled) {
+            mResolver.registerContentObserver(ENABLE_AUTOMATIC_SYSTEM_SERVER_HEAP_DUMPS_URI,
+                    false, this);
+        }
         updateConstants();
-        updateActivityStartsLoggingEnabled();
-        updateBackgroundActivityStartsEnabled();
-        DeviceConfig.addOnPropertyChangedListener(DeviceConfig.ActivityManager.NAMESPACE,
+        if (mSystemServerAutomaticHeapDumpEnabled) {
+            updateEnableAutomaticSystemServerHeapDumps();
+        }
+        DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 ActivityThread.currentApplication().getMainExecutor(),
                 mOnDeviceConfigChangedListener);
         updateMaxCachedProcesses();
-
+        updateActivityStartsLoggingEnabled();
+        updateBackgroundActivityStarts();
     }
 
     public void setOverrideMaxCachedProcesses(int value) {
@@ -354,7 +439,9 @@ final class ActivityManagerConstants extends ContentObserver {
         } else if (ACTIVITY_STARTS_LOGGING_ENABLED_URI.equals(uri)) {
             updateActivityStartsLoggingEnabled();
         } else if (BACKGROUND_ACTIVITY_STARTS_ENABLED_URI.equals(uri)) {
-            updateBackgroundActivityStartsEnabled();
+            updateBackgroundActivityStarts();
+        } else if (ENABLE_AUTOMATIC_SYSTEM_SERVER_HEAP_DUMPS_URI.equals(uri)) {
+            updateEnableAutomaticSystemServerHeapDumps();
         }
     }
 
@@ -415,6 +502,9 @@ final class ActivityManagerConstants extends ContentObserver {
                     DEFAULT_MAX_SERVICE_INACTIVITY);
             BG_START_TIMEOUT = mParser.getLong(KEY_BG_START_TIMEOUT,
                     DEFAULT_BG_START_TIMEOUT);
+            SERVICE_BG_ACTIVITY_START_TIMEOUT = mParser.getLong(
+                    KEY_SERVICE_BG_ACTIVITY_START_TIMEOUT,
+                    DEFAULT_SERVICE_BG_ACTIVITY_START_TIMEOUT);
             BOUND_SERVICE_CRASH_RESTART_DURATION = mParser.getLong(
                 KEY_BOUND_SERVICE_CRASH_RESTART_DURATION,
                 DEFAULT_BOUND_SERVICE_CRASH_RESTART_DURATION);
@@ -439,14 +529,63 @@ final class ActivityManagerConstants extends ContentObserver {
                 Settings.Global.ACTIVITY_STARTS_LOGGING_ENABLED, 1) == 1;
     }
 
-    private void updateBackgroundActivityStartsEnabled() {
-        mFlagBackgroundActivityStartsEnabled = Settings.Global.getInt(mResolver,
-                Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED, 1) == 1;
+    private void updateBackgroundActivityStarts() {
+        String whitelistedPackageNames = null;
+        int settingsValue = Settings.Global.getInt(mResolver,
+                Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED, -1);
+
+        // If the user has explicitly enabled or disabled, that affects all apps.
+        // Otherwise we take the default state and whitelist from DeviceConfig.
+        if (settingsValue >= 0) {
+            mFlagBackgroundActivityStartsEnabled = settingsValue != 0;
+        } else {
+            boolean enabledInDeviceConfig = DeviceConfig.getBoolean(
+                    DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                    KEY_DEFAULT_BACKGROUND_ACTIVITY_STARTS_ENABLED,
+                    /*defaultValue*/ true);
+            mFlagBackgroundActivityStartsEnabled = enabledInDeviceConfig;
+            if (!enabledInDeviceConfig) {
+                whitelistedPackageNames = DeviceConfig.getProperty(
+                        DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                        KEY_BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST);
+            }
+        }
+        if (TextUtils.isEmpty(whitelistedPackageNames)) {
+            if (!mPackageNamesWhitelistedForBgActivityStarts.isEmpty()) {
+                mPackageNamesWhitelistedForBgActivityStarts = new ArraySet<>();
+            }
+        } else {
+            ArraySet<String> newSet = new ArraySet<>();
+            SimpleStringSplitter splitter = new SimpleStringSplitter(':');
+            splitter.setString(whitelistedPackageNames);
+            while (splitter.hasNext()) {
+                newSet.add(splitter.next());
+            }
+            mPackageNamesWhitelistedForBgActivityStarts = newSet;
+        }
+    }
+
+    private void updateEnableAutomaticSystemServerHeapDumps() {
+        if (!mSystemServerAutomaticHeapDumpEnabled) {
+            Slog.wtf(TAG,
+                    "updateEnableAutomaticSystemServerHeapDumps called when leak detection "
+                            + "disabled");
+            return;
+        }
+        // Monitoring is on by default, so if the setting hasn't been set by the user,
+        // monitoring should be on.
+        final boolean enabled = Settings.Global.getInt(mResolver,
+                Settings.Global.ENABLE_AUTOMATIC_SYSTEM_SERVER_HEAP_DUMPS, 1) == 1;
+
+        // Setting the threshold to 0 stops the checking.
+        final long threshold = enabled ? mSystemServerAutomaticHeapDumpPssThresholdBytes : 0;
+        mService.setDumpHeapDebugLimit(null, 0, threshold,
+                mSystemServerAutomaticHeapDumpPackageName);
     }
 
     private void updateMaxCachedProcesses() {
         String maxCachedProcessesFlag = DeviceConfig.getProperty(
-                DeviceConfig.ActivityManager.NAMESPACE, KEY_MAX_CACHED_PROCESSES);
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER, KEY_MAX_CACHED_PROCESSES);
         try {
             CUR_MAX_CACHED_PROCESSES = mOverrideMaxCachedProcesses < 0
                     ? (TextUtils.isEmpty(maxCachedProcessesFlag)
@@ -454,7 +593,7 @@ final class ActivityManagerConstants extends ContentObserver {
                     : mOverrideMaxCachedProcesses;
         } catch (NumberFormatException e) {
             // Bad flag value from Phenotype, revert to default.
-            Slog.e("ActivityManagerConstants",
+            Slog.e(TAG,
                     "Unable to parse flag for max_cached_processes: " + maxCachedProcessesFlag, e);
             CUR_MAX_CACHED_PROCESSES = DEFAULT_MAX_CACHED_PROCESSES;
         }
@@ -521,6 +660,8 @@ final class ActivityManagerConstants extends ContentObserver {
         pw.println(MAX_SERVICE_INACTIVITY);
         pw.print("  "); pw.print(KEY_BG_START_TIMEOUT); pw.print("=");
         pw.println(BG_START_TIMEOUT);
+        pw.print("  "); pw.print(KEY_SERVICE_BG_ACTIVITY_START_TIMEOUT); pw.print("=");
+        pw.println(SERVICE_BG_ACTIVITY_START_TIMEOUT);
         pw.print("  "); pw.print(KEY_BOUND_SERVICE_CRASH_RESTART_DURATION); pw.print("=");
         pw.println(BOUND_SERVICE_CRASH_RESTART_DURATION);
         pw.print("  "); pw.print(KEY_BOUND_SERVICE_CRASH_MAX_RETRY); pw.print("=");

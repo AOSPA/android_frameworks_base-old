@@ -20,8 +20,9 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.support.test.InstrumentationRegistry;
 import android.util.Log;
+
+import androidx.test.InstrumentationRegistry;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -59,6 +60,13 @@ class RollbackBroadcastReceiver extends BroadcastReceiver {
      */
     Intent poll(long timeout, TimeUnit unit) throws InterruptedException {
         return mRollbackBroadcasts.poll(timeout, unit);
+    }
+
+    /**
+     * Waits forever for the next rollback broadcast.
+     */
+    Intent take() throws InterruptedException {
+        return mRollbackBroadcasts.take();
     }
 
     /**

@@ -45,6 +45,7 @@ import org.codeaurora.internal.DcParam;
 import org.codeaurora.internal.IExtTelephony;
 import org.codeaurora.internal.INetworkCallback;
 import org.codeaurora.internal.NrConfigType;
+import org.codeaurora.internal.NrIconType;
 import org.codeaurora.internal.ServiceUtil;
 import org.codeaurora.internal.Status;
 import org.codeaurora.internal.Token;
@@ -61,7 +62,6 @@ import static org.mockito.Mockito.when;
 
 import com.android.systemui.statusbar.policy.FiveGServiceClient;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
-import com.android.systemui.statusbar.policy.FiveGServiceClient.IndicatorConfig;
 import com.android.systemui.statusbar.policy.TelephonyIcons;
 
 @SmallTest
@@ -86,22 +86,6 @@ public class FiveGServiceClientTest extends NetworkControllerBaseTest {
         mFiveGServiceClient = mNetworkController.mFiveGServiceClient;
         mCallback = mFiveGServiceClient.mCallback;
 
-    }
-
-    @Test
-    public void testRegisterListener() {
-        mNetworkController.mMobileSignalControllers.clear();
-        List<SubscriptionInfo> subscriptions = new ArrayList<>();
-        SubscriptionInfo mockSubInfo = Mockito.mock(SubscriptionInfo.class);
-        Mockito.when(mockSubInfo.getSubscriptionId()).thenReturn(1);
-        Mockito.when(mockSubInfo.getSimSlotIndex()).thenReturn(mPhoneId);
-        subscriptions.add(mockSubInfo);
-
-        mNetworkController.mListening = true;
-        mNetworkController.setCurrentSubscriptions(subscriptions);
-
-        FiveGServiceClient fiveGServiceClient = mNetworkController.mFiveGServiceClient;
-        assertNotNull(mFiveGServiceClient.mStatesListeners.get(mPhoneId));
     }
 
     @Test
@@ -196,6 +180,21 @@ public class FiveGServiceClientTest extends NetworkControllerBaseTest {
     }
 
     @Test
+    public void testNrIconType() {
+        //Success status case
+        NrIconType nrIconType = new NrIconType(NrIconType.TYPE_5G_BASIC);
+        updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
+        FiveGServiceState fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
+        assertEquals(fiveGState.getNrIconType(), NrIconType.TYPE_5G_BASIC);
+
+        //Failure status case
+        nrIconType = new NrIconType(NrIconType.TYPE_NONE);
+        updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
+        fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
+        assertEquals(fiveGState.getNrIconType(), NrIconType.TYPE_5G_BASIC);
+    }
+
+    @Test
     public void test5GSaIcon() {
         NrConfigType type = new NrConfigType(NrConfigType.SA_CONFIGURATION);
         update5gConfigInfo(mPhoneId, mToken, mSuccessStatus, type);
@@ -220,42 +219,6 @@ public class FiveGServiceClientTest extends NetworkControllerBaseTest {
     }
 
     @Test
-    public void test5GIcon() {
-        IndicatorConfig indicatorConfig = mFiveGServiceClient.getIndicatorConfig(mPhoneId);
-        indicatorConfig.uwb = FiveGServiceClient.INDICATOR_CONFIG_UNKNOWN;
-        indicatorConfig.basic = FiveGServiceClient.INDICATOR_CONFIG_UNKNOWN;
-        NrConfigType type = new NrConfigType(NrConfigType.NSA_CONFIGURATION);
-        update5gConfigInfo(mPhoneId, mToken, mSuccessStatus, type);
-
-        /**
-         * Verify that 5G icon is shown when
-         * NrConfigType is NSA_CONFIGURATION and
-         * 5gUwbIndicatorConfig is INDICATOR_CONFIG_UNKNOWN and
-         * 5gBasicIndicatorConfig is INDICATOR_CONFIG_UNKNOWN and
-         * Dcnr is DCNR_UNRESTRICTED and
-         * UpperLayerIndInfo is UPPER_LAYER_IND_INFO_AVAILABLE
-         */
-        DcParam dcParam = new DcParam(DcParam.DCNR_UNRESTRICTED, DcParam.DCNR_UNRESTRICTED);
-        updateDcParam(mPhoneId, mToken, mSuccessStatus, dcParam);
-        UpperLayerIndInfo upperLayerIndInfo =
-                new UpperLayerIndInfo(UpperLayerIndInfo.PLMN_INFO_LIST_AVAILABLE,
-                        UpperLayerIndInfo.UPPER_LAYER_IND_INFO_AVAILABLE);
-        updateUpperLayerIndInfo(mPhoneId, mToken, mSuccessStatus, upperLayerIndInfo);
-        verifyIcon(TelephonyIcons.ICON_5G);
-
-        /**
-         * Verify that 5G icon is not shown when
-         * NrConfigType is NSA_CONFIGURATION
-         * 5gUwbIndicatorConfig is INDICATOR_CONFIG_UNKNOWN and
-         * 5gBasicIndicatorConfig is INDICATOR_CONFIG_UNKNOWN and
-         * dcnr is DCNR_RESTRICTED
-         */
-        dcParam = new DcParam(DcParam.DCNR_RESTRICTED, DcParam.DCNR_RESTRICTED);
-        updateDcParam(mPhoneId, mToken, mSuccessStatus, dcParam);
-        verifyIcon(0);
-    }
-
-    @Test
     public void test5GBasicIcon() {
         NrConfigType configType = new NrConfigType(NrConfigType.NSA_CONFIGURATION);
         update5gConfigInfo(mPhoneId, mToken, mSuccessStatus, configType);
@@ -263,81 +226,19 @@ public class FiveGServiceClientTest extends NetworkControllerBaseTest {
         /**
          * Verify that 5G Basic icon is shown when
          * NrConfigType is NSA_CONFIGURATION and
-         * 5gUwbIndicatorConfig is INDICATOR_CONFIG_CONFIGURATION1 and
-         * 5gBasicIndicatorConfig is INDICATOR_CONFIG_R15_ENABLED and
-         * Plmn is PLMN_INFO_LIST_AVAILABLE and
-         * UpperLayerInd is UPPER_LAYER_IND_INFO_UNAVAILABLE
+         * NrIconType is TYPE_5G_BASIC
          */
-        IndicatorConfig indicatorConfig = mFiveGServiceClient.getIndicatorConfig(mPhoneId);
-        indicatorConfig.uwb = FiveGServiceClient.INDICATOR_CONFIG_CONFIGURATION1;
-        indicatorConfig.basic = FiveGServiceClient.INDICATOR_CONFIG_R15_ENABLED;
-        UpperLayerIndInfo upperLayerIndInfo =
-                new UpperLayerIndInfo(UpperLayerIndInfo.PLMN_INFO_LIST_AVAILABLE,
-                        UpperLayerIndInfo.UPPER_LAYER_IND_INFO_UNAVAILABLE);
-        updateUpperLayerIndInfo(mPhoneId, mToken, mSuccessStatus, upperLayerIndInfo);
+        NrIconType nrIconType = new NrIconType(NrIconType.TYPE_5G_BASIC);
+        updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
         verifyIcon(TelephonyIcons.ICON_5G_BASIC);
 
         /**
-         * Verify that 5G Basic icon is shown when
+         * Verify that 5G Basic icon is not shown when
          * NrConfigType is NSA_CONFIGURATION and
-         * 5gUwbIndicatorConfig is INDICATOR_CONFIG_CONFIGURATION1 and
-         * 5gBasicIndicatorConfig is INDICATOR_CONFIG_R15_ENABLED and
-         * Plmn is PLMN_INFO_LIST_AVAILABLE and
-         * Dcnr is DCNR_RESTRICTED
+         * NrIconType is TYPE_NONE
          */
-        upperLayerIndInfo =
-                new UpperLayerIndInfo(UpperLayerIndInfo.PLMN_INFO_LIST_AVAILABLE,
-                        UpperLayerIndInfo.UPPER_LAYER_IND_INFO_AVAILABLE);
-        updateUpperLayerIndInfo(mPhoneId, mToken, mSuccessStatus, upperLayerIndInfo);
-        DcParam dcParam = new DcParam(DcParam.DCNR_RESTRICTED, DcParam.DCNR_RESTRICTED);
-        updateDcParam(mPhoneId, mToken, mSuccessStatus, dcParam);
-        verifyIcon(TelephonyIcons.ICON_5G_BASIC);
-
-        /**
-         * Verify that 5G Basic icon is shown when
-         * NrConfigType is NSA_CONFIGURATION and
-         * 5gUwbIndicatorConfig is INDICATOR_CONFIG_CONFIGURATION2 and
-         * 5gBasicIndicatorConfig is INDICATOR_CONFIG_R15_ENABLED and
-         * Plmn is PLMN_INFO_LIST_AVAILABLE and
-         * BearerAllocation is ALLOCATED
-         */
-        indicatorConfig.uwb = FiveGServiceClient.INDICATOR_CONFIG_CONFIGURATION2;
-        indicatorConfig.basic = FiveGServiceClient.INDICATOR_CONFIG_R15_ENABLED;
-        upperLayerIndInfo =
-                new UpperLayerIndInfo(UpperLayerIndInfo.PLMN_INFO_LIST_AVAILABLE,
-                        UpperLayerIndInfo.INVALID);
-        updateUpperLayerIndInfo(mPhoneId, mToken, mSuccessStatus, upperLayerIndInfo);
-        BearerAllocationStatus allocationStatus =
-                new BearerAllocationStatus(BearerAllocationStatus.ALLOCATED);
-        updateBearerAllocation(mPhoneId, mToken, mSuccessStatus, allocationStatus);
-        verifyIcon(TelephonyIcons.ICON_5G_BASIC);
-
-        FiveGServiceState fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
-        /**
-         * Verify that 5G Basic icon is not shown when
-         * NrConfigType is NSA_CONFIGURATION
-         * 5gBasicIndicatorConfig is INDICATOR_CONFIG_SPARE1
-         */
-        indicatorConfig.basic = FiveGServiceClient.INDICATOR_CONFIG_SPARE1;
-        mFiveGServiceClient.update5GIcon(fiveGState, mPhoneId);
-        verifyIcon(0);
-
-        /**
-         * Verify that 5G Basic icon is not shown when
-         * NrConfigType is NSA_CONFIGURATION
-         * 5gBasicIndicatorConfig is INDICATOR_CONFIG_SPARE2
-         */
-        indicatorConfig.basic = FiveGServiceClient.INDICATOR_CONFIG_SPARE2;
-        mFiveGServiceClient.update5GIcon(fiveGState, mPhoneId);
-        verifyIcon(0);
-
-        /**
-         * Verify that 5G Basic icon is not shown when
-         * NrConfigType is NSA_CONFIGURATION
-         * 5gBasicIndicatorConfig is INDICATOR_CONFIG_R15_DISABLED
-         */
-        indicatorConfig.basic = FiveGServiceClient.INDICATOR_CONFIG_R15_DISABLED;
-        mFiveGServiceClient.update5GIcon(fiveGState, mPhoneId);
+        nrIconType = new NrIconType(NrIconType.TYPE_NONE);
+        updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
         verifyIcon(0);
     }
 
@@ -349,52 +250,19 @@ public class FiveGServiceClientTest extends NetworkControllerBaseTest {
         /**
          * Verify that 5G UWB icon is shown when
          * NrConfigType is NSA_CONFIGURATION and
-         * 5gUwbIndicatorConfig is INDICATOR_CONFIG_CONFIGURATION1 and
-         * Plmn is PLMN_INFO_LIST_AVAILABLE and
-         * UpperLayerInd is UPPER_LAYER_IND_INFO_AVAILABLE and
-         * Dcnr is DCNR_UNRESTRICTED
+         * NrIconType is TYPE_5G_UWB
          */
-        IndicatorConfig indicatorConfig = mFiveGServiceClient.getIndicatorConfig(mPhoneId);
-        indicatorConfig.uwb = FiveGServiceClient.INDICATOR_CONFIG_CONFIGURATION1;
-        indicatorConfig.basic = FiveGServiceClient.INDICATOR_CONFIG_R15_ENABLED;
-        UpperLayerIndInfo upperLayerIndInfo =
-                new UpperLayerIndInfo(UpperLayerIndInfo.PLMN_INFO_LIST_AVAILABLE,
-                        UpperLayerIndInfo.UPPER_LAYER_IND_INFO_AVAILABLE);
-        updateUpperLayerIndInfo(mPhoneId, mToken, mSuccessStatus, upperLayerIndInfo);
-        DcParam dcParam = new DcParam(DcParam.DCNR_UNRESTRICTED, DcParam.DCNR_UNRESTRICTED);
-        updateDcParam(mPhoneId, mToken, mSuccessStatus, dcParam);
+        NrIconType nrIconType = new NrIconType(NrIconType.TYPE_5G_UWB);
+        updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
         verifyIcon(TelephonyIcons.ICON_5G_UWB);
-
-        /**
-         * Verify that 5G UWB icon is shown when
-         * NrConfigType is NSA_CONFIGURATION and
-         * 5gUwbIndicatorConfig is INDICATOR_CONFIG_CONFIGURATION2 and
-         * BearerAllocation is MMW_ALLOCATED
-         */
-        indicatorConfig.uwb = FiveGServiceClient.INDICATOR_CONFIG_CONFIGURATION2;
-        indicatorConfig.basic = FiveGServiceClient.INDICATOR_CONFIG_R15_ENABLED;
-        BearerAllocationStatus allocationStatus =
-                new BearerAllocationStatus(BearerAllocationStatus.MMW_ALLOCATED);
-        updateBearerAllocation(mPhoneId, mToken, mSuccessStatus, allocationStatus);
-        verifyIcon(TelephonyIcons.ICON_5G_UWB);
-
-        FiveGServiceState fiveGState = mFiveGServiceClient.getCurrentServiceState(mPhoneId);
-        /**
-         * Verify that 5G UWB icon is not shown when
-         * NrConfigType is NSA_CONFIGURATION and
-         * 5gUwbIndicatorConfig is INDICATOR_CONFIG_SPARE1
-         */
-        indicatorConfig.uwb = FiveGServiceClient.INDICATOR_CONFIG_SPARE1;
-        mFiveGServiceClient.update5GIcon(fiveGState, mPhoneId);
-        verifyIcon(0);
 
         /**
          * Verify that 5G UWB icon is not shown when
          * NrConfigType is NSA_CONFIGURATION and
-         * 5gUwbIndicatorConfig is INDICATOR_CONFIG_SPARE2
+         * NrIconType is TYPE_NONE
          */
-        indicatorConfig.uwb = FiveGServiceClient.INDICATOR_CONFIG_SPARE2;
-        mFiveGServiceClient.update5GIcon(fiveGState, mPhoneId);
+        nrIconType = new NrIconType(NrIconType.TYPE_NONE);
+        updateNrIconType(mPhoneId, mToken, mSuccessStatus, nrIconType);
         verifyIcon(0);
     }
 
@@ -443,6 +311,15 @@ public class FiveGServiceClientTest extends NetworkControllerBaseTest {
         try {
             mCallback.on5gConfigInfo(phoneId, token, status, nrConfigType);
         } catch (RemoteException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void updateNrIconType(int phoneId, Token token, Status status, NrIconType nrIconType) {
+        Log.d(TAG, "Sending NrIconType");
+        try {
+            mCallback.onNrIconType(phoneId, token, status, nrIconType);
+        } catch ( RemoteException e) {
             e.printStackTrace();
         }
     }

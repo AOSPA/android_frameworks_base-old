@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -36,6 +37,7 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.statusbar.NotificationMediaManager;
+import com.android.systemui.tuner.TunerService;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -68,6 +70,10 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
     private StatusBar mStatusBar;
     @Mock
     private UnlockMethodCache mUnlockMethodCache;
+    @Mock
+    private TunerService mTunerService;
+    @Mock
+    private Handler mHandler;
     private BiometricUnlockController mBiometricUnlockController;
 
     @Before
@@ -79,9 +85,8 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
         mDependency.injectTestDependency(NotificationMediaManager.class, mMediaManager);
         mDependency.injectTestDependency(StatusBarWindowController.class,
                 mStatusBarWindowController);
-        mBiometricUnlockController = new BiometricUnlockController(mContext, mDozeScrimController,
-                mKeyguardViewMediator, mScrimController, mStatusBar, mUnlockMethodCache,
-                new Handler(), mUpdateMonitor, 0 /* wakeUpDelay */);
+        mBiometricUnlockController = new TestableBiometricUnlockController(
+                false /* faceDismissesKeyguard */);
         mBiometricUnlockController.setStatusBarKeyguardViewManager(mStatusBarKeyguardViewManager);
     }
 
@@ -136,6 +141,19 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
     }
 
     @Test
+    public void onBiometricAuthenticated_whenFace_dismissingKeyguard() {
+        mBiometricUnlockController = new TestableBiometricUnlockController(
+                true /* faceDismissesKeyguard */);
+        mBiometricUnlockController.setStatusBarKeyguardViewManager(mStatusBarKeyguardViewManager);
+
+        when(mUpdateMonitor.isUnlockingWithBiometricAllowed()).thenReturn(true);
+        mBiometricUnlockController.onBiometricAuthenticated(UserHandle.USER_CURRENT,
+                BiometricSourceType.FACE);
+
+        verify(mStatusBarKeyguardViewManager).animateCollapsePanels(anyFloat());
+    }
+
+    @Test
     public void onBiometricAuthenticated_whenFaceOnBouncer_dismissBouncer() {
         when(mUpdateMonitor.isUnlockingWithBiometricAllowed()).thenReturn(true);
         when(mStatusBarKeyguardViewManager.isBouncerShowing()).thenReturn(true);
@@ -155,5 +173,28 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
                 BiometricSourceType.FACE);
 
         verify(mStatusBarKeyguardViewManager, never()).animateCollapsePanels(anyFloat());
+    }
+
+    @Test
+    public void onFinishedGoingToSleep_authenticatesWhenPending() {
+        when(mUpdateMonitor.isGoingToSleep()).thenReturn(true);
+        mBiometricUnlockController.onFinishedGoingToSleep(-1);
+        verify(mHandler, never()).post(any());
+
+        mBiometricUnlockController.onBiometricAuthenticated(1 /* userId */,
+                BiometricSourceType.FACE);
+        mBiometricUnlockController.onFinishedGoingToSleep(-1);
+        verify(mHandler).post(any());
+    }
+
+    private class TestableBiometricUnlockController extends BiometricUnlockController {
+
+        TestableBiometricUnlockController(boolean faceDismissesKeyguard) {
+            super(mContext, mDozeScrimController,
+                    mKeyguardViewMediator, mScrimController, mStatusBar, mUnlockMethodCache,
+                    mHandler, mUpdateMonitor, mTunerService, 0 /* wakeUpDelay */,
+                    faceDismissesKeyguard);
+            mFaceDismissesKeyguard = faceDismissesKeyguard;
+        }
     }
 }

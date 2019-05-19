@@ -36,7 +36,6 @@ abstract class DisplayDevice {
     private final DisplayAdapter mDisplayAdapter;
     private final IBinder mDisplayToken;
     private final String mUniqueId;
-    private long mPhysicalId = -1;
 
     // The display device does not manage these properties itself, they are set by
     // the display manager service.  The display device shouldn't really be looking at these.
@@ -52,12 +51,6 @@ abstract class DisplayDevice {
     // DEBUG STATE: Last device info which was written to the log, or null if none.
     // Do not use for any other purpose.
     DisplayDeviceInfo mDebugLastLoggedDeviceInfo;
-
-    public DisplayDevice(DisplayAdapter displayAdapter, IBinder displayToken, String uniqueId,
-                         long physicalId) {
-      this(displayAdapter, displayToken, uniqueId);
-      mPhysicalId = physicalId;
-    }
 
     public DisplayDevice(DisplayAdapter displayAdapter, IBinder displayToken, String uniqueId) {
         mDisplayAdapter = displayAdapter;
@@ -91,15 +84,6 @@ abstract class DisplayDevice {
      */
     public final String getNameLocked() {
         return getDisplayDeviceInfoLocked().name;
-    }
-
-    /**
-     * Gets the physical id (vendor specified) of the display device.
-     *
-     * @return The display device id.
-     */
-    public final long getPhysicalId() {
-        return mPhysicalId;
     }
 
     /**
@@ -154,9 +138,19 @@ abstract class DisplayDevice {
     }
 
     /**
-     * Sets the mode, if supported.
+     * Sets the display modes the system is allowed to switch between, roughly ordered by
+     * preference.
+     *
+     * Not all display devices will automatically switch between modes, so it's important that the
+     * most-desired modes are at the beginning of the allowed array.
      */
-    public void requestDisplayModesLocked(int colorMode, int modeId) {
+    public void setAllowedDisplayModesLocked(int[] modes) {
+    }
+
+    /**
+     * Sets the requested color mode.
+     */
+    public void setRequestedColorModeLocked(int colorMode) {
     }
 
     public void onOverlayChangedLocked() {
@@ -257,7 +251,6 @@ abstract class DisplayDevice {
     public void dumpLocked(PrintWriter pw) {
         pw.println("mAdapter=" + mDisplayAdapter.getName());
         pw.println("mUniqueId=" + mUniqueId);
-        pw.println("mPhysicalId=" + mPhysicalId);
         pw.println("mDisplayToken=" + mDisplayToken);
         pw.println("mCurrentLayerStack=" + mCurrentLayerStack);
         pw.println("mCurrentOrientation=" + mCurrentOrientation);

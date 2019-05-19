@@ -36,6 +36,7 @@ import android.widget.TextView;
 
 import com.android.internal.R;
 import com.android.systemui.Dependency;
+import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.TransformableView;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 
@@ -58,11 +59,9 @@ public class NotificationMediaTemplateViewWrapper extends NotificationTemplateVi
     private TextView mSeekBarTotalTime;
     private long mDuration = 0;
     private MediaController mMediaController;
+    private NotificationMediaManager mMediaManager;
     private View mSeekBarView;
     private Context mContext;
-
-    // TODO: implement as phenotype flag
-    public static final boolean HIDE_COMPACT_SCRUBBER = true;
 
     private SeekBar.OnSeekBarChangeListener mSeekListener = new SeekBar.OnSeekBarChangeListener() {
         @Override
@@ -91,6 +90,8 @@ public class NotificationMediaTemplateViewWrapper extends NotificationTemplateVi
         @Override
         public void onPlaybackStateChanged(PlaybackState state) {
             if (state.getState() != PlaybackState.STATE_PLAYING) {
+                // Update the UI once, in case playback info changed while we were paused
+                mUpdatePlaybackUi.run();
                 clearTimer();
             } else if (mSeekBarTimer == null) {
                 startTimer();
@@ -102,6 +103,7 @@ public class NotificationMediaTemplateViewWrapper extends NotificationTemplateVi
             ExpandableNotificationRow row) {
         super(ctx, view, row);
         mContext = ctx;
+        mMediaManager = Dependency.get(NotificationMediaManager.class);
     }
 
     private void resolveViews() {
@@ -110,7 +112,8 @@ public class NotificationMediaTemplateViewWrapper extends NotificationTemplateVi
         final MediaSession.Token token = mRow.getEntry().notification.getNotification().extras
                 .getParcelable(Notification.EXTRA_MEDIA_SESSION);
 
-        if (token == null || (COMPACT_MEDIA_TAG.equals(mView.getTag()) && HIDE_COMPACT_SCRUBBER)) {
+        boolean showCompactSeekbar = mMediaManager.getShowCompactMediaSeekbar();
+        if (token == null || (COMPACT_MEDIA_TAG.equals(mView.getTag()) && !showCompactSeekbar)) {
             if (mSeekBarView != null) {
                 mSeekBarView.setVisibility(View.GONE);
             }

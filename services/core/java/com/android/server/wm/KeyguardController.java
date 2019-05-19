@@ -29,6 +29,7 @@ import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_TO_SHADE;
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_WITH_WALLPAPER;
 
+import static com.android.server.am.KeyguardControllerProto.AOD_SHOWING;
 import static com.android.server.am.KeyguardControllerProto.KEYGUARD_OCCLUDED_STATES;
 import static com.android.server.am.KeyguardControllerProto.KEYGUARD_SHOWING;
 import static com.android.server.am.KeyguardOccludedProto.DISPLAY_ID;
@@ -86,11 +87,23 @@ class KeyguardController {
 
     /**
      * @return true if either Keyguard or AOD are showing, not going away, and not being occluded
-     *         on the given display, false otherwise
+     *         on the given display, false otherwise.
      */
     boolean isKeyguardOrAodShowing(int displayId) {
         return (mKeyguardShowing || mAodShowing) && !mKeyguardGoingAway
                 && !isDisplayOccluded(displayId);
+    }
+
+    /**
+     * @return {@code true} for default display when AOD is showing. Otherwise, same as
+     *         {@link #isKeyguardOrAodShowing(int)}
+     * TODO(b/125198167): Replace isKeyguardOrAodShowing() by this logic.
+     */
+    boolean isKeyguardUnoccludedOrAodShowing(int displayId) {
+        if (displayId == DEFAULT_DISPLAY && mAodShowing) {
+            return true;
+        }
+        return isKeyguardOrAodShowing(displayId);
     }
 
     /**
@@ -251,14 +264,16 @@ class KeyguardController {
         // Keyguard.
         return dismissKeyguard && canDismissKeyguard() && !mAodShowing
                 && (mDismissalRequested
-                || getDisplay(r.getDisplayId()).mDismissingKeyguardActivity != r);
+                || (r.canShowWhenLocked()
+                        && getDisplay(r.getDisplayId()).mDismissingKeyguardActivity != r));
     }
 
     /**
      * @return True if we may show an activity while Keyguard is occluded, false otherwise.
      */
     boolean canShowWhileOccluded(boolean dismissKeyguard, boolean showWhenLocked) {
-        return showWhenLocked || dismissKeyguard && !mWindowManager.isKeyguardSecure();
+        return showWhenLocked || dismissKeyguard
+                && !mWindowManager.isKeyguardSecure(mService.getCurrentUserId());
     }
 
     private void visibilitiesUpdated() {
@@ -280,7 +295,16 @@ class KeyguardController {
     /**
      * Called when occluded state changed.
      */
-    private void handleOccludedChanged() {
+    private void handleOccludedChanged(int displayId) {
+        // TODO(b/113840485): Handle app transition for individual display, and apply occluded
+        // state change to secondary displays.
+        // For now, only default display fully supports occluded change. Other displays only
+        // updates keygaurd sleep token on that display.
+        if (displayId != DEFAULT_DISPLAY) {
+            updateKeyguardSleepToken(displayId);
+            return;
+        }
+
         mWindowManager.onKeyguardOccludedChanged(isDisplayOccluded(DEFAULT_DISPLAY));
         if (isKeyguardLocked()) {
             mWindowManager.deferSurfaceLayout();
@@ -289,7 +313,7 @@ class KeyguardController {
                         .prepareAppTransition(resolveOccludeTransit(),
                                 false /* alwaysKeepCurrent */, 0 /* flags */,
                                 true /* forceOverride */);
-                updateKeyguardSleepToken();
+                updateKeyguardSleepToken(DEFAULT_DISPLAY);
                 mRootActivityContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
                 mWindowManager.executeAppTransition();
             } finally {
@@ -306,7 +330,7 @@ class KeyguardController {
         // We only allow dismissing Keyguard via the flag when Keyguard is secure for legacy
         // reasons, because that's how apps used to dismiss Keyguard in the secure case. In the
         // insecure case, we actually show it on top of the lockscreen. See #canShowWhileOccluded.
-        if (!mWindowManager.isKeyguardSecure()) {
+        if (!mWindowManager.isKeyguardSecure(mService.getCurrentUserId())) {
             return;
         }
 
@@ -334,7 +358,8 @@ class KeyguardController {
      * @return true if Keyguard can be currently dismissed without entering credentials.
      */
     boolean canDismissKeyguard() {
-        return mWindowManager.isKeyguardTrusted() || !mWindowManager.isKeyguardSecure();
+        return mWindowManager.isKeyguardTrusted()
+                || !mWindowManager.isKeyguardSecure(mService.getCurrentUserId());
     }
 
     private int resolveOccludeTransit() {
@@ -380,12 +405,16 @@ class KeyguardController {
         for (int displayNdx = mRootActivityContainer.getChildCount() - 1;
              displayNdx >= 0; displayNdx--) {
             final ActivityDisplay display = mRootActivityContainer.getChildAt(displayNdx);
-            final KeyguardDisplayState state = getDisplay(display.mDisplayId);
-            if (isKeyguardOrAodShowing(display.mDisplayId) && state.mSleepToken == null) {
-                state.acquiredSleepToken();
-            } else if (!isKeyguardOrAodShowing(display.mDisplayId) && state.mSleepToken != null) {
-                state.releaseSleepToken();
-            }
+            updateKeyguardSleepToken(display.mDisplayId);
+        }
+    }
+
+    private void updateKeyguardSleepToken(int displayId) {
+        final KeyguardDisplayState state = getDisplay(displayId);
+        if (isKeyguardUnoccludedOrAodShowing(displayId) && state.mSleepToken == null) {
+            state.acquiredSleepToken();
+        } else if (!isKeyguardUnoccludedOrAodShowing(displayId) && state.mSleepToken != null) {
+            state.releaseSleepToken();
         }
     }
 
@@ -467,15 +496,13 @@ class KeyguardController {
                 mOccluded |= controller.mWindowManager.isShowingDream();
             }
 
-            // TODO(b/113840485): Handle app transition for individual display, and apply occluded
-            // state change to secondary displays.
-            // For now, only default display can change occluded.
-            if (lastOccluded != mOccluded && mDisplayId == DEFAULT_DISPLAY) {
-                controller.handleOccludedChanged();
+            if (lastOccluded != mOccluded) {
+                controller.handleOccludedChanged(mDisplayId);
             }
             if (lastDismissActivity != mDismissingKeyguardActivity && !mOccluded
                     && mDismissingKeyguardActivity != null
-                    && controller.mWindowManager.isKeyguardSecure()) {
+                    && controller.mWindowManager.isKeyguardSecure(
+                            controller.mService.getCurrentUserId())) {
                 mRequestDismissKeyguard = true;
             }
         }
@@ -528,6 +555,7 @@ class KeyguardController {
 
     void writeToProto(ProtoOutputStream proto, long fieldId) {
         final long token = proto.start(fieldId);
+        proto.write(AOD_SHOWING, mAodShowing);
         proto.write(KEYGUARD_SHOWING, mKeyguardShowing);
         writeDisplayStatesToProto(proto, KEYGUARD_OCCLUDED_STATES);
         proto.end(token);

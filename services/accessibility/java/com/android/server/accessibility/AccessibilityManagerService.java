@@ -777,6 +777,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             final int removedWindowId = removeAccessibilityInteractionConnectionInternalLocked(
                     token, mGlobalWindowTokens, mGlobalInteractionConnections);
             if (removedWindowId >= 0) {
+                mSecurityPolicy.onAccessibilityClientRemovedLocked(removedWindowId);
                 if (DEBUG) {
                     Slog.i(LOG_TAG, "Removed global connection for pid:" + Binder.getCallingPid()
                             + " with windowId: " + removedWindowId + " and token: " + window.asBinder());
@@ -790,6 +791,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                         removeAccessibilityInteractionConnectionInternalLocked(
                         token, userState.mWindowTokens, userState.mInteractionConnections);
                 if (removedWindowIdForUser >= 0) {
+                    mSecurityPolicy.onAccessibilityClientRemovedLocked(removedWindowIdForUser);
                     if (DEBUG) {
                         Slog.i(LOG_TAG, "Removed user connection for pid:" + Binder.getCallingPid()
                                 + " with windowId: " + removedWindowIdForUser + " and userId:"
@@ -1332,6 +1334,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             userState.mWindowTokens.remove(windowId);
             userState.mInteractionConnections.remove(windowId);
         }
+        mSecurityPolicy.onAccessibilityClientRemovedLocked(windowId);
         if (DEBUG) {
             Slog.i(LOG_TAG, "Removing interaction connection to windowId: " + windowId);
         }
@@ -2501,7 +2504,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
      *   registered.
      */
     @Override
-    public int getAccessibilityWindowId(IBinder windowToken) {
+    public int getAccessibilityWindowId(@Nullable IBinder windowToken) {
         synchronized (mLock) {
             if (UserHandle.getAppId(Binder.getCallingUid()) != Process.SYSTEM_UID) {
                 throw new SecurityException("Only SYSTEM can call getAccessibilityWindowId");
@@ -2549,6 +2552,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 pw.append(", autoclickEnabled=" + userState.mIsAutoclickEnabled);
                 pw.append(", nonInteractiveUiTimeout=" + userState.mNonInteractiveUiTimeout);
                 pw.append(", interactiveUiTimeout=" + userState.mInteractiveUiTimeout);
+                pw.append(", installedServiceCount=" + userState.mInstalledServices.size());
                 if (mUiAutomationManager.isUiAutomationRunningLocked()) {
                     pw.append(", ");
                     mUiAutomationManager.dumpUiAutomationService(fd, pw, args);
@@ -2556,7 +2560,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 }
                 pw.append("}");
                 pw.println();
-                pw.append("           services:{");
+                pw.append("     Bound services:{");
                 final int serviceCount = userState.mBoundServices.size();
                 for (int j = 0; j < serviceCount; j++) {
                     if (j > 0) {
@@ -2566,6 +2570,30 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     }
                     AccessibilityServiceConnection service = userState.mBoundServices.get(j);
                     service.dump(fd, pw, args);
+                }
+                pw.println("}");
+                pw.append("     Enabled services:{");
+                Iterator<ComponentName> it = userState.mEnabledServices.iterator();
+                if (it.hasNext()) {
+                    ComponentName componentName = it.next();
+                    pw.append(componentName.toShortString());
+                    while (it.hasNext()) {
+                        componentName = it.next();
+                        pw.append(", ");
+                        pw.append(componentName.toShortString());
+                    }
+                }
+                pw.println("}");
+                pw.append("     Binding services:{");
+                it = userState.mBindingServices.iterator();
+                if (it.hasNext()) {
+                    ComponentName componentName = it.next();
+                    pw.append(componentName.toShortString());
+                    while (it.hasNext()) {
+                        componentName = it.next();
+                        pw.append(", ");
+                        pw.append(componentName.toShortString());
+                    }
                 }
                 pw.println("}]");
                 pw.println();
@@ -2582,6 +2610,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     pw.append(window.toString());
                     pw.append(']');
                 }
+                pw.println();
             }
         }
     }
@@ -2693,9 +2722,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         return -1;
     }
 
-    private void notifyOutsideTouchIfNeeded(int targetWindowId, int action, Bundle arguments,
-            int interactionId, IAccessibilityInteractionConnectionCallback callback, int fetchFlags,
-            int interrogatingPid, long interrogatingTid) {
+    private void notifyOutsideTouchIfNeeded(int targetWindowId, int action) {
         if (action != ACTION_CLICK && action != ACTION_LONG_CLICK) {
             return;
         }
@@ -2712,13 +2739,10 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             final RemoteAccessibilityConnection connection = connectionList.get(i);
             if (connection != null) {
                 try {
-                    connection.mConnection.performAccessibilityAction(
-                            AccessibilityNodeInfo.ROOT_ITEM_ID,
-                            R.id.accessibilityActionOutsideTouch, arguments, interactionId,
-                            callback, fetchFlags, interrogatingPid, interrogatingTid);
+                    connection.getRemote().notifyOutsideTouch();
                 } catch (RemoteException re) {
                     if (DEBUG) {
-                        Slog.e(LOG_TAG, "Error calling performAccessibilityAction: " + re);
+                        Slog.e(LOG_TAG, "Error calling notifyOutsideTouch()");
                     }
                 }
             }
@@ -2804,8 +2828,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             mPowerManager.userActivity(SystemClock.uptimeMillis(),
                     PowerManager.USER_ACTIVITY_EVENT_ACCESSIBILITY, 0);
 
-            notifyOutsideTouchIfNeeded(resolvedWindowId, action, arguments, interactionId, callback,
-                    fetchFlags, interrogatingPid, interrogatingTid);
+            notifyOutsideTouchIfNeeded(resolvedWindowId, action);
             if (activityToken != null) {
                 LocalServices.getService(ActivityTaskManagerInternal.class)
                         .setFocusedActivity(activityToken);
@@ -3264,6 +3287,18 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             updateWindowsLocked(windows);
             mActiveWindowId = activeWindowId;
             mWindows = null;
+        }
+
+        /**
+         * A callback when accessibility interaction client is removed.
+         */
+        public void onAccessibilityClientRemovedLocked(int windowId) {
+            // Active window cannot update immediately, if windows callback is unregistered.
+            // Update active window to invalid, when its a11y interaction client is removed.
+            if (mWindowsForAccessibilityCallback == null && windowId >= 0
+                    && mActiveWindowId == windowId) {
+                mActiveWindowId = INVALID_WINDOW_ID;
+            }
         }
 
         public void updateWindowsLocked(List<WindowInfo> windows) {
@@ -3749,7 +3784,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
         private List<Integer> getWatchOutsideTouchWindowIdLocked(int targetWindowId) {
             final WindowInfo targetWindow = mWindowInfoById.get(targetWindowId);
-            if (targetWindow != null && mWindowInfoById != null && mHasWatchOutsideTouchWindow) {
+            if (targetWindow != null && mHasWatchOutsideTouchWindow) {
                 final List<Integer> outsideWindowsId = new ArrayList<>();
                 for (int i = 0; i < mWindowInfoById.size(); i++) {
                     WindowInfo window = mWindowInfoById.valueAt(i);
@@ -4083,6 +4118,13 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
         public Set<ComponentName> getBindingServicesLocked() {
             return mBindingServices;
+        }
+
+        /**
+         * Returns enabled service list.
+         */
+        public Set<ComponentName> getEnabledServicesLocked() {
+            return mEnabledServices;
         }
 
         public int getSoftKeyboardShowMode() {

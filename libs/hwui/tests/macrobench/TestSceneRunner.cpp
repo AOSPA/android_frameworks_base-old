@@ -21,6 +21,7 @@
 #include "tests/common/TestContext.h"
 #include "tests/common/TestScene.h"
 #include "tests/common/scenes/TestSceneBase.h"
+#include "utils/TraceUtils.h"
 
 #include <benchmark/benchmark.h>
 #include <gui/Surface.h>
@@ -152,6 +153,11 @@ void run(const TestScene::Info& info, const TestScene::Options& opts,
 
     proxy->resetProfileInfo();
     proxy->fence();
+
+    if (opts.renderAhead) {
+        usleep(33000);
+    }
+    proxy->setRenderAheadDepth(opts.renderAhead);
 
     ModifiedMovingAverage<double> avgMs(opts.reportFrametimeWeight);
 

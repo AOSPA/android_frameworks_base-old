@@ -1164,6 +1164,15 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
             // Carrier might want to manage notifications themselves
             final PersistableBundle config = mCarrierConfigManager.getConfigForSubId(subId);
+            if (!CarrierConfigManager.isConfigForIdentifiedCarrier(config)) {
+                if (LOGV) Slog.v(TAG, "isConfigForIdentifiedCarrier returned false");
+                // Don't show notifications until we confirm that the loaded config is from an
+                // identified carrier, which may want to manage their own notifications. This method
+                // should be called every time the carrier config changes anyways, and there's no
+                // reason to alert if there isn't a carrier.
+                return;
+            }
+
             final boolean notifyWarning = getBooleanDefeatingNullable(config,
                     KEY_DATA_WARNING_NOTIFICATION_BOOL, true);
             final boolean notifyLimit = getBooleanDefeatingNullable(config,
@@ -1335,7 +1344,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             case TYPE_WARNING: {
                 title = res.getText(R.string.data_usage_warning_title);
                 body = res.getString(R.string.data_usage_warning_body,
-                        Formatter.formatFileSize(mContext, totalBytes));
+                        Formatter.formatFileSize(mContext, totalBytes, Formatter.FLAG_IEC_UNITS));
 
                 builder.setSmallIcon(R.drawable.stat_notify_error);
 
@@ -1383,7 +1392,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                 }
                 final long overBytes = totalBytes - policy.limitBytes;
                 body = res.getString(R.string.data_usage_limit_snoozed_body,
-                        Formatter.formatFileSize(mContext, overBytes));
+                        Formatter.formatFileSize(mContext, overBytes, Formatter.FLAG_IEC_UNITS));
 
                 builder.setOngoing(true);
                 builder.setSmallIcon(R.drawable.stat_notify_error);
@@ -3515,10 +3524,10 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     /**
      * Process state of UID changed; if needed, will trigger
      * {@link #updateRulesForDataUsageRestrictionsUL(int)} and
-     * {@link #updateRulesForPowerRestrictionsUL(int)}
+     * {@link #updateRulesForPowerRestrictionsUL(int)}. Returns true if the state was updated.
      */
     @GuardedBy("mUidRulesFirstLock")
-    private void updateUidStateUL(int uid, int uidState) {
+    private boolean updateUidStateUL(int uid, int uidState) {
         Trace.traceBegin(Trace.TRACE_TAG_NETWORK, "updateUidStateUL");
         try {
             final int oldUidState = mUidState.get(uid, ActivityManager.PROCESS_STATE_CACHED_EMPTY);
@@ -3537,15 +3546,16 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                     }
                     updateRulesForPowerRestrictionsUL(uid);
                 }
-                updateNetworkStats(uid, isUidStateForeground(uidState));
+                return true;
             }
         } finally {
             Trace.traceEnd(Trace.TRACE_TAG_NETWORK);
         }
+        return false;
     }
 
     @GuardedBy("mUidRulesFirstLock")
-    private void removeUidStateUL(int uid) {
+    private boolean removeUidStateUL(int uid) {
         final int index = mUidState.indexOfKey(uid);
         if (index >= 0) {
             final int oldUidState = mUidState.valueAt(index);
@@ -3560,9 +3570,10 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                     updateRuleForRestrictPowerUL(uid);
                 }
                 updateRulesForPowerRestrictionsUL(uid);
-                updateNetworkStats(uid, false);
+                return true;
             }
         }
+        return false;
     }
 
     // adjust stats accounting based on foreground status
@@ -4552,20 +4563,25 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                 }
             }
         }
-
     };
 
     void handleUidChanged(int uid, int procState, long procStateSeq) {
         Trace.traceBegin(Trace.TRACE_TAG_NETWORK, "onUidStateChanged");
         try {
+            boolean updated;
             synchronized (mUidRulesFirstLock) {
                 // We received a uid state change callback, add it to the history so that it
                 // will be useful for debugging.
                 mLogger.uidStateChanged(uid, procState, procStateSeq);
                 // Now update the network policy rules as per the updated uid state.
-                updateUidStateUL(uid, procState);
+                updated = updateUidStateUL(uid, procState);
                 // Updating the network rules is done, so notify AMS about this.
                 mActivityManagerInternal.notifyNetworkPolicyRulesUpdated(uid, procStateSeq);
+            }
+            // Do this without the lock held. handleUidChanged() and handleUidGone() are
+            // called from the handler, so there's no multi-threading issue.
+            if (updated) {
+                updateNetworkStats(uid, isUidStateForeground(procState));
             }
         } finally {
             Trace.traceEnd(Trace.TRACE_TAG_NETWORK);
@@ -4575,8 +4591,14 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     void handleUidGone(int uid) {
         Trace.traceBegin(Trace.TRACE_TAG_NETWORK, "onUidGone");
         try {
+            boolean updated;
             synchronized (mUidRulesFirstLock) {
-                removeUidStateUL(uid);
+                updated = removeUidStateUL(uid);
+            }
+            // Do this without the lock held. handleUidChanged() and handleUidGone() are
+            // called from the handler, so there's no multi-threading issue.
+            if (updated) {
+                updateNetworkStats(uid, false);
             }
         } finally {
             Trace.traceEnd(Trace.TRACE_TAG_NETWORK);

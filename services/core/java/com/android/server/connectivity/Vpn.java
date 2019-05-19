@@ -1604,12 +1604,7 @@ public class Vpn {
         if (mNetworkInfo.isConnected()) {
             return !appliesToUid(uid);
         } else {
-            for (UidRange uidRange : mBlockedUsers) {
-                if (uidRange.contains(uid)) {
-                    return true;
-                }
-            }
-            return false;
+            return UidRange.containsUid(mBlockedUsers, uid);
         }
     }
 
@@ -1842,6 +1837,7 @@ public class Vpn {
         config.interfaze = iface;
         config.session = profile.name;
         config.isMetered = false;
+        config.proxyInfo = profile.proxy;
 
         config.addLegacyRoutes(profile.routes);
         if (!profile.dnsServers.isEmpty()) {

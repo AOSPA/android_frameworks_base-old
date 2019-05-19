@@ -52,6 +52,8 @@
 package android.bluetooth;
 
 import android.Manifest;
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
@@ -89,7 +91,8 @@ import java.util.UUID;
  * returned by {@link BluetoothAdapter#getBondedDevices()
  * BluetoothAdapter.getBondedDevices()}. You can then open a
  * {@link BluetoothSocket} for communication with the remote device, using
- * {@link #createRfcommSocketToServiceRecord(UUID)}.
+ * {@link #createRfcommSocketToServiceRecord(UUID)} over Bluetooth BR/EDR or using
+ * {@link #createL2capChannel(int)} over Bluetooth LE.
  *
  * <p class="note"><strong>Note:</strong>
  * Requires the {@link android.Manifest.permission#BLUETOOTH} permission.
@@ -489,6 +492,7 @@ public final class BluetoothDevice implements Parcelable {
 
     /**
      * Manufacturer name of this Bluetooth device
+     * Data type should be {@String} as {@link Byte} array.
      * @hide
      */
     @SystemApi
@@ -496,6 +500,7 @@ public final class BluetoothDevice implements Parcelable {
 
     /**
      * Model name of this Bluetooth device
+     * Data type should be {@String} as {@link Byte} array.
      * @hide
      */
     @SystemApi
@@ -503,6 +508,7 @@ public final class BluetoothDevice implements Parcelable {
 
     /**
      * Software version of this Bluetooth device
+     * Data type should be {@String} as {@link Byte} array.
      * @hide
      */
     @SystemApi
@@ -510,6 +516,7 @@ public final class BluetoothDevice implements Parcelable {
 
     /**
      * Hardware version of this Bluetooth device
+     * Data type should be {@String} as {@link Byte} array.
      * @hide
      */
     @SystemApi
@@ -517,6 +524,7 @@ public final class BluetoothDevice implements Parcelable {
 
     /**
      * Package name of the companion app, if any
+     * Data type should be {@String} as {@link Byte} array.
      * @hide
      */
     @SystemApi
@@ -524,6 +532,7 @@ public final class BluetoothDevice implements Parcelable {
 
     /**
      * URI to the main icon shown on the settings UI
+     * Data type should be {@link Byte} array.
      * @hide
      */
     @SystemApi
@@ -531,80 +540,91 @@ public final class BluetoothDevice implements Parcelable {
 
     /**
      * Whether this device is an untethered headset with left, right and case
+     * Data type should be {@String} as {@link Byte} array.
      * @hide
      */
     @SystemApi
-    public static final int METADATA_IS_UNTHETHERED_HEADSET = 6;
+    public static final int METADATA_IS_UNTETHERED_HEADSET = 6;
 
     /**
      * URI to icon of the left headset
+     * Data type should be {@link Byte} array.
      * @hide
      */
     @SystemApi
-    public static final int METADATA_UNTHETHERED_LEFT_ICON = 7;
+    public static final int METADATA_UNTETHERED_LEFT_ICON = 7;
 
     /**
      * URI to icon of the right headset
+     * Data type should be {@link Byte} array.
      * @hide
      */
     @SystemApi
-    public static final int METADATA_UNTHETHERED_RIGHT_ICON = 8;
+    public static final int METADATA_UNTETHERED_RIGHT_ICON = 8;
 
     /**
      * URI to icon of the headset charging case
+     * Data type should be {@link Byte} array.
      * @hide
      */
     @SystemApi
-    public static final int METADATA_UNTHETHERED_CASE_ICON = 9;
+    public static final int METADATA_UNTETHERED_CASE_ICON = 9;
 
     /**
-     * Battery level (0-100), {@link BluetoothDevice#BATTERY_LEVEL_UNKNOWN}
-     * is invalid, of the left headset
+     * Battery level of left headset
+     * Data type should be {@String} 0-100 as {@link Byte} array, otherwise
+     * as invalid.
      * @hide
      */
     @SystemApi
-    public static final int METADATA_UNTHETHERED_LEFT_BATTERY = 10;
+    public static final int METADATA_UNTETHERED_LEFT_BATTERY = 10;
 
     /**
-     * Battery level (0-100), {@link BluetoothDevice#BATTERY_LEVEL_UNKNOWN}
-     * is invalid, of the right headset
+     * Battery level of rigth headset
+     * Data type should be {@String} 0-100 as {@link Byte} array, otherwise
+     * as invalid.
      * @hide
      */
     @SystemApi
-    public static final int METADATA_UNTHETHERED_RIGHT_BATTERY = 11;
+    public static final int METADATA_UNTETHERED_RIGHT_BATTERY = 11;
 
     /**
-     * Battery level (0-100), {@link BluetoothDevice#BATTERY_LEVEL_UNKNOWN}
-     * is invalid, of the headset charging case
+     * Battery level of the headset charging case
+     * Data type should be {@String} 0-100 as {@link Byte} array, otherwise
+     * as invalid.
      * @hide
      */
     @SystemApi
-    public static final int METADATA_UNTHETHERED_CASE_BATTERY = 12;
+    public static final int METADATA_UNTETHERED_CASE_BATTERY = 12;
 
     /**
      * Whether the left headset is charging
+     * Data type should be {@String} as {@link Byte} array.
      * @hide
      */
     @SystemApi
-    public static final int METADATA_UNTHETHERED_LEFT_CHARGING = 13;
+    public static final int METADATA_UNTETHERED_LEFT_CHARGING = 13;
 
     /**
      * Whether the right headset is charging
+     * Data type should be {@String} as {@link Byte} array.
      * @hide
      */
     @SystemApi
-    public static final int METADATA_UNTHETHERED_RIGHT_CHARGING = 14;
+    public static final int METADATA_UNTETHERED_RIGHT_CHARGING = 14;
 
     /**
      * Whether the headset charging case is charging
+     * Data type should be {@String} as {@link Byte} array.
      * @hide
      */
     @SystemApi
-    public static final int METADATA_UNTHETHERED_CASE_CHARGING = 15;
+    public static final int METADATA_UNTETHERED_CASE_CHARGING = 15;
 
     /**
-     * URI to the enhanced settings UI slice, null or empty String means
-     * the UI does not exist
+     * URI to the enhanced settings UI slice
+     * Data type should be {@String} as {@link Byte} array, null means
+     * the UI does not exist.
      * @hide
      */
     @SystemApi
@@ -673,7 +693,6 @@ public final class BluetoothDevice implements Parcelable {
     /**
      * Intent to broadcast silence mode changed.
      * Alway contains the extra field {@link #EXTRA_DEVICE}
-     * Alway contains the extra field {@link #EXTRA_SILENCE_ENABLED}
      *
      * @hide
      */
@@ -681,16 +700,6 @@ public final class BluetoothDevice implements Parcelable {
     @SystemApi
     public static final String ACTION_SILENCE_MODE_CHANGED =
             "android.bluetooth.device.action.SILENCE_MODE_CHANGED";
-
-    /**
-     * Used as an extra field in {@link #ACTION_SILENCE_MODE_CHANGED} intent,
-     * contains whether device is in silence mode as boolean.
-     *
-     * @hide
-     */
-    @SystemApi
-    public static final String EXTRA_SILENCE_ENABLED =
-            "android.bluetooth.device.extra.SILENCE_ENABLED";
 
     /**
      * Used as an extra field in {@link #ACTION_CONNECTION_ACCESS_REQUEST} intent.
@@ -1014,10 +1023,12 @@ public final class BluetoothDevice implements Parcelable {
     /*package*/
     @UnsupportedAppUsage
     static IBluetooth getService() {
+        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+        IBluetooth tService = adapter.getBluetoothService(sStateChangeCallback);
+
         synchronized (BluetoothDevice.class) {
             if (sService == null) {
-                BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-                sService = adapter.getBluetoothService(sStateChangeCallback);
+                sService = tService;
             }
         }
         return sService;
@@ -1099,7 +1110,7 @@ public final class BluetoothDevice implements Parcelable {
         return 0;
     }
 
-    public static final Parcelable.Creator<BluetoothDevice> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<BluetoothDevice> CREATOR =
             new Parcelable.Creator<BluetoothDevice>() {
                 public BluetoothDevice createFromParcel(Parcel in) {
                     return new BluetoothDevice(in.readString());
@@ -1789,7 +1800,8 @@ public final class BluetoothDevice implements Parcelable {
     }
 
     /**
-     * Set the Bluetooth device silence mode.
+     * Sets whether the {@link BluetoothDevice} enters silence mode. Audio will not
+     * be routed to the {@link BluetoothDevice} if set to {@code true}.
      *
      * When the {@link BluetoothDevice} enters silence mode, and the {@link BluetoothDevice}
      * is an active device (for A2DP or HFP), the active device for that profile
@@ -1809,6 +1821,7 @@ public final class BluetoothDevice implements Parcelable {
      *
      * @param silence true to enter silence mode, false to exit
      * @return true on success, false on error.
+     * @throws IllegalStateException if Bluetooth is not turned ON.
      * @hide
      */
     @SystemApi
@@ -1816,12 +1829,9 @@ public final class BluetoothDevice implements Parcelable {
     public boolean setSilenceMode(boolean silence) {
         final IBluetooth service = sService;
         if (service == null) {
-            return false;
+            throw new IllegalStateException("Bluetooth is not turned ON");
         }
         try {
-            if (getSilenceMode() == silence) {
-                return true;
-            }
             return service.setSilenceMode(this, silence);
         } catch (RemoteException e) {
             Log.e(TAG, "setSilenceMode fail", e);
@@ -1830,24 +1840,25 @@ public final class BluetoothDevice implements Parcelable {
     }
 
     /**
-     * Get the device silence mode status
+     * Check whether the {@link BluetoothDevice} is in silence mode
      *
      * <p> Requires {@link android.Manifest.permission#BLUETOOTH_PRIVILEGED}.
      *
      * @return true on device in silence mode, otherwise false.
+     * @throws IllegalStateException if Bluetooth is not turned ON.
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
-    public boolean getSilenceMode() {
+    public boolean isInSilenceMode() {
         final IBluetooth service = sService;
         if (service == null) {
-            return false;
+            throw new IllegalStateException("Bluetooth is not turned ON");
         }
         try {
             return service.getSilenceMode(this);
         } catch (RemoteException e) {
-            Log.e(TAG, "getSilenceMode fail", e);
+            Log.e(TAG, "isInSilenceMode fail", e);
             return false;
         }
     }
@@ -2357,7 +2368,7 @@ public final class BluetoothDevice implements Parcelable {
      * permissions
      */
     @RequiresPermission(Manifest.permission.BLUETOOTH)
-    public BluetoothSocket createL2capChannel(int psm) throws IOException {
+    public @NonNull BluetoothSocket createL2capChannel(int psm) throws IOException {
         if (!isBluetoothEnabled()) {
             Log.e(TAG, "createL2capChannel: Bluetooth is not enabled");
             throw new IOException();
@@ -2396,7 +2407,7 @@ public final class BluetoothDevice implements Parcelable {
      * permissions
      */
     @RequiresPermission(Manifest.permission.BLUETOOTH)
-    public BluetoothSocket createInsecureL2capChannel(int psm) throws IOException {
+    public @NonNull BluetoothSocket createInsecureL2capChannel(int psm) throws IOException {
         if (!isBluetoothEnabled()) {
             Log.e(TAG, "createInsecureL2capChannel: Bluetooth is not enabled");
             throw new IOException();
@@ -2428,21 +2439,21 @@ public final class BluetoothDevice implements Parcelable {
      * {@link #BOND_NONE}.
      *
      * @param key must be within the list of BluetoothDevice.METADATA_*
-     * @param value the string data to set for key. Must be less than
+     * @param value a byte array data to set for key. Must be less than
      * {@link BluetoothAdapter#METADATA_MAX_LENGTH} characters in length
      * @return true on success, false on error
      * @hide
     */
     @SystemApi
     @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
-    public boolean setMetadata(int key, String value) {
+    public boolean setMetadata(int key, @NonNull byte[] value) {
         final IBluetooth service = sService;
         if (service == null) {
             Log.e(TAG, "Bluetooth is not enabled. Cannot set metadata");
             return false;
         }
-        if (value.length() > METADATA_MAX_LENGTH) {
-            throw new IllegalArgumentException("value length is " + value.length()
+        if (value.length > METADATA_MAX_LENGTH) {
+            throw new IllegalArgumentException("value length is " + value.length
                     + ", should not over " + METADATA_MAX_LENGTH);
         }
         try {
@@ -2457,12 +2468,13 @@ public final class BluetoothDevice implements Parcelable {
      * Get a keyed metadata for this {@link BluetoothDevice} as {@link String}
      *
      * @param key must be within the list of BluetoothDevice.METADATA_*
-     * @return Metadata of the key as string, null on error or not found
+     * @return Metadata of the key as byte array, null on error or not found
      * @hide
      */
     @SystemApi
+    @Nullable
     @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
-    public String getMetadata(int key) {
+    public byte[] getMetadata(int key) {
         final IBluetooth service = sService;
         if (service == null) {
             Log.e(TAG, "Bluetooth is not enabled. Cannot get metadata");

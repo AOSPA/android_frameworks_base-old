@@ -19,6 +19,7 @@ package android.app;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC;
+import static android.view.Display.INVALID_DISPLAY;
 
 import android.annotation.NonNull;
 import android.annotation.TestApi;
@@ -27,6 +28,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Insets;
+import android.graphics.Region;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
 import android.hardware.input.InputManager;
@@ -46,6 +48,7 @@ import android.view.SurfaceSession;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 
@@ -80,6 +83,9 @@ public class ActivityView extends ViewGroup {
     private IActivityTaskManager mActivityTaskManager;
     // Temp container to store view coordinates in window.
     private final int[] mLocationInWindow = new int[2];
+
+    // The latest tap exclude region that we've sent to WM.
+    private final Region mTapExcludeRegion = new Region();
 
     private TaskStackListener mTaskStackListener;
 
@@ -249,6 +255,34 @@ public class ActivityView extends ViewGroup {
     }
 
     /**
+     * Launch a new activity into this container.
+     * <p>Activity resolved by the provided {@link PendingIntent} must have
+     * {@link android.R.attr#resizeableActivity} attribute set to {@code true} in order to be
+     * launched here. Also, if activity is not owned by the owner of this container, it must allow
+     * embedding and the caller must have permission to embed.
+     * <p>Note: This class must finish initializing and
+     * {@link StateCallback#onActivityViewReady(ActivityView)} callback must be triggered before
+     * this method can be called.
+     *
+     * @param pendingIntent Intent used to launch an activity.
+     * @param options options for the activity
+     *
+     * @see StateCallback
+     * @see #startActivity(Intent)
+     */
+    public void startActivity(@NonNull PendingIntent pendingIntent,
+            @NonNull ActivityOptions options) {
+        options.setLaunchDisplayId(mVirtualDisplay.getDisplay().getDisplayId());
+        try {
+            pendingIntent.send(null /* context */, 0 /* code */, null /* intent */,
+                    null /* onFinished */, null /* handler */, null /* requiredPermission */,
+                    options.toBundle());
+        } catch (PendingIntent.CanceledException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
      * Check if container is ready to launch and create {@link ActivityOptions} to target the
      * virtual display.
      */
@@ -279,11 +313,11 @@ public class ActivityView extends ViewGroup {
     }
 
     /**
-     * Triggers an update of {@link ActivityView}'s location in window to properly set touch exclude
+     * Triggers an update of {@link ActivityView}'s location in window to properly set tap exclude
      * regions and avoid focus switches by touches on this view.
      */
     public void onLocationChanged() {
-        updateLocation();
+        updateTapExcludeRegion();
     }
 
     @Override
@@ -291,15 +325,38 @@ public class ActivityView extends ViewGroup {
         mSurfaceView.layout(0 /* left */, 0 /* top */, r - l /* right */, b - t /* bottom */);
     }
 
-    /** Send current location and size to the WM to set tap exclude region for this view. */
-    private void updateLocation() {
+    @Override
+    public boolean gatherTransparentRegion(Region region) {
+        // The tap exclude region may be affected by any view on top of it, so we detect the
+        // possible change by monitoring this function.
+        updateTapExcludeRegion();
+        return super.gatherTransparentRegion(region);
+    }
+
+    /** Compute and send current tap exclude region to WM for this view. */
+    private void updateTapExcludeRegion() {
         if (!isAttachedToWindow()) {
+            return;
+        }
+        if (!canReceivePointerEvents()) {
+            cleanTapExcludeRegion();
             return;
         }
         try {
             getLocationInWindow(mLocationInWindow);
+            final int x = mLocationInWindow[0];
+            final int y = mLocationInWindow[1];
+            mTapExcludeRegion.set(x, y, x + getWidth(), y + getHeight());
+
+            // There might be views on top of us. We need to subtract those areas from the tap
+            // exclude region.
+            final ViewParent parent = getParent();
+            if (parent instanceof ViewGroup) {
+                ((ViewGroup) parent).subtractObscuredTouchableRegion(mTapExcludeRegion, this);
+            }
+
             WindowManagerGlobal.getWindowSession().updateTapExcludeRegion(getWindow(), hashCode(),
-                    mLocationInWindow[0], mLocationInWindow[1], getWidth(), getHeight());
+                    mTapExcludeRegion);
         } catch (RemoteException e) {
             e.rethrowAsRuntimeException();
         }
@@ -322,7 +379,7 @@ public class ActivityView extends ViewGroup {
                 mVirtualDisplay.setDisplayState(true);
             }
 
-            updateLocation();
+            updateTapExcludeRegion();
         }
 
         @Override
@@ -330,7 +387,7 @@ public class ActivityView extends ViewGroup {
             if (mVirtualDisplay != null) {
                 mVirtualDisplay.resize(width, height, getBaseDisplayDensity());
             }
-            updateLocation();
+            updateTapExcludeRegion();
         }
 
         @Override
@@ -346,6 +403,16 @@ public class ActivityView extends ViewGroup {
     protected void onVisibilityChanged(View changedView, int visibility) {
         super.onVisibilityChanged(changedView, visibility);
         mSurfaceView.setVisibility(visibility);
+    }
+
+    /**
+     * @return the display id of the virtual display.
+     */
+    public int getVirtualDisplayId() {
+        if (mVirtualDisplay != null) {
+            return mVirtualDisplay.getDisplay().getDisplayId();
+        }
+        return INVALID_DISPLAY;
     }
 
     /**
@@ -460,13 +527,14 @@ public class ActivityView extends ViewGroup {
 
     /** Report to server that tap exclude region on hosting display should be cleared. */
     private void cleanTapExcludeRegion() {
-        if (!isAttachedToWindow()) {
+        if (!isAttachedToWindow() || mTapExcludeRegion.isEmpty()) {
             return;
         }
-        // Update tap exclude region with an empty rect to clean the state on server.
+        // Update tap exclude region with a null region to clean the state on server.
         try {
             WindowManagerGlobal.getWindowSession().updateTapExcludeRegion(getWindow(), hashCode(),
-                    0 /* left */, 0 /* top */, 0 /* width */, 0 /* height */);
+                    null /* region */);
+            mTapExcludeRegion.setEmpty();
         } catch (RemoteException e) {
             e.rethrowAsRuntimeException();
         }

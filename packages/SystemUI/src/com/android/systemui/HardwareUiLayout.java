@@ -63,6 +63,9 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
 
     public HardwareUiLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
+        // Manually re-initialize mRotation to portrait-mode, since this view must always
+        // be constructed in portrait mode and rotated into the correct initial position.
+        mRotation = ROTATION_NONE;
         updateSettings();
     }
 
@@ -74,25 +77,6 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
     @Override
     protected ViewGroup getListView() {
         return findViewById(android.R.id.list);
-    }
-
-    @Override
-    public void removeAllItems() {
-        if (mList != null) {
-            mList.removeAllViews();
-        }
-        if (mSeparatedView != null) {
-            mSeparatedView.removeAllViews();
-        }
-    }
-
-    @Override
-    public ViewGroup getParentView(boolean separated, int index, boolean reverse) {
-        if (separated) {
-            return getSeparatedView();
-        } else {
-            return getListView();
-        }
     }
 
     @Override
@@ -172,6 +156,10 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
                 mSeparatedView.setBackground(mSeparatedViewBackground);
                 updateEdgeMargin(mEdgeBleed ? 0 : getEdgePadding());
                 mOldHeight = mList.getMeasuredHeight();
+
+                // Must be called to initialize view rotation correctly.
+                // Requires LayoutParams, hence why this isn't called during the constructor.
+                updateRotation();
             } else {
                 return;
             }
@@ -189,7 +177,18 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
         mSwapOrientation = swapOrientation;
     }
 
-    @Override
+    private void updateRotation() {
+        int rotation = RotationUtils.getRotation(getContext());
+        if (rotation != mRotation) {
+            rotate(mRotation, rotation);
+            mRotation = rotation;
+        }
+    }
+
+    /**
+     *  Requires LayoutParams to be set to work correctly, and therefore must be run after after
+     *  the HardwareUILayout has been added to the view hierarchy.
+     */
     protected void rotate(int from, int to) {
         super.rotate(from, to);
         if (from != ROTATION_NONE && to != ROTATION_NONE) {
@@ -203,7 +202,7 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
         } else {
             rotateLeft();
         }
-        if (mHasSeparatedView) {
+        if (mAdapter.hasSeparatedItems()) {
             if (from == ROTATION_SEASCAPE || to == ROTATION_SEASCAPE) {
                 // Separated view has top margin, so seascape separated view need special rotation,
                 // not a full left or right rotation.
@@ -240,6 +239,23 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
                 swapDimens(mList);
                 swapDimens(mSeparatedView);
             }
+        }
+    }
+
+    @Override
+    public void onUpdateList() {
+        super.onUpdateList();
+
+        for (int i = 0; i < mAdapter.getCount(); i++) {
+            ViewGroup parent;
+            boolean separated = mAdapter.shouldBeSeparated(i);
+            if (separated) {
+                parent = getSeparatedView();
+            } else {
+                parent = getListView();
+            }
+            View v = mAdapter.getView(i, null, parent);
+            parent.addView(v);
         }
     }
 
@@ -384,7 +400,9 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
+
         post(() -> updatePosition());
+
     }
 
     private void animateChild(int oldHeight, int newHeight) {
@@ -424,8 +442,9 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
         if (mList == null) return;
         // If got separated button, setRotatedBackground to false,
         // all items won't get white background.
-        mListBackground.setRotatedBackground(mHasSeparatedView);
-        mSeparatedViewBackground.setRotatedBackground(mHasSeparatedView);
+        boolean separated = mAdapter.hasSeparatedItems();
+        mListBackground.setRotatedBackground(separated);
+        mSeparatedViewBackground.setRotatedBackground(separated);
         if (mDivision != null && mDivision.getVisibility() == VISIBLE) {
             int index = mRotatedBackground ? 0 : 1;
             mDivision.getLocationOnScreen(mTmp2);
@@ -471,26 +490,27 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
         int screenHeight;
         int totalHeight;
         int targetGravity;
+        boolean separated = mAdapter.hasSeparatedItems();
         MarginLayoutParams params = (MarginLayoutParams) mSeparatedView.getLayoutParams();
         switch (RotationUtils.getRotation(getContext())) {
             case RotationUtils.ROTATION_LANDSCAPE:
                 defaultTopPadding = getPaddingLeft();
                 viewsTotalHeight = mList.getMeasuredWidth() + mSeparatedView.getMeasuredWidth();
-                separatedViewTopMargin = mHasSeparatedView ? params.leftMargin : 0;
+                separatedViewTopMargin = separated ? params.leftMargin : 0;
                 screenHeight = getMeasuredWidth();
                 targetGravity = Gravity.CENTER_HORIZONTAL|Gravity.TOP;
                 break;
             case RotationUtils.ROTATION_SEASCAPE:
                 defaultTopPadding = getPaddingRight();
                 viewsTotalHeight = mList.getMeasuredWidth() + mSeparatedView.getMeasuredWidth();
-                separatedViewTopMargin = mHasSeparatedView ? params.leftMargin : 0;
+                separatedViewTopMargin = separated ? params.leftMargin : 0;
                 screenHeight = getMeasuredWidth();
                 targetGravity = Gravity.CENTER_HORIZONTAL|Gravity.BOTTOM;
                 break;
             default: // Portrait
                 defaultTopPadding = getPaddingTop();
                 viewsTotalHeight = mList.getMeasuredHeight() + mSeparatedView.getMeasuredHeight();
-                separatedViewTopMargin = mHasSeparatedView ? params.topMargin : 0;
+                separatedViewTopMargin = separated ? params.topMargin : 0;
                 screenHeight = getMeasuredHeight();
                 targetGravity = Gravity.CENTER_VERTICAL|Gravity.RIGHT;
                 break;
@@ -522,4 +542,29 @@ public class HardwareUiLayout extends MultiListLayout implements Tunable {
         inoutInfo.contentInsets.set(mList.getLeft(), mList.getTop(),
                 0, getBottom() - mList.getBottom());
     };
+
+    private float getAnimationDistance() {
+        return getContext().getResources().getDimension(
+                com.android.systemui.R.dimen.global_actions_panel_width) / 2;
+    }
+
+    @Override
+    public float getAnimationOffsetX() {
+        if (RotationUtils.getRotation(mContext) == ROTATION_NONE) {
+            return getAnimationDistance();
+        }
+        return 0;
+    }
+
+    @Override
+    public float getAnimationOffsetY() {
+        switch (RotationUtils.getRotation(getContext())) {
+            case RotationUtils.ROTATION_LANDSCAPE:
+                return -getAnimationDistance();
+            case RotationUtils.ROTATION_SEASCAPE:
+                return getAnimationDistance();
+            default: // Portrait
+                return 0;
+        }
+    }
 }

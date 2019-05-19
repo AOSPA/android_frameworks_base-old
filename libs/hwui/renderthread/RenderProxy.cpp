@@ -31,6 +31,7 @@
 #include "renderthread/RenderThread.h"
 #include "utils/Macros.h"
 #include "utils/TimeUtils.h"
+#include "utils/TraceUtils.h"
 
 #include <ui/GraphicBuffer.h>
 
@@ -83,7 +84,7 @@ void RenderProxy::setName(const char* name) {
 
 void RenderProxy::setSurface(const sp<Surface>& surface) {
     mRenderThread.queue().post(
-            [ this, surf = surface ]() mutable { mContext->setSurface(std::move(surf)); });
+            [this, surf = surface]() mutable { mContext->setSurface(std::move(surf)); });
 }
 
 void RenderProxy::allocateBuffers() {
@@ -161,6 +162,7 @@ void RenderProxy::buildLayer(RenderNode* node) {
 }
 
 bool RenderProxy::copyLayerInto(DeferredLayerUpdater* layer, SkBitmap& bitmap) {
+    ATRACE_NAME("TextureView#getBitmap");
     auto& thread = RenderThread::getInstance();
     return thread.queue().runSync([&]() -> bool {
         return thread.readback().copyLayerInto(layer, &bitmap) == CopyResult::Success;
@@ -249,7 +251,7 @@ void RenderProxy::dumpGraphicsMemory(int fd) {
 
 void RenderProxy::setProcessStatsBuffer(int fd) {
     auto& rt = RenderThread::getInstance();
-    rt.queue().post([&rt, fd = dup(fd) ]() {
+    rt.queue().post([&rt, fd = dup(fd)]() {
         rt.globalProfileData().switchStorageToAshmem(fd);
         close(fd);
     });
@@ -283,7 +285,7 @@ void RenderProxy::setContentDrawBounds(int left, int top, int right, int bottom)
 void RenderProxy::setPictureCapturedCallback(
         const std::function<void(sk_sp<SkPicture>&&)>& callback) {
     mRenderThread.queue().post(
-            [ this, cb = callback ]() { mContext->setPictureCapturedCallback(cb); });
+            [this, cb = callback]() { mContext->setPictureCapturedCallback(cb); });
 }
 
 void RenderProxy::setFrameCallback(std::function<void(int64_t)>&& callback) {
@@ -295,19 +297,24 @@ void RenderProxy::setFrameCompleteCallback(std::function<void(int64_t)>&& callba
 }
 
 void RenderProxy::addFrameMetricsObserver(FrameMetricsObserver* observerPtr) {
-    mRenderThread.queue().post([ this, observer = sp{observerPtr} ]() {
+    mRenderThread.queue().post([this, observer = sp{observerPtr}]() {
         mContext->addFrameMetricsObserver(observer.get());
     });
 }
 
 void RenderProxy::removeFrameMetricsObserver(FrameMetricsObserver* observerPtr) {
-    mRenderThread.queue().post([ this, observer = sp{observerPtr} ]() {
+    mRenderThread.queue().post([this, observer = sp{observerPtr}]() {
         mContext->removeFrameMetricsObserver(observer.get());
     });
 }
 
 void RenderProxy::setForceDark(bool enable) {
     mRenderThread.queue().post([this, enable]() { mContext->setForceDark(enable); });
+}
+
+void RenderProxy::setRenderAheadDepth(int renderAhead) {
+    mRenderThread.queue().post(
+            [context = mContext, renderAhead] { context->setRenderAheadDepth(renderAhead); });
 }
 
 int RenderProxy::copySurfaceInto(sp<Surface>& surface, int left, int top, int right, int bottom,
@@ -346,6 +353,7 @@ void RenderProxy::prepareToDraw(Bitmap& bitmap) {
 }
 
 int RenderProxy::copyHWBitmapInto(Bitmap* hwBitmap, SkBitmap* bitmap) {
+    ATRACE_NAME("HardwareBitmap readback");
     RenderThread& thread = RenderThread::getInstance();
     if (gettid() == thread.getTid()) {
         // TODO: fix everything that hits this. We should never be triggering a readback ourselves.
@@ -384,9 +392,7 @@ void RenderProxy::releaseVDAtlasEntries() {
 void RenderProxy::preload() {
     // Create RenderThread object and start the thread. Then preload Vulkan/EGL driver.
     auto& thread = RenderThread::getInstance();
-    thread.queue().post([&thread]() {
-        thread.preload();
-    });
+    thread.queue().post([&thread]() { thread.preload(); });
 }
 
 } /* namespace renderthread */

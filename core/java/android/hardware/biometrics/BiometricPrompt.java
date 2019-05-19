@@ -82,6 +82,11 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
      * @hide
      */
     public static final String KEY_ALLOW_DEVICE_CREDENTIAL = "allow_device_credential";
+    /**
+     * @hide
+     */
+    public static final String KEY_FROM_CONFIRM_DEVICE_CREDENTIAL
+            = "from_confirm_device_credential";
 
     /**
      * Error/help message will show for this amount of time.
@@ -139,7 +144,7 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
          * @param title
          * @return
          */
-        public Builder setTitle(@NonNull CharSequence title) {
+        @NonNull public Builder setTitle(@NonNull CharSequence title) {
             mBundle.putCharSequence(KEY_TITLE, title);
             return this;
         }
@@ -150,7 +155,7 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
          * @hide
          */
         @RequiresPermission(USE_BIOMETRIC_INTERNAL)
-        public Builder setUseDefaultTitle() {
+        @NonNull public Builder setUseDefaultTitle() {
             mBundle.putBoolean(KEY_USE_DEFAULT_TITLE, true);
             return this;
         }
@@ -160,7 +165,7 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
          * @param subtitle
          * @return
          */
-        public Builder setSubtitle(@NonNull CharSequence subtitle) {
+        @NonNull public Builder setSubtitle(@NonNull CharSequence subtitle) {
             mBundle.putCharSequence(KEY_SUBTITLE, subtitle);
             return this;
         }
@@ -170,7 +175,7 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
          * @param description
          * @return
          */
-        public Builder setDescription(@NonNull CharSequence description) {
+        @NonNull public Builder setDescription(@NonNull CharSequence description) {
             mBundle.putCharSequence(KEY_DESCRIPTION, description);
             return this;
         }
@@ -182,7 +187,7 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
          * @return
          * @hide
          */
-        public Builder setPositiveButton(@NonNull CharSequence text,
+        @NonNull public Builder setPositiveButton(@NonNull CharSequence text,
                 @NonNull @CallbackExecutor Executor executor,
                 @NonNull DialogInterface.OnClickListener listener) {
             if (TextUtils.isEmpty(text)) {
@@ -204,13 +209,13 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
          * "Cancel" button, but may be also used to show an alternative method for authentication,
          * such as screen that asks for a backup password.
          *
-         * Note that this should not be set if {@link #setAllowDeviceCredential(boolean)
+         * Note that this should not be set if {@link #setDeviceCredentialAllowed(boolean)}(boolean)
          * is set to true.
          *
          * @param text
          * @return
          */
-        public Builder setNegativeButton(@NonNull CharSequence text,
+        @NonNull public Builder setNegativeButton(@NonNull CharSequence text,
                 @NonNull @CallbackExecutor Executor executor,
                 @NonNull DialogInterface.OnClickListener listener) {
             if (TextUtils.isEmpty(text)) {
@@ -245,7 +250,7 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
          *
          * @param requireConfirmation
          */
-        public Builder setRequireConfirmation(boolean requireConfirmation) {
+        @NonNull public Builder setConfirmationRequired(boolean requireConfirmation) {
             mBundle.putBoolean(KEY_REQUIRE_CONFIRMATION, requireConfirmation);
             return this;
         }
@@ -255,17 +260,29 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
          * option to authenticate with their device PIN, pattern, or password. Developers should
          * first check {@link KeyguardManager#isDeviceSecure()} before enabling this. If the device
          * is not secure, {@link BiometricPrompt#BIOMETRIC_ERROR_NO_DEVICE_CREDENTIAL} will be
-         * returned in {@link AuthenticationCallback#onAuthenticationError(int, CharSequence)}}
+         * returned in {@link AuthenticationCallback#onAuthenticationError(int, CharSequence)}}.
+         * Defaults to false.
          *
          * Note that {@link #setNegativeButton(CharSequence, Executor,
          * DialogInterface.OnClickListener)} should not be set if this is set to true.
          *
-         * @param enable When true, the prompt will fall back to ask for the user's device
+         * @param allowed When true, the prompt will fall back to ask for the user's device
          *               credentials (PIN, pattern, or password).
          * @return
          */
-        public Builder setAllowDeviceCredential(boolean enable) {
-            mBundle.putBoolean(KEY_ALLOW_DEVICE_CREDENTIAL, enable);
+        @NonNull public Builder setDeviceCredentialAllowed(boolean allowed) {
+            mBundle.putBoolean(KEY_ALLOW_DEVICE_CREDENTIAL, allowed);
+            return this;
+        }
+
+        /**
+         * TODO(123378871): Remove when moved.
+         * @return
+         * @hide
+         */
+        @RequiresPermission(USE_BIOMETRIC_INTERNAL)
+        @NonNull public Builder setFromConfirmDeviceCredential() {
+            mBundle.putBoolean(KEY_FROM_CONFIRM_DEVICE_CREDENTIAL, true);
             return this;
         }
 
@@ -274,7 +291,7 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
          * @return a {@link BiometricPrompt}
          * @throws IllegalArgumentException if any of the required fields are not set.
          */
-        public BiometricPrompt build() {
+        @NonNull public BiometricPrompt build() {
             final CharSequence title = mBundle.getCharSequence(KEY_TITLE);
             final CharSequence negative = mBundle.getCharSequence(KEY_NEGATIVE_TEXT);
             final boolean useDefaultTitle = mBundle.getBoolean(KEY_USE_DEFAULT_TITLE);
@@ -493,7 +510,8 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
     public void authenticateUser(@NonNull CancellationSignal cancel,
             @NonNull @CallbackExecutor Executor executor,
             @NonNull AuthenticationCallback callback,
-            int userId) {
+            int userId,
+            IBiometricConfirmDeviceCredentialCallback confirmDeviceCredentialCallback) {
         if (cancel == null) {
             throw new IllegalArgumentException("Must supply a cancellation signal");
         }
@@ -503,7 +521,8 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
         if (callback == null) {
             throw new IllegalArgumentException("Must supply a callback");
         }
-        authenticateInternal(null /* crypto */, cancel, executor, callback, userId);
+        authenticateInternal(null /* crypto */, cancel, executor, callback, userId,
+                confirmDeviceCredentialCallback);
     }
 
     /**
@@ -521,6 +540,11 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
      * previous client and start a new authentication. The interrupted client will receive a
      * cancelled notification through {@link AuthenticationCallback#onAuthenticationError(int,
      * CharSequence)}.
+     *
+     * Note: Applications generally should not cancel and start authentication in quick succession.
+     * For example, to properly handle authentication across configuration changes, it's recommended
+     * to use BiometricPrompt in a fragment with setRetainInstance(true). By doing so, the
+     * application will not need to cancel/restart authentication during the configuration change.
      *
      * @throws IllegalArgumentException If any of the arguments are null
      *
@@ -549,7 +573,8 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
         if (mBundle.getBoolean(KEY_ALLOW_DEVICE_CREDENTIAL)) {
             throw new IllegalArgumentException("Device credential not supported with crypto");
         }
-        authenticateInternal(crypto, cancel, executor, callback, mContext.getUserId());
+        authenticateInternal(crypto, cancel, executor, callback, mContext.getUserId(),
+                null /* confirmDeviceCredentialCallback */);
     }
 
     /**
@@ -566,6 +591,11 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
      * an existing authentication attempt is occurring will stop the previous client and start a new
      * authentication. The interrupted client will receive a cancelled notification through {@link
      * AuthenticationCallback#onAuthenticationError(int, CharSequence)}.
+     *
+     * Note: Applications generally should not cancel and start authentication in quick succession.
+     * For example, to properly handle authentication across configuration changes, it's recommended
+     * to use BiometricPrompt in a fragment with setRetainInstance(true). By doing so, the
+     * application will not need to cancel/restart authentication during the configuration change.
      *
      * @throws IllegalArgumentException If any of the arguments are null
      *
@@ -586,7 +616,8 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
         if (callback == null) {
             throw new IllegalArgumentException("Must supply a callback");
         }
-        authenticateInternal(null /* crypto */, cancel, executor, callback, mContext.getUserId());
+        authenticateInternal(null /* crypto */, cancel, executor, callback, mContext.getUserId(),
+                null /* confirmDeviceCredentialCallback */);
     }
 
     private void cancelAuthentication() {
@@ -603,7 +634,8 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
             @NonNull CancellationSignal cancel,
             @NonNull @CallbackExecutor Executor executor,
             @NonNull AuthenticationCallback callback,
-            int userId) {
+            int userId,
+            IBiometricConfirmDeviceCredentialCallback confirmDeviceCredentialCallback) {
         try {
             if (cancel.isCanceled()) {
                 Log.w(TAG, "Authentication already canceled");
@@ -616,8 +648,15 @@ public class BiometricPrompt implements BiometricAuthenticator, BiometricConstan
             mExecutor = executor;
             mAuthenticationCallback = callback;
             final long sessionId = crypto != null ? crypto.getOpId() : 0;
-            mService.authenticate(mToken, sessionId, userId, mBiometricServiceReceiver,
-                    mContext.getOpPackageName(), mBundle);
+            if (BiometricManager.hasBiometrics(mContext)) {
+                mService.authenticate(mToken, sessionId, userId, mBiometricServiceReceiver,
+                        mContext.getOpPackageName(), mBundle, confirmDeviceCredentialCallback);
+            } else {
+                mExecutor.execute(() -> {
+                    callback.onAuthenticationError(BiometricPrompt.BIOMETRIC_ERROR_HW_NOT_PRESENT,
+                            mContext.getString(R.string.biometric_error_hw_unavailable));
+                });
+            }
         } catch (RemoteException e) {
             Log.e(TAG, "Remote exception while authenticating", e);
             mExecutor.execute(() -> {

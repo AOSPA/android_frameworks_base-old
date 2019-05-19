@@ -26,20 +26,6 @@ import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.APP_TR
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.APP_TRANSITION_REPORTED_DRAWN_MS;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.APP_TRANSITION_STARTING_WINDOW_DELAY_MS;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.APP_TRANSITION_WINDOWS_DRAWN_DELAY_MS;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_ACTIVITY_RECORD_FLAGS;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_ACTIVITY_RECORD_IS_FULLSCREEN;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_ACTIVITY_RECORD_IS_NO_DISPLAY;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_ACTIVITY_RECORD_IS_VISIBLE;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_ACTIVITY_RECORD_IS_VISIBLE_IGNORING_KEYGUARD;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_ACTIVITY_RECORD_LAUNCH_MODE;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_ACTIVITY_RECORD_MILLIS_SINCE_LAST_LAUNCH;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_ACTIVITY_RECORD_MILLIS_SINCE_LAST_VISIBLE;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_ACTIVITY_RECORD_PROCESS_NAME;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_ACTIVITY_RECORD_REAL_ACTIVITY;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_ACTIVITY_RECORD_RESULT_TO_PKG_NAME;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_ACTIVITY_RECORD_RESULT_TO_SHORT_COMPONENT_NAME;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_ACTIVITY_RECORD_SHORT_COMPONENT_NAME;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_ACTIVITY_RECORD_TARGET_ACTIVITY;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_CALLING_PACKAGE_NAME;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_CALLING_UID;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_CALLING_UID_HAS_ANY_VISIBLE_WINDOW;
@@ -62,12 +48,7 @@ import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_REAL_CALLING_UID;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_REAL_CALLING_UID_HAS_ANY_VISIBLE_WINDOW;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_REAL_CALLING_UID_PROC_STATE;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TARGET_PACKAGE_NAME;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TARGET_SHORT_COMPONENT_NAME;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TARGET_UID;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TARGET_UID_HAS_ANY_VISIBLE_WINDOW;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TARGET_UID_PROC_STATE;
-import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_TARGET_WHITELIST_TAG;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.PACKAGE_OPTIMIZATION_COMPILATION_FILTER;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.PACKAGE_OPTIMIZATION_COMPILATION_REASON;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.TYPE_TRANSITION_COLD_LAUNCH;
@@ -85,6 +66,7 @@ import static com.android.server.wm.ActivityTaskManagerInternal.APP_TRANSITION_T
 
 import android.app.WaitResult;
 import android.app.WindowConfiguration.WindowingMode;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
@@ -118,7 +100,7 @@ import com.android.server.LocalServices;
  * data for Tron, logcat, event logs and {@link android.app.WaitResult}.
  *
  * Tests:
- * atest CtsActivityManagerDeviceTestCases:ActivityMetricsLoggerTests
+ * atest CtsWindowManagerDeviceTestCases:ActivityMetricsLoggerTests
  */
 class ActivityMetricsLogger {
 
@@ -172,6 +154,7 @@ class ActivityMetricsLogger {
     private final StringBuilder mStringBuilder = new StringBuilder();
 
     public static BoostFramework mPerfFirstDraw = null;
+    public static BoostFramework mUxPerf = new BoostFramework();
     private static ActivityRecord mLaunchedActivity;
 
     /**
@@ -674,6 +657,11 @@ class ActivityMetricsLogger {
             final WindowingModeTransitionInfo info = mWindowingModeTransitionInfo.valueAt(index);
             final int type = getTransitionType(info);
             if (type == INVALID_TRANSITION_TYPE) {
+                if (DEBUG_METRICS) {
+                    Slog.i(TAG, "invalid transition type"
+                            + " processRunning=" + info.currentTransitionProcessRunning
+                            + " startResult=" + info.startResult);
+                }
                 return;
             }
 
@@ -782,15 +770,15 @@ class ActivityMetricsLogger {
         sb.append(": ");
         TimeUtils.formatDuration(info.windowsDrawnDelayMs, sb);
 
-        if (mLaunchedActivity.mUxPerf != null) {
-            mLaunchedActivity.mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_DISPLAYED_ACT, 0, info.packageName, info.windowsDrawnDelayMs);
+        if (mUxPerf != null) {
+            mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_DISPLAYED_ACT, 0, info.packageName, info.windowsDrawnDelayMs);
         }
 
         Log.i(TAG, sb.toString());
 
         int isGame = mLaunchedActivity.isAppInfoGame();
-        if (mLaunchedActivity.mUxPerf !=  null) {
-            mLaunchedActivity.mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_GAME, 0, info.packageName, isGame);
+        if (mUxPerf !=  null) {
+            mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_GAME, 0, info.packageName, isGame);
         }
 
         if (mPerfFirstDraw == null) {
@@ -905,6 +893,11 @@ class ActivityMetricsLogger {
         builder.addTaggedData(FIELD_COMING_FROM_PENDING_INTENT, comingFromPendingIntent ? 1 : 0);
         if (intent != null) {
             builder.addTaggedData(FIELD_INTENT_ACTION, intent.getAction());
+            ComponentName component = intent.getComponent();
+            if (component != null) {
+                builder.addTaggedData(FIELD_TARGET_SHORT_COMPONENT_NAME,
+                        component.flattenToShortString());
+            }
         }
         if (callerApp != null) {
             builder.addTaggedData(FIELD_PROCESS_RECORD_PROCESS_NAME, callerApp.mName);
@@ -944,7 +937,10 @@ class ActivityMetricsLogger {
             } else if (info.startResult == START_TASK_TO_FRONT) {
                 return TYPE_TRANSITION_HOT_LAUNCH;
             }
-        } else if (info.startResult == START_SUCCESS) {
+        } else if (info.startResult == START_SUCCESS
+                || (info.startResult == START_TASK_TO_FRONT)) {
+            // TaskRecord may still exist when cold launching an activity and the start
+            // result will be set to START_TASK_TO_FRONT. Treat this as a COLD launch.
             return TYPE_TRANSITION_COLD_LAUNCH;
         }
         return INVALID_TRANSITION_TYPE;

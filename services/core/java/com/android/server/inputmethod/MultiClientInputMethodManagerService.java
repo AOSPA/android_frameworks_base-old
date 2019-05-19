@@ -29,6 +29,8 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.annotation.WorkerThread;
 import android.app.AppOpsManager;
+import android.app.Notification;
+import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -44,6 +46,7 @@ import android.inputmethodservice.MultiClientInputMethodServiceDelegate;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Debug;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -66,6 +69,7 @@ import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodSubtype;
 import android.view.inputmethod.InputMethodSystemProperty;
 
+import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.inputmethod.IMultiClientInputMethod;
 import com.android.internal.inputmethod.IMultiClientInputMethodPrivilegedOperations;
@@ -73,6 +77,11 @@ import com.android.internal.inputmethod.IMultiClientInputMethodSession;
 import com.android.internal.inputmethod.StartInputFlags;
 import com.android.internal.inputmethod.StartInputReason;
 import com.android.internal.inputmethod.UnbindReason;
+import com.android.internal.messages.nano.SystemMessageProto;
+import com.android.internal.notification.SystemNotificationChannels;
+import com.android.internal.os.TransferPipe;
+import com.android.internal.util.DumpUtils;
+import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.view.IInputContext;
 import com.android.internal.view.IInputMethodClient;
@@ -84,6 +93,8 @@ import com.android.server.SystemService;
 import com.android.server.wm.WindowManagerInternal;
 
 import java.io.FileDescriptor;
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.util.Collections;
 import java.util.List;
@@ -96,8 +107,15 @@ import java.util.WeakHashMap;
  * we can switch the implementation at the boot time.</p>
  */
 public final class MultiClientInputMethodManagerService {
-    static final String TAG = "MultiClientInputMethodManagerService";
-    static final boolean DEBUG = false;
+    private static final String TAG = "MultiClientInputMethodManagerService";
+    private static final boolean DEBUG = false;
+
+    private static final String PER_DISPLAY_FOCUS_DISABLED_WARNING_TITLE =
+            "config_perDisplayFocusEnabled is not true.";
+
+    private static final String PER_DISPLAY_FOCUS_DISABLED_WARNING_MSG =
+            "Consider rebuilding the system image after enabling config_perDisplayFocusEnabled to "
+                    + "make IME focus compatible with multi-client IME mode.";
 
     private static final long RECONNECT_DELAY_MSEC = 1000;
 
@@ -465,8 +483,33 @@ public final class MultiClientInputMethodManagerService {
                             onPackageAdded(intent);
                         }
                     }, filter, null, mHandler);
+                    break;
                 }
-                break;
+                case SystemService.PHASE_BOOT_COMPLETED: {
+                    final boolean perDisplayFocusEnabled = mContext.getResources().getBoolean(
+                            com.android.internal.R.bool.config_perDisplayFocusEnabled);
+                    if (!perDisplayFocusEnabled) {
+                        final Bundle extras = new Bundle();
+                        extras.putBoolean(Notification.EXTRA_ALLOW_DURING_SETUP, true);
+                        mContext.getSystemService(NotificationManager.class).notifyAsUser(TAG,
+                                SystemMessageProto.SystemMessage.NOTE_SELECT_INPUT_METHOD,
+                                new Notification.Builder(mContext,
+                                        SystemNotificationChannels.VIRTUAL_KEYBOARD)
+                                        .setContentTitle(PER_DISPLAY_FOCUS_DISABLED_WARNING_TITLE)
+                                        .setStyle(new Notification.BigTextStyle()
+                                                .bigText(PER_DISPLAY_FOCUS_DISABLED_WARNING_MSG))
+                                        .setSmallIcon(R.drawable.ic_notification_ime_default)
+                                        .setWhen(0)
+                                        .setOngoing(true)
+                                        .setLocalOnly(true)
+                                        .addExtras(extras)
+                                        .setCategory(Notification.CATEGORY_SYSTEM)
+                                        .setColor(mContext.getColor(
+                                                R.color.system_notification_accent_color))
+                                        .build(), UserHandle.ALL);
+                    }
+                    break;
+                }
             }
         }
 
@@ -607,6 +650,14 @@ public final class MultiClientInputMethodManagerService {
             mSelfReportedDisplayId = selfReportedDisplayId;
             mClientId = InputMethodClientIdSource.getNext();
         }
+
+        @GuardedBy("PerUserData.mLock")
+        void dumpLocked(FileDescriptor fd, IndentingPrintWriter ipw, String[] args) {
+            ipw.println("mState=" + mState + ",mBindingSequence=" + mBindingSequence
+                    + ",mWriteChannel=" + mWriteChannel
+                    + ",mInputMethodSession=" + mInputMethodSession
+                    + ",mMSInputMethodSession=" + mMSInputMethodSession);
+        }
     }
 
     private static final class UserDataMap {
@@ -633,6 +684,22 @@ public final class MultiClientInputMethodManagerService {
         PerUserData removeReturnOld(@UserIdInt int userId) {
             synchronized (mMap) {
                 return mMap.removeReturnOld(userId);
+            }
+        }
+
+        @AnyThread
+        void dump(FileDescriptor fd, IndentingPrintWriter ipw, String[] args) {
+            synchronized (mMap) {
+                for (int i = 0; i < mMap.size(); i++) {
+                    int userId = mMap.keyAt(i);
+                    PerUserData data = mMap.valueAt(i);
+                    ipw.println("userId=" + userId + ", data=");
+                    if (data != null) {
+                        ipw.increaseIndent();
+                        data.dump(fd, ipw, args);
+                        ipw.decreaseIndent();
+                    }
+                }
             }
         }
     }
@@ -929,6 +996,71 @@ public final class MultiClientInputMethodManagerService {
             }
         }
 
+        @AnyThread
+        void dump(FileDescriptor fd, IndentingPrintWriter ipw, String[] args) {
+            synchronized (mLock) {
+                ipw.println("mState=" + mState
+                        + ",mCurrentInputMethod=" + mCurrentInputMethod
+                        + ",mCurrentInputMethodInfo=" + mCurrentInputMethodInfo);
+
+                if (mCurrentInputMethod != null) {
+                    // indentation will not be kept. So add visual separator here.
+                    ipw.println(">>Dump CurrentInputMethod>>");
+                    ipw.flush();
+                    try {
+                        TransferPipe.dumpAsync(mCurrentInputMethod.asBinder(), fd, args);
+                    } catch (IOException | RemoteException e) {
+                        ipw.println("Failed to dump input method service: " + e);
+                    }
+                    ipw.println("<<Dump CurrentInputMethod<<");
+                }
+
+                ipw.println("mDisplayIdToImeWindowTokenMap=");
+                for (TokenInfo info : mDisplayIdToImeWindowTokenMap) {
+                    ipw.println(" display=" + info.mDisplayId + ",token="
+                            + info.mToken);
+                }
+                ipw.println("mClientMap=");
+                ipw.increaseIndent();
+                for (int i = 0; i < mClientMap.size(); i++) {
+
+                    ipw.println("binder=" + mClientMap.keyAt(i));
+                    ipw.println(" InputMethodClientInfo=");
+                    InputMethodClientInfo info = mClientMap.valueAt(i);
+                    if (info != null) {
+                        ipw.increaseIndent();
+                        info.dumpLocked(fd, ipw, args);
+                        ipw.decreaseIndent();
+                    }
+                }
+                ipw.decreaseIndent();
+                ipw.println("mClientIdToClientMap=");
+                ipw.increaseIndent();
+                for (int i = 0; i < mClientIdToClientMap.size(); i++) {
+                    ipw.println("clientId=" + mClientIdToClientMap.keyAt(i));
+                    ipw.println(" InputMethodClientInfo=");
+                    InputMethodClientInfo info = mClientIdToClientMap.valueAt(i);
+                    if (info != null) {
+                        ipw.increaseIndent();
+                        info.dumpLocked(fd, ipw, args);
+                        ipw.decreaseIndent();
+                    }
+                    if (info.mClient != null) {
+                        // indentation will not be kept. So add visual separator here.
+                        ipw.println(">>DumpClientStart>>");
+                        ipw.flush(); // all writes should be flushed to guarantee order.
+                        try {
+                            TransferPipe.dumpAsync(info.mClient.asBinder(), fd, args);
+                        } catch (IOException | RemoteException e) {
+                            ipw.println(" Failed to dump client:" + e);
+                        }
+                        ipw.println("<<DumpClientEnd<<");
+                    }
+                }
+                ipw.decreaseIndent();
+            }
+        }
+
         private static final class ClientDeathRecipient implements IBinder.DeathRecipient {
             private final PerUserData mPerUserData;
             private final IInputMethodClient mClient;
@@ -1068,6 +1200,16 @@ public final class MultiClientInputMethodManagerService {
             }
             return Collections.singletonList(info);
         }
+
+        @AnyThread
+        void dump(FileDescriptor fd, IndentingPrintWriter ipw, String[] args) {
+            synchronized (mArray) {
+                for (int i = 0; i < mArray.size(); i++) {
+                    ipw.println("userId=" + mArray.keyAt(i));
+                    ipw.println(" InputMethodInfo=" + mArray.valueAt(i));
+                }
+            }
+        }
     }
 
     /**
@@ -1189,6 +1331,24 @@ public final class MultiClientInputMethodManagerService {
         @Override
         public boolean isUidAllowedOnDisplay(int displayId, int uid) {
             return mIWindowManagerInternal.isUidAllowedOnDisplay(displayId, uid);
+        }
+
+        @BinderThread
+        @Override
+        public void setActive(int clientId, boolean active) {
+            synchronized (mPerUserData.mLock) {
+                final InputMethodClientInfo clientInfo =
+                        mPerUserData.getClientFromIdLocked(clientId);
+                if (clientInfo == null) {
+                    Slog.e(TAG, "Unknown clientId=" + clientId);
+                    return;
+                }
+                try {
+                    clientInfo.mClient.setActive(active, false /* fullscreen */);
+                } catch (RemoteException e) {
+                    return;
+                }
+            }
         }
     }
 
@@ -1544,6 +1704,20 @@ public final class MultiClientInputMethodManagerService {
         public void onShellCommand(@Nullable FileDescriptor in, @Nullable FileDescriptor out,
                 @Nullable FileDescriptor err, String[] args, @Nullable ShellCallback callback,
                 ResultReceiver resultReceiver) {
+        }
+
+        @BinderThread
+        @Override
+        protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+            if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
+            final String prefixChild = "  ";
+            pw.println("Current Multi Client Input Method Manager state:");
+            IndentingPrintWriter ipw = new IndentingPrintWriter(pw, " ");
+            ipw.println("mUserDataMap=");
+            if (mUserDataMap != null) {
+                ipw.increaseIndent();
+                mUserDataMap.dump(fd, ipw, args);
+            }
         }
     }
 }

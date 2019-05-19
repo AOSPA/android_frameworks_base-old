@@ -18,7 +18,10 @@ package com.android.systemui.statusbar;
 
 import static android.app.StatusBarManager.DISABLE2_NONE;
 import static android.app.StatusBarManager.DISABLE_NONE;
+import static android.inputmethodservice.InputMethodService.BACK_DISPOSITION_DEFAULT;
+import static android.inputmethodservice.InputMethodService.IME_INVISIBLE;
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.Display.INVALID_DISPLAY;
 
 import static com.android.systemui.statusbar.phone.StatusBar.ONLY_CORE_APPS;
 
@@ -40,6 +43,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.util.Pair;
 import android.util.SparseArray;
+import android.view.inputmethod.InputMethodSystemProperty;
 
 import androidx.annotation.VisibleForTesting;
 
@@ -127,6 +131,11 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     private Handler mHandler = new H(Looper.getMainLooper());
     /** A map of display id - disable flag pair */
     private SparseArray<Pair<Integer, Integer>> mDisplayDisabled = new SparseArray<>();
+    /**
+     * The last ID of the display where IME window for which we received setImeWindowStatus
+     * event.
+     */
+    private int mLastUpdatedImeDisplayId = INVALID_DISPLAY;
 
     /**
      * These methods are called back on the main thread.
@@ -166,9 +175,11 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
          * @param fullscreenStackBounds The current bounds of the fullscreen stack, in screen
          *                              coordinates.
          * @param dockedStackBounds The current bounds of the docked stack, in screen coordinates.
+         * @param navbarColorManagedByIme {@code true} if navigation bar color is managed by IME.
          */
         default void setSystemUiVisibility(int displayId, int vis, int fullscreenStackVis,
-                int dockedStackVis, int mask, Rect fullscreenStackBounds, Rect dockedStackBounds) {
+                int dockedStackVis, int mask, Rect fullscreenStackBounds, Rect dockedStackBounds,
+                boolean navbarColorManagedByIme) {
         }
 
         /**
@@ -271,15 +282,19 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
 
         default void showBiometricDialog(Bundle bundle, IBiometricServiceReceiverInternal receiver,
                 int type, boolean requireConfirmation, int userId) { }
-        default void onBiometricAuthenticated(boolean authenticated) { }
+        default void onBiometricAuthenticated(boolean authenticated, String failureReason) { }
         default void onBiometricHelp(String message) { }
         default void onBiometricError(String error) { }
         default void hideBiometricDialog() { }
 
         /**
-        * @see IStatusBar#onDisplayReady(int)
-        */
+         * @see IStatusBar#onDisplayReady(int)
+         */
         default void onDisplayReady(int displayId) { }
+        /**
+         * @see DisplayManager.DisplayListener#onDisplayRemoved(int)
+         */
+        default void onDisplayRemoved(int displayId) { }
     }
 
     @VisibleForTesting
@@ -296,6 +311,11 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     public void onDisplayRemoved(int displayId) {
         synchronized (mLock) {
             mDisplayDisabled.remove(displayId);
+        }
+        // This callback is registered with {@link #mHandler} that already posts to run on main
+        // thread, so it is safe to dispatch directly.
+        for (int i = mCallbacks.size() - 1; i >= 0; i--) {
+            mCallbacks.get(i).onDisplayRemoved(displayId);
         }
     }
 
@@ -441,7 +461,8 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
 
     @Override
     public void setSystemUiVisibility(int displayId, int vis, int fullscreenStackVis,
-            int dockedStackVis, int mask, Rect fullscreenStackBounds, Rect dockedStackBounds) {
+            int dockedStackVis, int mask, Rect fullscreenStackBounds, Rect dockedStackBounds,
+            boolean navbarColorManagedByIme) {
         synchronized (mLock) {
             // Don't coalesce these, since it might have one time flags set such as
             // STATUS_BAR_UNHIDE which might get lost.
@@ -451,6 +472,7 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
             args.argi3 = fullscreenStackVis;
             args.argi4 = dockedStackVis;
             args.argi5 = mask;
+            args.argi6 = navbarColorManagedByIme ? 1 : 0;
             args.arg1 = fullscreenStackBounds;
             args.arg2 = dockedStackBounds;
             mHandler.obtainMessage(MSG_SET_SYSTEMUI_VISIBILITY, args).sendToTarget();
@@ -587,7 +609,8 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     @Override
     public void appTransitionCancelled(int displayId) {
         synchronized (mLock) {
-            mHandler.obtainMessage(MSG_APP_TRANSITION_CANCELLED, displayId).sendToTarget();
+            mHandler.obtainMessage(MSG_APP_TRANSITION_CANCELLED, displayId, 0 /* unused */)
+                    .sendToTarget();
         }
     }
 
@@ -615,7 +638,8 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     @Override
     public void appTransitionFinished(int displayId) {
         synchronized (mLock) {
-            mHandler.obtainMessage(MSG_APP_TRANSITION_FINISHED, displayId).sendToTarget();
+            mHandler.obtainMessage(MSG_APP_TRANSITION_FINISHED, displayId, 0 /* unused */)
+                    .sendToTarget();
         }
     }
 
@@ -740,9 +764,12 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     }
 
     @Override
-    public void onBiometricAuthenticated(boolean authenticated) {
+    public void onBiometricAuthenticated(boolean authenticated, String failureReason) {
         synchronized (mLock) {
-            mHandler.obtainMessage(MSG_BIOMETRIC_AUTHENTICATED, authenticated).sendToTarget();
+            SomeArgs args = SomeArgs.obtain();
+            args.arg1 = authenticated;
+            args.arg2 = failureReason;
+            mHandler.obtainMessage(MSG_BIOMETRIC_AUTHENTICATED, args).sendToTarget();
         }
     }
 
@@ -771,6 +798,32 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     public void onDisplayReady(int displayId) {
         synchronized (mLock) {
             mHandler.obtainMessage(MSG_DISPLAY_READY, displayId, 0).sendToTarget();
+        }
+    }
+
+    private void handleShowImeButton(int displayId, IBinder token, int vis, int backDisposition,
+            boolean showImeSwitcher) {
+        if (displayId == INVALID_DISPLAY) return;
+
+        if (!InputMethodSystemProperty.MULTI_CLIENT_IME_ENABLED
+                && mLastUpdatedImeDisplayId != displayId
+                && mLastUpdatedImeDisplayId != INVALID_DISPLAY) {
+            // Set previous NavBar's IME window status as invisible when IME
+            // window switched to another display for single-session IME case.
+            sendImeInvisibleStatusForPrevNavBar();
+        }
+        for (int i = 0; i < mCallbacks.size(); i++) {
+            mCallbacks.get(i).setImeWindowStatus(displayId, token, vis, backDisposition,
+                    showImeSwitcher);
+        }
+        mLastUpdatedImeDisplayId = displayId;
+    }
+
+    private void sendImeInvisibleStatusForPrevNavBar() {
+        for (int i = 0; i < mCallbacks.size(); i++) {
+            mCallbacks.get(i).setImeWindowStatus(mLastUpdatedImeDisplayId,
+                    null /* token */, IME_INVISIBLE, BACK_DISPOSITION_DEFAULT,
+                    false /* showImeSwitcher */);
         }
     }
 
@@ -830,7 +883,8 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                     args = (SomeArgs) msg.obj;
                     for (int i = 0; i < mCallbacks.size(); i++) {
                         mCallbacks.get(i).setSystemUiVisibility(args.argi1, args.argi2, args.argi3,
-                                args.argi4, args.argi5, (Rect) args.arg1, (Rect) args.arg2);
+                                args.argi4, args.argi5, (Rect) args.arg1, (Rect) args.arg2,
+                                args.argi6 == 1);
                     }
                     args.recycle();
                     break;
@@ -841,10 +895,9 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                     break;
                 case MSG_SHOW_IME_BUTTON:
                     args = (SomeArgs) msg.obj;
-                    for (int i = 0; i < mCallbacks.size(); i++) {
-                        mCallbacks.get(i).setImeWindowStatus(args.argi1, (IBinder) args.arg1,
-                                args.argi2, args.argi3, args.argi4 != 0 /* showImeSwitcher */);
-                    }
+                    handleShowImeButton(args.argi1 /* displayId */, (IBinder) args.arg1 /* token */,
+                            args.argi2 /* vis */, args.argi3 /* backDisposition */,
+                            args.argi4 != 0 /* showImeSwitcher */);
                     break;
                 case MSG_SHOW_RECENT_APPS:
                     for (int i = 0; i < mCallbacks.size(); i++) {
@@ -978,7 +1031,7 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                         mCallbacks.get(i).onRotationProposal(msg.arg1, msg.arg2 != 0);
                     }
                     break;
-                case MSG_BIOMETRIC_SHOW:
+                case MSG_BIOMETRIC_SHOW: {
                     mHandler.removeMessages(MSG_BIOMETRIC_ERROR);
                     mHandler.removeMessages(MSG_BIOMETRIC_HELP);
                     mHandler.removeMessages(MSG_BIOMETRIC_AUTHENTICATED);
@@ -993,11 +1046,17 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                     }
                     someArgs.recycle();
                     break;
-                case MSG_BIOMETRIC_AUTHENTICATED:
+                }
+                case MSG_BIOMETRIC_AUTHENTICATED: {
+                    SomeArgs someArgs = (SomeArgs) msg.obj;
                     for (int i = 0; i < mCallbacks.size(); i++) {
-                        mCallbacks.get(i).onBiometricAuthenticated((boolean) msg.obj);
+                        mCallbacks.get(i).onBiometricAuthenticated(
+                                (boolean) someArgs.arg1 /* authenticated */,
+                                (String) someArgs.arg2 /* failureReason */);
                     }
+                    someArgs.recycle();
                     break;
+                }
                 case MSG_BIOMETRIC_HELP:
                     for (int i = 0; i < mCallbacks.size(); i++) {
                         mCallbacks.get(i).onBiometricHelp((String) msg.obj);

@@ -38,6 +38,18 @@
     <color name="qs_customize_background">@color/GM2_grey_50</color>
     <color name="qs_customize_decoration">@color/GM2_grey_100</color>
 
+    <!-- The color of the background in the separated list of the Global Actions menu -->
+    <color name="global_actions_separated_background">@color/GM2_grey_300</color>
+
+    <!-- The color of the background in the grid of the Global Actions menu -->
+    <color name="global_actions_grid_background">@color/GM2_grey_200</color>
+
+    <!-- The color of the text in the Global Actions menu -->
+    <color name="global_actions_text">@color/GM2_grey_900</color>
+
+    <!-- The color of the text in the Global Actions menu -->
+    <color name="global_actions_alert_text">@color/GM2_red_500</color>
+
     <!-- Tint color for the content on the notification overflow card. -->
     <color name="keyguard_overflow_content_color">#ff686868</color>
 
@@ -76,6 +88,14 @@
     <!-- The "inside" of a notification, reached via longpress -->
     <color name="notification_guts_bg_color">@color/GM2_grey_50</color>
 
+    <color name="notification_guts_selection_bg">#FFFFFF</color>
+    <color name="notification_guts_selection_border">#4285F4</color>
+    <color name="notification_guts_link_icon_tint">@color/GM2_grey_700</color>
+    <color name="notification_guts_sub_text_color">@color/GM2_grey_700</color>
+    <color name="notification_guts_header_text_color">@color/GM2_grey_900</color>
+    <color name="notification_silence_color">#FF32c1de</color>
+    <color name="notification_alert_color">#FFF87B2B</color>
+
     <color name="assist_orb_color">#ffffff</color>
 
     <color name="keyguard_user_switcher_background_gradient_color">#77000000</color>
@@ -98,6 +118,11 @@
     <color name="light_mode_icon_color_dual_tone_background">#4dffffff</color>
     <color name="light_mode_icon_color_dual_tone_fill">#ffffff</color>
 
+    <color name="dark_mode_qs_icon_color_single_tone">#B3000000</color><!-- 70% black -->
+    <color name="dark_mode_qs_icon_color_dual_tone_background">#3d000000</color>
+    <!-- Chosen so fill over background matches single tone -->
+    <color name="dark_mode_qs_icon_color_dual_tone_fill">#99000000</color>
+
     <color name="docked_divider_background">#ff000000</color>
     <color name="docked_divider_handle">#ffffff</color>
     <drawable name="forced_resizable_background">#59000000</drawable>
@@ -117,7 +142,6 @@
 
     <!-- Keyboard shortcuts colors -->
     <color name="ksh_application_group_color">#fff44336</color>
-    <color name="ksh_keyword_color">#d9000000</color>
     <color name="ksh_key_item_color">@color/material_grey_600</color>
     <color name="ksh_key_item_background">@color/material_grey_100</color>
 
@@ -149,4 +173,10 @@
     <color name="GM2_grey_700">#5F6368</color>
     <color name="GM2_grey_800">#3C4043</color>
     <color name="GM2_grey_900">#202124</color>
+
+    <color name="GM2_red_300">#F28B82</color>
+    <color name="GM2_red_500">#B71C1C</color>
+
+    <color name="GM2_yellow_500">#FFFBBC04</color>
+    <color name="GM2_green_500">#FF34A853</color>
 </resources>

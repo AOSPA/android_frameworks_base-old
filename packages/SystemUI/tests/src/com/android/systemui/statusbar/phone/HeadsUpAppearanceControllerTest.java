@@ -22,12 +22,13 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.testing.TestableLooper.RunWithLooper;
 import android.view.View;
 import android.widget.TextView;
+
+import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.plugins.DarkIconDispatcher;
@@ -73,7 +74,8 @@ public class HeadsUpAppearanceControllerTest extends SysuiTestCase {
                 mStackScroller,
                 mPanelView,
                 new View(mContext),
-                mOperatorNameView);
+                mOperatorNameView,
+                new View(mContext));
         mHeadsUpAppearanceController.setExpandedHeight(0.0f, 0.0f);
     }
 
@@ -145,6 +147,7 @@ public class HeadsUpAppearanceControllerTest extends SysuiTestCase {
                 mHeadsUpStatusBarView,
                 mStackScroller,
                 mPanelView,
+                new View(mContext),
                 new View(mContext),
                 new View(mContext));
         newController.readFrom(mHeadsUpAppearanceController);

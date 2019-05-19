@@ -92,10 +92,15 @@ public final class ConversationAction implements Parcelable {
      */
     public static final String TYPE_SHARE_LOCATION = "share_location";
 
+    // TODO: Make this public API
     /** @hide **/
     public static final String TYPE_ADD_CONTACT = "add_contact";
 
-    public static final Creator<ConversationAction> CREATOR =
+    // TODO: Make this public API
+    /** @hide **/
+    public static final String TYPE_COPY = "copy";
+
+    public static final @NonNull Creator<ConversationAction> CREATOR =
             new Creator<ConversationAction>() {
                 @Override
                 public ConversationAction createFromParcel(Parcel in) {
@@ -195,13 +200,11 @@ public final class ConversationAction implements Parcelable {
     /**
      * Returns the extended data related to this conversation action.
      *
-     * <p><b>NOTE: </b>Each call to this method returns a new bundle copy so clients should
-     * prefer to hold a reference to the returned bundle rather than frequently calling this
-     * method.
+     * <p><b>NOTE: </b>Do not modify this bundle.
      */
     @NonNull
     public Bundle getExtras() {
-        return mExtras.deepCopy();
+        return mExtras;
     }
 
     /** Builder class to construct {@link ConversationAction}. */
@@ -263,7 +266,7 @@ public final class ConversationAction implements Parcelable {
                     mAction,
                     mTextReply,
                     mScore,
-                    mExtras == null ? Bundle.EMPTY : mExtras.deepCopy());
+                    mExtras == null ? Bundle.EMPTY : mExtras);
         }
     }
 }

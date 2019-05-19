@@ -59,6 +59,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Retention;
 import java.nio.ByteBuffer;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -838,6 +840,40 @@ public final class ImageDecoder implements AutoCloseable {
     }
 
     /**
+     * Return if the given MIME type is a supported file format that can be
+     * decoded by this class. This can be useful to determine if a file can be
+     * decoded directly, or if it needs to be converted into a more general
+     * format using an API like {@link ContentResolver#openTypedAssetFile}.
+     */
+    public static boolean isMimeTypeSupported(@NonNull String mimeType) {
+        Objects.requireNonNull(mimeType);
+        switch (mimeType.toLowerCase(Locale.US)) {
+            case "image/png":
+            case "image/jpeg":
+            case "image/webp":
+            case "image/gif":
+            case "image/heif":
+            case "image/heic":
+            case "image/bmp":
+            case "image/x-ico":
+            case "image/vnd.wap.wbmp":
+            case "image/x-sony-arw":
+            case "image/x-canon-cr2":
+            case "image/x-adobe-dng":
+            case "image/x-nikon-nef":
+            case "image/x-nikon-nrw":
+            case "image/x-olympus-orf":
+            case "image/x-fuji-raf":
+            case "image/x-panasonic-rw2":
+            case "image/x-pentax-pef":
+            case "image/x-samsung-srw":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /**
      * Create a new {@link Source Source} from a resource.
      *
      * @param res the {@link Resources} object containing the image data.
@@ -1606,14 +1642,16 @@ public final class ImageDecoder implements AutoCloseable {
         mTempStorage = null;
     }
 
-    private void checkState() {
+    private void checkState(boolean animated) {
         if (mNativePtr == 0) {
             throw new IllegalStateException("Cannot use closed ImageDecoder!");
         }
 
         checkSubset(mDesiredWidth, mDesiredHeight, mCropRect);
 
-        if (mAllocator == ALLOCATOR_HARDWARE) {
+        // animated ignores the allocator, so no need to check for incompatible
+        // fields.
+        if (!animated && mAllocator == ALLOCATOR_HARDWARE) {
             if (mMutable) {
                 throw new IllegalStateException("Cannot make mutable HARDWARE Bitmap!");
             }
@@ -1637,21 +1675,30 @@ public final class ImageDecoder implements AutoCloseable {
         }
     }
 
+    private boolean checkForExtended() {
+        if (mDesiredColorSpace == null) {
+            return false;
+        }
+        return mDesiredColorSpace == ColorSpace.get(ColorSpace.Named.EXTENDED_SRGB)
+                || mDesiredColorSpace == ColorSpace.get(ColorSpace.Named.LINEAR_EXTENDED_SRGB);
+    }
+
+    private long getColorSpacePtr() {
+        if (mDesiredColorSpace == null) {
+            return 0;
+        }
+        return mDesiredColorSpace.getNativeInstance();
+    }
+
     @WorkerThread
     @NonNull
     private Bitmap decodeBitmapInternal() throws IOException {
-        checkState();
-        long colorSpacePtr = 0;
-        boolean extended = false;
-        if (mDesiredColorSpace != null) {
-            colorSpacePtr = mDesiredColorSpace.getNativeInstance();
-            extended = mDesiredColorSpace == ColorSpace.get(ColorSpace.Named.EXTENDED_SRGB)
-                || mDesiredColorSpace == ColorSpace.get(ColorSpace.Named.LINEAR_EXTENDED_SRGB);
-        }
+        checkState(false);
         return nDecodeBitmap(mNativePtr, this, mPostProcessor != null,
                 mDesiredWidth, mDesiredHeight, mCropRect,
                 mMutable, mAllocator, mUnpremultipliedRequired,
-                mConserveMemory, mDecodeAsAlphaMask, colorSpacePtr, extended);
+                mConserveMemory, mDecodeAsAlphaMask, getColorSpacePtr(),
+                checkForExtended());
     }
 
     private void callHeaderDecoded(@Nullable OnHeaderDecodedListener listener,
@@ -1717,9 +1764,11 @@ public final class ImageDecoder implements AutoCloseable {
                 // mPostProcessor exists.
                 ImageDecoder postProcessPtr = decoder.mPostProcessor == null ?
                         null : decoder;
+                decoder.checkState(true);
                 Drawable d = new AnimatedImageDrawable(decoder.mNativePtr,
                         postProcessPtr, decoder.mDesiredWidth,
-                        decoder.mDesiredHeight, srcDensity,
+                        decoder.mDesiredHeight, decoder.getColorSpacePtr(),
+                        decoder.checkForExtended(), srcDensity,
                         src.computeDstDensity(), decoder.mCropRect,
                         decoder.mInputStream, decoder.mAssetFd);
                 // d has taken ownership of these objects.

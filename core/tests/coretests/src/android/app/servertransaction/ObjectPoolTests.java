@@ -33,6 +33,7 @@ import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.os.Binder;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.os.PersistableBundle;
 import android.platform.test.annotations.Presubmit;
 
@@ -42,6 +43,15 @@ import androidx.test.runner.AndroidJUnit4;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+/**
+ * Tests for {@link ObjectPool}.
+ *
+ * <p>Build/Install/Run:
+ *  atest FrameworksCoreTests:ObjectPoolTests
+ *
+ * <p>This test class is a part of Window Manager Service tests and specified in
+ * {@link com.android.server.wm.test.filters.FrameworksTestsFilter}.
+ */
 @RunWith(AndroidJUnit4.class)
 @SmallTest
 @Presubmit
@@ -131,13 +141,14 @@ public class ObjectPoolTests {
         bundle.putString("key", "value");
         PersistableBundle persistableBundle = new PersistableBundle();
         persistableBundle.putInt("k", 4);
+        IBinder assistToken = new Binder();
 
         LaunchActivityItem emptyItem = LaunchActivityItem.obtain(null, 0, null, null, null, null,
-                null, null, 0, null, null, null, null, false, null);
+                null, null, 0, null, null, null, null, false, null, null);
         LaunchActivityItem item = LaunchActivityItem.obtain(intent, ident, activityInfo,
                 config(), overrideConfig, compat, referrer, null /* voiceInteractor */,
                 procState, bundle, persistableBundle, resultInfoList(), referrerIntentList(),
-                true /* isForward */, null /* profilerInfo */);
+                true /* isForward */, null /* profilerInfo */, assistToken);
         assertNotSame(item, emptyItem);
         assertFalse(item.equals(emptyItem));
 
@@ -147,7 +158,7 @@ public class ObjectPoolTests {
         LaunchActivityItem item2 = LaunchActivityItem.obtain(intent, ident, activityInfo,
                 config(), overrideConfig, compat, referrer, null /* voiceInteractor */,
                 procState, bundle, persistableBundle, resultInfoList(), referrerIntentList(),
-                true /* isForward */, null /* profilerInfo */);
+                true /* isForward */, null /* profilerInfo */, assistToken);
         assertSame(item, item2);
         assertFalse(item2.equals(emptyItem));
     }
@@ -203,15 +214,15 @@ public class ObjectPoolTests {
 
     @Test
     public void testRecycleNewIntentItem() {
-        NewIntentItem emptyItem = NewIntentItem.obtain(null, false);
-        NewIntentItem item = NewIntentItem.obtain(referrerIntentList(), true);
+        NewIntentItem emptyItem = NewIntentItem.obtain(null);
+        NewIntentItem item = NewIntentItem.obtain(referrerIntentList());
         assertNotSame(item, emptyItem);
         assertFalse(item.equals(emptyItem));
 
         item.recycle();
         assertEquals(item, emptyItem);
 
-        NewIntentItem item2 = NewIntentItem.obtain(referrerIntentList(), true);
+        NewIntentItem item2 = NewIntentItem.obtain(referrerIntentList());
         assertSame(item, item2);
         assertFalse(item2.equals(emptyItem));
     }

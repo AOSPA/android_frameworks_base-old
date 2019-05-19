@@ -18,9 +18,11 @@ package com.android.server.contentcapture;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
+import android.content.ComponentName;
 import android.content.ContentCaptureOptions;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.service.contentcapture.ActivityEvent.ActivityEventType;
 
 /**
  * ContentCapture Manager local system service interface.
@@ -47,8 +49,17 @@ public abstract class ContentCaptureManagerInternal {
     /**
      * Gets the content capture options for the given user and package, or {@code null} if the
      * package is not whitelisted by the service.
+     *
+     * <p><b>NOTE: </b>this method is called by the {@code ActivityManager} service and hence cannot
+     * hold the main service lock.
      */
     @Nullable
     public abstract ContentCaptureOptions getOptionsForPackage(@UserIdInt int userId,
             @NonNull String packageName);
+
+    /**
+     * Notifies the intelligence service of a high-level activity event for the given user.
+     */
+    public abstract void notifyActivityEvent(@UserIdInt int userId,
+            @NonNull ComponentName activityComponent, @ActivityEventType int eventType);
 }

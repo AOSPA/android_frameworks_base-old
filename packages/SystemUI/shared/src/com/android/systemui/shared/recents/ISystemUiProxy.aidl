@@ -17,6 +17,7 @@
 package com.android.systemui.shared.recents;
 
 import android.graphics.Rect;
+import android.os.Bundle;
 import android.view.MotionEvent;
 
 /**
@@ -35,11 +36,6 @@ interface ISystemUiProxy {
      * Begins screen pinning on the provided {@param taskId}.
      */
     void startScreenPinning(int taskId) = 1;
-
-    /**
-     * Enables/disables launcher/overview interaction features {@link InteractionType}.
-     */
-    void setInteractionState(int flags) = 4;
 
     /**
      * Notifies SystemUI that split screen has been invoked.
@@ -72,14 +68,32 @@ interface ISystemUiProxy {
     void onStatusBarMotionEvent(in MotionEvent event) = 9;
 
     /**
-     * Get the corner radius of windows in pixels.
+     * Proxies the assistant gesture's progress started from navigation bar.
      */
-    float getWindowCornerRadius() = 10;
+    void onAssistantProgress(float progress) = 12;
 
     /**
-     * If device supports live rounded corners on windows.
-     * This might be turned off for performance reasons
+     * Start the assistant.
      */
-    boolean supportsRoundedCornersOnWindows() = 11;
+    void startAssistant(in Bundle bundle) = 13;
 
+    /**
+     * Creates a new gesture monitor
+     */
+    Bundle monitorGestureInput(String name, int displayId) = 14;
+
+    /**
+     * Notifies that the accessibility button in the system's navigation area has been clicked
+     */
+    void notifyAccessibilityButtonClicked(int displayId) = 15;
+
+    /**
+     * Notifies that the accessibility button in the system's navigation area has been long clicked
+     */
+    void notifyAccessibilityButtonLongClicked() = 16;
+
+    /**
+     * Ends the system screen pinning.
+     */
+    void stopScreenPinning() = 17;
 }

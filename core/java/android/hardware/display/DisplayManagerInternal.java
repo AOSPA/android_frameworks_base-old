@@ -25,6 +25,7 @@ import android.util.SparseArray;
 import android.view.Display;
 import android.view.DisplayInfo;
 import android.view.Surface;
+import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 
 /**
@@ -64,13 +65,12 @@ public abstract class DisplayManagerInternal {
     public abstract boolean isProximitySensorAvailable();
 
     /**
-     * Take a screenshot of the specified display into the provided {@link Surface}.
+     * Take a screenshot of the specified display and return a buffer.
      *
      * @param displayId The display id to take the screenshot of.
-     * @param outSurface The {@link Surface} to take the screenshot into.
-     * @return True if the screenshot is taken.
+     * @return The buffer or null if we have failed.
      */
-    public abstract boolean screenshot(int displayId, Surface outSurface);
+    public abstract SurfaceControl.ScreenshotGraphicBuffer screenshot(int displayId);
 
     /**
      * Returns information about the specified logical display.
@@ -185,14 +185,6 @@ public abstract class DisplayManagerInternal {
      * @param displayAccessUIDs Mapping displayId -> int array of UIDs.
      */
     public abstract void setDisplayAccessUIDs(SparseArray<IntArray> displayAccessUIDs);
-
-    /**
-     * Check if specified UID's content is present on display and should be granted access to it.
-     *
-     * @param uid UID to be checked.
-     * @param displayId id of the display where presence of the content is checked.
-     * */
-    public abstract boolean isUidPresentOnDisplay(int uid, int displayId);
 
     /**
      * Persist brightness slider events and ambient brightness stats.

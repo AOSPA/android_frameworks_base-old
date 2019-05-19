@@ -27,6 +27,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.Telephony.Carriers;
+import android.telephony.ServiceState;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
@@ -198,29 +199,27 @@ class GnssNetworkConnectivityHandler {
     }
 
     /**
-     * called from native code to update AGPS status
+     * Called from native code to update AGPS connection status, or to request or release a SUPL
+     * connection.
+     *
+     * <p>Note: {@code suplIpAddr} parameter is not present from IAGnssCallback.hal@2.0 onwards
+     * and is set to {@code null}.
      */
     void onReportAGpsStatus(int agpsType, int agpsStatus, byte[] suplIpAddr) {
+        if (DEBUG) Log.d(TAG, "AGPS_DATA_CONNECTION: " + agpsDataConnStatusAsString(agpsStatus));
         switch (agpsStatus) {
             case GPS_REQUEST_AGPS_DATA_CONN:
-                if (DEBUG) Log.d(TAG, "GPS_REQUEST_AGPS_DATA_CONN");
                 runOnHandler(() -> handleRequestSuplConnection(agpsType, suplIpAddr));
                 break;
             case GPS_RELEASE_AGPS_DATA_CONN:
-                if (DEBUG) Log.d(TAG, "GPS_RELEASE_AGPS_DATA_CONN");
                 runOnHandler(() -> handleReleaseSuplConnection(GPS_RELEASE_AGPS_DATA_CONN));
                 break;
             case GPS_AGPS_DATA_CONNECTED:
-                if (DEBUG) Log.d(TAG, "GPS_AGPS_DATA_CONNECTED");
-                break;
             case GPS_AGPS_DATA_CONN_DONE:
-                if (DEBUG) Log.d(TAG, "GPS_AGPS_DATA_CONN_DONE");
-                break;
             case GPS_AGPS_DATA_CONN_FAILED:
-                if (DEBUG) Log.d(TAG, "GPS_AGPS_DATA_CONN_FAILED");
                 break;
             default:
-                if (DEBUG) Log.d(TAG, "Received Unknown AGPS status: " + agpsStatus);
+                Log.w(TAG, "Received unknown AGPS status: " + agpsStatus);
         }
     }
 
@@ -373,8 +372,8 @@ class GnssNetworkConnectivityHandler {
         networkAttributes = new NetworkAttributes();
         networkAttributes.mCapabilities = capabilities;
 
-        // TODO(b/119278134): The synchronous method ConnectivityManager.getNetworkInfo() must
-        // not be called inside the asynchronous ConnectivityManager.NetworkCallback methods.
+        // TODO: The synchronous method ConnectivityManager.getNetworkInfo() should not be called
+        //       inside the asynchronous ConnectivityManager.NetworkCallback methods.
         NetworkInfo info = mConnMgr.getNetworkInfo(network);
         if (info != null) {
             networkAttributes.mApn = info.getExtraInfo();
@@ -387,8 +386,8 @@ class GnssNetworkConnectivityHandler {
     }
 
     private void handleSuplConnectionAvailable(Network network) {
-        // TODO(b/119278134): The synchronous method ConnectivityManager.getNetworkInfo() must
-        // not be called inside the asynchronous ConnectivityManager.NetworkCallback methods.
+        // TODO: The synchronous method ConnectivityManager.getNetworkInfo() should not be called
+        //       inside the asynchronous ConnectivityManager.NetworkCallback methods.
         NetworkInfo info = mConnMgr.getNetworkInfo(network);
         String apn = null;
         if (info != null) {
@@ -458,11 +457,15 @@ class GnssNetworkConnectivityHandler {
         }
         mAGpsDataConnectionState = AGPS_DATA_CONNECTION_OPENING;
 
-        NetworkRequest.Builder requestBuilder = new NetworkRequest.Builder();
-        requestBuilder.addCapability(getNetworkCapability(mAGpsType));
-        NetworkRequest request = requestBuilder.build();
+        // The transport type must be set to NetworkCapabilities.TRANSPORT_CELLULAR for the
+        // deprecated requestRouteToHostAddress() method in ConnectivityService to work for
+        // pre-gnss@2.0 devices.
+        NetworkRequest.Builder networkRequestBuilder = new NetworkRequest.Builder();
+        networkRequestBuilder.addCapability(getNetworkCapability(mAGpsType));
+        networkRequestBuilder.addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR);
+        NetworkRequest networkRequest = networkRequestBuilder.build();
         mConnMgr.requestNetwork(
-                request,
+                networkRequest,
                 mSuplConnectivityCallback,
                 mHandler,
                 SUPL_NETWORK_REQUEST_TIMEOUT_MILLIS);
@@ -509,8 +512,8 @@ class GnssNetworkConnectivityHandler {
         }
     }
 
-    // TODO(25876485): Delete this method when all devices upgrade to HAL @2.0::IAGnssCallback
-    //                 interface which does not require setting route to host.
+    // TODO: Delete this method when all devices upgrade to HAL @2.0::IAGnssCallback
+    //       interface which does not require setting route to host.
     private void setRouting() {
         boolean result = mConnMgr.requestRouteToHostAddress(
                 ConnectivityManager.TYPE_MOBILE_SUPL,
@@ -545,7 +548,7 @@ class GnssNetworkConnectivityHandler {
             case AGPS_DATA_CONNECTION_OPENING:
                 return "OPENING";
             default:
-                return "<Unknown>";
+                return "<Unknown>(" + mAGpsDataConnectionState + ")";
         }
     }
 
@@ -565,7 +568,7 @@ class GnssNetworkConnectivityHandler {
             case GPS_REQUEST_AGPS_DATA_CONN:
                 return "REQUEST";
             default:
-                return "<Unknown>";
+                return "<Unknown>(" + agpsDataConnStatus + ")";
         }
     }
 
@@ -580,7 +583,7 @@ class GnssNetworkConnectivityHandler {
             case AGPS_TYPE_IMS:
                 return "IMS";
             default:
-                return "<Unknown>";
+                return "<Unknown>(" + agpsType + ")";
         }
     }
 
@@ -591,13 +594,25 @@ class GnssNetworkConnectivityHandler {
         }
         TelephonyManager phone = (TelephonyManager)
                 mContext.getSystemService(Context.TELEPHONY_SERVICE);
+        ServiceState serviceState = phone.getServiceState();
+        String projection = null;
+        String selection = null;
+
         // Carrier configuration may override framework roaming state, we need to use the actual
         // modem roaming state instead of the framework roaming state.
-        boolean isDataRoamingFromRegistration = phone.getServiceState()
-                .getDataRoamingFromRegistration();
-        String projection = isDataRoamingFromRegistration ? Carriers.ROAMING_PROTOCOL :
-                Carriers.PROTOCOL;
-        String selection = String.format("current = 1 and apn = '%s' and carrier_enabled = 1", apn);
+        if (serviceState != null && serviceState.getDataRoamingFromRegistration()) {
+            projection = Carriers.ROAMING_PROTOCOL;
+        } else {
+            projection = Carriers.PROTOCOL;
+        }
+        // No SIM case for emergency
+        if (TelephonyManager.NETWORK_TYPE_UNKNOWN == phone.getNetworkType()
+                && AGPS_TYPE_EIMS == mAGpsType) {
+            selection = String.format(
+                "type like '%%emergency%%' and apn = '%s' and carrier_enabled = 1", apn);
+        } else {
+            selection = String.format("current = 1 and apn = '%s' and carrier_enabled = 1", apn);
+        }
         try (Cursor cursor = mContext.getContentResolver().query(
                 Carriers.CONTENT_URI,
                 new String[]{projection},
@@ -613,7 +628,7 @@ class GnssNetworkConnectivityHandler {
             Log.e(TAG, "Error encountered on APN query for: " + apn, e);
         }
 
-        return APN_INVALID;
+        return APN_IPV4V6;
     }
 
     private int translateToApnIpType(String ipProtocol, String apn) {
@@ -630,7 +645,7 @@ class GnssNetworkConnectivityHandler {
         // we hit the default case so the ipProtocol is not recognized
         String message = String.format("Unknown IP Protocol: %s, for APN: %s", ipProtocol, apn);
         Log.e(TAG, message);
-        return APN_INVALID;
+        return APN_IPV4V6;
     }
 
     // AGPS support

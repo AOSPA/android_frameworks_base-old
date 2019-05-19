@@ -21,10 +21,9 @@ android_test {
     test_suites: ["device-tests"],
     resource_dirs: ["res"],
     static_libs: [
-        "android-support-test",
-        "frameworks-base-testutils",
+        "androidx.test.rules",
         "mockito-target-extended-minus-junit4",
-        "NetworkStackLib",
+        "NetworkStackBase",
         "testables",
     ],
     libs: [
@@ -43,9 +42,12 @@ android_test {
         "libbinder",
         "libbinderthreadstate",
         "libc++",
+        "libcgrouprc",
         "libcrypto",
         "libcutils",
         "libdexfile",
+        "ld-android",
+        "libdl_android",
         "libhidl-gen-utils",
         "libhidlbase",
         "libhidltransport",
@@ -54,7 +56,9 @@ android_test {
         "liblog",
         "liblzma",
         "libnativehelper",
+        "libnativehelper_compat_libc++",
         "libnetworkstacktestsjni",
+        "libnetworkstackutilsjni",
         "libpackagelistparser",
         "libpcre2",
         "libprocessgroup",
@@ -96,5 +100,4 @@ cc_library_shared {
         "libapf",
         "libpcap",
     ],
-
 }

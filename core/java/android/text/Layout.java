@@ -437,7 +437,8 @@ public abstract class Layout {
             previousLineEnd = getLineStart(lineNum + 1);
             final boolean justify = isJustificationRequired(lineNum);
             int end = getLineVisibleEnd(lineNum, start, previousLineEnd);
-            paint.setHyphenEdit(getHyphen(lineNum));
+            paint.setStartHyphenEdit(getStartHyphenEdit(lineNum));
+            paint.setEndHyphenEdit(getEndHyphenEdit(lineNum));
 
             int ltop = previousLineBottom;
             int lbottom = getLineTop(lineNum + 1);
@@ -910,12 +911,21 @@ public abstract class Layout {
     public abstract int getBottomPadding();
 
     /**
-     * Returns the hyphen edit for a line.
+     * Returns the start hyphen edit for a line.
      *
      * @hide
      */
-    public int getHyphen(int line) {
-        return 0;
+    public @Paint.StartHyphenEdit int getStartHyphenEdit(int line) {
+        return Paint.START_HYPHEN_EDIT_NO_EDIT;
+    }
+
+    /**
+     * Returns the end hyphen edit for a line.
+     *
+     * @hide
+     */
+    public @Paint.EndHyphenEdit int getEndHyphenEdit(int line) {
+        return Paint.END_HYPHEN_EDIT_NO_EDIT;
     }
 
     /**
@@ -1418,7 +1428,8 @@ public abstract class Layout {
         final TextLine tl = TextLine.obtain();
         final TextPaint paint = mWorkPaint;
         paint.set(mPaint);
-        paint.setHyphenEdit(getHyphen(line));
+        paint.setStartHyphenEdit(getStartHyphenEdit(line));
+        paint.setEndHyphenEdit(getEndHyphenEdit(line));
         tl.set(paint, mText, start, end, dir, directions, hasTabs, tabStops,
                 getEllipsisStart(line), getEllipsisStart(line) + getEllipsisCount(line));
         if (isJustificationRequired(line)) {
@@ -1447,7 +1458,8 @@ public abstract class Layout {
         final TextLine tl = TextLine.obtain();
         final TextPaint paint = mWorkPaint;
         paint.set(mPaint);
-        paint.setHyphenEdit(getHyphen(line));
+        paint.setStartHyphenEdit(getStartHyphenEdit(line));
+        paint.setEndHyphenEdit(getEndHyphenEdit(line));
         tl.set(paint, mText, start, end, dir, directions, hasTabs, tabStops,
                 getEllipsisStart(line), getEllipsisStart(line) + getEllipsisCount(line));
         if (isJustificationRequired(line)) {
@@ -2180,26 +2192,26 @@ public abstract class Layout {
      */
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
     public static class TabStops {
-        private int[] mStops;
+        private float[] mStops;
         private int mNumStops;
-        private int mIncrement;
+        private float mIncrement;
 
-        public TabStops(int increment, Object[] spans) {
+        public TabStops(float increment, Object[] spans) {
             reset(increment, spans);
         }
 
-        void reset(int increment, Object[] spans) {
+        void reset(float increment, Object[] spans) {
             this.mIncrement = increment;
 
             int ns = 0;
             if (spans != null) {
-                int[] stops = this.mStops;
+                float[] stops = this.mStops;
                 for (Object o : spans) {
                     if (o instanceof TabStopSpan) {
                         if (stops == null) {
-                            stops = new int[10];
+                            stops = new float[10];
                         } else if (ns == stops.length) {
-                            int[] nstops = new int[ns * 2];
+                            float[] nstops = new float[ns * 2];
                             for (int i = 0; i < ns; ++i) {
                                 nstops[i] = stops[i];
                             }
@@ -2221,9 +2233,9 @@ public abstract class Layout {
         float nextTab(float h) {
             int ns = this.mNumStops;
             if (ns > 0) {
-                int[] stops = this.mStops;
+                float[] stops = this.mStops;
                 for (int i = 0; i < ns; ++i) {
-                    int stop = stops[i];
+                    float stop = stops[i];
                     if (stop > h) {
                         return stop;
                     }
@@ -2232,7 +2244,10 @@ public abstract class Layout {
             return nextDefaultStop(h, mIncrement);
         }
 
-        public static float nextDefaultStop(float h, int inc) {
+        /**
+         * Returns the position of next tab stop.
+         */
+        public static float nextDefaultStop(float h, float inc) {
             return ((int) ((h + inc) / inc)) * inc;
         }
     }
@@ -2570,7 +2585,7 @@ public abstract class Layout {
         ALIGN_RIGHT,
     }
 
-    private static final int TAB_INCREMENT = 20;
+    private static final float TAB_INCREMENT = 20;
 
     /** @hide */
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)

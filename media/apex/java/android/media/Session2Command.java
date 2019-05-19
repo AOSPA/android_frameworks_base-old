@@ -30,7 +30,11 @@ import java.util.Objects;
  * <p>
  * If {@link #getCommandCode()} isn't {@link #COMMAND_CODE_CUSTOM}), it's predefined command.
  * If {@link #getCommandCode()} is {@link #COMMAND_CODE_CUSTOM}), it's custom command and
- * {@link #getCustomCommand()} shouldn't be {@code null}.
+ * {@link #getCustomAction()} shouldn't be {@code null}.
+ * <p>
+ * Refer to the
+ * <a href="{@docRoot}reference/androidx/media2/SessionCommand2.html">AndroidX SessionCommand</a>
+ * class for the list of valid commands.
  * <p>
  * This API is not generally intended for third party application developers.
  * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
@@ -44,23 +48,7 @@ public final class Session2Command implements Parcelable {
      */
     public static final int COMMAND_CODE_CUSTOM = 0;
 
-    /**
-     * Result code representing that the command is skipped or canceled. For an example, a seek
-     * command can be skipped if it is followed by another seek command.
-     */
-    public static final int RESULT_INFO_SKIPPED = 1;
-
-    /**
-     * Result code representing that the command is successfully completed.
-     */
-    public static final int RESULT_SUCCESS = 0;
-
-    /**
-     * Result code represents that call is ended with an unknown error.
-     */
-    public static final int RESULT_ERROR_UNKNOWN_ERROR = -1;
-
-    public static final Parcelable.Creator<Session2Command> CREATOR =
+    public static final @android.annotation.NonNull Parcelable.Creator<Session2Command> CREATOR =
             new Parcelable.Creator<Session2Command>() {
                 @Override
                 public Session2Command createFromParcel(Parcel in) {
@@ -75,8 +63,8 @@ public final class Session2Command implements Parcelable {
 
     private final int mCommandCode;
     // Nonnull if it's custom command
-    private final String mCustomCommand;
-    private final Bundle mExtras;
+    private final String mCustomAction;
+    private final Bundle mCustomExtras;
 
     /**
      * Constructor for creating a command predefined in AndroidX media2.
@@ -88,8 +76,8 @@ public final class Session2Command implements Parcelable {
             throw new IllegalArgumentException("commandCode shouldn't be COMMAND_CODE_CUSTOM");
         }
         mCommandCode = commandCode;
-        mCustomCommand = null;
-        mExtras = null;
+        mCustomAction = null;
+        mCustomExtras = null;
     }
 
     /**
@@ -103,8 +91,8 @@ public final class Session2Command implements Parcelable {
             throw new IllegalArgumentException("action shouldn't be null");
         }
         mCommandCode = COMMAND_CODE_CUSTOM;
-        mCustomCommand = action;
-        mExtras = extras;
+        mCustomAction = action;
+        mCustomExtras = extras;
     }
 
     /**
@@ -113,8 +101,8 @@ public final class Session2Command implements Parcelable {
     @SuppressWarnings("WeakerAccess") /* synthetic access */
     Session2Command(Parcel in) {
         mCommandCode = in.readInt();
-        mCustomCommand = in.readString();
-        mExtras = in.readBundle();
+        mCustomAction = in.readString();
+        mCustomExtras = in.readBundle();
     }
 
     /**
@@ -130,8 +118,8 @@ public final class Session2Command implements Parcelable {
      * This will return {@code null} for a predefined command.
      */
     @Nullable
-    public String getCustomCommand() {
-        return mCustomCommand;
+    public String getCustomAction() {
+        return mCustomAction;
     }
 
     /**
@@ -139,8 +127,8 @@ public final class Session2Command implements Parcelable {
      * This will return {@code null} for a predefined command.
      */
     @Nullable
-    public Bundle getExtras() {
-        return mExtras;
+    public Bundle getCustomExtras() {
+        return mCustomExtras;
     }
 
     @Override
@@ -154,8 +142,8 @@ public final class Session2Command implements Parcelable {
             throw new IllegalArgumentException("parcel shouldn't be null");
         }
         dest.writeInt(mCommandCode);
-        dest.writeString(mCustomCommand);
-        dest.writeBundle(mExtras);
+        dest.writeString(mCustomAction);
+        dest.writeBundle(mCustomExtras);
     }
 
     @Override
@@ -165,12 +153,12 @@ public final class Session2Command implements Parcelable {
         }
         Session2Command other = (Session2Command) obj;
         return mCommandCode == other.mCommandCode
-                && TextUtils.equals(mCustomCommand, other.mCustomCommand);
+                && TextUtils.equals(mCustomAction, other.mCustomAction);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(mCustomCommand, mCommandCode);
+        return Objects.hash(mCustomAction, mCommandCode);
     }
 
     /**
@@ -179,6 +167,22 @@ public final class Session2Command implements Parcelable {
     public static final class Result {
         private final int mResultCode;
         private final Bundle mResultData;
+
+        /**
+         * Result code representing that the command is skipped or canceled. For an example, a seek
+         * command can be skipped if it is followed by another seek command.
+         */
+        public static final int RESULT_INFO_SKIPPED = 1;
+
+        /**
+         * Result code representing that the command is successfully completed.
+         */
+        public static final int RESULT_SUCCESS = 0;
+
+        /**
+         * Result code represents that call is ended with an unknown error.
+         */
+        public static final int RESULT_ERROR_UNKNOWN_ERROR = -1;
 
         /**
          * Constructor of {@link Result}.

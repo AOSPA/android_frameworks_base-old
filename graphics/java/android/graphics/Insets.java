@@ -30,7 +30,7 @@ import android.os.Parcelable;
  *
  */
 public final class Insets implements Parcelable {
-    public static final Insets NONE = new Insets(0, 0, 0, 0);
+    public static final @NonNull Insets NONE = new Insets(0, 0, 0, 0);
 
     public final int left;
     public final int top;
@@ -184,7 +184,7 @@ public final class Insets implements Parcelable {
         out.writeInt(bottom);
     }
 
-    public static final Parcelable.Creator<Insets> CREATOR = new Parcelable.Creator<Insets>() {
+    public static final @android.annotation.NonNull Parcelable.Creator<Insets> CREATOR = new Parcelable.Creator<Insets>() {
         @Override
         public Insets createFromParcel(Parcel in) {
             return new Insets(in.readInt(), in.readInt(), in.readInt(), in.readInt());
