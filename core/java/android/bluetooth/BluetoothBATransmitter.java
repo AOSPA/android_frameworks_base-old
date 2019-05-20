@@ -238,6 +238,7 @@ public final class BluetoothBATransmitter implements BluetoothProfile {
             return false;
         } else {
             mBinding = true;
+            mBindingReset();
             return true;
         }
     }
@@ -550,4 +551,24 @@ public final class BluetoothBATransmitter implements BluetoothProfile {
     private static void log(String msg) {
       Log.d(TAG, msg);
     }
+
+    private void mBindingReset() {
+       Message message = mHandler.obtainMessage(SEND_DELAYED_MSG_TO_RESET);
+       mHandler.sendMessageDelayed(message, BIND_TIMEOUT_MS);
+    }
+
+    private final Handler mHandler = new Handler() {
+       @Override
+       public void handleMessage(Message msg) {
+           if (DBG) Log.d(TAG, " Handle the message: " + msg.what);
+           switch (msg.what) {
+               case SEND_DELAYED_MSG_TO_RESET:
+                   if (DBG) Log.d(TAG, "Reset mBinding flag");
+                   if (mBinding) mBinding = false;
+                   break;
+               default:
+                   break;
+           }
+       }
+    };
 }
