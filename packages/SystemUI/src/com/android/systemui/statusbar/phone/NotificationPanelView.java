@@ -156,6 +156,7 @@ public class NotificationPanelView extends PanelView implements
     private final AccessibilityManager mAccessibilityManager;
     private final NotificationWakeUpCoordinator mWakeUpCoordinator;
     private final PulseExpansionHandler mPulseExpansionHandler;
+    private final KeyguardBypassController mKeyguardBypassController;
 
     @VisibleForTesting
     protected KeyguardAffordanceHelper mAffordanceHelper;
@@ -358,7 +359,8 @@ public class NotificationPanelView extends PanelView implements
             InjectionInflationController injectionInflationController,
             NotificationWakeUpCoordinator coordinator,
             PulseExpansionHandler pulseExpansionHandler,
-            DynamicPrivacyController dynamicPrivacyController) {
+            DynamicPrivacyController dynamicPrivacyController,
+            KeyguardBypassController bypassController) {
         super(context, attrs);
         setWillNotDraw(!DEBUG);
         mInjectionInflationController = injectionInflationController;
@@ -373,6 +375,7 @@ public class NotificationPanelView extends PanelView implements
         mDisplayId = context.getDisplayId();
         mPulseExpansionHandler = pulseExpansionHandler;
         mThemeResId = context.getThemeResId();
+        mKeyguardBypassController = bypassController;
         dynamicPrivacyController.addListener(this);
 
         mBottomAreaShadeAlphaAnimator = ValueAnimator.ofFloat(1f, 0);
@@ -693,7 +696,8 @@ public class NotificationPanelView extends PanelView implements
                     hasCustomClock(),
                     mNotificationStackScroller.getVisibleNotificationCount() != 0,
                     mInterpolatedDarkAmount,
-                    mEmptyDragAmount);
+                    mEmptyDragAmount,
+                    mKeyguardBypassController.getBypassEnabled());
             mClockPositionAlgorithm.run(mClockPositionResult);
             PropertyAnimator.setProperty(mKeyguardStatusView, AnimatableProperty.X,
                     mClockPositionResult.clockX, CLOCK_ANIMATION_PROPERTIES, animateClock);
@@ -2976,7 +2980,7 @@ public class NotificationPanelView extends PanelView implements
     public void setDozing(boolean dozing, boolean animate, PointF wakeUpTouchLocation) {
         if (dozing == mDozing) return;
         mDozing = dozing;
-        mNotificationStackScroller.setDark(mDozing, animate, wakeUpTouchLocation);
+        mNotificationStackScroller.setDozing(mDozing, animate, wakeUpTouchLocation);
         mKeyguardBottomArea.setDozing(mDozing, animate);
 
         if (dozing) {
@@ -2988,8 +2992,8 @@ public class NotificationPanelView extends PanelView implements
             updateDozingVisibilities(animate);
         }
 
-        final float darkAmount = dozing ? 1 : 0;
-        mStatusBarStateController.setDozeAmount(darkAmount, animate);
+        final float dozeAmount = dozing ? 1 : 0;
+        mStatusBarStateController.setDozeAmount(dozeAmount, animate);
     }
 
     @Override
