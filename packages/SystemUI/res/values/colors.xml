@@ -95,6 +95,9 @@
     <color name="notification_guts_header_text_color">@color/GM2_grey_900</color>
     <color name="notification_silence_color">#FF32c1de</color>
     <color name="notification_alert_color">#FFF87B2B</color>
+    <color name="notification_guts_button_color">@color/GM2_blue_700</color>
+
+    <color name="notification_section_header_label_color">@color/GM2_grey_900</color>
 
     <color name="assist_orb_color">#ffffff</color>
 
@@ -110,11 +113,9 @@
 
     <color name="segmented_buttons_background">#14FFFFFF</color><!-- 8% white -->
 
-    <color name="dark_mode_icon_color_single_tone">#99000000</color>
     <color name="dark_mode_icon_color_dual_tone_background">#3d000000</color>
     <color name="dark_mode_icon_color_dual_tone_fill">#7a000000</color>
 
-    <color name="light_mode_icon_color_single_tone">#ffffff</color>
     <color name="light_mode_icon_color_dual_tone_background">#4dffffff</color>
     <color name="light_mode_icon_color_dual_tone_fill">#ffffff</color>
 
@@ -156,7 +157,9 @@
 
     <!-- Biometric dialog colors -->
     <color name="biometric_dialog_dim_color">#80000000</color> <!-- 50% black -->
-    <color name="biometric_face_icon_gray">#ffbdc1c6</color>
+    <color name="biometric_dialog_gray">#ff757575</color>
+    <color name="biometric_dialog_accent">#ff008577</color> <!-- dark teal -->
+    <color name="biometric_dialog_error">#ffd93025</color> <!-- red 600 -->
 
     <!-- Logout button -->
     <color name="logout_button_bg_color">#ccffffff</color>
@@ -176,6 +179,9 @@
 
     <color name="GM2_red_300">#F28B82</color>
     <color name="GM2_red_500">#B71C1C</color>
+
+    <color name="GM2_blue_200">#AECBFA</color>
+    <color name="GM2_blue_700">#1967D2</color>
 
     <color name="GM2_yellow_500">#FFFBBC04</color>
     <color name="GM2_green_500">#FF34A853</color>

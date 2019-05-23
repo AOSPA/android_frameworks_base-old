@@ -138,7 +138,8 @@ public class HotspotTile extends QSTileImpl<BooleanState> {
         state.isTransient = isTransient;
         state.slash.isSlashed = !state.value && !state.isTransient;
         if (state.isTransient) {
-            state.icon = ResourceIcon.get(R.drawable.ic_hotspot_transient_animation);
+            state.icon = ResourceIcon.get(
+                    com.android.internal.R.drawable.ic_hotspot_transient_animation);
         } else if (state.value) {
             if (mIeee80211axSupport) {
                 state.icon = mWifi6EnabledStatic;

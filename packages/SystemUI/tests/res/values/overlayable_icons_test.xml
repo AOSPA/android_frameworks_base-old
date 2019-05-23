@@ -20,6 +20,7 @@
   <array name="overlayable_icons">
     <item>@drawable/ic_alarm</item>
     <item>@drawable/ic_alarm_dim</item>
+    <item>@drawable/ic_arrow_back</item>
     <item>@drawable/ic_bluetooth_connected</item>
     <item>@drawable/ic_brightness_thumb</item>
     <item>@drawable/ic_camera</item>
@@ -42,7 +43,6 @@
     <item>@drawable/ic_power_low</item>
     <item>@drawable/ic_power_saver</item>
     <item>@drawable/ic_qs_bluetooth_connecting</item>
-    <item>@drawable/ic_qs_bluetooth_connecting</item>
     <item>@drawable/ic_qs_cancel</item>
     <item>@drawable/ic_qs_no_sim</item>
     <item>@drawable/ic_qs_wifi_0</item>
@@ -63,6 +63,7 @@
     <item>@drawable/ic_volume_ringer_mute</item>
     <item>@drawable/ic_volume_ringer_vibrate</item>
     <item>@drawable/ic_volume_voice</item>
+    <item>@drawable/stat_sys_managed_profile_status</item>
     <item>@drawable/stat_sys_mic_none</item>
     <item>@drawable/stat_sys_vpn_ic</item>
   </array>

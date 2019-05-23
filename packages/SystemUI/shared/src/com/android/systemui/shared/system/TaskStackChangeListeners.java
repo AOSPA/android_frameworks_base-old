@@ -70,6 +70,15 @@ public class TaskStackChangeListeners extends TaskStackListener {
 
     public void removeListener(TaskStackChangeListener listener) {
         mTaskStackListeners.remove(listener);
+        if (mTaskStackListeners.isEmpty() && mRegistered) {
+            // Unregister mTaskStackListener once we have no more listeners
+            try {
+                ActivityTaskManager.getService().unregisterTaskStackListener(this);
+                mRegistered = false;
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to call unregisterTaskStackListener", e);
+            }
+        }
     }
 
     @Override
@@ -175,6 +184,11 @@ public class TaskStackChangeListeners extends TaskStackListener {
     }
 
     @Override
+    public void onBackPressedOnTaskRoot(RunningTaskInfo taskInfo) throws RemoteException {
+        mHandler.obtainMessage(H.ON_BACK_PRESSED_ON_TASK_ROOT, taskInfo).sendToTarget();
+    }
+
+    @Override
     public void onActivityRequestedOrientationChanged(int taskId, int requestedOrientation)
             throws RemoteException {
         mHandler.obtainMessage(H.ON_ACTIVITY_REQUESTED_ORIENTATION_CHANGE, taskId,
@@ -205,6 +219,7 @@ public class TaskStackChangeListeners extends TaskStackListener {
         private static final int ON_ACTIVITY_REQUESTED_ORIENTATION_CHANGE = 15;
         private static final int ON_ACTIVITY_LAUNCH_ON_SECONDARY_DISPLAY_REROUTED = 16;
         private static final int ON_SIZE_COMPAT_MODE_ACTIVITY_CHANGED = 17;
+        private static final int ON_BACK_PRESSED_ON_TASK_ROOT = 18;
 
 
         public H(Looper looper) {
@@ -331,6 +346,13 @@ public class TaskStackChangeListeners extends TaskStackListener {
                         for (int i = mTaskStackListeners.size() - 1; i >= 0; i--) {
                             mTaskStackListeners.get(i).onSizeCompatModeActivityChanged(
                                     msg.arg1, (IBinder) msg.obj);
+                        }
+                        break;
+                    }
+                    case ON_BACK_PRESSED_ON_TASK_ROOT: {
+                        for (int i = mTaskStackListeners.size() - 1; i >= 0; i--) {
+                            mTaskStackListeners.get(i).onBackPressedOnTaskRoot(
+                                    (RunningTaskInfo) msg.obj);
                         }
                         break;
                     }
