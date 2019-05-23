@@ -1265,6 +1265,11 @@ interface ITelephony {
      */
     int getSubIdForPhoneAccount(in PhoneAccount phoneAccount);
 
+    /**
+     * Returns the PhoneAccountHandle associated with a subscription ID.
+     */
+    PhoneAccountHandle getPhoneAccountHandleForSubscriptionId(int subscriptionId);
+
     void factoryReset(int subId);
 
     /**
@@ -1589,7 +1594,7 @@ interface ITelephony {
     int getCardIdForDefaultEuicc(int subId, String callingPackage);
 
     /**
-     * Gets information about currently inserted UICCs and enabled eUICCs.
+     * Gets information about currently inserted UICCs and eUICCs.
      * <p>
      * Requires that the calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
      * <p>
@@ -1961,4 +1966,8 @@ interface ITelephony {
     int getRadioHalVersion();
 
     boolean isModemEnabledForSlot(int slotIndex, String callingPackage);
+
+    boolean isDataEnabledForApn(int apnType, int subId, String callingPackage);
+
+    boolean isApnMetered(int apnType, int subId);
 }

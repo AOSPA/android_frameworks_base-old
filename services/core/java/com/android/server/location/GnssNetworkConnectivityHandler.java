@@ -199,29 +199,27 @@ class GnssNetworkConnectivityHandler {
     }
 
     /**
-     * called from native code to update AGPS status
+     * Called from native code to update AGPS connection status, or to request or release a SUPL
+     * connection.
+     *
+     * <p>Note: {@code suplIpAddr} parameter is not present from IAGnssCallback.hal@2.0 onwards
+     * and is set to {@code null}.
      */
     void onReportAGpsStatus(int agpsType, int agpsStatus, byte[] suplIpAddr) {
+        if (DEBUG) Log.d(TAG, "AGPS_DATA_CONNECTION: " + agpsDataConnStatusAsString(agpsStatus));
         switch (agpsStatus) {
             case GPS_REQUEST_AGPS_DATA_CONN:
-                if (DEBUG) Log.d(TAG, "GPS_REQUEST_AGPS_DATA_CONN");
                 runOnHandler(() -> handleRequestSuplConnection(agpsType, suplIpAddr));
                 break;
             case GPS_RELEASE_AGPS_DATA_CONN:
-                if (DEBUG) Log.d(TAG, "GPS_RELEASE_AGPS_DATA_CONN");
                 runOnHandler(() -> handleReleaseSuplConnection(GPS_RELEASE_AGPS_DATA_CONN));
                 break;
             case GPS_AGPS_DATA_CONNECTED:
-                if (DEBUG) Log.d(TAG, "GPS_AGPS_DATA_CONNECTED");
-                break;
             case GPS_AGPS_DATA_CONN_DONE:
-                if (DEBUG) Log.d(TAG, "GPS_AGPS_DATA_CONN_DONE");
-                break;
             case GPS_AGPS_DATA_CONN_FAILED:
-                if (DEBUG) Log.d(TAG, "GPS_AGPS_DATA_CONN_FAILED");
                 break;
             default:
-                if (DEBUG) Log.d(TAG, "Received Unknown AGPS status: " + agpsStatus);
+                Log.w(TAG, "Received unknown AGPS status: " + agpsStatus);
         }
     }
 
@@ -459,11 +457,15 @@ class GnssNetworkConnectivityHandler {
         }
         mAGpsDataConnectionState = AGPS_DATA_CONNECTION_OPENING;
 
-        NetworkRequest.Builder requestBuilder = new NetworkRequest.Builder();
-        requestBuilder.addCapability(getNetworkCapability(mAGpsType));
-        NetworkRequest request = requestBuilder.build();
+        // The transport type must be set to NetworkCapabilities.TRANSPORT_CELLULAR for the
+        // deprecated requestRouteToHostAddress() method in ConnectivityService to work for
+        // pre-gnss@2.0 devices.
+        NetworkRequest.Builder networkRequestBuilder = new NetworkRequest.Builder();
+        networkRequestBuilder.addCapability(getNetworkCapability(mAGpsType));
+        networkRequestBuilder.addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR);
+        NetworkRequest networkRequest = networkRequestBuilder.build();
         mConnMgr.requestNetwork(
-                request,
+                networkRequest,
                 mSuplConnectivityCallback,
                 mHandler,
                 SUPL_NETWORK_REQUEST_TIMEOUT_MILLIS);
@@ -546,7 +548,7 @@ class GnssNetworkConnectivityHandler {
             case AGPS_DATA_CONNECTION_OPENING:
                 return "OPENING";
             default:
-                return "<Unknown>";
+                return "<Unknown>(" + mAGpsDataConnectionState + ")";
         }
     }
 
@@ -566,7 +568,7 @@ class GnssNetworkConnectivityHandler {
             case GPS_REQUEST_AGPS_DATA_CONN:
                 return "REQUEST";
             default:
-                return "<Unknown>";
+                return "<Unknown>(" + agpsDataConnStatus + ")";
         }
     }
 
@@ -581,7 +583,7 @@ class GnssNetworkConnectivityHandler {
             case AGPS_TYPE_IMS:
                 return "IMS";
             default:
-                return "<Unknown>";
+                return "<Unknown>(" + agpsType + ")";
         }
     }
 

@@ -64,6 +64,7 @@ import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
 import android.telephony.VisualVoicemailService.VisualVoicemailTask;
+import android.telephony.data.ApnSetting;
 import android.telephony.emergency.EmergencyNumber;
 import android.telephony.emergency.EmergencyNumber.EmergencyServiceCategories;
 import android.telephony.ims.aidl.IImsConfig;
@@ -106,6 +107,8 @@ import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import dalvik.system.VMRuntime;
 
 /**
  * Provides access to information about the telephony services on
@@ -2685,7 +2688,7 @@ public class TelephonyManager {
      */
     /** {@hide} */
     @UnsupportedAppUsage
-    public static String getNetworkTypeName(int type) {
+    public static String getNetworkTypeName(@NetworkType int type) {
         switch (type) {
             case NETWORK_TYPE_GPRS:
                 return "GPRS";
@@ -3324,7 +3327,7 @@ public class TelephonyManager {
     }
 
     /**
-     * Gets information about currently inserted UICCs and enabled eUICCs.
+     * Gets information about currently inserted UICCs and eUICCs.
      * <p>
      * Requires that the calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
      * <p>
@@ -3796,6 +3799,7 @@ public class TelephonyManager {
      * @hide
      * nobody seems to call this.
      */
+    @TestApi
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     public String getLine1AlphaTag() {
         return getLine1AlphaTag(getSubId());
@@ -4818,6 +4822,22 @@ public class TelephonyManager {
         }
     }
 
+    /**
+     * Convert data state to string
+     *
+     * @return The data state in string format.
+     * @hide
+     */
+    public static String dataStateToString(@DataState int state) {
+        switch (state) {
+            case DATA_DISCONNECTED: return "DISCONNECTED";
+            case DATA_CONNECTING: return "CONNECTING";
+            case DATA_CONNECTED: return "CONNECTED";
+            case DATA_SUSPENDED: return "SUSPENDED";
+        }
+        return "UNKNOWN(" + state + ")";
+    }
+
    /**
     * @hide
     */
@@ -4851,18 +4871,22 @@ public class TelephonyManager {
      * Registers a listener object to receive notification of changes
      * in specified telephony states.
      * <p>
-     * To register a listener, pass a {@link PhoneStateListener}
-     * and specify at least one telephony state of interest in
-     * the events argument.
+     * To register a listener, pass a {@link PhoneStateListener} and specify at least one telephony
+     * state of interest in the events argument.
      *
-     * At registration, and when a specified telephony state
-     * changes, the telephony manager invokes the appropriate
-     * callback method on the listener object and passes the
-     * current (updated) values.
+     * At registration, and when a specified telephony state changes, the telephony manager invokes
+     * the appropriate callback method on the listener object and passes the current (updated)
+     * values.
      * <p>
-     * To unregister a listener, pass the listener object and set the
-     * events argument to
+     * To un-register a listener, pass the listener object and set the events argument to
      * {@link PhoneStateListener#LISTEN_NONE LISTEN_NONE} (0).
+     *
+     * If this TelephonyManager object has been created with {@link #createForSubscriptionId},
+     * applies to the given subId. Otherwise, applies to
+     * {@link SubscriptionManager#getDefaultSubscriptionId()}. To listen events for multiple subIds,
+     * pass a separate listener object to each TelephonyManager object created with
+     * {@link #createForSubscriptionId}.
+     *
      * Note: if you call this method while in the middle of a binder transaction, you <b>must</b>
      * call {@link android.os.Binder#clearCallingIdentity()} before calling this method. A
      * {@link SecurityException} will be thrown otherwise.
@@ -4877,17 +4901,26 @@ public class TelephonyManager {
         if (mContext == null) return;
         try {
             boolean notifyNow = (getITelephony() != null);
-            // If the listener has not explicitly set the subId (for example, created with the
-            // default constructor), replace the subId so it will listen to the account the
-            // telephony manager is created with.
-            if (listener.mSubId == null) {
-                listener.mSubId = mSubId;
-            }
-
             ITelephonyRegistry registry = getTelephonyRegistry();
             if (registry != null) {
-                registry.listenForSubscriber(listener.mSubId, getOpPackageName(),
+                int subId;
+                // subId from phonestatelistner is deprecated Q on forward, use the subId from
+                // TelephonyManager instance.
+                if (VMRuntime.getRuntime().getTargetSdkVersion() >= Build.VERSION_CODES.Q
+                        || listener.mSubId == null) {
+                    subId = mSubId;
+                } else {
+                    subId = listener.mSubId;
+                }
+
+                registry.listenForSubscriber(subId, getOpPackageName(),
                         listener.callback, events, notifyNow);
+                // TODO: remove this once we remove PhoneStateListener constructor with subId.
+                if (events == PhoneStateListener.LISTEN_NONE) {
+                    listener.mSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+                } else {
+                    listener.mSubId = subId;
+                }
             } else {
                 Rlog.w(TAG, "telephony registry not ready.");
             }
@@ -8944,6 +8977,27 @@ public class TelephonyManager {
         return retval;
     }
 
+    /**
+     * Determines the {@link PhoneAccountHandle} associated with a subscription Id.
+     *
+     * @param subscriptionId The subscription Id to check.
+     * @return The {@link PhoneAccountHandle} associated with a subscription Id, or {@code null} if
+     * there is no associated {@link PhoneAccountHandle}.
+     * @hide
+     */
+    public @Nullable PhoneAccountHandle getPhoneAccountHandleForSubscriptionId(int subscriptionId) {
+        PhoneAccountHandle returnValue = null;
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                returnValue = service.getPhoneAccountHandleForSubscriptionId(subscriptionId);
+            }
+        } catch (RemoteException e) {
+        }
+
+        return returnValue;
+    }
+
     private int getSubIdForPhoneAccountHandle(PhoneAccountHandle phoneAccountHandle) {
         int retval = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
         try {
@@ -10310,11 +10364,12 @@ public class TelephonyManager {
     }
 
     /**
-     * Determine whether the emergency assistance feature is available on the device.
+     * Returns whether {@link TelephonyManager#ACTION_EMERGENCY_ASSISTANCE emergency assistance} is
+     * available on the device.
      * <p>
      * Requires permission: {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE}
      *
-     * @return whether the emergency assistance feature is available on the device
+     * @return {@code true} if emergency assistance is available, {@code false} otherwise
      *
      * @hide
      */
@@ -10344,10 +10399,10 @@ public class TelephonyManager {
      * <p>Requires permission {@link android.Manifest.permission#READ_PHONE_STATE} or the calling
      * app has carrier privileges (see {@link #hasCarrierPrivileges}).
      *
-     * @return Map including the key as the active subscription ID (Note: if there is no active
+     * @return Map including the keys as the active subscription IDs (Note: if there is no active
      * subscription, the key is {@link SubscriptionManager#getDefaultSubscriptionId}) and the value
-     * as the list of {@link EmergencyNumber}; null if this information is not available; or throw
-     * a SecurityException if the caller does not have the permission.
+     * as the list of {@link EmergencyNumber}; empty Map if this information is not available;
+     * or throw a SecurityException if the caller does not have the permission.
      */
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     @NonNull
@@ -10397,10 +10452,10 @@ public class TelephonyManager {
      * <li>{@link EmergencyNumber#EMERGENCY_SERVICE_CATEGORY_MIEC} </li>
      * <li>{@link EmergencyNumber#EMERGENCY_SERVICE_CATEGORY_AIEC} </li>
      * </ol>
-     * @return Map including the key as the active subscription ID (Note: if there is no active
+     * @return Map including the keys as the active subscription IDs (Note: if there is no active
      * subscription, the key is {@link SubscriptionManager#getDefaultSubscriptionId}) and the value
-     * as the list of {@link EmergencyNumber}; null if this information is not available; or throw
-     * a SecurityException if the caller does not have the permission.
+     * as the list of {@link EmergencyNumber}; empty Map if this information is not available;
+     * or throw a SecurityException if the caller does not have the permission.
      */
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     @NonNull
@@ -10915,5 +10970,59 @@ public class TelephonyManager {
             Log.e(TAG, "getRadioHalVersion() RemoteException", e);
         }
         return new Pair<Integer, Integer>(-1, -1);
+    }
+
+    /**
+     * Return whether data is enabled for certain APN type. This will tell if framework will accept
+     * corresponding network requests on a subId.
+     *
+     * {@link #isDataEnabled()} is directly associated with users' Mobile data toggle on / off. If
+     * {@link #isDataEnabled()} returns false, it means in general all meter-ed data are disabled.
+     *
+     * This per APN type API gives a better idea whether data is allowed on a specific APN type.
+     * It will return true if:
+     *
+     *  1) User data is turned on, or
+     *  2) APN is un-metered for this subscription, or
+     *  3) APN type is whitelisted. E.g. MMS is whitelisted if
+     *  {@link SubscriptionManager#setAlwaysAllowMmsData} is turned on.
+     *
+     * @return whether data is enabled for a apn type.
+     *
+     * @hide
+     */
+    public boolean isDataEnabledForApn(@ApnSetting.ApnType int apnType) {
+        String pkgForDebug = mContext != null ? mContext.getOpPackageName() : "<unknown>";
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                return service.isDataEnabledForApn(apnType, getSubId(), pkgForDebug);
+            }
+        } catch (RemoteException ex) {
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether an APN type is metered or not. It will be evaluated with the subId associated
+     * with the TelephonyManager instance.
+     *
+     * @hide
+     */
+    public boolean isApnMetered(@ApnSetting.ApnType int apnType) {
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                return service.isApnMetered(apnType, getSubId());
+            }
+        } catch (RemoteException ex) {
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
+        }
+        return true;
     }
 }

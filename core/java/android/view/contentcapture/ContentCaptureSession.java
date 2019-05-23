@@ -41,8 +41,7 @@ import java.util.ArrayList;
 import java.util.Random;
 
 /**
- * Session used to notify a system-provided Content Capture service about events associated with
- * views.
+ * Session used to notify the Android system about events associated with views.
  */
 public abstract class ContentCaptureSession implements AutoCloseable {
 
@@ -306,7 +305,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     }
 
     /**
-     * Destroys this session, flushing out all pending notifications to the service.
+     * Destroys this session, flushing out all pending notifications.
      *
      * <p>Once destroyed, any new notification will be dropped.
      */
@@ -354,11 +353,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     }
 
     /**
-     * Notifies the Content Capture Service that a node has been added to the view structure.
-     *
-     * <p>Typically called "manually" by views that handle their own virtual view hierarchy, or
-     * automatically by the Android System for views that return {@code true} on
-     * {@link View#onProvideContentCaptureStructure(ViewStructure, int)}.
+     * Notifies the Android system that a node has been added to the view structure.
      *
      * @param node node that has been added.
      */
@@ -376,10 +371,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     abstract void internalNotifyViewAppeared(@NonNull ViewNode.ViewStructureImpl node);
 
     /**
-     * Notifies the Content Capture Service that a node has been removed from the view structure.
-     *
-     * <p>Typically called "manually" by views that handle their own virtual view hierarchy, or
-     * automatically by the Android System for standard views.
+     * Notifies the Android system that a node has been removed from the view structure.
      *
      * @param id id of the node that has been removed.
      */
@@ -393,7 +385,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     abstract void internalNotifyViewDisappeared(@NonNull AutofillId id);
 
     /**
-     * Notifies the Content Capture Service that many nodes has been removed from a virtual view
+     * Notifies the Android system that many nodes has been removed from a virtual view
      * structure.
      *
      * <p>Should only be called by views that handle their own virtual view hierarchy.
@@ -419,7 +411,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     }
 
     /**
-     * Notifies the Intelligence Service that the value of a text node has been changed.
+     * Notifies the Android system that the value of a text node has been changed.
      *
      * @param id of the node.
      * @param text new text.
@@ -441,7 +433,46 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     /**
      * Creates a {@link ViewStructure} for a "standard" view.
      *
-     * @hide
+     * <p>This method should be called after a visible view is laid out; the view then must populate
+     * the structure and pass it to {@link #notifyViewAppeared(ViewStructure)}.
+     *
+     * <b>Note: </b>views that manage a virtual structure under this view must populate just the
+     * node representing this view and return right away, then asynchronously report (not
+     * necessarily in the UI thread) when the children nodes appear, disappear or have their text
+     * changed by calling {@link ContentCaptureSession#notifyViewAppeared(ViewStructure)},
+     * {@link ContentCaptureSession#notifyViewDisappeared(AutofillId)}, and
+     * {@link ContentCaptureSession#notifyViewTextChanged(AutofillId, CharSequence)} respectively.
+     * The structure for the a child must be created using
+     * {@link ContentCaptureSession#newVirtualViewStructure(AutofillId, long)}, and the
+     * {@code autofillId} for a child can be obtained either through
+     * {@code childStructure.getAutofillId()} or
+     * {@link ContentCaptureSession#newAutofillId(AutofillId, long)}.
+     *
+     * <p>When the virtual view hierarchy represents a web page, you should also:
+     *
+     * <ul>
+     * <li>Call {@link ContentCaptureManager#getContentCaptureConditions()} to infer content capture
+     * events should be generate for that URL.
+     * <li>Create a new {@link ContentCaptureSession} child for every HTML element that renders a
+     * new URL (like an {@code IFRAME}) and use that session to notify events from that subtree.
+     * </ul>
+     *
+     * <p><b>Note: </b>the following methods of the {@code structure} will be ignored:
+     * <ul>
+     * <li>{@link ViewStructure#setChildCount(int)}
+     * <li>{@link ViewStructure#addChildCount(int)}
+     * <li>{@link ViewStructure#getChildCount()}
+     * <li>{@link ViewStructure#newChild(int)}
+     * <li>{@link ViewStructure#asyncNewChild(int)}
+     * <li>{@link ViewStructure#asyncCommit()}
+     * <li>{@link ViewStructure#setWebDomain(String)}
+     * <li>{@link ViewStructure#newHtmlInfoBuilder(String)}
+     * <li>{@link ViewStructure#setHtmlInfo(android.view.ViewStructure.HtmlInfo)}
+     * <li>{@link ViewStructure#setDataIsSensitive(boolean)}
+     * <li>{@link ViewStructure#setAlpha(float)}
+     * <li>{@link ViewStructure#setElevation(float)}
+     * <li>{@link ViewStructure#setTransformation(android.graphics.Matrix)}
+     * </ul>
      */
     @NonNull
     public final ViewStructure newViewStructure(@NonNull View view) {

@@ -16,6 +16,8 @@
 
 package com.android.systemui.qs;
 
+import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
+
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Rect;
@@ -25,6 +27,7 @@ import android.view.View;
 import android.widget.LinearLayout;
 
 import com.android.systemui.Dependency;
+import com.android.systemui.DumpController;
 import com.android.systemui.R;
 import com.android.systemui.plugins.qs.QSTile;
 import com.android.systemui.plugins.qs.QSTile.SignalState;
@@ -35,6 +38,9 @@ import com.android.systemui.tuner.TunerService.Tunable;
 
 import java.util.ArrayList;
 import java.util.Collection;
+
+import javax.inject.Inject;
+import javax.inject.Named;
 
 /**
  * Version of QSPanel that only shows N Quick Tiles in the QS Header.
@@ -49,8 +55,10 @@ public class QuickQSPanel extends QSPanel {
     private int mMaxTiles;
     protected QSPanel mFullPanel;
 
-    public QuickQSPanel(Context context, AttributeSet attrs) {
-        super(context, attrs);
+    @Inject
+    public QuickQSPanel(@Named(VIEW_CONTEXT) Context context, AttributeSet attrs,
+            DumpController dumpController) {
+        super(context, attrs, dumpController);
         if (mFooter != null) {
             removeView(mFooter.getView());
         }
@@ -181,11 +189,16 @@ public class QuickQSPanel extends QSPanel {
     private static class HeaderTileLayout extends TileLayout {
 
         private boolean mListening;
+        private Rect mClippingBounds = new Rect();
 
         public HeaderTileLayout(Context context) {
             super(context);
             setClipChildren(false);
             setClipToPadding(false);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT,
+                    LayoutParams.MATCH_PARENT);
+            lp.gravity = Gravity.CENTER_HORIZONTAL;
+            setLayoutParams(lp);
         }
 
         @Override
@@ -197,13 +210,6 @@ public class QuickQSPanel extends QSPanel {
         @Override
         public void onFinishInflate(){
             updateResources();
-        }
-
-        private void updateLayoutParams() {
-            int width = getResources().getDimensionPixelSize(R.dimen.qs_quick_layout_width);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(width, LayoutParams.MATCH_PARENT);
-            lp.gravity = Gravity.CENTER_HORIZONTAL;
-            setLayoutParams(lp);
         }
 
         private LayoutParams generateTileLayoutParams() {
@@ -219,8 +225,8 @@ public class QuickQSPanel extends QSPanel {
         @Override
         protected void onLayout(boolean changed, int l, int t, int r, int b) {
             // We only care about clipping on the right side
-            Rect bounds = new Rect(0, 0, r - l, 10000);
-            setClipBounds(bounds);
+            mClippingBounds.set(0, 0, r - l, 10000);
+            setClipBounds(mClippingBounds);
 
             calculateColumns();
 
@@ -237,8 +243,6 @@ public class QuickQSPanel extends QSPanel {
             mCellWidth = mContext.getResources().getDimensionPixelSize(R.dimen.qs_quick_tile_size);
             mCellHeight = mCellWidth;
 
-            updateLayoutParams();
-
             return false;
         }
 
@@ -252,9 +256,9 @@ public class QuickQSPanel extends QSPanel {
             }
 
             final int availableWidth = getMeasuredWidth() - getPaddingStart() - getPaddingEnd();
-            final int leftoverWithespace = availableWidth - maxTiles * mCellWidth;
+            final int leftoverWhitespace = availableWidth - maxTiles * mCellWidth;
             final int smallestHorizontalMarginNeeded;
-            smallestHorizontalMarginNeeded = leftoverWithespace / Math.max(1, maxTiles - 1);
+            smallestHorizontalMarginNeeded = leftoverWhitespace / Math.max(1, maxTiles - 1);
 
             if (smallestHorizontalMarginNeeded > 0){
                 mCellMarginHorizontal = smallestHorizontalMarginNeeded;

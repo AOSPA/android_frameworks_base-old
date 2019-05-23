@@ -322,19 +322,19 @@ public class RecoverableKeyStoreDb {
     /**
      * Sets the {@code generationId} of the platform key for user {@code userId}.
      *
-     * @return The primary key ID of the relation.
+     * @return The number of updated rows.
      */
     public long setPlatformKeyGenerationId(int userId, int generationId) {
         SQLiteDatabase db = mKeyStoreDbHelper.getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put(UserMetadataEntry.COLUMN_NAME_USER_ID, userId);
         values.put(UserMetadataEntry.COLUMN_NAME_PLATFORM_KEY_GENERATION_ID, generationId);
-        long result = db.replace(
-                UserMetadataEntry.TABLE_NAME, /*nullColumnHack=*/ null, values);
-        if (result != -1) {
-            invalidateKeysWithOldGenerationId(userId, generationId);
-        }
-        return result;
+        String selection = UserMetadataEntry.COLUMN_NAME_USER_ID + " = ?";
+        String[] selectionArguments = new String[] {String.valueOf(userId)};
+
+        ensureUserMetadataEntryExists(userId);
+        invalidateKeysForUser(userId);
+        return db.update(UserMetadataEntry.TABLE_NAME, values, selection, selectionArguments);
     }
 
     /**
@@ -377,31 +377,31 @@ public class RecoverableKeyStoreDb {
     /**
      * Sets the {@code serialNumber} for the user {@code userId}.
      *
-     * @return The primary key of the inserted row, or -1 if failed.
+     * @return The number of updated rows.
      */
     public long setUserSerialNumber(int userId, long serialNumber) {
         SQLiteDatabase db = mKeyStoreDbHelper.getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put(UserMetadataEntry.COLUMN_NAME_USER_ID, userId);
         values.put(UserMetadataEntry.COLUMN_NAME_USER_SERIAL_NUMBER, serialNumber);
-        long result = db.replace(
-                UserMetadataEntry.TABLE_NAME, /*nullColumnHack=*/ null, values);
-        return result;
+        String selection = UserMetadataEntry.COLUMN_NAME_USER_ID + " = ?";
+        String[] selectionArguments = new String[] {String.valueOf(userId)};
+
+        ensureUserMetadataEntryExists(userId);
+        return db.update(UserMetadataEntry.TABLE_NAME, values, selection, selectionArguments);
+
     }
 
     /**
      * Updates status of old keys to {@code RecoveryController.RECOVERY_STATUS_PERMANENT_FAILURE}.
      */
-    public void invalidateKeysWithOldGenerationId(int userId, int newGenerationId) {
+    public void invalidateKeysForUser(int userId) {
         SQLiteDatabase db = mKeyStoreDbHelper.getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put(KeysEntry.COLUMN_NAME_RECOVERY_STATUS,
                 RecoveryController.RECOVERY_STATUS_PERMANENT_FAILURE);
-        String selection =
-                KeysEntry.COLUMN_NAME_USER_ID + " = ? AND "
-                + KeysEntry.COLUMN_NAME_GENERATION_ID + " < ?";
-        db.update(KeysEntry.TABLE_NAME, values, selection,
-            new String[] {String.valueOf(userId), String.valueOf(newGenerationId)});
+        String selection = KeysEntry.COLUMN_NAME_USER_ID + " = ?";
+        db.update(KeysEntry.TABLE_NAME, values, selection, new String[] {String.valueOf(userId)});
     }
 
     /**
@@ -1322,6 +1322,18 @@ public class RecoverableKeyStoreDb {
         values.put(RootOfTrustEntry.COLUMN_NAME_UID, uid);
         values.put(RootOfTrustEntry.COLUMN_NAME_ROOT_ALIAS, rootAlias);
         db.insertWithOnConflict(RootOfTrustEntry.TABLE_NAME, /*nullColumnHack=*/ null,
+                values, SQLiteDatabase.CONFLICT_IGNORE);
+    }
+
+    /**
+     * Creates an empty row in the user metadata table if such a row doesn't exist for
+     * the given userId, so db.update will succeed.
+     */
+    private void ensureUserMetadataEntryExists(int userId) {
+        SQLiteDatabase db = mKeyStoreDbHelper.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(UserMetadataEntry.COLUMN_NAME_USER_ID, userId);
+        db.insertWithOnConflict(UserMetadataEntry.TABLE_NAME, /*nullColumnHack=*/ null,
                 values, SQLiteDatabase.CONFLICT_IGNORE);
     }
 

@@ -35,7 +35,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.UserInfo;
 import android.database.ContentObserver;
-import android.graphics.Point;
 import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
@@ -73,7 +72,7 @@ import android.widget.TextView;
 import com.android.internal.R;
 import com.android.internal.colorextraction.ColorExtractor;
 import com.android.internal.colorextraction.ColorExtractor.GradientColors;
-import com.android.internal.colorextraction.drawable.GradientDrawable;
+import com.android.internal.colorextraction.drawable.ScrimDrawable;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.telephony.TelephonyIntents;
@@ -411,7 +410,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                                         mActivityStarter
                                                 .startPendingIntentDismissingKeyguard(intent);
                                     }
-                                })
+                                },
+                                mKeyguardManager.isDeviceLocked())
                         : null;
         ActionsDialog dialog = new ActionsDialog(mContext, mAdapter, panelViewController);
         dialog.setCanceledOnTouchOutside(false); // Handled by the custom class.
@@ -439,7 +439,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     @Override
     public void onUiModeChanged() {
         mContext.getTheme().applyStyle(mContext.getThemeResId(), true);
-        if (mDialog.isShowing()) {
+        if (mDialog != null && mDialog.isShowing()) {
             mDialog.refreshDialog();
         }
     }
@@ -505,6 +505,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             }
             TextView messageView = v.findViewById(R.id.message);
             messageView.setTextColor(textColor);
+            messageView.setSelected(true); // necessary for marquee to work
             ImageView icon = (ImageView) v.findViewById(R.id.icon);
             icon.getDrawable().setTint(textColor);
             return v;
@@ -919,56 +920,46 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
      * via {@link com.android.systemui.globalactions.GlobalActionsDialog#mDeviceProvisioned}.
      */
     public class MyAdapter extends MultiListAdapter {
-        @Override
-        public int getCount() {
+        private int countItems(boolean separated) {
             int count = 0;
             for (int i = 0; i < mItems.size(); i++) {
                 final Action action = mItems.get(i);
 
-                if (mKeyguardShowing && !action.showDuringKeyguard()) {
-                    continue;
+                if (shouldBeShown(action) && action.shouldBeSeparated() == separated) {
+                    count++;
                 }
-                if (!mDeviceProvisioned && !action.showBeforeProvisioning()) {
-                    continue;
-                }
-                count++;
             }
             return count;
+        }
+
+        private boolean shouldBeShown(Action action) {
+            if (mKeyguardShowing && !action.showDuringKeyguard()) {
+                return false;
+            }
+            if (!mDeviceProvisioned && !action.showBeforeProvisioning()) {
+                return false;
+            }
+            return true;
+        }
+
+        @Override
+        public int countSeparatedItems() {
+            return countItems(true);
+        }
+
+        @Override
+        public int countListItems() {
+            return countItems(false);
+        }
+
+        @Override
+        public int getCount() {
+            return countSeparatedItems() + countListItems();
         }
 
         @Override
         public boolean isEnabled(int position) {
             return getItem(position).isEnabled();
-        }
-
-        @Override
-        public ArrayList<Action> getSeparatedItems() {
-            ArrayList<Action> separatedActions = new ArrayList<Action>();
-            if (!shouldUseSeparatedView()) {
-                return separatedActions;
-            }
-            for (int i = 0; i < mItems.size(); i++) {
-                final Action action = mItems.get(i);
-                if (action.shouldBeSeparated()) {
-                    separatedActions.add(action);
-                }
-            }
-            return separatedActions;
-        }
-
-        @Override
-        public ArrayList<Action> getListItems() {
-            if (!shouldUseSeparatedView()) {
-                return new ArrayList<Action>(mItems);
-            }
-            ArrayList<Action> listActions = new ArrayList<Action>();
-            for (int i = 0; i < mItems.size(); i++) {
-                final Action action = mItems.get(i);
-                if (!action.shouldBeSeparated()) {
-                    listActions.add(action);
-                }
-            }
-            return listActions;
         }
 
         @Override
@@ -978,14 +969,10 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
         @Override
         public Action getItem(int position) {
-
             int filteredPos = 0;
             for (int i = 0; i < mItems.size(); i++) {
                 final Action action = mItems.get(i);
-                if (mKeyguardShowing && !action.showDuringKeyguard()) {
-                    continue;
-                }
-                if (!mDeviceProvisioned && !action.showBeforeProvisioning()) {
+                if (!shouldBeShown(action)) {
                     continue;
                 }
                 if (filteredPos == position) {
@@ -1010,10 +997,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         public View getView(int position, View convertView, ViewGroup parent) {
             Action action = getItem(position);
             View view = action.create(mContext, convertView, parent, LayoutInflater.from(mContext));
-            // Everything but screenshot, the last item, gets white background.
-            if (position == getCount() - 1) {
-                MultiListLayout.get(parent).setDivisionView(view);
-            }
+            view.setOnClickListener(v -> onClickItem(position));
+            view.setOnLongClickListener(v -> onLongClickItem(position));
             return view;
         }
 
@@ -1034,6 +1019,11 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 mDialog.dismiss();
             }
             item.onPress();
+        }
+
+        @Override
+        public boolean shouldBeSeparated(int position) {
+            return getItem(position).shouldBeSeparated();
         }
     }
 
@@ -1137,6 +1127,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
             ImageView icon = (ImageView) v.findViewById(R.id.icon);
             TextView messageView = (TextView) v.findViewById(R.id.message);
+            messageView.setSelected(true); // necessary for marquee to work
 
             TextView statusView = (TextView) v.findViewById(R.id.status);
             final String status = getStatus();
@@ -1240,6 +1231,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             if (messageView != null) {
                 messageView.setText(mMessageResId);
                 messageView.setEnabled(enabled);
+                messageView.setSelected(true); // necessary for marquee to work
             }
 
             boolean on = ((mState == State.On) || (mState == State.TurningOn));
@@ -1500,7 +1492,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         private final MyAdapter mAdapter;
         private MultiListLayout mGlobalActionsLayout;
         private Drawable mBackgroundDrawable;
-        private final ColorExtractor mColorExtractor;
+        private final SysuiColorExtractor mColorExtractor;
         private final GlobalActionsPanelPlugin.PanelViewController mPanelController;
         private boolean mKeyguardShowing;
         private boolean mShowing;
@@ -1579,26 +1571,33 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
             if (!shouldUsePanel()) {
                 if (mBackgroundDrawable == null) {
-                    mBackgroundDrawable = new GradientDrawable(mContext);
+                    mBackgroundDrawable = new ScrimDrawable();
                 }
                 mScrimAlpha = ScrimController.GRADIENT_SCRIM_ALPHA;
             } else {
                 mBackgroundDrawable = mContext.getDrawable(
                         com.android.systemui.R.drawable.global_action_panel_scrim);
                 mScrimAlpha = 1f;
+                initializePanel();
             }
-            mGlobalActionsLayout.setSnapToEdge(true);
             getWindow().setBackgroundDrawable(mBackgroundDrawable);
         }
 
         private int getGlobalActionsLayoutId(Context context) {
-            if (isForceGridEnabled(context) || shouldUsePanel()) {
-                if (RotationUtils.getRotation(context) == RotationUtils.ROTATION_SEASCAPE) {
+            boolean useGridLayout = isForceGridEnabled(context) || shouldUsePanel();
+            if (RotationUtils.getRotation(context) == RotationUtils.ROTATION_SEASCAPE) {
+                if (useGridLayout) {
                     return com.android.systemui.R.layout.global_actions_grid_seascape;
+                } else {
+                    return com.android.systemui.R.layout.global_actions_column_seascape;
                 }
-                return com.android.systemui.R.layout.global_actions_grid;
+            } else {
+                if (useGridLayout) {
+                    return com.android.systemui.R.layout.global_actions_grid;
+                } else {
+                    return com.android.systemui.R.layout.global_actions_column;
+                }
             }
-            return com.android.systemui.R.layout.global_actions_wrapped;
         }
 
         @Override
@@ -1607,16 +1606,9 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             super.onStart();
             mGlobalActionsLayout.updateList();
 
-            if (mBackgroundDrawable instanceof GradientDrawable) {
-                Point displaySize = new Point();
-                mContext.getDisplay().getRealSize(displaySize);
+            if (mBackgroundDrawable instanceof ScrimDrawable) {
                 mColorExtractor.addOnColorsChangedListener(this);
-                ((GradientDrawable) mBackgroundDrawable)
-                        .setScreenSize(displaySize.x, displaySize.y);
-                GradientColors colors = mColorExtractor.getColors(
-                        mKeyguardShowing
-                                ? WallpaperManager.FLAG_LOCK
-                                : WallpaperManager.FLAG_SYSTEM);
+                GradientColors colors = mColorExtractor.getNeutralColors();
                 updateColors(colors, false /* animate */);
             }
         }
@@ -1627,10 +1619,10 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
          * @param animate Interpolates gradient if true, just sets otherwise.
          */
         private void updateColors(GradientColors colors, boolean animate) {
-            if (!(mBackgroundDrawable instanceof GradientDrawable)) {
+            if (!(mBackgroundDrawable instanceof ScrimDrawable)) {
                 return;
             }
-            ((GradientDrawable) mBackgroundDrawable).setColors(colors, animate);
+            ((ScrimDrawable) mBackgroundDrawable).setColor(colors.getMainColor(), animate);
             View decorView = getWindow().getDecorView();
             if (colors.supportsDarkText()) {
                 decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR |
@@ -1728,7 +1720,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         }
 
         public void onRotate(int from, int to) {
-            if (mShowing && (shouldUsePanel() || isForceGridEnabled(mContext))) {
+            if (mShowing) {
                 refreshDialog();
             }
         }

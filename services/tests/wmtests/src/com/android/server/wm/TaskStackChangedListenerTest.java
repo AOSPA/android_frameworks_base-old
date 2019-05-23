@@ -79,6 +79,7 @@ public class TaskStackChangedListenerTest {
 
     @Test
     @Presubmit
+    @FlakyTest(bugId = 130388819)
     public void testTaskStackChanged_afterFinish() throws Exception {
         registerTaskStackChangedListener(new TaskStackListener() {
             @Override
@@ -159,6 +160,8 @@ public class TaskStackChangedListenerTest {
      * Tests for onTaskCreated, onTaskMovedToFront, onTaskRemoved and onTaskRemovalStarted.
      */
     @Test
+    @Presubmit
+    @FlakyTest(bugId = 130388819)
     public void testTaskChangeCallBacks() throws Exception {
         final Object[] params = new Object[2];
         final CountDownLatch taskCreatedLaunchLatch = new CountDownLatch(1);
@@ -207,7 +210,8 @@ public class TaskStackChangedListenerTest {
 
         // Test for onTaskMovedToFront.
         assertEquals(1, taskMovedToFrontLatch.getCount());
-        mService.moveTaskToFront(id, 0, null);
+        mService.moveTaskToFront(null, getInstrumentation().getContext().getPackageName(), id, 0,
+                null);
         waitForCallback(taskMovedToFrontLatch);
         assertEquals(activity.getTaskId(), params[0]);
 

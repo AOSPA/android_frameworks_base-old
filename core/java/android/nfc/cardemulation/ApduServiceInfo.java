@@ -435,7 +435,15 @@ public class ApduServiceInfo implements Parcelable {
         mDynamicAidGroups.put(aidGroup.getCategory(), aidGroup);
     }
 
-    @UnsupportedAppUsage
+    /**
+     * Sets the off host Secure Element.
+     * @param  offHost  Secure Element to set. Only accept strings with prefix SIM or prefix eSE.
+     *                  Ref: GSMA TS.26 - NFC Handset Requirements
+     *                  TS26_NFC_REQ_069: For UICC, Secure Element Name SHALL be SIM[smartcard slot]
+     *                                    (e.g. SIM/SIM1, SIM2… SIMn).
+     *                  TS26_NFC_REQ_070: For embedded SE, Secure Element Name SHALL be eSE[number]
+     *                                    (e.g. eSE/eSE1, eSE2, etc.).
+     */
     public void setOffHostSecureElement(String offHost) {
         mOffHostName = offHost;
     }
@@ -444,7 +452,6 @@ public class ApduServiceInfo implements Parcelable {
      * Resets the off host Secure Element to statically defined
      * by the service in the manifest file.
      */
-    @UnsupportedAppUsage
     public void unsetOffHostSecureElement() {
         mOffHostName = mStaticOffHostName;
     }
@@ -584,10 +591,9 @@ public class ApduServiceInfo implements Parcelable {
             pw.println("    On Host Service");
         } else {
             pw.println("    Off-host Service");
-            pw.println("        " + "Current off-host SE" + mOffHostName
-                    + " static off-host: " + mOffHostName);
+            pw.println("        " + "Current off-host SE:" + mOffHostName
+                    + " static off-host SE:" + mStaticOffHostName);
         }
-        pw.println("    Static off-host Secure Element:");
         pw.println("    Static AID groups:");
         for (AidGroup group : mStaticAidGroups.values()) {
             pw.println("        Category: " + group.category);

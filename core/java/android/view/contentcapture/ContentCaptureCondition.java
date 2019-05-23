@@ -35,7 +35,8 @@ import java.lang.annotation.RetentionPolicy;
 public final class ContentCaptureCondition implements Parcelable {
 
     /**
-     * When set, package should use the {@link LocusId#getId()} as a regular expression.
+     * When set, package should use the {@link LocusId#getId()} as a regular expression (using the
+     * {@link java.util.regex.Pattern} format).
      */
     public static final int FLAG_IS_REGEX = 0x2;
 
@@ -54,7 +55,9 @@ public final class ContentCaptureCondition implements Parcelable {
      *
      * @param locusId id of the condition, as defined by
      * {@link ContentCaptureContext#getLocusId()}.
-     * @param flags either {@link ContentCaptureCondition#FLAG_IS_REGEX} or {@code 0}.
+     * @param flags either {@link ContentCaptureCondition#FLAG_IS_REGEX} (to use a regular
+     * expression match) or {@code 0} (in which case the {@code LocusId} must be an exact match of
+     * the {@code LocusId} used in the {@link ContentCaptureContext}).
      */
     public ContentCaptureCondition(@NonNull LocusId locusId, @Flags int flags) {
         this.mLocusId = Preconditions.checkNotNull(locusId);

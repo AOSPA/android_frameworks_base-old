@@ -514,6 +514,7 @@ package android.provider {
 
   public final class MediaStore {
     method @Deprecated @NonNull public static android.net.Uri createPending(@NonNull android.content.Context, @NonNull android.provider.MediaStore.PendingParams);
+    method @Deprecated @NonNull public static java.util.Set<java.lang.String> getAllVolumeNames(@NonNull android.content.Context);
     method @Deprecated @NonNull public static android.provider.MediaStore.PendingSession openPending(@NonNull android.content.Context, @NonNull android.net.Uri);
     method @Deprecated @NonNull public static android.net.Uri setIncludeTrashed(@NonNull android.net.Uri);
     method @Deprecated public static void trash(@NonNull android.content.Context, @NonNull android.net.Uri);
@@ -521,7 +522,24 @@ package android.provider {
     method @Deprecated public static void untrash(@NonNull android.content.Context, @NonNull android.net.Uri);
   }
 
+  public static interface MediaStore.Audio.AudioColumns extends android.provider.MediaStore.MediaColumns {
+    field public static final String DURATION = "duration";
+  }
+
+  public static interface MediaStore.DownloadColumns extends android.provider.MediaStore.MediaColumns {
+    field @Deprecated public static final String DESCRIPTION = "description";
+  }
+
+  public static interface MediaStore.Images.ImageColumns extends android.provider.MediaStore.MediaColumns {
+    field public static final String BUCKET_DISPLAY_NAME = "bucket_display_name";
+    field public static final String BUCKET_ID = "bucket_id";
+    field public static final String DATE_TAKEN = "datetaken";
+    field public static final String GROUP_ID = "group_id";
+    field public static final String ORIENTATION = "orientation";
+  }
+
   public static interface MediaStore.MediaColumns extends android.provider.BaseColumns {
+    field @Deprecated public static final String GROUP_ID = "group_id";
     field @Deprecated public static final String HASH = "_hash";
     field @Deprecated public static final String IS_TRASHED = "is_trashed";
     field @Deprecated public static final String PRIMARY_DIRECTORY = "primary_directory";
@@ -543,6 +561,14 @@ package android.provider {
     method @NonNull public android.os.ParcelFileDescriptor open() throws java.io.FileNotFoundException;
     method @NonNull public java.io.OutputStream openOutputStream() throws java.io.FileNotFoundException;
     method @NonNull public android.net.Uri publish();
+  }
+
+  public static interface MediaStore.Video.VideoColumns extends android.provider.MediaStore.MediaColumns {
+    field public static final String BUCKET_DISPLAY_NAME = "bucket_display_name";
+    field public static final String BUCKET_ID = "bucket_id";
+    field public static final String DATE_TAKEN = "datetaken";
+    field public static final String DURATION = "duration";
+    field public static final String GROUP_ID = "group_id";
   }
 
   public static final class Settings.Global extends android.provider.Settings.NameValueTable {

@@ -220,7 +220,8 @@ public class AppOpsService extends IAppOpsService.Stub {
      * global Settings. Any access to this class or its fields should be done while
      * holding the AppOpsService lock.
      */
-    private final class Constants extends ContentObserver {
+    @VisibleForTesting
+    final class Constants extends ContentObserver {
         // Key names stored in the settings value.
         private static final String KEY_TOP_STATE_SETTLE_TIME = "top_state_settle_time";
         private static final String KEY_FG_SERVICE_STATE_SETTLE_TIME
@@ -305,7 +306,8 @@ public class AppOpsService extends IAppOpsService.Stub {
         }
     }
 
-    private final Constants mConstants;
+    @VisibleForTesting
+    final Constants mConstants;
 
     @VisibleForTesting
     static final class UidState {
@@ -341,7 +343,7 @@ public class AppOpsService extends IAppOpsService.Stub {
 
         int evalMode(int op, int mode) {
             if (mode == AppOpsManager.MODE_FOREGROUND) {
-                return state <= AppOpsManager.resolveLastRestrictedUidState(op)
+                return state <= AppOpsManager.resolveFirstUnrestrictedUidState(op)
                         ? AppOpsManager.MODE_ALLOWED : AppOpsManager.MODE_IGNORED;
             }
             return mode;
@@ -782,13 +784,20 @@ public class AppOpsService extends IAppOpsService.Stub {
                 final int[] changedUids = intent.getIntArrayExtra(Intent.EXTRA_CHANGED_UID_LIST);
                 final String[] changedPkgs = intent.getStringArrayExtra(
                         Intent.EXTRA_CHANGED_PACKAGE_LIST);
-                final ArraySet<ModeCallback> callbacks = mOpModeWatchers.get(OP_PLAY_AUDIO);
+                ArraySet<ModeCallback> callbacks;
+                synchronized (AppOpsService.this) {
+                    callbacks = mOpModeWatchers.get(OP_PLAY_AUDIO);
+                    if (callbacks == null) {
+                        return;
+                    }
+                    callbacks = new ArraySet<>(callbacks);
+                }
                 for (int i = 0; i < changedUids.length; i++) {
                     final int changedUid = changedUids[i];
                     final String changedPkg = changedPkgs[i];
-                    // We trust packagemanager to insert matching uid and packageNames in the extras
-                    mHandler.sendMessage(PooledLambda.obtainMessage(AppOpsService::notifyOpChanged,
-                            AppOpsService.this, callbacks, OP_PLAY_AUDIO, changedUid, changedPkg));
+                    // We trust packagemanager to insert matching uid and packageNames in the
+                    // extras
+                    notifyOpChanged(callbacks, OP_PLAY_AUDIO, changedUid, changedPkg);
                 }
             }
         }, packageSuspendFilter);
@@ -915,9 +924,12 @@ public class AppOpsService extends IAppOpsService.Stub {
             if (uidState != null && uidState.pendingState != newState) {
                 final int oldPendingState = uidState.pendingState;
                 uidState.pendingState = newState;
-                if (newState < uidState.state || newState <= UID_STATE_MAX_LAST_NON_RESTRICTED) {
-                    // We are moving to a more important state, or the new state is in the
-                    // foreground, then always do it immediately.
+                if (newState < uidState.state
+                        || (newState <= UID_STATE_MAX_LAST_NON_RESTRICTED
+                                && uidState.state > UID_STATE_MAX_LAST_NON_RESTRICTED)) {
+                    // We are moving to a more important state, or the new state may be in the
+                    // foreground and the old state is in the background, then always do it
+                    // immediately.
                     commitUidPendingStateLocked(uidState);
                 } else if (uidState.pendingStateCommitTime == 0) {
                     // We are moving to a less important state for the first time,
@@ -1833,11 +1845,14 @@ public class AppOpsService extends IAppOpsService.Stub {
     }
 
     private boolean isPackageSuspendedForUser(String pkg, int uid) {
+        final long identity = Binder.clearCallingIdentity();
         try {
             return AppGlobals.getPackageManager().isPackageSuspendedForUser(
                     pkg, UserHandle.getUserId(uid));
         } catch (RemoteException re) {
             throw new SecurityException("Could not talk to package manager service");
+        } finally {
+            Binder.restoreCallingIdentity(identity);
         }
     }
 
@@ -2414,9 +2429,7 @@ public class AppOpsService extends IAppOpsService.Stub {
     }
 
     private void commitUidPendingStateLocked(UidState uidState) {
-        final boolean lastForeground = uidState.state <= UID_STATE_MAX_LAST_NON_RESTRICTED;
-        final boolean nowForeground = uidState.pendingState <= UID_STATE_MAX_LAST_NON_RESTRICTED;
-        if (uidState.hasForegroundWatchers && lastForeground != nowForeground) {
+        if (uidState.hasForegroundWatchers) {
             for (int fgi = uidState.foregroundOps.size() - 1; fgi >= 0; fgi--) {
                 if (!uidState.foregroundOps.valueAt(fgi)) {
                     continue;
@@ -3085,6 +3098,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         int nonpackageUid;
         final static Binder sBinder = new Binder();
         IBinder mToken;
+        boolean targetsUid;
 
         Shell(IAppOpsService iface, AppOpsService internal) {
             mInterface = iface;
@@ -3178,6 +3192,8 @@ public class AppOpsService extends IAppOpsService.Stub {
             for (String argument; (argument = getNextArg()) != null;) {
                 if ("--user".equals(argument)) {
                     userId = UserHandle.parseUserArg(getNextArgRequired());
+                } else if ("--uid".equals(argument)) {
+                    targetsUid = true;
                 } else {
                     if (packageName == null) {
                         packageName = argument;
@@ -3276,7 +3292,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         pw.println("    Starts a given operation for a particular application.");
         pw.println("  stop [--user <USER_ID>] <PACKAGE | UID> <OP> ");
         pw.println("    Stops a given operation for a particular application.");
-        pw.println("  set [--user <USER_ID>] <PACKAGE | UID> <OP> <MODE>");
+        pw.println("  set [--user <USER_ID>] <--uid PACKAGE | PACKAGE | UID> <OP> <MODE>");
         pw.println("    Set the mode for a particular application and operation.");
         pw.println("  get [--user <USER_ID>] <PACKAGE | UID> [<OP>]");
         pw.println("    Return the mode for a particular application and optional operation.");
@@ -3294,6 +3310,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         pw.println("    <MODE>    one of allow, ignore, deny, or default");
         pw.println("    <USER_ID> the user id under which the package is installed. If --user is not");
         pw.println("              specified, the current user is assumed.");
+        pw.println("    --uid PACKAGE refer to the UID of the package");
     }
 
     static int onShellCommand(Shell shell, String cmd) {
@@ -3320,9 +3337,17 @@ public class AppOpsService extends IAppOpsService.Stub {
                         return -1;
                     }
 
-                    if (shell.packageName != null) {
+                    if (!shell.targetsUid && shell.packageName != null) {
                         shell.mInterface.setMode(shell.op, shell.packageUid, shell.packageName,
                                 mode);
+                    } else if (shell.targetsUid && shell.packageName != null) {
+                        try {
+                            final int uid = shell.mInternal.mContext.getPackageManager()
+                                    .getPackageUid(shell.packageName, shell.userId);
+                            shell.mInterface.setUidMode(shell.op, uid, mode);
+                        } catch (PackageManager.NameNotFoundException e) {
+                            return -1;
+                        }
                     } else {
                         shell.mInterface.setUidMode(shell.op, shell.nonpackageUid, mode);
                     }

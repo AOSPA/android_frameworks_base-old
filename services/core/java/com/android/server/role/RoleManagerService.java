@@ -38,9 +38,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.Signature;
-import android.database.ContentObserver;
 import android.database.CursorWindow;
-import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
@@ -51,7 +49,6 @@ import android.os.ResultReceiver;
 import android.os.ShellCallback;
 import android.os.UserHandle;
 import android.os.UserManagerInternal;
-import android.provider.Settings;
 import android.service.sms.FinancialSmsService;
 import android.telephony.IFinancialSmsCallback;
 import android.text.TextUtils;
@@ -87,6 +84,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Consumer;
 
 /**
  * Service for role management.
@@ -148,6 +146,8 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
 
         mLegacyRoleResolver = legacyRoleResolver;
 
+        RoleControllerManager.initializeRemoteServiceComponentName(context);
+
         mUserManagerInternal = LocalServices.getService(UserManagerInternal.class);
         mAppOpsManager = context.getSystemService(AppOpsManager.class);
 
@@ -195,26 +195,14 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
                     Slog.i(LOG_TAG, "Packages changed - re-running initial grants for user "
                             + userId);
                 }
-                performInitialGrantsIfNecessary(userId);
+                if (Intent.ACTION_PACKAGE_REMOVED.equals(intent.getAction())
+                        && intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) {
+                    // Package is being upgraded - we're about to get ACTION_PACKAGE_ADDED
+                    return;
+                }
+                performInitialGrantsIfNecessaryAsync(userId);
             }
         }, UserHandle.ALL, intentFilter, null, null);
-
-        getContext().getContentResolver().registerContentObserver(
-                Settings.Global.getUriFor(Settings.Global.SMS_ACCESS_RESTRICTION_ENABLED), false,
-                new ContentObserver(getContext().getMainThreadHandler()) {
-                    @Override
-                    public void onChange(boolean selfChange, Uri uri, int userId) {
-                        boolean killSwitchEnabled = Settings.Global.getInt(
-                                getContext().getContentResolver(),
-                                Settings.Global.SMS_ACCESS_RESTRICTION_ENABLED, 0) == 1;
-                        for (int user : mUserManagerInternal.getUserIds()) {
-                            if (mUserManagerInternal.isUserRunning(user)) {
-                                getOrCreateControllerService(user)
-                                        .onSmsKillSwitchToggled(killSwitchEnabled);
-                            }
-                        }
-                    }
-                }, UserHandle.USER_ALL);
     }
 
     @Override
@@ -222,8 +210,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         performInitialGrantsIfNecessary(userId);
     }
 
-    @MainThread
-    private void performInitialGrantsIfNecessary(@UserIdInt int userId) {
+    private CompletableFuture<Void> performInitialGrantsIfNecessaryAsync(@UserIdInt int userId) {
         RoleUserState userState;
         userState = getOrCreateUserState(userId);
 
@@ -244,22 +231,29 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             // Run grants again
             Slog.i(LOG_TAG, "Granting default permissions...");
             CompletableFuture<Void> result = new CompletableFuture<>();
-            getOrCreateControllerService(userId).grantDefaultRoles(FgThread.getExecutor(),
+            getOrCreateController(userId).grantDefaultRoles(FgThread.getExecutor(),
                     successful -> {
                         if (successful) {
+                            userState.setPackagesHash(packagesHash);
                             result.complete(null);
                         } else {
                             result.completeExceptionally(new RuntimeException());
                         }
                     });
-            try {
-                result.get(30, TimeUnit.SECONDS);
-                userState.setPackagesHash(packagesHash);
-            } catch (InterruptedException | ExecutionException | TimeoutException e) {
-                Slog.e(LOG_TAG, "Failed to grant defaults for user " + userId, e);
-            }
+            return result;
         } else if (DEBUG) {
             Slog.i(LOG_TAG, "Already ran grants for package state " + packagesHash);
+        }
+        return CompletableFuture.completedFuture(null);
+    }
+
+    @MainThread
+    private void performInitialGrantsIfNecessary(@UserIdInt int userId) {
+        CompletableFuture<Void> result = performInitialGrantsIfNecessaryAsync(userId);
+        try {
+            result.get(30, TimeUnit.SECONDS);
+        } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            Slog.e(LOG_TAG, "Failed to grant defaults for user " + userId, e);
         }
     }
 
@@ -324,7 +318,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
     }
 
     @NonNull
-    private RoleControllerManager getOrCreateControllerService(@UserIdInt int userId) {
+    private RoleControllerManager getOrCreateController(@UserIdInt int userId) {
         synchronized (mLock) {
             RoleControllerManager controller = mControllers.get(userId);
             if (controller == null) {
@@ -336,7 +330,8 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
                 } catch (NameNotFoundException e) {
                     throw new RuntimeException(e);
                 }
-                controller = new RoleControllerManager(context, FgThread.getHandler());
+                controller = RoleControllerManager.createWithInitializedRemoteServiceComponentName(
+                        FgThread.getHandler(), context);
                 mControllers.put(userId, controller);
             }
             return controller;
@@ -480,7 +475,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
             Preconditions.checkNotNull(callback, "callback cannot be null");
 
-            getOrCreateControllerService(userId).onAddRoleHolder(roleName, packageName, flags,
+            getOrCreateController(userId).onAddRoleHolder(roleName, packageName, flags,
                     callback);
         }
 
@@ -500,7 +495,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             Preconditions.checkStringNotEmpty(packageName, "packageName cannot be null or empty");
             Preconditions.checkNotNull(callback, "callback cannot be null");
 
-            getOrCreateControllerService(userId).onRemoveRoleHolder(roleName, packageName, flags,
+            getOrCreateController(userId).onRemoveRoleHolder(roleName, packageName, flags,
                     callback);
         }
 
@@ -519,7 +514,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             Preconditions.checkStringNotEmpty(roleName, "roleName cannot be null or empty");
             Preconditions.checkNotNull(callback, "callback cannot be null");
 
-            getOrCreateControllerService(userId).onClearRoleHolders(roleName, flags, callback);
+            getOrCreateController(userId).onClearRoleHolders(roleName, flags, callback);
         }
 
         @Override
@@ -744,10 +739,10 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
                 }
             });
             if (packageName != null) {
-                getOrCreateControllerService(userId).onAddRoleHolder(RoleManager.ROLE_BROWSER,
+                getOrCreateController(userId).onAddRoleHolder(RoleManager.ROLE_BROWSER,
                         packageName, 0, callback);
             } else {
-                getOrCreateControllerService(userId).onClearRoleHolders(RoleManager.ROLE_BROWSER, 0,
+                getOrCreateController(userId).onClearRoleHolders(RoleManager.ROLE_BROWSER, 0,
                         callback);
             }
             try {
@@ -768,10 +763,10 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
                 }
             });
             if (packageName != null) {
-                getOrCreateControllerService(userId).onAddRoleHolder(RoleManager.ROLE_BROWSER,
+                getOrCreateController(userId).onAddRoleHolder(RoleManager.ROLE_BROWSER,
                         packageName, 0, callback);
             } else {
-                getOrCreateControllerService(userId).onClearRoleHolders(RoleManager.ROLE_BROWSER, 0,
+                getOrCreateController(userId).onClearRoleHolders(RoleManager.ROLE_BROWSER, 0,
                         callback);
             }
         }
@@ -787,19 +782,21 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         }
 
         @Override
-        public void setDefaultHomeAsync(@Nullable String packageName, @UserIdInt int userId) {
-            RemoteCallback callback = new RemoteCallback(result -> {
+        public void setDefaultHomeAsync(@Nullable String packageName, @UserIdInt int userId,
+                @NonNull Consumer<Boolean> callback) {
+            RemoteCallback remoteCallback = new RemoteCallback(result -> {
                 boolean successful = result != null;
                 if (!successful) {
                     Slog.e(LOG_TAG, "Failed to set default home: " + packageName);
                 }
+                callback.accept(successful);
             });
             if (packageName != null) {
-                getOrCreateControllerService(userId).onAddRoleHolder(RoleManager.ROLE_HOME,
-                        packageName, 0, callback);
+                getOrCreateController(userId).onAddRoleHolder(RoleManager.ROLE_HOME,
+                        packageName, 0, remoteCallback);
             } else {
-                getOrCreateControllerService(userId).onClearRoleHolders(RoleManager.ROLE_HOME, 0,
-                        callback);
+                getOrCreateController(userId).onClearRoleHolders(RoleManager.ROLE_HOME, 0,
+                        remoteCallback);
             }
         }
     }

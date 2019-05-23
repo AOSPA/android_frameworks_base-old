@@ -55,6 +55,7 @@ ProtoFileReader::ProtoFileReader(int fd)
          mSize(get_file_size(fd)),
          mPos(0),
          mOffset(0),
+         mMaxOffset(0),
          mChunkSize(sizeof(mBuffer)) {
 }
 
@@ -98,6 +99,7 @@ ProtoFileReader::next()
         // Shouldn't get to here.  Always call hasNext() before calling next().
         return 0;
     }
+    mPos++;
     return mBuffer[mOffset++];
 }
 
@@ -126,8 +128,10 @@ ProtoFileReader::move(size_t amt)
         if (!ensure_data()) {
             return;
         }
-        const size_t chunk = mMaxOffset - mOffset < amt ? amt : mMaxOffset - mOffset;
+        const size_t chunk =
+                mMaxOffset - mOffset > amt ? amt : mMaxOffset - mOffset;
         mOffset += chunk;
+        mPos += chunk;
         amt -= chunk;
     }
 }

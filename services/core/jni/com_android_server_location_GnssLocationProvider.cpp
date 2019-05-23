@@ -499,7 +499,7 @@ static jobject translateGnssLocation(JNIEnv* env,
     }
 
     if (flags & ElapsedRealtimeFlags::HAS_TIME_UNCERTAINTY_NS) {
-        SET(ElapsedRealtimeUncertaintyNanos, location.elapsedRealtime.timeUncertaintyNs);
+        SET(ElapsedRealtimeUncertaintyNanos, static_cast<double>(location.elapsedRealtime.timeUncertaintyNs));
     }
 
     return object.get();
@@ -533,7 +533,7 @@ static GnssLocation_V2_0 createGnssLocation_V2_0(
         jfloat horizontalAccuracyMeters, jfloat verticalAccuracyMeters,
         jfloat speedAccuracyMetersPerSecond, jfloat bearingAccuracyDegrees,
         jlong timestamp, jint elapsedRealtimeFlags, jlong elapsedRealtimeNanos,
-        jlong elapsedRealtimeUncertaintyNanos) {
+        jdouble elapsedRealtimeUncertaintyNanos) {
     GnssLocation_V2_0 location;
     location.v1_0 = createGnssLocation_V1_0(
             gnssLocationFlags, latitudeDegrees, longitudeDegrees, altitudeMeters,
@@ -735,29 +735,16 @@ Return<void> GnssCallback::gnssNmeaCb(
 }
 
 Return<void> GnssCallback::gnssSetCapabilitesCb(uint32_t capabilities) {
-    return GnssCallback::gnssSetCapabilitesCbImpl(capabilities,
-        /* hasSubHalCapabilityFlags = */ true);
+    ALOGD("%s: %du\n", __func__, capabilities);
+
+    JNIEnv* env = getJniEnv();
+    env->CallVoidMethod(mCallbacksObj, method_setTopHalCapabilities, capabilities);
+    checkAndClearExceptionFromCallback(env, __FUNCTION__);
+    return Void();
 }
 
 Return<void> GnssCallback::gnssSetCapabilitiesCb_2_0(uint32_t capabilities) {
-    return GnssCallback::gnssSetCapabilitesCbImpl(capabilities,
-        /* hasSubHalCapabilityFlags = */ false);
-}
-
-Return <void> GnssCallback::gnssSetCapabilitesCbImpl(uint32_t capabilities,
-        bool hasSubHalCapabilityFlags) {
-    // The IGnssCallback.hal@2.0 removed sub-HAL capability flags from the Capabilities enum
-    // and instead uses the sub-HAL non-null handle returned from IGnss.hal@2.0 to indicate
-    // support. Therefore, the 'hasSubHalCapabilityFlags' parameter is needed to tell if the
-    // 'capabilities' parameter includes the sub-HAL capability flags or not. Old HALs
-    // which explicitly set the sub-HAL capability bits must continue to work.
-    ALOGD("%s: capabilities=%du, hasSubHalCapabilityFlags=%d\n", __func__, capabilities,
-        hasSubHalCapabilityFlags);
-    JNIEnv* env = getJniEnv();
-    env->CallVoidMethod(mCallbacksObj, method_setTopHalCapabilities, capabilities,
-            boolToJbool(hasSubHalCapabilityFlags));
-    checkAndClearExceptionFromCallback(env, __FUNCTION__);
-    return Void();
+    return GnssCallback::gnssSetCapabilitesCb(capabilities);
 }
 
 Return<void> GnssCallback::gnssAcquireWakelockCb() {
@@ -1175,7 +1162,7 @@ void GnssMeasurementCallback::translateGnssClock(
         SET(ElapsedRealtimeNanos, static_cast<uint64_t>(elapsedRealtime.timestampNs));
     }
     if (flags & ElapsedRealtimeFlags::HAS_TIME_UNCERTAINTY_NS) {
-        SET(ElapsedRealtimeUncertaintyNanos, static_cast<uint64_t>(elapsedRealtime.timeUncertaintyNs));
+        SET(ElapsedRealtimeUncertaintyNanos, static_cast<double>(elapsedRealtime.timeUncertaintyNs));
     }
     translateGnssClock(object, data.clock);
 }
@@ -1298,7 +1285,7 @@ Return<void> GnssVisibilityControlCallback::nfwNotifyCb(
     if (proxyAppPackageName && otherProtocolStackName && requestorId) {
         env->CallVoidMethod(mCallbacksObj, method_reportNfwNotification, proxyAppPackageName,
                             notification.protocolStack, otherProtocolStackName,
-                            notification.requestor, requestorId,
+                            notification.requestor, requestorId, notification.responseType,
                             notification.inEmergencyMode, notification.isCachedLocation);
     } else {
         ALOGE("%s: OOM Error\n", __func__);
@@ -1542,7 +1529,7 @@ static void android_location_GnssLocationProvider_init_once(JNIEnv* env, jclass 
     method_reportSvStatus = env->GetMethodID(clazz, "reportSvStatus", "(I[I[F[F[F[F)V");
     method_reportAGpsStatus = env->GetMethodID(clazz, "reportAGpsStatus", "(II[B)V");
     method_reportNmea = env->GetMethodID(clazz, "reportNmea", "(J)V");
-    method_setTopHalCapabilities = env->GetMethodID(clazz, "setTopHalCapabilities", "(IZ)V");
+    method_setTopHalCapabilities = env->GetMethodID(clazz, "setTopHalCapabilities", "(I)V");
     method_setGnssYearOfHardware = env->GetMethodID(clazz, "setGnssYearOfHardware", "(I)V");
     method_setGnssHardwareModelName = env->GetMethodID(clazz, "setGnssHardwareModelName",
             "(Ljava/lang/String;)V");
@@ -1706,7 +1693,7 @@ static void android_location_GnssLocationProvider_init_once(JNIEnv* env, jclass 
     // 1.1@IGnss can be paired {1.0, 1.1}@IGnssMeasurement
     // 1.0@IGnss is paired with 1.0@IGnssMeasurement
     gnssMeasurementIface = nullptr;
-    if (gnssHal_V2_0 != nullptr && gnssMeasurementIface == nullptr) {
+    if (gnssHal_V2_0 != nullptr) {
         auto gnssMeasurement = gnssHal_V2_0->getExtensionGnssMeasurement_2_0();
         if (!gnssMeasurement.isOk()) {
             ALOGD("Unable to get a handle to GnssMeasurement_V2_0");
@@ -1743,6 +1730,10 @@ static void android_location_GnssLocationProvider_init_once(JNIEnv* env, jclass 
         }
     }
 
+    // Allow all causal combinations between IGnss.hal and IGnssDebug.hal. That means,
+    // 2.0@IGnss can be paired with {1.0, 2.0}@IGnssDebug
+    // 1.0@IGnss is paired with 1.0@IGnssDebug
+    gnssDebugIface = nullptr;
     if (gnssHal_V2_0 != nullptr) {
         auto gnssDebug = gnssHal_V2_0->getExtensionGnssDebug_2_0();
         if (!gnssDebug.isOk()) {
@@ -1751,7 +1742,8 @@ static void android_location_GnssLocationProvider_init_once(JNIEnv* env, jclass 
             gnssDebugIface_V2_0 = gnssDebug;
             gnssDebugIface = gnssDebugIface_V2_0;
         }
-    } else {
+    }
+    if (gnssDebugIface == nullptr) {
         auto gnssDebug = gnssHal->getExtensionGnssDebug();
         if (!gnssDebug.isOk()) {
             ALOGD("Unable to get a handle to GnssDebug");
@@ -1868,13 +1860,14 @@ static jboolean android_location_GnssLocationProvider_init(JNIEnv* env, jobject 
      * Fail if the main interface fails to initialize
      */
     if (gnssHal == nullptr) {
-        ALOGE("Unable to Initialize GNSS HAL\n");
+        ALOGE("Unable to initialize GNSS HAL.");
         return JNI_FALSE;
     }
 
-    sp<IGnssCallback> gnssCbIface = new GnssCallback();
-
     Return<bool> result = false;
+
+    // Set top level IGnss.hal callback.
+    sp<IGnssCallback> gnssCbIface = new GnssCallback();
     if (gnssHal_V2_0 != nullptr) {
         result = gnssHal_V2_0->setCallback_2_0(gnssCbIface);
     } else if (gnssHal_V1_1 != nullptr) {
@@ -1884,62 +1877,89 @@ static jboolean android_location_GnssLocationProvider_init(JNIEnv* env, jobject 
     }
 
     if (!result.isOk() || !result) {
-        ALOGE("SetCallback for Gnss Interface fails\n");
+        ALOGE("SetCallback for IGnss interface failed.");
         return JNI_FALSE;
     }
 
-    sp<IGnssXtraCallback> gnssXtraCbIface = new GnssXtraCallback();
+    // Set IGnssXtra.hal callback.
     if (gnssXtraIface == nullptr) {
-        ALOGI("Unable to initialize GNSS Xtra interface\n");
+        ALOGI("Unable to initialize IGnssXtra interface.");
     } else {
+        sp<IGnssXtraCallback> gnssXtraCbIface = new GnssXtraCallback();
         result = gnssXtraIface->setCallback(gnssXtraCbIface);
         if (!result.isOk() || !result) {
             gnssXtraIface = nullptr;
-            ALOGI("SetCallback for Gnss Xtra Interface fails\n");
+            ALOGI("SetCallback for IGnssXtra interface failed.");
         }
     }
 
+    // Set IAGnss.hal callback.
+    Return<void> agnssStatus;
     if (agnssIface_V2_0 != nullptr) {
         sp<IAGnssCallback_V2_0> aGnssCbIface = new AGnssCallback_V2_0();
-        agnssIface_V2_0->setCallback(aGnssCbIface);
+        agnssStatus = agnssIface_V2_0->setCallback(aGnssCbIface);
     } else if (agnssIface != nullptr) {
         sp<IAGnssCallback_V1_0> aGnssCbIface = new AGnssCallback_V1_0();
-        agnssIface->setCallback(aGnssCbIface);
+        agnssStatus = agnssIface->setCallback(aGnssCbIface);
     } else {
-        ALOGI("Unable to initialize AGnss interface\n");
+        ALOGI("Unable to initialize IAGnss interface.");
     }
 
+    if (!agnssStatus.isOk()) {
+        ALOGI("SetCallback for IAGnss interface failed.");
+    }
+
+    // Set IGnssGeofencing.hal callback.
     sp<IGnssGeofenceCallback> gnssGeofencingCbIface = new GnssGeofenceCallback();
     if (gnssGeofencingIface != nullptr) {
-      gnssGeofencingIface->setCallback(gnssGeofencingCbIface);
+        auto status = gnssGeofencingIface->setCallback(gnssGeofencingCbIface);
+        if (!status.isOk()) {
+            ALOGI("SetCallback for IGnssGeofencing interface failed.");
+        }
     } else {
-        ALOGI("Unable to initialize GNSS Geofencing interface\n");
+        ALOGI("Unable to initialize IGnssGeofencing interface.");
     }
 
+    // Set IGnssNi.hal callback.
     sp<IGnssNiCallback> gnssNiCbIface = new GnssNiCallback();
     if (gnssNiIface != nullptr) {
-        gnssNiIface->setCallback(gnssNiCbIface);
+        auto status = gnssNiIface->setCallback(gnssNiCbIface);
+        if (!status.isOk()) {
+            ALOGI("SetCallback for IGnssNi interface failed.");
+        }
     } else {
-        ALOGI("Unable to initialize GNSS NI interface\n");
+        ALOGI("Unable to initialize IGnssNi interface.");
     }
 
+    // Set IAGnssRil.hal callback.
     sp<IAGnssRilCallback> aGnssRilCbIface = new AGnssRilCallback();
     if (agnssRilIface != nullptr) {
-        agnssRilIface->setCallback(aGnssRilCbIface);
+        auto status = agnssRilIface->setCallback(aGnssRilCbIface);
+        if (!status.isOk()) {
+            ALOGI("SetCallback for IAGnssRil interface failed.");
+        }
     } else {
-        ALOGI("Unable to initialize AGnss Ril interface\n");
+        ALOGI("Unable to initialize IAGnssRil interface.");
     }
 
+    // Set IGnssVisibilityControl.hal callback.
     if (gnssVisibilityControlIface != nullptr) {
         sp<IGnssVisibilityControlCallback> gnssVisibilityControlCbIface =
                 new GnssVisibilityControlCallback();
-        gnssVisibilityControlIface->setCallback(gnssVisibilityControlCbIface);
+        result = gnssVisibilityControlIface->setCallback(gnssVisibilityControlCbIface);
+        if (!result.isOk() || !result) {
+            ALOGI("SetCallback for IGnssVisibilityControl interface failed.");
+        }
     }
 
+    // Set IMeasurementCorrections.hal callback.
     if (gnssCorrectionsIface != nullptr) {
         sp<IMeasurementCorrectionsCallback> gnssCorrectionsIfaceCbIface =
                 new MeasurementCorrectionsCallback();
-        gnssCorrectionsIface->setCallback(gnssCorrectionsIfaceCbIface);
+        result = gnssCorrectionsIface->setCallback(gnssCorrectionsIfaceCbIface);
+        if (!result.isOk() || !result) {
+            ALOGI("SetCallback for IMeasurementCorrections interface failed.");
+        }
     }
 
     return JNI_TRUE;
@@ -2089,7 +2109,7 @@ static void android_location_GnssLocationProvider_inject_best_location(
         jlong timestamp,
         jint elapsedRealtimeFlags,
         jlong elapsedRealtimeNanos,
-        jlong elapsedRealtimeUncertaintyNanos) {
+        jdouble elapsedRealtimeUncertaintyNanos) {
     if (gnssHal_V2_0 != nullptr) {
         GnssLocation_V2_0 location = createGnssLocation_V2_0(
                 gnssLocationFlags,
@@ -3001,7 +3021,7 @@ static const JNINativeMethod sMethods[] = {
             android_location_GnssLocationProvider_read_nmea)},
     {"native_inject_time", "(JJI)V", reinterpret_cast<void *>(
             android_location_GnssLocationProvider_inject_time)},
-    {"native_inject_best_location", "(IDDDFFFFFFJIJJ)V", reinterpret_cast<void *>(
+    {"native_inject_best_location", "(IDDDFFFFFFJIJD)V", reinterpret_cast<void *>(
             android_location_GnssLocationProvider_inject_best_location)},
     {"native_inject_location", "(DDF)V", reinterpret_cast<void *>(
             android_location_GnssLocationProvider_inject_location)},

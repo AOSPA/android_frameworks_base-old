@@ -116,6 +116,7 @@ import com.android.server.om.OverlayManagerService;
 import com.android.server.os.BugreportManagerService;
 import com.android.server.os.DeviceIdentifiersPolicyService;
 import com.android.server.os.SchedulingPolicyService;
+import com.android.server.pm.ApexManager;
 import com.android.server.pm.BackgroundDexOptService;
 import com.android.server.pm.CrossProfileAppsService;
 import com.android.server.pm.DynamicCodeLoggingService;
@@ -125,6 +126,7 @@ import com.android.server.pm.OtaDexoptService;
 import com.android.server.pm.PackageManagerService;
 import com.android.server.pm.ShortcutService;
 import com.android.server.pm.UserManagerService;
+import com.android.server.policy.PermissionPolicyService;
 import com.android.server.policy.PhoneWindowManager;
 import com.android.server.policy.role.LegacyRoleResolutionPolicy;
 import com.android.server.power.PowerManagerService;
@@ -160,8 +162,6 @@ import dalvik.system.VMRuntime;
 import dalvik.system.PathClassLoader;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-
-import com.google.android.startop.iorap.IorapForwardingService;
 
 import java.io.File;
 import java.io.IOException;
@@ -258,6 +258,8 @@ public final class SystemServer {
             "com.android.server.autofill.AutofillManagerService";
     private static final String CONTENT_CAPTURE_MANAGER_SERVICE_CLASS =
             "com.android.server.contentcapture.ContentCaptureManagerService";
+    private static final String SYSTEM_CAPTIONS_MANAGER_SERVICE_CLASS =
+            "com.android.server.systemcaptions.SystemCaptionsManagerService";
     private static final String TIME_ZONE_RULES_MANAGER_SERVICE_CLASS =
             "com.android.server.timezone.RulesManagerService$Lifecycle";
     private static final String IOT_SERVICE_CLASS =
@@ -545,7 +547,7 @@ public final class SystemServer {
     }
 
     private boolean isFirstBootOrUpgrade() {
-        return mPackageManagerService.isFirstBoot() || mPackageManagerService.isUpgrade();
+        return mPackageManagerService.isFirstBoot() || mPackageManagerService.isDeviceUpgrading();
     }
 
     private void reportWtf(String msg, Throwable e) {
@@ -623,6 +625,19 @@ public final class SystemServer {
      * initialized in one of the other functions.
      */
     private void startBootstrapServices() {
+        // Start the watchdog as early as possible so we can crash the system server
+        // if we deadlock during early boot
+        traceBeginAndSlog("StartWatchdog");
+        final Watchdog watchdog = Watchdog.getInstance();
+        watchdog.start();
+        traceEnd();
+
+        // Start ApexManager as early as we can to give it enough time to call apexd and populate
+        // cache of known apex packages. Note that calling apexd will happen asynchronously.
+        traceBeginAndSlog("StartApexManager");
+        mSystemServiceManager.startService(ApexManager.class);
+        traceEnd();
+
         Slog.i(TAG, "Reading configuration...");
         final String TAG_SYSTEM_CONFIG = "ReadingSystemConfig";
         traceBeginAndSlog(TAG_SYSTEM_CONFIG);
@@ -765,6 +780,12 @@ public final class SystemServer {
         // Set up the Application instance for the system process and get started.
         traceBeginAndSlog("SetSystemProcess");
         mActivityManagerService.setSystemProcess();
+        traceEnd();
+
+        // Complete the watchdog setup with an ActivityManager instance and listen for reboots
+        // Do this only after the ActivityManagerService is properly started as a system process
+        traceBeginAndSlog("InitWatchdog");
+        watchdog.init(mSystemContext, mActivityManagerService);
         traceEnd();
 
         // DisplayManagerService needs to setup android.display scheduling related policies
@@ -989,12 +1010,6 @@ public final class SystemServer {
 
             traceBeginAndSlog("StartAlarmManagerService");
             mSystemServiceManager.startService(new AlarmManagerService(context));
-
-            traceEnd();
-
-            traceBeginAndSlog("InitWatchdog");
-            final Watchdog watchdog = Watchdog.getInstance();
-            watchdog.init(context, mActivityManagerService);
             traceEnd();
 
             traceBeginAndSlog("StartInputManagerService");
@@ -1074,10 +1089,6 @@ public final class SystemServer {
 
             traceBeginAndSlog("PinnerService");
             mSystemServiceManager.startService(PinnerService.class);
-            traceEnd();
-
-            traceBeginAndSlog("IorapForwardingService");
-            mSystemServiceManager.startService(IorapForwardingService.class);
             traceEnd();
 
             traceBeginAndSlog("SignedConfigService");
@@ -1239,6 +1250,8 @@ public final class SystemServer {
             startContentCaptureService(context);
             startAttentionService(context);
 
+            startSystemCaptionsManagerService(context);
+
             // App prediction manager service
             traceBeginAndSlog("StartAppPredictionService");
             mSystemServiceManager.startService(APP_PREDICTION_MANAGER_SERVICE_CLASS);
@@ -1247,11 +1260,6 @@ public final class SystemServer {
             // Content suggestions manager service
             traceBeginAndSlog("StartContentSuggestionsService");
             mSystemServiceManager.startService(CONTENT_SUGGESTIONS_SERVICE_CLASS);
-            traceEnd();
-
-            // NOTE: ClipboardService indirectly depends on IntelligenceService
-            traceBeginAndSlog("StartClipboardService");
-            mSystemServiceManager.startService(ClipboardService.class);
             traceEnd();
 
             traceBeginAndSlog("InitNetworkStackClient");
@@ -1916,6 +1924,11 @@ public final class SystemServer {
             traceEnd();
         }
 
+        // NOTE: ClipboardService depends on ContentCapture and Autofill
+        traceBeginAndSlog("StartClipboardService");
+        mSystemServiceManager.startService(ClipboardService.class);
+        traceEnd();
+
         traceBeginAndSlog("AppServiceManager");
         mSystemServiceManager.startService(AppBindingService.Lifecycle.class);
         traceEnd();
@@ -2037,6 +2050,11 @@ public final class SystemServer {
 
         traceBeginAndSlog("StartBootPhaseDeviceSpecificServicesReady");
         mSystemServiceManager.startBootPhase(SystemService.PHASE_DEVICE_SPECIFIC_SERVICES_READY);
+        traceEnd();
+
+        // Permission policy service
+        traceBeginAndSlog("StartPermissionPolicyService");
+        mSystemServiceManager.startService(PermissionPolicyService.class);
         traceEnd();
 
         // These are needed to propagate to the runnable below.
@@ -2168,10 +2186,6 @@ public final class SystemServer {
             }
             traceEnd();
 
-            traceBeginAndSlog("StartWatchdog");
-            Watchdog.getInstance().start();
-            traceEnd();
-
             // Wait for all packages to be prepared
             mPackageManagerService.waitForAppDataPrepared();
 
@@ -2280,6 +2294,19 @@ public final class SystemServer {
         }, BOOT_TIMINGS_TRACE_LOG);
     }
 
+    private void startSystemCaptionsManagerService(@NonNull Context context) {
+        String serviceName = context.getString(
+                com.android.internal.R.string.config_defaultSystemCaptionsManagerService);
+        if (TextUtils.isEmpty(serviceName)) {
+            Slog.d(TAG, "SystemCaptionsManagerService disabled because resource is not overlaid");
+            return;
+        }
+
+        traceBeginAndSlog("StartSystemCaptionsManagerService");
+        mSystemServiceManager.startService(SYSTEM_CAPTIONS_MANAGER_SERVICE_CLASS);
+        traceEnd();
+    }
+
     private void startContentCaptureService(@NonNull Context context) {
         // First check if it was explicitly enabled by DeviceConfig
         boolean explicitlyEnabled = false;
@@ -2328,7 +2355,7 @@ public final class SystemServer {
         traceEnd();
     }
 
-    static final void startSystemUi(Context context, WindowManagerService windowManager) {
+    private static void startSystemUi(Context context, WindowManagerService windowManager) {
         Intent intent = new Intent();
         intent.setComponent(new ComponentName("com.android.systemui",
                 "com.android.systemui.SystemUIService"));

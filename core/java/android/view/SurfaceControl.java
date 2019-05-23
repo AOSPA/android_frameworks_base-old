@@ -41,7 +41,6 @@ import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.Region;
-import android.hardware.HardwareBuffer;
 import android.hardware.display.DisplayedContentSample;
 import android.hardware.display.DisplayedContentSamplingAttributes;
 import android.os.Build;
@@ -91,8 +90,8 @@ public final class SurfaceControl implements Parcelable {
     private static native ScreenshotGraphicBuffer nativeScreenshot(IBinder displayToken,
             Rect sourceCrop, int width, int height, boolean useIdentityTransform, int rotation,
             boolean captureSecureLayers);
-    private static native ScreenshotGraphicBuffer nativeCaptureLayers(IBinder layerHandleToken,
-            Rect sourceCrop, float frameScale);
+    private static native ScreenshotGraphicBuffer nativeCaptureLayers(IBinder displayToken,
+            IBinder layerHandleToken, Rect sourceCrop, float frameScale, IBinder[] excludeLayers);
 
     private static native long nativeCreateTransaction();
     private static native long nativeGetNativeTransactionFinalizer();
@@ -195,7 +194,8 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeTransferTouchFocus(long transactionObj, IBinder fromToken,
             IBinder toToken);
     private static native boolean nativeGetProtectedContentSupport();
-    private static native void nativeSetMetadata(long transactionObj, int key, Parcel data);
+    private static native void nativeSetMetadata(long transactionObj, long nativeObject, int key,
+            Parcel data);
     private static native void nativeSyncInputWindows(long transactionObj);
     private static native boolean nativeGetDisplayBrightnessSupport(IBinder displayToken);
     private static native boolean nativeSetDisplayBrightness(IBinder displayToken,
@@ -346,34 +346,6 @@ public final class SurfaceControl implements Parcelable {
     /* built-in physical display ids (keep in sync with ISurfaceComposer.h)
      * these are different from the logical display ids used elsewhere in the framework */
 
-    /**
-     * Built-in physical display id: Main display.
-     * Use only with {@link SurfaceControl#getBuiltInDisplay(int)}.
-     * @hide
-     */
-    public static final int BUILT_IN_DISPLAY_ID_MAIN = 0;
-
-    /**
-     * Built-in physical display id: Attached HDMI display.
-     * Use only with {@link SurfaceControl#getBuiltInDisplay(int)}.
-     * @hide
-     */
-    public static final int BUILT_IN_DISPLAY_ID_HDMI = 1;
-
-    /**
-     * Built-in physical display id: Additional Built-in display id range.
-     * HDMI display ID range will be HDMI ID to EXT_MIN ID.
-     * Built-in display ID range will bee EXT_MIN ID to EXT_MAX ID.
-     * Use only with {@link SurfaceControl#getBuiltInDisplay(int)}.
-     *
-     * @hide
-     */
-    public static final int BUILT_IN_DISPLAY_ID_EXT_MIN = 5;
-    /**
-     * @hide
-     */
-    public static final int BUILT_IN_DISPLAY_ID_EXT_MAX = 7;
-
     // Display power modes.
     /**
      * Display power mode off: used while blanking the screen.
@@ -469,10 +441,13 @@ public final class SurfaceControl implements Parcelable {
     public static class ScreenshotGraphicBuffer {
         private final GraphicBuffer mGraphicBuffer;
         private final ColorSpace mColorSpace;
+        private final boolean mContainsSecureLayers;
 
-        public ScreenshotGraphicBuffer(GraphicBuffer graphicBuffer, ColorSpace colorSpace) {
+        public ScreenshotGraphicBuffer(GraphicBuffer graphicBuffer, ColorSpace colorSpace,
+                boolean containsSecureLayers) {
             mGraphicBuffer = graphicBuffer;
             mColorSpace = colorSpace;
+            mContainsSecureLayers = containsSecureLayers;
         }
 
        /**
@@ -483,13 +458,16 @@ public final class SurfaceControl implements Parcelable {
         * @param usage Hint indicating how the buffer will be used
         * @param unwrappedNativeObject The native object of GraphicBuffer
         * @param namedColorSpace Integer value of a named color space {@link ColorSpace.Named}
+        * @param containsSecureLayer Indicates whether this graphic buffer contains captured contents
+        *        of secure layers, in which case the screenshot should not be persisted.
         */
         private static ScreenshotGraphicBuffer createFromNative(int width, int height, int format,
-                int usage, long unwrappedNativeObject, int namedColorSpace) {
+                int usage, long unwrappedNativeObject, int namedColorSpace,
+                boolean containsSecureLayers) {
             GraphicBuffer graphicBuffer = GraphicBuffer.createFromExisting(width, height, format,
                     usage, unwrappedNativeObject);
             ColorSpace colorSpace = ColorSpace.get(ColorSpace.Named.values()[namedColorSpace]);
-            return new ScreenshotGraphicBuffer(graphicBuffer, colorSpace);
+            return new ScreenshotGraphicBuffer(graphicBuffer, colorSpace, containsSecureLayers);
         }
 
         public ColorSpace getColorSpace() {
@@ -498,6 +476,10 @@ public final class SurfaceControl implements Parcelable {
 
         public GraphicBuffer getGraphicBuffer() {
             return mGraphicBuffer;
+        }
+
+        public boolean containsSecureLayers() {
+            return mContainsSecureLayers;
         }
     }
 
@@ -1937,9 +1919,7 @@ public final class SurfaceControl implements Parcelable {
             Log.w(TAG, "Failed to take screenshot");
             return null;
         }
-        return Bitmap.wrapHardwareBuffer(
-                HardwareBuffer.createFromGraphicBuffer(buffer.getGraphicBuffer()),
-                buffer.getColorSpace());
+        return Bitmap.wrapHardwareBuffer(buffer.getGraphicBuffer(), buffer.getColorSpace());
     }
 
     /**
@@ -2021,7 +2001,18 @@ public final class SurfaceControl implements Parcelable {
      */
     public static ScreenshotGraphicBuffer captureLayers(IBinder layerHandleToken, Rect sourceCrop,
             float frameScale) {
-        return nativeCaptureLayers(layerHandleToken, sourceCrop, frameScale);
+        final IBinder displayToken = SurfaceControl.getInternalDisplayToken();
+        return nativeCaptureLayers(displayToken, layerHandleToken, sourceCrop, frameScale, null);
+    }
+
+    /**
+     * Like {@link captureLayers} but with an array of layer handles to exclude.
+     * @hide
+     */
+    public static ScreenshotGraphicBuffer captureLayersExcluding(IBinder layerHandleToken,
+            Rect sourceCrop, float frameScale, IBinder[] exclude) {
+        final IBinder displayToken = SurfaceControl.getInternalDisplayToken();
+        return nativeCaptureLayers(displayToken, layerHandleToken, sourceCrop, frameScale, exclude);
     }
 
     /**
@@ -2643,11 +2634,11 @@ public final class SurfaceControl implements Parcelable {
          * Sets an arbitrary piece of metadata on the surface. This is a helper for int data.
          * @hide
          */
-        public Transaction setMetadata(int key, int data) {
+        public Transaction setMetadata(SurfaceControl sc, int key, int data) {
             Parcel parcel = Parcel.obtain();
             parcel.writeInt(data);
             try {
-                setMetadata(key, parcel);
+                setMetadata(sc, key, parcel);
             } finally {
                 parcel.recycle();
             }
@@ -2658,8 +2649,8 @@ public final class SurfaceControl implements Parcelable {
          * Sets an arbitrary piece of metadata on the surface.
          * @hide
          */
-        public Transaction setMetadata(int key, Parcel data) {
-            nativeSetMetadata(mNativeObject, key, data);
+        public Transaction setMetadata(SurfaceControl sc, int key, Parcel data) {
+            nativeSetMetadata(mNativeObject, sc.mNativeObject, key, data);
             return this;
         }
 

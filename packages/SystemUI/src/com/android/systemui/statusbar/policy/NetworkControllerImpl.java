@@ -55,6 +55,7 @@ import android.util.Log;
 import android.util.MathUtils;
 import android.util.SparseArray;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.TelephonyIntents;
@@ -108,16 +109,10 @@ public class NetworkControllerImpl extends BroadcastReceiver
     private final SubscriptionDefaults mSubDefaults;
     private final DataSaverController mDataSaverController;
     private final CurrentUserTracker mUserTracker;
+    private final Object mLock = new Object();
     private Config mConfig;
 
-    private PhoneStateListener mPhoneStateListener = new PhoneStateListener() {
-        @Override
-        public void onActiveDataSubscriptionIdChanged(int subId) {
-            mActiveMobileDataSubscription = subId;
-            doUpdateMobileControllers();
-        }
-    };
-
+    private PhoneStateListener mPhoneStateListener;
     private int mActiveMobileDataSubscription = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
 
     // Subcontrollers.
@@ -249,7 +244,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                         deviceProvisionedController.getCurrentUser()));
             }
         });
-        mFiveGServiceClient = new FiveGServiceClient(context);
+        mFiveGServiceClient = FiveGServiceClient.getInstance(context);
         ConnectivityManager.NetworkCallback callback = new ConnectivityManager.NetworkCallback(){
             private Network mLastNetwork;
             private NetworkCapabilities mLastNetworkCapabilities;
@@ -281,6 +276,14 @@ public class NetworkControllerImpl extends BroadcastReceiver
         // TODO: Move off of the deprecated CONNECTIVITY_ACTION broadcast and rely on callbacks
         // exclusively for status bar icons.
         mConnectivityManager.registerDefaultNetworkCallback(callback, mReceiverHandler);
+        // Register the listener on our bg looper
+        mPhoneStateListener = new PhoneStateListener(bgLooper) {
+            @Override
+            public void onActiveDataSubscriptionIdChanged(int subId) {
+                mActiveMobileDataSubscription = subId;
+                doUpdateMobileControllers();
+            }
+        };
     }
 
     public DataSaverController getDataSaverController() {
@@ -605,7 +608,9 @@ public class NetworkControllerImpl extends BroadcastReceiver
             updateNoSims();
             return;
         }
-        setCurrentSubscriptions(subscriptions);
+        synchronized (mLock) {
+            setCurrentSubscriptionsLocked(subscriptions);
+        }
         updateNoSims();
         recalculateEmergency();
     }
@@ -633,14 +638,15 @@ public class NetworkControllerImpl extends BroadcastReceiver
         return false;
     }
 
+    @GuardedBy("mLock")
     @VisibleForTesting
-    void setCurrentSubscriptions(List<SubscriptionInfo> subscriptions) {
+    public void setCurrentSubscriptionsLocked(List<SubscriptionInfo> subscriptions) {
         Collections.sort(subscriptions, new Comparator<SubscriptionInfo>() {
             @Override
             public int compare(SubscriptionInfo lhs, SubscriptionInfo rhs) {
                 return lhs.getSimSlotIndex() == rhs.getSimSlotIndex()
                         ? lhs.getSubscriptionId() - rhs.getSubscriptionId()
-                        : rhs.getSimSlotIndex() - lhs.getSimSlotIndex();
+                        : lhs.getSimSlotIndex() - rhs.getSimSlotIndex();
             }
         });
         mCurrentSubscriptions = subscriptions;
@@ -661,8 +667,9 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 cachedControllers.remove(subId);
             } else {
                 MobileSignalController controller = new MobileSignalController(mContext, mConfig,
-                        mHasMobileDataFeature, mPhone, mCallbackHandler,
-                        this, subscriptions.get(i), mSubDefaults, mReceiverHandler.getLooper());
+                        mHasMobileDataFeature, mPhone.createForSubscriptionId(subId),
+                        mCallbackHandler, this, subscriptions.get(i),
+                        mSubDefaults, mReceiverHandler.getLooper());
                 controller.setUserSetupComplete(mUserSetup);
                 mMobileSignalControllers.put(subId, controller);
                 if (subscriptions.get(i).getSimSlotIndex() == 0) {
@@ -1050,7 +1057,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
         SubscriptionInfo info = new SubscriptionInfo(id, "", simSlotIndex, "", "", 0, 0, "", 0,
                 null, null, null, "", false, null, null);
         MobileSignalController controller = new MobileSignalController(mContext,
-                mConfig, mHasMobileDataFeature, mPhone, mCallbackHandler, this, info,
+                mConfig, mHasMobileDataFeature,
+                mPhone.createForSubscriptionId(info.getSubscriptionId()), mCallbackHandler, this, info,
                 mSubDefaults, mReceiverHandler.getLooper());
         mMobileSignalControllers.put(id, controller);
         controller.getState().userSetup = true;
@@ -1109,6 +1117,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
         boolean hspaDataDistinguishable;
         boolean inflateSignalStrengths = false;
         boolean alwaysShowDataRatIcon = false;
+        public String patternOfCarrierSpecificDataIcon = "";
+
         boolean readIconsFromXml;
         boolean showRsrpSignalLevelforLTE = false;
         boolean hideNoInternetState = false;
@@ -1158,6 +1168,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
                         CarrierConfigManager.KEY_SHOW_4G_FOR_LTE_DATA_ICON_BOOL);
                 config.hideLtePlus = b.getBoolean(
                         CarrierConfigManager.KEY_HIDE_LTE_PLUS_DATA_ICON_BOOL);
+                config.patternOfCarrierSpecificDataIcon = b.getString(
+                        CarrierConfigManager.KEY_SHOW_CARRIER_DATA_ICON_PATTERN_STRING);
                 String nr5GIconConfiguration =
                         b.getString(CarrierConfigManager.KEY_5G_ICON_CONFIGURATION_STRING);
                 if (!TextUtils.isEmpty(nr5GIconConfiguration)) {

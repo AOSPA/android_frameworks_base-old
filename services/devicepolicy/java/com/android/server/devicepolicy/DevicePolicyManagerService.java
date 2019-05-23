@@ -47,7 +47,6 @@ import static android.app.admin.DevicePolicyManager.DELEGATION_INSTALL_EXISTING_
 import static android.app.admin.DevicePolicyManager.DELEGATION_KEEP_UNINSTALLED_PACKAGES;
 import static android.app.admin.DevicePolicyManager.DELEGATION_NETWORK_LOGGING;
 import static android.app.admin.DevicePolicyManager.DELEGATION_PACKAGE_ACCESS;
-import static android.app.admin.DevicePolicyManager.DELEGATION_PACKAGE_INSTALLATION;
 import static android.app.admin.DevicePolicyManager.DELEGATION_PERMISSION_GRANT;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_BASE_INFO;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_IMEI;
@@ -379,13 +378,11 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         DELEGATION_KEEP_UNINSTALLED_PACKAGES,
         DELEGATION_NETWORK_LOGGING,
         DELEGATION_CERT_SELECTION,
-        DELEGATION_PACKAGE_INSTALLATION
     };
 
     // Subset of delegations that can only be delegated by Device Owner.
     private static final List<String> DEVICE_OWNER_DELEGATIONS = Arrays.asList(new String[] {
             DELEGATION_NETWORK_LOGGING,
-            DELEGATION_PACKAGE_INSTALLATION
     });
 
     // Subset of delegations that only one single package within a given user can hold
@@ -549,9 +546,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     private DevicePolicyConstants mConstants;
 
-    private static boolean ENABLE_LOCK_GUARD = Build.IS_ENG
-            || true // STOPSHIP Remove it.
-            || (SystemProperties.getInt("debug.dpm.lock_guard", 0) == 1);
+    private static final boolean ENABLE_LOCK_GUARD = true;
 
     interface Stats {
         int LOCK_GUARD_GUARD = 0;
@@ -1382,7 +1377,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             }
         }
 
-        void readFromXml(XmlPullParser parser)
+        void readFromXml(XmlPullParser parser, boolean shouldOverridePolicies)
                 throws XmlPullParserException, IOException {
             int outerDepth = parser.getDepth();
             int type;
@@ -1393,7 +1388,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 }
                 String tag = parser.getName();
                 if (TAG_POLICIES.equals(tag)) {
-                    info.readPoliciesFromXml(parser);
+                    if (shouldOverridePolicies) {
+                        Log.d(LOG_TAG, "Overriding device admin policies from XML.");
+                        info.readPoliciesFromXml(parser);
+                    }
                 } else if (TAG_PASSWORD_QUALITY.equals(tag)) {
                     minimumPasswordMetrics.quality = Integer.parseInt(
                             parser.getAttributeValue(null, ATTR_VALUE));
@@ -1521,9 +1519,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     }
                 } else if (TAG_PARENT_ADMIN.equals(tag)) {
                     Preconditions.checkState(!isParent);
-
                     parentAdmin = new ActiveAdmin(info, /* parent */ true);
-                    parentAdmin.readFromXml(parser);
+                    parentAdmin.readFromXml(parser, shouldOverridePolicies);
                 } else if (TAG_ORGANIZATION_COLOR.equals(tag)) {
                     organizationColor = Integer.parseInt(
                             parser.getAttributeValue(null, ATTR_VALUE));
@@ -3329,8 +3326,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                                     + userHandle);
                         }
                         if (dai != null) {
+                            boolean shouldOverwritePolicies =
+                                    shouldOverwritePoliciesFromXml(dai.getComponent(), userHandle);
                             ActiveAdmin ap = new ActiveAdmin(dai, /* parent */ false);
-                            ap.readFromXml(parser);
+                            ap.readFromXml(parser, shouldOverwritePolicies);
                             policy.mAdminMap.put(ap.info.getComponent(), ap);
                         }
                     } catch (RuntimeException e) {
@@ -3438,6 +3437,14 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         if (policy.mStatusBarDisabled) {
             setStatusBarDisabledInternal(policy.mStatusBarDisabled, userHandle);
         }
+    }
+
+    private boolean shouldOverwritePoliciesFromXml(
+            ComponentName deviceAdminComponent, int userHandle) {
+        // http://b/123415062: If DA, overwrite with the stored policies that were agreed by the
+        // user to prevent apps from sneaking additional policies into updates.
+        return !isProfileOwner(deviceAdminComponent, userHandle)
+                && !isDeviceOwner(deviceAdminComponent, userHandle);
     }
 
     private void updateLockTaskPackagesLocked(List<String> packages, int userId) {
@@ -4099,6 +4106,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public boolean isSeparateProfileChallengeAllowed(int userHandle) {
+        if (!isCallerWithSystemUid()) {
+            throw new SecurityException("Caller must be system");
+        }
         ComponentName profileOwner = getProfileOwner(userHandle);
         // Profile challenge is supported on N or newer release.
         return profileOwner != null &&
@@ -11269,10 +11279,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     && isActiveAdminWithPolicy(callerUid,
                             DeviceAdminInfo.USES_POLICY_PROFILE_OWNER)) {
                 // device owner or a profile owner affiliated with the device owner
-                return true;
-            }
-            if (DevicePolicyManagerService.this.isCallerDelegate(callerPackage, callerUid,
-                    DELEGATION_PACKAGE_INSTALLATION)) {
                 return true;
             }
             return false;

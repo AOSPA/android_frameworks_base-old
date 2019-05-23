@@ -36,6 +36,8 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.provider.DeviceConfig;
+import android.provider.DeviceConfig.Properties;
 import android.provider.Settings;
 import android.util.Base64;
 import android.util.Slog;
@@ -69,9 +71,11 @@ public class GpuService extends SystemService {
     private final String mDriverPackageName;
     private final PackageManager mPackageManager;
     private final Object mLock = new Object();
+    private final Object mDeviceConfigLock = new Object();
     private ContentResolver mContentResolver;
     private long mGameDriverVersionCode;
     private SettingsObserver mSettingsObserver;
+    private DeviceConfigListener mDeviceConfigListener;
     @GuardedBy("mLock")
     private Blacklists mBlacklists;
 
@@ -101,10 +105,11 @@ public class GpuService extends SystemService {
     public void onBootPhase(int phase) {
         if (phase == PHASE_BOOT_COMPLETED) {
             mContentResolver = mContext.getContentResolver();
-            mSettingsObserver = new SettingsObserver();
             if (mDriverPackageName == null || mDriverPackageName.isEmpty()) {
                 return;
             }
+            mSettingsObserver = new SettingsObserver();
+            mDeviceConfigListener = new DeviceConfigListener();
             fetchGameDriverPackageProperties();
             processBlacklists();
             setBlacklist();
@@ -130,6 +135,25 @@ public class GpuService extends SystemService {
             if (mGameDriverBlackUri.equals(uri)) {
                 processBlacklists();
                 setBlacklist();
+            }
+        }
+    }
+
+    private final class DeviceConfigListener implements DeviceConfig.OnPropertiesChangedListener {
+
+        DeviceConfigListener() {
+            super();
+            DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_GAME_DRIVER,
+                    mContext.getMainExecutor(), this);
+        }
+        @Override
+        public void onPropertiesChanged(Properties properties) {
+            synchronized (mDeviceConfigLock) {
+                if (properties.getKeyset().contains(Settings.Global.GAME_DRIVER_BLACKLISTS)) {
+                    parseBlacklists(
+                            properties.getString(Settings.Global.GAME_DRIVER_BLACKLISTS, ""));
+                    setBlacklist();
+                }
             }
         }
     }
@@ -229,13 +253,17 @@ public class GpuService extends SystemService {
     }
 
     private void processBlacklists() {
-        // TODO(b/121350991) Switch to DeviceConfig with property listener.
-        String base64String =
-                Settings.Global.getString(mContentResolver, Settings.Global.GAME_DRIVER_BLACKLISTS);
-        if (base64String == null || base64String.isEmpty()) {
-            return;
+        String base64String = DeviceConfig.getProperty(DeviceConfig.NAMESPACE_GAME_DRIVER,
+                Settings.Global.GAME_DRIVER_BLACKLISTS);
+        if (base64String == null) {
+            base64String =
+                    Settings.Global.getString(mContentResolver,
+                                              Settings.Global.GAME_DRIVER_BLACKLISTS);
         }
+        parseBlacklists(base64String != null ? base64String : "");
+    }
 
+    private void parseBlacklists(String base64String) {
         synchronized (mLock) {
             // Reset all blacklists
             mBlacklists = null;

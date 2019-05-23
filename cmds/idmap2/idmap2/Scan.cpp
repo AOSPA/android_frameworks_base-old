@@ -15,6 +15,7 @@
  */
 
 #include <dirent.h>
+
 #include <fstream>
 #include <memory>
 #include <ostream>
@@ -24,8 +25,8 @@
 #include <utility>
 #include <vector>
 
+#include "Commands.h"
 #include "android-base/properties.h"
-
 #include "idmap2/CommandLineOptions.h"
 #include "idmap2/FileUtils.h"
 #include "idmap2/Idmap.h"
@@ -35,11 +36,11 @@
 #include "idmap2/Xml.h"
 #include "idmap2/ZipFile.h"
 
-#include "Commands.h"
-
 using android::idmap2::CommandLineOptions;
 using android::idmap2::Error;
 using android::idmap2::Idmap;
+using android::idmap2::kPolicyOdm;
+using android::idmap2::kPolicyOem;
 using android::idmap2::kPolicyProduct;
 using android::idmap2::kPolicyPublic;
 using android::idmap2::kPolicySystem;
@@ -94,6 +95,8 @@ Result<std::unique_ptr<std::vector<std::string>>> FindApkFiles(const std::vector
 
 std::vector<std::string> PoliciesForPath(const std::string& apk_path) {
   static const std::vector<std::pair<std::string, std::string>> values = {
+      {"/odm/", kPolicyOdm},
+      {"/oem/", kPolicyOem},
       {"/product/", kPolicyProduct},
       {"/system/", kPolicySystem},
       {"/vendor/", kPolicyVendor},
@@ -211,7 +214,9 @@ Result<Unit> Scan(const std::vector<std::string>& args) {
 
       const auto create_ok = Create(create_args);
       if (!create_ok) {
-        return Error(create_ok.GetError(), "failed to create idmap");
+        LOG(WARNING) << "failed to create idmap for overlay apk path \"" << overlay.apk_path
+                     << "\": " << create_ok.GetError().GetMessage();
+        continue;
       }
     }
 

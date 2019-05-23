@@ -609,16 +609,17 @@ public abstract class CameraMetadata<TKey> {
 
     /**
      * <p>The camera device supports capturing high-resolution images at &gt;= 20 frames per
-     * second, in at least the uncompressed YUV format, when post-processing settings are set
-     * to FAST. Additionally, maximum-resolution images can be captured at &gt;= 10 frames
-     * per second.  Here, 'high resolution' means at least 8 megapixels, or the maximum
-     * resolution of the device, whichever is smaller.</p>
+     * second, in at least the uncompressed YUV format, when post-processing settings are
+     * set to FAST. Additionally, all image resolutions less than 24 megapixels can be
+     * captured at &gt;= 10 frames per second. Here, 'high resolution' means at least 8
+     * megapixels, or the maximum resolution of the device, whichever is smaller.</p>
      * <p>More specifically, this means that a size matching the camera device's active array
      * size is listed as a supported size for the {@link android.graphics.ImageFormat#YUV_420_888 } format in either {@link android.hardware.camera2.params.StreamConfigurationMap#getOutputSizes } or {@link android.hardware.camera2.params.StreamConfigurationMap#getHighResolutionOutputSizes },
      * with a minimum frame duration for that format and size of either &lt;= 1/20 s, or
-     * &lt;= 1/10 s, respectively; and the {@link CameraCharacteristics#CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES android.control.aeAvailableTargetFpsRanges} entry
-     * lists at least one FPS range where the minimum FPS is &gt;= 1 / minimumFrameDuration
-     * for the maximum-size YUV_420_888 format.  If that maximum size is listed in {@link android.hardware.camera2.params.StreamConfigurationMap#getHighResolutionOutputSizes },
+     * &lt;= 1/10 s if the image size is less than 24 megapixels, respectively; and
+     * the {@link CameraCharacteristics#CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES android.control.aeAvailableTargetFpsRanges} entry lists at least one FPS range
+     * where the minimum FPS is &gt;= 1 / minimumFrameDuration for the maximum-size
+     * YUV_420_888 format.  If that maximum size is listed in {@link android.hardware.camera2.params.StreamConfigurationMap#getHighResolutionOutputSizes },
      * then the list of resolutions for YUV_420_888 from {@link android.hardware.camera2.params.StreamConfigurationMap#getOutputSizes } contains at
      * least one resolution &gt;= 8 megapixels, with a minimum frame duration of &lt;= 1/20
      * s.</p>
@@ -906,6 +907,24 @@ public abstract class CameraMetadata<TKey> {
      * <li>{@link CameraCharacteristics#LENS_POSE_REFERENCE android.lens.poseReference}</li>
      * <li>{@link CameraCharacteristics#LENS_DISTORTION android.lens.distortion}</li>
      * </ul>
+     * <p>The field of view of all non-RAW physical streams must be the same or as close as
+     * possible to that of non-RAW logical streams. If the requested FOV is outside of the
+     * range supported by the physical camera, the physical stream for that physical camera
+     * will use either the maximum or minimum scaler crop region, depending on which one is
+     * closer to the requested FOV. For example, for a logical camera with wide-tele lens
+     * configuration where the wide lens is the default, if the logical camera's crop region
+     * is set to maximum, the physical stream for the tele lens will be configured to its
+     * maximum crop region. On the other hand, if the logical camera has a normal-wide lens
+     * configuration where the normal lens is the default, when the logical camera's crop
+     * region is set to maximum, the FOV of the logical streams will be that of the normal
+     * lens. The FOV of the physical streams for the wide lens will be the same as the
+     * logical stream, by making the crop region smaller than its active array size to
+     * compensate for the smaller focal length.</p>
+     * <p>Even if the underlying physical cameras have different RAW characteristics (such as
+     * size or CFA pattern), a logical camera can still advertise RAW capability. In this
+     * case, when the application configures a RAW stream, the camera device will make sure
+     * the active physical camera will remain active to ensure consistent RAW output
+     * behavior, and not switch to other physical cameras.</p>
      * <p>To maintain backward compatibility, the capture request and result metadata tags
      * required for basic camera functionalities will be solely based on the
      * logical camera capabiltity. Other request and result metadata tags, on the other
@@ -1252,6 +1271,7 @@ public abstract class CameraMetadata<TKey> {
      * fire the flash for flash power metering during precapture, and then fire the flash
      * for the final capture, if a flash is available on the device and the AE mode is set to
      * enable the flash.</p>
+     * <p>Devices that initially shipped with Android version {@link android.os.Build.VERSION_CODES#Q Q} or newer will not include any LEGACY-level devices.</p>
      *
      * @see CaptureRequest#CONTROL_AE_PRECAPTURE_TRIGGER
      * @see CameraCharacteristics#REQUEST_AVAILABLE_CAPABILITIES

@@ -40,7 +40,6 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
-import android.widget.ImageView.ScaleType;
 import android.widget.Switch;
 
 import com.android.settingslib.Utils;
@@ -63,6 +62,7 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
     private boolean mTileState;
     private boolean mCollapsedView;
     private boolean mClicked;
+    private boolean mShowRippleEffect = true;
 
     private final ImageView mBg;
     private final int mColorActive;
@@ -80,7 +80,6 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
         // Default to Quick Tile padding, and QSTileView will specify its own padding.
         int padding = context.getResources().getDimensionPixelSize(R.dimen.qs_quick_tile_padding);
         mIconFrame = new FrameLayout(context);
-        mIconFrame.setForegroundGravity(Gravity.CENTER);
         int size = context.getResources().getDimensionPixelSize(R.dimen.qs_quick_tile_size);
         addView(mIconFrame, new LayoutParams(size, size));
         mBg = new ImageView(getContext());
@@ -93,14 +92,14 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
         int bgSize = context.getResources().getDimensionPixelSize(R.dimen.qs_tile_background_size);
         d.setIntrinsicHeight(bgSize);
         d.setIntrinsicWidth(bgSize);
-        mBg.setScaleType(ScaleType.FIT_CENTER);
         mBg.setImageDrawable(d);
-        mIconFrame.addView(mBg, ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(bgSize, bgSize, Gravity.CENTER);
+        mIconFrame.addView(mBg, lp);
+        mBg.setLayoutParams(lp);
         mIcon = icon;
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, padding, 0, padding);
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER);
         mIconFrame.addView(mIcon, params);
         mIconFrame.setClipChildren(false);
         mIconFrame.setClipToPadding(false);
@@ -210,6 +209,7 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
             mCircleColor = circleColor;
         }
 
+        mShowRippleEffect = state.showRippleEffect;
         setClickable(state.state != Tile.STATE_UNAVAILABLE);
         setLongClickable(state.handlesLongClick);
         mIcon.setIcon(state, allowAnimations);
@@ -255,7 +255,7 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
     @Override
     public void setClickable(boolean clickable) {
         super.setClickable(clickable);
-        setBackground(clickable ? mRipple : null);
+        setBackground(clickable && mShowRippleEffect ? mRipple : null);
     }
 
     @Override
@@ -316,6 +316,16 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
                 }
             }
         }
+    }
+
+    @Override
+    public String toString() {
+        final StringBuilder sb = new StringBuilder(getClass().getSimpleName()).append('[');
+        sb.append("locInScreen=(" + mLocInScreen[0] + ", " + mLocInScreen[1] + ")");
+        sb.append(", iconView=" + mIcon.toString());
+        sb.append(", tileState=" + mTileState);
+        sb.append("]");
+        return sb.toString();
     }
 
     private class H extends Handler {

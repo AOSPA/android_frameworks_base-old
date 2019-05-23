@@ -18,14 +18,29 @@
 
 #include <android/os/IncidentReportArgs.h>
 #include <stdlib.h>
+#include <strstream>
+
 
 namespace android {
 namespace os {
 namespace incidentd {
 
 using namespace android::os;
+using std::strstream;
+
+static const bool kEncryptionEnabled = false;
 
 uint64_t encode_field_id(const Privacy* p) { return (uint64_t)p->type << 32 | p->field_id; }
+
+string Privacy::toString() const {
+    if (this == NULL) {
+        return "Privacy{null}";
+    }
+    strstream os;
+    os << "Privacy{field_id=" << field_id << " type=" << ((int)type)
+            << " children=" << ((void*)children) << " policy=" << ((int)policy) << "}";
+    return os.str();
+}
 
 const Privacy* lookup(const Privacy* p, uint32_t fieldId) {
     if (p->children == NULL) return NULL;
@@ -35,6 +50,10 @@ const Privacy* lookup(const Privacy* p, uint32_t fieldId) {
         if (p->children[i]->field_id > fieldId) return NULL;
     }
     return NULL;
+}
+
+bool sectionEncryption(int section_id) {
+    return kEncryptionEnabled ? (section_id == 3025) /*restricted image section*/ : false;
 }
 
 static bool isAllowed(const uint8_t policy, const uint8_t check) {
@@ -79,6 +98,16 @@ bool PrivacySpec::CheckPremission(const Privacy* privacy, const uint8_t defaultD
 
 bool PrivacySpec::RequireAll() const {
     return mPolicy == android::os::PRIVACY_POLICY_LOCAL;
+}
+
+uint8_t cleanup_privacy_policy(uint8_t policy) {
+    if (policy >= PRIVACY_POLICY_AUTOMATIC) {
+        return PRIVACY_POLICY_AUTOMATIC;
+    }
+    if (policy >= PRIVACY_POLICY_EXPLICIT) {
+        return PRIVACY_POLICY_EXPLICIT;
+    }
+    return PRIVACY_POLICY_LOCAL;
 }
 
 }  // namespace incidentd

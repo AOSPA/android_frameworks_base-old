@@ -37,6 +37,7 @@ import android.widget.LinearLayout;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.settingslib.graph.SignalDrawable;
+import com.android.systemui.DualToneHandler;
 import com.android.systemui.R;
 import com.android.systemui.plugins.DarkIconDispatcher.DarkReceiver;
 import com.android.systemui.statusbar.phone.StatusBarSignalPolicy.MobileIconState;
@@ -58,6 +59,8 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
     private ImageView mMobile, mMobileType, mMobileRoaming;
     private View mMobileRoamingSpace;
     private int mVisibleState = -1;
+    private DualToneHandler mDualToneHandler;
+
     private ImageView mVolte;
 
     public static StatusBarMobileView fromContext(Context context, String slot) {
@@ -100,6 +103,7 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
     }
 
     private void init() {
+        mDualToneHandler = new DualToneHandler(getContext());
         mMobileGroup = findViewById(R.id.mobile_group);
         mMobile = findViewById(R.id.mobile_signal);
         mMobileType = findViewById(R.id.mobile_type);
@@ -238,7 +242,8 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
         if (!isInArea(area, this)) {
             return;
         }
-        mMobileDrawable.setDarkIntensity(darkIntensity);
+        mMobileDrawable.setColors(mDualToneHandler.getBackgroundColor(darkIntensity),
+                mDualToneHandler.getFillColor(darkIntensity));
         ColorStateList color = ColorStateList.valueOf(getTint(area, this, tint));
         mIn.setImageTintList(color);
         mOut.setImageTintList(color);
@@ -261,8 +266,10 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
     public void setStaticDrawableColor(int color) {
         ColorStateList list = ColorStateList.valueOf(color);
         float intensity = color == Color.WHITE ? 0 : 1;
-        mMobileDrawable.setDarkIntensity(intensity);
-
+        // We want the ability to change the theme from the one set by SignalDrawable in certain
+        // surfaces. In this way, we can pass a theme to the view.
+        mMobileDrawable.setColors(mDualToneHandler.getBackgroundColor(intensity),
+                mDualToneHandler.getFillColor(intensity));
         mIn.setImageTintList(list);
         mOut.setImageTintList(list);
         mMobileType.setImageTintList(list);

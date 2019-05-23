@@ -250,10 +250,11 @@ static jobject nativeScreenshot(JNIEnv* env, jclass clazz,
 
     Rect sourceCrop = rectFromObj(env, sourceCropObj);
     sp<GraphicBuffer> buffer;
+    bool capturedSecureLayers = false;
     status_t res = ScreenshotClient::capture(displayToken, dataspace,
             ui::PixelFormat::RGBA_8888,
             sourceCrop, width, height,
-            useIdentityTransform, rotation, captureSecureLayers, &buffer);
+            useIdentityTransform, rotation, captureSecureLayers, &buffer, capturedSecureLayers);
     if (res != NO_ERROR) {
         return NULL;
     }
@@ -266,11 +267,13 @@ static jobject nativeScreenshot(JNIEnv* env, jclass clazz,
             buffer->getPixelFormat(),
             (jint)buffer->getUsage(),
             (jlong)buffer.get(),
-            namedColorSpace);
+            namedColorSpace,
+            capturedSecureLayers);
 }
 
-static jobject nativeCaptureLayers(JNIEnv* env, jclass clazz, jobject layerHandleToken,
-        jobject sourceCropObj, jfloat frameScale) {
+static jobject nativeCaptureLayers(JNIEnv* env, jclass clazz, jobject displayTokenObj,
+        jobject layerHandleToken, jobject sourceCropObj, jfloat frameScale,
+        jobjectArray excludeArray) {
 
     sp<IBinder> layerHandle = ibinderForJavaObject(env, layerHandleToken);
     if (layerHandle == NULL) {
@@ -282,11 +285,32 @@ static jobject nativeCaptureLayers(JNIEnv* env, jclass clazz, jobject layerHandl
         sourceCrop = rectFromObj(env, sourceCropObj);
     }
 
+    std::unordered_set<sp<IBinder>,ISurfaceComposer::SpHash<IBinder>> excludeHandles;
+    if (excludeArray != NULL) {
+        const jsize len = env->GetArrayLength(excludeArray);
+        excludeHandles.reserve(len);
+
+        for (jsize i = 0; i < len; i++) {
+            jobject obj = env->GetObjectArrayElement(excludeArray, i);
+            if (obj == nullptr) {
+                jniThrowNullPointerException(env, "Exclude layer is null");
+                return NULL;
+            }
+            sp<IBinder> excludeHandle = ibinderForJavaObject(env, obj);
+            excludeHandles.emplace(excludeHandle);
+        }
+    }
+
     sp<GraphicBuffer> buffer;
-    const ui::Dataspace dataspace = ui::Dataspace::V0_SRGB;
+    ui::Dataspace dataspace = ui::Dataspace::V0_SRGB;
+    sp<IBinder> displayToken = ibinderForJavaObject(env, displayTokenObj);
+    if (displayToken != nullptr) {
+        const ui::ColorMode colorMode = SurfaceComposerClient::getActiveColorMode(displayToken);
+        dataspace = pickDataspaceFromColorMode(colorMode);
+    }
     status_t res = ScreenshotClient::captureChildLayers(layerHandle, dataspace,
                                                         ui::PixelFormat::RGBA_8888, sourceCrop,
-                                                        frameScale, &buffer);
+                                                        excludeHandles, frameScale, &buffer);
     if (res != NO_ERROR) {
         return NULL;
     }
@@ -299,7 +323,8 @@ static jobject nativeCaptureLayers(JNIEnv* env, jclass clazz, jobject layerHandl
                                        buffer->getPixelFormat(),
                                        (jint)buffer->getUsage(),
                                        (jlong)buffer.get(),
-                                       namedColorSpace);
+                                       namedColorSpace,
+                                       false /* capturedSecureLayers */);
 }
 
 static void nativeApplyTransaction(JNIEnv* env, jclass clazz, jlong transactionObj, jboolean sync) {
@@ -362,9 +387,13 @@ static void nativeSetGeometry(JNIEnv* env, jclass clazz, jlong transactionObj, j
     Rect source, dst;
     if (sourceObj != NULL) {
         source = rectFromObj(env, sourceObj);
+    } else {
+        source.makeInvalid();
     }
     if (dstObj != NULL) {
         dst = rectFromObj(env, dstObj);
+    } else {
+        dst.makeInvalid();
     }
     transaction->setGeometry(ctrl, source, dst, orientation);
 }
@@ -1354,14 +1383,15 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             "Landroid/view/SurfaceControl$ScreenshotGraphicBuffer;",
             (void*)nativeScreenshot },
     {"nativeCaptureLayers",
-            "(Landroid/os/IBinder;Landroid/graphics/Rect;F)"
+            "(Landroid/os/IBinder;Landroid/os/IBinder;Landroid/graphics/Rect;"
+            "F[Landroid/os/IBinder;)"
             "Landroid/view/SurfaceControl$ScreenshotGraphicBuffer;",
             (void*)nativeCaptureLayers },
     {"nativeSetInputWindowInfo", "(JJLandroid/view/InputWindowHandle;)V",
             (void*)nativeSetInputWindowInfo },
     {"nativeTransferTouchFocus", "(JLandroid/os/IBinder;Landroid/os/IBinder;)V",
             (void*)nativeTransferTouchFocus },
-    {"nativeSetMetadata", "(JILandroid/os/Parcel;)V",
+    {"nativeSetMetadata", "(JJILandroid/os/Parcel;)V",
             (void*)nativeSetMetadata },
     {"nativeGetDisplayedContentSamplingAttributes",
             "(Landroid/os/IBinder;)Landroid/hardware/display/DisplayedContentSamplingAttributes;",
@@ -1439,7 +1469,7 @@ int register_android_view_SurfaceControl(JNIEnv* env)
             MakeGlobalRefOrDie(env, screenshotGraphicsBufferClazz);
     gScreenshotGraphicBufferClassInfo.builder = GetStaticMethodIDOrDie(env,
             screenshotGraphicsBufferClazz,
-            "createFromNative", "(IIIIJI)Landroid/view/SurfaceControl$ScreenshotGraphicBuffer;");
+            "createFromNative", "(IIIIJIZ)Landroid/view/SurfaceControl$ScreenshotGraphicBuffer;");
 
     jclass displayedContentSampleClazz = FindClassOrDie(env,
             "android/hardware/display/DisplayedContentSample");

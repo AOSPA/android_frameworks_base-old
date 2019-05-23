@@ -44,17 +44,16 @@ public class QSIconViewImpl extends QSIconView {
 
     protected final View mIcon;
     protected final int mIconSizePx;
-    protected final int mTilePaddingBelowIconPx;
     private boolean mAnimationEnabled = true;
     private int mState = -1;
     private int mTint;
+    private QSTile.Icon mLastIcon;
 
     public QSIconViewImpl(Context context) {
         super(context);
 
         final Resources res = context.getResources();
         mIconSizePx = res.getDimensionPixelSize(R.dimen.qs_tile_icon_size);
-        mTilePaddingBelowIconPx =  res.getDimensionPixelSize(R.dimen.qs_tile_padding_below_icon);
 
         mIcon = createIcon();
         addView(mIcon);
@@ -73,7 +72,17 @@ public class QSIconViewImpl extends QSIconView {
         final int w = MeasureSpec.getSize(widthMeasureSpec);
         final int iconSpec = exactly(mIconSizePx);
         mIcon.measure(MeasureSpec.makeMeasureSpec(w, getIconMeasureMode()), iconSpec);
-        setMeasuredDimension(w, mIcon.getMeasuredHeight() + mTilePaddingBelowIconPx);
+        setMeasuredDimension(w, mIcon.getMeasuredHeight());
+    }
+
+    @Override
+    public String toString() {
+        final StringBuilder sb = new StringBuilder(getClass().getSimpleName()).append('[');
+        sb.append("state=" + mState);
+        sb.append(", tint=" + mTint);
+        if (mLastIcon != null) sb.append(", lastIcon=" + mLastIcon.toString());
+        sb.append("]");
+        return sb.toString();
     }
 
     @Override
@@ -93,6 +102,7 @@ public class QSIconViewImpl extends QSIconView {
         if (!Objects.equals(icon, iv.getTag(R.id.qs_icon_tag))
                 || !Objects.equals(state.slash, iv.getTag(R.id.qs_slash_tag))) {
             boolean shouldAnimate = allowAnimations && shouldAnimate(iv);
+            mLastIcon = icon;
             Drawable d = icon != null
                     ? shouldAnimate ? icon.getDrawable(mContext)
                     : icon.getInvisibleDrawable(mContext) : null;

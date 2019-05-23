@@ -77,9 +77,11 @@ public class ZygoteProcess {
     private static final String LOG_TAG = "ZygoteProcess";
 
     /**
-     * The default value for enabling the unspecialized app process (USAP) pool.
+     * The default value for enabling the unspecialized app process (USAP) pool.  This value will
+     * not be used if the devices has a DeviceConfig profile pushed to it that contains a value for
+     * this key.
      */
-    private static final String USAP_POOL_ENABLED_DEFAULT = "false";
+    private static final String USAP_POOL_ENABLED_DEFAULT = "true";
 
     /**
      * The name of the socket used to communicate with the primary zygote.
@@ -306,6 +308,7 @@ public class ZygoteProcess {
      * @param packageName null-ok the name of the package this process belongs to.
      * @param packagesForUid null-ok all the packages with the same uid as this process.
      * @param zygoteArgs Additional arguments to supply to the zygote process.
+     * @param useSystemGraphicsDriver whether the process uses system graphics driver.
      *
      * @return An object that describes the result of the attempt to start the process.
      * @throws RuntimeException on fatal start failure
@@ -324,6 +327,7 @@ public class ZygoteProcess {
                                                   @Nullable String[] packagesForUid,
                                                   @Nullable String sandboxId,
                                                   boolean useUsapPool,
+                                                  boolean useSystemGraphicsDriver,
                                                   @Nullable String[] zygoteArgs) {
         // TODO (chriswailes): Is there a better place to check this value?
         if (fetchUsapPoolEnabledPropWithMinInterval()) {
@@ -335,7 +339,7 @@ public class ZygoteProcess {
                     runtimeFlags, mountExternal, targetSdkVersion, seInfo,
                     abi, instructionSet, appDataDir, invokeWith, /*startChildZygote=*/ false,
                     packageName, packagesForUid, sandboxId,
-                    useUsapPool, zygoteArgs);
+                    useUsapPool, useSystemGraphicsDriver, zygoteArgs);
         } catch (ZygoteStartFailedEx ex) {
             Log.e(LOG_TAG,
                     "Starting VM process through Zygote failed");
@@ -381,13 +385,17 @@ public class ZygoteProcess {
      */
     @GuardedBy("mLock")
     private Process.ProcessStartResult zygoteSendArgsAndGetResult(
-            ZygoteState zygoteState, boolean useUsapPool, ArrayList<String> args)
+            ZygoteState zygoteState, boolean useUsapPool, @NonNull ArrayList<String> args)
             throws ZygoteStartFailedEx {
         // Throw early if any of the arguments are malformed. This means we can
         // avoid writing a partial response to the zygote.
         for (String arg : args) {
+            // Making two indexOf calls here is faster than running a manually fused loop due
+            // to the fact that indexOf is a optimized intrinsic.
             if (arg.indexOf('\n') >= 0) {
-                throw new ZygoteStartFailedEx("embedded newlines not allowed");
+                throw new ZygoteStartFailedEx("Embedded newlines not allowed");
+            } else if (arg.indexOf('\r') >= 0) {
+                throw new ZygoteStartFailedEx("Embedded carriage returns not allowed");
             }
         }
 
@@ -544,7 +552,8 @@ public class ZygoteProcess {
                                                       @Nullable String packageName,
                                                       @Nullable String[] packagesForUid,
                                                       @Nullable String sandboxId,
-                                                      boolean useUnspecializedAppProcessPool,
+                                                      boolean useUsapPool,
+                                                      boolean useSystemGraphicsDriver,
                                                       @Nullable String[] extraArgs)
                                                       throws ZygoteStartFailedEx {
         ArrayList<String> argsForZygote = new ArrayList<>();
@@ -631,8 +640,10 @@ public class ZygoteProcess {
         }
 
         synchronized(mLock) {
+            // The USAP pool can not be used if the application will not use the systems graphics
+            // driver.  If that driver is requested use the Zygote application start path.
             return zygoteSendArgsAndGetResult(openZygoteSocketIfNeeded(abi),
-                                              useUnspecializedAppProcessPool,
+                                              useUsapPool && useSystemGraphicsDriver,
                                               argsForZygote);
         }
     }
@@ -644,9 +655,14 @@ public class ZygoteProcess {
                 ZygoteConfig.USAP_POOL_ENABLED, USAP_POOL_ENABLED_DEFAULT);
 
         if (!propertyString.isEmpty()) {
-            mUsapPoolEnabled = Zygote.getConfigurationPropertyBoolean(
+            if (SystemProperties.get("dalvik.vm.boot-image", "").endsWith("apex.art")) {
+                // TODO(b/119800099): Tweak usap configuration in jitzygote mode.
+                mUsapPoolEnabled = false;
+            } else {
+                mUsapPoolEnabled = Zygote.getConfigurationPropertyBoolean(
                     ZygoteConfig.USAP_POOL_ENABLED,
                     Boolean.parseBoolean(USAP_POOL_ENABLED_DEFAULT));
+            }
         }
 
         boolean valueChanged = origVal != mUsapPoolEnabled;
@@ -1132,7 +1148,8 @@ public class ZygoteProcess {
                     abi, instructionSet, null /* appDataDir */, null /* invokeWith */,
                     true /* startChildZygote */, null /* packageName */,
                     null /* packagesForUid */, null /* sandboxId */,
-                    false /* useUsapPool */, extraArgs);
+                    false /* useUsapPool */, false /*useSystemGraphicsDriver*/,
+                    extraArgs);
         } catch (ZygoteStartFailedEx ex) {
             throw new RuntimeException("Starting child-zygote through Zygote failed", ex);
         }

@@ -294,6 +294,19 @@ public class SubscriptionManager {
     public static final String SUBSCRIPTION_TYPE = "subscription_type";
 
     /**
+     * TelephonyProvider column name white_listed_apn_data.
+     * It's a bitmask of APN types that will be allowed on this subscription even if it's metered
+     * and mobile data is turned off by the user.
+     * <P>Type: INTEGER (int)</P> For example, if TYPE_MMS is is true, Telephony will allow MMS
+     * data connection to setup even if MMS is metered and mobile_data is turned off on that
+     * subscription.
+     *
+     * Default value is 0.
+     */
+    /** @hide */
+    public static final String WHITE_LISTED_APN_DATA = "white_listed_apn_data";
+
+    /**
      * This constant is to designate a subscription as a Local-SIM Subscription.
      * <p> A Local-SIM can be a physical SIM inserted into a sim-slot in the device, or eSIM on the
      * device.
@@ -362,12 +375,6 @@ public class SubscriptionManager {
      * @hide
      */
     public static final String NAME_SOURCE = "name_source";
-
-    /**
-     * The name_source is undefined
-     * @hide
-     */
-    public static final int NAME_SOURCE_UNDEFINDED = -1;
 
     /**
      * The name_source is the default
@@ -462,6 +469,18 @@ public class SubscriptionManager {
      * @hide
      */
     public static final String CARRIER_ID = "carrier_id";
+
+    /**
+     * @hide A comma-separated list of EHPLMNs associated with the subscription
+     * <P>Type: TEXT (String)</P>
+     */
+    public static final String EHPLMNS = "ehplmns";
+
+    /**
+     * @hide A comma-separated list of HPLMNs associated with the subscription
+     * <P>Type: TEXT (String)</P>
+     */
+    public static final String HPLMNS = "hplmns";
 
     /**
      * TelephonyProvider column name for the MCC associated with a SIM, stored as a string.
@@ -1598,27 +1617,16 @@ public class SubscriptionManager {
     }
 
     /**
-     * Set display name by simInfo index
-     * @param displayName the display name of SIM card
-     * @param subId the unique SubscriptionInfo index in database
-     * @return the number of records updated
-     * @hide
-     */
-    public int setDisplayName(String displayName, int subId) {
-        return setDisplayName(displayName, subId, NAME_SOURCE_UNDEFINDED);
-    }
-
-    /**
      * Set display name by simInfo index with name source
      * @param displayName the display name of SIM card
      * @param subId the unique SubscriptionInfo index in database
      * @param nameSource 0: NAME_SOURCE_DEFAULT_SOURCE, 1: NAME_SOURCE_SIM_SOURCE,
-     *                   2: NAME_SOURCE_USER_INPUT, -1 NAME_SOURCE_UNDEFINED
+     *                   2: NAME_SOURCE_USER_INPUT
      * @return the number of records updated or < 0 if invalid subId
      * @hide
      */
     @UnsupportedAppUsage
-    public int setDisplayName(String displayName, int subId, long nameSource) {
+    public int setDisplayName(String displayName, int subId, int nameSource) {
         if (VDBG) {
             logd("[setDisplayName]+  displayName:" + displayName + " subId:" + subId
                     + " nameSource:" + nameSource);
@@ -2056,7 +2064,6 @@ public class SubscriptionManager {
         } else {
             logd("putPhoneIdAndSubIdExtra: no valid subs");
             intent.putExtra(PhoneConstants.PHONE_KEY, phoneId);
-            intent.putExtra(PhoneConstants.SLOT_KEY, phoneId);
         }
     }
 
@@ -2067,9 +2074,6 @@ public class SubscriptionManager {
         intent.putExtra(PhoneConstants.SUBSCRIPTION_KEY, subId);
         intent.putExtra(EXTRA_SUBSCRIPTION_INDEX, subId);
         intent.putExtra(PhoneConstants.PHONE_KEY, phoneId);
-        //FIXME this is using phoneId and slotIndex interchangeably
-        //Eventually, this should be removed as it is not the slot id
-        intent.putExtra(PhoneConstants.SLOT_KEY, phoneId);
     }
 
     /**
@@ -2749,6 +2753,8 @@ public class SubscriptionManager {
      *
      * @throws SecurityException if the caller doesn't meet the requirements
      *             outlined above.
+     * @throws IllegalArgumentException if any of the subscriptions in the list doesn't exist.
+     * @throws IllegalStateException if Telephony service is in bad state.
      *
      * @param subIdList list of subId that will be in the same group
      * @return groupUUID a UUID assigned to the subscription group.
@@ -2797,6 +2803,7 @@ public class SubscriptionManager {
      *             outlined above.
      * @throws IllegalArgumentException if the some subscriptions in the list doesn't exist,
      *             or the groupUuid doesn't exist.
+     * @throws IllegalStateException if Telephony service is in bad state.
      *
      * @param subIdList list of subId that need adding into the group
      * @param groupUuid the groupUuid the subscriptions are being added to.
@@ -2849,6 +2856,7 @@ public class SubscriptionManager {
      *             outlined above.
      * @throws IllegalArgumentException if the some subscriptions in the list doesn't belong
      *             the specified group.
+     * @throws IllegalStateException if Telephony service is in bad state.
      *
      * @param subIdList list of subId that need removing from their groups.
      *
@@ -3085,6 +3093,31 @@ public class SubscriptionManager {
 
         if (VDBG) logd("getEnabledSubscriptionId, subId = " + subId);
         return subId;
+    }
+
+    /**
+     * Set whether a subscription always allows MMS connection. If true, MMS network
+     * request will be accepted by telephony even if user turns "mobile data" off
+     * on this subscription.
+     *
+     * @param subId which subscription it's setting to.
+     * @param alwaysAllow whether Mms data is always allowed.
+     * @return whether operation is successful.
+     *
+     * @hide
+     */
+    public boolean setAlwaysAllowMmsData(int subId, boolean alwaysAllow) {
+        try {
+            ISub iSub = ISub.Stub.asInterface(ServiceManager.getService("isub"));
+            if (iSub != null) {
+                return iSub.setAlwaysAllowMmsData(subId, alwaysAllow);
+            }
+        } catch (RemoteException ex) {
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
+        }
+        return false;
     }
 
     private interface CallISubMethodHelper {

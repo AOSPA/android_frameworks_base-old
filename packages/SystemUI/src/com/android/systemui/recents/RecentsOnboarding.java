@@ -18,6 +18,7 @@ package com.android.systemui.recents;
 
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON;
 
 import static com.android.systemui.Prefs.Key.DISMISSED_RECENTS_SWIPE_UP_ONBOARDING_COUNT;
 import static com.android.systemui.Prefs.Key.HAS_DISMISSED_RECENTS_QUICK_SCRUB_ONBOARDING_ONCE;
@@ -64,6 +65,7 @@ import com.android.systemui.Prefs;
 import com.android.systemui.R;
 import com.android.systemui.shared.recents.IOverviewProxy;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
+import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.shared.system.TaskStackChangeListener;
 
 import java.io.PrintWriter;
@@ -110,6 +112,7 @@ public class RecentsOnboarding {
     private final int mOnboardingToastColor;
     private final int mOnboardingToastArrowRadius;
     private int mNavBarHeight;
+    private int mNavBarMode = NAV_BAR_MODE_3BUTTON;
 
     private boolean mOverviewProxyListenerRegistered;
     private boolean mTaskListenerRegistered;
@@ -338,8 +341,12 @@ public class RecentsOnboarding {
         } catch (RemoteException e) {}
     }
 
+    public void onNavigationModeChanged(int mode) {
+        mNavBarMode = mode;
+    }
+
     public void onConnectedToLauncher() {
-        if (!ONBOARDING_ENABLED) {
+        if (!ONBOARDING_ENABLED || QuickStepContract.isGesturalMode(mNavBarMode)) {
             return;
         }
 

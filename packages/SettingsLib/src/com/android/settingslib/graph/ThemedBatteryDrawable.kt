@@ -44,6 +44,8 @@ open class ThemedBatteryDrawable(private val context: Context, frameColor: Int) 
     //    doesn't touch the walls
     private val perimeterPath = Path()
     private val scaledPerimeter = Path()
+    private val errorPerimeterPath = Path()
+    private val scaledErrorPerimeter = Path()
     // Fill will cover the whole bounding rect of the fillMask, and be masked by the path
     private val fillMask = Path()
     private val scaledFill = Path()
@@ -82,6 +84,8 @@ open class ThemedBatteryDrawable(private val context: Context, frameColor: Int) 
 
     // Dual tone implies that battery level is a clipped overlay over top of the whole shape
     private var dualTone = false
+
+    private var batteryLevel = 0
 
     private val invalidateRunnable: () -> Unit = {
         invalidateSelf()
@@ -173,12 +177,13 @@ open class ThemedBatteryDrawable(private val context: Context, frameColor: Int) 
     }
 
     override fun draw(c: Canvas) {
+        c.saveLayer(null, null)
         unifiedPath.reset()
         levelPath.reset()
         levelRect.set(fillRect)
-        val fillFraction = level / 100f
+        val fillFraction = batteryLevel / 100f
         val fillTop =
-                if (level >= 95)
+                if (batteryLevel >= 95)
                     fillRect.top
                 else
                     fillRect.top + (fillRect.height() * (1 - fillFraction))
@@ -222,7 +227,7 @@ open class ThemedBatteryDrawable(private val context: Context, frameColor: Int) 
             fillPaint.color = levelColor
 
             // Show colorError below this level
-            if (level <= Companion.CRITICAL_LEVEL && !charging) {
+            if (batteryLevel <= Companion.CRITICAL_LEVEL && !charging) {
                 c.save()
                 c.clipPath(scaledFill)
                 c.drawPath(levelPath, fillPaint)
@@ -239,10 +244,11 @@ open class ThemedBatteryDrawable(private val context: Context, frameColor: Int) 
             }
         } else if (powerSaveEnabled) {
             // If power save is enabled draw the perimeter path with colorError
-            c.drawPath(scaledPerimeter, errorPaint)
+            c.drawPath(scaledErrorPerimeter, errorPaint)
             // And draw the plus sign on top of the fill
             c.drawPath(scaledPlus, errorPaint)
         }
+        c.restore()
     }
 
     private fun batteryColorForLevel(level: Int): Int {
@@ -308,13 +314,13 @@ open class ThemedBatteryDrawable(private val context: Context, frameColor: Int) 
      */
     public open fun setBatteryLevel(l: Int) {
         invertFillIcon = if (l >= 67) true else if (l <= 33) false else invertFillIcon
-        level = l
-        levelColor = batteryColorForLevel(level)
+        batteryLevel = l
+        levelColor = batteryColorForLevel(batteryLevel)
         invalidateSelf()
     }
 
     public fun getBatteryLevel(): Int {
-        return level
+        return batteryLevel
     }
 
     override fun onBoundsChange(bounds: Rect?) {
@@ -341,7 +347,7 @@ open class ThemedBatteryDrawable(private val context: Context, frameColor: Int) 
         dualToneBackgroundFill.color = bgColor
 
         // Also update the level color, since fillColor may have changed
-        levelColor = batteryColorForLevel(level)
+        levelColor = batteryColorForLevel(batteryLevel)
 
         invalidateSelf()
     }
@@ -360,6 +366,7 @@ open class ThemedBatteryDrawable(private val context: Context, frameColor: Int) 
         }
 
         perimeterPath.transform(scaleMatrix, scaledPerimeter)
+        errorPerimeterPath.transform(scaleMatrix, scaledErrorPerimeter)
         fillMask.transform(scaleMatrix, scaledFill)
         scaledFill.computeBounds(fillRect, true)
         boltPath.transform(scaleMatrix, scaledBolt)
@@ -378,8 +385,12 @@ open class ThemedBatteryDrawable(private val context: Context, frameColor: Int) 
         val pathString = context.resources.getString(
                 com.android.internal.R.string.config_batterymeterPerimeterPath)
         perimeterPath.set(PathParser.createPathFromPathData(pathString))
-        val b = RectF()
-        perimeterPath.computeBounds(b, true)
+        perimeterPath.computeBounds(RectF(), true)
+
+        val errorPathString = context.resources.getString(
+                com.android.internal.R.string.config_batterymeterErrorPerimeterPath)
+        errorPerimeterPath.set(PathParser.createPathFromPathData(errorPathString))
+        errorPerimeterPath.computeBounds(RectF(), true)
 
         val fillMaskString = context.resources.getString(
                 com.android.internal.R.string.config_batterymeterFillMask)

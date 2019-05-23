@@ -68,6 +68,7 @@ import android.telephony.gsm.GsmCellLocation;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.StatsLog;
+import android.util.TimeUtils;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.IBatteryStats;
@@ -168,15 +169,12 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private static final int GPS_CAPABILITY_MSA = 0x0000004;
     private static final int GPS_CAPABILITY_SINGLE_SHOT = 0x0000008;
     private static final int GPS_CAPABILITY_ON_DEMAND_TIME = 0x0000010;
-
-    // The following three capability flags are removed in IGnssCallback.hal@2.0 and their values
-    // are marked reserved and not reused in 2.0 to avoid confusion with prior versions.
     public static final int GPS_CAPABILITY_GEOFENCING = 0x0000020;
     public static final int GPS_CAPABILITY_MEASUREMENTS = 0x0000040;
     public static final int GPS_CAPABILITY_NAV_MESSAGES = 0x0000080;
-
-    static final int GPS_CAPABILITY_LOW_POWER_MODE = 0x0000100;
-    static final int GPS_CAPABILITY_SATELLITE_BLACKLIST = 0x0000200;
+    public static final int GPS_CAPABILITY_LOW_POWER_MODE = 0x0000100;
+    public static final int GPS_CAPABILITY_SATELLITE_BLACKLIST = 0x0000200;
+    public static final int GPS_CAPABILITY_MEASUREMENT_CORRECTIONS = 0x0000400;
 
     // The AGPS SUPL mode
     private static final int AGPS_SUPL_MODE_MSA = 0x02;
@@ -337,8 +335,15 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     // true if low power mode for the GNSS chipset is part of the latest request.
     private boolean mLowPowerMode = false;
 
-    // true if we started navigation
+    // true if we started navigation in the HAL, only change value of this in setStarted
     private boolean mStarted;
+
+    // for logging of latest change, and warning of ongoing location after a stop
+    private long mStartedChangedElapsedRealtime;
+
+    // threshold for delay in GNSS engine turning off before warning & error
+    private static final long LOCATION_OFF_DELAY_THRESHOLD_WARN_MILLIS = 2 * 1000;
+    private static final long LOCATION_OFF_DELAY_THRESHOLD_ERROR_MILLIS = 15 * 1000;
 
     // capabilities reported through the top level IGnssCallback.hal
     private volatile int mTopHalCapabilities;
@@ -500,6 +505,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     @Override
     public void onUpdateSatelliteBlacklist(int[] constellations, int[] svids) {
         mHandler.post(() -> mGnssConfiguration.setSatelliteBlacklist(constellations, svids));
+        mGnssMetrics.resetConstellationTypes();
     }
 
     private void subscriptionOrCarrierConfigChanged(Context context) {
@@ -791,7 +797,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 | (location.hasElapsedRealtimeUncertaintyNanos()
                         ? ELAPSED_REALTIME_HAS_TIME_UNCERTAINTY_NS : 0);
         long elapsedRealtimeNanos = location.getElapsedRealtimeNanos();
-        long elapsedRealtimeUncertaintyNanos = location.getElapsedRealtimeUncertaintyNanos();
+        double elapsedRealtimeUncertaintyNanos = location.getElapsedRealtimeUncertaintyNanos();
 
         native_inject_best_location(
                 gnssLocationFlags, latitudeDegrees, longitudeDegrees,
@@ -931,6 +937,9 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             mGnssMeasurementsProvider.onGpsEnabledChanged();
             mGnssNavigationMessageProvider.onGpsEnabledChanged();
             mGnssBatchingProvider.enable();
+            if (mGnssVisibilityControl != null) {
+                mGnssVisibilityControl.onGpsEnabledChanged(mEnabled);
+            }
         } else {
             mEnabled = false;
             Log.w(TAG, "Failed to enable location provider");
@@ -947,6 +956,9 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mAlarmManager.cancel(mWakeupIntent);
         mAlarmManager.cancel(mTimeoutIntent);
 
+        if (mGnssVisibilityControl != null) {
+            mGnssVisibilityControl.onGpsEnabledChanged(mEnabled);
+        }
         mGnssBatchingProvider.disable();
         // do this before releasing wakelock
         native_cleanup();
@@ -1196,7 +1208,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             if (DEBUG) Log.d(TAG, "startNavigating");
             mTimeToFirstFix = 0;
             mLastFixTime = 0;
-            mStarted = true;
+            setStarted(true);
             mPositionMode = GPS_POSITION_MODE_STANDALONE;
             // Notify about suppressed output, if speed limit was previously exceeded.
             // Elsewhere, we check again with every speed output reported.
@@ -1234,12 +1246,12 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             mLowPowerMode = mProviderRequest.lowPowerMode;
             if (!setPositionMode(mPositionMode, GPS_POSITION_RECURRENCE_PERIODIC,
                     interval, 0, 0, mLowPowerMode)) {
-                mStarted = false;
+                setStarted(false);
                 Log.e(TAG, "set_position_mode failed in startNavigating()");
                 return;
             }
             if (!native_start()) {
-                mStarted = false;
+                setStarted(false);
                 Log.e(TAG, "native_start failed in startNavigating()");
                 return;
             }
@@ -1262,7 +1274,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private void stopNavigating() {
         if (DEBUG) Log.d(TAG, "stopNavigating");
         if (mStarted) {
-            mStarted = false;
+            setStarted(false);
             native_stop();
             mLastFixTime = 0;
             // native_stop() may reset the position mode in hardware.
@@ -1271,6 +1283,13 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             // reset SV count to zero
             updateStatus(LocationProvider.TEMPORARILY_UNAVAILABLE);
             mLocationExtras.reset();
+        }
+    }
+
+    private void setStarted(boolean started) {
+        if (mStarted != started) {
+            mStarted = started;
+            mStartedChangedElapsedRealtime = SystemClock.elapsedRealtime();
         }
     }
 
@@ -1321,6 +1340,21 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 if (mTimeToFirstFix > 0) {
                     int timeBetweenFixes = (int) (SystemClock.elapsedRealtime() - mLastFixTime);
                     mGnssMetrics.logMissedReports(mFixInterval, timeBetweenFixes);
+                }
+            }
+        } else {
+            // Warn or error about long delayed GNSS engine shutdown as this generally wastes
+            // power and sends location when not expected.
+            long locationAfterStartedFalseMillis =
+                    SystemClock.elapsedRealtime() - mStartedChangedElapsedRealtime;
+            if (locationAfterStartedFalseMillis > LOCATION_OFF_DELAY_THRESHOLD_WARN_MILLIS) {
+                String logMessage = "Unexpected GNSS Location report "
+                        + TimeUtils.formatDuration(locationAfterStartedFalseMillis)
+                        + " after location turned off";
+                if (locationAfterStartedFalseMillis > LOCATION_OFF_DELAY_THRESHOLD_ERROR_MILLIS) {
+                    Log.e(TAG, logMessage);
+                } else {
+                    Log.w(TAG, logMessage);
                 }
             }
         }
@@ -1448,6 +1482,13 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                                 GnssStatus.GNSS_SV_FLAGS_HAS_CARRIER_FREQUENCY) == 0
                                 ? "" : "F"));
             }
+
+            if ((info.mSvidWithFlags[i] & GnssStatus.GNSS_SV_FLAGS_USED_IN_FIX) != 0) {
+                int constellationType =
+                        (info.mSvidWithFlags[i] >> GnssStatus.CONSTELLATION_TYPE_SHIFT_WIDTH)
+                                & GnssStatus.CONSTELLATION_TYPE_MASK;
+                mGnssMetrics.logConstellationType(constellationType);
+            }
         }
         if (usedInFixCount > 0) {
             meanCn0 /= usedInFixCount;
@@ -1492,12 +1533,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     }
 
     @NativeEntryPoint
-    private void setTopHalCapabilities(int topHalCapabilities, boolean hasSubHalCapabilityFlags) {
-        // The IGnssCallback.hal@2.0 removed sub-HAL capability flags from the Capabilities enum
-        // and instead uses the sub-HAL non-null handle returned from IGnss.hal@2.0 to indicate
-        // support. Therefore, the 'hasSubHalCapabilityFlags' parameter is needed to tell if the
-        // 'capabilities' parameter includes the sub-HAL capability flags or not. Old HALs
-        // which explicitly set the sub-HAL capability bits must continue to work.
+    private void setTopHalCapabilities(int topHalCapabilities) {
         mHandler.post(() -> {
             mTopHalCapabilities = topHalCapabilities;
 
@@ -1506,25 +1542,13 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 requestUtcTime();
             }
 
-            boolean hasGeofencingCapability;
-            boolean hasMeasurementsCapability;
-            boolean hasNavMessagesCapability;
-            if (hasSubHalCapabilityFlags) {
-                hasGeofencingCapability = hasCapability(GPS_CAPABILITY_GEOFENCING);
-                hasMeasurementsCapability = hasCapability(GPS_CAPABILITY_MEASUREMENTS);
-                hasNavMessagesCapability = hasCapability(GPS_CAPABILITY_NAV_MESSAGES);
-            } else {
-                hasGeofencingCapability = mGnssGeofenceProvider.isHardwareGeofenceSupported();
-                hasMeasurementsCapability = mGnssMeasurementsProvider.isAvailableInPlatform();
-                hasNavMessagesCapability = mGnssNavigationMessageProvider.isAvailableInPlatform();
-            }
-
-            mGnssMeasurementsProvider.onCapabilitiesUpdated(hasMeasurementsCapability);
-            mGnssNavigationMessageProvider.onCapabilitiesUpdated(hasNavMessagesCapability);
+            mGnssMeasurementsProvider.onCapabilitiesUpdated(
+                    hasCapability(GPS_CAPABILITY_MEASUREMENTS));
+            mGnssNavigationMessageProvider.onCapabilitiesUpdated(
+                    hasCapability(GPS_CAPABILITY_NAV_MESSAGES));
             restartRequests();
 
-            mGnssCapabilitiesProvider.setTopHalCapabilities(topHalCapabilities,
-                    hasGeofencingCapability, hasMeasurementsCapability, hasNavMessagesCapability);
+            mGnssCapabilitiesProvider.setTopHalCapabilities(mTopHalCapabilities);
         });
     }
 
@@ -1552,7 +1576,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
     private void restartLocationRequest() {
         if (DEBUG) Log.d(TAG, "restartLocationRequest");
-        mStarted = false;
+        setStarted(false);
         updateRequirements();
     }
 
@@ -2166,7 +2190,10 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         StringBuilder s = new StringBuilder();
-        s.append("  mStarted=").append(mStarted).append('\n');
+        s.append("  mStarted=").append(mStarted).append("   (changed ");
+        TimeUtils.formatDuration(SystemClock.elapsedRealtime()
+                - mStartedChangedElapsedRealtime, s);
+        s.append(" ago)").append('\n');
         s.append("  mFixInterval=").append(mFixInterval).append('\n');
         s.append("  mLowPowerMode=").append(mLowPowerMode).append('\n');
         s.append("  mGnssMeasurementsProvider.isRegistered()=")
@@ -2186,18 +2213,12 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         if (hasCapability(GPS_CAPABILITY_NAV_MESSAGES)) s.append("NAV_MESSAGES ");
         if (hasCapability(GPS_CAPABILITY_LOW_POWER_MODE)) s.append("LOW_POWER_MODE ");
         if (hasCapability(GPS_CAPABILITY_SATELLITE_BLACKLIST)) s.append("SATELLITE_BLACKLIST ");
+        if (hasCapability(GPS_CAPABILITY_MEASUREMENT_CORRECTIONS)) {
+            s.append("MEASUREMENT_CORRECTIONS ");
+        }
         s.append(")\n");
-        if (mGnssGeofenceProvider.isHardwareGeofenceSupported()) {
-            s.append("  hasSubHal=GEOFENCING\n");
-        }
-        if (mGnssMeasurementsProvider.isAvailableInPlatform()) {
-            s.append("  hasSubHal=MEASUREMENTS\n");
-        }
-        if (mGnssNavigationMessageProvider.isAvailableInPlatform()) {
-            s.append("  hasSubHal=NAV_MESSAGES\n");
-        }
-        if (mGnssMeasurementCorrectionsProvider.isAvailableInPlatform()) {
-            s.append("  hasSubHal=MEASUREMENT_CORRECTIONS [");
+        if (hasCapability(GPS_CAPABILITY_MEASUREMENT_CORRECTIONS)) {
+            s.append("  SubHal=MEASUREMENT_CORRECTIONS[");
             s.append(mGnssMeasurementCorrectionsProvider.toStringCapabilities());
             s.append("]\n");
         }
@@ -2243,7 +2264,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             float horizontalAccuracyMeters, float verticalAccuracyMeters,
             float speedAccuracyMetersPerSecond, float bearingAccuracyDegrees,
             long timestamp, int elapsedRealtimeFlags, long elapsedRealtimeNanos,
-            long elapsedRealtimeUncertaintyNanos);
+            double elapsedRealtimeUncertaintyNanos);
 
     private native void native_inject_location(double latitude, double longitude, float accuracy);
 

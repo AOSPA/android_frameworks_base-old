@@ -16,6 +16,7 @@
 
 #include "RenderThread.h"
 
+#include "../HardwareBitmapUploader.h"
 #include "CanvasContext.h"
 #include "DeviceInfo.h"
 #include "EglManager.h"
@@ -29,7 +30,6 @@
 #include "utils/FatVector.h"
 #include "utils/TimeUtils.h"
 #include "utils/TraceUtils.h"
-#include "../HardwareBitmapUploader.h"
 
 #ifdef HWUI_GLES_WRAP_ENABLED
 #include "debug/GlesDriver.h"
@@ -60,8 +60,10 @@ static JVMAttachHook gOnStartHook = nullptr;
 
 class DisplayEventReceiverWrapper : public VsyncSource {
 public:
-    DisplayEventReceiverWrapper(std::unique_ptr<DisplayEventReceiver>&& receiver)
-            : mDisplayEventReceiver(std::move(receiver)) {}
+    DisplayEventReceiverWrapper(std::unique_ptr<DisplayEventReceiver>&& receiver,
+            const std::function<void()>& onDisplayConfigChanged)
+            : mDisplayEventReceiver(std::move(receiver))
+            , mOnDisplayConfigChanged(onDisplayConfigChanged) {}
 
     virtual void requestNextVsync() override {
         status_t status = mDisplayEventReceiver->requestNextVsync();
@@ -79,6 +81,9 @@ public:
                     case DisplayEventReceiver::DISPLAY_EVENT_VSYNC:
                         latest = ev.header.timestamp;
                         break;
+                    case DisplayEventReceiver::DISPLAY_EVENT_CONFIG_CHANGED:
+                        mOnDisplayConfigChanged();
+                        break;
                 }
             }
         }
@@ -90,6 +95,7 @@ public:
 
 private:
     std::unique_ptr<DisplayEventReceiver> mDisplayEventReceiver;
+    std::function<void()> mOnDisplayConfigChanged;
 };
 
 class DummyVsyncSource : public VsyncSource {
@@ -160,22 +166,29 @@ void RenderThread::initializeDisplayEventReceiver() {
         // Register the FD
         mLooper->addFd(receiver->getFd(), 0, Looper::EVENT_INPUT,
                        RenderThread::displayEventReceiverCallback, this);
-        mVsyncSource = new DisplayEventReceiverWrapper(std::move(receiver));
+        mVsyncSource = new DisplayEventReceiverWrapper(std::move(receiver), [this] {
+            DeviceInfo::get()->onDisplayConfigChanged();
+            setupFrameInterval();
+        });
     } else {
         mVsyncSource = new DummyVsyncSource(this);
     }
 }
 
 void RenderThread::initThreadLocals() {
-    mDisplayInfo = DeviceInfo::get()->displayInfo();
-    nsecs_t frameIntervalNanos = static_cast<nsecs_t>(1000000000 / mDisplayInfo.fps);
-    mTimeLord.setFrameInterval(frameIntervalNanos);
-    mDispatchFrameDelay = static_cast<nsecs_t>(frameIntervalNanos * .25f);
+    setupFrameInterval();
     initializeDisplayEventReceiver();
     mEglManager = new EglManager();
     mRenderState = new RenderState(*this);
     mVkManager = new VulkanManager();
-    mCacheManager = new CacheManager(mDisplayInfo);
+    mCacheManager = new CacheManager(DeviceInfo::get()->displayInfo());
+}
+
+void RenderThread::setupFrameInterval() {
+    auto& displayInfo = DeviceInfo::get()->displayInfo();
+    nsecs_t frameIntervalNanos = static_cast<nsecs_t>(1000000000 / displayInfo.fps);
+    mTimeLord.setFrameInterval(frameIntervalNanos);
+    mDispatchFrameDelay = static_cast<nsecs_t>(frameIntervalNanos * .25f);
 }
 
 void RenderThread::requireGlContext() {
@@ -410,9 +423,7 @@ bool RenderThread::isCurrent() {
 void RenderThread::preload() {
     // EGL driver is always preloaded only if HWUI renders with GL.
     if (Properties::getRenderPipelineType() == RenderPipelineType::SkiaGL) {
-        std::thread eglInitThread([]() {
-            eglGetDisplay(EGL_DEFAULT_DISPLAY);
-        });
+        std::thread eglInitThread([]() { eglGetDisplay(EGL_DEFAULT_DISPLAY); });
         eglInitThread.detach();
     } else {
         requireVkContext();

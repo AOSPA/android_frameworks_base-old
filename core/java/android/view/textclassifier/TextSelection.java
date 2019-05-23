@@ -112,13 +112,11 @@ public final class TextSelection implements Parcelable {
     /**
      * Returns the extended data.
      *
-     * <p><b>NOTE: </b>Each call to this method returns a new bundle copy so clients should
-     * prefer to hold a reference to the returned bundle rather than frequently calling this
-     * method.
+     * <p><b>NOTE: </b>Do not modify this bundle.
      */
     @NonNull
     public Bundle getExtras() {
-        return mExtras.deepCopy();
+        return mExtras;
     }
 
     @Override
@@ -197,7 +195,7 @@ public final class TextSelection implements Parcelable {
         public TextSelection build() {
             return new TextSelection(
                     mStartIndex, mEndIndex, mEntityConfidence, mId,
-                    mExtras == null ? Bundle.EMPTY : mExtras.deepCopy());
+                    mExtras == null ? Bundle.EMPTY : mExtras);
         }
     }
 
@@ -296,13 +294,11 @@ public final class TextSelection implements Parcelable {
         /**
          * Returns the extended data.
          *
-         * <p><b>NOTE: </b>Each call to this method returns a new bundle copy so clients should
-         * prefer to hold a reference to the returned bundle rather than frequently calling this
-         * method.
+         * <p><b>NOTE: </b>Do not modify this bundle.
          */
         @NonNull
         public Bundle getExtras() {
-            return mExtras.deepCopy();
+            return mExtras;
         }
 
         /**
@@ -382,7 +378,7 @@ public final class TextSelection implements Parcelable {
             public Request build() {
                 return new Request(new SpannedString(mText), mStartIndex, mEndIndex,
                         mDefaultLocales, mDarkLaunchAllowed,
-                        mExtras == null ? Bundle.EMPTY : mExtras.deepCopy());
+                        mExtras == null ? Bundle.EMPTY : mExtras);
             }
         }
 

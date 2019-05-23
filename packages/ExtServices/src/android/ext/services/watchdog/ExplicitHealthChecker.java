@@ -38,7 +38,7 @@ interface ExplicitHealthChecker {
     boolean isPending();
 
     /**
-     * Returns the package name this checker can make requests for.
+     * Returns the name of the package this checker can make requests for.
      */
-    String getPackageName();
+    String getSupportedPackageName();
 }

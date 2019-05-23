@@ -76,6 +76,7 @@ import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.procstats.ProcessStats;
 import com.android.server.LocalServices;
 import com.android.server.wm.ActivityServiceConnectionsHolder;
@@ -90,6 +91,21 @@ import java.util.Arrays;
  */
 public final class OomAdjuster {
     private static final String TAG = "OomAdjuster";
+
+    static final String OOM_ADJ_REASON_METHOD = "updateOomAdj";
+    static final String OOM_ADJ_REASON_NONE = OOM_ADJ_REASON_METHOD + "_meh";
+    static final String OOM_ADJ_REASON_ACTIVITY = OOM_ADJ_REASON_METHOD + "_activityChange";
+    static final String OOM_ADJ_REASON_FINISH_RECEIVER = OOM_ADJ_REASON_METHOD + "_finishReceiver";
+    static final String OOM_ADJ_REASON_START_RECEIVER = OOM_ADJ_REASON_METHOD + "_startReceiver";
+    static final String OOM_ADJ_REASON_BIND_SERVICE = OOM_ADJ_REASON_METHOD + "_bindService";
+    static final String OOM_ADJ_REASON_UNBIND_SERVICE = OOM_ADJ_REASON_METHOD + "_unbindService";
+    static final String OOM_ADJ_REASON_START_SERVICE = OOM_ADJ_REASON_METHOD + "_startService";
+    static final String OOM_ADJ_REASON_GET_PROVIDER = OOM_ADJ_REASON_METHOD + "_getProvider";
+    static final String OOM_ADJ_REASON_REMOVE_PROVIDER = OOM_ADJ_REASON_METHOD + "_removeProvider";
+    static final String OOM_ADJ_REASON_UI_VISIBILITY = OOM_ADJ_REASON_METHOD + "_uiVisibility";
+    static final String OOM_ADJ_REASON_WHITELIST = OOM_ADJ_REASON_METHOD + "_whitelistChange";
+    static final String OOM_ADJ_REASON_PROCESS_BEGIN = OOM_ADJ_REASON_METHOD + "_processBegin";
+    static final String OOM_ADJ_REASON_PROCESS_END = OOM_ADJ_REASON_METHOD + "_processEnd";
 
     /**
      * For some direct access we need to power manager.
@@ -167,10 +183,12 @@ public final class OomAdjuster {
      * @param app The process to update
      * @param oomAdjAll If it's ok to call updateOomAdjLocked() for all running apps
      *                  if necessary, or skip.
+     * @param oomAdjReason
      * @return whether updateOomAdjLocked(app) was successful.
      */
     @GuardedBy("mService")
-    final boolean updateOomAdjLocked(ProcessRecord app, boolean oomAdjAll) {
+    boolean updateOomAdjLocked(ProcessRecord app, boolean oomAdjAll,
+            String oomAdjReason) {
         final ProcessRecord TOP_APP = mService.getTopAppLocked();
         final boolean wasCached = app.cached;
 
@@ -188,7 +206,7 @@ public final class OomAdjuster {
                 && (wasCached != app.cached || app.getCurRawAdj() == ProcessList.UNKNOWN_ADJ)) {
             // Changed to/from cached state, so apps after it in the LRU
             // list may also be changed.
-            updateOomAdjLocked();
+            updateOomAdjLocked(oomAdjReason);
         }
         return success;
     }
@@ -206,8 +224,8 @@ public final class OomAdjuster {
     }
 
     @GuardedBy("mService")
-    final void updateOomAdjLocked() {
-        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "updateOomAdj");
+    void updateOomAdjLocked(String oomAdjReason) {
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, oomAdjReason);
         mService.mOomAdjProfiler.oomAdjStarted();
         final ProcessRecord TOP_APP = mService.getTopAppLocked();
         final long now = SystemClock.uptimeMillis();
@@ -1314,15 +1332,16 @@ public final class OomAdjuster {
                                 // processes).  These should not bring the current process
                                 // into the top state, since they are not on top.  Instead
                                 // give them the best bound state after that.
+                                final int bestState = cr.hasFlag(Context.BIND_INCLUDE_CAPABILITIES)
+                                        ? PROCESS_STATE_FOREGROUND_SERVICE_LOCATION
+                                        : PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
                                 if ((cr.flags & Context.BIND_FOREGROUND_SERVICE) != 0) {
-                                    clientProcState =
-                                            PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
+                                    clientProcState = bestState;
                                 } else if (mService.mWakefulness
                                         == PowerManagerInternal.WAKEFULNESS_AWAKE
                                         && (cr.flags & Context.BIND_FOREGROUND_SERVICE_WHILE_AWAKE)
                                                 != 0) {
-                                    clientProcState =
-                                            PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
+                                    clientProcState = bestState;
                                 } else {
                                     clientProcState =
                                             PROCESS_STATE_IMPORTANT_FOREGROUND;
@@ -1931,6 +1950,10 @@ public final class OomAdjuster {
             // For apps that sit around for a long time in the interactive state, we need
             // to report this at least once a day so they don't go idle.
             maybeUpdateUsageStatsLocked(app, nowElapsed);
+        } else if (!app.reportedInteraction && (nowElapsed - app.getFgInteractionTime())
+                > mConstants.SERVICE_USAGE_INTERACTION_TIME) {
+            // For foreground services that sit around for a long time but are not interacted with.
+            maybeUpdateUsageStatsLocked(app, nowElapsed);
         }
 
         if (changes != 0) {
@@ -1949,6 +1972,14 @@ public final class OomAdjuster {
         }
 
         return success;
+    }
+
+    // ONLY used for unit testing in OomAdjusterTests.java
+    @VisibleForTesting
+    void maybeUpdateUsageStats(ProcessRecord app, long nowElapsed) {
+        synchronized (mService) {
+            maybeUpdateUsageStatsLocked(app, nowElapsed);
+        }
     }
 
     @GuardedBy("mService")
@@ -2060,7 +2091,7 @@ public final class OomAdjuster {
             }
         }
         if (changed) {
-            updateOomAdjLocked();
+            updateOomAdjLocked(OOM_ADJ_REASON_WHITELIST);
         }
     }
 
@@ -2070,7 +2101,7 @@ public final class OomAdjuster {
         final UidRecord uidRec = mActiveUids.get(uid);
         if (uidRec != null && uidRec.curWhitelist != onWhitelist) {
             uidRec.curWhitelist = onWhitelist;
-            updateOomAdjLocked();
+            updateOomAdjLocked(OOM_ADJ_REASON_WHITELIST);
         }
     }
 

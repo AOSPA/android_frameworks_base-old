@@ -576,7 +576,7 @@ public class WifiAwareManagerTest {
                 equalTo(configRequest.mClusterLow));
         collector.checkThat("mMasterPreference", 0,
                 equalTo(configRequest.mMasterPreference));
-        collector.checkThat("mSupport5gBand", false, equalTo(configRequest.mSupport5gBand));
+        collector.checkThat("mSupport5gBand", true, equalTo(configRequest.mSupport5gBand));
         collector.checkThat("mDiscoveryWindowInterval.length", 2,
                 equalTo(configRequest.mDiscoveryWindowInterval.length));
         collector.checkThat("mDiscoveryWindowInterval[2.4GHz]", ConfigRequest.DW_INTERVAL_NOT_INIT,
@@ -709,6 +709,7 @@ public class WifiAwareManagerTest {
         ConfigRequest rereadConfigRequest = ConfigRequest.CREATOR.createFromParcel(parcelR);
 
         assertEquals(configRequest, rereadConfigRequest);
+        assertEquals(configRequest.hashCode(), rereadConfigRequest.hashCode());
     }
 
     /*
@@ -801,6 +802,7 @@ public class WifiAwareManagerTest {
         SubscribeConfig rereadSubscribeConfig = SubscribeConfig.CREATOR.createFromParcel(parcelR);
 
         assertEquals(subscribeConfig, rereadSubscribeConfig);
+        assertEquals(subscribeConfig.hashCode(), rereadSubscribeConfig.hashCode());
     }
 
     @Test(expected = IllegalArgumentException.class)
@@ -892,6 +894,7 @@ public class WifiAwareManagerTest {
         PublishConfig rereadPublishConfig = PublishConfig.CREATOR.createFromParcel(parcelR);
 
         assertEquals(publishConfig, rereadPublishConfig);
+        assertEquals(publishConfig.hashCode(), rereadPublishConfig.hashCode());
     }
 
     @Test(expected = IllegalArgumentException.class)

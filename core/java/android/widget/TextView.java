@@ -55,6 +55,7 @@ import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
 import android.graphics.BaseCanvas;
+import android.graphics.BlendMode;
 import android.graphics.Canvas;
 import android.graphics.Insets;
 import android.graphics.Paint;
@@ -161,8 +162,6 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.animation.AnimationUtils;
 import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillValue;
-import android.view.contentcapture.ContentCaptureManager;
-import android.view.contentcapture.ContentCaptureSession;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.CompletionInfo;
 import android.view.inputmethod.CorrectionInfo;
@@ -491,7 +490,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         final Drawable[] mShowing = new Drawable[4];
 
         ColorStateList mTintList;
-        PorterDuff.Mode mTintMode;
+        BlendMode mBlendMode;
         boolean mHasTint;
         boolean mHasTintMode;
 
@@ -978,9 +977,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (getImportantForAutofill() == IMPORTANT_FOR_AUTOFILL_AUTO) {
             setImportantForAutofill(IMPORTANT_FOR_AUTOFILL_YES);
         }
-        if (getImportantForContentCapture() == IMPORTANT_FOR_CONTENT_CAPTURE_AUTO) {
-            setImportantForContentCapture(IMPORTANT_FOR_CONTENT_CAPTURE_YES);
-        }
 
         setTextInternal("");
 
@@ -1041,7 +1037,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         Drawable drawableLeft = null, drawableTop = null, drawableRight = null,
                 drawableBottom = null, drawableStart = null, drawableEnd = null;
         ColorStateList drawableTint = null;
-        PorterDuff.Mode drawableTintMode = null;
+        BlendMode drawableTintMode = null;
         int drawablePadding = 0;
         int ellipsize = ELLIPSIZE_NOT_SET;
         boolean singleLine = false;
@@ -1144,7 +1140,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     break;
 
                 case com.android.internal.R.styleable.TextView_drawableTintMode:
-                    drawableTintMode = Drawable.parseTintMode(a.getInt(attr, -1), drawableTintMode);
+                    drawableTintMode = Drawable.parseBlendMode(a.getInt(attr, -1),
+                            drawableTintMode);
                     break;
 
                 case com.android.internal.R.styleable.TextView_drawablePadding:
@@ -1548,7 +1545,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 mDrawables.mHasTint = true;
             }
             if (drawableTintMode != null) {
-                mDrawables.mTintMode = drawableTintMode;
+                mDrawables.mBlendMode = drawableTintMode;
                 mDrawables.mHasTintMode = true;
             }
         }
@@ -3304,10 +3301,26 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @see Drawable#setTintMode(PorterDuff.Mode)
      */
     public void setCompoundDrawableTintMode(@Nullable PorterDuff.Mode tintMode) {
+        setCompoundDrawableTintBlendMode(tintMode != null
+                ? BlendMode.fromValue(tintMode.nativeInt) : null);
+    }
+
+    /**
+     * Specifies the blending mode used to apply the tint specified by
+     * {@link #setCompoundDrawableTintList(ColorStateList)} to the compound
+     * drawables. The default mode is {@link PorterDuff.Mode#SRC_IN}.
+     *
+     * @param blendMode the blending mode used to apply the tint, may be
+     *                 {@code null} to clear tint
+     * @attr ref android.R.styleable#TextView_drawableTintMode
+     * @see #setCompoundDrawableTintList(ColorStateList)
+     * @see Drawable#setTintBlendMode(BlendMode)
+     */
+    public void setCompoundDrawableTintBlendMode(@Nullable BlendMode blendMode) {
         if (mDrawables == null) {
             mDrawables = new Drawables(getContext());
         }
-        mDrawables.mTintMode = tintMode;
+        mDrawables.mBlendMode = blendMode;
         mDrawables.mHasTintMode = true;
 
         applyCompoundDrawableTint();
@@ -3321,10 +3334,27 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *         drawables
      * @attr ref android.R.styleable#TextView_drawableTintMode
      * @see #setCompoundDrawableTintMode(PorterDuff.Mode)
+     *
      */
     @InspectableProperty(name = "drawableTintMode")
     public PorterDuff.Mode getCompoundDrawableTintMode() {
-        return mDrawables != null ? mDrawables.mTintMode : null;
+        BlendMode mode = getCompoundDrawableTintBlendMode();
+        return mode != null ? BlendMode.blendModeToPorterDuffMode(mode) : null;
+    }
+
+    /**
+     * Returns the blending mode used to apply the tint to the compound
+     * drawables, if specified.
+     *
+     * @return the blending mode used to apply the tint to the compound
+     *         drawables
+     * @attr ref android.R.styleable#TextView_drawableTintMode
+     * @see #setCompoundDrawableTintBlendMode(BlendMode)
+     */
+    @InspectableProperty(name = "drawableBlendMode",
+            attributeId = com.android.internal.R.styleable.TextView_drawableTintMode)
+    public @Nullable BlendMode getCompoundDrawableTintBlendMode() {
+        return mDrawables != null ? mDrawables.mBlendMode : null;
     }
 
     private void applyCompoundDrawableTint() {
@@ -3334,7 +3364,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         if (mDrawables.mHasTint || mDrawables.mHasTintMode) {
             final ColorStateList tintList = mDrawables.mTintList;
-            final PorterDuff.Mode tintMode = mDrawables.mTintMode;
+            final BlendMode blendMode = mDrawables.mBlendMode;
             final boolean hasTint = mDrawables.mHasTint;
             final boolean hasTintMode = mDrawables.mHasTintMode;
             final int[] state = getDrawableState();
@@ -3358,7 +3388,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 }
 
                 if (hasTintMode) {
-                    dr.setTintMode(tintMode);
+                    dr.setTintBlendMode(blendMode);
                 }
 
                 // The drawable (or one of its children) may not have been
@@ -10520,8 +10550,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
-     * Notify managers (such as {@link AutofillManager} and {@link ContentCaptureManager}) that are
-     * interested on text changes.
+     * Notify managers (such as {@link AutofillManager}) that are interested in text changes.
      */
     private void notifyListeningManagersAfterTextChanged() {
 
@@ -10535,22 +10564,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     Log.v(LOG_TAG, "notifyAutoFillManagerAfterTextChanged");
                 }
                 afm.notifyValueChanged(TextView.this);
-            }
-        }
-
-        // TODO(b/121045053): should use a flag / boolean to keep status of SHOWN / HIDDEN instead
-        // of using isLaidout(), so it's not called in cases where it's laid out but a
-        // notifyAppeared was not sent.
-
-        // ContentCapture
-        if (isLaidOut() && isImportantForContentCapture() && isTextEditable()) {
-            final ContentCaptureManager cm = mContext.getSystemService(ContentCaptureManager.class);
-            if (cm != null && cm.isContentCaptureEnabled()) {
-                final ContentCaptureSession session = getContentCaptureSession();
-                if (session != null) {
-                    // TODO(b/111276913): pass flags when edited by user / add CTS test
-                    session.notifyViewTextChanged(getAutofillId(), getText());
-                }
             }
         }
     }
@@ -11386,8 +11399,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         final boolean isPassword = hasPasswordTransformationMethod()
                 || isPasswordInputType(getInputType());
-        if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL
-                || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
+        if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL) {
             if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL) {
                 structure.setDataIsSensitive(!mTextSetFromXmlOrResourceId);
             }
@@ -11403,12 +11415,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             }
         }
 
-        if (!isPassword || viewFor == VIEW_STRUCTURE_FOR_AUTOFILL
-                || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
+        if (!isPassword || viewFor == VIEW_STRUCTURE_FOR_AUTOFILL) {
             if (mLayout == null) {
-                if (viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
-                    Log.w(LOG_TAG, "onProvideContentCaptureStructure(): calling assumeLayout()");
-                }
                 assumeLayout();
             }
             Layout layout = mLayout;
@@ -11496,8 +11504,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 }
             }
 
-            if (viewFor == VIEW_STRUCTURE_FOR_ASSIST
-                    || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
+            if (viewFor == VIEW_STRUCTURE_FOR_ASSIST) {
                 // Extract style information that applies to the TextView as a whole.
                 int style = 0;
                 int typefaceStyle = getTypefaceStyle();
@@ -11525,8 +11532,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 structure.setTextStyle(getTextSize(), getCurrentTextColor(),
                         AssistStructure.ViewNode.TEXT_COLOR_UNDEFINED /* bgColor */, style);
             }
-            if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL
-                    || viewFor == VIEW_STRUCTURE_FOR_CONTENT_CAPTURE) {
+            if (viewFor == VIEW_STRUCTURE_FOR_AUTOFILL) {
                 structure.setMinTextEms(getMinEms());
                 structure.setMaxTextEms(getMaxEms());
                 int maxLength = -1;

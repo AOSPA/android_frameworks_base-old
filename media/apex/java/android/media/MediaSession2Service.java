@@ -16,6 +16,10 @@
 
 package android.media;
 
+import static android.media.MediaConstants.KEY_CONNECTION_HINTS;
+import static android.media.MediaConstants.KEY_PACKAGE_NAME;
+import static android.media.MediaConstants.KEY_PID;
+
 import android.annotation.CallSuper;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -24,6 +28,9 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.media.MediaSession2.ControllerInfo;
+import android.media.session.MediaSessionManager;
+import android.media.session.MediaSessionManager.RemoteUserInfo;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
@@ -70,6 +77,8 @@ public abstract class MediaSession2Service extends Service {
     //@GuardedBy("mLock")
     private NotificationManager mNotificationManager;
     //@GuardedBy("mLock")
+    private MediaSessionManager mMediaSessionManager;
+    //@GuardedBy("mLock")
     private Intent mStartSelfIntent;
     //@GuardedBy("mLock")
     private Map<String, MediaSession2> mSessions = new ArrayMap<>();
@@ -93,6 +102,8 @@ public abstract class MediaSession2Service extends Service {
             mStartSelfIntent = new Intent(this, this.getClass());
             mNotificationManager =
                     (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            mMediaSessionManager =
+                    (MediaSessionManager) getSystemService(Context.MEDIA_SESSION_SERVICE);
         }
     }
 
@@ -132,34 +143,22 @@ public abstract class MediaSession2Service extends Service {
 
     /**
      * Called when a {@link MediaController2} is created with the this service's
-     * {@link Session2Token}. Return the primary session for telling the controller which session to
-     * connect.
-     * <p>
-     * Primary session is the highest priority session that this service manages. Here are some
-     * recommendations of the primary session.
-     * <ol>
-     * <li>When there's no {@link MediaSession2}, create and return a new session. Resume the
-     * playback that the app has the lastly played with the new session. The behavior is what
-     * framework expects when the framework sends key events to the service.</li>
-     * <li>When there's multiple {@link MediaSession2}s, pick the session that has the lastly
-     * started the playback. This is the same way as the framework prioritize sessions to receive
-     * media key events.</li>
-     * </ol>
+     * {@link Session2Token}. Return the session for telling the controller which session to
+     * connect. Return {@code null} to reject the connection from this controller.
      * <p>
      * Session returned here will be added to this service automatically. You don't need to call
      * {@link #addSession(MediaSession2)} for that.
      * <p>
-     * Session service will accept or reject the connection with the
-     * {@link MediaSession2.SessionCallback} in the session returned here.
-     * <p>
      * This method is always called on the main thread.
      *
-     * @return a new session
+     * @param controllerInfo information of the controller which is trying to connect.
+     * @return a {@link MediaSession2} instance for the controller to connect to, or {@code null}
+     *         to reject connection
      * @see MediaSession2.Builder
      * @see #getSessions()
      */
-    @NonNull
-    public abstract MediaSession2 onGetPrimarySession();
+    @Nullable
+    public abstract MediaSession2 onGetSession(@NonNull ControllerInfo controllerInfo);
 
     /**
      * Called when notification UI needs update. Override this method to show or cancel your own
@@ -196,15 +195,15 @@ public abstract class MediaSession2Service extends Service {
             throw new IllegalArgumentException("session is already closed");
         }
         synchronized (mLock) {
-            MediaSession2 previousSession = mSessions.get(session.getSessionId());
+            MediaSession2 previousSession = mSessions.get(session.getId());
             if (previousSession != null) {
                 if (previousSession != session) {
-                    Log.w(TAG, "Session ID should be unique, ID=" + session.getSessionId()
+                    Log.w(TAG, "Session ID should be unique, ID=" + session.getId()
                             + ", previous=" + previousSession + ", session=" + session);
                 }
                 return;
             }
-            mSessions.put(session.getSessionId(), session);
+            mSessions.put(session.getId(), session);
             session.setForegroundServiceEventCallback(mForegroundServiceEventCallback);
         }
     }
@@ -221,11 +220,11 @@ public abstract class MediaSession2Service extends Service {
         }
         MediaNotification notification;
         synchronized (mLock) {
-            if (mSessions.get(session.getSessionId()) != session) {
+            if (mSessions.get(session.getId()) != session) {
                 // Session isn't added or removed already.
                 return;
             }
-            mSessions.remove(session.getSessionId());
+            mSessions.remove(session.getId());
             notification = mNotifications.remove(session);
         }
         session.setForegroundServiceEventCallback(null);
@@ -248,6 +247,16 @@ public abstract class MediaSession2Service extends Service {
             list.addAll(mSessions.values());
         }
         return list;
+    }
+
+    /**
+     * Returns the {@link MediaSessionManager}.
+     */
+    @NonNull
+    MediaSessionManager getMediaSessionManager() {
+        synchronized (mLock) {
+            return mMediaSessionManager;
+        }
     }
 
     /**
@@ -361,12 +370,38 @@ public abstract class MediaSession2Service extends Service {
                             }
                             return;
                         }
+
+                        String callingPkg = connectionRequest.getString(KEY_PACKAGE_NAME);
+                        // The Binder.getCallingPid() can be 0 for an oneway call from the
+                        // remote process. If it's the case, use PID from the connectionRequest.
+                        RemoteUserInfo remoteUserInfo = new RemoteUserInfo(
+                                callingPkg,
+                                pid == 0 ? connectionRequest.getInt(KEY_PID) : pid,
+                                uid);
+                        final ControllerInfo controllerInfo = new ControllerInfo(
+                                remoteUserInfo,
+                                service.getMediaSessionManager()
+                                        .isTrustedForMediaControl(remoteUserInfo),
+                                caller,
+                                connectionRequest.getBundle(KEY_CONNECTION_HINTS));
+
                         if (DEBUG) {
                             Log.d(TAG, "Handling incoming connection request from the"
-                                    + " controller, controller=" + caller + ", uid=" + uid);
+                                    + " controller=" + controllerInfo);
                         }
+
                         final MediaSession2 session;
-                        session = service.onGetPrimarySession();
+                        session = service.onGetSession(controllerInfo);
+
+                        if (session == null) {
+                            if (DEBUG) {
+                                Log.d(TAG, "Rejecting incoming connection request from the"
+                                        + " controller=" + controllerInfo);
+                            }
+                            // Note: Trusted controllers also can be rejected according to the
+                            // service implementation.
+                            return;
+                        }
                         service.addSession(session);
                         shouldNotifyDisconnected = false;
                         session.onConnect(caller, pid, uid, seq, connectionRequest);
@@ -377,8 +412,7 @@ public abstract class MediaSession2Service extends Service {
                         // Trick to call onDisconnected() in one place.
                         if (shouldNotifyDisconnected) {
                             if (DEBUG) {
-                                Log.d(TAG, "Service has destroyed prematurely."
-                                        + " Rejecting connection");
+                                Log.d(TAG, "Notifying the controller of its disconnection");
                             }
                             try {
                                 caller.notifyDisconnected(0);

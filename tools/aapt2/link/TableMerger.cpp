@@ -138,17 +138,29 @@ static bool MergeEntry(IAaptContext* context, const Source& src,
 
   if (src_entry->overlayable_item) {
     if (dst_entry->overlayable_item) {
-      // Do not allow a resource with an overlayable declaration to have that overlayable
-      // declaration redefined
-      context->GetDiagnostics()->Error(DiagMessage(src_entry->overlayable_item.value().source)
-                                       << "duplicate overlayable declaration for resource '"
-                                       << src_entry->name << "'");
-      context->GetDiagnostics()->Error(DiagMessage(dst_entry->overlayable_item.value().source)
-                                       << "previous declaration here");
-      return false;
-    } else {
-      dst_entry->overlayable_item = std::move(src_entry->overlayable_item);
+      CHECK(src_entry->overlayable_item.value().overlayable != nullptr);
+      Overlayable* src_overlayable = src_entry->overlayable_item.value().overlayable.get();
+
+      CHECK(dst_entry->overlayable_item.value().overlayable != nullptr);
+      Overlayable* dst_overlayable = dst_entry->overlayable_item.value().overlayable.get();
+
+      if (src_overlayable->name != dst_overlayable->name
+          || src_overlayable->actor != dst_overlayable->actor
+          || src_entry->overlayable_item.value().policies !=
+             dst_entry->overlayable_item.value().policies) {
+
+        // Do not allow a resource with an overlayable declaration to have that overlayable
+        // declaration redefined.
+        context->GetDiagnostics()->Error(DiagMessage(src_entry->overlayable_item.value().source)
+                                             << "duplicate overlayable declaration for resource '"
+                                             << src_entry->name << "'");
+        context->GetDiagnostics()->Error(DiagMessage(dst_entry->overlayable_item.value().source)
+                                             << "previous declaration here");
+        return false;
+      }
     }
+
+    dst_entry->overlayable_item = std::move(src_entry->overlayable_item);
   }
 
   return true;
@@ -176,7 +188,7 @@ static ResourceTable::CollisionResult ResolveMergeCollision(Value* existing, Val
     }
   }
   // Delegate to the default handler.
-  return ResourceTable::ResolveValueCollision(existing, incoming);
+  return ResourceTable::ResolveValueCollision(existing, incoming, true /* overlay */);
 }
 
 static ResourceTable::CollisionResult MergeConfigValue(IAaptContext* context,
@@ -194,15 +206,11 @@ static ResourceTable::CollisionResult MergeConfigValue(IAaptContext* context,
   if (overlay) {
     collision_result = ResolveMergeCollision(dst_value, src_value, pool);
   } else {
-    collision_result = ResourceTable::ResolveValueCollision(dst_value, src_value);
+    collision_result = ResourceTable::ResolveValueCollision(dst_value, src_value,
+                                                            false /* overlay */);
   }
 
   if (collision_result == CollisionResult::kConflict) {
-    if (overlay) {
-      return CollisionResult::kTakeNew;
-    }
-
-    // Error!
     context->GetDiagnostics()->Error(DiagMessage(src_value->GetSource())
                                      << "resource '" << res_name << "' has a conflicting value for "
                                      << "configuration (" << src_config_value->config << ")");

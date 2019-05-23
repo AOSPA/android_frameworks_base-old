@@ -22,7 +22,6 @@ import static com.android.systemui.statusbar.notification.NotificationUtils.inte
 import android.content.res.Resources;
 import android.util.MathUtils;
 
-import com.android.internal.annotations.VisibleForTesting;
 import com.android.keyguard.KeyguardStatusView;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
@@ -53,6 +52,21 @@ public class KeyguardClockPositionAlgorithm {
      * Height of {@link KeyguardStatusView}.
      */
     private int mKeyguardStatusHeight;
+
+    /**
+     * Preferred Y position of clock.
+     */
+    private int mClockPreferredY;
+
+    /**
+     * Whether or not there is a custom clock face on keyguard.
+     */
+    private boolean mHasCustomClock;
+
+    /**
+     * Whether or not the NSSL contains any visible notifications.
+     */
+    private boolean mHasVisibleNotifs;
 
     /**
      * Height of notification stack: Sum of height of each notification.
@@ -95,11 +109,6 @@ public class KeyguardClockPositionAlgorithm {
      */
     private float mDarkAmount;
 
-    /**
-     * If keyguard will require a password or just fade away.
-     */
-    private boolean mCurrentlySecure;
-
     private float mEmptyDragAmount;
 
     /**
@@ -117,16 +126,18 @@ public class KeyguardClockPositionAlgorithm {
     }
 
     public void setup(int minTopMargin, int maxShadeBottom, int notificationStackHeight,
-            float panelExpansion, int parentHeight, int keyguardStatusHeight, float dark,
-            boolean secure, float emptyDragAmount) {
+            float panelExpansion, int parentHeight, int keyguardStatusHeight, int clockPreferredY,
+            boolean hasCustomClock, boolean hasVisibleNotifs, float dark, float emptyDragAmount) {
         mMinTopMargin = minTopMargin + mContainerTopPadding;
         mMaxShadeBottom = maxShadeBottom;
         mNotificationStackHeight = notificationStackHeight;
         mPanelExpansion = panelExpansion;
         mHeight = parentHeight;
         mKeyguardStatusHeight = keyguardStatusHeight;
+        mClockPreferredY = clockPreferredY;
+        mHasCustomClock = hasCustomClock;
+        mHasVisibleNotifs = hasVisibleNotifs;
         mDarkAmount = dark;
-        mCurrentlySecure = secure;
         mEmptyDragAmount = emptyDragAmount;
     }
 
@@ -144,6 +155,15 @@ public class KeyguardClockPositionAlgorithm {
 
     private int getMaxClockY() {
         return mHeight / 2 - mKeyguardStatusHeight - mClockNotificationsMargin;
+    }
+
+    private int getPreferredClockY() {
+        return mClockPreferredY;
+    }
+
+    private int getExpandedPreferredClockY() {
+        return (mHasCustomClock && !mHasVisibleNotifs) ? getPreferredClockY()
+                : getExpandedClockPosition();
     }
 
     /**
@@ -172,10 +192,11 @@ public class KeyguardClockPositionAlgorithm {
 
     private int getClockY() {
         // Dark: Align the bottom edge of the clock at about half of the screen:
-        float clockYDark = getMaxClockY() + burnInPreventionOffsetY();
+        float clockYDark = (mHasCustomClock ? getPreferredClockY() : getMaxClockY())
+                + burnInPreventionOffsetY();
         clockYDark = MathUtils.max(0, clockYDark);
 
-        float clockYRegular = getExpandedClockPosition();
+        float clockYRegular = getExpandedPreferredClockY();
         float clockYBouncer = -mKeyguardStatusHeight;
 
         // Move clock up while collapsing the shade
@@ -195,13 +216,8 @@ public class KeyguardClockPositionAlgorithm {
      * @return Alpha from 0 to 1.
      */
     private float getClockAlpha(int y) {
-        float alphaKeyguard;
-        if (mCurrentlySecure) {
-            alphaKeyguard = 1;
-        } else {
-            alphaKeyguard = Math.max(0, y / Math.max(1f, getExpandedClockPosition()));
-            alphaKeyguard = Interpolators.ACCELERATE.getInterpolation(alphaKeyguard);
-        }
+        float alphaKeyguard = Math.max(0, y / Math.max(1f, getExpandedPreferredClockY()));
+        alphaKeyguard = Interpolators.ACCELERATE.getInterpolation(alphaKeyguard);
         return MathUtils.lerp(alphaKeyguard, 1f, mDarkAmount);
     }
 

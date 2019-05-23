@@ -104,6 +104,7 @@ public abstract class AuthenticationClient extends ClientMonitor {
     public boolean onError(long deviceId, int error, int vendorCode) {
         if (!shouldFrameworkHandleLockout()) {
             switch (error) {
+                case BiometricConstants.BIOMETRIC_ERROR_TIMEOUT:
                 case BiometricConstants.BIOMETRIC_ERROR_LOCKOUT:
                 case BiometricConstants.BIOMETRIC_ERROR_LOCKOUT_PERMANENT:
                     if (mStarted) {
@@ -120,8 +121,8 @@ public abstract class AuthenticationClient extends ClientMonitor {
     @Override
     public boolean onAuthenticated(BiometricAuthenticator.Identifier identifier,
             boolean authenticated, ArrayList<Byte> token) {
-        super.logOnAuthenticated(authenticated, mRequireConfirmation, getTargetUserId(),
-                isBiometricPrompt());
+        super.logOnAuthenticated(getContext(), authenticated, mRequireConfirmation,
+                getTargetUserId(), isBiometricPrompt());
 
         final BiometricServiceBase.ServiceListener listener = getListener();
 
@@ -129,13 +130,17 @@ public abstract class AuthenticationClient extends ClientMonitor {
         boolean result = false;
 
         try {
+            if (DEBUG) Slog.v(getLogTag(), "onAuthenticated(" + authenticated + ")"
+                    + ", ID:" + identifier.getBiometricId()
+                    + ", Owner: " + getOwnerString()
+                    + ", isBP: " + isBiometricPrompt()
+                    + ", listener: " + listener
+                    + ", requireConfirmation: " + mRequireConfirmation
+                    + ", user: " + getTargetUserId());
+
             if (authenticated) {
                 mAlreadyDone = true;
-                if (DEBUG) Slog.v(getLogTag(), "onAuthenticated(" + getOwnerString()
-                        + ", ID:" + identifier.getBiometricId()
-                        + ", isBP: " + isBiometricPrompt()
-                        + ", listener: " + listener
-                        + ", requireConfirmation: " + mRequireConfirmation);
+
                 if (listener != null) {
                     vibrateSuccess();
                 }

@@ -73,7 +73,7 @@ final class NetworkChecker extends ConnectivityManager.NetworkCallback
     }
 
     @Override
-    public String getPackageName() {
+    public String getSupportedPackageName() {
         return mPackageName;
     }
 

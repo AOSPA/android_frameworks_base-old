@@ -495,15 +495,16 @@ public class RingtoneManager {
         if (mCursor == null || !mCursor.moveToPosition(position)) {
             return null;
         }
-        
-        return getUriFromCursor(mCursor);
+
+        return getUriFromCursor(mContext, mCursor);
     }
 
-    private static Uri getUriFromCursor(Cursor cursor) {
-        return ContentUris.withAppendedId(Uri.parse(cursor.getString(URI_COLUMN_INDEX)), cursor
-                .getLong(ID_COLUMN_INDEX));
+    private static Uri getUriFromCursor(Context context, Cursor cursor) {
+        final Uri uri = ContentUris.withAppendedId(Uri.parse(cursor.getString(URI_COLUMN_INDEX)),
+                cursor.getLong(ID_COLUMN_INDEX));
+        return context.getContentResolver().canonicalizeOrElse(uri);
     }
-    
+
     /**
      * Gets the position of a {@link Uri} within this {@link RingtoneManager}.
      * 
@@ -569,7 +570,7 @@ public class RingtoneManager {
             Uri uri = null;
             
             if (cursor.moveToFirst()) {
-                uri = getUriFromCursor(cursor);
+                uri = getUriFromCursor(context, cursor);
             }
             cursor.close();
             

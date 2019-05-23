@@ -57,22 +57,24 @@ public class StackAnimationController extends
     /**
      * Values to use for the default {@link SpringForce} provided to the physics animation layout.
      */
-    private static final float DEFAULT_STIFFNESS = 2500f;
-    private static final float DEFAULT_BOUNCINESS = 0.85f;
+    private static final int DEFAULT_STIFFNESS = 12000;
+    private static final int FLING_FOLLOW_STIFFNESS = 20000;
+    private static final float DEFAULT_BOUNCINESS = 0.9f;
 
     /**
      * Friction applied to fling animations. Since the stack must land on one of the sides of the
      * screen, we want less friction horizontally so that the stack has a better chance of making it
      * to the side without needing a spring.
      */
-    private static final float FLING_FRICTION_X = 1.15f;
-    private static final float FLING_FRICTION_Y = 1.5f;
+    private static final float FLING_FRICTION_X = 2.2f;
+    private static final float FLING_FRICTION_Y = 2.2f;
 
     /**
-     * Damping ratio to use for the stack spring animation used to spring the stack to its final
-     * position after a fling.
+     * Values to use for the stack spring animation used to spring the stack to its final position
+     * after a fling.
      */
-    private static final float SPRING_DAMPING_RATIO = 0.85f;
+    private static final int SPRING_AFTER_FLING_STIFFNESS = 750;
+    private static final float SPRING_AFTER_FLING_DAMPING_RATIO = 0.85f;
 
     /**
      * Minimum fling velocity required to trigger moving the stack from one side of the screen to
@@ -108,11 +110,21 @@ public class StackAnimationController extends
     private HashMap<DynamicAnimation.ViewProperty, DynamicAnimation> mStackPositionAnimations =
             new HashMap<>();
 
+    /**
+     * Whether the current motion of the stack is due to a fling animation (vs. being dragged
+     * manually).
+     */
+    private boolean mIsMovingFromFlinging = false;
+
     /** Horizontal offset of bubbles in the stack. */
     private float mStackOffset;
     /** Diameter of the bubbles themselves. */
     private int mIndividualBubbleSize;
-    /** Size of spacing around the bubbles, separating it from the edge of the screen. */
+    /**
+     * The amount of space to add between the bubbles and certain UI elements, such as the top of
+     * the screen or the IME. This does not apply to the left/right sides of the screen since the
+     * stack goes offscreen intentionally.
+     */
     private int mBubblePadding;
     /** How far offscreen the stack rests. */
     private int mBubbleOffscreen;
@@ -147,6 +159,10 @@ public class StackAnimationController extends
 
         moveFirstBubbleWithStackFollowing(DynamicAnimation.TRANSLATION_X, x);
         moveFirstBubbleWithStackFollowing(DynamicAnimation.TRANSLATION_Y, y);
+
+        // This method is called when the stack is being dragged manually, so we're clearly no
+        // longer flinging.
+        mIsMovingFromFlinging = false;
     }
 
     /**
@@ -202,8 +218,8 @@ public class StackAnimationController extends
                 startXVelocity,
                 FLING_FRICTION_X,
                 new SpringForce()
-                        .setStiffness(SpringForce.STIFFNESS_LOW)
-                        .setDampingRatio(SPRING_DAMPING_RATIO),
+                        .setStiffness(SPRING_AFTER_FLING_STIFFNESS)
+                        .setDampingRatio(SPRING_AFTER_FLING_DAMPING_RATIO),
                 destinationRelativeX);
 
         flingThenSpringFirstBubbleWithStackFollowing(
@@ -211,8 +227,8 @@ public class StackAnimationController extends
                 velY,
                 FLING_FRICTION_Y,
                 new SpringForce()
-                        .setStiffness(SpringForce.STIFFNESS_LOW)
-                        .setDampingRatio(SPRING_DAMPING_RATIO),
+                        .setStiffness(SPRING_AFTER_FLING_STIFFNESS)
+                        .setDampingRatio(SPRING_AFTER_FLING_DAMPING_RATIO),
                 /* destination */ null);
 
         mLayout.setEndActionForMultipleProperties(
@@ -223,6 +239,8 @@ public class StackAnimationController extends
                     mLayout.removeEndActionForProperty(DynamicAnimation.TRANSLATION_Y);
                 },
                 DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
+
+        mIsMovingFromFlinging = true;
     }
 
     /**
@@ -235,6 +253,21 @@ public class StackAnimationController extends
 
         stackPos.x = onLeft ? bounds.left : bounds.right;
         return stackPos;
+    }
+
+    /**
+     * Moves the stack in response to rotation. We keep it in the most similar position by keeping
+     * it on the same side, and positioning it the same percentage of the way down the screen
+     * (taking status bar/nav bar into account by using the allowable region's height).
+     */
+    public void moveStackToSimilarPositionAfterRotation(boolean wasOnLeft, float verticalPercent) {
+        final RectF allowablePos = getAllowableStackPositionRegion();
+        final float allowableRegionHeight = allowablePos.bottom - allowablePos.top;
+
+        final float x = wasOnLeft ? allowablePos.left : allowablePos.right;
+        final float y = (allowableRegionHeight * verticalPercent) + allowablePos.top;
+
+        setStackPosition(new PointF(x, y));
     }
 
     /**
@@ -305,41 +338,38 @@ public class StackAnimationController extends
         mLayout.removeEndActionForProperty(DynamicAnimation.TRANSLATION_Y);
     }
 
-    /**
-     * Save the IME height so that the allowable stack bounds reflect the now-visible IME, and
-     * animate the stack out of the way if necessary.
-     */
-    public void updateBoundsForVisibleImeAndAnimate(int imeHeight) {
+    /** Save the current IME height so that we know where the stack bounds should be. */
+    public void setImeHeight(int imeHeight) {
         mImeHeight = imeHeight;
+    }
 
+    /**
+     * Animates the stack either away from the newly visible IME, or back to its original position
+     * due to the IME going away.
+     */
+    public void animateForImeVisibility(boolean imeVisible) {
         final float maxBubbleY = getAllowableStackPositionRegion().bottom;
-        if (mStackPosition.y > maxBubbleY && mPreImeY == Float.MIN_VALUE) {
-            mPreImeY = mStackPosition.y;
+        float destinationY = Float.MIN_VALUE;
 
+        if (imeVisible) {
+            if (mStackPosition.y > maxBubbleY && mPreImeY == Float.MIN_VALUE) {
+                mPreImeY = mStackPosition.y;
+                destinationY = maxBubbleY;
+            }
+        } else {
+            if (mPreImeY > Float.MIN_VALUE) {
+                destinationY = mPreImeY;
+                mPreImeY = Float.MIN_VALUE;
+            }
+        }
+
+        if (destinationY > Float.MIN_VALUE) {
             springFirstBubbleWithStackFollowing(
                     DynamicAnimation.TRANSLATION_Y,
                     getSpringForce(DynamicAnimation.TRANSLATION_Y, /* view */ null)
                             .setStiffness(SpringForce.STIFFNESS_LOW),
                     /* startVel */ 0f,
-                    maxBubbleY);
-        }
-    }
-
-    /**
-     * Clear the IME height from the bounds and animate the stack back to its original position,
-     * assuming it wasn't moved in the meantime.
-     */
-    public void updateBoundsForInvisibleImeAndAnimate() {
-        mImeHeight = 0;
-
-        if (mPreImeY > Float.MIN_VALUE) {
-            springFirstBubbleWithStackFollowing(
-                    DynamicAnimation.TRANSLATION_Y,
-                    getSpringForce(DynamicAnimation.TRANSLATION_Y, /* view */ null)
-                        .setStiffness(SpringForce.STIFFNESS_LOW),
-                    /* startVel */ 0f,
-                    mPreImeY);
-            mPreImeY = Float.MIN_VALUE;
+                    destinationY);
         }
     }
 
@@ -355,7 +385,6 @@ public class StackAnimationController extends
         if (insets != null) {
             allowableRegion.left =
                     -mBubbleOffscreen
-                            - mBubblePadding
                             + Math.max(
                             insets.getSystemWindowInsetLeft(),
                             insets.getDisplayCutout() != null
@@ -365,7 +394,6 @@ public class StackAnimationController extends
                     mLayout.getWidth()
                             - mIndividualBubbleSize
                             + mBubbleOffscreen
-                            - mBubblePadding
                             - Math.max(
                             insets.getSystemWindowInsetRight(),
                             insets.getDisplayCutout() != null
@@ -432,7 +460,8 @@ public class StackAnimationController extends
                 .setDampingRatio(BubbleController.getBubbleBounciness(
                         mLayout.getContext(), DEFAULT_BOUNCINESS))
                 .setStiffness(BubbleController.getBubbleStiffness(
-                        mLayout.getContext(), (int) DEFAULT_STIFFNESS));
+                        mLayout.getContext(),
+                        mIsMovingFromFlinging ? FLING_FOLLOW_STIFFNESS : DEFAULT_STIFFNESS));
     }
 
     @Override
@@ -494,7 +523,6 @@ public class StackAnimationController extends
 
         if (mLayout.getChildCount() > 0) {
             property.setValue(mLayout.getChildAt(0), value);
-
             if (mLayout.getChildCount() > 1) {
                 animationForChildAtIndex(1)
                         .property(property, value + getOffsetForChainedPropertyAnimation(property))
@@ -508,6 +536,7 @@ public class StackAnimationController extends
         Log.d(TAG, String.format("Setting position to (%f, %f).", pos.x, pos.y));
         mStackPosition.set(pos.x, pos.y);
 
+        mLayout.cancelAllAnimations();
         cancelStackPositionAnimations();
 
         // Since we're not using the chained animations, apply the offsets manually.

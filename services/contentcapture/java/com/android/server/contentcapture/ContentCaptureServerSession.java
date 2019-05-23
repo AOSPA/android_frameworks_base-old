@@ -16,6 +16,8 @@
 package com.android.server.contentcapture;
 
 import static android.service.contentcapture.ContentCaptureService.setClientState;
+import static android.view.contentcapture.ContentCaptureManager.RESULT_CODE_FALSE;
+import static android.view.contentcapture.ContentCaptureManager.RESULT_CODE_TRUE;
 import static android.view.contentcapture.ContentCaptureSession.NO_SESSION_ID;
 import static android.view.contentcapture.ContentCaptureSession.STATE_ACTIVE;
 import static android.view.contentcapture.ContentCaptureSession.STATE_DISABLED;
@@ -24,13 +26,16 @@ import static android.view.contentcapture.ContentCaptureSession.STATE_SERVICE_UP
 
 import android.annotation.NonNull;
 import android.content.ComponentName;
+import android.os.Bundle;
 import android.os.IBinder;
+import android.os.RemoteException;
 import android.service.contentcapture.ContentCaptureService;
 import android.service.contentcapture.SnapshotData;
 import android.util.LocalLog;
 import android.util.Slog;
 import android.view.contentcapture.ContentCaptureContext;
 import android.view.contentcapture.ContentCaptureSessionId;
+import android.view.contentcapture.MainContentCaptureSession;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.IResultReceiver;
@@ -65,11 +70,14 @@ final class ContentCaptureServerSession {
      */
     private final int mUid;
 
-    ContentCaptureServerSession(@NonNull IBinder activityToken,
+    private final Object mLock;
+
+    ContentCaptureServerSession(@NonNull Object lock, @NonNull IBinder activityToken,
             @NonNull ContentCapturePerUserService service, @NonNull ComponentName appComponentName,
             @NonNull IResultReceiver sessionStateReceiver, int taskId, int displayId, int sessionId,
             int uid, int flags) {
         Preconditions.checkArgument(sessionId != NO_SESSION_ID);
+        mLock = lock;
         mActivityToken = activityToken;
         mService = service;
         mId = sessionId;
@@ -77,6 +85,11 @@ final class ContentCaptureServerSession {
         mContentCaptureContext = new ContentCaptureContext(/* clientContext= */ null,
                 appComponentName, taskId, displayId, flags);
         mSessionStateReceiver = sessionStateReceiver;
+        try {
+            sessionStateReceiver.asBinder().linkToDeath(() -> onClientDeath(), 0);
+        } catch (Exception e) {
+            Slog.w(TAG, "could not register DeathRecipient for " + activityToken);
+        }
     }
 
     /**
@@ -97,6 +110,20 @@ final class ContentCaptureServerSession {
         }
         mService.mRemoteService.onSessionStarted(mContentCaptureContext, mId, mUid, clientReceiver,
                 STATE_ACTIVE);
+    }
+
+    /**
+     * Changes the {@link ContentCaptureService} enabled state.
+     */
+    @GuardedBy("mLock")
+    public void setContentCaptureEnabledLocked(boolean enabled) {
+        try {
+            final Bundle extras = new Bundle();
+            extras.putBoolean(MainContentCaptureSession.EXTRA_ENABLED_STATE, true);
+            mSessionStateReceiver.send(enabled ? RESULT_CODE_TRUE : RESULT_CODE_FALSE, extras);
+        } catch (RemoteException e) {
+            Slog.w(TAG, "Error async reporting result to client: " + e);
+        }
     }
 
     /**
@@ -180,6 +207,19 @@ final class ContentCaptureServerSession {
         if (mService.isVerbose()) Slog.v(TAG, "pausing " + mActivityToken);
         setClientState(mSessionStateReceiver, STATE_DISABLED | STATE_SERVICE_UPDATING,
                 /* binder= */ null);
+    }
+
+    /**
+     * Called when the session client binder object died - typically when its process was killed
+     * and the activity was not properly destroyed.
+     */
+    private void onClientDeath() {
+        if (mService.isVerbose()) {
+            Slog.v(TAG, "onClientDeath(" + mActivityToken + "): removing session " + mId);
+        }
+        synchronized (mLock) {
+            removeSelfLocked(/* notifyRemoteService= */ true);
+        }
     }
 
     @GuardedBy("mLock")

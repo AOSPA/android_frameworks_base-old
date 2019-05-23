@@ -81,6 +81,7 @@ public class SettingsToPropertiesMapper {
     static final String[] sDeviceConfigScopes = new String[] {
         DeviceConfig.NAMESPACE_ACTIVITY_MANAGER_NATIVE_BOOT,
         DeviceConfig.NAMESPACE_INPUT_NATIVE_BOOT,
+        DeviceConfig.NAMESPACE_INTELLIGENCE_CONTENT_SUGGESTIONS,
         DeviceConfig.NAMESPACE_MEDIA_NATIVE,
         DeviceConfig.NAMESPACE_NETD_NATIVE,
         DeviceConfig.NAMESPACE_RUNTIME_NATIVE,
@@ -132,16 +133,20 @@ public class SettingsToPropertiesMapper {
         }
 
         for (String deviceConfigScope : mDeviceConfigScopes) {
-            DeviceConfig.addOnPropertyChangedListener(
+            DeviceConfig.addOnPropertiesChangedListener(
                     deviceConfigScope,
                     AsyncTask.THREAD_POOL_EXECUTOR,
-                    (String scope, String name, String value) -> {
-                        String propertyName = makePropertyName(scope, name);
-                        if (propertyName == null) {
-                            log("unable to construct system property for " + scope + "/" + name);
-                            return;
+                    (DeviceConfig.Properties properties) -> {
+                        String scope = properties.getNamespace();
+                        for (String key : properties.getKeyset()) {
+                            String propertyName = makePropertyName(scope, key);
+                            if (propertyName == null) {
+                                log("unable to construct system property for " + scope + "/"
+                                        + key);
+                                return;
+                            }
+                            setProperty(propertyName, properties.getString(key, null));
                         }
-                        setProperty(propertyName, value);
                     });
         }
     }

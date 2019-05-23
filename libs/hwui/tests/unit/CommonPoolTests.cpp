@@ -36,7 +36,9 @@ TEST(CommonPool, post) {
     EXPECT_TRUE(ran) << "Failed to flip atomic after 1 second";
 }
 
-TEST(CommonPool, threadCount) {
+// test currently relies on timings, which
+// makes it flaky. Disable for now
+TEST(DISABLED_CommonPool, threadCount) {
     std::set<pid_t> threads;
     std::array<std::future<pid_t>, 64> futures;
     for (int i = 0; i < futures.size(); i++) {
@@ -93,7 +95,9 @@ TEST(CommonPool, singleThread) {
     EXPECT_NE(gettid(), tid1);
 }
 
-TEST(CommonPool, fullQueue) {
+// Test currently relies on timings
+// which makes it flaky, disable for now
+TEST(DISABLED_CommonPool, fullQueue) {
     std::mutex lock;
     std::condition_variable fence;
     bool signaled = false;
@@ -135,4 +139,48 @@ TEST(CommonPool, fullQueue) {
     for (auto& f : futures) {
         f.get();
     }
+}
+
+class ObjectTracker {
+    static std::atomic_int sGlobalCount;
+
+public:
+    ObjectTracker() {
+        sGlobalCount++;
+    }
+    ObjectTracker(const ObjectTracker&) {
+        sGlobalCount++;
+    }
+    ObjectTracker(ObjectTracker&&) {
+        sGlobalCount++;
+    }
+    ~ObjectTracker() {
+        sGlobalCount--;
+    }
+
+    static int count() { return sGlobalCount.load(); }
+};
+
+std::atomic_int ObjectTracker::sGlobalCount{0};
+
+TEST(CommonPool, asyncLifecycleCheck) {
+    ASSERT_EQ(0, ObjectTracker::count());
+    {
+        ObjectTracker obj;
+        ASSERT_EQ(1, ObjectTracker::count());
+        EXPECT_LT(1, CommonPool::async([obj] { return ObjectTracker::count(); }).get());
+    }
+    CommonPool::waitForIdle();
+    ASSERT_EQ(0, ObjectTracker::count());
+}
+
+TEST(CommonPool, syncLifecycleCheck) {
+    ASSERT_EQ(0, ObjectTracker::count());
+    {
+        ObjectTracker obj;
+        ASSERT_EQ(1, ObjectTracker::count());
+        EXPECT_LT(1, CommonPool::runSync([obj] { return ObjectTracker::count(); }));
+    }
+    CommonPool::waitForIdle();
+    ASSERT_EQ(0, ObjectTracker::count());
 }

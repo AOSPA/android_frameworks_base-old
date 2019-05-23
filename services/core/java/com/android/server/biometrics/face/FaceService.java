@@ -23,7 +23,12 @@ import static android.Manifest.permission.USE_BIOMETRIC_INTERNAL;
 
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.UserInfo;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricConstants;
@@ -42,16 +47,16 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Environment;
 import android.os.IBinder;
+import android.os.NativeHandle;
 import android.os.RemoteException;
 import android.os.SELinux;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.service.restricted_image.RestrictedImageProto;
-import android.service.restricted_image.RestrictedImageSetProto;
-import android.service.restricted_image.RestrictedImagesDumpProto;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 
+import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.util.DumpUtils;
@@ -69,8 +74,11 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileDescriptor;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -121,6 +129,49 @@ public class FaceService extends BiometricServiceBase {
             // but let's leave it as-is for now.
             return result || !authenticated;
         }
+
+        @Override
+        public boolean onAcquired(int acquireInfo, int vendorCode) {
+
+            if (acquireInfo == FaceManager.FACE_ACQUIRED_RECALIBRATE) {
+                final String name =
+                        getContext().getString(R.string.face_recalibrate_notification_name);
+                final String title =
+                        getContext().getString(R.string.face_recalibrate_notification_title);
+                final String content =
+                        getContext().getString(R.string.face_recalibrate_notification_content);
+
+                final Intent intent = new Intent("android.settings.FACE_SETTINGS");
+                intent.setPackage("com.android.settings");
+
+                final PendingIntent pendingIntent = PendingIntent.getActivityAsUser(getContext(),
+                        0 /* requestCode */, intent, 0 /* flags */, null /* options */,
+                        UserHandle.CURRENT);
+
+                final String id = "FaceService";
+
+                NotificationManager nm =
+                        getContext().getSystemService(NotificationManager.class);
+                NotificationChannel channel = new NotificationChannel(id, name,
+                        NotificationManager.IMPORTANCE_HIGH);
+                Notification notification = new Notification.Builder(getContext(), id)
+                        .setSmallIcon(R.drawable.ic_lock)
+                        .setContentTitle(title)
+                        .setContentText(content)
+                        .setSubText(name)
+                        .setOnlyAlertOnce(true)
+                        .setLocalOnly(true)
+                        .setAutoCancel(true)
+                        .setCategory(Notification.CATEGORY_SYSTEM)
+                        .setContentIntent(pendingIntent)
+                        .build();
+
+                nm.createNotificationChannel(channel);
+                nm.notifyAsUser(null /* tag */, 0 /* id */, notification, UserHandle.CURRENT);
+            }
+
+            return super.onAcquired(acquireInfo, vendorCode);
+        }
     }
 
     /**
@@ -165,7 +216,7 @@ public class FaceService extends BiometricServiceBase {
                 }
             };
 
-            enrollInternal(client, UserHandle.getCallingUserId());
+            enrollInternal(client, mCurrentUserId);
         }
 
         @Override // Binder call
@@ -285,8 +336,8 @@ public class FaceService extends BiometricServiceBase {
 
             final long ident = Binder.clearCallingIdentity();
             try {
-                if (args.length == 1 && "--restricted_image".equals(args[0])) {
-                    dumpRestrictedImage(fd);
+                if (args.length > 1 && "--hal".equals(args[0])) {
+                    dumpHal(fd, Arrays.copyOfRange(args, 1, args.length, args.getClass()));
                 } else if (args.length > 0 && "--proto".equals(args[0])) {
                     dumpProto(fd);
                 } else {
@@ -545,7 +596,8 @@ public class FaceService extends BiometricServiceBase {
                 throws RemoteException {
             if (mFaceServiceReceiver != null) {
                 if (biometric == null || biometric instanceof Face) {
-                    mFaceServiceReceiver.onAuthenticationSucceeded(deviceId, (Face)biometric);
+                    mFaceServiceReceiver.onAuthenticationSucceeded(deviceId, (Face) biometric,
+                            userId);
                 } else {
                     Slog.e(TAG, "onAuthenticationSucceeded received non-face biometric");
                 }
@@ -813,7 +865,7 @@ public class FaceService extends BiometricServiceBase {
                 com.android.internal.R.integer.config_faceMaxTemplatesPerUser);
         final int enrolled = FaceService.this.getEnrolledTemplates(userId).size();
         if (enrolled >= limit) {
-            Slog.w(TAG, "Too many faces registered");
+            Slog.w(TAG, "Too many faces registered, user: " + userId);
             return true;
         }
         return false;
@@ -835,7 +887,7 @@ public class FaceService extends BiometricServiceBase {
             try {
                 userId = getUserOrWorkProfileId(clientPackage, userId);
                 if (userId != mCurrentUserId) {
-                    final File baseDir = Environment.getDataVendorDeDirectory(userId);
+                    final File baseDir = Environment.getDataVendorCeDirectory(userId);
                     final File faceDir = new File(baseDir, FACE_DATA_DIR);
                     if (!faceDir.exists()) {
                         if (!faceDir.mkdir()) {
@@ -1077,7 +1129,7 @@ public class FaceService extends BiometricServiceBase {
         mCryptoPerformanceMap.clear();
     }
 
-    private void dumpRestrictedImage(FileDescriptor fd) {
+    private void dumpHal(FileDescriptor fd, String[] args) {
         // WARNING: CDD restricts image data from leaving TEE unencrypted on
         //          production devices:
         // [C-1-10] MUST not allow unencrypted access to identifiable biometric
@@ -1091,59 +1143,35 @@ public class FaceService extends BiometricServiceBase {
             return;
         }
 
-        final ProtoOutputStream proto = new ProtoOutputStream(fd);
-
-        final long setToken = proto.start(RestrictedImagesDumpProto.SETS);
-
-        // Name of the service
-        proto.write(RestrictedImageSetProto.CATEGORY, "face");
-
-        // Individual images
-        for (int i = 0; i < 5; i++) {
-            final long imageToken = proto.start(RestrictedImageSetProto.IMAGES);
-            proto.write(RestrictedImageProto.MIME_TYPE, "image/png");
-            proto.write(RestrictedImageProto.IMAGE_DATA, new byte[] {
-                    // png image data
-                    -119,   80,   78,   71,   13,   10,   26,   10,
-                       0,    0,    0,   13,   73,   72,   68,   82,
-                       0,    0,    0,  100,    0,    0,    0,  100,
-                       1,    3,    0,    0,    0,   74,   44,    7,
-                      23,    0,    0,    0,    4,  103,   65,   77,
-                      65,    0,    0,  -79, -113,   11,   -4,   97,
-                       5,    0,    0,    0,    1,  115,   82,   71,
-                      66,    0,  -82,  -50,   28,  -23,    0,    0,
-                       0,    6,   80,   76,   84,   69,   -1,   -1,
-                      -1,    0,    0,    0,   85,  -62,  -45,  126,
-                       0,    0,    0, -115,   73,   68,   65,   84,
-                      56,  -53,  -19,  -46,  -79,   17, -128,   32,
-                      12,    5,  -48,  120,   22, -106, -116,  -32,
-                      40,  -84,  101, -121,  -93,   57,   10,   35,
-                      88,   82,  112,  126,    3,  -60,  104,    6,
-                    -112,   70,  127,  -59,  -69,  -53,   29,   33,
-                    -127,  -24,   79,  -49,  -52,  -15,   41,   36,
-                      34, -105,   85,  124,  -14,   88,   27,    6,
-                      28,   68,    1,   82,   62,   22,  -95, -108,
-                      55,  -95,   40,   -9, -110,  -12,   98, -107,
-                      76,  -41, -105,  -62,  -50,  111,  -60,   46,
-                     -14,   -4,   24,  -89,   42, -103,   16,   63,
-                     -72,  -11,  -15,   48,  -62,  102,  -44,  102,
-                     -73,  -56,   56,  -21, -128,   92,  -70, -124,
-                     117,  -46,  -67,  -77,   82,   80,  121,  -44,
-                     -56,  116,   93,  -45,  -90,   -5,  -29,  -24,
-                     -83,  -75,   52,  -34,   55,  -22,  102,  -21,
-                    -105, -124,  -23,   71,   87,   -7,  -25,  -59,
-                    -100,  -73,  -92, -122,   -7, -109,  -49,  -80,
-                     -89,    0,    0,    0,    0,   73,   69,   78,
-                      68,  -82,   66,   96, -126
-            });
-            // proto.write(RestrictedImageProto.METADATA, flattened_protobuf);
-            proto.end(imageToken);
+        // Additionally, this flag allows turning off face for a device
+        // (either permanently through the build or on an individual device).
+        if (SystemProperties.getBoolean("ro.face.disable_debug_data", false)
+                || SystemProperties.getBoolean("persist.face.disable_debug_data", false)) {
+            return;
         }
 
-        // Face service metadata
-        // proto.write(RestrictedImageSetProto.METADATA, flattened_protobuf);
-
-        proto.end(setToken);
-        proto.flush();
+        // The debug method takes two file descriptors. The first is for text
+        // output, which we will drop.  The second is for binary data, which
+        // will be the protobuf data.
+        final IBiometricsFace daemon = getFaceDaemon();
+        if (daemon != null) {
+            FileOutputStream devnull = null;
+            try {
+                devnull = new FileOutputStream("/dev/null");
+                final NativeHandle handle = new NativeHandle(
+                        new FileDescriptor[] { devnull.getFD(), fd },
+                        new int[0], false);
+                daemon.debug(handle, new ArrayList<String>(Arrays.asList(args)));
+            } catch (IOException | RemoteException ex) {
+                Slog.d(TAG, "error while reading face debugging data", ex);
+            } finally {
+                if (devnull != null) {
+                    try {
+                        devnull.close();
+                    } catch (IOException ex) {
+                    }
+                }
+            }
+        }
     }
 }

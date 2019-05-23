@@ -166,6 +166,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *     . . . .  . . . . . . . . . . . . . . . . . .
  * </pre>
  *
+ * <p>To test the OMS, execute:
+ * <code>
+ * atest FrameworksServicesTests:com.android.server.om  # internal tests
+ * atest OverlayDeviceTests OverlayHostTests            # public API tests
+ * </code>
+ * </p>
+ *
  * <p>Finally, here is a list of keywords used in the OMS context.</p>
  *
  * <ul>
@@ -703,6 +710,26 @@ public final class OverlayManagerService extends SystemService {
                 try {
                     synchronized (mLock) {
                         return mImpl.setLowestPriority(packageName, userId);
+                    }
+                } finally {
+                    Binder.restoreCallingIdentity(ident);
+                }
+            } finally {
+                traceEnd(TRACE_TAG_RRO);
+            }
+        }
+
+        @Override
+        public String[] getDefaultOverlayPackages() throws RemoteException {
+            try {
+                traceBegin(TRACE_TAG_RRO, "OMS#getDefaultOverlayPackages");
+                getContext().enforceCallingOrSelfPermission(
+                        android.Manifest.permission.MODIFY_THEME_OVERLAY, null);
+
+                final long ident = Binder.clearCallingIdentity();
+                try {
+                    synchronized (mLock) {
+                        return mImpl.getDefaultOverlayPackages();
                     }
                 } finally {
                     Binder.restoreCallingIdentity(ident);

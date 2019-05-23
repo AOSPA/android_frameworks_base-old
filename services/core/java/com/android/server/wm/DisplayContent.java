@@ -250,8 +250,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     // on the IME target. We mainly have this container grouping so we can keep track of all the IME
     // window containers together and move them in-sync if/when needed. We use a subclass of
     // WindowContainer which is omitted from screen magnification, as the IME is never magnified.
-    private final NonMagnifiableWindowContainers mImeWindowsContainers =
-            new NonMagnifiableWindowContainers("mImeWindowsContainers", mWmService);
+    private final NonAppWindowContainers mImeWindowsContainers =
+            new NonAppWindowContainers("mImeWindowsContainers", mWmService);
 
     private WindowState mTmpWindow;
     private WindowState mTmpWindow2;
@@ -2362,33 +2362,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     }
 
     /**
-     * Used to obtain task ID when user taps on coordinate (x, y) in this display, and outside
-     * current task in focus.
-     *
-     * This returns the task ID of the foremost task at (x, y) if the task is not home. Otherwise it
-     * returns -1.
-     *
-     * @param x horizontal coordinate of the tap position
-     * @param y vertical coordinate of the tap position
-     * @return the task ID if a non-home task is found; -1 if not
-     */
-    int taskForTapOutside(int x, int y) {
-        for (int stackNdx = mTaskStackContainers.getChildCount() - 1; stackNdx >= 0; --stackNdx) {
-            final TaskStack stack = mTaskStackContainers.getChildAt(stackNdx);
-            if (stack.isActivityTypeHome() && !stack.inMultiWindowMode()) {
-                // We skip not only home stack, but also everything behind home because user can't
-                // see them when home stack is isn't in multi-window mode.
-                break;
-            }
-            final int taskId = stack.taskIdFromPoint(x, y);
-            if (taskId != -1) {
-                return taskId;
-            }
-        }
-        return -1;
-    }
-
-    /**
      * Returns true if the input point is within an app window.
      */
     boolean pointWithinAppWindow(int x, int y) {
@@ -2489,6 +2462,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     void switchUser() {
         super.switchUser();
         mWmService.mWindowsChanged = true;
+        mDisplayPolicy.switchUser();
     }
 
     private void resetAnimationBackgroundAnimator() {
@@ -4588,7 +4562,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                         token2.mOwnerCanManageAppTokens) ? -1 : 1;
 
         private final Predicate<WindowState> mGetOrientingWindow = w -> {
-            if (!w.isVisibleLw() || !w.mPolicyVisibilityAfterAnim) {
+            if (!w.isVisibleLw() || !w.mLegacyPolicyVisibilityAfterAnim) {
                 return false;
             }
             final int req = w.mAttrs.screenOrientation;
@@ -4668,16 +4642,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             }
         }
     }
-
-    private class NonMagnifiableWindowContainers extends NonAppWindowContainers {
-        NonMagnifiableWindowContainers(String name, WindowManagerService service) {
-            super(name, service);
-        }
-
-        @Override
-        void applyMagnificationSpec(Transaction t, MagnificationSpec spec) {
-        }
-    };
 
     SurfaceControl.Builder makeSurface(SurfaceSession s) {
         return mWmService.makeSurfaceBuilder(s)

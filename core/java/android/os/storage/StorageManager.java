@@ -18,6 +18,7 @@ package android.os.storage;
 
 import static android.Manifest.permission.READ_EXTERNAL_STORAGE;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
+import static android.app.AppOpsManager.OP_LEGACY_STORAGE;
 import static android.app.AppOpsManager.OP_READ_EXTERNAL_STORAGE;
 import static android.app.AppOpsManager.OP_READ_MEDIA_AUDIO;
 import static android.app.AppOpsManager.OP_READ_MEDIA_IMAGES;
@@ -1130,7 +1131,7 @@ public class StorageManager {
     public @NonNull StorageVolume getStorageVolume(@NonNull Uri uri) {
         final String volumeName = MediaStore.getVolumeName(uri);
         switch (volumeName) {
-            case MediaStore.VOLUME_EXTERNAL:
+            case MediaStore.VOLUME_EXTERNAL_PRIMARY:
                 return getPrimaryStorageVolume();
             default:
                 for (StorageVolume vol : getStorageVolumes()) {
@@ -1652,6 +1653,26 @@ public class StorageManager {
      */
     public static boolean checkPermissionAndAppOp(Context context, boolean enforce,
             int pid, int uid, String packageName, String permission, int op) {
+        return checkPermissionAndAppOp(context, enforce, pid, uid, packageName, permission, op,
+                true);
+    }
+
+    /**
+     * Check that given app holds both permission and appop but do not noteOp.
+     * @hide
+     */
+    public static boolean checkPermissionAndCheckOp(Context context, boolean enforce,
+            int pid, int uid, String packageName, String permission, int op) {
+        return checkPermissionAndAppOp(context, enforce, pid, uid, packageName, permission, op,
+                false);
+    }
+
+    /**
+     * Check that given app holds both permission and appop.
+     * @hide
+     */
+    private static boolean checkPermissionAndAppOp(Context context, boolean enforce,
+            int pid, int uid, String packageName, String permission, int op, boolean note) {
         if (context.checkPermission(permission, pid, uid) != PERMISSION_GRANTED) {
             if (enforce) {
                 throw new SecurityException(
@@ -1662,7 +1683,21 @@ public class StorageManager {
         }
 
         AppOpsManager appOps = context.getSystemService(AppOpsManager.class);
-        final int mode = appOps.noteOpNoThrow(op, uid, packageName);
+        final int mode;
+        if (note) {
+            mode = appOps.noteOpNoThrow(op, uid, packageName);
+        } else {
+            try {
+                appOps.checkPackage(uid, packageName);
+            } catch (SecurityException e) {
+                if (enforce) {
+                    throw e;
+                } else {
+                    return false;
+                }
+            }
+            mode = appOps.checkOpNoThrow(op, uid, packageName);
+        }
         switch (mode) {
             case AppOpsManager.MODE_ALLOWED:
                 return true;
@@ -1687,6 +1722,33 @@ public class StorageManager {
         return checkPermissionAndAppOp(mContext, enforce, pid, uid, packageName, permission, op);
     }
 
+    private boolean noteAppOpAllowingLegacy(boolean enforce,
+            int pid, int uid, String packageName, int op) {
+        final int mode = mAppOps.noteOpNoThrow(op, uid, packageName);
+        switch (mode) {
+            case AppOpsManager.MODE_ALLOWED:
+                return true;
+            case AppOpsManager.MODE_DEFAULT:
+            case AppOpsManager.MODE_IGNORED:
+            case AppOpsManager.MODE_ERRORED:
+                // Legacy apps technically have the access granted by this op,
+                // even when the op is denied
+                if ((mAppOps.checkOpNoThrow(OP_LEGACY_STORAGE, uid,
+                        packageName) == AppOpsManager.MODE_ALLOWED)) return true;
+
+                if (enforce) {
+                    throw new SecurityException("Op " + AppOpsManager.opToName(op) + " "
+                            + AppOpsManager.modeToName(mode) + " for package " + packageName);
+                } else {
+                    return false;
+                }
+            default:
+                throw new IllegalStateException(
+                        AppOpsManager.opToName(op) + " has unknown mode "
+                                + AppOpsManager.modeToName(mode));
+        }
+    }
+
     // Callers must hold both the old and new permissions, so that we can
     // handle obscure cases like when an app targets Q but was installed on
     // a device that was originally running on P before being upgraded to Q.
@@ -1696,8 +1758,7 @@ public class StorageManager {
             int pid, int uid, String packageName) {
         if (!checkPermissionAndAppOp(enforce, pid, uid, packageName,
                 READ_EXTERNAL_STORAGE, OP_READ_EXTERNAL_STORAGE)) return false;
-        mAppOps.noteOpNoThrow(OP_READ_MEDIA_AUDIO, uid, packageName);
-        return true;
+        return noteAppOpAllowingLegacy(enforce, pid, uid, packageName, OP_READ_MEDIA_AUDIO);
     }
 
     /** {@hide} */
@@ -1705,8 +1766,7 @@ public class StorageManager {
             int pid, int uid, String packageName) {
         if (!checkPermissionAndAppOp(enforce, pid, uid, packageName,
                 WRITE_EXTERNAL_STORAGE, OP_WRITE_EXTERNAL_STORAGE)) return false;
-        mAppOps.noteOpNoThrow(OP_WRITE_MEDIA_AUDIO, uid, packageName);
-        return true;
+        return noteAppOpAllowingLegacy(enforce, pid, uid, packageName, OP_WRITE_MEDIA_AUDIO);
     }
 
     /** {@hide} */
@@ -1714,8 +1774,7 @@ public class StorageManager {
             int pid, int uid, String packageName) {
         if (!checkPermissionAndAppOp(enforce, pid, uid, packageName,
                 READ_EXTERNAL_STORAGE, OP_READ_EXTERNAL_STORAGE)) return false;
-        mAppOps.noteOpNoThrow(OP_READ_MEDIA_VIDEO, uid, packageName);
-        return true;
+        return noteAppOpAllowingLegacy(enforce, pid, uid, packageName, OP_READ_MEDIA_VIDEO);
     }
 
     /** {@hide} */
@@ -1723,8 +1782,7 @@ public class StorageManager {
             int pid, int uid, String packageName) {
         if (!checkPermissionAndAppOp(enforce, pid, uid, packageName,
                 WRITE_EXTERNAL_STORAGE, OP_WRITE_EXTERNAL_STORAGE)) return false;
-        mAppOps.noteOpNoThrow(OP_WRITE_MEDIA_VIDEO, uid, packageName);
-        return true;
+        return noteAppOpAllowingLegacy(enforce, pid, uid, packageName, OP_WRITE_MEDIA_VIDEO);
     }
 
     /** {@hide} */
@@ -1732,8 +1790,7 @@ public class StorageManager {
             int pid, int uid, String packageName) {
         if (!checkPermissionAndAppOp(enforce, pid, uid, packageName,
                 READ_EXTERNAL_STORAGE, OP_READ_EXTERNAL_STORAGE)) return false;
-        mAppOps.noteOpNoThrow(OP_READ_MEDIA_IMAGES, uid, packageName);
-        return true;
+        return noteAppOpAllowingLegacy(enforce, pid, uid, packageName, OP_READ_MEDIA_IMAGES);
     }
 
     /** {@hide} */
@@ -1741,8 +1798,7 @@ public class StorageManager {
             int pid, int uid, String packageName) {
         if (!checkPermissionAndAppOp(enforce, pid, uid, packageName,
                 WRITE_EXTERNAL_STORAGE, OP_WRITE_EXTERNAL_STORAGE)) return false;
-        mAppOps.noteOpNoThrow(OP_WRITE_MEDIA_IMAGES, uid, packageName);
-        return true;
+        return noteAppOpAllowingLegacy(enforce, pid, uid, packageName, OP_WRITE_MEDIA_IMAGES);
     }
 
     /** {@hide} */

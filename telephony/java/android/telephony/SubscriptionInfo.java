@@ -39,6 +39,7 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
@@ -87,8 +88,8 @@ public class SubscriptionInfo implements Parcelable {
     private int mCarrierId;
 
     /**
-     * The source of the name, NAME_SOURCE_UNDEFINED, NAME_SOURCE_DEFAULT_SOURCE,
-     * NAME_SOURCE_SIM_SOURCE or NAME_SOURCE_USER_INPUT.
+     * The source of the name, NAME_SOURCE_DEFAULT_SOURCE, NAME_SOURCE_SIM_SOURCE or
+     * NAME_SOURCE_USER_INPUT.
      */
     private int mNameSource;
 
@@ -103,7 +104,7 @@ public class SubscriptionInfo implements Parcelable {
     private String mNumber;
 
     /**
-     * Data roaming state, DATA_RAOMING_ENABLE, DATA_RAOMING_DISABLE
+     * Data roaming state, DATA_ROAMING_ENABLE, DATA_ROAMING_DISABLE
      */
     private int mDataRoaming;
 
@@ -121,6 +122,16 @@ public class SubscriptionInfo implements Parcelable {
      * Mobile Network Code
      */
     private String mMnc;
+
+    /**
+     * EHPLMNs associated with the subscription
+     */
+    private String[] mEhplmns;
+
+    /**
+     * HPLMNs associated with the subscription
+     */
+    private String[] mHplmns;
 
     /**
      * ISO Country code for the subscription's provider
@@ -306,8 +317,8 @@ public class SubscriptionInfo implements Parcelable {
     }
 
     /**
-     * @return the source of the name, eg NAME_SOURCE_UNDEFINED, NAME_SOURCE_DEFAULT_SOURCE,
-     * NAME_SOURCE_SIM_SOURCE or NAME_SOURCE_USER_INPUT.
+     * @return the source of the name, eg NAME_SOURCE_DEFAULT_SOURCE, NAME_SOURCE_SIM_SOURCE or
+     * NAME_SOURCE_USER_INPUT.
      * @hide
      */
     @UnsupportedAppUsage
@@ -316,8 +327,16 @@ public class SubscriptionInfo implements Parcelable {
     }
 
     /**
-     * Creates and returns an icon {@code Bitmap} to represent this {@code SubscriptionInfo} in a user
-     * interface.
+     * @hide
+     */
+    public void setAssociatedPlmns(String[] ehplmns, String[] hplmns) {
+        mEhplmns = ehplmns;
+        mHplmns = hplmns;
+    }
+
+    /**
+     * Creates and returns an icon {@code Bitmap} to represent this {@code SubscriptionInfo} in a
+     * user interface.
      *
      * @param context A {@code Context} to get the {@code DisplayMetrics}s from.
      *
@@ -467,6 +486,20 @@ public class SubscriptionInfo implements Parcelable {
     }
 
     /**
+     * @hide
+     */
+    public List<String> getEhplmns() {
+        return mEhplmns == null ? Collections.emptyList() : Arrays.asList(mEhplmns);
+    }
+
+    /**
+     * @hide
+     */
+    public List<String> getHplmns() {
+        return mHplmns == null ? Collections.emptyList() : Arrays.asList(mHplmns);
+    }
+
+    /**
      * @return the profile class of this subscription.
      * @hide
      */
@@ -600,7 +633,7 @@ public class SubscriptionInfo implements Parcelable {
             String mcc = source.readString();
             String mnc = source.readString();
             String countryIso = source.readString();
-            Bitmap iconBitmap = Bitmap.CREATOR.createFromParcel(source);
+            Bitmap iconBitmap = source.readParcelable(Bitmap.class.getClassLoader());
             boolean isEmbedded = source.readBoolean();
             UiccAccessRule[] accessRules = source.createTypedArray(UiccAccessRule.CREATOR);
             String cardString = source.readString();
@@ -611,11 +644,15 @@ public class SubscriptionInfo implements Parcelable {
             int carrierid = source.readInt();
             int profileClass = source.readInt();
             int subType = source.readInt();
+            String[] ehplmns = source.readStringArray();
+            String[] hplmns = source.readStringArray();
 
-            return new SubscriptionInfo(id, iccId, simSlotIndex, displayName, carrierName,
-                    nameSource, iconTint, number, dataRoaming, iconBitmap, mcc, mnc, countryIso,
-                    isEmbedded, accessRules, cardString, cardId, isOpportunistic, groupUUID,
-                    isGroupDisabled, carrierid, profileClass, subType);
+            SubscriptionInfo info = new SubscriptionInfo(id, iccId, simSlotIndex, displayName,
+                    carrierName, nameSource, iconTint, number, dataRoaming, iconBitmap, mcc, mnc,
+                    countryIso, isEmbedded, accessRules, cardString, cardId, isOpportunistic,
+                    groupUUID, isGroupDisabled, carrierid, profileClass, subType);
+            info.setAssociatedPlmns(ehplmns, hplmns);
+            return info;
         }
 
         @Override
@@ -638,7 +675,7 @@ public class SubscriptionInfo implements Parcelable {
         dest.writeString(mMcc);
         dest.writeString(mMnc);
         dest.writeString(mCountryIso);
-        mIconBitmap.writeToParcel(dest, flags);
+        dest.writeParcelable(mIconBitmap, flags);
         dest.writeBoolean(mIsEmbedded);
         dest.writeTypedArray(mAccessRules, flags);
         dest.writeString(mCardString);
@@ -649,6 +686,8 @@ public class SubscriptionInfo implements Parcelable {
         dest.writeInt(mCarrierId);
         dest.writeInt(mProfileClass);
         dest.writeInt(mSubscriptionType);
+        dest.writeStringArray(mEhplmns);
+        dest.writeStringArray(mHplmns);
     }
 
     @Override
@@ -686,6 +725,8 @@ public class SubscriptionInfo implements Parcelable {
                 + " isOpportunistic " + mIsOpportunistic + " mGroupUUID=" + mGroupUUID
                 + " mIsGroupDisabled=" + mIsGroupDisabled
                 + " profileClass=" + mProfileClass
+                + " ehplmns = " + Arrays.toString(mEhplmns)
+                + " hplmns = " + Arrays.toString(mHplmns)
                 + " subscriptionType=" + mSubscriptionType + "}";
     }
 
@@ -729,6 +770,8 @@ public class SubscriptionInfo implements Parcelable {
                 && TextUtils.equals(mDisplayName, toCompare.mDisplayName)
                 && TextUtils.equals(mCarrierName, toCompare.mCarrierName)
                 && Arrays.equals(mAccessRules, toCompare.mAccessRules)
-                && mProfileClass == toCompare.mProfileClass;
+                && mProfileClass == toCompare.mProfileClass
+                && Arrays.equals(mEhplmns, toCompare.mEhplmns)
+                && Arrays.equals(mHplmns, toCompare.mHplmns);
     }
 }

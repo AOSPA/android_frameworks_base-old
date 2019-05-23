@@ -58,15 +58,18 @@ public interface SensorManagerPlugin extends Plugin {
         public static final int TYPE_WAKE_LOCK_SCREEN = 1;
         public static final int TYPE_WAKE_DISPLAY = 2;
         public static final int TYPE_SWIPE = 3;
+        public static final int TYPE_STATUS = 4;
 
-        int mType;
-
-        public int getType() {
-            return mType;
-        }
+        private int mType;
 
         public Sensor(int type) {
             mType = type;
+        }
+        public int getType() {
+            return mType;
+        }
+        public String toString() {
+            return "{PluginSensor type=\"" + mType + "\"}";
         }
     }
 

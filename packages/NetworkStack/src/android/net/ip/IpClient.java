@@ -29,6 +29,7 @@ import android.net.INetd;
 import android.net.IpPrefix;
 import android.net.LinkAddress;
 import android.net.LinkProperties;
+import android.net.NattKeepalivePacketDataParcelable;
 import android.net.NetworkStackIpMemoryStore;
 import android.net.ProvisioningConfigurationParcelable;
 import android.net.ProxyInfo;
@@ -51,6 +52,7 @@ import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.LocalLog;
 import android.util.Log;
+import android.util.Pair;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -299,6 +301,7 @@ public class IpClient extends StateMachine {
     private static final int EVENT_READ_PACKET_FILTER_COMPLETE    = 12;
     private static final int CMD_ADD_KEEPALIVE_PACKET_FILTER_TO_APF = 13;
     private static final int CMD_REMOVE_KEEPALIVE_PACKET_FILTER_FROM_APF = 14;
+    private static final int CMD_UPDATE_L2KEY_GROUPHINT = 15;
 
     // Internal commands to use instead of trying to call transitionTo() inside
     // a given State's enter() method. Calling transitionTo() from enter/exit
@@ -365,8 +368,14 @@ public class IpClient extends StateMachine {
     private String mTcpBufferSizes;
     private ProxyInfo mHttpProxy;
     private ApfFilter mApfFilter;
+    private String mL2Key; // The L2 key for this network, for writing into the memory store
+    private String mGroupHint; // The group hint for this network, for writing into the memory store
     private boolean mMulticastFiltering;
     private long mStartTimeMillis;
+
+    /* This must match the definition in KeepaliveTracker.KeepaliveInfo */
+    private static final int TYPE_NATT = 1;
+    private static final int TYPE_TCP = 2;
 
     /**
      * Reading the snapshot is an asynchronous operation initiated by invoking
@@ -525,6 +534,11 @@ public class IpClient extends StateMachine {
             IpClient.this.stop();
         }
         @Override
+        public void setL2KeyAndGroupHint(String l2Key, String groupHint) {
+            checkNetworkStackCallingPermission();
+            IpClient.this.setL2KeyAndGroupHint(l2Key, groupHint);
+        }
+        @Override
         public void setTcpBufferSizes(String tcpBufferSizes) {
             checkNetworkStackCallingPermission();
             IpClient.this.setTcpBufferSizes(tcpBufferSizes);
@@ -545,9 +559,19 @@ public class IpClient extends StateMachine {
             IpClient.this.addKeepalivePacketFilter(slot, pkt);
         }
         @Override
+        public void addNattKeepalivePacketFilter(int slot, NattKeepalivePacketDataParcelable pkt) {
+            checkNetworkStackCallingPermission();
+            IpClient.this.addNattKeepalivePacketFilter(slot, pkt);
+        }
+        @Override
         public void removeKeepalivePacketFilter(int slot) {
             checkNetworkStackCallingPermission();
             IpClient.this.removeKeepalivePacketFilter(slot);
+        }
+
+        @Override
+        public int getInterfaceVersion() {
+            return this.VERSION;
         }
     }
 
@@ -653,6 +677,13 @@ public class IpClient extends StateMachine {
     }
 
     /**
+     * Set the L2 key and group hint for storing info into the memory store.
+     */
+    public void setL2KeyAndGroupHint(String l2Key, String groupHint) {
+        sendMessage(CMD_UPDATE_L2KEY_GROUPHINT, new Pair<>(l2Key, groupHint));
+    }
+
+    /**
      * Set the HTTP Proxy configuration to use.
      *
      * This may be called, repeatedly, at any time before or after a call to
@@ -671,11 +702,20 @@ public class IpClient extends StateMachine {
     }
 
     /**
-     * Called by WifiStateMachine to add keepalive packet filter before setting up
+     * Called by WifiStateMachine to add TCP keepalive packet filter before setting up
      * keepalive offload.
      */
     public void addKeepalivePacketFilter(int slot, @NonNull TcpKeepalivePacketDataParcelable pkt) {
-        sendMessage(CMD_ADD_KEEPALIVE_PACKET_FILTER_TO_APF, slot, 0 /* Unused */, pkt);
+        sendMessage(CMD_ADD_KEEPALIVE_PACKET_FILTER_TO_APF, slot, TYPE_TCP, pkt);
+    }
+
+    /**
+     *  Called by WifiStateMachine to add NATT keepalive packet filter before setting up
+     *  keepalive offload.
+     */
+    public void addNattKeepalivePacketFilter(int slot,
+            @NonNull NattKeepalivePacketDataParcelable pkt) {
+        sendMessage(CMD_ADD_KEEPALIVE_PACKET_FILTER_TO_APF, slot, TYPE_NATT, pkt);
     }
 
     /**
@@ -1069,6 +1109,10 @@ public class IpClient extends StateMachine {
             return true;
         }
         final int delta = setLinkProperties(newLp);
+        // Most of the attributes stored in the memory store are deduced from
+        // the link properties, therefore when the properties update the memory
+        // store record should be updated too.
+        maybeSaveNetworkToIpMemoryStore();
         if (sendCallbacks) {
             dispatchCallback(delta, newLp);
         }
@@ -1084,6 +1128,7 @@ public class IpClient extends StateMachine {
             Log.d(mTag, "onNewDhcpResults(" + Objects.toString(dhcpResults) + ")");
         }
         mCallback.onNewDhcpResults(dhcpResults);
+        maybeSaveNetworkToIpMemoryStore();
         dispatchCallback(delta, newLp);
     }
 
@@ -1224,6 +1269,10 @@ public class IpClient extends StateMachine {
         mInterfaceCtrl.clearAllAddresses();
     }
 
+    private void maybeSaveNetworkToIpMemoryStore() {
+        // TODO : implement this
+    }
+
     class StoppedState extends State {
         @Override
         public void enter() {
@@ -1268,6 +1317,13 @@ public class IpClient extends StateMachine {
                     mHttpProxy = (ProxyInfo) msg.obj;
                     handleLinkPropertiesUpdate(NO_CALLBACKS);
                     break;
+
+                case CMD_UPDATE_L2KEY_GROUPHINT: {
+                    final Pair<String, String> args = (Pair<String, String>) msg.obj;
+                    mL2Key = args.first;
+                    mGroupHint = args.second;
+                    break;
+                }
 
                 case CMD_SET_MULTICAST_FILTER:
                     mMulticastFiltering = (boolean) msg.obj;
@@ -1367,6 +1423,20 @@ public class IpClient extends StateMachine {
                         transitionTo(mRunningState);
                     }
                     break;
+
+                case CMD_UPDATE_L2KEY_GROUPHINT: {
+                    final Pair<String, String> args = (Pair<String, String>) msg.obj;
+                    mL2Key = args.first;
+                    mGroupHint = args.second;
+                    // TODO : attributes should be saved to the memory store with
+                    // these new values if they differ from the previous ones.
+                    // If the state machine is in pure StartedState, then the values to input
+                    // are not known yet and should be updated when the LinkProperties are updated.
+                    // If the state machine is in RunningState (which is a child of StartedState)
+                    // then the next NUD check should be used to store the new values to avoid
+                    // inputting current values for what may be a different L3 network.
+                    break;
+                }
 
                 case EVENT_PROVISIONING_TIMEOUT:
                     handleProvisioningFailure();
@@ -1567,9 +1637,16 @@ public class IpClient extends StateMachine {
 
                 case CMD_ADD_KEEPALIVE_PACKET_FILTER_TO_APF: {
                     final int slot = msg.arg1;
+                    final int type = msg.arg2;
+
                     if (mApfFilter != null) {
-                        mApfFilter.addKeepalivePacketFilter(slot,
-                                (TcpKeepalivePacketDataParcelable) msg.obj);
+                        if (type == TYPE_NATT) {
+                            mApfFilter.addNattKeepalivePacketFilter(slot,
+                                    (NattKeepalivePacketDataParcelable) msg.obj);
+                        } else {
+                            mApfFilter.addTcpKeepalivePacketFilter(slot,
+                                    (TcpKeepalivePacketDataParcelable) msg.obj);
+                        }
                     }
                     break;
                 }

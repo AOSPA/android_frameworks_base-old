@@ -95,8 +95,6 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map.Entry;
@@ -476,16 +474,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         List<SubscriptionInfo> sil = mSubscriptionInfo;
         if (sil == null || forceReload) {
             sil = mSubscriptionManager.getActiveSubscriptionInfoList();
-            if ( sil != null ) {
-                Collections.sort(sil, new Comparator<SubscriptionInfo>() {
-                    @Override
-                    public int compare(SubscriptionInfo lhs, SubscriptionInfo rhs) {
-                        return lhs.getSimSlotIndex() == rhs.getSimSlotIndex()
-                                ? lhs.getSubscriptionId() - rhs.getSubscriptionId()
-                                : lhs.getSimSlotIndex() - rhs.getSimSlotIndex();
-                    }
-                });
-            }
         }
         if (sil == null) {
             // getActiveSubscriptionInfoList was null callers expect an empty list.
@@ -677,9 +665,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         boolean wasRunning = mFingerprintRunningState == BIOMETRIC_STATE_RUNNING;
         boolean isRunning = fingerprintRunningState == BIOMETRIC_STATE_RUNNING;
         mFingerprintRunningState = fingerprintRunningState;
-        if (DEBUG) Log.v(TAG, "Fingerprint State: " + mFingerprintRunningState);
+        Log.d(TAG, "fingerprintRunningState: " + mFingerprintRunningState);
         // Clients of KeyguardUpdateMonitor don't care about the internal state about the
-        // asynchronousness of the cancel cycle. So only notify them if the actualy running state
+        // asynchronousness of the cancel cycle. So only notify them if the actually running state
         // has changed.
         if (wasRunning != isRunning) {
             notifyFingerprintRunningStateChanged();
@@ -830,9 +818,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         boolean wasRunning = mFaceRunningState == BIOMETRIC_STATE_RUNNING;
         boolean isRunning = faceRunningState == BIOMETRIC_STATE_RUNNING;
         mFaceRunningState = faceRunningState;
-        if (DEBUG) Log.v(TAG, "Face State: " + mFaceRunningState);
+        Log.d(TAG, "faceRunningState: " + mFaceRunningState);
         // Clients of KeyguardUpdateMonitor don't care about the internal state or about the
-        // asynchronousness of the cancel cycle. So only notify them if the actualy running state
+        // asynchronousness of the cancel cycle. So only notify them if the actually running state
         // has changed.
         if (wasRunning != isRunning) {
             notifyFaceRunningStateChanged();
@@ -1677,17 +1665,28 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             }
             mFaceCancelSignal = new CancellationSignal();
             mFaceManager.authenticate(null, mFaceCancelSignal, 0,
-                    mFaceAuthenticationCallback, null);
+                    mFaceAuthenticationCallback, null, userId);
             setFaceRunningState(BIOMETRIC_STATE_RUNNING);
         }
     }
 
-    public boolean isUnlockWithFingerprintPossible(int userId) {
+    /**
+     * If biometrics hardware is available, not disabled, and user has enrolled templates.
+     * This does NOT check if the device is encrypted or in lockdown.
+     *
+     * @param userId User that's trying to unlock.
+     * @return {@code true} if possible.
+     */
+    public boolean isUnlockingWithBiometricsPossible(int userId) {
+        return isUnlockWithFacePossible(userId) || isUnlockWithFingerprintPossible(userId);
+    }
+
+    private boolean isUnlockWithFingerprintPossible(int userId) {
         return mFpm != null && mFpm.isHardwareDetected() && !isFingerprintDisabled(userId)
                 && mFpm.getEnrolledFingerprints(userId).size() > 0;
     }
 
-    public boolean isUnlockWithFacePossible(int userId) {
+    private boolean isUnlockWithFacePossible(int userId) {
         return mFaceManager != null && mFaceManager.isHardwareDetected()
                 && !isFaceDisabled(userId)
                 && mFaceManager.hasEnrolledTemplates(userId);
@@ -2058,7 +2057,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
      */
     public void onKeyguardVisibilityChanged(boolean showing) {
         checkIsHandlerThread();
-        if (DEBUG) Log.d(TAG, "onKeyguardVisibilityChanged(" + showing + ")");
+        Log.d(TAG, "onKeyguardVisibilityChanged(" + showing + ")");
         mKeyguardIsVisible = showing;
         for (int i = 0; i < mCallbacks.size(); i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();

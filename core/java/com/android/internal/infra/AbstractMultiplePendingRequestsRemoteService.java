@@ -32,7 +32,6 @@ import java.util.ArrayList;
  *
  * @param <S> the concrete remote service class
  * @param <I> the interface of the binder service
- * @hide
  */
 public abstract class AbstractMultiplePendingRequestsRemoteService<S
         extends AbstractMultiplePendingRequestsRemoteService<S, I>, I extends IInterface>
@@ -70,6 +69,20 @@ public abstract class AbstractMultiplePendingRequestsRemoteService<S
             if (mVerbose) Slog.v(mTag, "Canceling " + size + " pending requests");
             for (int i = 0; i < size; i++) {
                 mPendingRequests.get(i).cancel();
+            }
+            mPendingRequests = null;
+        }
+    }
+
+    @Override // from AbstractRemoteService
+    final void handleBindFailure() {
+        if (mPendingRequests != null) {
+            final int size = mPendingRequests.size();
+            if (mVerbose) Slog.v(mTag, "Sending failure to " + size + " pending requests");
+            for (int i = 0; i < size; i++) {
+                final BasePendingRequest<S, I> request = mPendingRequests.get(i);
+                request.onFailed();
+                request.finish();
             }
             mPendingRequests = null;
         }

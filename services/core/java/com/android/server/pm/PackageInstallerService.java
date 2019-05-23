@@ -532,6 +532,16 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                         + "to use the PackageManager.INSTALL_GRANT_RUNTIME_PERMISSIONS flag");
             }
 
+            // Only system components can circumvent restricted whitelisting when installing.
+            if ((params.installFlags
+                    & PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS) != 0
+                    && mContext.checkCallingOrSelfPermission(Manifest.permission
+                    .WHITELIST_RESTRICTED_PERMISSIONS) == PackageManager.PERMISSION_DENIED) {
+                throw new SecurityException("You need the "
+                        + "android.permission.WHITELIST_RESTRICTED_PERMISSIONS permission to"
+                        + " use the PackageManager.INSTALL_WHITELIST_RESTRICTED_PERMISSIONS flag");
+            }
+
             // Defensively resize giant app icons
             if (params.appIcon != null) {
                 final ActivityManager am = (ActivityManager) mContext.getSystemService(
@@ -804,7 +814,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
 
     @Override
     public void uninstall(VersionedPackage versionedPackage, String callerPackageName, int flags,
-                IntentSender statusReceiver, int userId) throws RemoteException {
+                IntentSender statusReceiver, int userId) {
         final int callingUid = Binder.getCallingUid();
         mPermissionManager.enforceCrossUserPermission(callingUid, userId, true, true, "uninstall");
         if ((callingUid != Process.SHELL_UID) && (callingUid != Process.ROOT_UID)) {
@@ -943,6 +953,9 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
 
         @Override
         public void onUserActionRequired(Intent intent) {
+            if (mTarget == null) {
+                return;
+            }
             final Intent fillIn = new Intent();
             fillIn.putExtra(PackageInstaller.EXTRA_PACKAGE_NAME, mPackageName);
             fillIn.putExtra(PackageInstaller.EXTRA_STATUS,
@@ -962,6 +975,9 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                 notificationManager.notify(basePackageName,
                         SystemMessage.NOTE_PACKAGE_STATE,
                         mNotification);
+            }
+            if (mTarget == null) {
+                return;
             }
             final Intent fillIn = new Intent();
             fillIn.putExtra(PackageInstaller.EXTRA_PACKAGE_NAME, mPackageName);

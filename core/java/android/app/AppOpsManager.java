@@ -30,9 +30,7 @@ import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
-import android.database.ContentObserver;
 import android.media.AudioAttributes.AttributeUsage;
-import android.net.Uri;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.Parcel;
@@ -40,9 +38,7 @@ import android.os.Parcelable;
 import android.os.Process;
 import android.os.RemoteCallback;
 import android.os.RemoteException;
-import android.os.SystemProperties;
 import android.os.UserManager;
-import android.provider.Settings;
 import android.util.ArrayMap;
 import android.util.LongSparseArray;
 import android.util.LongSparseLongArray;
@@ -70,7 +66,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -333,7 +328,9 @@ public class AppOpsManager {
     public static int resolveFirstUnrestrictedUidState(int op) {
         switch (op) {
             case OP_FINE_LOCATION:
-            case OP_COARSE_LOCATION: {
+            case OP_COARSE_LOCATION:
+            case OP_MONITOR_LOCATION:
+            case OP_MONITOR_HIGH_POWER_LOCATION: {
                 return UID_STATE_FOREGROUND_SERVICE_LOCATION;
             }
         }
@@ -828,9 +825,11 @@ public class AppOpsManager {
     public static final int OP_LEGACY_STORAGE = 87;
     /** @hide Accessing accessibility features */
     public static final int OP_ACCESS_ACCESSIBILITY = 88;
+    /** @hide Read the device identifiers (IMEI / MEID, IMSI, SIM / Build serial) */
+    public static final int OP_READ_DEVICE_IDENTIFIERS = 89;
     /** @hide */
     @UnsupportedAppUsage
-    public static final int _NUM_OP = 89;
+    public static final int _NUM_OP = 90;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -1104,6 +1103,8 @@ public class AppOpsManager {
     /** @hide Interact with accessibility. */
     @SystemApi
     public static final String OPSTR_ACCESS_ACCESSIBILITY = "android:access_accessibility";
+    /** @hide Read device identifiers */
+    public static final String OPSTR_READ_DEVICE_IDENTIFIERS = "android:read_device_identifiers";
 
     // Warning: If an permission is added here it also has to be added to
     // com.android.packageinstaller.permission.utils.EventLogger
@@ -1264,6 +1265,7 @@ public class AppOpsManager {
             OP_WRITE_MEDIA_IMAGES,              // WRITE_MEDIA_IMAGES
             OP_LEGACY_STORAGE,                  // LEGACY_STORAGE
             OP_ACCESS_ACCESSIBILITY,            // ACCESS_ACCESSIBILITY
+            OP_READ_DEVICE_IDENTIFIERS,         // READ_DEVICE_IDENTIFIERS
     };
 
     /**
@@ -1359,6 +1361,7 @@ public class AppOpsManager {
             OPSTR_WRITE_MEDIA_IMAGES,
             OPSTR_LEGACY_STORAGE,
             OPSTR_ACCESS_ACCESSIBILITY,
+            OPSTR_READ_DEVICE_IDENTIFIERS,
     };
 
     /**
@@ -1455,6 +1458,7 @@ public class AppOpsManager {
             "WRITE_MEDIA_IMAGES",
             "LEGACY_STORAGE",
             "ACCESS_ACCESSIBILITY",
+            "READ_DEVICE_IDENTIFIERS",
     };
 
     /**
@@ -1552,6 +1556,7 @@ public class AppOpsManager {
             null, // no permission for OP_WRITE_MEDIA_IMAGES
             null, // no permission for OP_LEGACY_STORAGE
             null, // no permission for OP_ACCESS_ACCESSIBILITY
+            null, // no direct permission for OP_READ_DEVICE_IDENTIFIERS
     };
 
     /**
@@ -1649,6 +1654,7 @@ public class AppOpsManager {
             null, // WRITE_MEDIA_IMAGES
             null, // LEGACY_STORAGE
             null, // ACCESS_ACCESSIBILITY
+            null, // READ_DEVICE_IDENTIFIERS
     };
 
     /**
@@ -1745,6 +1751,7 @@ public class AppOpsManager {
             false, // WRITE_MEDIA_IMAGES
             false, // LEGACY_STORAGE
             false, // ACCESS_ACCESSIBILITY
+            false, // READ_DEVICE_IDENTIFIERS
     };
 
     /**
@@ -1840,6 +1847,7 @@ public class AppOpsManager {
             AppOpsManager.MODE_ERRORED, // WRITE_MEDIA_IMAGES
             AppOpsManager.MODE_DEFAULT, // LEGACY_STORAGE
             AppOpsManager.MODE_ALLOWED, // ACCESS_ACCESSIBILITY
+            AppOpsManager.MODE_ERRORED, // READ_DEVICE_IDENTIFIERS
     };
 
     /**
@@ -1939,6 +1947,7 @@ public class AppOpsManager {
             false, // WRITE_MEDIA_IMAGES
             false, // LEGACY_STORAGE
             false, // ACCESS_ACCESSIBILITY
+            false, // READ_DEVICE_IDENTIFIERS
     };
 
     /**
@@ -2101,49 +2110,7 @@ public class AppOpsManager {
      * @hide
      */
     public static @Mode int opToDefaultMode(int op) {
-        // STOPSHIP b/118520006: Hardcode the default values once the feature is stable.
-        switch (op) {
-            // SMS permissions
-            case AppOpsManager.OP_SEND_SMS:
-            case AppOpsManager.OP_RECEIVE_SMS:
-            case AppOpsManager.OP_READ_SMS:
-            case AppOpsManager.OP_RECEIVE_WAP_PUSH:
-            case AppOpsManager.OP_RECEIVE_MMS:
-            case AppOpsManager.OP_READ_CELL_BROADCASTS:
-            // CallLog permissions
-            case AppOpsManager.OP_READ_CALL_LOG:
-            case AppOpsManager.OP_WRITE_CALL_LOG:
-            case AppOpsManager.OP_PROCESS_OUTGOING_CALLS: {
-                if (sSmsAndCallLogRestrictionEnabled.get() == 1) {
-                    return AppOpsManager.MODE_DEFAULT;
-                }
-            }
-        }
         return sOpDefaultMode[op];
-    }
-
-    // STOPSHIP b/118520006: Hardcode the default values once the feature is stable.
-    private static final AtomicInteger sSmsAndCallLogRestrictionEnabled = new AtomicInteger(-1);
-
-    // STOPSHIP b/118520006: Hardcode the default values once the feature is stable.
-    static {
-        final Context context = ActivityThread.currentApplication();
-        if (context != null) {
-            sSmsAndCallLogRestrictionEnabled.set(ActivityThread.currentActivityThread()
-                        .getIntCoreSetting(Settings.Global.SMS_ACCESS_RESTRICTION_ENABLED, 0));
-
-            final Uri uri =
-                    Settings.Global.getUriFor(Settings.Global.SMS_ACCESS_RESTRICTION_ENABLED);
-            context.getContentResolver().registerContentObserver(uri, false, new ContentObserver(
-                    context.getMainThreadHandler()) {
-                @Override
-                public void onChange(boolean selfChange) {
-                    sSmsAndCallLogRestrictionEnabled.set(Settings.Global.getInt(
-                            context.getContentResolver(),
-                            Settings.Global.SMS_ACCESS_RESTRICTION_ENABLED, 0));
-                }
-            });
-        }
     }
 
     /**
@@ -5255,7 +5222,6 @@ public class AppOpsManager {
      * @hide
      */
     public int noteProxyOpNoThrow(int op, String proxiedPackageName, int proxiedUid) {
-        logOperationIfNeeded(op, mContext.getOpPackageName(), proxiedPackageName);
         try {
             return mService.noteProxyOperation(op, Process.myUid(), mContext.getOpPackageName(),
                     proxiedUid, proxiedPackageName);
@@ -5284,7 +5250,6 @@ public class AppOpsManager {
      */
     @UnsupportedAppUsage
     public int noteOpNoThrow(int op, int uid, String packageName) {
-        logOperationIfNeeded(op, packageName, null);
         try {
             return mService.noteOperation(op, uid, packageName);
         } catch (RemoteException e) {
@@ -5392,7 +5357,6 @@ public class AppOpsManager {
      * @hide
      */
     public int startOpNoThrow(int op, int uid, String packageName, boolean startIfModeDefault) {
-        logOperationIfNeeded(op, packageName, null);
         try {
             return mService.startOperation(getToken(mService), op, uid, packageName,
                     startIfModeDefault);
@@ -5409,7 +5373,6 @@ public class AppOpsManager {
      * @hide
      */
     public void finishOp(int op, int uid, String packageName) {
-        logOperationIfNeeded(op, packageName, null);
         try {
             mService.finishOperation(getToken(mService), op, uid, packageName);
         } catch (RemoteException e) {
@@ -5748,46 +5711,5 @@ public class AppOpsManager {
         }
 
         return AppOpsManager.MODE_DEFAULT;
-    }
-
-    private static void logOperationIfNeeded(int op, String callingPackage, String proxiedPackage) {
-        // Check if debug logging propety is enabled.
-        if (!SystemProperties.getBoolean(DEBUG_LOGGING_ENABLE_PROP, false)) {
-            return;
-        }
-        // Check if this package should be logged.
-        String packages = SystemProperties.get(DEBUG_LOGGING_PACKAGES_PROP, "");
-        if (!"".equals(packages) && callingPackage != null) {
-            boolean found = false;
-            for (String pkg : packages.split(",")) {
-                if (callingPackage.equals(pkg)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return;
-            }
-        }
-        String opStr = opToName(op);
-        // Check if this app op should be logged
-        String logOps = SystemProperties.get(DEBUG_LOGGING_OPS_PROP, "");
-        if (!"".equals(logOps)) {
-            boolean found = false;
-            for (String logOp : logOps.split(",")) {
-                if (opStr.equals(logOp)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return;
-            }
-        }
-
-        // Log a stack trace
-        Exception here = new Exception("HERE!");
-        android.util.Log.i(DEBUG_LOGGING_TAG, "Note operation package= " + callingPackage
-                + " proxied= " + proxiedPackage + " op= " + opStr, here);
     }
 }

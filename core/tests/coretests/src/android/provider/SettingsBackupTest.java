@@ -130,8 +130,10 @@ public class SettingsBackupTest {
                     Settings.Global.AUTOFILL_MAX_PARTITIONS_SIZE,
                     Settings.Global.AUTOFILL_MAX_VISIBLE_DATASETS,
                     Settings.Global.AUTOMATIC_POWER_SAVE_MODE,
+                    Settings.Global.AVERAGE_TIME_TO_DISCHARGE,
                     Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED,
                     Settings.Global.BATTERY_CHARGING_STATE_UPDATE_DELAY,
+                    Settings.Global.BATTERY_ESTIMATES_LAST_UPDATE_TIME,
                     Settings.Global.BROADCAST_BG_CONSTANTS,
                     Settings.Global.BROADCAST_FG_CONSTANTS,
                     Settings.Global.BROADCAST_OFFLOAD_CONSTANTS,
@@ -203,11 +205,7 @@ public class SettingsBackupTest {
                     Settings.Global.DATA_ROAMING,
                     Settings.Global.DATA_STALL_ALARM_AGGRESSIVE_DELAY_IN_MS,
                     Settings.Global.DATA_STALL_ALARM_NON_AGGRESSIVE_DELAY_IN_MS,
-                    Settings.Global.DATA_STALL_CONSECUTIVE_DNS_TIMEOUT_THRESHOLD,
-                    Settings.Global.DATA_STALL_EVALUATION_TYPE,
-                    Settings.Global.DATA_STALL_MIN_EVALUATE_INTERVAL,
                     Settings.Global.DATA_STALL_RECOVERY_ON_BAD_NETWORK,
-                    Settings.Global.DATA_STALL_VALID_DNS_TIME_THRESHOLD,
                     Settings.Global.DEBUG_APP,
                     Settings.Global.DEBUG_VIEW_ATTRIBUTES,
                     Settings.Global.DEBUG_VIEW_ATTRIBUTES_APPLICATION_PACKAGE,
@@ -296,6 +294,8 @@ public class SettingsBackupTest {
                     Settings.Global.INTENT_FIREWALL_UPDATE_CONTENT_URL,
                     Settings.Global.INTENT_FIREWALL_UPDATE_METADATA_URL,
                     Settings.Global.JOB_SCHEDULER_CONSTANTS,
+                    Settings.Global.JOB_SCHEDULER_QUOTA_CONTROLLER_CONSTANTS,
+                    Settings.Global.JOB_SCHEDULER_TIME_CONTROLLER_CONSTANTS,
                     Settings.Global.KEEP_PROFILE_IN_BACKGROUND,
                     Settings.Global.KERNEL_CPU_THREAD_READER,
                     Settings.Global.LANG_ID_UPDATE_CONTENT_URL,
@@ -394,6 +394,7 @@ public class SettingsBackupTest {
                     Settings.Global.PDP_WATCHDOG_POLL_INTERVAL_MS,
                     Settings.Global.PDP_WATCHDOG_TRIGGER_PACKET_COUNT,
                     Settings.Global.POLICY_CONTROL,
+                    Settings.Global.POWER_BUTTON_SUPPRESSION_DELAY_AFTER_GESTURE_WAKE,
                     Settings.Global.POWER_MANAGER_CONSTANTS,
                     Settings.Global.PREFERRED_NETWORK_MODE,
                     Settings.Global.PRIVATE_DNS_DEFAULT_MODE,
@@ -433,7 +434,6 @@ public class SettingsBackupTest {
                     Settings.Global.SIGNED_CONFIG_VERSION,
                     Settings.Global.SMART_SELECTION_UPDATE_CONTENT_URL,
                     Settings.Global.SMART_SELECTION_UPDATE_METADATA_URL,
-                    Settings.Global.SMS_ACCESS_RESTRICTION_ENABLED,
                     Settings.Global.SMS_OUTGOING_CHECK_INTERVAL_MS,
                     Settings.Global.SMS_OUTGOING_CHECK_MAX_COUNT,
                     Settings.Global.SMS_SHORT_CODE_CONFIRMATION,
@@ -467,6 +467,8 @@ public class SettingsBackupTest {
                     Settings.Global.TEXT_CLASSIFIER_ACTION_MODEL_PARAMS,
                     Settings.Global.THEATER_MODE_ON,
                     Settings.Global.TIME_ONLY_MODE_CONSTANTS,
+                    Settings.Global.TIME_REMAINING_ESTIMATE_MILLIS,
+                    Settings.Global.TIME_REMAINING_ESTIMATE_BASED_ON_USAGE,
                     Settings.Global.TRANSITION_ANIMATION_SCALE,
                     Settings.Global.TRUSTED_SOUND,
                     Settings.Global.TZINFO_UPDATE_CONTENT_URL,
@@ -578,7 +580,10 @@ public class SettingsBackupTest {
                     Settings.Global.RADIO_BUG_WAKELOCK_TIMEOUT_COUNT_THRESHOLD,
                     Settings.Global.RADIO_BUG_SYSTEM_ERROR_COUNT_THRESHOLD,
                     Settings.Global.ENABLED_SUBSCRIPTION_FOR_SLOT,
-                    Settings.Global.MODEM_STACK_ENABLED_FOR_SLOT);
+                    Settings.Global.MODEM_STACK_ENABLED_FOR_SLOT,
+                    Settings.Global.POWER_BUTTON_LONG_PRESS,
+                    Settings.Global.POWER_BUTTON_VERY_LONG_PRESS);
+
     private static final Set<String> BACKUP_BLACKLISTED_SECURE_SETTINGS =
              newHashSet(
                  Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE,
@@ -650,7 +655,6 @@ public class SettingsBackupTest {
                  Settings.Secure.NIGHT_DISPLAY_LAST_ACTIVATED_TIME,
                  Settings.Secure.NUM_ROTATION_SUGGESTIONS_ACCEPTED,
                  Settings.Secure.ODI_CAPTIONS_ENABLED,
-                 Settings.Secure.ODI_CAPTIONS_OPTED_OUT,
                  Settings.Secure.PACKAGE_VERIFIER_STATE,
                  Settings.Secure.PACKAGE_VERIFIER_USER_CONSENT,
                  Settings.Secure.PARENTAL_CONTROL_LAST_UPDATE,
@@ -714,7 +718,10 @@ public class SettingsBackupTest {
                  Settings.Secure.FLASHLIGHT_ENABLED,
                  Settings.Secure.CROSS_PROFILE_CALENDAR_ENABLED,
                  Settings.Secure.LOCATION_ACCESS_CHECK_INTERVAL_MILLIS,
-                 Settings.Secure.LOCATION_ACCESS_CHECK_DELAY_MILLIS);
+                 Settings.Secure.LOCATION_ACCESS_CHECK_DELAY_MILLIS,
+                 Settings.Secure.BIOMETRIC_DEBUG_ENABLED,
+                 Settings.Secure.FACE_UNLOCK_ATTENTION_REQUIRED,
+                 Settings.Secure.FACE_UNLOCK_DIVERSITY_REQUIRED);
 
     @Test
     public void systemSettingsBackedUpOrBlacklisted() {

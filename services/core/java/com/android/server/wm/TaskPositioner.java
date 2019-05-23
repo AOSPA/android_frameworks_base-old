@@ -34,6 +34,7 @@ import android.app.IActivityTaskManager;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Binder;
+import android.os.IBinder;
 import android.os.Looper;
 import android.os.Process;
 import android.os.RemoteException;
@@ -56,7 +57,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
-class TaskPositioner {
+class TaskPositioner implements IBinder.DeathRecipient {
     private static final boolean DEBUG_ORIENTATION_VIOLATIONS = false;
     private static final String TAG_LOCAL = "TaskPositioner";
     private static final String TAG = TAG_WITH_CLASS_NAME ? TAG_LOCAL : TAG_WM;
@@ -104,7 +105,8 @@ class TaskPositioner {
     private int mMinVisibleWidth;
     private int mMinVisibleHeight;
 
-    private Task mTask;
+    @VisibleForTesting
+    Task mTask;
     private boolean mResizing;
     private boolean mPreserveOrientation;
     private boolean mStartOrientationWasLandscape;
@@ -115,7 +117,9 @@ class TaskPositioner {
     private float mStartDragY;
     @CtrlType
     private int mCtrlType = CTRL_NONE;
-    private boolean mDragEnded = false;
+    @VisibleForTesting
+    boolean mDragEnded;
+    private IBinder mClientCallback;
 
     InputChannel mServerChannel;
     InputChannel mClientChannel;
@@ -345,6 +349,7 @@ class TaskPositioner {
         }
         mDisplayContent.resumeRotationLocked();
         mDisplayContent = null;
+        mClientCallback.unlinkToDeath(this, 0 /* flags */);
     }
 
     void startDrag(WindowState win, boolean resize, boolean preserveOrientation, float startX,
@@ -353,6 +358,14 @@ class TaskPositioner {
             Slog.d(TAG, "startDrag: win=" + win + ", resize=" + resize
                     + ", preserveOrientation=" + preserveOrientation + ", {" + startX + ", "
                     + startY + "}");
+        }
+        try {
+            mClientCallback = win.mClient.asBinder();
+            mClientCallback.linkToDeath(this, 0 /* flags */);
+        } catch (RemoteException e) {
+            // The caller has died, so clean up TaskPositioningController.
+            mService.mTaskPositioningController.finishTaskPositioning();
+            return;
         }
         mTask = win.getTask();
         // Use the bounds of the task which accounts for
@@ -437,6 +450,11 @@ class TaskPositioner {
 
         // This is a moving or scrolling operation.
         mTask.mStack.getDimBounds(mTmpRect);
+        // If a target window is covered by system bar, there is no way to move it again by touch.
+        // So we exclude them from stack bounds. and then it will be shown inside stable area.
+        Rect stableBounds = new Rect();
+        mDisplayContent.getStableRect(stableBounds);
+        mTmpRect.intersect(stableBounds);
 
         int nX = (int) x;
         int nY = (int) y;
@@ -648,6 +666,11 @@ class TaskPositioner {
         }
 
         return sFactory.create(service);
+    }
+
+    @Override
+    public void binderDied() {
+        mService.mTaskPositioningController.finishTaskPositioning();
     }
 
     interface Factory {

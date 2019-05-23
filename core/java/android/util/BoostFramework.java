@@ -30,7 +30,6 @@
 package android.util;
 
 import android.content.Context;
-import android.os.SystemProperties;
 import android.util.Log;
 
 import java.lang.reflect.Constructor;
@@ -56,7 +55,6 @@ public class BoostFramework {
     private static Method sFeedbackFunc = null;
     private static Method sPerfGetPropFunc = null;
 
-    private static int sIopv2 = -1;
     private static Method sIOPStart = null;
     private static Method sIOPStop  = null;
     private static Method sUXEngineEvents  = null;
@@ -111,6 +109,8 @@ public class BoostFramework {
         public static final int BOOST_V2 = 2;
         public static final int BOOST_V3 = 3;
         public static final int BOOST_GAME = 4;
+        public static final int RESERVED_1 = 5;
+        public static final int RESERVED_2 = 6;
         public static final int TYPE_SERVICE_START = 100;
     };
 
@@ -359,12 +359,8 @@ public class BoostFramework {
 /** @hide */
     public int perfUXEngine_events(int opcode, int pid, String pkgName, int lat) {
         int ret = -1;
-        if (sIopv2 == -1) {
-            sIopv2 = SystemProperties.getInt("vendor.iop.enable_uxe", 0);
-        }
-
         try {
-            if (sIopv2 == 0 || sUXEngineEvents == null) {
+            if (sUXEngineEvents == null) {
                 return ret;
             }
             Object retVal = sUXEngineEvents.invoke(mPerf, opcode, pid, pkgName, lat);
@@ -379,11 +375,8 @@ public class BoostFramework {
 /** @hide */
     public String perfUXEngine_trigger(int opcode) {
         String ret = null;
-        if (sIopv2 == -1) {
-            sIopv2 = SystemProperties.getInt("vendor.iop.enable_uxe", 0);
-        }
         try {
-            if (sIopv2 == 0 || sUXEngineTrigger == null) {
+            if (sUXEngineTrigger == null) {
                 return ret;
             }
             Object retVal = sUXEngineTrigger.invoke(mPerf, opcode);

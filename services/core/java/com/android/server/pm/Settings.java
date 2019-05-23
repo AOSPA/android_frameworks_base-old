@@ -810,15 +810,20 @@ public final class Settings {
 
     /**
      * Registers a user ID with the system. Potentially allocates a new user ID.
+     * @return {@code true} if a new app ID was created in the process. {@code false} can be
+     *         returned in the case that a shared user ID already exists or the explicit app ID is
+     *         already registered.
      * @throws PackageManagerException If a user ID could not be allocated.
      */
-    void registerAppIdLPw(PackageSetting p) throws PackageManagerException {
+    boolean registerAppIdLPw(PackageSetting p) throws PackageManagerException {
+        final boolean createdNew;
         if (p.appId == 0) {
             // Assign new user ID
             p.appId = acquireAndRegisterNewAppIdLPw(p);
+            createdNew = true;
         } else {
             // Add new setting to list of user IDs
-            registerExistingAppIdLPw(p.appId, p, p.name);
+            createdNew = registerExistingAppIdLPw(p.appId, p, p.name);
         }
         if (p.appId < 0) {
             PackageManagerService.reportSettingsProblem(Log.WARN,
@@ -826,6 +831,7 @@ public final class Settings {
             throw new PackageManagerException(INSTALL_FAILED_INSUFFICIENT_STORAGE,
                     "Package " + p.name + " could not be assigned a valid UID");
         }
+        return createdNew;
     }
 
     /**
@@ -1313,12 +1319,20 @@ public final class Settings {
 
     boolean areDefaultRuntimePermissionsGrantedLPr(int userId) {
         return mRuntimePermissionsPersistence
-                .areDefaultRuntimPermissionsGrantedLPr(userId);
+                .areDefaultRuntimePermissionsGrantedLPr(userId);
     }
 
     void onDefaultRuntimePermissionsGrantedLPr(int userId) {
         mRuntimePermissionsPersistence
                 .onDefaultRuntimePermissionsGrantedLPr(userId);
+    }
+
+    int getDefaultRuntimePermissionsVersionLPr(int userId) {
+        return mRuntimePermissionsPersistence.getVersionLPr(userId);
+    }
+
+    void setDefaultRuntimePermissionsVersionLPr(int version, int userId) {
+        mRuntimePermissionsPersistence.setVersionLPr(version, userId);
     }
 
     public VersionInfo findOrCreateVersion(String volumeUuid) {
@@ -2673,7 +2687,7 @@ public final class Settings {
 
     private void writePackageListLPrInternal(int creatingUserId) {
         // Only derive GIDs for active users (not dying)
-        final List<UserInfo> users = UserManagerService.getInstance().getUsers(true);
+        final List<UserInfo> users = getUsers(UserManagerService.getInstance(), true);
         int[] userIds = new int[users.size()];
         for (int i = 0; i < userIds.length; i++) {
             userIds[i] = users.get(i).id;
@@ -4343,10 +4357,26 @@ public final class Settings {
         return pkgSetting.getHarmfulAppWarning(userId);
     }
 
+    /**
+     * Return all users on the device, including partial or dying users.
+     * @param userManager UserManagerService instance
+     * @return the list of users
+     */
     private static List<UserInfo> getAllUsers(UserManagerService userManager) {
+        return getUsers(userManager, false);
+    }
+
+    /**
+     * Return the list of users on the device. Clear the calling identity before calling into
+     * UserManagerService.
+     * @param userManager UserManagerService instance
+     * @param excludeDying Indicates whether to exclude any users marked for deletion.
+     * @return the list of users
+     */
+    private static List<UserInfo> getUsers(UserManagerService userManager, boolean excludeDying) {
         long id = Binder.clearCallingIdentity();
         try {
-            return userManager.getUsers(false);
+            return userManager.getUsers(excludeDying);
         } catch (NullPointerException npe) {
             // packagemanager not yet initialized
         } finally {
@@ -4405,7 +4435,7 @@ public final class Settings {
             ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION, "PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION",
             ApplicationInfo.PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_UNRESIZEABLE, "PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_UNRESIZEABLE",
             ApplicationInfo.PRIVATE_FLAG_ALLOW_AUDIO_PLAYBACK_CAPTURE, "ALLOW_AUDIO_PLAYBACK_CAPTURE",
-            ApplicationInfo.PRIVATE_FLAG_ALLOW_EXTERNAL_STORAGE_SANDBOX, "ALLOW_EXTERNAL_STORAGE_SANDBOX",
+            ApplicationInfo.PRIVATE_FLAG_REQUEST_LEGACY_EXTERNAL_STORAGE, "PRIVATE_FLAG_REQUEST_LEGACY_EXTERNAL_STORAGE",
             ApplicationInfo.PRIVATE_FLAG_BACKUP_IN_FOREGROUND, "BACKUP_IN_FOREGROUND",
             ApplicationInfo.PRIVATE_FLAG_CANT_SAVE_STATE, "CANT_SAVE_STATE",
             ApplicationInfo.PRIVATE_FLAG_DEFAULT_TO_DEVICE_PROTECTED_STORAGE, "DEFAULT_TO_DEVICE_PROTECTED_STORAGE",
@@ -4727,7 +4757,13 @@ public final class Settings {
                         && !permissionNames.contains(perm)) {
                     continue;
                 }
-                pw.print(prefix); pw.print("    "); pw.println(perm);
+                pw.print(prefix); pw.print("    "); pw.print(perm);
+                final BasePermission bp = mPermissions.getPermission(perm);
+                if (bp != null && bp.isHardOrSoftRestricted()) {
+                    pw.println(": restricted=true");
+                } else {
+                    pw.println();
+                }
             }
         }
 
@@ -5023,7 +5059,10 @@ public final class Settings {
             final int flag = 1 << Integer.numberOfTrailingZeros(flags);
             flags &= ~flag;
             flagsString.append(PackageManager.permissionFlagToString(flag));
-            flagsString.append(' ');
+            if (flags != 0) {
+                flagsString.append('|');
+            }
+
         }
         if (flagsString != null) {
             flagsString.append(']');
@@ -5085,6 +5124,8 @@ public final class Settings {
         private static final long WRITE_PERMISSIONS_DELAY_MILLIS = 200;
         private static final long MAX_WRITE_PERMISSIONS_DELAY_MILLIS = 2000;
 
+        private static final int INITIAL_VERSION = 0;
+
         private final Handler mHandler = new MyHandler();
 
         private final Object mPersistenceLock;
@@ -5095,6 +5136,10 @@ public final class Settings {
         @GuardedBy("mLock")
         // The mapping keys are user ids.
         private final SparseLongArray mLastNotWrittenMutationTimesMillis = new SparseLongArray();
+
+        @GuardedBy("mLock")
+        // The mapping keys are user ids.
+        private final SparseIntArray mVersions = new SparseIntArray();
 
         @GuardedBy("mLock")
         // The mapping keys are user ids.
@@ -5109,7 +5154,18 @@ public final class Settings {
         }
 
         @GuardedBy("Settings.this.mLock")
-        public boolean areDefaultRuntimPermissionsGrantedLPr(int userId) {
+        int getVersionLPr(int userId) {
+            return mVersions.get(userId);
+        }
+
+        @GuardedBy("Settings.this.mLock")
+        void setVersionLPr(int version, int userId) {
+            mVersions.put(userId, version);
+            writePermissionsForUserAsyncLPr(userId);
+        }
+
+        @GuardedBy("Settings.this.mLock")
+        public boolean areDefaultRuntimePermissionsGrantedLPr(int userId) {
             return mDefaultPermissionsGranted.get(userId);
         }
 
@@ -5206,6 +5262,9 @@ public final class Settings {
 
                 serializer.startTag(null, TAG_RUNTIME_PERMISSIONS);
 
+                final int version = mVersions.get(userId, INITIAL_VERSION);
+                serializer.attribute(null, ATTR_VERSION, Integer.toString(version));
+
                 String fingerprint = mFingerprints.get(userId);
                 if (fingerprint != null) {
                     serializer.attribute(null, ATTR_FINGERPRINT, fingerprint);
@@ -5263,6 +5322,7 @@ public final class Settings {
             }
 
             mDefaultPermissionsGranted.delete(userId);
+            mVersions.delete(userId);
             mFingerprints.remove(userId);
         }
 
@@ -5326,6 +5386,9 @@ public final class Settings {
 
                 switch (parser.getName()) {
                     case TAG_RUNTIME_PERMISSIONS: {
+                        int version = XmlUtils.readIntAttribute(parser, ATTR_VERSION,
+                                INITIAL_VERSION);
+                        mVersions.put(userId, version);
                         String fingerprint = parser.getAttributeValue(null, ATTR_FINGERPRINT);
                         mFingerprints.put(userId, fingerprint);
                         final boolean defaultsGranted = Build.FINGERPRINT.equals(fingerprint);

@@ -39,6 +39,10 @@ public class HotspotTile extends QSTileImpl<BooleanState> {
             "com.android.settings", "com.android.settings.TetherSettings"));
 
     private final Icon mEnabledStatic = ResourceIcon.get(R.drawable.ic_hotspot);
+    private final Icon mWifi5EnabledStatic = ResourceIcon.get(R.drawable.ic_wifi_5_hotspot);
+    private final Icon mWifi6EnabledStatic = ResourceIcon.get(R.drawable.ic_wifi_6_hotspot);
+    private final boolean mIeee80211acSupport;
+    private final boolean mIeee80211axSupport;
 
     private final HotspotController mHotspotController;
     private final DataSaverController mDataSaverController;
@@ -54,6 +58,10 @@ public class HotspotTile extends QSTileImpl<BooleanState> {
         mDataSaverController = dataSaverController;
         mHotspotController.observe(this, mCallbacks);
         mDataSaverController.observe(this, mCallbacks);
+        mIeee80211acSupport =
+            mContext.getResources().getBoolean(com.android.internal.R.bool.config_wifi_softap_ieee80211ac_supported);
+        mIeee80211axSupport =
+            mContext.getResources().getBoolean(com.android.internal.R.bool.config_wifi_softap_ieee80211ax_supported);
     }
 
     @Override
@@ -131,6 +139,12 @@ public class HotspotTile extends QSTileImpl<BooleanState> {
         state.slash.isSlashed = !state.value && !state.isTransient;
         if (state.isTransient) {
             state.icon = ResourceIcon.get(R.drawable.ic_hotspot_transient_animation);
+        } else if (state.value) {
+            if (mIeee80211axSupport) {
+                state.icon = mWifi6EnabledStatic;
+            } else if (mIeee80211acSupport) {
+                state.icon = mWifi5EnabledStatic;
+            }
         }
         state.expandedAccessibilityClassName = Switch.class.getName();
         state.contentDescription = state.label;

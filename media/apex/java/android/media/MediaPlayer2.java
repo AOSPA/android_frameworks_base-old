@@ -31,6 +31,7 @@ import android.media.MediaDrm.KeyRequest;
 import android.media.MediaPlayer2.DrmInfo;
 import android.media.MediaPlayer2Proto.PlayerMessage;
 import android.media.MediaPlayer2Proto.Value;
+import android.media.protobuf.InvalidProtocolBufferException;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -46,7 +47,6 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 
 import com.android.internal.annotations.GuardedBy;
-import com.android.media.protobuf.InvalidProtocolBufferException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -273,6 +273,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * Then check the <code>status</code> parameter. The value {@link #CALL_STATUS_NO_ERROR} indicates a
  * successful transition. Any other value will be an error. Call {@link #getState()} to
  * determine the current state. </p>
+ *
+ * @hide
  */
 public class MediaPlayer2 implements AutoCloseable, AudioRouting {
     static {
@@ -546,7 +548,7 @@ public class MediaPlayer2 implements AutoCloseable, AudioRouting {
             @Override
             void process() {
                 if (getState() == PLAYER_STATE_PLAYING) {
-                    pause();
+                    native_pause();
                 }
                 playNextDataSource();
             }

@@ -45,8 +45,7 @@ public final class OverlayInfo implements Parcelable {
             STATE_DISABLED,
             STATE_ENABLED,
             STATE_ENABLED_STATIC,
-            // @Deprecated STATE_TARGET_UPGRADING,
-            STATE_TARGET_IS_BEING_REPLACED,
+            // @Deprecated STATE_TARGET_IS_BEING_REPLACED,
             STATE_OVERLAY_IS_BEING_REPLACED,
     })
     /** @hide */
@@ -451,7 +450,7 @@ public final class OverlayInfo implements Parcelable {
     public String toString() {
         return "OverlayInfo { overlay=" + packageName + ", targetPackage=" + targetPackageName
                 + ((targetOverlayableName == null) ? ""
-                : ", targetOverlyabale=" + targetOverlayableName)
+                : ", targetOverlayable=" + targetOverlayableName)
                 + ", state=" + state + " (" + stateToString(state) + "), userId=" + userId + " }";
     }
 }

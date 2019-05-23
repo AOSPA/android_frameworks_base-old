@@ -760,7 +760,7 @@ class AlarmManagerService extends SystemService {
                 if (predicate.test(alarm)) {
                     alarms.remove(i);
                     if (!reOrdering) {
-                        decrementAlarmCount(alarm.uid);
+                        decrementAlarmCount(alarm.uid, 1);
                     }
                     didRemove = true;
                     if (alarm.alarmClock != null) {
@@ -1697,6 +1697,8 @@ class AlarmManagerService extends SystemService {
             return;
         }
 
+        type = fixTypeIfAuto(type);
+
         // Sanity check the window length.  This will catch people mistakenly
         // trying to pass an end-of-window timestamp rather than a duration.
         if (windowLength > AlarmManager.INTERVAL_HALF_DAY) {
@@ -1762,7 +1764,8 @@ class AlarmManagerService extends SystemService {
                                 + ", callingPackage: " + callingPackage;
                 // STOPSHIP (b/128866264): Just to catch breakages. Remove before final release.
                 Slog.wtf(TAG, errorMsg);
-                throw new UnsupportedOperationException(errorMsg);
+                // TODO b/129995049: Resume throwing after some soak time without errors
+                // throw new UnsupportedOperationException(errorMsg);
             }
             setImplLocked(type, triggerAtTime, triggerElapsed, windowLength, maxElapsed,
                     interval, operation, directReceiver, listenerTag, flags, true, workSource,
@@ -1809,6 +1812,21 @@ class AlarmManagerService extends SystemService {
             index = NEVER_INDEX;
         }
         return mConstants.APP_STANDBY_QUOTAS[index];
+    }
+
+    /**
+     * In case of cars, we need to avoid scheduling wakeup alarms, since we don't want the system
+     * to wake up from suspend arbitrarily to perform app work.
+     */
+    private int fixTypeIfAuto(int type) {
+        if (mInjector.isAutomotive()) {
+            if (type == AlarmManager.ELAPSED_REALTIME_WAKEUP) {
+                type = AlarmManager.ELAPSED_REALTIME;
+            } else if (type == AlarmManager.RTC_WAKEUP) {
+                type = AlarmManager.RTC;
+            }
+        }
+        return type;
     }
 
     /**
@@ -2214,6 +2232,7 @@ class AlarmManagerService extends SystemService {
             pw.print("  mLastTickSet="); pw.println(sdf.format(new Date(mLastTickSet)));
             pw.print("  mLastTickAdded="); pw.println(sdf.format(new Date(mLastTickAdded)));
             pw.print("  mLastTickRemoved="); pw.println(sdf.format(new Date(mLastTickRemoved)));
+            pw.print("  mIsAutomotive="); pw.println(mInjector.isAutomotive());
 
             if (RECORD_ALARMS_IN_HISTORY) {
                 pw.println();
@@ -3094,17 +3113,21 @@ class AlarmManagerService extends SystemService {
             }
         }
         for (int i = mPendingWhileIdleAlarms.size() - 1; i >= 0; i--) {
-            if (mPendingWhileIdleAlarms.get(i).matches(operation, directReceiver)) {
+            final Alarm alarm = mPendingWhileIdleAlarms.get(i);
+            if (alarm.matches(operation, directReceiver)) {
                 // Don't set didRemove, since this doesn't impact the scheduled alarms.
                 mPendingWhileIdleAlarms.remove(i);
+                decrementAlarmCount(alarm.uid, 1);
             }
         }
         for (int i = mPendingBackgroundAlarms.size() - 1; i >= 0; i--) {
             final ArrayList<Alarm> alarmsForUid = mPendingBackgroundAlarms.valueAt(i);
             for (int j = alarmsForUid.size() - 1; j >= 0; j--) {
-                if (alarmsForUid.get(j).matches(operation, directReceiver)) {
+                final Alarm alarm = alarmsForUid.get(j);
+                if (alarm.matches(operation, directReceiver)) {
                     // Don't set didRemove, since this doesn't impact the scheduled alarms.
                     alarmsForUid.remove(j);
+                    decrementAlarmCount(alarm.uid, 1);
                 }
             }
             if (alarmsForUid.size() == 0) {
@@ -3133,7 +3156,7 @@ class AlarmManagerService extends SystemService {
 
     void removeLocked(final int uid) {
         if (uid == Process.SYSTEM_UID) {
-            Slog.wtf(TAG, "removeLocked: Shouldn't for UID=" + uid);
+            // If a force-stop occurs for a system-uid package, ignore it.
             return;
         }
         boolean didRemove = false;
@@ -3150,6 +3173,7 @@ class AlarmManagerService extends SystemService {
             if (a.uid == uid) {
                 // Don't set didRemove, since this doesn't impact the scheduled alarms.
                 mPendingWhileIdleAlarms.remove(i);
+                decrementAlarmCount(uid, 1);
             }
         }
         for (int i = mPendingBackgroundAlarms.size() - 1; i >= 0; i --) {
@@ -3157,6 +3181,7 @@ class AlarmManagerService extends SystemService {
             for (int j = alarmsForUid.size() - 1; j >= 0; j--) {
                 if (alarmsForUid.get(j).uid == uid) {
                     alarmsForUid.remove(j);
+                    decrementAlarmCount(uid, 1);
                 }
             }
             if (alarmsForUid.size() == 0) {
@@ -3202,13 +3227,16 @@ class AlarmManagerService extends SystemService {
             if (a.matches(packageName)) {
                 // Don't set didRemove, since this doesn't impact the scheduled alarms.
                 mPendingWhileIdleAlarms.remove(i);
+                decrementAlarmCount(a.uid, 1);
             }
         }
         for (int i = mPendingBackgroundAlarms.size() - 1; i >= 0; i --) {
             final ArrayList<Alarm> alarmsForUid = mPendingBackgroundAlarms.valueAt(i);
             for (int j = alarmsForUid.size() - 1; j >= 0; j--) {
-                if (alarmsForUid.get(j).matches(packageName)) {
+                final Alarm alarm = alarmsForUid.get(j);
+                if (alarm.matches(packageName)) {
                     alarmsForUid.remove(j);
+                    decrementAlarmCount(alarm.uid, 1);
                 }
             }
             if (alarmsForUid.size() == 0) {
@@ -3228,7 +3256,7 @@ class AlarmManagerService extends SystemService {
     // Only called for ephemeral apps
     void removeForStoppedLocked(final int uid) {
         if (uid == Process.SYSTEM_UID) {
-            Slog.wtf(TAG, "removeForStoppedLocked: Shouldn't for UID=" + uid);
+            // If a force-stop occurs for a system-uid package, ignore it.
             return;
         }
         boolean didRemove = false;
@@ -3253,10 +3281,15 @@ class AlarmManagerService extends SystemService {
             if (a.uid == uid) {
                 // Don't set didRemove, since this doesn't impact the scheduled alarms.
                 mPendingWhileIdleAlarms.remove(i);
+                decrementAlarmCount(uid, 1);
             }
         }
         for (int i = mPendingBackgroundAlarms.size() - 1; i >= 0; i--) {
             if (mPendingBackgroundAlarms.keyAt(i) == uid) {
+                final ArrayList<Alarm> toRemove = mPendingBackgroundAlarms.valueAt(i);
+                if (toRemove != null) {
+                    decrementAlarmCount(uid, toRemove.size());
+                }
                 mPendingBackgroundAlarms.removeAt(i);
             }
         }
@@ -3272,7 +3305,7 @@ class AlarmManagerService extends SystemService {
 
     void removeUserLocked(int userHandle) {
         if (userHandle == UserHandle.USER_SYSTEM) {
-            Slog.wtf(TAG, "removeForStoppedLocked: Shouldn't for user=" + userHandle);
+            // If we're told we're removing the system user, ignore it.
             return;
         }
         boolean didRemove = false;
@@ -3289,11 +3322,18 @@ class AlarmManagerService extends SystemService {
             if (UserHandle.getUserId(mPendingWhileIdleAlarms.get(i).creatorUid)
                     == userHandle) {
                 // Don't set didRemove, since this doesn't impact the scheduled alarms.
-                mPendingWhileIdleAlarms.remove(i);
+                final Alarm removed = mPendingWhileIdleAlarms.remove(i);
+                decrementAlarmCount(removed.uid, 1);
             }
         }
         for (int i = mPendingBackgroundAlarms.size() - 1; i >= 0; i--) {
             if (UserHandle.getUserId(mPendingBackgroundAlarms.keyAt(i)) == userHandle) {
+                final ArrayList<Alarm> toRemove = mPendingBackgroundAlarms.valueAt(i);
+                if (toRemove != null) {
+                    for (int j = 0; j < toRemove.size(); j++) {
+                        decrementAlarmCount(toRemove.get(j).uid, 1);
+                    }
+                }
                 mPendingBackgroundAlarms.removeAt(i);
             }
         }
@@ -3825,7 +3865,7 @@ class AlarmManagerService extends SystemService {
                 Slog.w(TAG, "Failure sending alarm.", e);
             }
             Trace.traceEnd(Trace.TRACE_TAG_POWER);
-            decrementAlarmCount(alarm.uid);
+            decrementAlarmCount(alarm.uid, 1);
         }
     }
 
@@ -3838,9 +3878,12 @@ class AlarmManagerService extends SystemService {
     static class Injector {
         private long mNativeData;
         private Context mContext;
+        private final boolean mIsAutomotive;
 
         Injector(Context context) {
             mContext = context;
+            mIsAutomotive = context.getPackageManager().hasSystemFeature(
+                PackageManager.FEATURE_AUTOMOTIVE);
         }
 
         void init() {
@@ -3928,6 +3971,10 @@ class AlarmManagerService extends SystemService {
 
         ClockReceiver getClockReceiver(AlarmManagerService service) {
             return service.new ClockReceiver();
+        }
+
+        boolean isAutomotive() {
+            return mIsAutomotive;
         }
     }
 
@@ -4172,7 +4219,7 @@ class AlarmManagerService extends SystemService {
                                 removeImpl(alarm.operation, null);
                             }
                         }
-                        decrementAlarmCount(alarm.uid);
+                        decrementAlarmCount(alarm.uid, 1);
                     }
                     break;
                 }
@@ -4802,15 +4849,20 @@ class AlarmManagerService extends SystemService {
         }
     }
 
-    private void decrementAlarmCount(int uid) {
+    private void decrementAlarmCount(int uid, int decrement) {
+        int oldCount = 0;
         final int uidIndex = mAlarmsPerUid.indexOfKey(uid);
         if (uidIndex >= 0) {
-            final int newCount = mAlarmsPerUid.valueAt(uidIndex) - 1;
-            if (newCount > 0) {
-                mAlarmsPerUid.setValueAt(uidIndex, newCount);
+            oldCount = mAlarmsPerUid.valueAt(uidIndex);
+            if (oldCount > decrement) {
+                mAlarmsPerUid.setValueAt(uidIndex, oldCount - decrement);
             } else {
                 mAlarmsPerUid.removeAt(uidIndex);
             }
+        }
+        if (oldCount < decrement) {
+            Slog.wtf(TAG, "Attempt to decrement existing alarm count " + oldCount + " by "
+                    + decrement + " for uid " + uid);
         }
     }
 

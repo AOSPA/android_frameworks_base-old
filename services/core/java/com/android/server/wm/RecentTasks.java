@@ -60,7 +60,6 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.IBinder;
 import android.os.RemoteException;
-import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.text.TextUtils;
@@ -68,6 +67,7 @@ import android.util.ArraySet;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
+import android.util.BoostFramework;
 import android.view.MotionEvent;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
 
@@ -185,7 +185,6 @@ class RecentTasks {
     // front. Newly created tasks, or tasks that are removed from the list will continue to change
     // the list.  This does not affect affiliated tasks.
     private boolean mFreezeTaskListReordering;
-    private long mFreezeTaskListReorderingTime;
     private long mFreezeTaskListTimeoutMs = FREEZE_TASK_LIST_TIMEOUT_MS;
 
     // Mainly to avoid object recreation on multiple calls.
@@ -193,6 +192,7 @@ class RecentTasks {
     private final HashMap<ComponentName, ActivityInfo> mTmpAvailActCache = new HashMap<>();
     private final HashMap<String, ApplicationInfo> mTmpAvailAppCache = new HashMap<>();
     private final SparseBooleanArray mTmpQuietProfileUserIds = new SparseBooleanArray();
+    private final BoostFramework mUxPerf = new BoostFramework();
 
     // TODO(b/127498985): This is currently a rough heuristic for interaction inside an app
     private final PointerEventListener mListener = new PointerEventListener() {
@@ -219,6 +219,9 @@ class RecentTasks {
             }, null).recycleOnUse());
         }
     };
+
+    private final Runnable mResetFreezeTaskListOnTimeoutRunnable =
+            this::resetFreezeTaskListReorderingOnTimeout;
 
     @VisibleForTesting
     RecentTasks(ActivityTaskManagerService service, TaskPersister taskPersister) {
@@ -255,8 +258,7 @@ class RecentTasks {
     }
 
     @VisibleForTesting
-    void setFreezeTaskListTimeoutParams(long reorderingTime, long timeoutMs) {
-        mFreezeTaskListReorderingTime = reorderingTime;
+    void setFreezeTaskListTimeout(long timeoutMs) {
         mFreezeTaskListTimeoutMs = timeoutMs;
     }
 
@@ -272,7 +274,8 @@ class RecentTasks {
         // Always update the reordering time when this is called to ensure that the timeout
         // is reset
         mFreezeTaskListReordering = true;
-        mFreezeTaskListReorderingTime = SystemClock.elapsedRealtime();
+        mService.mH.removeCallbacks(mResetFreezeTaskListOnTimeoutRunnable);
+        mService.mH.postDelayed(mResetFreezeTaskListOnTimeoutRunnable, mFreezeTaskListTimeoutMs);
     }
 
     /**
@@ -286,6 +289,7 @@ class RecentTasks {
 
         // Once we end freezing the task list, reset the existing task order to the stable state
         mFreezeTaskListReordering = false;
+        mService.mH.removeCallbacks(mResetFreezeTaskListOnTimeoutRunnable);
 
         // If the top task is provided, then restore the top task to the front of the list
         if (topTask != null) {
@@ -295,6 +299,8 @@ class RecentTasks {
 
         // Resume trimming tasks
         trimInactiveRecentTasks();
+
+        mService.getTaskChangeNotificationController().notifyTaskStackChanged();
     }
 
     /**
@@ -302,13 +308,8 @@ class RecentTasks {
      * before we need to iterate the task list in order (either for purposes of returning the list
      * to SystemUI or if we need to trim tasks in order)
      */
+    @VisibleForTesting
     void resetFreezeTaskListReorderingOnTimeout() {
-        // Unfreeze the recent task list if the time heuristic has passed
-        if (mFreezeTaskListReorderingTime
-                > (SystemClock.elapsedRealtime() - mFreezeTaskListTimeoutMs)) {
-            return;
-        }
-
         final ActivityStack focusedStack = mService.getTopDisplayFocusedStack();
         final TaskRecord topTask = focusedStack != null
                 ? focusedStack.topTask()
@@ -654,9 +655,11 @@ class RecentTasks {
     }
 
     void removeAllVisibleTasks(int userId) {
+        Set<Integer> profileIds = getProfileIds(userId);
         for (int i = mTasks.size() - 1; i >= 0; --i) {
             final TaskRecord tr = mTasks.get(i);
-            if (tr.userId == userId && isVisibleRecentTask(tr)) {
+            if (!profileIds.contains(tr.userId)) continue;
+            if (isVisibleRecentTask(tr)) {
                 mTasks.remove(i);
                 notifyTaskRemoved(tr, true /* wasTrimmed */, true /* killProcess */);
             }
@@ -875,9 +878,6 @@ class RecentTasks {
         final Set<Integer> includedUsers = getProfileIds(userId);
         includedUsers.add(Integer.valueOf(userId));
 
-        // Check if the frozen task list has timed out
-        resetFreezeTaskListReorderingOnTimeout();
-
         final ArrayList<ActivityManager.RecentTaskInfo> res = new ArrayList<>();
         final int size = mTasks.size();
         int numVisibleTasks = 0;
@@ -886,7 +886,7 @@ class RecentTasks {
 
             if (isVisibleRecentTask(tr)) {
                 numVisibleTasks++;
-                if (isInVisibleRange(tr, numVisibleTasks, withExcluded)) {
+                if (isInVisibleRange(tr, i, numVisibleTasks, withExcluded)) {
                     // Fall through
                 } else {
                     // Not in visible range
@@ -991,7 +991,7 @@ class RecentTasks {
             final TaskRecord tr = mTasks.get(i);
             if (isVisibleRecentTask(tr)) {
                 numVisibleTasks++;
-                if (isInVisibleRange(tr, numVisibleTasks, false /* skipExcludedCheck */)) {
+                if (isInVisibleRange(tr, i, numVisibleTasks, false /* skipExcludedCheck */)) {
                     res.put(tr.taskId, true);
                 }
             }
@@ -1160,6 +1160,13 @@ class RecentTasks {
     void remove(TaskRecord task) {
         mTasks.remove(task);
         notifyTaskRemoved(task, false /* wasTrimmed */, false /* killProcess */);
+        if (task != null) {
+            final String taskPkgName =
+                  task.getBaseIntent().getComponent().getPackageName();
+            if (mUxPerf != null) {
+                mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, taskPkgName, 0);
+            }
+        }
     }
 
     /**
@@ -1212,7 +1219,7 @@ class RecentTasks {
                     continue;
                 } else {
                     numVisibleTasks++;
-                    if (isInVisibleRange(task, numVisibleTasks, false /* skipExcludedCheck */)
+                    if (isInVisibleRange(task, i, numVisibleTasks, false /* skipExcludedCheck */)
                             || !isTrimmable(task)) {
                         // Keep visible tasks in range
                         i++;
@@ -1327,7 +1334,7 @@ class RecentTasks {
     /**
      * @return whether the given visible task is within the policy range.
      */
-    private boolean isInVisibleRange(TaskRecord task, int numVisibleTasks,
+    private boolean isInVisibleRange(TaskRecord task, int taskIndex, int numVisibleTasks,
             boolean skipExcludedCheck) {
         if (!skipExcludedCheck) {
             // Keep the most recent task even if it is excluded from recents
@@ -1336,7 +1343,7 @@ class RecentTasks {
                             == FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
             if (isExcludeFromRecents) {
                 if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "\texcludeFromRecents=true");
-                return numVisibleTasks == 1;
+                return taskIndex == 0;
             }
         }
 
@@ -1654,8 +1661,8 @@ class RecentTasks {
         pw.println("mRecentsUid=" + mRecentsUid);
         pw.println("mRecentsComponent=" + mRecentsComponent);
         pw.println("mFreezeTaskListReordering=" + mFreezeTaskListReordering);
-        pw.println("mFreezeTaskListReorderingTime (time since)="
-                + (SystemClock.elapsedRealtime() - mFreezeTaskListReorderingTime) + "ms");
+        pw.println("mFreezeTaskListReorderingPendingTimeout="
+                + mService.mH.hasCallbacks(mResetFreezeTaskListOnTimeoutRunnable));
         if (mTasks.isEmpty()) {
             return;
         }

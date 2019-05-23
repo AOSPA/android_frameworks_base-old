@@ -3090,6 +3090,7 @@ public final class Telephony {
              * The {@code content://} style URL for this table. Can be appended with a part ID to
              * address individual parts.
              */
+            @NonNull
             public static final Uri CONTENT_URI = Uri.withAppendedPath(Mms.CONTENT_URI, "part");
 
             /**
@@ -3445,6 +3446,7 @@ public final class Telephony {
          * {@link SubscriptionManager#getDefaultSubscriptionId()}. To specify subId for MSIM,
          * use {@link Uri#withAppendedPath(Uri, String)} to append with subscription id.
          */
+        @NonNull
         public static final Uri CONTENT_URI = Uri.parse("content://telephony/carriers");
 
         /**
@@ -3457,6 +3459,7 @@ public final class Telephony {
          * {@link SubscriptionManager#getDefaultSubscriptionId()}. To specify subId for MSIM,
          * use {@link Uri#withAppendedPath(Uri, String)} to append with subscription id.
          */
+        @NonNull
         public static final Uri SIM_APN_URI = Uri.parse(
                 "content://telephony/carriers/sim_apn_list");
 
@@ -4372,6 +4375,22 @@ public final class Telephony {
          * @hide
          */
         public static final String IS_USING_CARRIER_AGGREGATION = "is_using_carrier_aggregation";
+
+        /**
+         * The current registered raw data network operator name in long alphanumeric format.
+         * <p>
+         * This is the same as {@link ServiceState#getOperatorAlphaLongRaw()}.
+         * @hide
+         */
+        public static final String OPERATOR_ALPHA_LONG_RAW = "operator_alpha_long_raw";
+
+        /**
+         * The current registered raw data network operator name in short alphanumeric format.
+         * <p>
+         * This is the same as {@link ServiceState#getOperatorAlphaShortRaw()}.
+         * @hide
+         */
+        public static final String OPERATOR_ALPHA_SHORT_RAW = "operator_alpha_short_raw";
     }
 
     /**

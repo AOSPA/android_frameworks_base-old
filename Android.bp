@@ -161,6 +161,7 @@ java_defaults {
         ":libcamera_client_framework_aidl",
         "core/java/android/hardware/IConsumerIrService.aidl",
         "core/java/android/hardware/ISerialManager.aidl",
+        "core/java/android/hardware/biometrics/IBiometricConfirmDeviceCredentialCallback.aidl",
         "core/java/android/hardware/biometrics/IBiometricEnabledOnKeyguardCallback.aidl",
         "core/java/android/hardware/biometrics/IBiometricService.aidl",
         "core/java/android/hardware/biometrics/IBiometricServiceReceiver.aidl",
@@ -319,6 +320,7 @@ java_defaults {
         "core/java/android/service/vr/IVrManager.aidl",
         "core/java/android/service/vr/IVrStateCallbacks.aidl",
         "core/java/android/service/watchdog/IExplicitHealthCheckService.aidl",
+        "core/java/android/service/watchdog/PackageConfig.aidl",
         "core/java/android/print/ILayoutResultCallback.aidl",
         "core/java/android/print/IPrinterDiscoveryObserver.aidl",
         "core/java/android/print/IPrintDocumentAdapter.aidl",
@@ -436,6 +438,7 @@ java_defaults {
         "core/java/com/android/internal/os/IShellCallback.aidl",
         "core/java/com/android/internal/statusbar/IStatusBar.aidl",
         "core/java/com/android/internal/statusbar/IStatusBarService.aidl",
+        "core/java/com/android/internal/statusbar/RegisterStatusBarResult.aidl",
         "core/java/com/android/internal/textservice/ISpellCheckerService.aidl",
         "core/java/com/android/internal/textservice/ISpellCheckerServiceCallback.aidl",
         "core/java/com/android/internal/textservice/ISpellCheckerSession.aidl",
@@ -477,10 +480,7 @@ java_defaults {
         "media/java/android/media/IMediaHTTPConnection.aidl",
         "media/java/android/media/IMediaHTTPService.aidl",
         "media/java/android/media/IMediaResourceMonitor.aidl",
-        "media/java/android/media/IMediaRoute2Callback.aidl",
-        "media/java/android/media/IMediaRoute2Provider.aidl",
         "media/java/android/media/IMediaRouterClient.aidl",
-        "media/java/android/media/IMediaRouter2ManagerClient.aidl",
         "media/java/android/media/IMediaRouterService.aidl",
         "media/java/android/media/IMediaScannerListener.aidl",
         "media/java/android/media/IMediaScannerService.aidl",
@@ -689,6 +689,7 @@ java_defaults {
         "core/java/com/android/server/DropboxLogTags.logtags",
         "core/java/org/chromium/arc/EventLogTags.logtags",
 
+        ":apex-properties",
         ":platform-properties",
 
         ":framework-statslog-gen",
@@ -922,6 +923,7 @@ filegroup {
         "core/java/com/android/internal/util/RingBufferIndices.java",
         "core/java/com/android/internal/util/State.java",
         "core/java/com/android/internal/util/StateMachine.java",
+        "core/java/com/android/internal/util/TrafficStatsConstants.java",
         "core/java/com/android/internal/util/WakeupMessage.java",
         "core/java/android/net/shared/*.java",
     ]
@@ -1049,6 +1051,35 @@ cc_library {
         },
     },
 }
+
+// This library is meant for vendor code that needs to output protobuf. It links
+// against the static version of libprotobuf-cpp-lite, for which we can not guarantee
+// binary compatibility.
+cc_library {
+    name: "libplatformprotos-static",
+    defaults: ["libplatformprotos-defaults"],
+    host_supported: false,
+
+    // This is okay because this library is only built as a static library.  The C++
+    // API is not guaranteed. The proto API is guaranteed to be stable via Metrics Council,
+    // but is not authorized to be used outside of debugging.
+    vendor_available: true,
+
+    target: {
+        android: {
+            proto: {
+                type: "lite",
+            },
+            static_libs: [
+                "libprotobuf-cpp-lite",
+            ],
+            shared: {
+                enabled: false,
+            },
+        },
+    },
+}
+
 
 // This is the full proto version of libplatformprotos. It may only
 // be used by test code that is not shipped on the device.

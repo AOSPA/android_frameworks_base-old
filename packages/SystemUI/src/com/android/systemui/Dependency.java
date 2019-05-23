@@ -35,6 +35,7 @@ import com.android.systemui.appops.AppOpsController;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
+import com.android.systemui.dock.DockManager;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
@@ -74,6 +75,7 @@ import com.android.systemui.statusbar.phone.KeyguardDismissUtil;
 import com.android.systemui.statusbar.phone.LightBarController;
 import com.android.systemui.statusbar.phone.LockscreenGestureLogger;
 import com.android.systemui.statusbar.phone.ManagedProfileController;
+import com.android.systemui.statusbar.phone.NavigationModeController;
 import com.android.systemui.statusbar.phone.NotificationGroupAlertTransferHelper;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.ShadeController;
@@ -244,6 +246,7 @@ public class Dependency extends SystemUI {
     @Inject Lazy<LightBarController> mLightBarController;
     @Inject Lazy<IWindowManager> mIWindowManager;
     @Inject Lazy<OverviewProxyService> mOverviewProxyService;
+    @Inject Lazy<NavigationModeController> mNavBarModeController;
     @Inject Lazy<EnhancedEstimates> mEnhancedEstimates;
     @Inject Lazy<VibratorHelper> mVibratorHelper;
     @Inject Lazy<IStatusBarService> mIStatusBarService;
@@ -293,6 +296,8 @@ public class Dependency extends SystemUI {
     @Inject Lazy<DevicePolicyManagerWrapper> mDevicePolicyManagerWrapper;
     @Inject Lazy<PackageManagerWrapper> mPackageManagerWrapper;
     @Inject Lazy<SensorPrivacyController> mSensorPrivacyController;
+    @Inject Lazy<DumpController> mDumpController;
+    @Inject Lazy<DockManager> mDockManager;
 
     @Inject
     public Dependency() {
@@ -406,6 +411,8 @@ public class Dependency extends SystemUI {
 
         mProviders.put(OverviewProxyService.class, mOverviewProxyService::get);
 
+        mProviders.put(NavigationModeController.class, mNavBarModeController::get);
+
         mProviders.put(EnhancedEstimates.class, mEnhancedEstimates::get);
 
         mProviders.put(VibratorHelper.class, mVibratorHelper::get);
@@ -464,7 +471,8 @@ public class Dependency extends SystemUI {
         mProviders.put(DevicePolicyManagerWrapper.class, mDevicePolicyManagerWrapper::get);
         mProviders.put(PackageManagerWrapper.class, mPackageManagerWrapper::get);
         mProviders.put(SensorPrivacyController.class, mSensorPrivacyController::get);
-
+        mProviders.put(DumpController.class, mDumpController::get);
+        mProviders.put(DockManager.class, mDockManager::get);
 
         // TODO(b/118592525): to support multi-display , we start to add something which is
         //                    per-display, while others may be global. I think it's time to add
@@ -478,8 +486,23 @@ public class Dependency extends SystemUI {
     @Override
     public synchronized void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         super.dump(fd, pw, args);
-        pw.println("Dumping existing controllers:");
-        mDependencies.values().stream().filter(obj -> obj instanceof Dumpable)
+
+        // Make sure that the DumpController gets added to mDependencies, as they are only added
+        // with Dependency#get.
+        getDependency(DumpController.class);
+
+        // If an arg is specified, try to dump the dependency
+        String controller = args != null && args.length > 1
+                ? args[1].toLowerCase()
+                : null;
+        if (controller != null) {
+            pw.println("Dumping controller=" + controller + ":");
+        } else {
+            pw.println("Dumping existing controllers:");
+        }
+        mDependencies.values().stream()
+                .filter(obj -> obj instanceof Dumpable && (controller == null
+                        || obj.getClass().getName().toLowerCase().endsWith(controller)))
                 .forEach(o -> ((Dumpable) o).dump(fd, pw, args));
     }
 

@@ -39,7 +39,6 @@ import android.content.pm.ShortcutInfo;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Rect;
-import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -643,6 +642,7 @@ public class Intent implements Parcelable, Cloneable {
     private static final String ATTR_CATEGORY = "category";
     private static final String TAG_EXTRA = "extra";
     private static final String ATTR_TYPE = "type";
+    private static final String ATTR_IDENTIFIER = "ident";
     private static final String ATTR_COMPONENT = "component";
     private static final String ATTR_DATA = "data";
     private static final String ATTR_FLAGS = "flags";
@@ -4743,6 +4743,18 @@ public class Intent implements Parcelable, Cloneable {
     @SdkConstant(SdkConstantType.INTENT_CATEGORY)
     public static final String CATEGORY_APP_MUSIC = "android.intent.category.APP_MUSIC";
 
+    /**
+     * Used with {@link #ACTION_MAIN} to launch the files application.
+     * The activity should be able to browse and manage files stored on the device.
+     * <p>NOTE: This should not be used as the primary key of an Intent,
+     * since it will not result in the app launching with the correct
+     * action and category.  Instead, use this with
+     * {@link #makeMainSelectorActivity(String, String)} to generate a main
+     * Intent with this category in the selector.</p>
+     */
+    @SdkConstant(SdkConstantType.INTENT_CATEGORY)
+    public static final String CATEGORY_APP_FILES = "android.intent.category.APP_FILES";
+
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------
     // Standard extra data keys.
@@ -6314,6 +6326,7 @@ public class Intent implements Parcelable, Cloneable {
     private String mAction;
     private Uri mData;
     private String mType;
+    private String mIdentifier;
     private String mPackage;
     private ComponentName mComponent;
     private int mFlags;
@@ -6359,6 +6372,7 @@ public class Intent implements Parcelable, Cloneable {
         this.mAction = o.mAction;
         this.mData = o.mData;
         this.mType = o.mType;
+        this.mIdentifier = o.mIdentifier;
         this.mPackage = o.mPackage;
         this.mComponent = o.mComponent;
 
@@ -6676,6 +6690,11 @@ public class Intent implements Parcelable, Cloneable {
                 // type
                 else if (uri.startsWith("type=", i)) {
                     intent.mType = value;
+                }
+
+                // identifier
+                else if (uri.startsWith("identifier=", i)) {
+                    intent.mIdentifier = value;
                 }
 
                 // launch flags
@@ -7013,6 +7032,12 @@ public class Intent implements Parcelable, Cloneable {
                     break;
                 case "-t":
                     type = cmd.getNextArgRequired();
+                    if (intent == baseIntent) {
+                        hasIntentInfo = true;
+                    }
+                    break;
+                case "-i":
+                    intent.setIdentifier(cmd.getNextArgRequired());
                     if (intent == baseIntent) {
                         hasIntentInfo = true;
                     }
@@ -7375,7 +7400,7 @@ public class Intent implements Parcelable, Cloneable {
     public static void printIntentArgsHelp(PrintWriter pw, String prefix) {
         final String[] lines = new String[] {
                 "<INTENT> specifications include these flags and arguments:",
-                "    [-a <ACTION>] [-d <DATA_URI>] [-t <MIME_TYPE>]",
+                "    [-a <ACTION>] [-d <DATA_URI>] [-t <MIME_TYPE>] [-i <IDENTIFIER>]",
                 "    [-c <CATEGORY> [-c <CATEGORY>] ...]",
                 "    [-n <COMPONENT_NAME>]",
                 "    [-e|--es <EXTRA_KEY> <EXTRA_STRING_VALUE> ...]",
@@ -7554,6 +7579,18 @@ public class Intent implements Parcelable, Cloneable {
             return mType;
         }
         return resolveType(resolver);
+    }
+
+    /**
+     * Retrieve the identifier for this Intent.  If non-null, this is an arbitrary identity
+     * of the Intent to distinguish it from other Intents.
+     *
+     * @return The identifier of this intent or null if none is specified.
+     *
+     * @see #setIdentifier
+     */
+    public @Nullable String getIdentifier() {
+        return mIdentifier;
     }
 
     /**
@@ -8573,6 +8610,35 @@ public class Intent implements Parcelable, Cloneable {
      */
     public @NonNull Intent setDataAndTypeAndNormalize(@NonNull Uri data, @Nullable String type) {
         return setDataAndType(data.normalizeScheme(), normalizeMimeType(type));
+    }
+
+    /**
+     * Set an identifier for this Intent.  If set, this provides a unique identity for this Intent,
+     * allowing it to be unique from other Intents that would otherwise look the same.  In
+     * particular, this will be used by {@link #filterEquals(Intent)} to determine if two
+     * Intents are the same as with other fields like {@link #setAction}.  However, unlike those
+     * fields, the identifier is <em>never</em> used for matching against an {@link IntentFilter};
+     * it is as if the identifier has not been set on the Intent.
+     *
+     * <p>This can be used, for example, to make this Intent unique from other Intents that
+     * are otherwise the same, for use in creating a {@link android.app.PendingIntent}.  (Be aware
+     * however that the receiver of the PendingIntent will see whatever you put in here.)  The
+     * structure of this string is completely undefined by the platform, however if you are going
+     * to be exposing identifier strings across different applications you may need to define
+     * your own structure if there is no central party defining the contents of this field.</p>
+     *
+     * @param identifier The identifier for this Intent.  The contents of the string have no
+     *                   meaning to the system, except whether they are exactly the same as
+     *                   another identifier.
+     *
+     * @return Returns the same Intent object, for chaining multiple calls
+     * into a single statement.
+     *
+     * @see #getIdentifier
+     */
+    public @NonNull Intent setIdentifier(@Nullable String identifier) {
+        mIdentifier = identifier;
+        return this;
     }
 
     /**
@@ -9693,6 +9759,12 @@ public class Intent implements Parcelable, Cloneable {
     public static final int FILL_IN_CLIP_DATA = 1<<7;
 
     /**
+     * Use with {@link #fillIn} to allow the current identifier value to be
+     * overwritten, even if it is already set.
+     */
+    public static final int FILL_IN_IDENTIFIER = 1<<8;
+
+    /**
      * Copy the contents of <var>other</var> in to this object, but only
      * where fields are not defined by this object.  For purposes of a field
      * being defined, the following pieces of data in the Intent are
@@ -9702,6 +9774,7 @@ public class Intent implements Parcelable, Cloneable {
      * <li> action, as set by {@link #setAction}.
      * <li> data Uri and MIME type, as set by {@link #setData(Uri)},
      * {@link #setType(String)}, or {@link #setDataAndType(Uri, String)}.
+     * <li> identifier, as set by {@link #setIdentifier}.
      * <li> categories, as set by {@link #addCategory}.
      * <li> package, as set by {@link #setPackage}.
      * <li> component, as set by {@link #setComponent(ComponentName)} or
@@ -9713,8 +9786,8 @@ public class Intent implements Parcelable, Cloneable {
      * </ul>
      *
      * <p>In addition, you can use the {@link #FILL_IN_ACTION},
-     * {@link #FILL_IN_DATA}, {@link #FILL_IN_CATEGORIES}, {@link #FILL_IN_PACKAGE},
-     * {@link #FILL_IN_COMPONENT}, {@link #FILL_IN_SOURCE_BOUNDS},
+     * {@link #FILL_IN_DATA}, {@link #FILL_IN_IDENTIFIER}, {@link #FILL_IN_CATEGORIES},
+     * {@link #FILL_IN_PACKAGE}, {@link #FILL_IN_COMPONENT}, {@link #FILL_IN_SOURCE_BOUNDS},
      * {@link #FILL_IN_SELECTOR}, and {@link #FILL_IN_CLIP_DATA} to override
      * the restriction where the corresponding field will not be replaced if
      * it is already set.
@@ -9757,6 +9830,11 @@ public class Intent implements Parcelable, Cloneable {
             mType = other.mType;
             changes |= FILL_IN_DATA;
             mayHaveCopiedUris = true;
+        }
+        if (other.mIdentifier != null
+                && (mIdentifier == null || (flags&FILL_IN_IDENTIFIER) != 0)) {
+            mIdentifier = other.mIdentifier;
+            changes |= FILL_IN_IDENTIFIER;
         }
         if (other.mCategories != null
                 && (mCategories == null || (flags&FILL_IN_CATEGORIES) != 0)) {
@@ -9871,9 +9949,11 @@ public class Intent implements Parcelable, Cloneable {
 
     /**
      * Determine if two intents are the same for the purposes of intent
-     * resolution (filtering). That is, if their action, data, type,
+     * resolution (filtering). That is, if their action, data, type, identity,
      * class, and categories are the same.  This does <em>not</em> compare
-     * any extra data included in the intents.
+     * any extra data included in the intents.  Note that technically when actually
+     * matching against an {@link IntentFilter} the identifier is ignored, while here
+     * it is directly compared for equality like the other fields.
      *
      * @param other The other Intent to compare against.
      *
@@ -9887,6 +9967,7 @@ public class Intent implements Parcelable, Cloneable {
         if (!Objects.equals(this.mAction, other.mAction)) return false;
         if (!Objects.equals(this.mData, other.mData)) return false;
         if (!Objects.equals(this.mType, other.mType)) return false;
+        if (!Objects.equals(this.mIdentifier, other.mIdentifier)) return false;
         if (!Objects.equals(this.mPackage, other.mPackage)) return false;
         if (!Objects.equals(this.mComponent, other.mComponent)) return false;
         if (!Objects.equals(this.mCategories, other.mCategories)) return false;
@@ -9912,6 +9993,9 @@ public class Intent implements Parcelable, Cloneable {
         }
         if (mType != null) {
             code += mType.hashCode();
+        }
+        if (mIdentifier != null) {
+            code += mIdentifier.hashCode();
         }
         if (mPackage != null) {
             code += mPackage.hashCode();
@@ -10004,6 +10088,13 @@ public class Intent implements Parcelable, Cloneable {
             }
             first = false;
             b.append("typ=").append(mType);
+        }
+        if (mIdentifier != null) {
+            if (!first) {
+                b.append(' ');
+            }
+            first = false;
+            b.append("id=").append(mIdentifier);
         }
         if (mFlags != 0) {
             if (!first) {
@@ -10107,6 +10198,9 @@ public class Intent implements Parcelable, Cloneable {
         }
         if (mType != null) {
             proto.write(IntentProto.TYPE, mType);
+        }
+        if (mIdentifier != null) {
+            proto.write(IntentProto.IDENTIFIER, mIdentifier);
         }
         if (mFlags != 0) {
             proto.write(IntentProto.FLAG, "0x" + Integer.toHexString(mFlags));
@@ -10276,6 +10370,9 @@ public class Intent implements Parcelable, Cloneable {
         if (mType != null) {
             uri.append("type=").append(Uri.encode(mType, "/")).append(';');
         }
+        if (mIdentifier != null) {
+            uri.append("identifier=").append(Uri.encode(mIdentifier, "/")).append(';');
+        }
         if (mFlags != 0) {
             uri.append("launchFlags=0x").append(Integer.toHexString(mFlags)).append(';');
         }
@@ -10326,6 +10423,7 @@ public class Intent implements Parcelable, Cloneable {
         out.writeString(mAction);
         Uri.writeToParcel(out, mData);
         out.writeString(mType);
+        out.writeString(mIdentifier);
         out.writeInt(mFlags);
         out.writeString(mPackage);
         ComponentName.writeToParcel(mComponent, out);
@@ -10383,6 +10481,7 @@ public class Intent implements Parcelable, Cloneable {
         setAction(in.readString());
         mData = Uri.CREATOR.createFromParcel(in);
         mType = in.readString();
+        mIdentifier = in.readString();
         mFlags = in.readInt();
         mPackage = in.readString();
         mComponent = ComponentName.readFromParcel(in);
@@ -10445,6 +10544,8 @@ public class Intent implements Parcelable, Cloneable {
         String mimeType = sa.getString(com.android.internal.R.styleable.Intent_mimeType);
         intent.setDataAndType(data != null ? Uri.parse(data) : null, mimeType);
 
+        intent.setIdentifier(sa.getString(com.android.internal.R.styleable.Intent_identifier));
+
         String packageName = sa.getString(com.android.internal.R.styleable.Intent_targetPackage);
         String className = sa.getString(com.android.internal.R.styleable.Intent_targetClass);
         if (packageName != null && className != null) {
@@ -10499,6 +10600,9 @@ public class Intent implements Parcelable, Cloneable {
         if (mType != null) {
             out.attribute(null, ATTR_TYPE, mType);
         }
+        if (mIdentifier != null) {
+            out.attribute(null, ATTR_IDENTIFIER, mIdentifier);
+        }
         if (mComponent != null) {
             out.attribute(null, ATTR_COMPONENT, mComponent.flattenToShortString());
         }
@@ -10529,6 +10633,8 @@ public class Intent implements Parcelable, Cloneable {
                 intent.setData(Uri.parse(attrValue));
             } else if (ATTR_TYPE.equals(attrName)) {
                 intent.setType(attrValue);
+            } else if (ATTR_IDENTIFIER.equals(attrName)) {
+                intent.setIdentifier(attrValue);
             } else if (ATTR_COMPONENT.equals(attrName)) {
                 intent.setComponent(ComponentName.unflattenFromString(attrValue));
             } else if (ATTR_FLAGS.equals(attrName)) {

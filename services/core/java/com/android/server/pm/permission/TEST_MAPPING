@@ -1,14 +1,6 @@
 {
     "presubmit": [
         {
-            "name": "GtsPermissionTestCases",
-            "options": [
-                {
-                    "include-filter": "com.google.android.permission.gts.DefaultPermissionGrantPolicyTest"
-                }
-            ]
-        },
-        {
             "name": "CtsPermissionTestCases",
             "options": [
                 {
@@ -19,6 +11,9 @@
                 },
                 {
                     "include-filter": "android.permission.cts.PermissionFlagsTest"
+                },
+                {
+                    "include-filter": "android.permission.cts.SharedUidPermissionsTest"
                 }
             ]
         },

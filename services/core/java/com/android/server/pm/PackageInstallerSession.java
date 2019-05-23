@@ -139,6 +139,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     static final String TAG_SESSION = "session";
     static final String TAG_CHILD_SESSION = "childSession";
     private static final String TAG_GRANTED_RUNTIME_PERMISSION = "granted-runtime-permission";
+    private static final String TAG_WHITELISTED_RESTRICTED_PERMISSION =
+            "whitelisted-restricted-permission";
     private static final String ATTR_SESSION_ID = "sessionId";
     private static final String ATTR_USER_ID = "userId";
     private static final String ATTR_INSTALLER_PACKAGE_NAME = "installerPackageName";
@@ -486,6 +488,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             info.originatingUid = params.originatingUid;
             info.referrerUri = params.referrerUri;
             info.grantedRuntimePermissions = params.grantedRuntimePermissions;
+            info.whitelistedRestrictedPermissions = params.whitelistedRestrictedPermissions;
             info.installFlags = params.installFlags;
             info.isMultiPackage = params.isMultiPackage;
             info.isStaged = params.isStaged;
@@ -838,6 +841,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     @Override
     public void commit(@NonNull IntentSender statusReceiver, boolean forTransfer) {
+        if (hasParentSessionId()) {
+            throw new IllegalStateException(
+                    "Session " + sessionId + " is a child of multi-package session "
+                            + mParentSessionId +  " and may not be committed directly.");
+        }
         if (!markAsCommitted(statusReceiver, forTransfer)) {
             return;
         }
@@ -2034,9 +2042,21 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     @Override
     public void abandon() {
+        if (hasParentSessionId()) {
+            throw new IllegalStateException(
+                    "Session " + sessionId + " is a child of multi-package session "
+                            + mParentSessionId +  " and may not be abandoned directly.");
+        }
         synchronized (mLock) {
             assertCallerIsOwnerOrRootLocked();
 
+            if (isStagedAndInTerminalState()) {
+                // We keep the session in the database if it's in a finalized state. It will be
+                // removed by PackageInstallerService when the last update time is old enough.
+                // Also, in such cases cleanStageDir() has already been executed so no need to
+                // do it now.
+                return;
+            }
             if (mCommitted && params.isStaged) {
                 synchronized (mLock) {
                     mDestroyed = true;
@@ -2076,13 +2096,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     @Override
-    public void addChildSessionId(int childSessionId) throws RemoteException {
+    public void addChildSessionId(int childSessionId) {
         final PackageInstallerSession childSession = mSessionProvider.getSession(childSessionId);
-        if (childSession == null) {
-            throw new RemoteException("Unable to add child.",
-                    new PackageManagerException("Child session " + childSessionId
-                            + " does not exist"),
-                    false, true).rethrowAsRuntimeException();
+        if (childSession == null
+                || (childSession.hasParentSessionId() && childSession.mParentSessionId != sessionId)
+                || childSession.mCommitted
+                || childSession.mDestroyed) {
+            throw new IllegalStateException("Unable to add child session " + childSessionId
+                            + " as it does not exist or is in an invalid state.");
         }
         synchronized (mLock) {
             assertCallerIsOwnerOrRootLocked();
@@ -2121,11 +2142,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         synchronized (mLock) {
             if (parentSessionId != SessionInfo.INVALID_ID
                     && mParentSessionId != SessionInfo.INVALID_ID) {
-                throw new RemoteException("Unable to set parent session.",
-                        new PackageManagerException(
-                                "The parent of " + sessionId + " is" + " already set to "
-                                        + mParentSessionId), false,
-                        true).rethrowAsRuntimeException();
+                throw new IllegalStateException("The parent of " + sessionId + " is" + " already"
+                        + "set to " + mParentSessionId);
             }
             this.mParentSessionId = parentSessionId;
         }
@@ -2331,6 +2349,19 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
+    private static void writeWhitelistedRestrictedPermissionsLocked(@NonNull XmlSerializer out,
+            @Nullable List<String> whitelistedRestrictedPermissions) throws IOException {
+        if (whitelistedRestrictedPermissions != null) {
+            final int permissionCount = whitelistedRestrictedPermissions.size();
+            for (int i = 0; i < permissionCount; i++) {
+                out.startTag(null, TAG_WHITELISTED_RESTRICTED_PERMISSION);
+                writeStringAttribute(out, ATTR_NAME, whitelistedRestrictedPermissions.get(i));
+                out.endTag(null, TAG_WHITELISTED_RESTRICTED_PERMISSION);
+            }
+        }
+    }
+
+
     private static File buildAppIconFile(int sessionId, @NonNull File sessionsDir) {
         return new File(sessionsDir, "app_icon." + sessionId + ".png");
     }
@@ -2392,6 +2423,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             writeIntAttribute(out, ATTR_INSTALL_REASON, params.installReason);
 
             writeGrantedRuntimePermissionsLocked(out, params.grantedRuntimePermissions);
+            writeWhitelistedRestrictedPermissionsLocked(out,
+                    params.whitelistedRestrictedPermissions);
 
             // Persist app icon if changed since last written
             File appIconFile = buildAppIconFile(sessionId, sessionsDir);
@@ -2510,7 +2543,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
         // Store the current depth. We should stop parsing when we reach an end tag at the same
         // depth.
-        List<String> permissions = new ArrayList<>();
+        List<String> grantedRuntimePermissions = new ArrayList<>();
+        List<String> whitelistedRestrictedPermissions = new ArrayList<>();
         List<Integer> childSessionIds = new ArrayList<>();
         int outerDepth = in.getDepth();
         int type;
@@ -2520,15 +2554,24 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 continue;
             }
             if (TAG_GRANTED_RUNTIME_PERMISSION.equals(in.getName())) {
-                permissions.add(readStringAttribute(in, ATTR_NAME));
+                grantedRuntimePermissions.add(readStringAttribute(in, ATTR_NAME));
+            }
+            if (TAG_WHITELISTED_RESTRICTED_PERMISSION.equals(in.getName())) {
+                whitelistedRestrictedPermissions.add(readStringAttribute(in, ATTR_NAME));
+
             }
             if (TAG_CHILD_SESSION.equals(in.getName())) {
                 childSessionIds.add(readIntAttribute(in, ATTR_SESSION_ID, SessionInfo.INVALID_ID));
             }
         }
 
-        if (permissions.size() > 0) {
-            params.grantedRuntimePermissions = permissions.stream().toArray(String[]::new);
+        if (grantedRuntimePermissions.size() > 0) {
+            params.grantedRuntimePermissions = grantedRuntimePermissions
+                    .stream().toArray(String[]::new);
+        }
+
+        if (whitelistedRestrictedPermissions.size() > 0) {
+            params.whitelistedRestrictedPermissions = whitelistedRestrictedPermissions;
         }
 
         int[] childSessionIdsArray;

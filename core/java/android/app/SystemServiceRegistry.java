@@ -50,6 +50,7 @@ import android.content.om.IOverlayManager;
 import android.content.om.OverlayManager;
 import android.content.pm.CrossProfileApps;
 import android.content.pm.ICrossProfileApps;
+import android.content.pm.IPackageManager;
 import android.content.pm.IShortcutService;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
@@ -366,7 +367,7 @@ final class SystemServiceRegistry {
                             throw new ServiceNotFoundException(Context.TEST_NETWORK_SERVICE);
                         }
                         ITestNetworkManager tnMgr = ITestNetworkManager.Stub.asInterface(tnBinder);
-                        return new TestNetworkManager(context, tnMgr);
+                        return new TestNetworkManager(tnMgr);
                     }
                 });
 
@@ -1142,7 +1143,7 @@ final class SystemServiceRegistry {
                 Context outerContext = ctx.getOuterContext();
                 ContentCaptureOptions options = outerContext.getContentCaptureOptions();
                 // Options is null when the service didn't whitelist the activity or package
-                if (options != null) {
+                if (options != null && (options.lite || options.isWhitelisted(outerContext))) {
                     IBinder b = ServiceManager
                             .getService(Context.CONTENT_CAPTURE_MANAGER_SERVICE);
                     IContentCaptureManager service = IContentCaptureManager.Stub.asInterface(b);
@@ -1239,14 +1240,16 @@ final class SystemServiceRegistry {
                 new CachedServiceFetcher<PermissionManager>() {
                     @Override
                     public PermissionManager createService(ContextImpl ctx) {
-                        return new PermissionManager(ctx.getOuterContext());
+                        IPackageManager packageManager = AppGlobals.getPackageManager();
+                        return new PermissionManager(ctx.getOuterContext(), packageManager);
                     }});
 
         registerService(Context.PERMISSION_CONTROLLER_SERVICE, PermissionControllerManager.class,
                 new CachedServiceFetcher<PermissionControllerManager>() {
                     @Override
                     public PermissionControllerManager createService(ContextImpl ctx) {
-                        return new PermissionControllerManager(ctx.getOuterContext());
+                        return new PermissionControllerManager(ctx.getOuterContext(),
+                                ctx.getMainThreadHandler());
                     }});
 
         registerService(Context.ROLE_SERVICE, RoleManager.class,

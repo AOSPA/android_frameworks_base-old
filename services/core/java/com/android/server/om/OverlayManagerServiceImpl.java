@@ -452,10 +452,7 @@ final class OverlayManagerServiceImpl {
             final OverlayInfo overlayInfo = mSettings.getOverlayInfo(packageName, userId);
             if (mSettings.remove(packageName, userId)) {
                 removeIdmapIfPossible(overlayInfo);
-                if (overlayInfo.isEnabled()) {
-                    // Only trigger updates if the overlay was enabled.
-                    mListener.onOverlaysChanged(overlayInfo.targetPackageName, userId);
-                }
+                mListener.onOverlaysChanged(overlayInfo.targetPackageName, userId);
             }
         } catch (OverlayManagerSettings.BadKeyException e) {
             Slog.e(TAG, "failed to remove overlay", e);
@@ -642,6 +639,10 @@ final class OverlayManagerServiceImpl {
     void onDump(@NonNull final PrintWriter pw) {
         mSettings.dump(pw);
         pw.println("Default overlays: " + TextUtils.join(";", mDefaultOverlays));
+    }
+
+    @NonNull String[] getDefaultOverlayPackages() {
+        return mDefaultOverlays;
     }
 
     List<String> getEnabledOverlayPackageNames(@NonNull final String targetPackageName,

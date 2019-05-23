@@ -344,11 +344,19 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
      * {@link #getTimeoutIdleBindMillis() idle timeout} expires.
      */
     protected void scheduleUnbind() {
-        final long unbindDelay = getTimeoutIdleBindMillis();
+        scheduleUnbind(true);
+    }
 
-        if (unbindDelay <= 0) {
+    private void scheduleUnbind(boolean delay) {
+        long unbindDelay = getTimeoutIdleBindMillis();
+
+        if (unbindDelay <= PERMANENT_BOUND_TIMEOUT_MS) {
             if (mVerbose) Slog.v(mTag, "not scheduling unbind when value is " + unbindDelay);
             return;
+        }
+
+        if (!delay) {
+            unbindDelay = 0;
         }
 
         cancelScheduledUnbind();
@@ -397,6 +405,11 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
     abstract void handlePendingRequestWhileUnBound(
             @NonNull BasePendingRequest<S, I> pendingRequest);
 
+    /**
+     * Called if {@link Context#bindServiceAsUser} returns {@code false}.
+     */
+    abstract void handleBindFailure();
+
     private boolean handleIsBound() {
         return mService != null;
     }
@@ -418,6 +431,8 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
             mBinding = false;
 
             if (!mServiceDied) {
+                // TODO(b/126266412): merge these 2 calls?
+                handleBindFailure();
                 handleBinderDied();
             }
         }
@@ -449,21 +464,28 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
                 return;
             }
             mBinding = false;
-            mService = getServiceInterface(service);
             try {
                 service.linkToDeath(AbstractRemoteService.this, 0);
             } catch (RemoteException re) {
                 handleBinderDied();
                 return;
             }
+            mService = getServiceInterface(service);
             handleOnConnectedStateChangedInternal(true);
             mServiceDied = false;
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
+            if (mVerbose) Slog.v(mTag, "onServiceDisconnected()");
             mBinding = true;
             mService = null;
+        }
+
+        @Override
+        public void onBindingDied(ComponentName name) {
+            if (mVerbose) Slog.v(mTag, "onBindingDied()");
+            scheduleUnbind(false);
         }
     }
 
@@ -545,6 +567,12 @@ public abstract class AbstractRemoteService<S extends AbstractRemoteService<S, I
         }
 
         void onFinished() { }
+
+        /**
+         * Called when request fails due to reasons internal to {@link AbstractRemoteService},
+         * e.g. failure to bind to service.
+         */
+        protected void onFailed() { }
 
         /**
          * Checks whether this request was cancelled.

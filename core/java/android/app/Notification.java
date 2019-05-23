@@ -618,9 +618,11 @@ public class Notification implements Parcelable
     public static final int FLAG_CAN_COLORIZE = 0x00000800;
 
     /**
-     * Bit to be bitswised-ored into the {@link #flags} field that should be
-     * set if this notification can be shown as a bubble.
-     * @hide
+     * Bit to be bitswised-ored into the {@link #flags} field that should be set if this
+     * notification is showing as a bubble. This will be set by the system if it is determined
+     * that your notification is allowed to be a bubble.
+     *
+     * @see {@link Notification.Builder#setBubbleMetadata(BubbleMetadata)}
      */
     public static final int FLAG_BUBBLE = 0x00001000;
 
@@ -3163,8 +3165,8 @@ public class Notification implements Parcelable
     /**
      * Gets the {@link LocusId} associated with this notification.
      *
-     * <p>Used by the device's intelligence services to correlate objects (such as
-     * {@link ShortcutInfo} and {@link ContentCaptureContext}) that are correlated.
+     * <p>Used by the Android system to correlate objects (such as
+     * {@link ShortcutInfo} and {@link ContentCaptureContext}).
      */
     @Nullable
     public LocusId getLocusId() {
@@ -3532,8 +3534,8 @@ public class Notification implements Parcelable
          * Sets the {@link LocusId} associated with this notification.
          *
          * <p>This method should be called when the {@link LocusId} is used in other places (such
-         * as {@link ShortcutInfo} and {@link ContentCaptureContext}) so the device's intelligence
-         * services can correlate them.
+         * as {@link ShortcutInfo} and {@link ContentCaptureContext}) so the Android system can
+         * correlate them.
          */
         @NonNull
         public Builder setLocusId(@Nullable LocusId locusId) {
@@ -3578,9 +3580,9 @@ public class Notification implements Parcelable
          * <p>This data will be ignored unless the notification is posted to a channel that
          * allows {@link NotificationChannel#canBubble() bubbles}.</p>
          *
-         * <b>Notifications with a valid and allowed bubble metadata will display in collapsed state
-         * outside of the notification shade on unlocked devices. When a user interacts with the
-         * collapsed state, the bubble intent will be invoked and displayed.</b>
+         * <p>Notifications allowed to bubble that have valid bubble metadata will display in
+         * collapsed state outside of the notification shade on unlocked devices. When a user
+         * interacts with the collapsed state, the bubble intent will be invoked and displayed.</p>
          */
         @NonNull
         public Builder setBubbleMetadata(@Nullable BubbleMetadata data) {
@@ -8555,16 +8557,16 @@ public class Notification implements Parcelable
         private static final int FLAG_AUTO_EXPAND_BUBBLE = 0x00000001;
 
         /**
-         * If set and the app creating the bubble is in the foreground, the bubble will be posted
-         * <b>without</b> the associated notification in the notification shade. Subsequent update
-         * notifications to this bubble will post a notification in the shade.
+         * If set and the app posting the bubble is in the foreground, the bubble will
+         * be posted <b>without</b> the associated notification in the notification shade.
          *
-         * <p>If the app creating the bubble is not in the foreground this flag has no effect.</p>
+         * <p>If the app posting the bubble is not in the foreground this flag has no effect.</p>
          *
          * <p>Generally this flag should only be set if the user has performed an action to request
-         * or create a bubble.</p>
+         * or create a bubble, or if the user has seen the content in the notification and the
+         * notification is no longer relevant.</p>
          */
-        private static final int FLAG_SUPPRESS_INITIAL_NOTIFICATION = 0x00000002;
+        private static final int FLAG_SUPPRESS_NOTIFICATION = 0x00000002;
 
         private BubbleMetadata(PendingIntent expandIntent, PendingIntent deleteIntent,
                 Icon icon, int height, @DimenRes int heightResId) {
@@ -8640,12 +8642,12 @@ public class Notification implements Parcelable
         }
 
         /**
-         * @return whether this bubble should suppress the initial notification when it is posted.
+         * @return whether this bubble should suppress the notification when it is posted.
          *
-         * @see BubbleMetadata.Builder#setSuppressInitialNotification(boolean)
+         * @see BubbleMetadata.Builder#setSuppressNotification(boolean)
          */
-        public boolean getSuppressInitialNotification() {
-            return (mFlags & FLAG_SUPPRESS_INITIAL_NOTIFICATION) != 0;
+        public boolean isNotificationSuppressed() {
+            return (mFlags & FLAG_SUPPRESS_NOTIFICATION) != 0;
         }
 
         public static final @android.annotation.NonNull Parcelable.Creator<BubbleMetadata> CREATOR =
@@ -8795,20 +8797,19 @@ public class Notification implements Parcelable
             }
 
             /**
-             * If set and the app creating the bubble is in the foreground, the bubble will be
+             * If set and the app posting the bubble is in the foreground, the bubble will be
              * posted <b>without</b> the associated notification in the notification shade.
-             * Subsequent update notifications to this bubble will post a notification in the shade.
              *
-             * <p>If the app creating the bubble is not in the foreground this flag has no effect.
+             * <p>If the app posting the bubble is not in the foreground this flag has no effect.
              * </p>
              *
              * <p>Generally this flag should only be set if the user has performed an action to
-             * request or create a bubble.</p>
+             * request or create a bubble, or if the user has seen the content in the notification
+             * and the notification is no longer relevant.</p>
              */
             @NonNull
-            public BubbleMetadata.Builder setSuppressInitialNotification(
-                    boolean shouldSupressNotif) {
-                setFlag(FLAG_SUPPRESS_INITIAL_NOTIFICATION, shouldSupressNotif);
+            public BubbleMetadata.Builder setSuppressNotification(boolean shouldSupressNotif) {
+                setFlag(FLAG_SUPPRESS_NOTIFICATION, shouldSupressNotif);
                 return this;
             }
 

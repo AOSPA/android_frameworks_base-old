@@ -47,7 +47,7 @@ public class ButtonDispatcher {
     private Boolean mLongClickable;
     private Float mAlpha;
     private Float mDarkIntensity;
-    private Integer mVisibility = -1;
+    private Integer mVisibility = View.VISIBLE;
     private Boolean mDelayTouchFeedback;
     private KeyButtonDrawable mImageDrawable;
     private View mCurrentView;
@@ -61,6 +61,7 @@ public class ButtonDispatcher {
     private final AnimatorListenerAdapter mFadeListener = new AnimatorListenerAdapter() {
         @Override
         public void onAnimationEnd(Animator animation) {
+            mFadeAnimator = null;
             setVisibility(getAlpha() == 1 ? View.VISIBLE : View.INVISIBLE);
         }
     };
@@ -85,7 +86,7 @@ public class ButtonDispatcher {
         if (mAlpha != null) {
             view.setAlpha(mAlpha);
         }
-        if (mVisibility != null && mVisibility != -1) {
+        if (mVisibility != null) {
             view.setVisibility(mVisibility);
         }
         if (mAccessibilityDelegate != null) {
@@ -141,6 +142,10 @@ public class ButtonDispatcher {
 
     public void setVisibility(int visibility) {
         if (mVisibility == visibility) return;
+        if (mFadeAnimator != null) {
+            mFadeAnimator.cancel();
+        }
+
         mVisibility = visibility;
         final int N = mViews.size();
         for (int i = 0; i < N; i++) {
@@ -171,13 +176,13 @@ public class ButtonDispatcher {
             if (mFadeAnimator != null) {
                 mFadeAnimator.cancel();
             }
+            setVisibility(View.VISIBLE);
             mFadeAnimator = ValueAnimator.ofFloat(getAlpha(), alpha);
             mFadeAnimator.setDuration(duration);
             mFadeAnimator.setInterpolator(getAlpha() < alpha ? ALPHA_IN : ALPHA_OUT);
             mFadeAnimator.addListener(mFadeListener);
             mFadeAnimator.addUpdateListener(mAlphaListener);
             mFadeAnimator.start();
-            setVisibility(View.VISIBLE);
         } else {
             mAlpha = alpha;
             final int N = mViews.size();

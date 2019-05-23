@@ -33,8 +33,8 @@ import android.media.IVolumeController;
 import android.media.PlayerBase;
 import android.media.VolumePolicy;
 import android.media.audiopolicy.AudioPolicyConfig;
-import android.media.audiopolicy.AudioProductStrategies;
-import android.media.audiopolicy.AudioVolumeGroups;
+import android.media.audiopolicy.AudioProductStrategy;
+import android.media.audiopolicy.AudioVolumeGroup;
 import android.media.audiopolicy.IAudioPolicyCallback;
 import android.media.projection.IMediaProjection;
 import android.net.Uri;
@@ -59,6 +59,10 @@ interface IAudioService {
     oneway void playerEvent(in int piid, in int event);
 
     oneway void releasePlayer(in int piid);
+
+    int trackRecorder(in IBinder recorder);
+
+    oneway void recorderEvent(in int riid, in int event);
 
     // Java-only methods below.
 
@@ -86,7 +90,7 @@ interface IAudioService {
     @UnsupportedAppUsage
     int getStreamMaxVolume(int streamType);
 
-    AudioVolumeGroups listAudioVolumeGroups();
+    List<AudioVolumeGroup> getAudioVolumeGroups();
 
     void setVolumeIndexForAttributes(in AudioAttributes aa, int index, int flags, String callingPackage);
 
@@ -98,7 +102,7 @@ interface IAudioService {
 
     int getLastAudibleStreamVolume(int streamType);
 
-    AudioProductStrategies getAudioProductStrategies();
+    List<AudioProductStrategy> getAudioProductStrategies();
 
     void setMicrophoneMute(boolean on, String callingPackage, int userId);
 
@@ -210,6 +214,8 @@ interface IAudioService {
     int setFocusPropertiesForPolicy(int duckingBehavior, in IAudioPolicyCallback pcb);
 
     void setVolumePolicy(in VolumePolicy policy);
+
+    boolean hasRegisteredDynamicPolicy();
 
     void registerRecordingCallback(in IRecordingConfigDispatcher rcdb);
 

@@ -149,6 +149,9 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 
+import java.util.Arrays;
+import android.os.AsyncTask;
+
 // TODO: This class has become a dumping ground. Let's
 // - Move things relating to the hierarchy to RootWindowContainer
 // - Move things relating to activity life cycles to maybe a new class called ActivityLifeCycler
@@ -185,6 +188,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     public static boolean mIsPerfBoostAcquired = false;
     public static int mPerfHandle = -1;
     public BoostFramework mPerfBoost = null;
+    public BoostFramework mUxPerf = new BoostFramework();
 
     static final int LAUNCH_TASK_BEHIND_COMPLETE = FIRST_SUPERVISOR_STACK_MSG + 12;
     static final int RESTART_ACTIVITY_PROCESS_TIMEOUT_MSG = FIRST_SUPERVISOR_STACK_MSG + 13;
@@ -777,14 +781,12 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                                 + " old=" + r.app + " new=" + proc);
             }
 
-            proc.clearWaitingToKill();
             r.launchCount++;
             r.lastLaunchTime = SystemClock.uptimeMillis();
 
             if (DEBUG_ALL) Slog.v(TAG, "Launching: " + r);
 
             proc.addActivityIfNeeded(r);
-            proc.updateProcessInfo(false, true, true, true);
 
             final LockTaskController lockTaskController = mService.getLockTaskController();
             if (task.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE
@@ -822,7 +824,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 r.forceNewConfig = false;
                 mService.getAppWarningsLocked().onStartActivity(r);
                 r.compat = mService.compatibilityInfoForPackageLocked(r.info.applicationInfo);
-                ProfilerInfo profilerInfo = proc.onStartActivity(mService.mTopProcessState);
 
                 // Because we could be starting an Activity in the system process this may not go
                 // across a Binder interface which would create a new Configuration. Consequently
@@ -848,7 +849,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                         mergedConfiguration.getOverrideConfiguration(), r.compat,
                         r.launchedFromPackage, task.voiceInteractor, proc.getReportedProcState(),
                         r.icicle, r.persistentState, results, newIntents,
-                        dc.isNextTransitionForward(), profilerInfo));
+                        dc.isNextTransitionForward(), proc.createProfilerInfoIfNeeded(),
+                                r.assistToken));
 
                 // Set desired final state.
                 final ActivityLifecycleItem lifecycleItem;
@@ -861,7 +863,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
                 // Schedule transaction.
                 mService.getLifecycleManager().scheduleTransaction(clientTransaction);
-                updateTopResumedActivityIfNeeded();
 
                 if ((proc.mInfo.privateFlags & ApplicationInfo.PRIVATE_FLAG_CANT_SAVE_STATE) != 0
                         && mService.mHasHeavyWeightFeature) {
@@ -919,6 +920,9 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                     "Moving to PAUSED: " + r + " (starting in paused state)");
             r.setState(PAUSED, "realStartActivityLocked");
         }
+        // Perform OOM scoring after the activity state is set, so the process can be updated with
+        // the latest state.
+        proc.onStartActivity(mService.mTopProcessState, r.info);
 
         // Launch the new version setup screen if needed.  We do this -after-
         // launching the initial activity (that is, home), so that it can have
@@ -969,13 +973,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         boolean knownToBeDead = false;
         if (wpc != null && wpc.hasThread()) {
             try {
-                if ((r.info.flags & ActivityInfo.FLAG_MULTIPROCESS) == 0
-                        || !"android".equals(r.info.packageName)) {
-                    // Don't add this if it is a platform component that is marked to run in
-                    // multiple processes, because this is actually part of the framework so doesn't
-                    // make sense to track as a separate apk in the process.
-                    wpc.addPackage(r.info.packageName, r.info.applicationInfo.longVersionCode);
-                }
                 realStartActivityLocked(r, wpc, andResume, checkConfig);
                 return;
             } catch (RemoteException e) {
@@ -1892,6 +1889,15 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 ActivityManagerInternal::killProcessesForRemovedTask, mService.mAmInternal,
                 procsToKill);
         mService.mH.sendMessage(m);
+
+        if(removeFromRecents) {
+            try {
+                new PreferredAppsTask().execute();
+            } catch (Exception e) {
+                Slog.v (TAG, "Exception: " + e);
+            }
+        }
+
     }
 
     /**
@@ -2363,8 +2369,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         // mTopResumedActivityWaitingForPrev == true at this point would mean that an activity
         // before the prevTopActivity one hasn't reported back yet. So server never sent the top
         // resumed state change message to prevTopActivity.
-        if (prevActivityReceivedTopState) {
-            prevTopActivity.scheduleTopResumedActivityChanged(false /* onTop */);
+        if (prevActivityReceivedTopState
+                && prevTopActivity.scheduleTopResumedActivityChanged(false /* onTop */)) {
             scheduleTopResumedStateLossTimeout(prevTopActivity);
             mTopResumedActivityWaitingForPrev = true;
         }
@@ -2767,7 +2773,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         if (activityOptions != null) {
             activityType = activityOptions.getLaunchActivityType();
             windowingMode = activityOptions.getLaunchWindowingMode();
-            if (activityOptions.freezeRecentTasksReordering()) {
+            if (activityOptions.freezeRecentTasksReordering()
+                    && mRecentTasks.isCallerRecents(callingUid)) {
                 mRecentTasks.setFreezeTaskListReordering();
             }
         }
@@ -2818,8 +2825,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                         true /* forceSend */, targetActivity);
                 mActivityMetricsLogger.notifyActivityLaunching(task.intent);
                 try {
-                    mService.moveTaskToFrontLocked(task.taskId, 0, options,
-                            true /* fromRecents */);
+                    mService.moveTaskToFrontLocked(null /* appThread */, null /* callingPackage */,
+                            task.taskId, 0, options, true /* fromRecents */);
                     // Apply options to prevent pendingOptions be taken by client to make sure
                     // the override pending app transition will be applied immediately.
                     targetActivity.applyOptionsLocked();
@@ -2909,4 +2916,30 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             mResult.dump(pw, prefix);
         }
     }
+
+    class PreferredAppsTask extends AsyncTask<Void, Void, Void> {
+        @Override
+        protected Void doInBackground(Void... params) {
+            String res = null;
+            final Intent intent = new Intent(Intent.ACTION_MAIN);
+            if (mUxPerf != null) {
+                res = mUxPerf.perfUXEngine_trigger(BoostFramework.UXE_TRIGGER);
+                if (res == null)
+                    return null;
+                String[] p_apps = res.split("/");
+                if (p_apps.length != 0) {
+                    ArrayList<String> apps_l = new ArrayList(Arrays.asList(p_apps));
+                    Bundle bParams = new Bundle();
+                    if (bParams == null)
+                        return null;
+                    bParams.putStringArrayList("start_empty_apps", apps_l);
+                    final Message msg = PooledLambda.obtainMessage(
+                                            ActivityManagerInternal::startActivityAsUserEmpty, mService.mAmInternal, bParams);
+                    mService.mH.sendMessage(msg);
+                }
+            }
+            return null;
+        }
+    }
+
 }

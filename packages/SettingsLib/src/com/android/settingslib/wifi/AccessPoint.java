@@ -164,6 +164,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
     static final String KEY_IS_CARRIER_AP = "key_is_carrier_ap";
     static final String KEY_CARRIER_AP_EAP_TYPE = "key_carrier_ap_eap_type";
     static final String KEY_CARRIER_NAME = "key_carrier_name";
+    static final String KEY_EAPTYPE = "eap_psktype";
     static final AtomicInteger sLastId = new AtomicInteger(0);
 
     /*
@@ -185,6 +186,11 @@ public class AccessPoint implements Comparable<AccessPoint> {
     private static final int PSK_WPA = 1;
     private static final int PSK_WPA2 = 2;
     private static final int PSK_WPA_WPA2 = 3;
+    private static final int PSK_SAE = 4;
+
+    private static final int EAP_UNKNOWN = 0;
+    private static final int EAP_WPA = 1; // WPA-EAP
+    private static final int EAP_WPA2_WPA3 = 2; // RSN-EAP
 
     private static final int LEGACY_CAPABLE_BSSID = 0;
     private static final int HT_CAPABLE_BSSID = 1;
@@ -221,6 +227,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
     private int networkId = WifiConfiguration.INVALID_NETWORK_ID;
 
     private int pskType = PSK_UNKNOWN;
+    private int mEapType = EAP_UNKNOWN;
 
     private WifiConfiguration mConfig;
 
@@ -281,6 +288,9 @@ public class AccessPoint implements Comparable<AccessPoint> {
         }
         if (savedState.containsKey(KEY_PSKTYPE)) {
             pskType = savedState.getInt(KEY_PSKTYPE);
+        }
+        if (savedState.containsKey(KEY_EAPTYPE)) {
+            mEapType = savedState.getInt(KEY_EAPTYPE);
         }
         mInfo = savedState.getParcelable(KEY_WIFIINFO);
         if (savedState.containsKey(KEY_NETWORKINFO)) {
@@ -353,6 +363,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         mContext = context;
         networkId = config.networkId;
         mConfig = config;
+        mFqdn = config.FQDN;
         setScanResultsPasspoint(homeScans, roamingScans);
         updateKey();
     }
@@ -689,6 +700,13 @@ public class AccessPoint implements Comparable<AccessPoint> {
         return mKey;
     }
 
+    /**
+     * Determines if the other AccessPoint represents the same network as this AccessPoint
+     */
+    public boolean matches(AccessPoint other) {
+        return getKey().equals(other.getKey());
+    }
+
     public boolean matches(WifiConfiguration config) {
         if (config.isPasspoint()) {
             return (isPasspoint() && config.FQDN.equals(mConfig.FQDN));
@@ -849,8 +867,11 @@ public class AccessPoint implements Comparable<AccessPoint> {
             ssid = bestResult.SSID;
             bssid = bestResult.BSSID;
             security = getSecurity(bestResult);
-            if (security == SECURITY_PSK) {
+            if (security == SECURITY_PSK || security == SECURITY_SAE) {
                 pskType = getPskType(bestResult);
+            }
+            if (security == SECURITY_EAP) {
+                mEapType = getEapType(bestResult);
             }
             mIsCarrierAp = bestResult.isCarrierAp;
             mCarrierApEapType = bestResult.carrierApEapType;
@@ -954,8 +975,20 @@ public class AccessPoint implements Comparable<AccessPoint> {
         }
         switch(security) {
             case SECURITY_EAP:
-                return concise ? context.getString(R.string.wifi_security_short_eap) :
-                    context.getString(R.string.wifi_security_eap);
+                switch (mEapType) {
+                    case EAP_WPA:
+                        return concise ? context.getString(R.string.wifi_security_short_eap_wpa) :
+                                context.getString(R.string.wifi_security_eap_wpa);
+                    case EAP_WPA2_WPA3:
+                        return concise
+                                ? context.getString(R.string.wifi_security_short_eap_wpa2_wpa3) :
+                                context.getString(R.string.wifi_security_eap_wpa2_wpa3);
+                    case EAP_UNKNOWN:
+                    default:
+                        return concise
+                                ? context.getString(R.string.wifi_security_short_eap) :
+                                context.getString(R.string.wifi_security_eap);
+                }
             case SECURITY_EAP_SUITE_B:
                 return concise ? context.getString(R.string.wifi_security_short_eap_suiteb) :
                         context.getString(R.string.wifi_security_eap_suiteb);
@@ -982,8 +1015,13 @@ public class AccessPoint implements Comparable<AccessPoint> {
                 return concise ? context.getString(R.string.wifi_security_short_dpp) :
                     context.getString(R.string.wifi_security_dpp);
             case SECURITY_SAE:
-                return concise ? context.getString(R.string.wifi_security_short_sae) :
-                    context.getString(R.string.wifi_security_sae);
+                if (pskType == PSK_SAE) {
+                    return concise ? context.getString(R.string.wifi_security_short_psk_sae) :
+                            context.getString(R.string.wifi_security_psk_sae);
+                } else {
+                    return concise ? context.getString(R.string.wifi_security_short_sae) :
+                            context.getString(R.string.wifi_security_sae);
+                }
             case SECURITY_OWE:
                 return concise ? context.getString(R.string.wifi_security_short_owe) :
                     context.getString(R.string.wifi_security_owe);
@@ -1086,6 +1124,13 @@ public class AccessPoint implements Comparable<AccessPoint> {
     }
 
     public String getSettingsSummary() {
+        return getSettingsSummary(false /*convertSavedAsDisconnected*/);
+    }
+
+    /**
+     * Returns the summary for the AccessPoint.
+     */
+    public String getSettingsSummary(boolean convertSavedAsDisconnected) {
         // Update to new summary
         StringBuilder summary = new StringBuilder();
 
@@ -1151,8 +1196,13 @@ public class AccessPoint implements Comparable<AccessPoint> {
                                     R.string.wifi_ap_unable_to_handle_new_sta));
                             break;
                         default:
-                            // "Saved"
-                            summary.append(mContext.getString(R.string.wifi_remembered));
+                            if (convertSavedAsDisconnected) {
+                                // Disconnected
+                                summary.append(mContext.getString(R.string.wifi_disconnected));
+                            } else {
+                                // "Saved"
+                                summary.append(mContext.getString(R.string.wifi_remembered));
+                            }
                             break;
                     }
                 }
@@ -1303,6 +1353,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         savedState.putInt(KEY_SECURITY, security);
         savedState.putInt(KEY_SPEED, mSpeed);
         savedState.putInt(KEY_PSKTYPE, pskType);
+        savedState.putInt(KEY_EAPTYPE, mEapType);
         if (mConfig != null) savedState.putParcelable(KEY_CONFIG, mConfig);
         savedState.putParcelable(KEY_WIFIINFO, mInfo);
         savedState.putParcelableArray(KEY_SCANRESULTS,
@@ -1626,17 +1677,36 @@ public class AccessPoint implements Comparable<AccessPoint> {
 
     private static int getPskType(ScanResult result) {
         boolean wpa = result.capabilities.contains("WPA-PSK");
-        boolean wpa2 = result.capabilities.contains("WPA2-PSK");
-        if (wpa2 && wpa) {
+        boolean wpa2 = result.capabilities.contains("RSN-PSK");
+        boolean wpa3TransitionMode = result.capabilities.contains("PSK+SAE");
+        boolean wpa3 = result.capabilities.contains("RSN-SAE");
+        if (wpa3TransitionMode) {
+            return PSK_SAE;
+        } else if (wpa2 && wpa) {
             return PSK_WPA_WPA2;
         } else if (wpa2) {
             return PSK_WPA2;
         } else if (wpa) {
             return PSK_WPA;
         } else {
-            Log.w(TAG, "Received abnormal flag string: " + result.capabilities);
+            if (!wpa3) {
+                // Suppress warning for WPA3 only networks
+                Log.w(TAG, "Received abnormal flag string: " + result.capabilities);
+            }
             return PSK_UNKNOWN;
         }
+    }
+
+    private static int getEapType(ScanResult result) {
+        // WPA2-Enterprise and WPA3-Enterprise (non 192-bit) advertise RSN-EAP-CCMP
+        if (result.capabilities.contains("RSN-EAP")) {
+            return EAP_WPA2_WPA3;
+        }
+        // WPA-Enterprise advertises WPA-EAP-TKIP
+        if (result.capabilities.contains("WPA-EAP")) {
+            return EAP_WPA;
+        }
+        return EAP_UNKNOWN;
     }
 
     private static int getSecurity(ScanResult result) {

@@ -286,8 +286,12 @@ class SurfaceAnimator {
         final boolean destroy = mLeash != null && surface != null && parent != null;
         if (destroy) {
             if (DEBUG_ANIM) Slog.i(TAG, "Reparenting to original parent");
-            t.reparent(surface, parent);
-            scheduleAnim = true;
+            // We shouldn't really need these isValid checks but we do
+            // b/130364451
+            if (surface.isValid() && parent.isValid()) {
+                t.reparent(surface, parent);
+                scheduleAnim = true;
+            }
         }
         mService.mAnimationTransferMap.remove(mAnimation);
         if (mLeash != null && destroyLeash) {
@@ -410,11 +414,13 @@ class SurfaceAnimator {
 
         /**
          * @return The surface of the object to be animated.
+         *         This SurfaceControl must be valid if non-null.
          */
         @Nullable SurfaceControl getSurfaceControl();
 
         /**
          * @return The parent of the surface object to be animated.
+         *         This SurfaceControl must be valid if non-null.
          */
         @Nullable SurfaceControl getParentSurfaceControl();
 

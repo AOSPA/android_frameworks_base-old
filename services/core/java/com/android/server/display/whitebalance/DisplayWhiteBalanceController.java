@@ -271,7 +271,7 @@ public class DisplayWhiteBalanceController implements
         final long time = System.currentTimeMillis();
         float ambientColorTemperature = mColorTemperatureFilter.getEstimate(time);
 
-        if (mAmbientToDisplayColorTemperatureSpline != null) {
+        if (mAmbientToDisplayColorTemperatureSpline != null && ambientColorTemperature != -1.0f) {
             ambientColorTemperature =
                 mAmbientToDisplayColorTemperatureSpline.interpolate(ambientColorTemperature);
         }
@@ -405,6 +405,7 @@ public class DisplayWhiteBalanceController implements
         mThrottler.clear();
         mAmbientColorTemperature = -1.0f;
         mPendingAmbientColorTemperature = -1.0f;
+        mColorDisplayServiceInternal.resetDisplayWhiteBalanceColorTemperature();
         return true;
     }
 

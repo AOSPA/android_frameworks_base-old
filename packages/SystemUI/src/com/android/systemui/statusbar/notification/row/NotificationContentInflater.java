@@ -44,6 +44,7 @@ import com.android.systemui.statusbar.notification.row.wrapper.NotificationViewW
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.policy.InflatedSmartReplies;
+import com.android.systemui.statusbar.policy.InflatedSmartReplies.SmartRepliesAndActions;
 import com.android.systemui.statusbar.policy.SmartReplyConstants;
 import com.android.systemui.util.Assert;
 
@@ -119,8 +120,6 @@ public class NotificationContentInflater {
      */
     @InflationFlag
     private int mInflationFlags = REQUIRED_INFLATION_FLAGS;
-
-    static final InflationExecutor EXECUTOR = new InflationExecutor();
 
     private final ExpandableNotificationRow mRow;
     private boolean mIsLowPriority;
@@ -284,7 +283,8 @@ public class NotificationContentInflater {
                 mIsChildInGroup, mUsesIncreasedHeight, mUsesIncreasedHeadsUpHeight,
                 mRedactAmbient, packageContext);
         result = inflateSmartReplyViews(result, reInflateFlags, mRow.getEntry(),
-                mRow.getContext(), mRow.getHeadsUpManager());
+                mRow.getContext(), mRow.getHeadsUpManager(),
+                mRow.getExistingSmartRepliesAndActions());
         apply(
                 inflateSynchronously,
                 result,
@@ -346,20 +346,20 @@ public class NotificationContentInflater {
 
     private static InflationProgress inflateSmartReplyViews(InflationProgress result,
             @InflationFlag int reInflateFlags, NotificationEntry entry, Context context,
-            HeadsUpManager headsUpManager) {
+            HeadsUpManager headsUpManager, SmartRepliesAndActions previousSmartRepliesAndActions) {
         SmartReplyConstants smartReplyConstants = Dependency.get(SmartReplyConstants.class);
         SmartReplyController smartReplyController = Dependency.get(SmartReplyController.class);
         if ((reInflateFlags & FLAG_CONTENT_VIEW_EXPANDED) != 0 && result.newExpandedView != null) {
             result.expandedInflatedSmartReplies =
                     InflatedSmartReplies.inflate(
                             context, entry, smartReplyConstants, smartReplyController,
-                            headsUpManager);
+                            headsUpManager, previousSmartRepliesAndActions);
         }
         if ((reInflateFlags & FLAG_CONTENT_VIEW_HEADS_UP) != 0 && result.newHeadsUpView != null) {
             result.headsUpInflatedSmartReplies =
                     InflatedSmartReplies.inflate(
                             context, entry, smartReplyConstants, smartReplyController,
-                            headsUpManager);
+                            headsUpManager, previousSmartRepliesAndActions);
         }
         return result;
     }
@@ -638,14 +638,14 @@ public class NotificationContentInflater {
             cancellationSignal = newContentView.applyAsync(
                     result.packageContext,
                     parentLayout,
-                    EXECUTOR,
+                    null,
                     listener,
                     remoteViewClickHandler);
         } else {
             cancellationSignal = newContentView.reapplyAsync(
                     result.packageContext,
                     existingView,
-                    EXECUTOR,
+                    null,
                     listener,
                     remoteViewClickHandler);
         }
@@ -907,7 +907,8 @@ public class NotificationContentInflater {
                         mIsChildInGroup, mUsesIncreasedHeight, mUsesIncreasedHeadsUpHeight,
                         mRedactAmbient, packageContext);
                 return inflateSmartReplyViews(inflationProgress, mReInflateFlags, mRow.getEntry(),
-                        mRow.getContext(), mRow.getHeadsUpManager());
+                        mRow.getContext(), mRow.getHeadsUpManager(),
+                        mRow.getExistingSmartRepliesAndActions());
             } catch (Exception e) {
                 mError = e;
                 return null;
@@ -995,41 +996,5 @@ public class NotificationContentInflater {
     abstract static class ApplyCallback {
         public abstract void setResultView(View v);
         public abstract RemoteViews getRemoteView();
-    }
-
-    /**
-     * A custom executor that allows more tasks to be queued. Default values are copied from
-     * AsyncTask
-      */
-    private static class InflationExecutor implements Executor {
-        private static final int CPU_COUNT = Runtime.getRuntime().availableProcessors();
-        // We want at least 2 threads and at most 4 threads in the core pool,
-        // preferring to have 1 less than the CPU count to avoid saturating
-        // the CPU with background work
-        private static final int CORE_POOL_SIZE = Math.max(2, Math.min(CPU_COUNT - 1, 4));
-        private static final int MAXIMUM_POOL_SIZE = CPU_COUNT * 2 + 1;
-        private static final int KEEP_ALIVE_SECONDS = 30;
-
-        private static final ThreadFactory sThreadFactory = new ThreadFactory() {
-            private final AtomicInteger mCount = new AtomicInteger(1);
-
-            public Thread newThread(Runnable r) {
-                return new Thread(r, "InflaterThread #" + mCount.getAndIncrement());
-            }
-        };
-
-        private final ThreadPoolExecutor mExecutor;
-
-        private InflationExecutor() {
-            mExecutor = new ThreadPoolExecutor(
-                    CORE_POOL_SIZE, MAXIMUM_POOL_SIZE, KEEP_ALIVE_SECONDS, TimeUnit.SECONDS,
-                    new LinkedBlockingQueue<>(), sThreadFactory);
-            mExecutor.allowCoreThreadTimeOut(true);
-        }
-
-        @Override
-        public void execute(Runnable runnable) {
-            mExecutor.execute(runnable);
-        }
     }
 }

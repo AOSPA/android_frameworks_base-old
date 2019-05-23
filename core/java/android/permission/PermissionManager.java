@@ -16,10 +16,16 @@
 
 package android.permission;
 
+import android.Manifest;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
+import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
 import android.content.Context;
+import android.content.pm.IPackageManager;
+import android.os.RemoteException;
 
 import com.android.internal.annotations.Immutable;
 import com.android.server.SystemConfig;
@@ -46,24 +52,63 @@ public final class PermissionManager {
 
     private final @NonNull Context mContext;
 
+    private final IPackageManager mPackageManager;
+
     /**
      * Creates a new instance.
      *
      * @param context The current context in which to operate.
      * @hide
      */
-    public PermissionManager(@NonNull Context context) {
+    public PermissionManager(@NonNull Context context, IPackageManager packageManager) {
         mContext = context;
+        mPackageManager = packageManager;
+    }
+
+    /**
+     * Gets the version of the runtime permission database.
+     *
+     * @return The database version.
+     *
+     * @hide
+     */
+    @TestApi
+    @SystemApi
+    @RequiresPermission(Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY)
+    public @IntRange(from = 0) int getRuntimePermissionsVersion() {
+        try {
+            return mPackageManager.getRuntimePermissionsVersion(mContext.getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Sets the version of the runtime permission database.
+     *
+     * @param version The new version.
+     *
+     * @hide
+     */
+    @TestApi
+    @SystemApi
+    @RequiresPermission(Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY)
+    public void setRuntimePermissionsVersion(@IntRange(from = 0) int version) {
+        try {
+            mPackageManager.setRuntimePermissionsVersion(version, mContext.getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
      * Get set of permissions that have been split into more granular or dependent permissions.
      *
-     * <p>E.g. before {@link android.os.Build.VERSION_CODES#P0} an app that was granted
+     * <p>E.g. before {@link android.os.Build.VERSION_CODES#Q} an app that was granted
      * {@link Manifest.permission#ACCESS_COARSE_LOCATION} could access he location while it was in
-     * foreground and background. On platforms after {@link android.os.Build.VERSION_CODES#P0}
+     * foreground and background. On platforms after {@link android.os.Build.VERSION_CODES#Q}
      * the location permission only grants location access while the app is in foreground. This
-     * would break apps that target before {@link android.os.Build.VERSION_CODES#P0}. Hence whenever
+     * would break apps that target before {@link android.os.Build.VERSION_CODES#Q}. Hence whenever
      * such an old app asks for a location permission (i.e. the
      * {@link SplitPermissionInfo#getSplitPermission()}), then the
      * {@link Manifest.permission#ACCESS_BACKGROUND_LOCATION} permission (inside

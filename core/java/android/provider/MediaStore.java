@@ -31,7 +31,6 @@ import android.annotation.UnsupportedAppUsage;
 import android.app.Activity;
 import android.app.AppGlobals;
 import android.content.ClipData;
-import android.content.ContentInterface;
 import android.content.ContentProviderClient;
 import android.content.ContentResolver;
 import android.content.ContentUris;
@@ -102,19 +101,39 @@ public final class MediaStore {
     public static final @NonNull Uri AUTHORITY_URI = Uri.parse("content://" + AUTHORITY);
 
     /**
-     * Volume name used for content on "internal" storage of device. This
-     * volume contains media distributed with the device, such as built-in
-     * ringtones and wallpapers.
+     * Synthetic volume name that provides a view of all content across the
+     * "internal" storage of the device.
+     * <p>
+     * This synthetic volume provides a merged view of all media distributed
+     * with the device, such as built-in ringtones and wallpapers.
+     * <p>
+     * Because this is a synthetic volume, you can't insert new content into
+     * this volume.
      */
     public static final String VOLUME_INTERNAL = "internal";
 
     /**
-     * Volume name used for content on "external" storage of device. This only
-     * includes media on the primary shared storage device; the contents of any
-     * secondary storage devices can be obtained using
-     * {@link #getAllVolumeNames(Context)}.
+     * Synthetic volume name that provides a view of all content across the
+     * "external" storage of the device.
+     * <p>
+     * This synthetic volume provides a merged view of all media across all
+     * currently attached external storage devices.
+     * <p>
+     * Because this is a synthetic volume, you can't insert new content into
+     * this volume. Instead, you can insert content into a specific storage
+     * volume obtained from {@link #getExternalVolumeNames(Context)}.
      */
     public static final String VOLUME_EXTERNAL = "external";
+
+    /**
+     * Specific volume name that represents the primary external storage device
+     * at {@link Environment#getExternalStorageDirectory()}.
+     * <p>
+     * This volume may not always be available, such as when the user has
+     * ejected the device. You can find a list of all specific volume names
+     * using {@link #getExternalVolumeNames(Context)}.
+     */
+    public static final String VOLUME_EXTERNAL_PRIMARY = "external_primary";
 
     /** {@hide} */
     public static final String SCAN_FILE_CALL = "scan_file";
@@ -948,6 +967,13 @@ public final class MediaStore {
         public static final String DATE_MODIFIED = "date_modified";
 
         /**
+         * The time the media item was taken.
+         */
+        @CurrentTimeMillisLong
+        @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+        public static final String DATE_TAKEN = "datetaken";
+
+        /**
          * The MIME type of the media item.
          * <p>
          * This is typically defined based on the file extension of the media
@@ -1037,6 +1063,16 @@ public final class MediaStore {
         public static final String OWNER_PACKAGE_NAME = "owner_package_name";
 
         /**
+         * Volume name of the specific storage device where this media item is
+         * persisted. The value is typically one of the volume names returned
+         * from {@link MediaStore#getExternalVolumeNames(Context)}.
+         * <p>
+         * This is a read-only column that is automatically computed.
+         */
+        @Column(value = Cursor.FIELD_TYPE_STRING, readOnly = true)
+        public static final String VOLUME_NAME = "volume_name";
+
+        /**
          * Relative path of this media item within the storage device where it
          * is persisted. For example, an item stored at
          * {@code /storage/0000-0000/DCIM/Vacation/IMG1024.JPG} would have a
@@ -1087,6 +1123,41 @@ public final class MediaStore {
         public static final String SECONDARY_DIRECTORY = "secondary_directory";
 
         /**
+         * The primary bucket ID of this media item. This can be useful to
+         * present the user a first-level clustering of related media items.
+         * This is a read-only column that is automatically computed.
+         */
+        @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+        public static final String BUCKET_ID = "bucket_id";
+
+        /**
+         * The primary bucket display name of this media item. This can be
+         * useful to present the user a first-level clustering of related
+         * media items. This is a read-only column that is automatically
+         * computed.
+         */
+        @Column(value = Cursor.FIELD_TYPE_STRING, readOnly = true)
+        public static final String BUCKET_DISPLAY_NAME = "bucket_display_name";
+
+        /**
+         * The group ID of this media item. This can be useful to present
+         * the user a grouping of related media items, such a burst of
+         * images, or a {@code JPG} and {@code DNG} version of the same
+         * image.
+         * <p>
+         * This is a read-only column that is automatically computed based
+         * on the first portion of the filename. For example,
+         * {@code IMG1024.BURST001.JPG} and {@code IMG1024.BURST002.JPG}
+         * will have the same {@link #GROUP_ID} because the first portion of
+         * their filenames is identical.
+         *
+         * @removed
+         */
+        @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+        @Deprecated
+        public static final String GROUP_ID = "group_id";
+
+        /**
          * The "document ID" GUID as defined by the <em>XMP Media
          * Management</em> standard, extracted from any XMP metadata contained
          * within this media item. The value is {@code null} when no metadata
@@ -1122,6 +1193,20 @@ public final class MediaStore {
          */
         @Column(value = Cursor.FIELD_TYPE_STRING, readOnly = true)
         public static final String ORIGINAL_DOCUMENT_ID = "original_document_id";
+
+        /**
+         * The duration of the media item.
+         */
+        @DurationMillisLong
+        @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+        public static final String DURATION = "duration";
+
+        /**
+         * The orientation for the media item, expressed in degrees. For
+         * example, 0, 90, 180, or 270 degrees.
+         */
+        @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+        public static final String ORIENTATION = "orientation";
     }
 
     /**
@@ -1327,7 +1412,10 @@ public final class MediaStore {
 
         /**
          * The description of the download.
+         *
+         * @removed
          */
+        @Deprecated
         @Column(Cursor.FIELD_TYPE_STRING)
         String DESCRIPTION = "description";
     }
@@ -1408,7 +1496,7 @@ public final class MediaStore {
             final StorageVolume sv = sm.getStorageVolume(path);
             if (sv != null) {
                 if (sv.isPrimary()) {
-                    return VOLUME_EXTERNAL;
+                    return VOLUME_EXTERNAL_PRIMARY;
                 } else {
                     return checkArgumentVolumeName(sv.getNormalizedUuid());
                 }
@@ -1543,18 +1631,9 @@ public final class MediaStore {
             @Column(value = Cursor.FIELD_TYPE_FLOAT, readOnly = true)
             public static final String LONGITUDE = "longitude";
 
-            /**
-             * The time the media item was taken.
-             */
-            @CurrentTimeMillisLong
-            @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+            /** @removed promoted to parent interface */
             public static final String DATE_TAKEN = "datetaken";
-
-            /**
-             * The orientation for the image expressed as degrees.
-             * Only degrees 0, 90, 180, 270 will work.
-             */
-            @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+            /** @removed promoted to parent interface */
             public static final String ORIENTATION = "orientation";
 
             /**
@@ -1568,36 +1647,11 @@ public final class MediaStore {
             @Column(Cursor.FIELD_TYPE_INTEGER)
             public static final String MINI_THUMB_MAGIC = "mini_thumb_magic";
 
-            /**
-             * The primary bucket ID of this media item. This can be useful to
-             * present the user a first-level clustering of related media items.
-             * This is a read-only column that is automatically computed.
-             */
-            @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+            /** @removed promoted to parent interface */
             public static final String BUCKET_ID = "bucket_id";
-
-            /**
-             * The primary bucket display name of this media item. This can be
-             * useful to present the user a first-level clustering of related
-             * media items. This is a read-only column that is automatically
-             * computed.
-             */
-            @Column(value = Cursor.FIELD_TYPE_STRING, readOnly = true)
+            /** @removed promoted to parent interface */
             public static final String BUCKET_DISPLAY_NAME = "bucket_display_name";
-
-            /**
-             * The group ID of this media item. This can be useful to present
-             * the user a grouping of related media items, such a burst of
-             * images, or a {@code JPG} and {@code DNG} version of the same
-             * image.
-             * <p>
-             * This is a read-only column that is automatically computed based
-             * on the first portion of the filename. For example,
-             * {@code IMG1024.BURST001.JPG} and {@code IMG1024.BURST002.JPG}
-             * will have the same {@link #GROUP_ID} because the first portion of
-             * their filenames is identical.
-             */
-            @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+            /** @removed promoted to parent interface */
             public static final String GROUP_ID = "group_id";
         }
 
@@ -1710,7 +1764,7 @@ public final class MediaStore {
                 String stringUrl = null;    /* value to be returned */
 
                 try {
-                    url = cr.insert(EXTERNAL_CONTENT_URI, values);
+                    url = cr.insert(getContentUri(VOLUME_EXTERNAL_PRIMARY), values);
 
                     if (source != null) {
                         try (OutputStream out = new ParcelFileDescriptor.AutoCloseOutputStream(
@@ -2018,11 +2072,7 @@ public final class MediaStore {
             @Column(value = Cursor.FIELD_TYPE_STRING, readOnly = true)
             public static final String TITLE_KEY = "title_key";
 
-            /**
-             * The duration of the audio item.
-             */
-            @DurationMillisLong
-            @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+            /** @removed promoted to parent interface */
             public static final String DURATION = "duration";
 
             /**
@@ -2676,7 +2726,13 @@ public final class MediaStore {
             public static final String ALBUM = "album";
 
             /**
-             * The artist whose songs appear on this album
+             * The ID of the artist whose songs appear on this album.
+             */
+            @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+            public static final String ARTIST_ID = "artist_id";
+
+            /**
+             * The name of the artist whose songs appear on this album.
              */
             @Column(value = Cursor.FIELD_TYPE_STRING, readOnly = true)
             public static final String ARTIST = "artist";
@@ -2849,12 +2905,7 @@ public final class MediaStore {
          * Video metadata columns.
          */
         public interface VideoColumns extends MediaColumns {
-
-            /**
-             * The duration of the video item.
-             */
-            @DurationMillisLong
-            @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+            /** @removed promoted to parent interface */
             public static final String DURATION = "duration";
 
             /**
@@ -2929,11 +2980,7 @@ public final class MediaStore {
             @Column(value = Cursor.FIELD_TYPE_FLOAT, readOnly = true)
             public static final String LONGITUDE = "longitude";
 
-            /**
-             * The time the media item was taken.
-             */
-            @CurrentTimeMillisLong
-            @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+            /** @removed promoted to parent interface */
             public static final String DATE_TAKEN = "datetaken";
 
             /**
@@ -2947,36 +2994,11 @@ public final class MediaStore {
             @Column(Cursor.FIELD_TYPE_INTEGER)
             public static final String MINI_THUMB_MAGIC = "mini_thumb_magic";
 
-            /**
-             * The primary bucket ID of this media item. This can be useful to
-             * present the user a first-level clustering of related media items.
-             * This is a read-only column that is automatically computed.
-             */
-            @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+            /** @removed promoted to parent interface */
             public static final String BUCKET_ID = "bucket_id";
-
-            /**
-             * The primary bucket display name of this media item. This can be
-             * useful to present the user a first-level clustering of related
-             * media items. This is a read-only column that is automatically
-             * computed.
-             */
-            @Column(value = Cursor.FIELD_TYPE_STRING, readOnly = true)
+            /** @removed promoted to parent interface */
             public static final String BUCKET_DISPLAY_NAME = "bucket_display_name";
-
-            /**
-             * The group ID of this media item. This can be useful to present
-             * the user a grouping of related media items, such a burst of
-             * images, or a {@code JPG} and {@code DNG} version of the same
-             * image.
-             * <p>
-             * This is a read-only column that is automatically computed based
-             * on the first portion of the filename. For example,
-             * {@code IMG1024.BURST001.JPG} and {@code IMG1024.BURST002.JPG}
-             * will have the same {@link #GROUP_ID} because the first portion of
-             * their filenames is identical.
-             */
-            @Column(value = Cursor.FIELD_TYPE_INTEGER, readOnly = true)
+            /** @removed promoted to parent interface */
             public static final String GROUP_ID = "group_id";
 
             /**
@@ -3218,22 +3240,29 @@ public final class MediaStore {
         }
     }
 
-    /**
-     * Return list of all volume names currently available. This includes a
-     * unique name for each shared storage device that is currently mounted.
-     * <p>
-     * Each name can be passed to APIs like
-     * {@link MediaStore.Images.Media#getContentUri(String)} to query media at
-     * that location.
-     */
+    /** @removed */
+    @Deprecated
     public static @NonNull Set<String> getAllVolumeNames(@NonNull Context context) {
+        return getExternalVolumeNames(context);
+    }
+
+    /**
+     * Return list of all specific volume names that make up
+     * {@link #VOLUME_EXTERNAL}. This includes a unique volume name for each
+     * shared storage device that is currently attached, which typically
+     * includes {@link MediaStore#VOLUME_EXTERNAL_PRIMARY}.
+     * <p>
+     * Each specific volume name can be passed to APIs like
+     * {@link MediaStore.Images.Media#getContentUri(String)} to interact with
+     * media on that storage device.
+     */
+    public static @NonNull Set<String> getExternalVolumeNames(@NonNull Context context) {
         final StorageManager sm = context.getSystemService(StorageManager.class);
         final Set<String> volumeNames = new ArraySet<>();
-        volumeNames.add(VOLUME_INTERNAL);
         for (VolumeInfo vi : sm.getVolumes()) {
             if (vi.isVisibleForUser(UserHandle.myUserId()) && vi.isMountedReadable()) {
                 if (vi.isPrimary()) {
-                    volumeNames.add(VOLUME_EXTERNAL);
+                    volumeNames.add(VOLUME_EXTERNAL_PRIMARY);
                 } else {
                     volumeNames.add(vi.getNormalizedFsUuid());
                 }
@@ -3264,6 +3293,8 @@ public final class MediaStore {
             return volumeName;
         } else if (VOLUME_EXTERNAL.equals(volumeName)) {
             return volumeName;
+        } else if (VOLUME_EXTERNAL_PRIMARY.equals(volumeName)) {
+            return volumeName;
         }
 
         // When not one of the well-known values above, it must be a hex UUID
@@ -3279,8 +3310,9 @@ public final class MediaStore {
     }
 
     /**
-     * Return path where the given volume is mounted. Not valid for
-     * {@link #VOLUME_INTERNAL}.
+     * Return path where the given specific volume is mounted. Not valid for
+     * {@link #VOLUME_INTERNAL} or {@link #VOLUME_EXTERNAL}, since those are
+     * broad collections that cover many paths.
      *
      * @hide
      */
@@ -3291,8 +3323,12 @@ public final class MediaStore {
             throw new IllegalArgumentException();
         }
 
-        if (VOLUME_EXTERNAL.equals(volumeName)) {
-            return Environment.getExternalStorageDirectory();
+        switch (volumeName) {
+            case VOLUME_INTERNAL:
+            case VOLUME_EXTERNAL:
+                throw new FileNotFoundException(volumeName + " has no associated path");
+            case VOLUME_EXTERNAL_PRIMARY:
+                return Environment.getExternalStorageDirectory();
         }
 
         final StorageManager sm = AppGlobals.getInitialApplication()
@@ -3322,23 +3358,31 @@ public final class MediaStore {
             throw new IllegalArgumentException();
         }
 
+        final Context context = AppGlobals.getInitialApplication();
+        final UserManager um = context.getSystemService(UserManager.class);
+
         final ArrayList<File> res = new ArrayList<>();
         if (VOLUME_INTERNAL.equals(volumeName)) {
-            addCanoncialFile(res, new File(Environment.getRootDirectory(), "media"));
-            addCanoncialFile(res, new File(Environment.getOemDirectory(), "media"));
-            addCanoncialFile(res, new File(Environment.getProductDirectory(), "media"));
+            addCanonicalFile(res, new File(Environment.getRootDirectory(), "media"));
+            addCanonicalFile(res, new File(Environment.getOemDirectory(), "media"));
+            addCanonicalFile(res, new File(Environment.getProductDirectory(), "media"));
+        } else if (VOLUME_EXTERNAL.equals(volumeName)) {
+            for (String exactVolume : getExternalVolumeNames(context)) {
+                addCanonicalFile(res, getVolumePath(exactVolume));
+            }
+            if (um.isDemoUser()) {
+                addCanonicalFile(res, Environment.getDataPreloadsMediaDirectory());
+            }
         } else {
-            addCanoncialFile(res, getVolumePath(volumeName));
-            final UserManager um = AppGlobals.getInitialApplication()
-                    .getSystemService(UserManager.class);
-            if (VOLUME_EXTERNAL.equals(volumeName) && um.isDemoUser()) {
-                addCanoncialFile(res, Environment.getDataPreloadsMediaDirectory());
+            addCanonicalFile(res, getVolumePath(volumeName));
+            if (VOLUME_EXTERNAL_PRIMARY.equals(volumeName) && um.isDemoUser()) {
+                addCanonicalFile(res, Environment.getDataPreloadsMediaDirectory());
             }
         }
         return res;
     }
 
-    private static void addCanoncialFile(List<File> list, File file) {
+    private static void addCanonicalFile(List<File> list, File file) {
         try {
             list.add(file.getCanonicalFile());
         } catch (IOException e) {
@@ -3376,12 +3420,12 @@ public final class MediaStore {
      * <p>
      * No other assumptions should be made about the meaning of the version.
      * <p>
-     * This method returns the version for {@link MediaStore#VOLUME_EXTERNAL};
-     * to obtain a version for a different volume, use
-     * {@link #getVersion(Context, String)}.
+     * This method returns the version for
+     * {@link MediaStore#VOLUME_EXTERNAL_PRIMARY}; to obtain a version for a
+     * different volume, use {@link #getVersion(Context, String)}.
      */
     public static @NonNull String getVersion(@NonNull Context context) {
-        return getVersion(context, VOLUME_EXTERNAL);
+        return getVersion(context, VOLUME_EXTERNAL_PRIMARY);
     }
 
     /**
@@ -3395,7 +3439,7 @@ public final class MediaStore {
      *
      * @param volumeName specific volume to obtain an opaque version string for.
      *            Must be one of the values returned from
-     *            {@link #getAllVolumeNames(Context)}.
+     *            {@link #getExternalVolumeNames(Context)}.
      */
     public static @NonNull String getVersion(@NonNull Context context, @NonNull String volumeName) {
         final ContentResolver resolver = context.getContentResolver();

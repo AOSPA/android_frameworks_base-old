@@ -17,6 +17,7 @@ package com.android.server.webkit;
 
 import android.content.Context;
 import android.content.pm.PackageInfo;
+import android.os.AsyncTask;
 import android.os.UserHandle;
 import android.webkit.WebViewProviderInfo;
 import android.webkit.WebViewProviderResponse;
@@ -80,7 +81,18 @@ public class WebViewUpdateServiceImpl {
     void prepareWebViewInSystemServer() {
         migrateFallbackStateOnBoot();
         mWebViewUpdater.prepareWebViewInSystemServer();
-        mSystemInterface.notifyZygote(isMultiProcessEnabled());
+        boolean multiProcessEnabled = isMultiProcessEnabled();
+        mSystemInterface.notifyZygote(multiProcessEnabled);
+        if (multiProcessEnabled) {
+            AsyncTask.THREAD_POOL_EXECUTOR.execute(this::startZygoteWhenReady);
+        }
+    }
+
+    void startZygoteWhenReady() {
+        // Wait on a background thread for RELRO creation to be done. We ignore the return value
+        // because even if RELRO creation failed we still want to start the zygote.
+        waitForAndGetProvider();
+        mSystemInterface.ensureZygoteStarted();
     }
 
     void handleNewUser(int userId) {

@@ -96,7 +96,7 @@ public class ZenModeHelper {
     private final Context mContext;
     private final H mHandler;
     private final SettingsObserver mSettingsObserver;
-    @VisibleForTesting protected final AppOpsManager mAppOps;
+    private final AppOpsManager mAppOps;
     @VisibleForTesting protected final NotificationManager mNotificationManager;
     @VisibleForTesting protected ZenModeConfig mDefaultConfig;
     private final ArrayList<Callback> mCallbacks = new ArrayList<Callback>();
@@ -123,11 +123,13 @@ public class ZenModeHelper {
 
     @VisibleForTesting protected boolean mIsBootComplete;
 
+    private String[] mPriorityOnlyDndExemptPackages;
+
     public ZenModeHelper(Context context, Looper looper, ConditionProviders conditionProviders) {
         mContext = context;
         mHandler = new H(looper);
         addCallback(mMetrics);
-        mAppOps = (AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
+        mAppOps = context.getSystemService(AppOpsManager.class);
         mNotificationManager =  context.getSystemService(NotificationManager.class);
 
         mDefaultConfig = readDefaultConfig(mContext.getResources());
@@ -212,6 +214,10 @@ public class ZenModeHelper {
 
     public void onUserUnlocked(int user) {
         loadConfigForUser(user, "onUserUnlocked");
+    }
+
+    void setPriorityOnlyDndExemptPackages(String[] packages) {
+        mPriorityOnlyDndExemptPackages = packages;
     }
 
     private void loadConfigForUser(int user, String reason) {
@@ -389,8 +395,8 @@ public class ZenModeHelper {
             if (mConfig == null) return;
 
             newConfig = mConfig.copy();
+            setAutomaticZenRuleStateLocked(newConfig, newConfig.automaticRules.get(id), condition);
         }
-        setAutomaticZenRuleState(newConfig, newConfig.automaticRules.get(id), condition);
     }
 
     public void setAutomaticZenRuleState(Uri ruleDefinition, Condition condition) {
@@ -398,14 +404,15 @@ public class ZenModeHelper {
         synchronized (mConfig) {
             if (mConfig == null) return;
             newConfig = mConfig.copy();
-        }
 
-        setAutomaticZenRuleState(newConfig,
-                findMatchingRule(newConfig, ruleDefinition, condition),
-                condition);
+            setAutomaticZenRuleStateLocked(newConfig,
+                    findMatchingRule(newConfig, ruleDefinition, condition),
+                    condition);
+        }
     }
 
-    private void setAutomaticZenRuleState(ZenModeConfig config, ZenRule rule, Condition condition) {
+    private void setAutomaticZenRuleStateLocked(ZenModeConfig config, ZenRule rule,
+            Condition condition) {
         if (rule == null) return;
 
         rule.condition = condition;
@@ -723,12 +730,14 @@ public class ZenModeHelper {
 
     public void writeXml(XmlSerializer out, boolean forBackup, Integer version, int userId)
             throws IOException {
-        final int N = mConfigs.size();
-        for (int i = 0; i < N; i++) {
-            if (forBackup && mConfigs.keyAt(i) != userId) {
-                continue;
+        synchronized (mConfigs) {
+            final int n = mConfigs.size();
+            for (int i = 0; i < n; i++) {
+                if (forBackup && mConfigs.keyAt(i) != userId) {
+                    continue;
+                }
+                mConfigs.valueAt(i).writeXml(out, version);
             }
-            mConfigs.valueAt(i).writeXml(out, version);
         }
     }
 
@@ -932,13 +941,34 @@ public class ZenModeHelper {
         }
     }
 
+    private void applyCustomPolicy(ZenPolicy policy, ZenRule rule) {
+        if (rule.zenMode == NotificationManager.INTERRUPTION_FILTER_NONE) {
+            policy.apply(new ZenPolicy.Builder()
+                    .disallowAllSounds()
+                    .build());
+        } else if (rule.zenMode
+                == NotificationManager.INTERRUPTION_FILTER_ALARMS) {
+            policy.apply(new ZenPolicy.Builder()
+                    .disallowAllSounds()
+                    .allowAlarms(true)
+                    .allowMedia(true)
+                    .build());
+        } else {
+            policy.apply(rule.zenPolicy);
+        }
+    }
+
     private void updateConsolidatedPolicy(String reason) {
         if (mConfig == null) return;
         synchronized (mConfig) {
             ZenPolicy policy = new ZenPolicy();
+            if (mConfig.manualRule != null) {
+                applyCustomPolicy(policy, mConfig.manualRule);
+            }
+
             for (ZenRule automaticRule : mConfig.automaticRules.values()) {
                 if (automaticRule.isAutomaticActive()) {
-                    policy.apply(automaticRule.zenPolicy);
+                    applyCustomPolicy(policy, automaticRule);
                 }
             }
             Policy newPolicy = mConfig.toNotificationPolicy(policy);
@@ -993,53 +1023,47 @@ public class ZenModeHelper {
         for (int usage : AudioAttributes.SDK_USAGES) {
             final int suppressionBehavior = AudioAttributes.SUPPRESSIBLE_USAGES.get(usage);
             if (suppressionBehavior == AudioAttributes.SUPPRESSIBLE_NEVER) {
-                applyRestrictions(false /*mute*/, usage);
+                applyRestrictions(zenPriorityOnly, false /*mute*/, usage);
             } else if (suppressionBehavior == AudioAttributes.SUPPRESSIBLE_NOTIFICATION) {
-                applyRestrictions(muteNotifications || muteEverything, usage);
+                applyRestrictions(zenPriorityOnly, muteNotifications || muteEverything, usage);
             } else if (suppressionBehavior == AudioAttributes.SUPPRESSIBLE_CALL) {
-                applyRestrictions(muteCalls || muteEverything, usage);
+                applyRestrictions(zenPriorityOnly, muteCalls || muteEverything, usage);
             } else if (suppressionBehavior == AudioAttributes.SUPPRESSIBLE_ALARM) {
-                applyRestrictions(muteAlarms || muteEverything, usage);
+                applyRestrictions(zenPriorityOnly, muteAlarms || muteEverything, usage);
             } else if (suppressionBehavior == AudioAttributes.SUPPRESSIBLE_MEDIA) {
-                applyRestrictions(muteMedia || muteEverything, usage);
+                applyRestrictions(zenPriorityOnly, muteMedia || muteEverything, usage);
             } else if (suppressionBehavior == AudioAttributes.SUPPRESSIBLE_SYSTEM) {
                 if (usage == AudioAttributes.USAGE_ASSISTANCE_SONIFICATION) {
                     // normally DND will only restrict touch sounds, not haptic feedback/vibrations
-                    applyRestrictions(muteSystem || muteEverything, usage,
+                    applyRestrictions(zenPriorityOnly, muteSystem || muteEverything, usage,
                             AppOpsManager.OP_PLAY_AUDIO);
-                    applyRestrictions(false, usage, AppOpsManager.OP_VIBRATE);
+                    applyRestrictions(zenPriorityOnly, false, usage, AppOpsManager.OP_VIBRATE);
                 } else {
-                    applyRestrictions(muteSystem || muteEverything, usage);
+                    applyRestrictions(zenPriorityOnly, muteSystem || muteEverything, usage);
                 }
             } else {
-                applyRestrictions(muteEverything, usage);
+                applyRestrictions(zenPriorityOnly, muteEverything, usage);
             }
         }
     }
 
 
     @VisibleForTesting
-    protected void applyRestrictions(boolean mute, int usage, int code) {
-        final String[] exceptionPackages = null; // none (for now)
-
-        // Only do this if we are executing within the system process...  otherwise
-        // we are running as test code, so don't have access to the protected call.
-        if (Process.myUid() == Process.SYSTEM_UID) {
-            final long ident = Binder.clearCallingIdentity();
-            try {
-                mAppOps.setRestriction(code, usage,
-                        mute ? AppOpsManager.MODE_IGNORED : AppOpsManager.MODE_ALLOWED,
-                        exceptionPackages);
-            } finally {
-                Binder.restoreCallingIdentity(ident);
-            }
+    protected void applyRestrictions(boolean zenPriorityOnly, boolean mute, int usage, int code) {
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            mAppOps.setRestriction(code, usage,
+                    mute ? AppOpsManager.MODE_IGNORED : AppOpsManager.MODE_ALLOWED,
+                    zenPriorityOnly ? mPriorityOnlyDndExemptPackages : null);
+        } finally {
+            Binder.restoreCallingIdentity(ident);
         }
     }
 
     @VisibleForTesting
-    protected void applyRestrictions(boolean mute, int usage) {
-        applyRestrictions(mute, usage, AppOpsManager.OP_VIBRATE);
-        applyRestrictions(mute, usage, AppOpsManager.OP_PLAY_AUDIO);
+    protected void applyRestrictions(boolean zenPriorityOnly, boolean mute, int usage) {
+        applyRestrictions(zenPriorityOnly, mute, usage, AppOpsManager.OP_VIBRATE);
+        applyRestrictions(zenPriorityOnly, mute, usage, AppOpsManager.OP_PLAY_AUDIO);
     }
 
 

@@ -47,8 +47,8 @@ public class OverScroller {
     private static final int SCROLL_MODE = 0;
     private static final int FLING_MODE = 1;
 
-    private static boolean SCROLL_BOOST_SS_ENABLE = false;
-
+    static boolean SCROLL_BOOST_SS_ENABLE = false;
+    BoostFramework mGetProp = null;
 
     /**
      * Creates an OverScroller with a viscous fluid scroll interpolator and flywheel.
@@ -86,8 +86,11 @@ public class OverScroller {
         mFlywheel = flywheel;
         mScrollerX = new SplineOverScroller(context);
         mScrollerY = new SplineOverScroller(context);
-        SCROLL_BOOST_SS_ENABLE =
-                    SystemProperties.getBoolean("vendor.perf.gestureflingboost.enable", false);
+
+        mGetProp = new BoostFramework();
+
+       if (mGetProp != null)
+            SCROLL_BOOST_SS_ENABLE = Boolean.parseBoolean(mGetProp.perfGetProp("vendor.perf.gestureflingboost.enable", "false"));
     }
 
     /**

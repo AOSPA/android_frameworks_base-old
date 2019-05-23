@@ -216,6 +216,11 @@ public class TextClassifierTest {
 
         TextClassification classification = mClassifier.classifyText(request);
         assertThat(classification, isTextClassification(classifiedText, TextClassifier.TYPE_DATE));
+        Bundle extras = classification.getExtras();
+        List<Bundle> entities = ExtrasUtils.getEntities(extras);
+        Truth.assertThat(entities).hasSize(1);
+        Bundle entity = entities.get(0);
+        Truth.assertThat(ExtrasUtils.getEntityType(entity)).isEqualTo(TextClassifier.TYPE_DATE);
     }
 
     @Test
@@ -357,6 +362,38 @@ public class TextClassifierTest {
     }
 
     @Test
+    public void testGenerateLinks_entityData() {
+        if (isTextClassifierDisabled()) return;
+        String text = "The number is +12122537077.";
+        Bundle extras = new Bundle();
+        ExtrasUtils.putIsSerializedEntityDataEnabled(extras, true);
+        TextLinks.Request request = new TextLinks.Request.Builder(text).setExtras(extras).build();
+
+        TextLinks textLinks = mClassifier.generateLinks(request);
+
+        Truth.assertThat(textLinks.getLinks()).hasSize(1);
+        TextLinks.TextLink textLink = textLinks.getLinks().iterator().next();
+        List<Bundle> entities = ExtrasUtils.getEntities(textLink.getExtras());
+        Truth.assertThat(entities).hasSize(1);
+        Bundle entity = entities.get(0);
+        Truth.assertThat(ExtrasUtils.getEntityType(entity)).isEqualTo(TextClassifier.TYPE_PHONE);
+    }
+
+    @Test
+    public void testGenerateLinks_entityData_disabled() {
+        if (isTextClassifierDisabled()) return;
+        String text = "The number is +12122537077.";
+        TextLinks.Request request = new TextLinks.Request.Builder(text).build();
+
+        TextLinks textLinks = mClassifier.generateLinks(request);
+
+        Truth.assertThat(textLinks.getLinks()).hasSize(1);
+        TextLinks.TextLink textLink = textLinks.getLinks().iterator().next();
+        List<Bundle> entities = ExtrasUtils.getEntities(textLink.getExtras());
+        Truth.assertThat(entities).isNull();
+    }
+
+    @Test
     public void testDetectLanguage() {
         if (isTextClassifierDisabled()) return;
         String text = "This is English text";
@@ -375,7 +412,7 @@ public class TextClassifierTest {
     }
 
     @Test
-    public void testSuggestConversationActions_textReplyOnly_maxThree() {
+    public void testSuggestConversationActions_textReplyOnly_maxOne() {
         if (isTextClassifierDisabled()) return;
         ConversationActions.Message message =
                 new ConversationActions.Message.Builder(
@@ -394,12 +431,11 @@ public class TextClassifierTest {
                         .build();
 
         ConversationActions conversationActions = mClassifier.suggestConversationActions(request);
-        assertTrue(conversationActions.getConversationActions().size() > 0);
-        for (ConversationAction conversationAction :
-                conversationActions.getConversationActions()) {
-            assertThat(conversationAction,
-                    isConversationAction(ConversationAction.TYPE_TEXT_REPLY));
-        }
+        Truth.assertThat(conversationActions.getConversationActions()).hasSize(1);
+        ConversationAction conversationAction = conversationActions.getConversationActions().get(0);
+        Truth.assertThat(conversationAction.getType()).isEqualTo(
+                ConversationAction.TYPE_TEXT_REPLY);
+        Truth.assertThat(conversationAction.getTextReply()).isNotNull();
     }
 
     @Test
@@ -484,6 +520,26 @@ public class TextClassifierTest {
         Truth.assertThat(conversationAction.getAction()).isNull();
         String code = ExtrasUtils.getCopyText(conversationAction.getExtras());
         Truth.assertThat(code).isEqualTo("12345");
+        Truth.assertThat(
+                ExtrasUtils.getSerializedEntityData(conversationAction.getExtras())).isNotEmpty();
+    }
+
+    @Test
+    public void testSuggetsConversationActions_deduplicate() {
+        if (isTextClassifierDisabled()) return;
+        ConversationActions.Message message =
+                new ConversationActions.Message.Builder(
+                        ConversationActions.Message.PERSON_USER_OTHERS)
+                        .setText("a@android.com b@android.com")
+                        .build();
+        ConversationActions.Request request =
+                new ConversationActions.Request.Builder(Collections.singletonList(message))
+                        .setMaxSuggestions(3)
+                        .build();
+
+        ConversationActions conversationActions = mClassifier.suggestConversationActions(request);
+
+        Truth.assertThat(conversationActions.getConversationActions()).isEmpty();
     }
 
     private boolean isTextClassifierDisabled() {

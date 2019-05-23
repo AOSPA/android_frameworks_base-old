@@ -29,6 +29,7 @@ import android.os.ParcelFileDescriptor;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Pair;
+import android.view.textclassifier.ActionsModelParamsSupplier.ActionsModelParams;
 import android.view.textclassifier.intent.ClassificationIntentFactory;
 import android.view.textclassifier.intent.LabeledIntent;
 import android.view.textclassifier.intent.LegacyClassificationIntentFactory;
@@ -57,6 +58,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Default implementation of the {@link TextClassifier} interface.
@@ -124,6 +126,7 @@ public final class TextClassifierImpl implements TextClassifier {
 
     private final ClassificationIntentFactory mClassificationIntentFactory;
     private final TemplateIntentFactory mTemplateIntentFactory;
+    private final Supplier<ActionsModelParams> mActionsModelParamsSupplier;
 
     public TextClassifierImpl(
             Context context, TextClassificationConstants settings, TextClassifier fallback) {
@@ -158,6 +161,15 @@ public final class TextClassifierImpl implements TextClassifier {
                 ? new TemplateClassificationIntentFactory(
                 mTemplateIntentFactory, new LegacyClassificationIntentFactory())
                 : new LegacyClassificationIntentFactory();
+        mActionsModelParamsSupplier = new ActionsModelParamsSupplier(mContext,
+                () -> {
+                    synchronized (mLock) {
+                        // Clear mActionsImpl here, so that we will create a new
+                        // ActionsSuggestionsModel object with the new flag in the next request.
+                        mActionsImpl = null;
+                        mActionModelInUse = null;
+                    }
+                });
     }
 
     public TextClassifierImpl(Context context, TextClassificationConstants settings) {
@@ -295,6 +307,8 @@ public final class TextClassifierImpl implements TextClassifier {
             final String detectLanguageTags = detectLanguageTagsFromText(request.getText());
             final AnnotatorModel annotatorImpl =
                     getAnnotatorImpl(request.getDefaultLocales());
+            final boolean isSerializedEntityDataEnabled =
+                    ExtrasUtils.isSerializedEntityDataEnabled(request);
             final AnnotatorModel.AnnotatedSpan[] annotations =
                     annotatorImpl.annotate(
                             textString,
@@ -302,7 +316,10 @@ public final class TextClassifierImpl implements TextClassifier {
                                     refTime.toInstant().toEpochMilli(),
                                     refTime.getZone().getId(),
                                     localesString,
-                                    detectLanguageTags));
+                                    detectLanguageTags,
+                                    entitiesToIdentify,
+                                    AnnotatorModel.AnnotationUsecase.SMART.getValue(),
+                                    isSerializedEntityDataEnabled));
             for (AnnotatorModel.AnnotatedSpan span : annotations) {
                 final AnnotatorModel.ClassificationResult[] results =
                         span.getClassification();
@@ -314,7 +331,11 @@ public final class TextClassifierImpl implements TextClassifier {
                 for (int i = 0; i < results.length; i++) {
                     entityScores.put(results[i].getCollection(), results[i].getScore());
                 }
-                builder.addLink(span.getStartIndex(), span.getEndIndex(), entityScores);
+                Bundle extras = new Bundle();
+                if (isSerializedEntityDataEnabled) {
+                    ExtrasUtils.putEntities(extras, results);
+                }
+                builder.addLink(span.getStartIndex(), span.getEndIndex(), entityScores, extras);
             }
             final TextLinks links = builder.build();
             final long endTimeMs = System.currentTimeMillis();
@@ -439,10 +460,6 @@ public final class TextClassifierImpl implements TextClassifier {
         Collection<String> expectedTypes = resolveActionTypesFromRequest(request);
         List<ConversationAction> conversationActions = new ArrayList<>();
         for (ActionsSuggestionsModel.ActionSuggestion nativeSuggestion : nativeSuggestions) {
-            if (request.getMaxSuggestions() >= 0
-                    && conversationActions.size() == request.getMaxSuggestions()) {
-                break;
-            }
             String actionType = nativeSuggestion.getActionType();
             if (!expectedTypes.contains(actionType)) {
                 continue;
@@ -458,6 +475,7 @@ public final class TextClassifierImpl implements TextClassifier {
                 remoteAction = labeledIntentResult.remoteAction;
                 ExtrasUtils.putActionIntent(extras, labeledIntentResult.resolvedIntent);
             }
+            ExtrasUtils.putSerializedEntityData(extras, nativeSuggestion.getSerializedEntityData());
             ExtrasUtils.putEntitiesExtras(
                     extras,
                     TemplateIntentFactory.nameVariantsToBundle(nativeSuggestion.getEntityData()));
@@ -471,6 +489,10 @@ public final class TextClassifierImpl implements TextClassifier {
         }
         conversationActions =
                 ActionsSuggestionsHelper.removeActionsWithDuplicates(conversationActions);
+        if (request.getMaxSuggestions() >= 0
+                && conversationActions.size() > request.getMaxSuggestions()) {
+            conversationActions = conversationActions.subList(0, request.getMaxSuggestions());
+        }
         String resultId = ActionsSuggestionsHelper.createResultId(
                 mContext,
                 request.getConversation(),
@@ -583,10 +605,14 @@ public final class TextClassifierImpl implements TextClassifier {
                 final ParcelFileDescriptor pfd = ParcelFileDescriptor.open(
                         new File(bestModel.getPath()), ParcelFileDescriptor.MODE_READ_ONLY);
                 try {
-                    if (pfd != null) {
-                        mActionsImpl = new ActionsSuggestionsModel(pfd.getFd());
-                        mActionModelInUse = bestModel;
+                    if (pfd == null) {
+                        Log.d(LOG_TAG, "Failed to read the model file: " + bestModel.getPath());
+                        return null;
                     }
+                    ActionsModelParams params = mActionsModelParamsSupplier.get();
+                    mActionsImpl = new ActionsSuggestionsModel(
+                            pfd.getFd(), params.getSerializedPreconditions(bestModel));
+                    mActionModelInUse = bestModel;
                 } finally {
                     maybeCloseAndLogError(pfd);
                 }
@@ -618,9 +644,7 @@ public final class TextClassifierImpl implements TextClassifier {
         AnnotatorModel.ClassificationResult highestScoringResult =
                 typeCount > 0 ? classifications[0] : null;
         for (int i = 0; i < typeCount; i++) {
-            builder.setEntityType(
-                    classifications[i].getCollection(),
-                    classifications[i].getScore());
+            builder.setEntityType(classifications[i]);
             if (classifications[i].getScore() > highestScoringResult.getScore()) {
                 highestScoringResult = classifications[i];
             }
@@ -663,7 +687,6 @@ public final class TextClassifierImpl implements TextClassifier {
             }
             builder.addAction(action, intent);
         }
-
         return builder.setId(createId(text, start, end)).build();
     }
 

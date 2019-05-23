@@ -31,7 +31,7 @@ import static android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATIO
 import static android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_DRAW_STATUS_BAR_BACKGROUND;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_DRAW_BAR_BACKGROUNDS;
 
 import android.annotation.NonNull;
 import android.annotation.UnsupportedAppUsage;
@@ -45,11 +45,13 @@ import android.content.res.Configuration;
 import android.content.res.Resources.Theme;
 import android.content.res.TypedArray;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
 import android.media.session.MediaController;
 import android.media.session.MediaSessionManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Parcel;
@@ -114,6 +116,7 @@ import com.android.internal.widget.SwipeDismissLayout;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Android-specific Window.
@@ -246,6 +249,9 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
     int mNavigationBarDividerColor = 0;
     private boolean mForcedStatusBarColor = false;
     private boolean mForcedNavigationBarColor = false;
+
+    boolean mEnsureStatusBarContrastWhenTransparent;
+    boolean mEnsureNavigationBarContrastWhenTransparent;
 
     @UnsupportedAppUsage
     private CharSequence mTitle = null;
@@ -2439,6 +2445,7 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
         final boolean targetPreHoneycomb = targetSdk < android.os.Build.VERSION_CODES.HONEYCOMB;
         final boolean targetPreIcs = targetSdk < android.os.Build.VERSION_CODES.ICE_CREAM_SANDWICH;
         final boolean targetPreL = targetSdk < android.os.Build.VERSION_CODES.LOLLIPOP;
+        final boolean targetPreQ = targetSdk < Build.VERSION_CODES.Q;
         final boolean targetHcNeedsOptions = context.getResources().getBoolean(
                 R.bool.target_honeycomb_needs_options_menu);
         final boolean noActionBar = !hasFeature(FEATURE_ACTION_BAR) || hasFeature(FEATURE_NO_TITLE);
@@ -2457,6 +2464,12 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
             mNavigationBarDividerColor = a.getColor(R.styleable.Window_navigationBarDividerColor,
                     0x00000000);
         }
+        if (!targetPreQ) {
+            mEnsureStatusBarContrastWhenTransparent = a.getBoolean(
+                    R.styleable.Window_enforceStatusBarContrast, false);
+            mEnsureNavigationBarContrastWhenTransparent = a.getBoolean(
+                    R.styleable.Window_enforceNavigationBarContrast, true);
+        }
 
         WindowManager.LayoutParams params = getAttributes();
 
@@ -2469,8 +2482,8 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
                 setFlags(FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS,
                         FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS & ~getForcedWindowFlags());
             }
-            if (mDecor.mForceWindowDrawsStatusBarBackground) {
-                params.privateFlags |= PRIVATE_FLAG_FORCE_DRAW_STATUS_BAR_BACKGROUND;
+            if (mDecor.mForceWindowDrawsBarBackgrounds) {
+                params.privateFlags |= PRIVATE_FLAG_FORCE_DRAW_BAR_BACKGROUNDS;
             }
         }
         if (a.getBoolean(R.styleable.Window_windowLightStatusBar, false)) {
@@ -3845,6 +3858,32 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
         return mNavigationBarDividerColor;
     }
 
+    @Override
+    public void setStatusBarContrastEnforced(boolean ensureContrast) {
+        mEnsureStatusBarContrastWhenTransparent = ensureContrast;
+        if (mDecor != null) {
+            mDecor.updateColorViews(null, false /* animate */);
+        }
+    }
+
+    @Override
+    public boolean isStatusBarContrastEnforced() {
+        return mEnsureStatusBarContrastWhenTransparent;
+    }
+
+    @Override
+    public void setNavigationBarContrastEnforced(boolean enforceContrast) {
+        mEnsureNavigationBarContrastWhenTransparent = enforceContrast;
+        if (mDecor != null) {
+            mDecor.updateColorViews(null, false /* animate */);
+        }
+    }
+
+    @Override
+    public boolean isNavigationBarContrastEnforced() {
+        return mEnsureNavigationBarContrastWhenTransparent;
+    }
+
     public void setIsStartingWindow(boolean isStartingWindow) {
         mIsStartingWindow = isStartingWindow;
     }
@@ -3888,5 +3927,16 @@ public class PhoneWindow extends Window implements MenuBuilder.Callback {
     @Override
     public WindowInsetsController getInsetsController() {
         return mDecor.getWindowInsetsController();
+    }
+
+    @Override
+    public void setSystemGestureExclusionRects(@NonNull List<Rect> rects) {
+        getViewRootImpl().setRootSystemGestureExclusionRects(rects);
+    }
+
+    @Override
+    @NonNull
+    public List<Rect> getSystemGestureExclusionRects() {
+        return getViewRootImpl().getRootSystemGestureExclusionRects();
     }
 }

@@ -16,8 +16,11 @@
 
 package android.ext.services.watchdog;
 
+import static android.service.watchdog.ExplicitHealthCheckService.PackageConfig;
+
 import android.content.ComponentName;
 import android.content.Intent;
+import android.provider.DeviceConfig;
 import android.service.watchdog.ExplicitHealthCheckService;
 import android.util.Log;
 
@@ -26,6 +29,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Routes explicit health check requests to the appropriate {@link ExplicitHealthChecker}.
@@ -35,6 +39,10 @@ public final class ExplicitHealthCheckServiceImpl extends ExplicitHealthCheckSer
     // TODO: Add build dependency on NetworkStack stable AIDL so we can stop hard coding class name
     private static final String NETWORK_STACK_CONNECTOR_CLASS =
             "android.net.INetworkStackConnector";
+    private static final String PROPERTY_WATCHDOG_REQUEST_TIMEOUT_MILLIS =
+            "watchdog_request_timeout_millis";
+    private static final long DEFAULT_REQUEST_TIMEOUT_MILLIS =
+            TimeUnit.HOURS.toMillis(1);
     // Modified only #onCreate, using concurrent collection to ensure thread visibility
     private final Map<String, ExplicitHealthChecker> mSupportedCheckers = new ConcurrentHashMap<>();
 
@@ -67,8 +75,21 @@ public final class ExplicitHealthCheckServiceImpl extends ExplicitHealthCheckSer
     }
 
     @Override
-    public List<String> onGetSupportedPackages() {
-        return new ArrayList<>(mSupportedCheckers.keySet());
+    public List<PackageConfig> onGetSupportedPackages() {
+        List<PackageConfig> packages = new ArrayList<>();
+        long requestTimeoutMillis = DeviceConfig.getLong(
+                DeviceConfig.NAMESPACE_ROLLBACK,
+                PROPERTY_WATCHDOG_REQUEST_TIMEOUT_MILLIS,
+                DEFAULT_REQUEST_TIMEOUT_MILLIS);
+        if (requestTimeoutMillis <= 0) {
+            requestTimeoutMillis = DEFAULT_REQUEST_TIMEOUT_MILLIS;
+        }
+        for (ExplicitHealthChecker checker : mSupportedCheckers.values()) {
+            PackageConfig pkg = new PackageConfig(checker.getSupportedPackageName(),
+                    requestTimeoutMillis);
+            packages.add(pkg);
+        }
+        return packages;
     }
 
     @Override
@@ -82,7 +103,7 @@ public final class ExplicitHealthCheckServiceImpl extends ExplicitHealthCheckSer
         while (it.hasNext()) {
             ExplicitHealthChecker checker = it.next();
             if (checker.isPending()) {
-                packages.add(checker.getPackageName());
+                packages.add(checker.getSupportedPackageName());
             }
         }
         return packages;

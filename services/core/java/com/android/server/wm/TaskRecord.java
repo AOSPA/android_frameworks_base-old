@@ -22,6 +22,7 @@ import static android.app.ActivityTaskManager.RESIZE_MODE_FORCED;
 import static android.app.ActivityTaskManager.RESIZE_MODE_SYSTEM;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
+import static android.app.WindowConfiguration.ROTATION_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
@@ -1276,19 +1277,6 @@ class TaskRecord extends ConfigurationContainer {
     }
 
     /**
-     * Checks if the top activity requires a particular orientation (either by override or
-     * activityInfo) and returns that. Otherwise, this returns ORIENTATION_UNDEFINED.
-     */
-    private int getTopActivityRequestedOrientation() {
-        ActivityRecord top = getTopActivity();
-        if (getRequestedOverrideConfiguration().orientation != ORIENTATION_UNDEFINED
-                || top == null) {
-            return getRequestedOverrideConfiguration().orientation;
-        }
-        return top.getRequestedConfigurationOrientation();
-    }
-
-    /**
      * Adds an activity {@param r} at the given {@param index}. The activity {@param r} must either
      * be in the current task or unparented to any task.
      */
@@ -1688,6 +1676,8 @@ class TaskRecord extends ConfigurationContainer {
             int colorBackground = 0;
             int statusBarColor = 0;
             int navigationBarColor = 0;
+            boolean statusBarContrastWhenTransparent = false;
+            boolean navigationBarContrastWhenTransparent = false;
             boolean topActivity = true;
             for (--activityNdx; activityNdx >= 0; --activityNdx) {
                 final ActivityRecord r = mActivities.get(activityNdx);
@@ -1711,12 +1701,17 @@ class TaskRecord extends ConfigurationContainer {
                         colorBackground = r.taskDescription.getBackgroundColor();
                         statusBarColor = r.taskDescription.getStatusBarColor();
                         navigationBarColor = r.taskDescription.getNavigationBarColor();
+                        statusBarContrastWhenTransparent =
+                                r.taskDescription.getEnsureStatusBarContrastWhenTransparent();
+                        navigationBarContrastWhenTransparent =
+                                r.taskDescription.getEnsureNavigationBarContrastWhenTransparent();
                     }
                 }
                 topActivity = false;
             }
             lastTaskDescription = new TaskDescription(label, null, iconResource, iconFilename,
-                    colorPrimary, colorBackground, statusBarColor, navigationBarColor);
+                    colorPrimary, colorBackground, statusBarColor, navigationBarColor,
+                    statusBarContrastWhenTransparent, navigationBarContrastWhenTransparent);
             if (mTask != null) {
                 mTask.setTaskDescription(lastTaskDescription);
             }
@@ -1998,7 +1993,7 @@ class TaskRecord extends ConfigurationContainer {
      * @param intersectBounds the bounds to intersect with.
      * @param intersectInsets insets to apply to intersectBounds before intersecting.
      */
-    private static void intersectWithInsetsIfFits(
+    static void intersectWithInsetsIfFits(
             Rect inOutBounds, Rect intersectBounds, Rect intersectInsets) {
         if (inOutBounds.right <= intersectBounds.right) {
             inOutBounds.right =
@@ -2041,15 +2036,12 @@ class TaskRecord extends ConfigurationContainer {
         }
         mTmpBounds.set(0, 0, displayInfo.logicalWidth, displayInfo.logicalHeight);
 
-        policy.getStableInsetsLw(displayInfo.rotation,
-                displayInfo.logicalWidth, displayInfo.logicalHeight, displayInfo.displayCutout,
-                mTmpInsets);
-        intersectWithInsetsIfFits(outStableBounds, mTmpBounds, mTmpInsets);
-
-        policy.getNonDecorInsetsLw(displayInfo.rotation,
-                displayInfo.logicalWidth, displayInfo.logicalHeight, displayInfo.displayCutout,
-                mTmpInsets);
+        policy.getNonDecorInsetsLw(displayInfo.rotation, displayInfo.logicalWidth,
+                displayInfo.logicalHeight, displayInfo.displayCutout, mTmpInsets);
         intersectWithInsetsIfFits(outNonDecorBounds, mTmpBounds, mTmpInsets);
+
+        policy.convertNonDecorInsetsToStableInsets(mTmpInsets, displayInfo.rotation);
+        intersectWithInsetsIfFits(outStableBounds, mTmpBounds, mTmpInsets);
     }
 
     /**
@@ -2066,7 +2058,7 @@ class TaskRecord extends ConfigurationContainer {
 
     void computeConfigResourceOverrides(@NonNull Configuration inOutConfig,
             @NonNull Configuration parentConfig) {
-        computeConfigResourceOverrides(inOutConfig, parentConfig, true /* insideParentBounds */);
+        computeConfigResourceOverrides(inOutConfig, parentConfig, null /* compatInsets */);
     }
 
     /**
@@ -2078,7 +2070,8 @@ class TaskRecord extends ConfigurationContainer {
      * just be inherited from the parent configuration.
      **/
     void computeConfigResourceOverrides(@NonNull Configuration inOutConfig,
-            @NonNull Configuration parentConfig, boolean insideParentBounds) {
+            @NonNull Configuration parentConfig,
+            @Nullable ActivityRecord.CompatDisplayInsets compatInsets) {
         int windowingMode = inOutConfig.windowConfiguration.getWindowingMode();
         if (windowingMode == WINDOWING_MODE_UNDEFINED) {
             windowingMode = parentConfig.windowConfiguration.getWindowingMode();
@@ -2096,6 +2089,9 @@ class TaskRecord extends ConfigurationContainer {
             inOutConfig.windowConfiguration.setAppBounds(bounds);
             outAppBounds = inOutConfig.windowConfiguration.getAppBounds();
         }
+        // Non-null compatibility insets means the activity prefers to keep its original size, so
+        // the out bounds doesn't need to be restricted by the parent.
+        final boolean insideParentBounds = compatInsets == null;
         if (insideParentBounds && windowingMode != WINDOWING_MODE_FREEFORM) {
             final Rect parentAppBounds = parentConfig.windowConfiguration.getAppBounds();
             if (parentAppBounds != null && !parentAppBounds.isEmpty()) {
@@ -2115,9 +2111,23 @@ class TaskRecord extends ConfigurationContainer {
                 // {@link WindowManagerPolicy#getNonDecorInsetsLw}.
                 calculateInsetFrames(mTmpNonDecorBounds, mTmpStableBounds, bounds, di);
             } else {
-                // Set to app bounds because it excludes decor insets.
-                mTmpNonDecorBounds.set(outAppBounds);
-                mTmpStableBounds.set(outAppBounds);
+                // Apply the given non-decor and stable insets to calculate the corresponding bounds
+                // for screen size of configuration.
+                final int rotation = parentConfig.windowConfiguration.getRotation();
+                if (rotation != ROTATION_UNDEFINED && compatInsets != null) {
+                    mTmpNonDecorBounds.set(bounds);
+                    mTmpStableBounds.set(bounds);
+                    compatInsets.getDisplayBoundsByRotation(mTmpBounds, rotation);
+                    intersectWithInsetsIfFits(mTmpNonDecorBounds, mTmpBounds,
+                            compatInsets.mNonDecorInsets[rotation]);
+                    intersectWithInsetsIfFits(mTmpStableBounds, mTmpBounds,
+                            compatInsets.mStableInsets[rotation]);
+                    outAppBounds.set(mTmpNonDecorBounds);
+                } else {
+                    // Set to app bounds because it excludes decor insets.
+                    mTmpNonDecorBounds.set(outAppBounds);
+                    mTmpStableBounds.set(outAppBounds);
+                }
             }
 
             if (inOutConfig.screenWidthDp == Configuration.SCREEN_WIDTH_DP_UNDEFINED) {
@@ -2184,34 +2194,9 @@ class TaskRecord extends ConfigurationContainer {
                 getResolvedOverrideConfiguration().windowConfiguration.getBounds();
 
         if (windowingMode == WINDOWING_MODE_FULLSCREEN) {
-            // In FULLSCREEN mode, always start with empty bounds to indicate "fill parent"
-            outOverrideBounds.setEmpty();
-
-            final boolean parentHandlesOrientationChange = mTask != null
-                    && mTask.getParent() != null
-                    && mTask.getParent().handlesOrientationChangeFromDescendant();
-            // If the task or its top activity requires a different orientation, make it fit the
-            // available bounds by scaling down its bounds.
-            int forcedOrientation = getTopActivityRequestedOrientation();
-            if (forcedOrientation != ORIENTATION_UNDEFINED
-                    && forcedOrientation != newParentConfig.orientation
-                    && !parentHandlesOrientationChange) {
-                final Rect parentBounds = newParentConfig.windowConfiguration.getBounds();
-                final int parentWidth = parentBounds.width();
-                final int parentHeight = parentBounds.height();
-                final float aspect = ((float) parentHeight) / parentWidth;
-                if (forcedOrientation == ORIENTATION_LANDSCAPE) {
-                    final int height = (int) (parentWidth / aspect);
-                    final int top = parentBounds.centerY() - height / 2;
-                    outOverrideBounds.set(
-                            parentBounds.left, top, parentBounds.right, top + height);
-                } else {
-                    final int width = (int) (parentHeight * aspect);
-                    final int left = parentBounds.centerX() - width / 2;
-                    outOverrideBounds.set(
-                            left, parentBounds.top, left + width, parentBounds.bottom);
-                }
-            }
+            computeFullscreenBounds(outOverrideBounds, null /* refActivity */,
+                    newParentConfig.windowConfiguration.getBounds(),
+                    newParentConfig.orientation);
         }
 
         if (outOverrideBounds.isEmpty()) {
@@ -2224,11 +2209,78 @@ class TaskRecord extends ConfigurationContainer {
             // by policy, make sure the window remains within parent somewhere
             final float density =
                     ((float) newParentConfig.densityDpi) / DisplayMetrics.DENSITY_DEFAULT;
-            fitWithinBounds(outOverrideBounds, newParentConfig.windowConfiguration.getBounds(),
+            final Rect parentBounds =
+                    new Rect(newParentConfig.windowConfiguration.getBounds());
+            final ActivityDisplay display = mStack.getDisplay();
+            if (display != null && display.mDisplayContent != null) {
+                // If a freeform window moves below system bar, there is no way to move it again
+                // by touch. Because its caption is covered by system bar. So we exclude them
+                // from stack bounds. and then caption will be shown inside stable area.
+                final Rect stableBounds = new Rect();
+                display.mDisplayContent.getStableRect(stableBounds);
+                parentBounds.intersect(stableBounds);
+            }
+
+            fitWithinBounds(outOverrideBounds, parentBounds,
                     (int) (density * WindowState.MINIMUM_VISIBLE_WIDTH_IN_DP),
                     (int) (density * WindowState.MINIMUM_VISIBLE_HEIGHT_IN_DP));
+
+            // Prevent to overlap caption with stable insets.
+            final int offsetTop = parentBounds.top - outOverrideBounds.top;
+            if (offsetTop > 0) {
+                outOverrideBounds.offset(0, offsetTop);
+            }
         }
         computeConfigResourceOverrides(getResolvedOverrideConfiguration(), newParentConfig);
+    }
+
+    /** @see WindowContainer#handlesOrientationChangeFromDescendant */
+    boolean handlesOrientationChangeFromDescendant() {
+        return mTask != null && mTask.getParent() != null
+                && mTask.getParent().handlesOrientationChangeFromDescendant();
+    }
+
+    /**
+     * Compute bounds (letterbox or pillarbox) for {@link #WINDOWING_MODE_FULLSCREEN} when the
+     * parent doesn't handle the orientation change and the requested orientation is different from
+     * the parent.
+     */
+    void computeFullscreenBounds(@NonNull Rect outBounds, @Nullable ActivityRecord refActivity,
+            @NonNull Rect parentBounds, int parentOrientation) {
+        // In FULLSCREEN mode, always start with empty bounds to indicate "fill parent".
+        outBounds.setEmpty();
+        if (handlesOrientationChangeFromDescendant()) {
+            return;
+        }
+        if (refActivity == null) {
+            // Use the top activity as the reference of orientation. Don't include overlays because
+            // it is usually not the actual content or just temporarily shown.
+            // E.g. ForcedResizableInfoActivity.
+            refActivity = getTopActivity(false /* includeOverlays */);
+        }
+
+        // If the task or the reference activity requires a different orientation (either by
+        // override or activityInfo), make it fit the available bounds by scaling down its bounds.
+        final int overrideOrientation = getRequestedOverrideConfiguration().orientation;
+        final int forcedOrientation =
+                (overrideOrientation != ORIENTATION_UNDEFINED || refActivity == null)
+                        ? overrideOrientation : refActivity.getRequestedConfigurationOrientation();
+        if (forcedOrientation == ORIENTATION_UNDEFINED || forcedOrientation == parentOrientation) {
+            return;
+        }
+
+        final int parentWidth = parentBounds.width();
+        final int parentHeight = parentBounds.height();
+        final float aspect = ((float) parentHeight) / parentWidth;
+        if (forcedOrientation == ORIENTATION_LANDSCAPE) {
+            final int height = (int) (parentWidth / aspect);
+            final int top = parentBounds.centerY() - height / 2;
+            outBounds.set(parentBounds.left, top, parentBounds.right, top + height);
+        } else {
+            final int width = (int) (parentHeight * aspect);
+            final int left = parentBounds.centerX() - width / 2;
+            outBounds.set(left, parentBounds.top, left + width, parentBounds.bottom);
+        }
     }
 
     Rect updateOverrideConfigurationFromLaunchBounds() {

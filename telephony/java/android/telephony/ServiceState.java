@@ -339,6 +339,9 @@ public class ServiceState implements Parcelable {
 
     private List<NetworkRegistrationInfo> mNetworkRegistrationInfos = new ArrayList<>();
 
+    private String mOperatorAlphaLongRaw;
+    private String mOperatorAlphaShortRaw;
+
     /**
      * get String description of roaming type
      * @hide
@@ -418,8 +421,10 @@ public class ServiceState implements Parcelable {
                 Arrays.copyOf(s.mCellBandwidths, s.mCellBandwidths.length);
         mLteEarfcnRsrpBoost = s.mLteEarfcnRsrpBoost;
         mNetworkRegistrationInfos = s.mNetworkRegistrationInfos == null ? null :
-                new ArrayList<>(s.mNetworkRegistrationInfos);
+                s.getNetworkRegistrationInfoList();
         mNrFrequencyRange = s.mNrFrequencyRange;
+        mOperatorAlphaLongRaw = s.mOperatorAlphaLongRaw;
+        mOperatorAlphaShortRaw = s.mOperatorAlphaShortRaw;
     }
 
     /**
@@ -453,6 +458,8 @@ public class ServiceState implements Parcelable {
         mChannelNumber = in.readInt();
         mCellBandwidths = in.createIntArray();
         mNrFrequencyRange = in.readInt();
+        mOperatorAlphaLongRaw = in.readString();
+        mOperatorAlphaShortRaw = in.readString();
     }
 
     public void writeToParcel(Parcel out, int flags) {
@@ -478,6 +485,8 @@ public class ServiceState implements Parcelable {
         out.writeInt(mChannelNumber);
         out.writeIntArray(mCellBandwidths);
         out.writeInt(mNrFrequencyRange);
+        out.writeString(mOperatorAlphaLongRaw);
+        out.writeString(mOperatorAlphaShortRaw);
     }
 
     public int describeContents() {
@@ -836,7 +845,9 @@ public class ServiceState implements Parcelable {
                 mIsEmergencyOnly,
                 mLteEarfcnRsrpBoost,
                 mNetworkRegistrationInfos,
-                mNrFrequencyRange);
+                mNrFrequencyRange,
+                mOperatorAlphaLongRaw,
+                mOperatorAlphaShortRaw);
     }
 
     @Override
@@ -862,6 +873,8 @@ public class ServiceState implements Parcelable {
                 && equalsHandlesNulls(mCdmaDefaultRoamingIndicator,
                         s.mCdmaDefaultRoamingIndicator)
                 && mIsEmergencyOnly == s.mIsEmergencyOnly
+                && equalsHandlesNulls(mOperatorAlphaLongRaw, s.mOperatorAlphaLongRaw)
+                && equalsHandlesNulls(mOperatorAlphaShortRaw, s.mOperatorAlphaShortRaw)
                 && (mNetworkRegistrationInfos == null
                 ? s.mNetworkRegistrationInfos == null : s.mNetworkRegistrationInfos != null
                 && mNetworkRegistrationInfos.containsAll(s.mNetworkRegistrationInfos))
@@ -1019,6 +1032,8 @@ public class ServiceState implements Parcelable {
             .append(", mLteEarfcnRsrpBoost=").append(mLteEarfcnRsrpBoost)
             .append(", mNetworkRegistrationInfos=").append(mNetworkRegistrationInfos)
             .append(", mNrFrequencyRange=").append(mNrFrequencyRange)
+            .append(", mOperatorAlphaLongRaw=").append(mOperatorAlphaLongRaw)
+            .append(", mOperatorAlphaShortRaw=").append(mOperatorAlphaShortRaw)
             .append("}").toString();
     }
 
@@ -1045,6 +1060,7 @@ public class ServiceState implements Parcelable {
         mIsEmergencyOnly = false;
         mLteEarfcnRsrpBoost = 0;
         mNrFrequencyRange = FREQUENCY_RANGE_UNKNOWN;
+        mNetworkRegistrationInfos.clear();
         addNetworkRegistrationInfo(new NetworkRegistrationInfo.Builder()
                 .setDomain(NetworkRegistrationInfo.DOMAIN_CS)
                 .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WWAN)
@@ -1055,6 +1071,8 @@ public class ServiceState implements Parcelable {
                 .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WWAN)
                 .setRegistrationState(NetworkRegistrationInfo.REGISTRATION_STATE_UNKNOWN)
                 .build());
+        mOperatorAlphaLongRaw = null;
+        mOperatorAlphaShortRaw = null;
     }
 
     public void setStateOutOfService() {
@@ -1112,16 +1130,16 @@ public class ServiceState implements Parcelable {
     /** @hide */
     @TestApi
     public void setVoiceRoamingType(@RoamingType int type) {
-        NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+        NetworkRegistrationInfo regInfo = getNetworkRegistrationInfo(
                 NetworkRegistrationInfo.DOMAIN_CS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
-        if (regState == null) {
-            regState = new NetworkRegistrationInfo.Builder()
+        if (regInfo == null) {
+            regInfo = new NetworkRegistrationInfo.Builder()
                     .setDomain(NetworkRegistrationInfo.DOMAIN_CS)
                     .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WWAN)
                     .build();
-            addNetworkRegistrationInfo(regState);
         }
-        regState.setRoamingType(type);
+        regInfo.setRoamingType(type);
+        addNetworkRegistrationInfo(regInfo);
     }
 
     /** @hide */
@@ -1133,16 +1151,16 @@ public class ServiceState implements Parcelable {
     /** @hide */
     @TestApi
     public void setDataRoamingType(@RoamingType int type) {
-        NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+        NetworkRegistrationInfo regInfo = getNetworkRegistrationInfo(
                 NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
-        if (regState == null) {
-            regState = new NetworkRegistrationInfo.Builder()
+        if (regInfo == null) {
+            regInfo = new NetworkRegistrationInfo.Builder()
                     .setDomain(NetworkRegistrationInfo.DOMAIN_PS)
                     .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WWAN)
                     .build();
-            addNetworkRegistrationInfo(regState);
         }
-        regState.setRoamingType(type);
+        regInfo.setRoamingType(type);
+        addNetworkRegistrationInfo(regInfo);
     }
 
     /**
@@ -1296,6 +1314,8 @@ public class ServiceState implements Parcelable {
         m.putInt("ChannelNumber", mChannelNumber);
         m.putIntArray("CellBandwidths", mCellBandwidths);
         m.putInt("mNrFrequencyRange", mNrFrequencyRange);
+        m.putString("operator-alpha-long-raw", mOperatorAlphaLongRaw);
+        m.putString("operator-alpha-short-raw", mOperatorAlphaShortRaw);
     }
 
     /** @hide */
@@ -1304,16 +1324,16 @@ public class ServiceState implements Parcelable {
         Rlog.e(LOG_TAG, "ServiceState.setRilVoiceRadioTechnology() called. It's encouraged to "
                 + "use addNetworkRegistrationInfo() instead *******");
         // Sync to network registration state
-        NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+        NetworkRegistrationInfo regInfo = getNetworkRegistrationInfo(
                 NetworkRegistrationInfo.DOMAIN_CS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
-        if (regState == null) {
-            regState = new NetworkRegistrationInfo.Builder()
+        if (regInfo == null) {
+            regInfo = new NetworkRegistrationInfo.Builder()
                     .setDomain(NetworkRegistrationInfo.DOMAIN_CS)
                     .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WWAN)
                     .build();
-            addNetworkRegistrationInfo(regState);
         }
-        regState.setAccessNetworkTechnology(rilRadioTechnologyToNetworkType(rt));
+        regInfo.setAccessNetworkTechnology(rilRadioTechnologyToNetworkType(rt));
+        addNetworkRegistrationInfo(regInfo);
     }
 
 
@@ -1325,17 +1345,17 @@ public class ServiceState implements Parcelable {
         // Sync to network registration state. Always write down the WWAN transport. For AP-assisted
         // mode device, use addNetworkRegistrationInfo() to set the correct transport if RAT
         // is IWLAN.
-        NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+        NetworkRegistrationInfo regInfo = getNetworkRegistrationInfo(
                 NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
 
-        if (regState == null) {
-            regState = new NetworkRegistrationInfo.Builder()
+        if (regInfo == null) {
+            regInfo = new NetworkRegistrationInfo.Builder()
                     .setDomain(NetworkRegistrationInfo.DOMAIN_PS)
                     .setTransportType(AccessNetworkConstants.TRANSPORT_TYPE_WWAN)
                     .build();
-            addNetworkRegistrationInfo(regState);
         }
-        regState.setAccessNetworkTechnology(rilRadioTechnologyToNetworkType(rt));
+        regInfo.setAccessNetworkTechnology(rilRadioTechnologyToNetworkType(rt));
+        addNetworkRegistrationInfo(regInfo);
     }
 
     /** @hide */
@@ -1377,10 +1397,10 @@ public class ServiceState implements Parcelable {
      * @hide
      */
     public @NRState int getNrState() {
-        final NetworkRegistrationInfo regState = getNetworkRegistrationInfo(
+        final NetworkRegistrationInfo regInfo = getNetworkRegistrationInfo(
                 NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
-        if (regState == null) return NetworkRegistrationInfo.NR_STATE_NONE;
-        return regState.getNrState();
+        if (regInfo == null) return NetworkRegistrationInfo.NR_STATE_NONE;
+        return regInfo.getNrState();
     }
 
     /**
@@ -1647,7 +1667,8 @@ public class ServiceState implements Parcelable {
                 || radioTechnology == RIL_RADIO_TECHNOLOGY_GSM
                 || radioTechnology == RIL_RADIO_TECHNOLOGY_TD_SCDMA
                 || radioTechnology == RIL_RADIO_TECHNOLOGY_IWLAN
-                || radioTechnology == RIL_RADIO_TECHNOLOGY_LTE_CA;
+                || radioTechnology == RIL_RADIO_TECHNOLOGY_LTE_CA
+                || radioTechnology == RIL_RADIO_TECHNOLOGY_NR;
 
     }
 
@@ -1667,6 +1688,13 @@ public class ServiceState implements Parcelable {
     public static boolean isLte(int radioTechnology) {
         return radioTechnology == RIL_RADIO_TECHNOLOGY_LTE ||
                 radioTechnology == RIL_RADIO_TECHNOLOGY_LTE_CA;
+    }
+
+    /** @hide */
+    public static boolean isPsTech(int radioTechnology) {
+        return radioTechnology == RIL_RADIO_TECHNOLOGY_LTE ||
+                radioTechnology == RIL_RADIO_TECHNOLOGY_LTE_CA ||
+                radioTechnology == RIL_RADIO_TECHNOLOGY_NR;
     }
 
     /** @hide */
@@ -1774,7 +1802,11 @@ public class ServiceState implements Parcelable {
     @SystemApi
     public List<NetworkRegistrationInfo> getNetworkRegistrationInfoList() {
         synchronized (mNetworkRegistrationInfos) {
-            return new ArrayList<>(mNetworkRegistrationInfos);
+            List<NetworkRegistrationInfo> newList = new ArrayList<>();
+            for (NetworkRegistrationInfo nri : mNetworkRegistrationInfos) {
+                newList.add(new NetworkRegistrationInfo(nri));
+            }
+            return newList;
         }
     }
 
@@ -1794,7 +1826,7 @@ public class ServiceState implements Parcelable {
         synchronized (mNetworkRegistrationInfos) {
             for (NetworkRegistrationInfo networkRegistrationInfo : mNetworkRegistrationInfos) {
                 if (networkRegistrationInfo.getTransportType() == transportType) {
-                    list.add(networkRegistrationInfo);
+                    list.add(new NetworkRegistrationInfo(networkRegistrationInfo));
                 }
             }
         }
@@ -1818,7 +1850,7 @@ public class ServiceState implements Parcelable {
         synchronized (mNetworkRegistrationInfos) {
             for (NetworkRegistrationInfo networkRegistrationInfo : mNetworkRegistrationInfos) {
                 if (networkRegistrationInfo.getDomain() == domain) {
-                    list.add(networkRegistrationInfo);
+                    list.add(new NetworkRegistrationInfo(networkRegistrationInfo));
                 }
             }
         }
@@ -1843,7 +1875,7 @@ public class ServiceState implements Parcelable {
             for (NetworkRegistrationInfo networkRegistrationInfo : mNetworkRegistrationInfos) {
                 if (networkRegistrationInfo.getTransportType() == transportType
                         && networkRegistrationInfo.getDomain() == domain) {
-                    return networkRegistrationInfo;
+                    return new NetworkRegistrationInfo(networkRegistrationInfo);
                 }
             }
         }
@@ -1855,20 +1887,20 @@ public class ServiceState implements Parcelable {
      * @hide
      */
     @TestApi
-    public void addNetworkRegistrationInfo(NetworkRegistrationInfo regState) {
-        if (regState == null) return;
+    public void addNetworkRegistrationInfo(NetworkRegistrationInfo nri) {
+        if (nri == null) return;
 
         synchronized (mNetworkRegistrationInfos) {
             for (int i = 0; i < mNetworkRegistrationInfos.size(); i++) {
                 NetworkRegistrationInfo curRegState = mNetworkRegistrationInfos.get(i);
-                if (curRegState.getTransportType() == regState.getTransportType()
-                        && curRegState.getDomain() == regState.getDomain()) {
+                if (curRegState.getTransportType() == nri.getTransportType()
+                        && curRegState.getDomain() == nri.getDomain()) {
                     mNetworkRegistrationInfos.remove(i);
                     break;
                 }
             }
 
-            mNetworkRegistrationInfos.add(regState);
+            mNetworkRegistrationInfos.add(new NetworkRegistrationInfo(nri));
         }
     }
 
@@ -1904,5 +1936,37 @@ public class ServiceState implements Parcelable {
         state.mVoiceOperatorNumeric = null;
 
         return state;
+    }
+
+    /**
+     * @hide
+     */
+    public void setOperatorAlphaLongRaw(String operatorAlphaLong) {
+        mOperatorAlphaLongRaw = operatorAlphaLong;
+    }
+
+    /**
+     * The current registered raw data network operator name in long alphanumeric format.
+     *
+     * @hide
+     */
+    public String getOperatorAlphaLongRaw() {
+        return mOperatorAlphaLongRaw;
+    }
+
+    /**
+     * @hide
+     */
+    public void setOperatorAlphaShortRaw(String operatorAlphaShort) {
+        mOperatorAlphaShortRaw = operatorAlphaShort;
+    }
+
+    /**
+     * The current registered raw data network operator name in short alphanumeric format.
+     *
+     * @hide
+     */
+    public String getOperatorAlphaShortRaw() {
+        return mOperatorAlphaShortRaw;
     }
 }

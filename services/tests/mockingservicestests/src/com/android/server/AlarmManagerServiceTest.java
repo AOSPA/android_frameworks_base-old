@@ -66,6 +66,7 @@ import android.app.usage.UsageStatsManagerInternal;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -77,6 +78,7 @@ import android.provider.Settings;
 import android.util.Log;
 import android.util.SparseArray;
 
+import androidx.test.filters.FlakyTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.internal.annotations.GuardedBy;
@@ -118,6 +120,8 @@ public class AlarmManagerServiceTest {
     private AlarmManagerService.ClockReceiver mClockReceiver;
     @Mock
     private PowerManager.WakeLock mWakeLock;
+    @Mock
+    private PackageManager mMockPackageManager;
 
     private MockitoSession mMockingSession;
     private Injector mInjector;
@@ -128,13 +132,19 @@ public class AlarmManagerServiceTest {
     static class TestTimer {
         private long mElapsed;
         boolean mExpired;
+        int mType;
 
         synchronized long getElapsed() {
             return mElapsed;
         }
 
-        synchronized void set(long millisElapsed) {
+        synchronized void set(int type, long millisElapsed) {
+            mType = type;
             mElapsed = millisElapsed;
+        }
+
+        synchronized int getType() {
+            return mType;
         }
 
         synchronized void expire() throws InterruptedException {
@@ -146,6 +156,8 @@ public class AlarmManagerServiceTest {
     }
 
     public class Injector extends AlarmManagerService.Injector {
+        boolean mIsAutomotiveOverride;
+
         Injector(Context context) {
             super(context);
         }
@@ -179,7 +191,7 @@ public class AlarmManagerServiceTest {
 
         @Override
         void setAlarm(int type, long millis) {
-            mTestTimer.set(millis);
+            mTestTimer.set(type, millis);
         }
 
         @Override
@@ -211,6 +223,11 @@ public class AlarmManagerServiceTest {
         PowerManager.WakeLock getAlarmWakeLock() {
             return mWakeLock;
         }
+
+        @Override
+        boolean isAutomotive() {
+            return mIsAutomotiveOverride;
+        }
     }
 
     @Before
@@ -237,6 +254,8 @@ public class AlarmManagerServiceTest {
         when(mMockContext.getContentResolver()).thenReturn(mMockResolver);
         doReturn("min_futurity=0,min_interval=0").when(() ->
                 Settings.Global.getString(mMockResolver, Settings.Global.ALARM_MANAGER_CONSTANTS));
+        when(mMockContext.getPackageManager()).thenReturn(mMockPackageManager);
+
         mInjector = new Injector(mMockContext);
         mService = new AlarmManagerService(mMockContext, mInjector);
         spyOn(mService);
@@ -244,6 +263,9 @@ public class AlarmManagerServiceTest {
 
         mService.onStart();
         spyOn(mService.mHandler);
+        // Stubbing the handler. Test should simulate any handling of messages synchronously.
+        doReturn(true).when(mService.mHandler).sendMessageAtTime(any(Message.class), anyLong());
+
         assertEquals(mService.mSystemUiUid, SYSTEM_UI_UID);
         assertEquals(mService.mClockReceiver, mClockReceiver);
         assertEquals(mService.mWakeLock, mWakeLock);
@@ -385,6 +407,7 @@ public class AlarmManagerServiceTest {
         assertEquals(expectedTriggerTime, mTestTimer.getElapsed());
     }
 
+    @FlakyTest(bugId = 130313408)
     @Test
     public void testEarliestAlarmSet() {
         final PendingIntent pi6 = getNewMockPendingIntent();
@@ -597,11 +620,9 @@ public class AlarmManagerServiceTest {
         testQuotasNoDeferral(STANDBY_BUCKET_RARE);
     }
 
-    private void sendAndHandleBucketChanged(int bucket) {
+    private void assertAndHandleBucketChanged(int bucket) {
         when(mUsageStatsManagerInternal.getAppStandbyBucket(eq(TEST_CALLING_PACKAGE), anyInt(),
                 anyLong())).thenReturn(bucket);
-        // Stubbing the handler call to simulate it synchronously here.
-        doReturn(true).when(mService.mHandler).sendMessage(any(Message.class));
         mAppStandbyListener.onAppIdleStateChanged(TEST_CALLING_PACKAGE,
                 UserHandle.getUserId(TEST_CALLING_UID), false, bucket, 0);
         final ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
@@ -632,7 +653,7 @@ public class AlarmManagerServiceTest {
         // The next upcoming alarm in queue should also be set as expected.
         assertEquals(firstTrigger + workingQuota - 1, mTestTimer.getElapsed());
         // Downgrading the bucket now
-        sendAndHandleBucketChanged(STANDBY_BUCKET_RARE);
+        assertAndHandleBucketChanged(STANDBY_BUCKET_RARE);
         final int rareQuota = mService.getQuotaForBucketLocked(STANDBY_BUCKET_RARE);
         // The last alarm should now be deferred.
         final long expectedNextTrigger = (firstTrigger + workingQuota - 1 - rareQuota)
@@ -660,15 +681,13 @@ public class AlarmManagerServiceTest {
         assertEquals(deferredTrigger, mTestTimer.getElapsed());
 
         // Upgrading the bucket now
-        sendAndHandleBucketChanged(STANDBY_BUCKET_ACTIVE);
+        assertAndHandleBucketChanged(STANDBY_BUCKET_ACTIVE);
         // The last alarm should now be rescheduled to go as per original expectations
         final long originalTrigger = firstTrigger + frequentQuota;
         assertEquals("Incorrect next alarm trigger", originalTrigger, mTestTimer.getElapsed());
     }
 
-    private void sendAndHandleParoleChanged(boolean parole) {
-        // Stubbing the handler call to simulate it synchronously here.
-        doReturn(true).when(mService.mHandler).sendMessage(any(Message.class));
+    private void assertAndHandleParoleChanged(boolean parole) {
         mAppStandbyListener.onParoleStateChanged(parole);
         final ArgumentCaptor<Message> messageCaptor = ArgumentCaptor.forClass(Message.class);
         verify(mService.mHandler, atLeastOnce()).sendMessage(messageCaptor.capture());
@@ -699,7 +718,7 @@ public class AlarmManagerServiceTest {
         // Any subsequent alarms in queue should all be deferred
         assertEquals(firstTrigger + mAppStandbyWindow + 1, mTestTimer.getElapsed());
         // Paroling now
-        sendAndHandleParoleChanged(true);
+        assertAndHandleParoleChanged(true);
 
         // Subsequent alarms should now go off as per original expectations.
         for (int i = 0; i < 5; i++) {
@@ -708,7 +727,7 @@ public class AlarmManagerServiceTest {
             mTestTimer.expire();
         }
         // Come out of parole
-        sendAndHandleParoleChanged(false);
+        assertAndHandleParoleChanged(false);
 
         // Subsequent alarms should again get deferred
         final long expectedNextTrigger = (firstTrigger + 5) + 1 + mAppStandbyWindow;
@@ -918,6 +937,26 @@ public class AlarmManagerServiceTest {
     }
 
     @Test
+    public void alarmCountOnRemoveFromPendingWhileIdle() {
+        mService.mPendingIdleUntil = mock(AlarmManagerService.Alarm.class);
+        final int numAlarms = 15;
+        final PendingIntent[] pis = new PendingIntent[numAlarms];
+        for (int i = 0; i < numAlarms; i++) {
+            pis[i] = getNewMockPendingIntent();
+            setTestAlarm(ELAPSED_REALTIME, mNowElapsedTest + i + 5, pis[i]);
+        }
+        assertEquals(numAlarms, mService.mAlarmsPerUid.get(TEST_CALLING_UID));
+        assertEquals(numAlarms, mService.mPendingWhileIdleAlarms.size());
+        final int toRemove = 8;
+        for (int i = 0; i < toRemove; i++) {
+            mService.removeLocked(pis[i], null);
+            assertEquals(numAlarms - i - 1, mService.mAlarmsPerUid.get(TEST_CALLING_UID, 0));
+        }
+        mService.removeLocked(TEST_CALLING_UID);
+        assertEquals(0, mService.mAlarmsPerUid.get(TEST_CALLING_UID, 0));
+    }
+
+    @Test
     public void alarmCountOnAlarmRemoved() {
         final int numAlarms = 10;
         final PendingIntent[] pis = new PendingIntent[numAlarms];
@@ -929,6 +968,37 @@ public class AlarmManagerServiceTest {
         for (int i = 0; i < numAlarms; i++) {
             mService.removeLocked(pis[i], null);
             assertEquals(numAlarms - i - 1, mService.mAlarmsPerUid.get(TEST_CALLING_UID, 0));
+        }
+    }
+
+    @Test
+    public void alarmTypes() throws Exception {
+        final int[] typesToSet = {ELAPSED_REALTIME_WAKEUP, ELAPSED_REALTIME, RTC_WAKEUP, RTC};
+        final int[] typesExpected = {ELAPSED_REALTIME_WAKEUP, ELAPSED_REALTIME,
+                ELAPSED_REALTIME_WAKEUP, ELAPSED_REALTIME};
+        assertAlarmTypeConversion(typesToSet, typesExpected);
+    }
+
+    /**
+     * Confirm that wakeup alarms are never set for automotive.
+     */
+    @Test
+    public void alarmTypesForAuto() throws Exception {
+        mInjector.mIsAutomotiveOverride = true;
+        final int[] typesToSet = {ELAPSED_REALTIME_WAKEUP, ELAPSED_REALTIME, RTC_WAKEUP, RTC};
+        final int[] typesExpected = {ELAPSED_REALTIME, ELAPSED_REALTIME, ELAPSED_REALTIME,
+                ELAPSED_REALTIME};
+        assertAlarmTypeConversion(typesToSet, typesExpected);
+    }
+
+    private void assertAlarmTypeConversion(int[] typesToSet, int[] typesExpected) throws Exception {
+        for (int i = 0; i < typesToSet.length; i++) {
+            setTestAlarm(typesToSet[i], 1234, getNewMockPendingIntent());
+            final int typeSet = mTestTimer.getType();
+            assertEquals("Alarm of type " + typesToSet[i] + " was set to type " + typeSet,
+                    typesExpected[i], typeSet);
+            mNowElapsedTest = mTestTimer.getElapsed();
+            mTestTimer.expire();
         }
     }
 

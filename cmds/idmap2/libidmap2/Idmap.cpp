@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "idmap2/Idmap.h"
+
 #include <algorithm>
 #include <iostream>
 #include <iterator>
@@ -28,14 +30,12 @@
 #include "android-base/macros.h"
 #include "android-base/stringprintf.h"
 #include "androidfw/AssetManager2.h"
-#include "utils/String16.h"
-#include "utils/String8.h"
-
-#include "idmap2/Idmap.h"
 #include "idmap2/ResourceUtils.h"
 #include "idmap2/Result.h"
 #include "idmap2/SysTrace.h"
 #include "idmap2/ZipFile.h"
+#include "utils/String16.h"
+#include "utils/String8.h"
 
 namespace android::idmap2 {
 
@@ -282,6 +282,7 @@ Result<Unit> CheckOverlayable(const LoadedPackage& target_package,
                               const utils::OverlayManifestInfo& overlay_info,
                               const PolicyBitmask& fulfilled_policies, const ResourceId& resid) {
   static constexpr const PolicyBitmask sDefaultPolicies =
+      PolicyFlags::POLICY_ODM_PARTITION | PolicyFlags::POLICY_OEM_PARTITION |
       PolicyFlags::POLICY_SYSTEM_PARTITION | PolicyFlags::POLICY_VENDOR_PARTITION |
       PolicyFlags::POLICY_PRODUCT_PARTITION | PolicyFlags::POLICY_SIGNATURE;
 

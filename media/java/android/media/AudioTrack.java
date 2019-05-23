@@ -25,7 +25,6 @@ import android.annotation.Nullable;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.os.Binder;
-import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
@@ -976,13 +975,9 @@ public class AudioTrack extends PlayerBase
                     throw new UnsupportedOperationException(
                             "Offload and low latency modes are incompatible");
                 }
-                if (mAttributes.getUsage() != AudioAttributes.USAGE_MEDIA) {
-                    throw new UnsupportedOperationException(
-                            "Cannot create AudioTrack, offload requires USAGE_MEDIA");
-                }
                 if (!AudioSystem.isOffloadSupported(mFormat, mAttributes)) {
                     throw new UnsupportedOperationException(
-                            "Cannot create AudioTrack, offload format not supported");
+                            "Cannot create AudioTrack, offload format / attributes not supported");
                 }
             }
 
@@ -1662,7 +1657,7 @@ public class AudioTrack extends PlayerBase
      * a better solution.
      * @hide
      */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 112561552)
+    @UnsupportedAppUsage(trackingBug = 130237544)
     public int getLatency() {
         return native_get_latency();
     }

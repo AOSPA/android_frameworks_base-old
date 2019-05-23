@@ -234,8 +234,10 @@ public class UserBackupManagerService {
     // CPU on bring-up and increase time-to-UI.
     private static final long INITIALIZATION_DELAY_MILLIS = 3000;
 
-    // Timeout interval for deciding that a bind or clear-data has taken too long
-    private static final long TIMEOUT_INTERVAL = 10 * 1000;
+    // Timeout interval for deciding that a bind has taken too long.
+    private static final long BIND_TIMEOUT_INTERVAL = 10 * 1000;
+    // Timeout interval for deciding that a clear-data has taken too long.
+    private static final long CLEAR_DATA_TIMEOUT_INTERVAL = 30 * 1000;
 
     // User confirmation timeout for a full backup/restore operation.  It's this long in
     // order to give them time to enter the backup password.
@@ -566,10 +568,6 @@ public class UserBackupManagerService {
         // require frequent starting and stopping.
         mConstants.start();
 
-        // Set up the various sorts of package tracking we do
-        mFullBackupScheduleFile = new File(mBaseStateDir, "fb-schedule");
-        initPackageTracking();
-
         // Build our mapping of uid to backup client services.  This implicitly
         // schedules a backup pass on the Package Manager metadata the first
         // time anything needs to be backed up.
@@ -589,6 +587,10 @@ public class UserBackupManagerService {
 
         // Power management
         mWakelock = mPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "*backup*-" + userId);
+
+        // Set up the various sorts of package tracking we do
+        mFullBackupScheduleFile = new File(mBaseStateDir, "fb-schedule");
+        initPackageTracking();
     }
 
     void initializeBackupEnableState() {
@@ -742,6 +744,11 @@ public class UserBackupManagerService {
 
     public File getDataDir() {
         return mDataDir;
+    }
+
+    @VisibleForTesting
+    BroadcastReceiver getPackageTrackingReceiver() {
+        return mBroadcastReceiver;
     }
 
     @Nullable
@@ -1444,7 +1451,7 @@ public class UserBackupManagerService {
 
                     // success; wait for the agent to arrive
                     // only wait 10 seconds for the bind to happen
-                    long timeoutMark = System.currentTimeMillis() + TIMEOUT_INTERVAL;
+                    long timeoutMark = System.currentTimeMillis() + BIND_TIMEOUT_INTERVAL;
                     while (mConnecting && mConnectedAgent == null
                             && (System.currentTimeMillis() < timeoutMark)) {
                         try {
@@ -1549,15 +1556,21 @@ public class UserBackupManagerService {
                 // can't happen because the activity manager is in this process
             }
 
-            // only wait 10 seconds for the clear data to happen
-            long timeoutMark = System.currentTimeMillis() + TIMEOUT_INTERVAL;
+            // Only wait 30 seconds for the clear data to happen.
+            long timeoutMark = System.currentTimeMillis() + CLEAR_DATA_TIMEOUT_INTERVAL;
             while (mClearingData && (System.currentTimeMillis() < timeoutMark)) {
                 try {
                     mClearDataLock.wait(5000);
                 } catch (InterruptedException e) {
                     // won't happen, but still.
                     mClearingData = false;
+                    Slog.w(TAG, "Interrupted while waiting for " + packageName
+                            + " data to be cleared", e);
                 }
+            }
+
+            if (mClearingData) {
+                Slog.w(TAG, "Clearing app data for " + packageName + " timed out");
             }
         }
     }

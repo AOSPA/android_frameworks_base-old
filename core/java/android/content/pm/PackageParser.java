@@ -1602,8 +1602,8 @@ public class PackageParser {
         final String apkPath = fd != null ? debugPathName : apkFile.getAbsolutePath();
 
         XmlResourceParser parser = null;
+        ApkAssets apkAssets = null;
         try {
-            final ApkAssets apkAssets;
             try {
                 apkAssets = fd != null
                         ? ApkAssets.loadFromFd(fd, debugPathName, false, false)
@@ -1640,7 +1640,13 @@ public class PackageParser {
                     "Failed to parse " + apkPath, e);
         } finally {
             IoUtils.closeQuietly(parser);
-            // TODO(b/72056911): Implement and call close() on ApkAssets.
+            if (apkAssets != null) {
+                try {
+                    apkAssets.close();
+                } catch (Throwable ignored) {
+                }
+            }
+            // TODO(b/72056911): Implement AutoCloseable on ApkAssets.
         }
     }
 
@@ -3279,6 +3285,19 @@ public class PackageParser {
         perm.info.flags = sa.getInt(
                 com.android.internal.R.styleable.AndroidManifestPermission_permissionFlags, 0);
 
+        // For now only platform runtime permissions can be restricted
+        if (!perm.info.isRuntime() || !"android".equals(perm.info.packageName)) {
+            perm.info.flags &= ~PermissionInfo.FLAG_HARD_RESTRICTED;
+            perm.info.flags &= ~PermissionInfo.FLAG_SOFT_RESTRICTED;
+        } else {
+            // The platform does not get to specify conflicting permissions
+            if ((perm.info.flags & PermissionInfo.FLAG_HARD_RESTRICTED) != 0
+                    && (perm.info.flags & PermissionInfo.FLAG_SOFT_RESTRICTED) != 0) {
+                throw new IllegalStateException("Permission cannot be both soft and hard"
+                        + " restricted: " + perm.info.name);
+            }
+        }
+
         sa.recycle();
 
         if (perm.info.protectionLevel == -1) {
@@ -3681,9 +3700,9 @@ public class PackageParser {
         }
 
         if (sa.getBoolean(
-                R.styleable.AndroidManifestApplication_allowExternalStorageSandbox,
-                owner.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.Q)) {
-            ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_ALLOW_EXTERNAL_STORAGE_SANDBOX;
+                R.styleable.AndroidManifestApplication_requestLegacyExternalStorage,
+                owner.applicationInfo.targetSdkVersion < Build.VERSION_CODES.Q)) {
+            ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_REQUEST_LEGACY_EXTERNAL_STORAGE;
         }
 
         ai.maxAspectRatio = sa.getFloat(R.styleable.AndroidManifestApplication_maxAspectRatio, 0);
@@ -8428,6 +8447,20 @@ public class PackageParser {
         // Collect certificates
         if ((flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
             collectCertificates(p, apexFile, false);
+            // Keep legacy mechanism for handling signatures. While this is deprecated, it's
+            // still part of the public API and needs to be maintained
+            if (p.mSigningDetails.hasPastSigningCertificates()) {
+                // Package has included signing certificate rotation information.  Return
+                // the oldest cert so that programmatic checks keep working even if unaware
+                // of key rotation.
+                pi.signatures = new Signature[1];
+                pi.signatures[0] = p.mSigningDetails.pastSigningCertificates[0];
+            } else if (p.mSigningDetails.hasSignatures()) {
+                // otherwise keep old behavior
+                int numberOfSigs = p.mSigningDetails.signatures.length;
+                pi.signatures = new Signature[numberOfSigs];
+                System.arraycopy(p.mSigningDetails.signatures, 0, pi.signatures, 0, numberOfSigs);
+            }
             if (p.mSigningDetails != SigningDetails.UNKNOWN) {
                 // only return a valid SigningInfo if there is signing information to report
                 pi.signingInfo = new SigningInfo(p.mSigningDetails);

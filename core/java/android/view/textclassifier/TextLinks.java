@@ -125,13 +125,11 @@ public final class TextLinks implements Parcelable {
     /**
      * Returns the extended data.
      *
-     * <p><b>NOTE: </b>Each call to this method returns a new bundle copy so clients should
-     * prefer to hold a reference to the returned bundle rather than frequently calling this
-     * method.
+     * <p><b>NOTE: </b>Do not modify this bundle.
      */
     @NonNull
     public Bundle getExtras() {
-        return mExtras.deepCopy();
+        return mExtras;
     }
 
     /**
@@ -283,6 +281,7 @@ public final class TextLinks implements Parcelable {
         /**
          * Returns a bundle containing custom data related to this TextLink.
          */
+        @NonNull
         public Bundle getExtras() {
             return mExtras;
         }
@@ -413,13 +412,11 @@ public final class TextLinks implements Parcelable {
         /**
          * Returns the extended data.
          *
-         * <p><b>NOTE: </b>Each call to this method returns a new bundle copy so clients should
-         * prefer to hold a reference to the returned bundle rather than frequently calling this
-         * method.
+         * <p><b>NOTE: </b>Do not modify this bundle.
          */
         @NonNull
         public Bundle getExtras() {
-            return mExtras.deepCopy();
+            return mExtras;
         }
 
         /**
@@ -497,7 +494,7 @@ public final class TextLinks implements Parcelable {
                 return new Request(
                         mText, mDefaultLocales, mEntityConfig,
                         mLegacyFallback,
-                        mExtras == null ? Bundle.EMPTY : mExtras.deepCopy());
+                        mExtras == null ? Bundle.EMPTY : mExtras);
             }
         }
 
@@ -706,7 +703,7 @@ public final class TextLinks implements Parcelable {
         @NonNull
         public TextLinks build() {
             return new TextLinks(mFullText, mLinks,
-                    mExtras == null ? Bundle.EMPTY : mExtras.deepCopy());
+                    mExtras == null ? Bundle.EMPTY : mExtras);
         }
     }
 }

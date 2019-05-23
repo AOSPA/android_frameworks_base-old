@@ -159,6 +159,14 @@ public final class DeviceConfig {
     public static final String NAMESPACE_INTELLIGENCE_ATTENTION = "intelligence_attention";
 
     /**
+     * Definitions for properties related to Content Suggestions.
+     *
+     * @hide
+     */
+    public static final String NAMESPACE_INTELLIGENCE_CONTENT_SUGGESTIONS =
+            "intelligence_content_suggestions";
+
+    /**
      * Namespace for all media native related features.
      *
      * @hide
@@ -260,6 +268,20 @@ public final class DeviceConfig {
     public static final String NAMESPACE_TEXTCLASSIFIER = "textclassifier";
 
     /**
+     * Namespace for contacts provider related features.
+     *
+     * @hide
+     */
+    public static final String NAMESPACE_CONTACTS_PROVIDER = "contacts_provider";
+
+    /**
+     * Namespace for settings ui related features
+     *
+     * @hide
+     */
+    public static final String NAMESPACE_SETTINGS_UI = "settings_ui";
+
+    /**
      * List of namespaces which can be read without READ_DEVICE_CONFIG permission
      *
      * @hide
@@ -274,30 +296,7 @@ public final class DeviceConfig {
      */
     @SystemApi
     @TestApi
-    public interface Privacy {
-        String NAMESPACE = "privacy";
-
-        /**
-         * Whether to show the Permissions Hub.
-         *
-         * @hide
-         */
-        @SystemApi
-        String PROPERTY_PERMISSIONS_HUB_ENABLED = "permissions_hub_enabled";
-
-        /**
-         * Whether to show location access check notifications.
-         */
-        String PROPERTY_LOCATION_ACCESS_CHECK_ENABLED = "location_access_check_enabled";
-
-        /**
-         * Whether to disable the new device identifier access restrictions.
-         *
-         * @hide
-         */
-        String PROPERTY_DEVICE_IDENTIFIER_ACCESS_RESTRICTIONS_DISABLED =
-                "device_identifier_access_restrictions_disabled";
-    }
+    public static final String NAMESPACE_PRIVACY = "privacy";
 
     private static final Object sLock = new Object();
     @GuardedBy("sLock")
@@ -509,6 +508,7 @@ public final class DeviceConfig {
      * @param onPropertyChangedListener The listener to add.
      * @hide
      * @see #removeOnPropertyChangedListener(OnPropertyChangedListener)
+     * @removed
      */
     @SystemApi
     @TestApi
@@ -585,6 +585,7 @@ public final class DeviceConfig {
      * @param onPropertyChangedListener The listener to remove.
      * @hide
      * @see #addOnPropertyChangedListener(String, Executor, OnPropertyChangedListener)
+     * @removed
      */
     @SystemApi
     @TestApi
@@ -753,6 +754,7 @@ public final class DeviceConfig {
      * Override {@link #onPropertyChanged(String, String, String)} to handle callbacks for changes.
      *
      * @hide
+     * @removed
      */
     @SystemApi
     @TestApi

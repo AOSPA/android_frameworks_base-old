@@ -19,6 +19,7 @@ package com.android.systemui.statusbar.phone;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
@@ -36,6 +37,7 @@ import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.plugins.ActivityStarter.OnDismissAction;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -64,16 +66,23 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
     private BiometricUnlockController mBiometrucUnlockController;
     @Mock
     private DismissCallbackRegistry mDismissCallbackRegistry;
+    @Mock
+    private ViewGroup mLockIconContainer;
+    @Mock
+    private StatusBarStateController mStatusBarStateController;
     private StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
         mDependency.injectMockDependency(StatusBarWindowController.class);
+        mDependency.injectTestDependency(StatusBarStateController.class, mStatusBarStateController);
+        when(mLockIconContainer.getParent()).thenReturn(mock(ViewGroup.class));
         mStatusBarKeyguardViewManager = new TestableStatusBarKeyguardViewManager(getContext(),
                 mViewMediatorCallback, mLockPatternUtils);
         mStatusBarKeyguardViewManager.registerStatusBar(mStatusBar, mContainer,
-                mNotificationPanelView, mBiometrucUnlockController, mDismissCallbackRegistry);
+                mNotificationPanelView, mBiometrucUnlockController, mDismissCallbackRegistry,
+                mLockIconContainer);
         mStatusBarKeyguardViewManager.show(null);
     }
 
@@ -199,9 +208,10 @@ public class StatusBarKeyguardViewManagerTest extends SysuiTestCase {
         public void registerStatusBar(StatusBar statusBar, ViewGroup container,
                 NotificationPanelView notificationPanelView,
                 BiometricUnlockController fingerprintUnlockController,
-                DismissCallbackRegistry dismissCallbackRegistry) {
+                DismissCallbackRegistry dismissCallbackRegistry,
+                ViewGroup lockIconContainer) {
             super.registerStatusBar(statusBar, container, notificationPanelView,
-                    fingerprintUnlockController, dismissCallbackRegistry);
+                    fingerprintUnlockController, dismissCallbackRegistry, lockIconContainer);
             mBouncer = StatusBarKeyguardViewManagerTest.this.mBouncer;
         }
     }

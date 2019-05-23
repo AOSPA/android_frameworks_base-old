@@ -293,6 +293,12 @@ public class FaceDialogView extends BiometricDialogView {
                 mTryAgainButton.setVisibility(View.GONE);
             }
         }
+
+        if (show) {
+            mPositiveButton.setVisibility(View.GONE);
+        } else if (!show && requiresConfirmation()) {
+            mPositiveButton.setVisibility(View.VISIBLE);
+        }
     }
 
     @Override
@@ -330,6 +336,10 @@ public class FaceDialogView extends BiometricDialogView {
             return true;
         } else if (oldState == STATE_AUTHENTICATING && newState == STATE_AUTHENTICATED) {
             return true;
+        } else if (oldState == STATE_ERROR && newState == STATE_PENDING_CONFIRMATION) {
+            return true;
+        } else if (oldState == STATE_ERROR && newState == STATE_AUTHENTICATED) {
+            return true;
         }
         return false;
     }
@@ -364,6 +374,10 @@ public class FaceDialogView extends BiometricDialogView {
             iconRes = R.drawable.face_dialog_face_blue_to_checkmark;
         } else if (oldState == STATE_AUTHENTICATING && newState == STATE_AUTHENTICATED) {
             iconRes = R.drawable.face_dialog_face_gray_to_checkmark;
+        } else if (oldState == STATE_ERROR && newState == STATE_PENDING_CONFIRMATION) {
+            iconRes = R.drawable.face_dialog_face_gray_to_face_blue;
+        } else if (oldState == STATE_ERROR && newState == STATE_AUTHENTICATED) {
+            iconRes = R.drawable.face_dialog_face_blue_to_checkmark;
         } else {
             return null;
         }

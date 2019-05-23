@@ -781,16 +781,6 @@ public final class LoadedApk {
             isBundledApp = false;
         }
 
-        // Similar to vendor apks, we should add /product/lib for apks from product partition
-        // and not having /product/lib in the default search path
-        final boolean treatProductApkAsUnbundled = !defaultSearchPaths.contains("/product/lib");
-        if (mApplicationInfo.getCodePath() != null
-                && mApplicationInfo.isProduct() && treatProductApkAsUnbundled
-                // TODO(b/128557860): Change target SDK version when version code R is available.
-                && getTargetSdkVersion() == Build.VERSION_CODES.CUR_DEVELOPMENT) {
-            isBundledApp = false;
-        }
-
         makePaths(mActivityThread, isBundledApp, mApplicationInfo, zipPaths, libPaths);
 
         String libraryPermittedPath = mDataDir;
@@ -937,7 +927,9 @@ public final class LoadedApk {
         //
         // It is NOT ok to call this function from the system_server (for any of the packages it
         // loads code from) so we explicitly disallow it there.
-        if (needToSetupJitProfiles && !ActivityThread.isSystem()) {
+        //
+        // It is not ok to call this in a zygote context where mActivityThread is null.
+        if (needToSetupJitProfiles && !ActivityThread.isSystem() && mActivityThread != null) {
             setupJitProfileSupport();
         }
 
