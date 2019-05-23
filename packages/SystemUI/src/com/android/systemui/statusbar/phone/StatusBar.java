@@ -31,6 +31,7 @@ import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_ASL
 import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_AWAKE;
 import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_WAKING;
 import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_BOUNCER_SHOWING;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING;
 import static com.android.systemui.shared.system.WindowManagerWrapper.NAV_BAR_POS_INVALID;
 import static com.android.systemui.shared.system.WindowManagerWrapper.NAV_BAR_POS_LEFT;
 import static com.android.systemui.statusbar.NotificationLockscreenUserManager.PERMISSION_SELF;
@@ -149,7 +150,6 @@ import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.charging.WirelessChargingAnimation;
 import com.android.systemui.classifier.FalsingLog;
 import com.android.systemui.classifier.FalsingManagerFactory;
-import com.android.systemui.classifier.FalsingManagerFactory.FalsingManager;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.doze.DozeHost;
 import com.android.systemui.doze.DozeLog;
@@ -162,6 +162,7 @@ import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.DarkIconDispatcher;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.PluginDependencyProvider;
 import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper.SnoozeOption;
@@ -318,6 +319,17 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     /** If true, the lockscreen will show a distinct wallpaper */
     public static final boolean ENABLE_LOCKSCREEN_WALLPAPER = true;
+
+    private static final AudioAttributes AUDIO_ATTRIBUTES =
+            new AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    // Temporary fix for b/123870990. No time in this release to
+                    // introduce a new vibration type, but we need to distinguish these vibrations
+                    // from other haptic feedback vibrations. Fortunately, Alarm vibrations have
+                    // exactly the same behavior as we need
+                    // TODO: refactor within the scope of b/132170758
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .build();
 
     static {
         boolean onlyCoreApps;
@@ -774,6 +786,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         Dependency.get(InitController.class).addPostInitTask(
                 () -> setUpDisableFlags(disabledFlags1, disabledFlags2));
 
+        updateSystemUiStateFlags();
     }
 
     // ================================================================================
@@ -917,6 +930,9 @@ public class StatusBar extends SystemUI implements DemoMode,
                     if (mStatusBarWindowController != null) {
                         mStatusBarWindowController.setScrimsVisibility(scrimsVisible);
                     }
+                    if (mStatusBarWindow != null) {
+                        mStatusBarWindow.onScrimVisibilityChanged(scrimsVisible);
+                    }
                 }, DozeParameters.getInstance(mContext),
                 mContext.getSystemService(AlarmManager.class));
         mNotificationPanel.initDependencies(this, mGroupManager, mNotificationShelf,
@@ -934,6 +950,9 @@ public class StatusBar extends SystemUI implements DemoMode,
         if (UserManager.get(mContext).isUserSwitcherEnabled()) {
             createUserSwitcher();
         }
+
+        mNotificationPanel.setLaunchAffordanceListener(
+                mStatusBarWindow::onShowingLaunchAffordanceChanged);
 
         // Set up the quick settings tile panel
         View container = mStatusBarWindow.findViewById(R.id.qs_frame);
@@ -2142,6 +2161,11 @@ public class StatusBar extends SystemUI implements DemoMode,
         }
     }
 
+    @Override
+    public void onRecentsAnimationStateChanged(boolean running) {
+        setInteracting(StatusBarManager.WINDOW_NAVIGATION_BAR, running);
+    }
+
     protected @TransitionMode int computeStatusBarMode(int oldVal, int newVal) {
         return computeBarMode(oldVal, newVal);
     }
@@ -2227,6 +2251,20 @@ public class StatusBar extends SystemUI implements DemoMode,
         if (mVolumeComponent != null) {
             mVolumeComponent.dismissNow();
         }
+    }
+
+    /** Returns whether the top activity is in fullscreen mode. */
+    public boolean inFullscreenMode() {
+        return 0
+                != (mSystemUiVisibility
+                        & (View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION));
+    }
+
+    /** Returns whether the top activity is in immersive mode. */
+    public boolean inImmersiveMode() {
+        return 0
+                != (mSystemUiVisibility
+                        & (View.SYSTEM_UI_FLAG_IMMERSIVE | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY));
     }
 
     private boolean areLightsOn() {
@@ -3105,7 +3143,6 @@ public class StatusBar extends SystemUI implements DemoMode,
 
             // If the state didn't change, we may still need to update public mode
             mLockscreenUserManager.updatePublicMode();
-            mEntryManager.updateNotifications();
         }
         if (mStatusBarStateController.leaveOpenOnKeyguardHide()) {
             if (!mStatusBarStateController.isKeyguardRequested()) {
@@ -3260,11 +3297,6 @@ public class StatusBar extends SystemUI implements DemoMode,
             }
             return true;
         }
-        if (mStatusBarWindowController.hasAssistActiveSession()) {
-            // Back pressed during an assist session, cancel it.
-            mAssistManager.hideAssist();
-            return true;
-        }
         if (mState != StatusBarState.KEYGUARD && mState != StatusBarState.SHADE_LOCKED) {
             if (mNotificationPanel.canPanelBeCollapsed()) {
                 animateCollapsePanels();
@@ -3297,11 +3329,7 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     @Override
     public void showBouncer(boolean scrimmed) {
-        if (!mIsOccluded && !scrimmed && mState == StatusBarState.KEYGUARD) {
-            animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE, true /* force */);
-        } else {
-            mStatusBarKeyguardViewManager.showBouncer(scrimmed);
-        }
+        mStatusBarKeyguardViewManager.showBouncer(scrimmed);
     }
 
     @Override
@@ -3393,6 +3421,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         updateDozingState();
         checkBarModes();
         updateScrimController();
+        updateSystemUiStateFlags();
         mPresenter.updateMediaMetaData(false, mState != StatusBarState.KEYGUARD);
         mKeyguardMonitor.notifyKeyguardState(mStatusBarKeyguardViewManager.isShowing(),
                 mUnlockMethodCache.isMethodSecure(),
@@ -3559,10 +3588,16 @@ public class StatusBar extends SystemUI implements DemoMode,
         if (!mBouncerShowing) {
             updatePanelExpansionForKeyguard();
         }
+        updateSystemUiStateFlags();
+    }
 
-        // Notify overview proxy service of the new states
-        Dependency.get(OverviewProxyService.class).setSystemUiStateFlag(SYSUI_STATE_BOUNCER_SHOWING,
-                isBouncerShowing(), mContext.getDisplayId());
+    public void updateSystemUiStateFlags() {
+        OverviewProxyService overviewProxyService = Dependency.get(OverviewProxyService.class);
+        overviewProxyService.setSystemUiStateFlag(SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING,
+                mStatusBarStateController.getState() == StatusBarState.KEYGUARD,
+                mDisplayId);
+        overviewProxyService.setSystemUiStateFlag(SYSUI_STATE_BOUNCER_SHOWING,
+                isBouncerShowing(), mDisplayId);
     }
 
     /**
@@ -3672,7 +3707,7 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     private void vibrateForCameraGesture() {
         // Make sure to pass -1 for repeat so VibratorService doesn't stop us when going to sleep.
-        mVibrator.vibrate(mCameraLaunchGestureVibePattern, -1 /* repeat */);
+        mVibrator.vibrate(mCameraLaunchGestureVibePattern, -1 /* repeat */, AUDIO_ATTRIBUTES);
     }
 
     /**
@@ -3791,6 +3826,7 @@ public class StatusBar extends SystemUI implements DemoMode,
     public void notifyBiometricAuthModeChanged() {
         updateDozing();
         updateScrimController();
+        mStatusBarWindow.onBiometricAuthModeChanged(mBiometricUnlockController.isWakeAndUnlock());
     }
 
     @VisibleForTesting

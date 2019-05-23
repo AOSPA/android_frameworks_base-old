@@ -261,7 +261,7 @@
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"Netwerkmeldingen"</string>
     <string name="notification_channel_network_available" msgid="4531717914138179517">"Netwerk beschikbaar"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"VPN-status"</string>
-    <string name="notification_channel_device_admin" msgid="1568154104368069249">"Apparaatbeheer"</string>
+    <string name="notification_channel_device_admin" msgid="8353118887482520565">"Meldingen van je IT-team"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"Meldingen"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"Demo voor de detailhandel"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"USB-verbinding"</string>
@@ -302,9 +302,9 @@
     <string name="permgrouplab_camera" msgid="4820372495894586615">"Camera"</string>
     <string name="permgroupdesc_camera" msgid="3250611594678347720">"foto\'s maken en video opnemen"</string>
     <string name="permgrouprequest_camera" msgid="1299833592069671756">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; toestaan om foto\'s te maken en video op te nemen?"</string>
-    <string name="permgrouplab_calllog" msgid="8798646184930388160">"Gesprekkenlijsten"</string>
-    <string name="permgroupdesc_calllog" msgid="3006237336748283775">"gesprekkenlijst lezen en schrijven"</string>
-    <string name="permgrouprequest_calllog" msgid="8487355309583773267">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; toegang geven tot je gesprekkenlijsten?"</string>
+    <string name="permgrouplab_calllog" msgid="8798646184930388160">"Gesprekslijsten"</string>
+    <string name="permgroupdesc_calllog" msgid="3006237336748283775">"gesprekslijst lezen en schrijven"</string>
+    <string name="permgrouprequest_calllog" msgid="8487355309583773267">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; toegang geven tot je gesprekslijsten?"</string>
     <string name="permgrouplab_phone" msgid="5229115638567440675">"Telefoon"</string>
     <string name="permgroupdesc_phone" msgid="6234224354060641055">"telefoneren en gesprekken beheren"</string>
     <string name="permgrouprequest_phone" msgid="9166979577750581037">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; toestaan om telefoongesprekken te starten en te beheren?"</string>
@@ -395,12 +395,12 @@
     <string name="permdesc_writeContacts" product="tablet" msgid="897243932521953602">"Hiermee kan de app gegevens wijzigen over de contacten die zijn opgeslagen op je tablet, inclusief de frequentie waarmee je hebt gebeld, gemaild of op andere manieren hebt gecommuniceerd met specifieke contacten. Met deze toestemming kunnen apps contactgegevens verwijderen."</string>
     <string name="permdesc_writeContacts" product="tv" msgid="5438230957000018959">"Hiermee kan de app gegevens wijzigen over de contacten die zijn opgeslagen op je tv, inclusief de frequentie waarmee je hebt gebeld, gemaild of op andere manieren hebt gecommuniceerd met specifieke contacten. Met deze toestemming kunnen apps contactgegevens verwijderen."</string>
     <string name="permdesc_writeContacts" product="default" msgid="589869224625163558">"Hiermee kan de app gegevens wijzigen over de contacten die zijn opgeslagen op je telefoon, inclusief de frequentie waarmee je hebt gebeld, gemaild of op andere manieren hebt gecommuniceerd met specifieke contacten. Met deze toestemming kunnen apps contactgegevens verwijderen."</string>
-    <string name="permlab_readCallLog" msgid="3478133184624102739">"gesprekkenlijst lezen"</string>
+    <string name="permlab_readCallLog" msgid="3478133184624102739">"gesprekslijst lezen"</string>
     <string name="permdesc_readCallLog" msgid="3204122446463552146">"Deze app kan je gespreksgeschiedenis lezen."</string>
-    <string name="permlab_writeCallLog" msgid="8552045664743499354">"gesprekkenlijst schrijven"</string>
-    <string name="permdesc_writeCallLog" product="tablet" msgid="6661806062274119245">"Toestaan dat de app de gesprekkenlijst van je tablet aanpast, waaronder gegevens over inkomende en uitgaande gesprekken. Schadelijke apps kunnen hiermee je gesprekkenlijst wissen of aanpassen."</string>
-    <string name="permdesc_writeCallLog" product="tv" msgid="4225034892248398019">"Toestaan dat de app de gesprekkenlijst van je tv aanpast, waaronder gegevens over inkomende en uitgaande gesprekken. Schadelijke apps kunnen hiermee je gesprekkenlijst wissen of aanpassen."</string>
-    <string name="permdesc_writeCallLog" product="default" msgid="683941736352787842">"Toestaan dat de app de gesprekkenlijst van je telefoon aanpast, waaronder gegevens over inkomende en uitgaande gesprekken. Schadelijke apps kunnen hiermee je gesprekkenlijst wissen of aanpassen."</string>
+    <string name="permlab_writeCallLog" msgid="8552045664743499354">"gesprekslijst schrijven"</string>
+    <string name="permdesc_writeCallLog" product="tablet" msgid="6661806062274119245">"Toestaan dat de app de gesprekslijst van je tablet aanpast, waaronder gegevens over inkomende en uitgaande gesprekken. Schadelijke apps kunnen hiermee je gesprekslijst wissen of aanpassen."</string>
+    <string name="permdesc_writeCallLog" product="tv" msgid="4225034892248398019">"Toestaan dat de app de gesprekslijst van je tv aanpast, waaronder gegevens over inkomende en uitgaande gesprekken. Schadelijke apps kunnen hiermee je gesprekslijst wissen of aanpassen."</string>
+    <string name="permdesc_writeCallLog" product="default" msgid="683941736352787842">"Toestaan dat de app de gesprekslijst van je telefoon aanpast, waaronder gegevens over inkomende en uitgaande gesprekken. Schadelijke apps kunnen hiermee je gesprekslijst wissen of aanpassen."</string>
     <string name="permlab_bodySensors" msgid="4683341291818520277">"toegang tot lichaamssensoren (zoals hartslagmeters)"</string>
     <string name="permdesc_bodySensors" product="default" msgid="4380015021754180431">"Hiermee kan de app toegang krijgen tot gegevens van sensoren die je lichamelijke conditie controleren, zoals je hartslag."</string>
     <string name="permlab_readCalendar" msgid="6716116972752441641">"Agenda-afspraken en -gegevens lezen"</string>
@@ -565,23 +565,21 @@
     <string name="face_acquired_too_low" msgid="488983581737550912">"Houd de telefoon lager."</string>
     <string name="face_acquired_too_right" msgid="3667075962661863218">"Beweeg je telefoon meer naar links."</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"Beweeg je telefoon meer naar rechts."</string>
-    <string name="face_acquired_poor_gaze" msgid="8471716624377228327">"Kijk met beide ogen open naar het scherm."</string>
+    <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"Kijk rechter naar je apparaat."</string>
     <string name="face_acquired_not_detected" msgid="4885504661626728809">"Je gezicht is niet te zien. Kijk naar de telefoon."</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"Te veel beweging. Houd je telefoon stil."</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"Registreer je gezicht opnieuw."</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"Herkent gezicht niet meer. Probeer het nog eens."</string>
     <string name="face_acquired_too_similar" msgid="1508776858407646460">"Lijkt te veel op elkaar. Verander je pose."</string>
-    <!-- no translation found for face_acquired_pan_too_extreme (4581629343077288178) -->
-    <skip />
-    <!-- no translation found for face_acquired_tilt_too_extreme (4019954263012496468) -->
-    <skip />
-    <string name="face_acquired_roll_too_extreme" msgid="1444829237745898619">"Houd je hoofd verticaal recht."</string>
-    <string name="face_acquired_obscured" msgid="5747521031647744553">"Zorg dat er niks tussen je hoofd en telefoon zit."</string>
-    <string name="face_acquired_sensor_dirty" msgid="364493868630891300">"Maak de camera schoon."</string>
+    <string name="face_acquired_pan_too_extreme" msgid="4581629343077288178">"Draai je hoofd iets minder."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"Draai je hoofd iets minder."</string>
+    <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"Draai je hoofd iets minder."</string>
+    <string name="face_acquired_obscured" msgid="5357207702967893283">"Zorg dat je gezicht volledig zichtbaar is."</string>
+    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"Maak de sensor bovenaan het scherm schoon."</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"Kan gezicht niet verifiëren. Hardware niet beschikbaar."</string>
-    <string name="face_error_timeout" msgid="2605673935810019129">"Time-out voor gezicht bereikt. Probeer opnieuw."</string>
+    <string name="face_error_timeout" msgid="3202585609451248103">"Probeer de gezichtsverificatie opnieuw."</string>
     <string name="face_error_no_space" msgid="2712120617457553825">"Kan nieuwe gezichten niet opslaan. Verwijder eerst een oude."</string>
     <string name="face_error_canceled" msgid="2768146728600802422">"Gezichtsbewerking geannuleerd"</string>
     <string name="face_error_user_canceled" msgid="9003022830076496163">"Gezichtsverificatie geannuleerd door gebruiker"</string>
@@ -650,6 +648,8 @@
     <string name="permdesc_bindCarrierServices" msgid="1391552602551084192">"Hiermee kan de houder binden aan providerservices. Nooit gebruikt voor normale apps."</string>
     <string name="permlab_access_notification_policy" msgid="4247510821662059671">"toegang tot \'Niet storen\'"</string>
     <string name="permdesc_access_notification_policy" msgid="3296832375218749580">"Hiermee kan de app configuratie voor Niet storen lezen en schrijven."</string>
+    <string name="permlab_startViewPermissionUsage" msgid="5484728591597709944">"rechtengebruik starten"</string>
+    <string name="permdesc_startViewPermissionUsage" msgid="4808345878203594428">"Hiermee kan de houder het rechtengebruik voor een app starten. Nooit vereist voor normale apps."</string>
     <string name="policylab_limitPassword" msgid="4497420728857585791">"Wachtwoordregels instellen"</string>
     <string name="policydesc_limitPassword" msgid="2502021457917874968">"De lengte en het aantal tekens beheren die zijn toegestaan in wachtwoorden en pincodes voor schermvergrendeling."</string>
     <string name="policylab_watchLogin" msgid="5091404125971980158">"Pogingen voor schermontgrendeling bijhouden"</string>
@@ -1900,9 +1900,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Controleren op update"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"Je hebt nieuwe berichten"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"Open je sms-app om ze te bekijken"</string>
-    <string name="user_encrypted_title" msgid="9054897468831672082">"Bepaalde functionaliteit kan zijn beperkt"</string>
-    <string name="user_encrypted_message" msgid="4923292604515744267">"Tik om te ontgrendelen"</string>
-    <string name="user_encrypted_detail" msgid="5708447464349420392">"Gebruikersgegevens vergrendeld"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"Functionaliteit kan zijn beperkt"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"Werkprofiel vergrendeld"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"Ontgrendel werkprofiel met tik"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"Verbonden met <xliff:g id="PRODUCT_NAME">%1$s</xliff:g>"</string>

@@ -123,7 +123,6 @@ import android.provider.Settings;
 import android.renderscript.RenderScriptCacheDir;
 import android.security.NetworkSecurityPolicy;
 import android.security.net.config.NetworkSecurityConfigProvider;
-import android.service.voice.VoiceInteractionSession;
 import android.system.ErrnoException;
 import android.system.OsConstants;
 import android.system.StructStat;
@@ -3394,6 +3393,9 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
         WindowManagerGlobal.initialize();
 
+        // Hint the GraphicsEnvironment that an activity is launching on the process.
+        GraphicsEnvironment.hintActivityLaunch();
+
         final Activity a = performLaunchActivity(r, customIntent);
 
         if (a != null) {
@@ -3553,11 +3555,13 @@ public final class ActivityThread extends ClientTransactionHandler {
             @NonNull RemoteCallback callback) {
         final ActivityClientRecord r = mActivities.get(activityToken);
         if (r == null) {
+            Log.w(TAG, "requestDirectActions(): no activity for " + activityToken);
             callback.sendResult(null);
             return;
         }
         final int lifecycleState = r.getLifecycleState();
         if (lifecycleState < ON_START || lifecycleState >= ON_STOP) {
+            Log.w(TAG, "requestDirectActions(" + r + "): wrong lifecycle: " + lifecycleState);
             callback.sendResult(null);
             return;
         }
@@ -5623,6 +5627,16 @@ public final class ActivityThread extends ClientTransactionHandler {
                 }
             }
         }
+    }
+
+    /**
+     * Updates the application info.
+     *
+     * This only works in the system process. Must be called on the main thread.
+     */
+    public void handleSystemApplicationInfoChanged(@NonNull ApplicationInfo ai) {
+        Preconditions.checkState(mSystemThread, "Must only be called in the system process");
+        handleApplicationInfoChanged(ai);
     }
 
     @VisibleForTesting(visibility = PACKAGE)

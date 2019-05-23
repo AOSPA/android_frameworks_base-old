@@ -63,6 +63,7 @@ import com.android.systemui.R;
 import com.android.systemui.statusbar.notification.logging.NotificationCounters;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * The guts of a notification revealed when performing a long press. This also houses the blocking
@@ -93,15 +94,19 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
 
     private static final int BUTTON_ANIM_TIME_MS = 200;
 
+    private static final boolean SHOW_BUTTON_SUMMARY = false;
+
     private INotificationManager mINotificationManager;
     private PackageManager mPm;
     private MetricsLogger mMetricsLogger;
+    private ChannelEditorDialogController mChannelEditorDialogController;
 
     private String mPackageName;
     private String mAppName;
     private int mAppUid;
     private String mDelegatePkg;
     private int mNumUniqueChannelsInRow;
+    private Set<NotificationChannel> mUniqueChannelsInRow;
     private NotificationChannel mSingleNotificationChannel;
     private int mStartingChannelImportance;
     private boolean mWasShownHighPriority;
@@ -126,6 +131,7 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
     private NotificationGuts mGutsContainer;
     private Drawable mSelectedBackground;
     private Drawable mUnselectedBackground;
+    private Drawable mPkgIcon;
 
     /** Whether this view is being shown as part of the blocking helper. */
     private boolean mIsForBlockingHelper;
@@ -233,7 +239,7 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
             final INotificationManager iNotificationManager,
             final String pkg,
             final NotificationChannel notificationChannel,
-            final int numUniqueChannelsInRow,
+            final Set<NotificationChannel> uniqueChannelsInRow,
             final StatusBarNotification sbn,
             final CheckSaveListener checkSaveListener,
             final OnSettingsClickListener onSettingsClick,
@@ -244,7 +250,7 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
             boolean wasShownHighPriority)
             throws RemoteException {
         bindNotification(pm, iNotificationManager, pkg, notificationChannel,
-                numUniqueChannelsInRow, sbn, checkSaveListener, onSettingsClick,
+                uniqueChannelsInRow, sbn, checkSaveListener, onSettingsClick,
                 onAppSettingsClick, isDeviceProvisioned, isNonblockable,
                 false /* isBlockingHelper */,
                 importance, wasShownHighPriority);
@@ -255,7 +261,7 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
             INotificationManager iNotificationManager,
             String pkg,
             NotificationChannel notificationChannel,
-            int numUniqueChannelsInRow,
+            Set<NotificationChannel> uniqueChannelsInRow,
             StatusBarNotification sbn,
             CheckSaveListener checkSaveListener,
             OnSettingsClickListener onSettingsClick,
@@ -268,8 +274,10 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
             throws RemoteException {
         mINotificationManager = iNotificationManager;
         mMetricsLogger = Dependency.get(MetricsLogger.class);
+        mChannelEditorDialogController = Dependency.get(ChannelEditorDialogController.class);
         mPackageName = pkg;
-        mNumUniqueChannelsInRow = numUniqueChannelsInRow;
+        mUniqueChannelsInRow = uniqueChannelsInRow;
+        mNumUniqueChannelsInRow = uniqueChannelsInRow.size();
         mSbn = sbn;
         mPm = pm;
         mAppSettingsClickListener = onAppSettingsClick;
@@ -355,7 +363,7 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
         }
 
         View turnOffButton = findViewById(R.id.turn_off_notifications);
-        turnOffButton.setOnClickListener(getSettingsOnClickListener());
+        turnOffButton.setOnClickListener(getTurnOffNotificationsClickListener());
         turnOffButton.setVisibility(turnOffButton.hasOnClickListeners() && !mIsNonblockable
                 ? VISIBLE : GONE);
 
@@ -379,7 +387,7 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
 
     private void bindHeader() {
         // Package name
-        Drawable pkgicon = null;
+        mPkgIcon = null;
         ApplicationInfo info;
         try {
             info = mPm.getApplicationInfo(
@@ -390,13 +398,13 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
                             | PackageManager.MATCH_DIRECT_BOOT_AWARE);
             if (info != null) {
                 mAppName = String.valueOf(mPm.getApplicationLabel(info));
-                pkgicon = mPm.getApplicationIcon(info);
+                mPkgIcon = mPm.getApplicationIcon(info);
             }
         } catch (PackageManager.NameNotFoundException e) {
             // app is gone, just show package name and generic icon
-            pkgicon = mPm.getDefaultActivityIcon();
+            mPkgIcon = mPm.getDefaultActivityIcon();
         }
-        ((ImageView) findViewById(R.id.pkgicon)).setImageDrawable(pkgicon);
+        ((ImageView) findViewById(R.id.pkgicon)).setImageDrawable(mPkgIcon);
         ((TextView) findViewById(R.id.pkgname)).setText(mAppName);
 
         // Delegate
@@ -435,6 +443,16 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
             });
         }
         return null;
+    }
+
+    private OnClickListener getTurnOffNotificationsClickListener() {
+        return ((View view) -> {
+            if (mChannelEditorDialogController != null) {
+                mChannelEditorDialogController.prepareDialogForApp(mAppName, mPackageName, mAppUid,
+                        mUniqueChannelsInRow, mPkgIcon, mOnSettingsClickListener);
+                mChannelEditorDialogController.show();
+            }
+        });
     }
 
     private void bindChannelDetails() throws RemoteException {
@@ -564,25 +582,27 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
             transition.setDuration(BUTTON_ANIM_TIME_MS);
             TransitionManager.beginDelayedTransition(this, transition);
         }
-        if (blockState == ACTION_ALERT) {
-            TextView view = findViewById(R.id.alert_summary);
-            view.setVisibility(VISIBLE);
-            findViewById(R.id.silence_summary).setVisibility(GONE);
-            view.setText(R.string.notification_channel_summary_default);
-        } else {
-            TextView view = findViewById(R.id.silence_summary);
-            view.setVisibility(VISIBLE);
-            findViewById(R.id.alert_summary).setVisibility(GONE);
-            if (mShowInStatusBar) {
-                if (mShowOnLockscreen) {
-                    view.setText(R.string.notification_channel_summary_low_status_lock);
-                } else {
-                    view.setText(R.string.notification_channel_summary_low_status);
-                }
-            } else if (mShowOnLockscreen) {
-                view.setText(R.string.notification_channel_summary_low_lock);
+        if (SHOW_BUTTON_SUMMARY) {
+            if (blockState == ACTION_ALERT) {
+                TextView view = findViewById(R.id.alert_summary);
+                view.setVisibility(VISIBLE);
+                findViewById(R.id.silence_summary).setVisibility(GONE);
+                view.setText(R.string.notification_channel_summary_default);
             } else {
-                view.setText(R.string.notification_channel_summary_low);
+                TextView view = findViewById(R.id.silence_summary);
+                view.setVisibility(VISIBLE);
+                findViewById(R.id.alert_summary).setVisibility(GONE);
+                if (mShowInStatusBar) {
+                    if (mShowOnLockscreen) {
+                        view.setText(R.string.notification_channel_summary_low_status_lock);
+                    } else {
+                        view.setText(R.string.notification_channel_summary_low_status);
+                    }
+                } else if (mShowOnLockscreen) {
+                    view.setText(R.string.notification_channel_summary_low_lock);
+                } else {
+                    view.setText(R.string.notification_channel_summary_low);
+                }
             }
         }
     }

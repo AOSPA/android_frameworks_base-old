@@ -23,6 +23,8 @@ import static android.hardware.display.ColorDisplayManager.COLOR_MODE_AUTOMATIC;
 import static android.hardware.display.ColorDisplayManager.COLOR_MODE_BOOSTED;
 import static android.hardware.display.ColorDisplayManager.COLOR_MODE_NATURAL;
 import static android.hardware.display.ColorDisplayManager.COLOR_MODE_SATURATED;
+import static android.hardware.display.ColorDisplayManager.VENDOR_COLOR_MODE_RANGE_MAX;
+import static android.hardware.display.ColorDisplayManager.VENDOR_COLOR_MODE_RANGE_MIN;
 
 import static com.android.server.display.color.DisplayTransformManager.LEVEL_COLOR_MATRIX_NIGHT_DISPLAY;
 
@@ -775,10 +777,10 @@ public final class ColorDisplayService extends SystemService {
         final ContentResolver cr = getContext().getContentResolver();
         if (isAccessibilityEnabled()) {
             // There are restrictions on the available color modes combined with a11y transforms.
-            if (isColorModeAvailable(COLOR_MODE_SATURATED)) {
-                return COLOR_MODE_SATURATED;
-            } else if (isColorModeAvailable(COLOR_MODE_AUTOMATIC)) {
-                return COLOR_MODE_AUTOMATIC;
+            final int a11yColorMode = getContext().getResources().getInteger(
+                    R.integer.config_accessibilityColorMode);
+            if (a11yColorMode >= 0) {
+                return a11yColorMode;
             }
         }
 
@@ -822,6 +824,9 @@ public final class ColorDisplayService extends SystemService {
             return COLOR_MODE_SATURATED;
         } else if (displayColorSetting == 2) {
             return COLOR_MODE_AUTOMATIC;
+        } else if (displayColorSetting >= VENDOR_COLOR_MODE_RANGE_MIN
+                && displayColorSetting <= VENDOR_COLOR_MODE_RANGE_MAX) {
+            return displayColorSetting;
         } else {
             return -1;
         }

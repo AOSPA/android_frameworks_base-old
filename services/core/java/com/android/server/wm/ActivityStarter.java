@@ -769,6 +769,8 @@ class ActivityStarter {
                 inTask != null, callerApp, resultRecord, resultStack);
         abort |= !mService.mIntentFirewall.checkStartActivity(intent, callingUid,
                 callingPid, resolvedType, aInfo.applicationInfo);
+        abort |= !mService.getPermissionPolicyInternal().checkStartActivity(intent, callingUid,
+                callingPackage);
 
         boolean restrictedBgActivity = false;
         if (!abort) {
@@ -946,8 +948,9 @@ class ActivityStarter {
             WindowProcessController callerApp, PendingIntentRecord originatingPendingIntent,
             boolean allowBackgroundActivityStart, Intent intent) {
         // don't abort for the most important UIDs
-        if (callingUid == Process.ROOT_UID || callingUid == Process.SYSTEM_UID
-                || callingUid == Process.NFC_UID) {
+        final int callingAppId = UserHandle.getAppId(callingUid);
+        if (callingUid == Process.ROOT_UID || callingAppId == Process.SYSTEM_UID
+                || callingAppId == Process.NFC_UID) {
             return false;
         }
         // don't abort if the callingUid has a visible window or is a persistent system process
@@ -957,8 +960,8 @@ class ActivityStarter {
         final boolean isCallingUidForeground = callingUidHasAnyVisibleWindow
                 || callingUidProcState == ActivityManager.PROCESS_STATE_TOP
                 || callingUidProcState == ActivityManager.PROCESS_STATE_BOUND_TOP;
-        final boolean isCallingUidPersistentSystemProcess = (callingUid == Process.SYSTEM_UID)
-                || callingUidProcState <= ActivityManager.PROCESS_STATE_PERSISTENT_UI;
+        final boolean isCallingUidPersistentSystemProcess =
+                callingUidProcState <= ActivityManager.PROCESS_STATE_PERSISTENT_UI;
         if (callingUidHasAnyVisibleWindow || isCallingUidPersistentSystemProcess) {
             return false;
         }
@@ -973,14 +976,14 @@ class ActivityStarter {
                 ? isCallingUidForeground
                 : realCallingUidHasAnyVisibleWindow
                         || realCallingUidProcState == ActivityManager.PROCESS_STATE_TOP;
+        final int realCallingAppId = UserHandle.getAppId(realCallingUid);
         final boolean isRealCallingUidPersistentSystemProcess = (callingUid == realCallingUid)
                 ? isCallingUidPersistentSystemProcess
-                : (realCallingUid == Process.SYSTEM_UID)
+                : (realCallingAppId == Process.SYSTEM_UID)
                         || realCallingUidProcState <= ActivityManager.PROCESS_STATE_PERSISTENT_UI;
         if (realCallingUid != callingUid) {
-            // don't abort if the realCallingUid has a visible window, unless realCallingUid is
-            // SYSTEM_UID, in which case it start needs to be explicitly whitelisted
-            if (realCallingUidHasAnyVisibleWindow && realCallingUid != Process.SYSTEM_UID) {
+            // don't abort if the realCallingUid has a visible window
+            if (realCallingUidHasAnyVisibleWindow) {
                 return false;
             }
             // if the realCallingUid is a persistent system process, abort if the IntentSender
@@ -1010,12 +1013,6 @@ class ActivityStarter {
         // don't abort if the callingUid has companion device
         final int callingUserId = UserHandle.getUserId(callingUid);
         if (mService.isAssociatedCompanionApp(callingUserId, callingUid)) {
-            return false;
-        }
-        // don't abort if the callingPackage is temporarily whitelisted
-        if (mService.isPackageNameWhitelistedForBgActivityStarts(callingPackage)) {
-            Slog.w(TAG, "Background activity start for " + callingPackage
-                    + " temporarily whitelisted. This will not be supported in future Q builds.");
             return false;
         }
         // If we don't have callerApp at this point, no caller was provided to startActivity().
@@ -1049,6 +1046,12 @@ class ActivityStarter {
         if (mService.hasSystemAlertWindowPermission(callingUid, callingPid, callingPackage)) {
             Slog.w(TAG, "Background activity start for " + callingPackage
                     + " allowed because SYSTEM_ALERT_WINDOW permission is granted.");
+            return false;
+        }
+        // don't abort if the callingPackage is temporarily whitelisted
+        if (mService.isPackageNameWhitelistedForBgActivityStarts(callingPackage)) {
+            Slog.w(TAG, "Background activity start for " + callingPackage
+                    + " temporarily whitelisted. This will not be supported in future Q builds.");
             return false;
         }
         // anything that has fallen through would currently be aborted

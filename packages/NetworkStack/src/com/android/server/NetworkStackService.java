@@ -49,6 +49,7 @@ import android.net.shared.PrivateDnsConfig;
 import android.net.util.SharedLog;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.util.ArraySet;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.IndentingPrintWriter;
@@ -117,6 +118,13 @@ public class NetworkStackService extends Service {
         @GuardedBy("mValidationLogs")
         private final ArrayDeque<SharedLog> mValidationLogs = new ArrayDeque<>(MAX_VALIDATION_LOGS);
 
+        private static final String DUMPSYS_ARG_VERSION = "version";
+
+        /** Version of the framework AIDL interfaces observed. Should hold only one value. */
+        @GuardedBy("mFrameworkAidlVersions")
+        private final ArraySet<Integer> mFrameworkAidlVersions = new ArraySet<>(1);
+        private final int mNetdAidlVersion;
+
         private SharedLog addValidationLogs(Network network, String name) {
             final SharedLog log = new SharedLog(NUM_VALIDATION_LOG_LINES, network + " - " + name);
             synchronized (mValidationLogs) {
@@ -136,10 +144,25 @@ public class NetworkStackService extends Service {
             mCm = context.getSystemService(ConnectivityManager.class);
             mIpMemoryStoreService = new IpMemoryStoreService(context);
 
+            int netdVersion;
+            try {
+                netdVersion = mNetd.getInterfaceVersion();
+            } catch (RemoteException e) {
+                mLog.e("Error obtaining INetd version", e);
+                netdVersion = -1;
+            }
+            mNetdAidlVersion = netdVersion;
+
             try {
                 mObserverRegistry.register(mNetd);
             } catch (RemoteException e) {
                 mLog.e("Error registering observer on Netd", e);
+            }
+        }
+
+        private void updateSystemAidlVersion(final int version) {
+            synchronized (mFrameworkAidlVersions) {
+                mFrameworkAidlVersions.add(version);
             }
         }
 
@@ -150,6 +173,7 @@ public class NetworkStackService extends Service {
         public void makeDhcpServer(@NonNull String ifName, @NonNull DhcpServingParamsParcel params,
                 @NonNull IDhcpServerCallbacks cb) throws RemoteException {
             checkNetworkStackCallingPermission();
+            updateSystemAidlVersion(cb.getInterfaceVersion());
             final DhcpServer server;
             try {
                 server = new DhcpServer(
@@ -171,6 +195,7 @@ public class NetworkStackService extends Service {
         @Override
         public void makeNetworkMonitor(Network network, String name, INetworkMonitorCallbacks cb)
                 throws RemoteException {
+            updateSystemAidlVersion(cb.getInterfaceVersion());
             final SharedLog log = addValidationLogs(network, name);
             final NetworkMonitor nm = new NetworkMonitor(mContext, cb, network, log);
             cb.onNetworkMonitorCreated(new NetworkMonitorImpl(nm));
@@ -178,6 +203,7 @@ public class NetworkStackService extends Service {
 
         @Override
         public void makeIpClient(String ifName, IIpClientCallbacks cb) throws RemoteException {
+            updateSystemAidlVersion(cb.getInterfaceVersion());
             final IpClient ipClient = new IpClient(mContext, ifName, cb, mObserverRegistry, this);
 
             synchronized (mIpClients) {
@@ -202,6 +228,7 @@ public class NetworkStackService extends Service {
         @Override
         public void fetchIpMemoryStore(@NonNull final IIpMemoryStoreCallbacks cb)
                 throws RemoteException {
+            updateSystemAidlVersion(cb.getInterfaceVersion());
             cb.onIpMemoryStoreFetched(mIpMemoryStoreService);
         }
 
@@ -209,7 +236,16 @@ public class NetworkStackService extends Service {
         protected void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter fout,
                 @Nullable String[] args) {
             checkDumpPermission();
+
             final IndentingPrintWriter pw = new IndentingPrintWriter(fout, "  ");
+            pw.println("NetworkStack version:");
+            dumpVersion(pw);
+            pw.println();
+
+            if (args != null && args.length >= 1 && DUMPSYS_ARG_VERSION.equals(args[0])) {
+                return;
+            }
+
             pw.println("NetworkStack logs:");
             mLog.dump(fd, pw, args);
 
@@ -250,6 +286,17 @@ public class NetworkStackService extends Service {
                     pw.decreaseIndent();
                 }
             }
+        }
+
+        /**
+         * Dump version information of the module and detected system version.
+         */
+        private void dumpVersion(@NonNull PrintWriter fout) {
+            fout.println("NetworkStackConnector: " + this.VERSION);
+            synchronized (mFrameworkAidlVersions) {
+                fout.println("SystemServer: " + mFrameworkAidlVersions);
+            }
+            fout.println("Netd: " + mNetdAidlVersion);
         }
 
         @Override

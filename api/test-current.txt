@@ -520,8 +520,6 @@ package android.app.prediction {
     method @NonNull public android.app.prediction.AppTarget build();
     method @NonNull public android.app.prediction.AppTarget.Builder setClassName(@NonNull String);
     method @NonNull public android.app.prediction.AppTarget.Builder setRank(@IntRange(from=0) int);
-    method @Deprecated @NonNull public android.app.prediction.AppTarget.Builder setTarget(@NonNull String, @NonNull android.os.UserHandle);
-    method @Deprecated @NonNull public android.app.prediction.AppTarget.Builder setTarget(@NonNull android.content.pm.ShortcutInfo);
   }
 
   public final class AppTargetEvent implements android.os.Parcelable {
@@ -3173,6 +3171,7 @@ package android.view {
 
   @UiThread public class View implements android.view.accessibility.AccessibilityEventSource android.graphics.drawable.Drawable.Callback android.view.KeyEvent.Callback {
     method public android.view.View getTooltipView();
+    method public boolean isAutofilled();
     method public static boolean isDefaultFocusHighlightEnabled();
     method public boolean isDefaultFocusHighlightNeeded(android.graphics.drawable.Drawable, android.graphics.drawable.Drawable);
     method protected void resetResolvedDrawables();

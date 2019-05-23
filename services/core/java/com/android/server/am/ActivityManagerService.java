@@ -33,6 +33,7 @@ import static android.app.AppOpsManager.OP_NONE;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.content.pm.ApplicationInfo.HIDDEN_API_ENFORCEMENT_DEFAULT;
 import static android.content.pm.PackageManager.GET_PROVIDERS;
+import static android.content.pm.PackageManager.GET_SHARED_LIBRARY_FILES;
 import static android.content.pm.PackageManager.MATCH_ALL;
 import static android.content.pm.PackageManager.MATCH_ANY_USER;
 import static android.content.pm.PackageManager.MATCH_DEBUG_TRIAGED_MISSING;
@@ -276,6 +277,7 @@ import android.os.storage.IStorageManager;
 import android.os.storage.StorageManager;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
+import android.server.ServerProtoEnums;
 import android.sysprop.VoldProperties;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
@@ -748,11 +750,11 @@ public class ActivityManagerService extends IActivityManager.Stub
          * <p>NOTE: Callers should avoid acquiring the mPidsSelfLocked lock before calling this
          * method.
          */
-        void put(int key, ProcessRecord value) {
+        void put(ProcessRecord app) {
             synchronized (this) {
-                mPidMap.put(key, value);
+                mPidMap.put(app.pid, app);
             }
-            mAtmInternal.onProcessMapped(key, value.getWindowProcessController());
+            mAtmInternal.onProcessMapped(app.pid, app.getWindowProcessController());
         }
 
         /**
@@ -760,11 +762,18 @@ public class ActivityManagerService extends IActivityManager.Stub
          * <p>NOTE: Callers should avoid acquiring the mPidsSelfLocked lock before calling this
          * method.
          */
-        void remove(int pid) {
+        void remove(ProcessRecord app) {
+            boolean removed = false;
             synchronized (this) {
-                mPidMap.remove(pid);
+                final ProcessRecord existingApp = mPidMap.get(app.pid);
+                if (existingApp != null && existingApp.startSeq == app.startSeq) {
+                    mPidMap.remove(app.pid);
+                    removed = true;
+                }
             }
-            mAtmInternal.onProcessUnMapped(pid);
+            if (removed) {
+                mAtmInternal.onProcessUnMapped(app.pid);
+            }
         }
 
         /**
@@ -772,17 +781,18 @@ public class ActivityManagerService extends IActivityManager.Stub
          * <p>NOTE: Callers should avoid acquiring the mPidsSelfLocked lock before calling this
          * method.
          */
-        boolean removeIfNoThread(int pid) {
+        boolean removeIfNoThread(ProcessRecord app) {
             boolean removed = false;
             synchronized (this) {
-                final ProcessRecord app = get(pid);
-                if (app != null && app.thread == null) {
-                    mPidMap.remove(pid);
+                final ProcessRecord existingApp = get(app.pid);
+                if (existingApp != null && existingApp.startSeq == app.startSeq
+                        && app.thread == null) {
+                    mPidMap.remove(app.pid);
                     removed = true;
                 }
             }
             if (removed) {
-                mAtmInternal.onProcessUnMapped(pid);
+                mAtmInternal.onProcessUnMapped(app.pid);
             }
             return removed;
         }
@@ -1989,7 +1999,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 app.getWindowProcessController().setPid(MY_PID);
                 app.maxAdj = ProcessList.SYSTEM_ADJ;
                 app.makeActive(mSystemThread.getApplicationThread(), mProcessStats);
-                mPidsSelfLocked.put(app.pid, app);
+                mPidsSelfLocked.put(app);
                 mProcessList.updateLruProcessLocked(app, false, null);
                 updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_NONE);
             }
@@ -4670,7 +4680,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     @GuardedBy("this")
     private final void processStartTimedOutLocked(ProcessRecord app) {
         final int pid = app.pid;
-        boolean gone = mPidsSelfLocked.removeIfNoThread(pid);
+        boolean gone = mPidsSelfLocked.removeIfNoThread(app);
 
         if (gone) {
             Slog.w(TAG, "Process " + app + " failed to attach");
@@ -4727,6 +4737,26 @@ public class ActivityManagerService extends IActivityManager.Stub
             synchronized (mPidsSelfLocked) {
                 app = mPidsSelfLocked.get(pid);
             }
+            if (app != null && (app.startUid != callingUid || app.startSeq != startSeq)) {
+                String processName = null;
+                final ProcessRecord pending = mProcessList.mPendingStarts.get(startSeq);
+                if (pending != null) {
+                    processName = pending.processName;
+                }
+                final String msg = "attachApplicationLocked process:" + processName
+                        + " startSeq:" + startSeq
+                        + " pid:" + pid
+                        + " belongs to another existing app:" + app.processName
+                        + " startSeq:" + app.startSeq;
+                Slog.wtf(TAG, msg);
+                // SafetyNet logging for b/131105245.
+                EventLog.writeEvent(0x534e4554, "131105245", app.startUid, msg);
+                // If there is already an app occupying that pid that hasn't been cleaned up
+                cleanUpApplicationRecordLocked(app, false, false, -1,
+                            true /*replacingPid*/);
+                mPidsSelfLocked.remove(app);
+                app = null;
+            }
         } else {
             app = null;
         }
@@ -4735,7 +4765,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // update the internal state.
         if (app == null && startSeq > 0) {
             final ProcessRecord pending = mProcessList.mPendingStarts.get(startSeq);
-            if (pending != null && pending.startUid == callingUid
+            if (pending != null && pending.startUid == callingUid && pending.startSeq == startSeq
                     && mProcessList.handleProcessStartedLocked(pending, pid, pending
                             .isUsingWrapper(),
                             startSeq, true)) {
@@ -9126,7 +9156,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                         ? StatsLog.APP_CRASH_OCCURRED__FOREGROUND_STATE__FOREGROUND
                         : StatsLog.APP_CRASH_OCCURRED__FOREGROUND_STATE__BACKGROUND)
                         : StatsLog.APP_CRASH_OCCURRED__FOREGROUND_STATE__UNKNOWN,
-                (r != null) ? r.getProcessClassEnum() : 0
+                processName.equals("system_server") ? ServerProtoEnums.SYSTEM_SERVER
+                        : (r != null) ? r.getProcessClassEnum()
+                                      : ServerProtoEnums.ERROR_SOURCE_UNKNOWN
         );
 
         final int relaunchReason = r == null ? RELAUNCH_REASON_NONE
@@ -13709,7 +13741,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             return true;
         } else if (app.pid > 0 && app.pid != MY_PID) {
             // Goodbye!
-            mPidsSelfLocked.remove(app.pid);
+            mPidsSelfLocked.remove(app);
             mHandler.removeMessages(PROC_START_TIMEOUT_MSG, app);
             mBatteryStatsService.noteProcessFinish(app.processName, app.info.uid);
             if (app.isolated) {
@@ -17439,7 +17471,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public int stopUser(final int userId, boolean force, final IStopUserCallback callback) {
-        return mUserController.stopUser(userId, force, callback);
+        return mUserController.stopUser(userId, force, callback, null /* keyEvictedCallback */);
     }
 
     @Override
@@ -18608,6 +18640,21 @@ public class ActivityManagerService extends IActivityManager.Stub
                 Binder.restoreCallingIdentity(origId);
             }
         }
+    }
+
+    /**
+     * Synchronously update the system ActivityThread, bypassing any deferred threading so any
+     * resources and overlaid values are available immediately.
+     */
+    public void updateSystemUiContext() {
+        PackageManagerInternal packageManagerInternal;
+        synchronized (this) {
+            packageManagerInternal = getPackageManagerInternalLocked();
+        }
+
+        ApplicationInfo ai = packageManagerInternal.getApplicationInfo("android",
+                GET_SHARED_LIBRARY_FILES, Binder.getCallingUid(), UserHandle.USER_SYSTEM);
+        ActivityThread.currentActivityThread().handleSystemApplicationInfoChanged(ai);
     }
 
     void updateApplicationInfoLocked(@NonNull List<String> packagesToUpdate, int userId) {

@@ -32,7 +32,6 @@ import android.app.prediction.AppPredictionManager;
 import android.app.prediction.AppPredictor;
 import android.app.prediction.AppTarget;
 import android.app.prediction.AppTargetEvent;
-import android.app.prediction.AppTargetId;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ComponentName;
@@ -125,7 +124,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The Chooser Activity handles intent resolution specifically for sharing intents -
@@ -162,6 +163,7 @@ public class ChooserActivity extends ResolverActivity {
     public static final String APP_PREDICTION_INTENT_FILTER_KEY = "intent_filter";
     private AppPredictor mAppPredictor;
     private AppPredictor.Callback mAppPredictorCallback;
+    private Map<ChooserTarget, AppTarget> mDirectShareAppTargetCache;
 
     /**
      * If set to true, use ShortcutManager to retrieve the matching direct share targets, instead of
@@ -212,7 +214,7 @@ public class ChooserActivity extends ResolverActivity {
     /** {@link ChooserActivity#getBaseScore} */
     private static final float CALLER_TARGET_SCORE_BOOST = 900.f;
     /** {@link ChooserActivity#getBaseScore} */
-    private static final float SHORTCUT_TARGET_SCORE_BOOST = 10.f;
+    private static final float SHORTCUT_TARGET_SCORE_BOOST = 90.f;
     private static final String TARGET_DETAILS_FRAGMENT_TAG = "targetDetailsFragment";
     // TODO: Update to handle landscape instead of using static value
     private static final int MAX_RANKED_TARGETS = 4;
@@ -234,7 +236,6 @@ public class ChooserActivity extends ResolverActivity {
     private static final int MAX_EXTRA_CHOOSER_TARGETS = 2;
 
     private boolean mListViewDataChanged = false;
-
 
     @Retention(SOURCE)
     @IntDef({CONTENT_PREVIEW_FILE, CONTENT_PREVIEW_IMAGE, CONTENT_PREVIEW_TEXT})
@@ -454,6 +455,7 @@ public class ChooserActivity extends ResolverActivity {
 
         AppPredictor appPredictor = getAppPredictorForDirectShareIfEnabled();
         if (appPredictor != null) {
+            mDirectShareAppTargetCache = new HashMap<>();
             mAppPredictorCallback = resultList -> {
                 if (isFinishing() || isDestroyed()) {
                     return;
@@ -480,8 +482,7 @@ public class ChooserActivity extends ResolverActivity {
                             new ComponentName(
                                 appTarget.getPackageName(), appTarget.getClassName())));
                 }
-                sendShareShortcutInfoList(shareShortcutInfos, driList);
-                sendShortcutManagerShareTargetResultCompleted();
+                sendShareShortcutInfoList(shareShortcutInfos, driList, resultList);
             };
             appPredictor
                 .registerPredictionUpdates(this.getMainExecutor(), mAppPredictorCallback);
@@ -1318,13 +1319,14 @@ public class ChooserActivity extends ResolverActivity {
         AsyncTask.execute(() -> {
             ShortcutManager sm = (ShortcutManager) getSystemService(Context.SHORTCUT_SERVICE);
             List<ShortcutManager.ShareShortcutInfo> resultList = sm.getShareTargets(filter);
-            sendShareShortcutInfoList(resultList, driList);
+            sendShareShortcutInfoList(resultList, driList, null);
         });
     }
 
     private void sendShareShortcutInfoList(
                 List<ShortcutManager.ShareShortcutInfo> resultList,
-                List<DisplayResolveInfo> driList) {
+                List<DisplayResolveInfo> driList,
+                @Nullable List<AppTarget> appTargets) {
         // Match ShareShortcutInfos with DisplayResolveInfos to be able to use the old code path
         // for direct share targets. After ShareSheet is refactored we should use the
         // ShareShortcutInfos directly.
@@ -1334,7 +1336,13 @@ public class ChooserActivity extends ResolverActivity {
             for (int j = 0; j < resultList.size(); j++) {
                 if (driList.get(i).getResolvedComponentName().equals(
                             resultList.get(j).getTargetComponent())) {
-                    chooserTargets.add(convertToChooserTarget(resultList.get(j)));
+                    ShortcutManager.ShareShortcutInfo shareShortcutInfo = resultList.get(j);
+                    ChooserTarget chooserTarget = convertToChooserTarget(shareShortcutInfo);
+                    chooserTargets.add(chooserTarget);
+                    if (mDirectShareAppTargetCache != null && appTargets != null) {
+                        // Note that appTargets.size() == resultList.size() is always true.
+                        mDirectShareAppTargetCache.put(chooserTarget, appTargets.get(j));
+                    }
                 }
             }
             if (chooserTargets.isEmpty()) {
@@ -1442,33 +1450,25 @@ public class ChooserActivity extends ResolverActivity {
     }
 
     private void sendClickToAppPredictor(TargetInfo targetInfo) {
-        AppPredictor appPredictor = getAppPredictorForDirectShareIfEnabled();
-        if (appPredictor == null) {
+        AppPredictor directShareAppPredictor = getAppPredictorForDirectShareIfEnabled();
+        if (directShareAppPredictor == null) {
             return;
         }
         if (!(targetInfo instanceof ChooserTargetInfo)) {
             return;
         }
         ChooserTarget chooserTarget = ((ChooserTargetInfo) targetInfo).getChooserTarget();
-        ComponentName componentName = chooserTarget.getComponentName();
-        Bundle extras = chooserTarget.getIntentExtras();
-        if (extras == null) {
-            return;
+        AppTarget appTarget = null;
+        if (mDirectShareAppTargetCache != null) {
+            appTarget = mDirectShareAppTargetCache.get(chooserTarget);
         }
-        String shortcutId = extras.getString(Intent.EXTRA_SHORTCUT_ID);
-        if (shortcutId == null) {
-            return;
+        // This is a direct share click that was provided by the APS
+        if (appTarget != null) {
+            directShareAppPredictor.notifyAppTargetEvent(
+                    new AppTargetEvent.Builder(appTarget, AppTargetEvent.ACTION_LAUNCH)
+                        .setLaunchLocation(LAUNCH_LOCATON_DIRECT_SHARE)
+                        .build());
         }
-        appPredictor.notifyAppTargetEvent(
-                new AppTargetEvent.Builder(
-                    // TODO(b/124404997) Send full shortcut info, not just Id with AppTargetId.
-                    new AppTarget.Builder(new AppTargetId(shortcutId),
-                            componentName.getPackageName(), getUser())
-                        .setClassName(componentName.getClassName())
-                        .build(),
-                    AppTargetEvent.ACTION_LAUNCH)
-                    .setLaunchLocation(LAUNCH_LOCATON_DIRECT_SHARE)
-                    .build());
     }
 
     @Nullable
@@ -2035,7 +2035,8 @@ public class ChooserActivity extends ResolverActivity {
             return;
         }
 
-        if (mChooserRowAdapter.calculateChooserTargetWidth(right - left)
+        int availableWidth = right - left - v.getPaddingLeft() - v.getPaddingRight();
+        if (mChooserRowAdapter.calculateChooserTargetWidth(availableWidth)
                 || mAdapterView.getAdapter() == null) {
             mAdapterView.setAdapter(mChooserRowAdapter);
 
@@ -2044,7 +2045,9 @@ public class ChooserActivity extends ResolverActivity {
                     return;
                 }
 
-                int offset = 0;
+                final int bottomInset = mSystemWindowInsets != null
+                                            ? mSystemWindowInsets.bottom : 0;
+                int offset = bottomInset;
                 int rowsToShow = mChooserRowAdapter.getContentPreviewRowCount()
                         + mChooserRowAdapter.getProfileRowCount()
                         + mChooserRowAdapter.getServiceTargetRowCount()
@@ -2059,7 +2062,7 @@ public class ChooserActivity extends ResolverActivity {
                 // still zero? then use a default height and leave, which
                 // can happen when there are no targets to show
                 if (rowsToShow == 0) {
-                    offset = getResources().getDimensionPixelSize(
+                    offset += getResources().getDimensionPixelSize(
                             R.dimen.chooser_max_collapsed_height);
                     mResolverDrawerLayout.setCollapsibleHeightReserved(offset);
                     return;
@@ -2084,8 +2087,9 @@ public class ChooserActivity extends ResolverActivity {
                     // make sure to leave room for direct share 4->8 expansion
                     int requiredExpansionHeight =
                             (int) (directShareHeight / DIRECT_SHARE_EXPANSION_RATE);
+                    int topInset = mSystemWindowInsets != null ? mSystemWindowInsets.top : 0;
                     int minHeight = bottom - top - mResolverDrawerLayout.getAlwaysShowHeight()
-                                        - requiredExpansionHeight;
+                                        - requiredExpansionHeight - topInset - bottomInset;
 
                     offset = Math.min(offset, minHeight);
                 }
@@ -2477,10 +2481,11 @@ public class ChooserActivity extends ResolverActivity {
         }
 
         /**
-          * Use the scoring system along with artificial boosts to create up to 3 distinct buckets:
+          * Use the scoring system along with artificial boosts to create up to 4 distinct buckets:
           * <ol>
           *   <li>App-supplied targets
-          *   <li>Prediction manager targets or Shortcut API targets
+          *   <li>Shortcuts ranked via App Prediction Manager
+          *   <li>Shortcuts ranked via legacy heuristics
           *   <li>Legacy direct share targets
           * </ol>
           */
@@ -2489,7 +2494,7 @@ public class ChooserActivity extends ResolverActivity {
                 return CALLER_TARGET_SCORE_BOOST;
             }
 
-            if (getAppPredictorForDirectShareIfEnabled() != null) {
+            if (isShortcutResult && getAppPredictorForDirectShareIfEnabled() != null) {
                 return SHORTCUT_TARGET_SCORE_BOOST;
             }
 
@@ -2654,7 +2659,7 @@ public class ChooserActivity extends ResolverActivity {
         @Override
         public boolean isEnabled(int position) {
             int viewType = getItemViewType(position);
-            if (viewType == VIEW_TYPE_CONTENT_PREVIEW) {
+            if (viewType == VIEW_TYPE_CONTENT_PREVIEW || viewType == VIEW_TYPE_AZ_LABEL) {
                 return false;
             }
             return true;

@@ -23,6 +23,7 @@ import static android.app.Notification.FLAG_BUBBLE;
 import static android.app.Notification.FLAG_FOREGROUND_SERVICE;
 import static android.app.Notification.FLAG_NO_CLEAR;
 import static android.app.Notification.FLAG_ONGOING_EVENT;
+import static android.app.Notification.FLAG_ONLY_ALERT_ONCE;
 import static android.app.NotificationManager.ACTION_APP_BLOCK_STATE_CHANGED;
 import static android.app.NotificationManager.ACTION_NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED;
 import static android.app.NotificationManager.ACTION_NOTIFICATION_CHANNEL_GROUP_BLOCK_STATE_CHANGED;
@@ -45,6 +46,7 @@ import static android.content.Context.BIND_ADJUST_BELOW_PERCEPTIBLE;
 import static android.content.Context.BIND_ALLOW_WHITELIST_MANAGEMENT;
 import static android.content.Context.BIND_AUTO_CREATE;
 import static android.content.Context.BIND_FOREGROUND_SERVICE;
+import static android.content.pm.ActivityInfo.DOCUMENT_LAUNCH_ALWAYS;
 import static android.content.pm.PackageManager.FEATURE_LEANBACK;
 import static android.content.pm.PackageManager.FEATURE_TELEVISION;
 import static android.content.pm.PackageManager.MATCH_ALL;
@@ -81,6 +83,9 @@ import static android.service.notification.NotificationListenerService.REASON_UN
 import static android.service.notification.NotificationListenerService.REASON_USER_STOPPED;
 import static android.service.notification.NotificationListenerService.TRIM_FULL;
 import static android.service.notification.NotificationListenerService.TRIM_LIGHT;
+import static android.util.StatsLogInternal.BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__ACTIVITY_INFO_MISSING;
+import static android.util.StatsLogInternal.BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__ACTIVITY_INFO_NOT_RESIZABLE;
+import static android.util.StatsLogInternal.BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__DOCUMENT_LAUNCH_NOT_ALWAYS;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 
 import static com.android.server.am.PendingIntentRecord.FLAG_ACTIVITY_SENDER;
@@ -121,8 +126,6 @@ import android.app.backup.BackupManager;
 import android.app.role.OnRoleHoldersChangedListener;
 import android.app.role.RoleManager;
 import android.app.usage.UsageEvents;
-import android.app.usage.UsageStats;
-import android.app.usage.UsageStatsManager;
 import android.app.usage.UsageStatsManagerInternal;
 import android.companion.ICompanionDeviceManager;
 import android.content.BroadcastReceiver;
@@ -132,6 +135,7 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
@@ -183,7 +187,6 @@ import android.service.notification.NotificationRankingUpdate;
 import android.service.notification.NotificationRecordProto;
 import android.service.notification.NotificationServiceDumpProto;
 import android.service.notification.NotificationStats;
-import android.service.notification.NotifyingApp;
 import android.service.notification.SnoozeCriterion;
 import android.service.notification.StatusBarNotification;
 import android.service.notification.ZenModeConfig;
@@ -199,6 +202,7 @@ import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.StatsLog;
 import android.util.Xml;
 import android.util.proto.ProtoOutputStream;
 import android.view.accessibility.AccessibilityEvent;
@@ -260,8 +264,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Calendar;
-import java.util.GregorianCalendar;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
@@ -314,7 +316,6 @@ public class NotificationManagerService extends SystemService {
     static final boolean ENABLE_BLOCKED_TOASTS = true;
 
     static final String[] DEFAULT_ALLOWED_ADJUSTMENTS = new String[] {
-            Adjustment.KEY_IMPORTANCE,
             Adjustment.KEY_CONTEXTUAL_ACTIONS,
             Adjustment.KEY_TEXT_REPLIES};
 
@@ -1036,11 +1037,18 @@ public class NotificationManagerService extends SystemService {
                     final StatusBarNotification n = r.sbn;
                     final int callingUid = n.getUid();
                     final String pkg = n.getPackageName();
+                    final boolean wasBubble = r.getNotification().isBubbleNotification();
                     if (isBubble && isNotificationAppropriateToBubble(r, pkg, callingUid,
                             null /* oldEntry */)) {
                         r.getNotification().flags |= FLAG_BUBBLE;
                     } else {
                         r.getNotification().flags &= ~FLAG_BUBBLE;
+                    }
+                    if (wasBubble != r.getNotification().isBubbleNotification()) {
+                        // Add the "alert only once" flag so that the notification won't HUN
+                        // unnecessarily just because the bubble flag was changed.
+                        r.getNotification().flags |= FLAG_ONLY_ALERT_ONCE;
+                        mListeners.notifyPostedLocked(r, r);
                     }
                 }
             }
@@ -2467,7 +2475,8 @@ public class NotificationManagerService extends SystemService {
          */
         @Override
         public boolean areNotificationsEnabledForPackage(String pkg, int uid) {
-            checkCallerIsSystemOrSameApp(pkg);
+            enforceSystemOrSystemUIOrSamePackage(pkg,
+                    "Caller not system or systemui or same package");
             if (UserHandle.getCallingUserId() != UserHandle.getUserId(uid)) {
                 getContext().enforceCallingPermission(
                         android.Manifest.permission.INTERACT_ACROSS_USERS,
@@ -2793,7 +2802,7 @@ public class NotificationManagerService extends SystemService {
         @Override
         public ParceledListSlice<NotificationChannelGroup> getNotificationChannelGroupsForPackage(
                 String pkg, int uid, boolean includeDeleted) {
-            checkCallerIsSystem();
+            enforceSystemOrSystemUI("getNotificationChannelGroupsForPackage");
             return mPreferencesHelper.getNotificationChannelGroups(
                     pkg, uid, includeDeleted, true, false);
         }
@@ -4818,10 +4827,14 @@ public class NotificationManagerService extends SystemService {
     private boolean isNotificationAppropriateToBubble(NotificationRecord r, String pkg, int userId,
             NotificationRecord oldRecord) {
         Notification notification = r.getNotification();
+        Notification.BubbleMetadata metadata = notification.getBubbleMetadata();
+        boolean intentCanBubble = metadata != null
+                && canLaunchInActivityView(getContext(), metadata.getIntent(), pkg);
 
         // Does the app want to bubble & is able to bubble
-        boolean canBubble = notification.getBubbleMetadata() != null
+        boolean canBubble = intentCanBubble
                 && mPreferencesHelper.areBubblesAllowed(pkg, userId)
+                && mPreferencesHelper.bubblesEnabled(r.sbn.getUser())
                 && r.getChannel().canBubble()
                 && !mActivityManager.isLowRamDevice();
 
@@ -4863,6 +4876,63 @@ public class NotificationManagerService extends SystemService {
             }
         }
         return false;
+    }
+
+    /**
+     * Whether an intent is properly configured to display in an {@link android.app.ActivityView}.
+     *
+     * @param context       the context to use.
+     * @param pendingIntent the pending intent of the bubble.
+     * @param packageName   the notification package name for this bubble.
+     */
+    // Keep checks in sync with BubbleController#canLaunchInActivityView.
+    @VisibleForTesting
+    protected boolean canLaunchInActivityView(Context context, PendingIntent pendingIntent,
+            String packageName) {
+        if (pendingIntent == null) {
+            Log.w(TAG, "Unable to create bubble -- no intent");
+            return false;
+        }
+
+        // Need escalated privileges to get the intent.
+        final long token = Binder.clearCallingIdentity();
+        Intent intent;
+        try {
+            intent = pendingIntent.getIntent();
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+
+        ActivityInfo info = intent != null
+                ? intent.resolveActivityInfo(context.getPackageManager(), 0)
+                : null;
+        if (info == null) {
+            StatsLog.write(StatsLog.BUBBLE_DEVELOPER_ERROR_REPORTED, packageName,
+                    BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__ACTIVITY_INFO_MISSING);
+            Log.w(TAG, "Unable to send as bubble -- couldn't find activity info for intent: "
+                    + intent);
+            return false;
+        }
+        if (!ActivityInfo.isResizeableMode(info.resizeMode)) {
+            StatsLog.write(StatsLog.BUBBLE_DEVELOPER_ERROR_REPORTED, packageName,
+                    BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__ACTIVITY_INFO_NOT_RESIZABLE);
+            Log.w(TAG, "Unable to send as bubble -- activity is not resizable for intent: "
+                    + intent);
+            return false;
+        }
+        if (info.documentLaunchMode != DOCUMENT_LAUNCH_ALWAYS) {
+            StatsLog.write(StatsLog.BUBBLE_DEVELOPER_ERROR_REPORTED, packageName,
+                    BUBBLE_DEVELOPER_ERROR_REPORTED__ERROR__DOCUMENT_LAUNCH_NOT_ALWAYS);
+            Log.w(TAG, "Unable to send as bubble -- activity is not documentLaunchMode=always "
+                    + "for intent: " + intent);
+            return false;
+        }
+        if ((info.flags & ActivityInfo.FLAG_ALLOW_EMBEDDED) == 0) {
+            Log.w(TAG, "Unable to send as bubble -- activity is not embeddable for intent: "
+                    + intent);
+            return false;
+        }
+        return true;
     }
 
     private void doChannelWarningToast(CharSequence toastText) {
@@ -5736,7 +5806,7 @@ public class NotificationManagerService extends SystemService {
         }
         // Suppressed because it's a silent update
         final Notification notification = record.getNotification();
-        if (record.isUpdate && (notification.flags & Notification.FLAG_ONLY_ALERT_ONCE) != 0) {
+        if (record.isUpdate && (notification.flags & FLAG_ONLY_ALERT_ONCE) != 0) {
             return false;
         }
         // Suppressed because another notification in its group handles alerting
@@ -5755,7 +5825,7 @@ public class NotificationManagerService extends SystemService {
     boolean shouldMuteNotificationLocked(final NotificationRecord record) {
         // Suppressed because it's a silent update
         final Notification notification = record.getNotification();
-        if (record.isUpdate && (notification.flags & Notification.FLAG_ONLY_ALERT_ONCE) != 0) {
+        if (record.isUpdate && (notification.flags & FLAG_ONLY_ALERT_ONCE) != 0) {
             return true;
         }
 
@@ -7340,7 +7410,7 @@ public class NotificationManagerService extends SystemService {
         static final String TAG_ENABLED_NOTIFICATION_ASSISTANTS = "enabled_assistants";
 
         private static final String ATT_USER_SET = "user_set";
-        private static final String TAG_ALLOWED_ADJUSTMENT_TYPES = "allowed_adjustments";
+        private static final String TAG_ALLOWED_ADJUSTMENT_TYPES = "q_allowed_adjustments";
         private static final String ATT_TYPES = "types";
 
         private final Object mLock = new Object();

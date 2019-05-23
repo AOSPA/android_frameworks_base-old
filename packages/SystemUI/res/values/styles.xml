@@ -349,7 +349,7 @@
     <style name="AutoSizingList">
         <item name="enableAutoSizing">true</item>
     </style>
-    <style name="Theme.MediaProjectionAlertDialog" parent="android:Theme.DeviceDefault">
+    <style name="Theme.SystemUI.MediaProjectionAlertDialog">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowContentOverlay">@null</item>
@@ -448,6 +448,12 @@
     <style name="TextAppearance.NotificationInfo.Secondary">
         <item name="android:textSize">14sp</item>
         <item name="android:alpha">0.54</item>
+    </style>
+
+    <style name="TextAppearance.NotificationInfo.Title">
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:textColor">@color/notification_primary_text_color</item>
+        <item name="android:textStyle">bold</item>
     </style>
 
     <style name="TextAppearance.NotificationInfo.Button">
@@ -565,5 +571,23 @@
         <item name="android:windowIsFloating">true</item>
         <item name="android:backgroundDimEnabled">true</item>
         <item name="android:windowCloseOnTouchOutside">true</item>
+    </style>
+
+    <!-- USB Contaminant dialog -->
+    <style name ="USBContaminant" />
+
+    <style name ="USBContaminant.UserAction">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">roboto-regular</item>
+        <item name="android:paddingLeft">16dp</item>
+        <item name="android:paddingTop">16dp</item>
+        <item name="android:paddingRight">24dp</item>
+        <item name="android:paddingBottom">16dp</item>
+        <item name="android:textAlignment">viewStart</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:clickable">true</item>
+        <item name="android:background">?android:attr/selectableItemBackground</item>
+        <item name="android:textColor">?android:attr/textColorPrimary</item>
     </style>
 </resources>
