@@ -143,6 +143,12 @@ class ZygoteServer {
      */
     private int mUsapPoolRefillDelayMs = -1;
 
+    /**
+     * If and when we should refill the USAP pool.
+     */
+    private UsapPoolRefillAction mUsapPoolRefillAction;
+    private long mUsapPoolRefillTriggerTimestamp;
+
     private enum UsapPoolRefillAction {
         DELAYED,
         IMMEDIATE,
@@ -374,6 +380,8 @@ class ZygoteServer {
         // are re-enabled in specializeAppProcess.
         ZygoteHooks.postForkCommon();
 
+        resetUsapRefillState();
+
         Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
 
         return null;
@@ -403,6 +411,11 @@ class ZygoteServer {
         }
     }
 
+    void resetUsapRefillState() {
+        mUsapPoolRefillAction = UsapPoolRefillAction.NONE;
+        mUsapPoolRefillTriggerTimestamp = INVALID_TIMESTAMP;
+    }
+
     /**
      * Runs the zygote process's select loop. Accepts new connections as
      * they happen, and reads commands from connections one spawn-request's
@@ -415,10 +428,11 @@ class ZygoteServer {
         socketFDs.add(mZygoteSocket.getFileDescriptor());
         peers.add(null);
 
-        long usapPoolRefillTriggerTimestamp = INVALID_TIMESTAMP;
+        mUsapPoolRefillTriggerTimestamp = INVALID_TIMESTAMP;
 
         while (true) {
             fetchUsapPoolPolicyPropsWithMinInterval();
+            mUsapPoolRefillAction = UsapPoolRefillAction.NONE;
 
             int[] usapPipeFDs = null;
             StructPollfd[] pollFDs = null;
@@ -470,11 +484,11 @@ class ZygoteServer {
 
             int pollTimeoutMs;
 
-            if (usapPoolRefillTriggerTimestamp == INVALID_TIMESTAMP) {
+            if (mUsapPoolRefillTriggerTimestamp == INVALID_TIMESTAMP) {
                 pollTimeoutMs = -1;
             } else {
                 int elapsedTimeMs =
-                        (int) (System.currentTimeMillis() - usapPoolRefillTriggerTimestamp);
+                        (int) (System.currentTimeMillis() - mUsapPoolRefillTriggerTimestamp);
 
                 if (elapsedTimeMs >= mUsapPoolRefillDelayMs) {
                     // Normalize the poll timeout value when the time between one poll event and the
@@ -493,13 +507,12 @@ class ZygoteServer {
                 throw new RuntimeException("poll failed", ex);
             }
 
-            UsapPoolRefillAction usapPoolRefillAction = UsapPoolRefillAction.NONE;
             if (pollReturnValue == 0) {
                 // The poll timeout has been exceeded.  This only occurs when we have finished the
                 // USAP pool refill delay period.
 
-                usapPoolRefillTriggerTimestamp = INVALID_TIMESTAMP;
-                usapPoolRefillAction = UsapPoolRefillAction.DELAYED;
+                mUsapPoolRefillTriggerTimestamp = INVALID_TIMESTAMP;
+                mUsapPoolRefillAction = UsapPoolRefillAction.DELAYED;
 
             } else {
                 boolean usapPoolFDRead = false;
@@ -629,15 +642,15 @@ class ZygoteServer {
 
                     if (usapPoolCount < mUsapPoolSizeMin) {
                         // Immediate refill
-                        usapPoolRefillAction = UsapPoolRefillAction.IMMEDIATE;
+                        mUsapPoolRefillAction = UsapPoolRefillAction.IMMEDIATE;
                     } else if (mUsapPoolSizeMax - usapPoolCount >= mUsapPoolRefillThreshold) {
                         // Delayed refill
-                        usapPoolRefillTriggerTimestamp = System.currentTimeMillis();
+                        mUsapPoolRefillTriggerTimestamp = System.currentTimeMillis();
                     }
                 }
             }
 
-            if (usapPoolRefillAction != UsapPoolRefillAction.NONE) {
+            if (mUsapPoolRefillAction != UsapPoolRefillAction.NONE) {
                 int[] sessionSocketRawFDs =
                         socketFDs.subList(1, socketFDs.size())
                                 .stream()
@@ -645,7 +658,7 @@ class ZygoteServer {
                                 .toArray();
 
                 final boolean isPriorityRefill =
-                        usapPoolRefillAction == UsapPoolRefillAction.IMMEDIATE;
+                        mUsapPoolRefillAction == UsapPoolRefillAction.IMMEDIATE;
 
                 final Runnable command =
                         fillUsapPool(sessionSocketRawFDs, isPriorityRefill);
@@ -654,7 +667,7 @@ class ZygoteServer {
                     return command;
                 } else if (isPriorityRefill) {
                     // Schedule a delayed refill to finish refilling the pool.
-                    usapPoolRefillTriggerTimestamp = System.currentTimeMillis();
+                    mUsapPoolRefillTriggerTimestamp = System.currentTimeMillis();
                 }
             }
         }
