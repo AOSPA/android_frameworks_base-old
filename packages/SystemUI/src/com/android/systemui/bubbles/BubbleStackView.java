@@ -225,7 +225,7 @@ public class BubbleStackView extends FrameLayout {
                 @Override
                 public boolean onPreDraw() {
                     getViewTreeObserver().removeOnPreDrawListener(mViewUpdater);
-                    applyCurrentState();
+                    updateExpandedView();
                     mViewUpdatedRequested = false;
                     return true;
                 }
@@ -392,7 +392,7 @@ public class BubbleStackView extends FrameLayout {
             }
             mImeVisible = keyboardHeight != 0;
 
-            float newY = getYPositionForExpandedView();
+            float newY = getExpandedViewY();
             if (newY < 0) {
                 // TODO: This means our expanded content is too big to fit on screen. Right now
                 // we'll let it translate off but we should be clipping it & pushing the header
@@ -770,25 +770,14 @@ public class BubbleStackView extends FrameLayout {
         if (DEBUG) {
             Log.d(TAG, "setExpanded: " + shouldExpand);
         }
-        boolean wasExpanded = mIsExpanded;
-        if (shouldExpand == wasExpanded) {
+        if (shouldExpand == mIsExpanded) {
             return;
         }
-        if (wasExpanded) {
-            // Collapse the stack
-            mExpandedViewContainer.setAlpha(0.0f);
-            // TODO: In order to prevent flicker, code below should be executed after the alpha
-            // value set on the mExpandedViewContainer is reflected on the screen. However, we
-            // cannot just postpone the execution like #setSelectedBubble(), since some of member
-            // variables referred by the code are overridden before the execution.
-            if (mExpandedBubble != null) {
-                mExpandedBubble.setContentVisibility(false);
-            }
-            animateExpansion(false /* expand */);
+        if (mIsExpanded) {
+            animateCollapse();
             logBubbleEvent(mExpandedBubble, StatsLog.BUBBLE_UICHANGED__ACTION__COLLAPSED);
         } else {
-            // Expand the stack
-            animateExpansion(true /* expand */);
+            animateExpansion();
             // TODO: move next line to BubbleData
             logBubbleEvent(mExpandedBubble, StatsLog.BUBBLE_UICHANGED__ACTION__EXPANDED);
             logBubbleEvent(mExpandedBubble, StatsLog.BUBBLE_UICHANGED__ACTION__STACK_EXPANDED);
@@ -888,62 +877,71 @@ public class BubbleStackView extends FrameLayout {
         mBubbleData.setExpanded(true);
     }
 
-    /**
-     * Tell the stack to animate to collapsed or expanded state.
-     */
-    private void animateExpansion(boolean shouldExpand) {
-        if (DEBUG) {
-            Log.d(TAG, "animateExpansion: shouldExpand=" + shouldExpand);
-        }
-        if (mIsExpanded != shouldExpand) {
-            hideFlyoutImmediate();
+    private void beforeExpandedViewAnimation() {
+        hideFlyoutImmediate();
+        updateExpandedBubble();
+        updateExpandedView();
+        mIsExpansionAnimating = true;
+    }
 
-            mIsExpanded = shouldExpand;
-            updateExpandedBubble();
-            applyCurrentState();
+    private void afterExpandedViewAnimation() {
+        updateExpandedView();
+        mIsExpansionAnimating = false;
+        requestUpdate();
+    }
 
-            mIsExpansionAnimating = true;
+    private void animateCollapse() {
+        mIsExpanded = false;
+        beforeExpandedViewAnimation();
 
-            Runnable updateAfter = () -> {
-                applyCurrentState();
-                mIsExpansionAnimating = false;
-                requestUpdate();
-            };
+        mBubbleContainer.cancelAllAnimations();
+        mExpandedAnimationController.collapseBackToStack(
+                () -> {
+                    mBubbleContainer.setController(mStackAnimationController);
+                    afterExpandedViewAnimation();
+                });
 
-            if (shouldExpand) {
-                mBubbleContainer.setActiveController(mExpandedAnimationController);
-                mExpandedAnimationController.expandFromStack(() -> {
+        mExpandedViewXAnim.animateToFinalPosition(getCollapsedX());
+        mExpandedViewYAnim.animateToFinalPosition(getCollapsedY());
+        mExpandedViewContainer.animate()
+                .setDuration(100)
+                .alpha(0f);
+    }
+
+    private void animateExpansion() {
+        mIsExpanded = true;
+        beforeExpandedViewAnimation();
+
+        mBubbleContainer.setController(mExpandedAnimationController);
+        mExpandedAnimationController.expandFromStack(
+                mStackAnimationController.getStackPositionAlongNearestHorizontalEdge()
+                /* collapseTo */,
+                () -> {
                     updatePointerPosition();
-                    updateAfter.run();
+                    afterExpandedViewAnimation();
                 } /* after */);
-            } else {
-                mBubbleContainer.cancelAllAnimations();
-                mExpandedAnimationController.collapseBackToStack(
-                        mStackAnimationController.getStackPositionAlongNearestHorizontalEdge(),
-                        () -> {
-                            mBubbleContainer.setActiveController(mStackAnimationController);
-                            updateAfter.run();
-                        });
-            }
 
-            final float xStart =
-                    mStackAnimationController.getStackPosition().x < getWidth() / 2
-                            ? -mExpandedAnimateXDistance
-                            : mExpandedAnimateXDistance;
 
-            final float yStart = Math.min(
-                    mStackAnimationController.getStackPosition().y,
-                    mExpandedAnimateYDistance);
-            final float yDest = getYPositionForExpandedView();
+        mExpandedViewContainer.setTranslationX(getCollapsedX());
+        mExpandedViewContainer.setTranslationY(getCollapsedY());
+        mExpandedViewContainer.setAlpha(0f);
 
-            if (shouldExpand) {
-                mExpandedViewContainer.setTranslationX(xStart);
-                mExpandedViewContainer.setTranslationY(yStart);
-            }
+        mExpandedViewXAnim.animateToFinalPosition(0f);
+        mExpandedViewYAnim.animateToFinalPosition(getExpandedViewY());
+        mExpandedViewContainer.animate()
+                .setDuration(100)
+                .alpha(1f);
+    }
 
-            mExpandedViewXAnim.animateToFinalPosition(shouldExpand ? 0f : xStart);
-            mExpandedViewYAnim.animateToFinalPosition(shouldExpand ? yDest : yStart);
-        }
+    private float getCollapsedX() {
+        return mStackAnimationController.getStackPosition().x < getWidth() / 2
+                ? -mExpandedAnimateXDistance
+                : mExpandedAnimateXDistance;
+    }
+
+    private float getCollapsedY() {
+        return Math.min(mStackAnimationController.getStackPosition().y,
+                mExpandedAnimateYDistance);
     }
 
     private void notifyExpansionChanged(NotificationEntry entry, boolean expanded) {
@@ -1297,7 +1295,7 @@ public class BubbleStackView extends FrameLayout {
     /**
      * Calculates the y position of the expanded view when it is expanded.
      */
-    float getYPositionForExpandedView() {
+    float getExpandedViewY() {
         return getStatusBarHeight() + mBubbleSize + mBubblePadding + mPointerHeight;
     }
 
@@ -1479,9 +1477,9 @@ public class BubbleStackView extends FrameLayout {
         }
     }
 
-    private void applyCurrentState() {
+    private void updateExpandedView() {
         if (DEBUG) {
-            Log.d(TAG, "applyCurrentState: mIsExpanded=" + mIsExpanded);
+            Log.d(TAG, "updateExpandedView: mIsExpanded=" + mIsExpanded);
         }
 
         mExpandedViewContainer.setVisibility(mIsExpanded ? VISIBLE : GONE);
@@ -1489,7 +1487,7 @@ public class BubbleStackView extends FrameLayout {
             // First update the view so that it calculates a new height (ensuring the y position
             // calculation is correct)
             mExpandedBubble.expandedView.updateView();
-            final float y = getYPositionForExpandedView();
+            final float y = getExpandedViewY();
             if (!mExpandedViewYAnim.isRunning()) {
                 // We're not animating so set the value
                 mExpandedViewContainer.setTranslationY(y);
