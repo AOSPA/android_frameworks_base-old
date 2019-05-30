@@ -54,16 +54,16 @@ public class ExpandedAnimationController
 
     /** Horizontal offset between bubbles, which we need to know to re-stack them. */
     private float mStackOffsetPx;
-    /** Spacing between bubbles in the expanded state. */
-    private float mBubblePaddingPx;
+    /** Space between status bar and bubbles in the expanded state. */
+    private float mBubblePaddingTop;
     /** Size of each bubble. */
     private float mBubbleSizePx;
     /** Height of the status bar. */
     private float mStatusBarHeight;
     /** Size of display. */
     private Point mDisplaySize;
-    /** Size of dismiss target at bottom of screen. */
-    private float mPipDismissHeight;
+    /** Max number of bubbles shown in row above expanded view.*/
+    private int mBubblesMaxRendered;
 
     /** Whether the dragged-out bubble is in the dismiss target. */
     private boolean mIndividualBubbleWithinDismissTarget = false;
@@ -276,26 +276,13 @@ public class ExpandedAnimationController
                 0, (i, anim) -> anim.translationY(getExpandedY())).startAll(after);
     }
 
-    /**
-     * Animates the bubbles, starting at the given index, to the left or right by the given number
-     * of bubble widths. Passing zero for numBubbleWidths will animate the bubbles to their normal
-     * positions.
-     */
-    private void animateStackByBubbleWidthsStartingFrom(int numBubbleWidths, int startIndex) {
-        animationsForChildrenFromIndex(
-                startIndex,
-                (index, animation) ->
-                        animation.translationX(getXForChildAtIndex(index + numBubbleWidths)))
-            .startAll();
-    }
-
     /** The Y value of the row of expanded bubbles. */
     public float getExpandedY() {
         if (mLayout == null || mLayout.getRootWindowInsets() == null) {
             return 0;
         }
         final WindowInsets insets = mLayout.getRootWindowInsets();
-        return mBubblePaddingPx + Math.max(
+        return mBubblePaddingTop + Math.max(
             mStatusBarHeight,
             insets.getDisplayCutout() != null
                 ? insets.getDisplayCutout().getSafeInsetTop()
@@ -306,7 +293,7 @@ public class ExpandedAnimationController
     void onActiveControllerForLayout(PhysicsAnimationLayout layout) {
         final Resources res = layout.getResources();
         mStackOffsetPx = res.getDimensionPixelSize(R.dimen.bubble_stack_offset);
-        mBubblePaddingPx = res.getDimensionPixelSize(R.dimen.bubble_padding);
+        mBubblePaddingTop = res.getDimensionPixelSize(R.dimen.bubble_padding_top);
         mBubbleSizePx = res.getDimensionPixelSize(R.dimen.individual_bubble_size);
         mStatusBarHeight =
                 res.getDimensionPixelSize(com.android.internal.R.dimen.status_bar_height);
@@ -355,7 +342,6 @@ public class ExpandedAnimationController
         } else if (mAnimatingCollapse) {
             startOrUpdateCollapseAnimation();
         } else {
-            child.setTranslationX(getXForChildAtIndex(index));
             animationForChild(child)
                     .translationY(
                             getExpandedY() - mBubbleSizePx * ANIMATE_TRANSLATION_FACTOR, /* from */
@@ -411,35 +397,59 @@ public class ExpandedAnimationController
         }
     }
 
-    /** Returns the appropriate X translation value for a bubble at the given index. */
-    private float getXForChildAtIndex(int index) {
-        return mBubblePaddingPx + (mBubbleSizePx + mBubblePaddingPx) * index;
-    }
-
     /**
      * @param index Bubble index in row.
      * @return Bubble left x from left edge of screen.
      */
     public float getBubbleLeft(int index) {
-        float bubbleLeftFromRowLeft = index * (mBubbleSizePx + mBubblePaddingPx);
-        return getRowLeft() + bubbleLeftFromRowLeft;
+        float bubbleFromRowLeft = index * (mBubbleSizePx + getSpaceBetweenBubbles());
+        return getRowLeft() + bubbleFromRowLeft;
     }
 
     private float getRowLeft() {
         if (mLayout == null) {
             return 0;
         }
+
         int bubbleCount = mLayout.getChildCount();
+        if (bubbleCount > mBubblesMaxRendered) {
+            // Only rendered bubbles are relevant for calculating row left.
+            bubbleCount = mBubblesMaxRendered;
+        }
 
-        // Width calculations.
-        double bubble = bubbleCount * mBubbleSizePx;
-        float gap = (bubbleCount - 1) * mBubblePaddingPx;
-        float row = gap + (float) bubble;
+        final float totalBubbleWidth = bubbleCount * mBubbleSizePx;
+        final float totalGapWidth = (bubbleCount - 1) * getSpaceBetweenBubbles();
+        final float rowWidth = totalGapWidth + totalBubbleWidth;
 
-        float halfRow = row / 2f;
-        float centerScreen = mDisplaySize.x / 2;
-        float rowLeftFromScreenLeft = centerScreen - halfRow;
+        final float centerScreen = mDisplaySize.x / 2f;
+        final float halfRow = rowWidth / 2f;
+        final float rowLeft = centerScreen - halfRow;
 
-        return rowLeftFromScreenLeft;
+        return rowLeft;
+    }
+
+    /**
+     * @return Space between bubbles in row above expanded view.
+     */
+    private float getSpaceBetweenBubbles() {
+        /**
+         * Ordered left to right:
+         *  Screen edge
+         *      [mExpandedViewPadding]
+         *  Expanded view edge
+         *      [launcherGridDiff] --- arbitrary value until launcher exports widths
+         *  Launcher's app icon grid edge that we must match
+         */
+        final float launcherGridDiff = mBubbleSizePx / 2f;
+        final float rowMargins = (mExpandedViewPadding + launcherGridDiff) * 2;
+        final float maxRowWidth = mDisplaySize.x - rowMargins;
+
+        final float totalBubbleWidth = mBubblesMaxRendered * mBubbleSizePx;
+        final float totalGapWidth = maxRowWidth - totalBubbleWidth;
+
+        final int gapCount = mBubblesMaxRendered - 1;
+        final float gapWidth = totalGapWidth / gapCount;
+
+        return gapWidth;
     }
 }

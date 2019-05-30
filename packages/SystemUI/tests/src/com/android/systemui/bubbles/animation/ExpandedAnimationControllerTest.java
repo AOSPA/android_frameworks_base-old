@@ -65,7 +65,7 @@ public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestC
 
         Resources res = mLayout.getResources();
         mStackOffset = res.getDimensionPixelSize(R.dimen.bubble_stack_offset);
-        mBubblePadding = res.getDimensionPixelSize(R.dimen.bubble_padding);
+        mBubblePaddingTop = res.getDimensionPixelSize(R.dimen.bubble_padding_top);
         mBubbleSize = res.getDimensionPixelSize(R.dimen.individual_bubble_size);
         mExpansionPoint = new PointF(100, 100);
     }
@@ -138,7 +138,8 @@ public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestC
         assertEquals(500f, draggedBubble.getTranslationX(), 1f);
         assertEquals(500f, draggedBubble.getTranslationY(), 1f);
 
-        // Snap it back and make sure it made it back correctly.
+        // Snap bubble back and make sure it returned correctly.
+        mExpandedController.prepareForDismissalWithVelocity(draggedBubble);
         mLayout.removeView(draggedBubble);
         waitForLayoutMessageQueue();
         waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
