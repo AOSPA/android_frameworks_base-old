@@ -355,6 +355,9 @@ public class NotificationPanelView extends PanelView implements
     private int mThemeResId;
     private KeyguardIndicationController mKeyguardIndicationController;
     private Consumer<Boolean> mAffordanceLaunchListener;
+    private int mShelfHeight;
+    private Runnable mOnReinflationListener;
+    private int mDarkIconSize;
 
     @Inject
     public NotificationPanelView(@Named(VIEW_CONTEXT) Context context, AttributeSet attrs,
@@ -471,6 +474,9 @@ public class NotificationPanelView extends PanelView implements
                 R.dimen.keyguard_indication_bottom_padding);
         mQsNotificationTopPadding = getResources().getDimensionPixelSize(
                 R.dimen.qs_notification_padding);
+        mShelfHeight = getResources().getDimensionPixelSize(R.dimen.notification_shelf_height);
+        mDarkIconSize = getResources().getDimensionPixelSize(
+                R.dimen.status_bar_icon_drawing_size_dark);
     }
 
     /**
@@ -563,6 +569,9 @@ public class NotificationPanelView extends PanelView implements
 
         setKeyguardStatusViewVisibility(mBarState, false, false);
         setKeyguardBottomAreaVisibility(mBarState, false);
+        if (mOnReinflationListener != null) {
+            mOnReinflationListener.run();
+        }
     }
 
     private void initBottomArea() {
@@ -694,7 +703,8 @@ public class NotificationPanelView extends PanelView implements
                     mNotificationStackScroller.getIntrinsicContentHeight(),
                     getExpandedFraction(),
                     totalHeight,
-                    mKeyguardStatusView.getHeight(),
+                    (int) (mKeyguardStatusView.getHeight()
+                            - mShelfHeight / 2.0f - mDarkIconSize / 2.0f),
                     clockPreferredY,
                     hasCustomClock(),
                     mNotificationStackScroller.getVisibleNotificationCount() != 0,
@@ -3162,10 +3172,6 @@ public class NotificationPanelView extends PanelView implements
         return mNotificationStackScroller.hasPulsingNotifications();
     }
 
-    public boolean isFullyDark() {
-        return mNotificationStackScroller.isFullyDark();
-    }
-
     public ActivatableNotificationView getActivatedChild() {
         return mNotificationStackScroller.getActivatedChild();
     }
@@ -3211,6 +3217,10 @@ public class NotificationPanelView extends PanelView implements
             return;
         }
         mAnimateNextPositionUpdate = true;
+    }
+
+    public void setOnReinflationListener(Runnable onReinflationListener) {
+        mOnReinflationListener = onReinflationListener;
     }
 
     /**

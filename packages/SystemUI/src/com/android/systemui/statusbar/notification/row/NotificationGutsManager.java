@@ -419,7 +419,7 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
         }
 
         final ExpandableNotificationRow row = (ExpandableNotificationRow) view;
-        if (row.isDark()) {
+        if (row.isDozing()) {
             return false;
         }
         view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
