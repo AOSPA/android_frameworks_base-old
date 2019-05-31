@@ -3237,7 +3237,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 178;
+            private static final int SETTINGS_VERSION = 181;
 
             private final int mUserId;
 
@@ -4366,6 +4366,69 @@ public class SettingsProvider extends ContentProvider {
                     currentVersion = 178;
                 }
 
+                if (currentVersion == 178) {
+                    // Version 178: Set the default value for Secure Settings:
+                    // SKIP_GESTURE & SILENCE_GESTURE
+
+                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
+
+                    final Setting skipGesture = secureSettings.getSettingLocked(
+                            Secure.SKIP_GESTURE);
+
+                    if (skipGesture.isNull()) {
+                        final boolean defSkipGesture = getContext().getResources().getBoolean(
+                                R.bool.def_skip_gesture);
+                        secureSettings.insertSettingLocked(
+                                Secure.SKIP_GESTURE, defSkipGesture ? "1" : "0",
+                                null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+
+                    final Setting silenceGesture = secureSettings.getSettingLocked(
+                            Secure.SILENCE_GESTURE);
+
+                    if (silenceGesture.isNull()) {
+                        final boolean defSilenceGesture = getContext().getResources().getBoolean(
+                                R.bool.def_silence_gesture);
+                        secureSettings.insertSettingLocked(
+                                Secure.SILENCE_GESTURE, defSilenceGesture ? "1" : "0",
+                                null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+
+                    currentVersion = 179;
+                }
+
+                if (currentVersion == 179) {
+                    // Version 178: Reset the default for Secure Settings: NOTIFICATION_BUBBLES
+                    // This is originally set in version 173, however, the default value changed
+                    // so this step is to ensure the value is updated to the correct defaulte
+                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
+
+                    secureSettings.insertSettingLocked(Secure.NOTIFICATION_BUBBLES,
+                            getContext().getResources().getBoolean(
+                                    R.bool.def_notification_bubbles) ? "1" : "0", null,
+                                    true, SettingsState.SYSTEM_PACKAGE_NAME);
+
+                    currentVersion = 180;
+                }
+
+                if (currentVersion == 180) {
+                    // Version 180: Set the default value for Secure Settings: AWARE_LOCK_ENABLED
+
+                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
+
+                    final Setting awareLockEnabled = secureSettings.getSettingLocked(
+                            Secure.AWARE_LOCK_ENABLED);
+
+                    if (awareLockEnabled.isNull()) {
+                        final boolean defAwareLockEnabled = getContext().getResources().getBoolean(
+                                R.bool.def_aware_lock_enabled);
+                        secureSettings.insertSettingLocked(
+                                Secure.AWARE_LOCK_ENABLED, defAwareLockEnabled ? "1" : "0",
+                                null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+
+                    currentVersion = 181;
+                }
 
                 // vXXX: Add new settings above this point.
 

@@ -261,7 +261,7 @@
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"Avvisi di rete"</string>
     <string name="notification_channel_network_available" msgid="4531717914138179517">"Rete disponibile"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"Stato della VPN"</string>
-    <string name="notification_channel_device_admin" msgid="1568154104368069249">"Amministrazione dispositivo"</string>
+    <string name="notification_channel_device_admin" msgid="8353118887482520565">"Avvisi dall\'amministratore IT"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"Avvisi"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"Demo retail"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"Connessione USB"</string>
@@ -278,7 +278,7 @@
     <string name="permgrouplab_contacts" msgid="3657758145679177612">"Contatti"</string>
     <string name="permgroupdesc_contacts" msgid="6951499528303668046">"accedere ai contatti"</string>
     <string name="permgrouprequest_contacts" msgid="6032805601881764300">"Consentire all\'app &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; di accedere ai tuoi contatti?"</string>
-    <string name="permgrouplab_location" msgid="7275582855722310164">"Geolocalizzazione"</string>
+    <string name="permgrouplab_location" msgid="7275582855722310164">"Geolocalizz."</string>
     <string name="permgroupdesc_location" msgid="1346617465127855033">"accedere alla posizione di questo dispositivo"</string>
     <string name="permgrouprequest_location" msgid="3788275734953323491">"Consentire all\'app &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; di accedere alla posizione di questo dispositivo?"</string>
     <string name="permgrouprequestdetail_location" msgid="1347189607421252902">"L\'app avrà accesso alla posizione soltanto quando la usi"</string>
@@ -302,8 +302,8 @@
     <string name="permgrouplab_camera" msgid="4820372495894586615">"Fotocamera"</string>
     <string name="permgroupdesc_camera" msgid="3250611594678347720">"scattare foto e registrare video"</string>
     <string name="permgrouprequest_camera" msgid="1299833592069671756">"Consentire all\'app &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; di scattare foto e registrare video?"</string>
-    <string name="permgrouplab_calllog" msgid="8798646184930388160">"Registri chiamate"</string>
-    <string name="permgroupdesc_calllog" msgid="3006237336748283775">"leggere e scrivere il registro chiamate del telefono"</string>
+    <string name="permgrouplab_calllog" msgid="8798646184930388160">"Log chiamate"</string>
+    <string name="permgroupdesc_calllog" msgid="3006237336748283775">"leggere e modificare il registro chiamate del telefono"</string>
     <string name="permgrouprequest_calllog" msgid="8487355309583773267">"Consentire all\'app &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; di accedere ai registri chiamate del tuo telefono?"</string>
     <string name="permgrouplab_phone" msgid="5229115638567440675">"Telefono"</string>
     <string name="permgroupdesc_phone" msgid="6234224354060641055">"eseguire e gestire le telefonate"</string>
@@ -565,23 +565,21 @@
     <string name="face_acquired_too_low" msgid="488983581737550912">"Sposta il telefono più in basso."</string>
     <string name="face_acquired_too_right" msgid="3667075962661863218">"Sposta il telefono verso sinistra."</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"Sposta il telefono verso destra."</string>
-    <string name="face_acquired_poor_gaze" msgid="8471716624377228327">"Guarda lo schermo con gli occhi aperti."</string>
+    <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"Guarda più direttamente verso il dispositivo."</string>
     <string name="face_acquired_not_detected" msgid="4885504661626728809">"Impossibile vedere il volto. Guarda il telefono."</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"Troppo movimento. Tieni fermo il telefono."</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"Ripeti l\'acquisizione del volto."</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"Non è più possibile riconoscere il volto. Riprova."</string>
     <string name="face_acquired_too_similar" msgid="1508776858407646460">"Troppo simile; cambia posa."</string>
-    <!-- no translation found for face_acquired_pan_too_extreme (4581629343077288178) -->
-    <skip />
-    <!-- no translation found for face_acquired_tilt_too_extreme (4019954263012496468) -->
-    <skip />
-    <string name="face_acquired_roll_too_extreme" msgid="1444829237745898619">"Raddrizza la testa in verticale."</string>
-    <string name="face_acquired_obscured" msgid="5747521031647744553">"Libera lo spazio tra la tua testa e il telefono."</string>
-    <string name="face_acquired_sensor_dirty" msgid="364493868630891300">"Pulisci la fotocamera."</string>
+    <string name="face_acquired_pan_too_extreme" msgid="4581629343077288178">"Gira un po\' meno la testa."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"Gira un po\' meno la testa."</string>
+    <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"Gira un po\' meno la testa."</string>
+    <string name="face_acquired_obscured" msgid="5357207702967893283">"Rimuovi tutto ciò che ti nasconde il viso."</string>
+    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"Pulisci sensore sul bordo superiore dello schermo."</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"Imposs. verificare volto. Hardware non disponibile."</string>
-    <string name="face_error_timeout" msgid="2605673935810019129">"Timeout operazione associata al volto. Riprova."</string>
+    <string name="face_error_timeout" msgid="3202585609451248103">"Riprova l\'autenticazione volti."</string>
     <string name="face_error_no_space" msgid="2712120617457553825">"Imposs. salvare dati nuovi volti. Elimina un volto vecchio."</string>
     <string name="face_error_canceled" msgid="2768146728600802422">"Operazione associata al volto annullata"</string>
     <string name="face_error_user_canceled" msgid="9003022830076496163">"Autenticazione volti annullata dall\'utente"</string>
@@ -650,6 +648,8 @@
     <string name="permdesc_bindCarrierServices" msgid="1391552602551084192">"Consente al titolare di collegarsi a servizi dell\'operatore. Non dovrebbe mai essere necessaria per le normali app."</string>
     <string name="permlab_access_notification_policy" msgid="4247510821662059671">"accesso alla funzione Non disturbare"</string>
     <string name="permdesc_access_notification_policy" msgid="3296832375218749580">"Consente all\'app di leggere e modificare la configurazione della funzione Non disturbare."</string>
+    <string name="permlab_startViewPermissionUsage" msgid="5484728591597709944">"avvio dell\'uso dell\'autorizzazione di visualizzazione"</string>
+    <string name="permdesc_startViewPermissionUsage" msgid="4808345878203594428">"Consente al titolare di avviare l\'uso delle autorizzazioni per un\'app. Non dovrebbe essere mai necessaria per le normali applicazioni."</string>
     <string name="policylab_limitPassword" msgid="4497420728857585791">"Impostare regole per le password"</string>
     <string name="policydesc_limitPassword" msgid="2502021457917874968">"Controlla la lunghezza e i caratteri ammessi nelle password e nei PIN del blocco schermo."</string>
     <string name="policylab_watchLogin" msgid="5091404125971980158">"Monitorare tentativi di sblocco dello schermo"</string>
@@ -1900,9 +1900,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Verifica la presenza di aggiornamenti"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"Hai nuovi messaggi"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"Apri l\'app SMS per la visualizzazione"</string>
-    <string name="user_encrypted_title" msgid="9054897468831672082">"Funzioni potenzial. limitate"</string>
-    <string name="user_encrypted_message" msgid="4923292604515744267">"Tocca per sbloccare"</string>
-    <string name="user_encrypted_detail" msgid="5708447464349420392">"Dati utente bloccati"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"Funzionalità potenzialmente limitate"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"Profilo di lavoro bloccato"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"Tocca per sbloc. prof. di lav."</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"Connesso a <xliff:g id="PRODUCT_NAME">%1$s</xliff:g>"</string>

@@ -203,8 +203,9 @@ public class AccessPointPreference extends Preference {
         if (frictionImageView == null || mFrictionSld == null) {
             return;
         }
-        if (mAccessPoint.getSecurity() != AccessPoint.SECURITY_NONE &&
-            mAccessPoint.getSecurity() != AccessPoint.SECURITY_OWE) {
+        if ((mAccessPoint.getSecurity() != AccessPoint.SECURITY_NONE)
+                && (mAccessPoint.getSecurity() != AccessPoint.SECURITY_OWE)
+                && (mAccessPoint.getSecurity() != AccessPoint.SECURITY_OWE_TRANSITION)) {
             mFrictionSld.setState(STATE_SECURED);
         } else if (mAccessPoint.isMetered()) {
             mFrictionSld.setState(STATE_METERED);

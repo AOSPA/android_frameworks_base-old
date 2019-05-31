@@ -238,6 +238,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private boolean mIsDreaming;
     private final DevicePolicyManager mDevicePolicyManager;
     private boolean mLogoutEnabled;
+    // If the user long pressed the lock icon, disabling face auth for the current session.
+    private boolean mLockIconPressed;
 
     /**
      * Short delay before restarting biometric authentication after a successful try
@@ -1185,7 +1187,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 throw new IllegalArgumentException("only handles intent ACTION_SIM_STATE_CHANGED");
             }
             String stateExtra = intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE);
-            int slotId = intent.getIntExtra(PhoneConstants.SLOT_KEY, 0);
+            int slotId = intent.getIntExtra(PhoneConstants.PHONE_KEY, 0);
             int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY,
                     SubscriptionManager.INVALID_SUBSCRIPTION_ID);
             if (IccCardConstants.INTENT_VALUE_ICC_ABSENT.equals(stateExtra)) {
@@ -1384,6 +1386,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     private void handleScreenTurnedOff() {
+        mLockIconPressed = false;
         mHardwareFingerprintUnavailableRetryCount = 0;
         mHardwareFaceUnavailableRetryCount = 0;
         final int count = mCallbacks.size();
@@ -1625,10 +1628,19 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         // instance of KeyguardUpdateMonitor for each user but KeyguardUpdateMonitor is user-aware.
         return (mBouncer || mAuthInterruptActive || awakeKeyguard || shouldListenForFaceAssistant())
                 && !mSwitchingUser && !getUserCanSkipBouncer(user) && !isFaceDisabled(user)
-                && !mKeyguardGoingAway && mFaceSettingEnabledForUser
+                && !mKeyguardGoingAway && mFaceSettingEnabledForUser && !mLockIconPressed
                 && mUserManager.isUserUnlocked(user) && mIsPrimaryUser;
     }
 
+    /**
+     * Whenever the lock icon is long pressed, disabling trust agents.
+     * This means that we cannot auth passively (face) until the user presses power.
+     */
+    public void onLockIconPressed() {
+        mLockIconPressed = true;
+        mUserFaceAuthenticated.put(getCurrentUser(), false);
+        updateFaceListeningState();
+    }
 
     private void startListeningForFingerprint() {
         if (mFingerprintRunningState == BIOMETRIC_STATE_CANCELLING) {
@@ -1686,7 +1698,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 && mFpm.getEnrolledFingerprints(userId).size() > 0;
     }
 
-    private boolean isUnlockWithFacePossible(int userId) {
+    /**
+     * If face hardware is available and user has enrolled. Not considering encryption or
+     * lockdown state.
+     */
+    public boolean isUnlockWithFacePossible(int userId) {
         return mFaceManager != null && mFaceManager.isHardwareDetected()
                 && !isFaceDisabled(userId)
                 && mFaceManager.hasEnrolledTemplates(userId);
@@ -1978,7 +1994,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         boolean becameAbsent = false;
         if (!SubscriptionManager.isValidSubscriptionId(subId)) {
             Log.w(TAG, "invalid subId in handleSimStateChange()");
-            /* Only handle No SIM(ABSENT) due to handleServiceStateChange() handle other case */
+            /* Only handle No SIM(ABSENT) and Card Error(CARD_IO_ERROR) due to
+             * handleServiceStateChange() handle other case */
             if (state == State.ABSENT) {
                 updateTelephonyCapable(true);
                 // Even though the subscription is not valid anymore, we need to notify that the
@@ -1991,6 +2008,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                         data.simState = State.ABSENT;
                     }
                 }
+            } else if (state == State.CARD_IO_ERROR) {
+                updateTelephonyCapable(true);
             } else {
                 return;
             }
@@ -2274,6 +2293,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         return isSimPinSecure();
     }
 
+    /**
+     * If any SIM cards are currently secure.
+     * @see #isSimPinSecure(State)
+     */
     public boolean isSimPinSecure() {
         // True if any SIM is pin secure
         for (SubscriptionInfo info : getSubscriptionInfo(false /* forceReload */)) {
@@ -2369,11 +2392,13 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         return changed;
     }
 
+    /**
+     * If the {@code state} is currently requiring a SIM PIN, PUK, or is disabled.
+     */
     public static boolean isSimPinSecure(IccCardConstants.State state) {
-        final IccCardConstants.State simState = state;
-        return (simState == IccCardConstants.State.PIN_REQUIRED
-                || simState == IccCardConstants.State.PUK_REQUIRED
-                || simState == IccCardConstants.State.PERM_DISABLED);
+        return (state == IccCardConstants.State.PIN_REQUIRED
+                || state == IccCardConstants.State.PUK_REQUIRED
+                || state == IccCardConstants.State.PERM_DISABLED);
     }
 
     public DisplayClientState getCachedDisplayClientState() {

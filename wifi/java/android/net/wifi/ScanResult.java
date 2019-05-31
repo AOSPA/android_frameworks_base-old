@@ -155,9 +155,19 @@ public class ScanResult implements Parcelable {
     public static final int KEY_MGMT_EAP_SUITE_B_192 = 10;
     /**
      * @hide
+     * Security key management scheme: FT_SAE.
+     */
+    public static final int KEY_MGMT_FT_SAE = 11;
+    /**
+     * @hide
+     * Security key management scheme: OWE in transition mode.
+     */
+    public static final int KEY_MGMT_OWE_TRANSITION = 12;
+    /**
+     * @hide
      * Security key management scheme: DPP.
      */
-    public static final int KEY_MGMT_DPP = 11;
+    public static final int KEY_MGMT_DPP = 13;
     /**
      * @hide
      * No cipher suite.

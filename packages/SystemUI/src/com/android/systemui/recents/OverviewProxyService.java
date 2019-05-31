@@ -27,9 +27,6 @@ import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_INP
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SUPPORTS_WINDOW_CORNERS;
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SYSUI_PROXY;
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_WINDOW_CORNER_RADIUS;
-import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_BOUNCER_SHOWING;
-import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_NAV_BAR_HIDDEN;
-import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED;
 
 import android.annotation.FloatRange;
 import android.app.ActivityTaskManager;
@@ -44,6 +41,7 @@ import android.graphics.Region;
 import android.hardware.input.InputManager;
 import android.os.Binder;
 import android.os.Bundle;
+import android.os.Debug;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -68,6 +66,7 @@ import com.android.systemui.shared.system.QuickStepContract.SystemUiStateFlags;
 import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.NavigationBarController;
 import com.android.systemui.statusbar.phone.NavigationBarFragment;
+import com.android.systemui.statusbar.phone.NavigationBarView;
 import com.android.systemui.statusbar.phone.NavigationModeController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.CallbackController;
@@ -270,6 +269,19 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         }
 
         @Override
+        public void onAssistantGestureCompletion(float velocity) {
+            if (!verifyCaller("onAssistantGestureCompletion")) {
+                return;
+            }
+            long token = Binder.clearCallingIdentity();
+            try {
+                mHandler.post(() -> notifyAssistantGestureCompletion(velocity));
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
         public void startAssistant(Bundle bundle) {
             if (!verifyCaller("startAssistant")) {
                 return;
@@ -450,20 +462,20 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         // Assumes device always starts with back button until launcher tells it that it does not
         mBackButtonAlpha = 1.0f;
 
+        // Listen for nav bar mode changes
         mNavBarMode = Dependency.get(NavigationModeController.class).addListener(this);
 
-        // Listen for the package update changes.
-        if (mDeviceProvisionedController.getCurrentUser() == UserHandle.USER_SYSTEM) {
-            updateEnabledState();
-            mDeviceProvisionedController.addCallback(mDeviceProvisionedCallback);
-            IntentFilter filter = new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
-            filter.addDataScheme("package");
-            filter.addDataSchemeSpecificPart(mRecentsComponentName.getPackageName(),
-                    PatternMatcher.PATTERN_LITERAL);
-            filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
-            // TODO: Shouldn't this be per-user?
-            mContext.registerReceiver(mLauncherStateChangedReceiver, filter);
-        }
+        // Listen for device provisioned/user setup
+        updateEnabledState();
+        mDeviceProvisionedController.addCallback(mDeviceProvisionedCallback);
+
+        // Listen for launcher package changes
+        IntentFilter filter = new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
+        filter.addDataScheme("package");
+        filter.addDataSchemeSpecificPart(mRecentsComponentName.getPackageName(),
+                PatternMatcher.PATTERN_LITERAL);
+        filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+        mContext.registerReceiver(mLauncherStateChangedReceiver, filter);
     }
 
     public void notifyBackAction(boolean completed, int downX, int downY, boolean isButton,
@@ -491,6 +503,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         }
         if (mSysUiStateFlags != newState) {
             mSysUiStateFlags = newState;
+            notifySystemUiStateChanged(mSysUiStateFlags);
             notifySystemUiStateFlags(mSysUiStateFlags);
         }
     }
@@ -502,18 +515,19 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     private void updateSystemUiStateFlags() {
         final NavigationBarController navBar = Dependency.get(NavigationBarController.class);
         final NavigationBarFragment navBarFragment = navBar.getDefaultNavigationBarFragment();
+        final NavigationBarView navBarView = navBar.getNavigationBarView(mContext.getDisplayId());
         final StatusBar statusBar = SysUiServiceProvider.getComponent(mContext, StatusBar.class);
-        final boolean panelExpanded = statusBar != null && statusBar.getPanel() != null
-                && statusBar.getPanel().isFullyExpanded();
-        final boolean bouncerShowing = statusBar != null && statusBar.isBouncerShowing();
+
         mSysUiStateFlags = 0;
-        mSysUiStateFlags |= (navBarFragment != null && !navBarFragment.isNavBarWindowVisible())
-                ? SYSUI_STATE_NAV_BAR_HIDDEN : 0;
-        mSysUiStateFlags |= panelExpanded
-                ? SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED : 0;
-        mSysUiStateFlags |= bouncerShowing
-                ? SYSUI_STATE_BOUNCER_SHOWING : 0;
-        mSysUiStateFlags |= navBarFragment != null ? navBarFragment.getA11yButtonState(null) : 0;
+        if (navBarFragment != null) {
+            navBarFragment.updateSystemUiStateFlags(-1);
+        }
+        if (navBarView != null) {
+            navBarView.updateSystemUiStateFlags();
+        }
+        if (statusBar != null) {
+            statusBar.updateSystemUiStateFlags();
+        }
         notifySystemUiStateFlags(mSysUiStateFlags);
     }
 
@@ -619,6 +633,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         mConnectionCallbacks.add(listener);
         listener.onConnectionChanged(mOverviewProxy != null);
         listener.onBackButtonAlphaChanged(mBackButtonAlpha, false);
+        listener.onSystemUiStateChanged(mSysUiStateFlags);
     }
 
     @Override
@@ -683,6 +698,18 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         }
     }
 
+    private void notifyAssistantGestureCompletion(float velocity) {
+        for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
+            mConnectionCallbacks.get(i).onAssistantGestureCompletion(velocity);
+        }
+    }
+
+    private void notifySystemUiStateChanged(int sysuiStateFlags) {
+        for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
+            mConnectionCallbacks.get(i).onSystemUiStateChanged(sysuiStateFlags);
+        }
+    }
+
     private void notifyStartAssistant(Bundle bundle) {
         for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
             mConnectionCallbacks.get(i).startAssistant(bundle);
@@ -722,6 +749,11 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         pw.print("  quickStepIntent="); pw.println(mQuickStepIntent);
         pw.print("  quickStepIntentResolved="); pw.println(isEnabled());
         pw.print("  mSysUiStateFlags="); pw.println(mSysUiStateFlags);
+        pw.println("    " + QuickStepContract.getSystemUiStateString(mSysUiStateFlags));
+        pw.print("    backGestureDisabled=");
+        pw.println(QuickStepContract.isBackGestureDisabled(mSysUiStateFlags));
+        pw.print("    assistantGestureDisabled=");
+        pw.println(QuickStepContract.isAssistantGestureDisabled(mSysUiStateFlags));
     }
 
     public interface OverviewProxyListener {
@@ -730,7 +762,9 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         default void onOverviewShown(boolean fromHome) {}
         default void onQuickScrubStarted() {}
         default void onBackButtonAlphaChanged(float alpha, boolean animate) {}
+        default void onSystemUiStateChanged(int sysuiStateFlags) {}
         default void onAssistantProgress(@FloatRange(from = 0.0, to = 1.0) float progress) {}
+        default void onAssistantGestureCompletion(float velocity) {}
         default void startAssistant(Bundle bundle) {}
     }
 }

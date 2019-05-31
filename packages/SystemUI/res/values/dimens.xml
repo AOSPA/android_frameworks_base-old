@@ -41,10 +41,10 @@
 
     <!-- Size of the nav bar edge panels, should be greater to the
          edge sensitivity + the drag threshold -->
-    <dimen name="navigation_edge_panel_width">76dp</dimen>
+    <dimen name="navigation_edge_panel_width">70dp</dimen>
     <!-- Padding at the end of the navigation panel to allow the arrow not to be clipped off -->
-    <dimen name="navigation_edge_panel_padding">24dp</dimen>
-    <dimen name="navigation_edge_panel_height">84dp</dimen>
+    <dimen name="navigation_edge_panel_padding">8dp</dimen>
+    <dimen name="navigation_edge_panel_height">96dp</dimen>
     <!-- The threshold to drag to trigger the edge action -->
     <dimen name="navigation_edge_action_drag_threshold">16dp</dimen>
     <!-- The minimum display position of the arrow on the screen -->
@@ -89,7 +89,7 @@
     <dimen name="status_bar_wifi_signal_spacer_width">2.5dp</dimen>
 
     <!-- Size of the view displaying the wifi signal icon in the status bar. -->
-    <dimen name="status_bar_wifi_signal_size">15dp</dimen>
+    <dimen name="status_bar_wifi_signal_size">@*android:dimen/status_bar_system_icon_size</dimen>
 
     <!-- Spacing before the airplane mode icon if there are any icons preceding it. -->
     <dimen name="status_bar_airplane_spacer_width">4dp</dimen>
@@ -251,6 +251,9 @@
 
     <!-- size at which Notification icons will be drawn on Ambient Display -->
     <dimen name="status_bar_icon_drawing_size_dark">@*android:dimen/notification_header_icon_size_ambient</dimen>
+
+    <!-- size of notification icons on AOD -->
+    <dimen name="dark_shelf_icon_size">16dp</dimen>
 
     <!-- opacity at which Notification icons will be drawn in the status bar -->
     <item type="dimen" name="status_bar_icon_drawing_alpha">90%</item>
@@ -439,8 +442,11 @@
     <dimen name="qs_tile_margin_vertical">24dp</dimen>
     <dimen name="qs_tile_margin_top_bottom">12dp</dimen>
     <dimen name="qs_tile_margin_top_bottom_negative">-12dp</dimen>
-    <!-- The height of the qs customize header. Should be (28dp - qs_tile_margin_top_bottom). -->
-    <dimen name="qs_customize_header_min_height">40dp</dimen>
+    <!-- The height of the qs customize header. Should be
+         (qs_panel_padding_top (48dp) +  brightness_mirror_height (48dp) + qs_tile_margin_top (18dp)) -
+         (Toolbar_minWidth (56dp) + qs_tile_margin_top_bottom (12dp))
+    -->
+    <dimen name="qs_customize_header_min_height">46dp</dimen>
     <dimen name="qs_tile_margin_top">18dp</dimen>
     <dimen name="qs_tile_background_size">44dp</dimen>
     <dimen name="qs_quick_tile_size">48dp</dimen>
@@ -695,7 +701,7 @@
     <!-- The top padding of the clear all button -->
     <dimen name="clear_all_padding_top">12dp</dimen>
 
-    <dimen name="notification_section_header_height">40dp</dimen>
+    <dimen name="notification_section_header_height">48dp</dimen>
     <dimen name="notification_section_header_padding_left">16dp</dimen>
 
     <!-- Largest size an avatar might need to be drawn in the user picker, status bar, or
@@ -941,6 +947,12 @@
 
     <!-- Global actions grid layout -->
     <dimen name="global_actions_grid_side_margin">4dp</dimen>
+    <dimen name="global_actions_grid_container_bottom_margin">4dp</dimen>
+
+    <!-- Used to workaround a bug where shadows are clipped during animations by expanding
+         the bounds of the parent view. -->
+    <dimen name="global_actions_grid_container_shadow_offset">20dp</dimen>
+    <dimen name="global_actions_grid_container_negative_shadow_offset">-20dp</dimen>
 
     <!-- The maximum offset in either direction that elements are moved horizontally to prevent
          burn-in on AOD. -->
@@ -1095,6 +1107,8 @@
     <dimen name="bubble_padding">8dp</dimen>
     <!-- Size of individual bubbles. -->
     <dimen name="individual_bubble_size">52dp</dimen>
+    <!-- Size of the circle around the bubbles when they're in the dismiss target. -->
+    <dimen name="bubble_dismiss_encircle_size">56dp</dimen>
     <!-- How much to inset the icon in the circle -->
     <dimen name="bubble_icon_inset">16dp</dimen>
     <!-- Padding around the view displayed when the bubble is expanded -->
@@ -1131,7 +1145,12 @@
     <dimen name="bubble_header_icon_size">48dp</dimen>
     <!-- Space between the pointer triangle and the bubble expanded view -->
     <dimen name="bubble_pointer_margin">8dp</dimen>
-
+    <!-- Height of the permission prompt shown with bubbles -->
+    <dimen name="bubble_permission_height">120dp</dimen>
+    <!-- Padding applied to the bubble dismiss target. Touches in this padding cause the bubbles to
+         snap to the dismiss target. -->
+    <dimen name="bubble_dismiss_target_padding_x">40dp</dimen>
+    <dimen name="bubble_dismiss_target_padding_y">20dp</dimen>
     <!-- Size of the RAT type for CellularTile -->
     <dimen name="celltile_rat_type_size">10sp</dimen>
 </resources>

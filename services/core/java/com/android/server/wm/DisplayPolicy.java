@@ -269,6 +269,7 @@ public class DisplayPolicy {
     private volatile boolean mNavigationBarCanMove;
     private volatile boolean mNavigationBarLetsThroughTaps;
     private volatile boolean mNavigationBarAlwaysShowOnSideGesture;
+    private volatile boolean mAllowSeamlessRotationDespiteNavBarMoving;
 
     // Written by vr manager thread, only read in this class.
     private volatile boolean mPersistentVrModeEnabled;
@@ -393,6 +394,8 @@ public class DisplayPolicy {
      * be then used to layout windows in the virtual display.
      */
     @NonNull private Insets mForwardedInsets = Insets.NONE;
+
+    private RefreshRatePolicy mRefreshRatePolicy;
 
     // -------- PolicyHandler --------
     private static final int MSG_UPDATE_DREAMING_SLEEP_TOKEN = 1;
@@ -680,6 +683,10 @@ public class DisplayPolicy {
             mHasStatusBar = false;
             mHasNavigationBar = mDisplayContent.supportsSystemDecorations();
         }
+
+        mRefreshRatePolicy = new RefreshRatePolicy(mService,
+                mDisplayContent.getDisplayInfo(),
+                mService.mHighRefreshRateBlacklist);
     }
 
     void systemReady() {
@@ -2816,6 +2823,8 @@ public class DisplayPolicy {
         mNavigationBarCanMove =
                 mDisplayContent.mBaseDisplayWidth != mDisplayContent.mBaseDisplayHeight
                         && res.getBoolean(R.bool.config_navBarCanMove);
+        mAllowSeamlessRotationDespiteNavBarMoving =
+                res.getBoolean(R.bool.config_allowSeamlessRotationDespiteNavBarMoving);
     }
 
     /**
@@ -3598,8 +3607,9 @@ public class DisplayPolicy {
         }
         // If the navigation bar can't change sides, then it will
         // jump when we change orientations and we don't rotate
-        // seamlessly.
-        if (!navigationBarCanMove()) {
+        // seamlessly - unless that is allowed, eg. with gesture
+        // navigation where the navbar is low-profile enough that this isn't very noticeable.
+        if (!navigationBarCanMove() && !mAllowSeamlessRotationDespiteNavBarMoving) {
             return false;
         }
 
@@ -3680,6 +3690,10 @@ public class DisplayPolicy {
                     mStatusBar != null && mStatusBar.isVisibleLw(),
                     mNavigationBar != null && mNavigationBar.isVisibleLw(), mHandler);
         }
+    }
+
+    RefreshRatePolicy getRefreshRatePolicy() {
+        return mRefreshRatePolicy;
     }
 
     void dump(String prefix, PrintWriter pw) {

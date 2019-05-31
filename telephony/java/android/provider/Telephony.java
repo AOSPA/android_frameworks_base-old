@@ -927,6 +927,10 @@ public final class Telephony {
              * user whether they want to replace the current default
              * SMS application with the one specified in
              * {@link #EXTRA_PACKAGE_NAME}.
+             * <p>
+             * This is no longer supported since Q, please use
+             * {@link android.app.role.RoleManager#createRequestRoleIntent(String)} with
+             * {@link android.app.role.RoleManager#ROLE_SMS} instead.
              */
             @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
             public static final String ACTION_CHANGE_DEFAULT =
@@ -937,6 +941,10 @@ public final class Telephony {
              * extra for {@link #ACTION_CHANGE_DEFAULT}
              *
              * @see #ACTION_CHANGE_DEFAULT
+             * <p>
+             * This is no longer supported since Q, please use
+             * {@link android.app.role.RoleManager#createRequestRoleIntent(String)} with
+             * {@link android.app.role.RoleManager#ROLE_SMS} instead.
              */
             public static final String EXTRA_PACKAGE_NAME = "package";
 
