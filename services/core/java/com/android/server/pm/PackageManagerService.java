@@ -318,7 +318,6 @@ import com.android.server.pm.dex.PackageDexUsage;
 import com.android.server.pm.dex.ViewCompiler;
 import com.android.server.pm.permission.BasePermission;
 import com.android.server.pm.permission.DefaultPermissionGrantPolicy;
-import com.android.server.pm.permission.DefaultPermissionGrantPolicy.DefaultPermissionGrantedCallback;
 import com.android.server.pm.permission.PermissionManagerService;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.pm.permission.PermissionManagerServiceInternal.PermissionCallback;
@@ -2417,15 +2416,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     LocalServices.getService(PackageManagerInternal.class),
                     mPackages);
             mPermissionManager = PermissionManagerService.create(context,
-                    new DefaultPermissionGrantedCallback() {
-                        @Override
-                        public void onDefaultRuntimePermissionsGranted(int userId) {
-                            synchronized(mPackages) {
-                                mSettings.onDefaultRuntimePermissionsGrantedLPr(userId);
-                                mDefaultPermissionsGrantedUsers.put(userId, userId);
-                            }
-                        }
-                    }, mPackages /*externalLock*/);
+                    mPackages /*externalLock*/);
             mDefaultPermissionPolicy = mPermissionManager.getDefaultPermissionGrantPolicy();
             mSettings = new Settings(Environment.getDataDirectory(),
                     mPermissionManager.getPermissionSettings(), mPackages);
@@ -4260,6 +4251,11 @@ public class PackageManagerService extends IPackageManager.Stub
 
             final boolean matchFactoryOnly = (flags & MATCH_FACTORY_ONLY) != 0;
             if (matchFactoryOnly) {
+                // Instant app filtering for APEX modules is ignored
+                if ((flags & MATCH_APEX) != 0) {
+                    return mApexManager.getPackageInfo(packageName,
+                            ApexManager.MATCH_FACTORY_PACKAGE);
+                }
                 final PackageSetting ps = mSettings.getDisabledSystemPkgLPr(packageName);
                 if (ps != null) {
                     if (filterSharedLibPackageLPr(ps, filterCallingUid, userId, flags)) {
@@ -4270,7 +4266,6 @@ public class PackageManagerService extends IPackageManager.Stub
                     }
                     return generatePackageInfo(ps, flags, userId);
                 }
-                // TODO(b/123680735): support MATCH_APEX|MATCH_FACTORY_ONLY case
             }
 
             PackageParser.Package p = mPackages.get(packageName);
@@ -4300,9 +4295,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
                 return generatePackageInfo(ps, flags, userId);
             }
-            //
             if (!matchFactoryOnly && (flags & MATCH_APEX) != 0) {
-                return mApexManager.getActivePackage(packageName);
+                return mApexManager.getPackageInfo(packageName, ApexManager.MATCH_ACTIVE_PACKAGE);
             }
         }
         return null;
@@ -8598,6 +8592,7 @@ public class PackageManagerService extends IPackageManager.Stub
         flags = updateFlagsForPackage(flags, userId, null);
         final boolean listUninstalled = (flags & MATCH_KNOWN_PACKAGES) != 0;
         final boolean listApex = (flags & MATCH_APEX) != 0;
+        final boolean listFactory = (flags & MATCH_FACTORY_ONLY) != 0;
 
         mPermissionManager.enforceCrossUserPermission(callingUid, userId,
                 false /* requireFullPermission */, false /* checkShell */,
@@ -8638,9 +8633,14 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
             if (listApex) {
-                // TODO(b/119767311): include uninstalled/inactive APEX if
-                //  MATCH_UNINSTALLED_PACKAGES is set.
-                list.addAll(mApexManager.getActivePackages());
+                if (listFactory) {
+                    list.addAll(mApexManager.getFactoryPackages());
+                } else {
+                    list.addAll(mApexManager.getActivePackages());
+                }
+                if (listUninstalled) {
+                    list.addAll(mApexManager.getInactivePackages());
+                }
             }
             return new ParceledListSlice<>(list);
         }
@@ -17147,6 +17147,13 @@ public class PackageManagerService extends IPackageManager.Stub
                         cleanUpAppIdCreation(result);
                     }
                 }
+                // TODO(patb): create a more descriptive reason than unknown in future release
+                // mark all non-failure installs as UNKNOWN so we do not treat them as success
+                for (InstallRequest request : requests) {
+                    if (request.installResult.returnCode == PackageManager.INSTALL_SUCCEEDED) {
+                        request.installResult.returnCode = PackageManager.INSTALL_UNKNOWN;
+                    }
+                }
             }
             for (PrepareResult result : prepareResults.values()) {
                 if (result.freezer != null) {
@@ -24862,6 +24869,12 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         @Override
+        public void forEachInstalledPackage(@NonNull Consumer<PackageParser.Package> actionLocked,
+                @UserIdInt int userId) {
+            PackageManagerService.this.forEachInstalledPackage(actionLocked, userId);
+        }
+
+        @Override
         public ArraySet<String> getEnabledComponents(String packageName, int userId) {
             synchronized (mPackages) {
                 PackageSetting setting = mSettings.getPackageLPr(packageName);
@@ -24971,7 +24984,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 return;
             }
             final ApexManager am = PackageManagerService.this.mApexManager;
-            PackageInfo activePackage = am.getActivePackage(packageName);
+            PackageInfo activePackage = am.getPackageInfo(packageName,
+                    ApexManager.MATCH_ACTIVE_PACKAGE);
             if (activePackage == null) {
                 adapter.onPackageDeleted(packageName, PackageManager.DELETE_FAILED_ABORTED,
                         packageName + " is not an apex package");
@@ -24997,6 +25011,14 @@ public class PackageManagerService extends IPackageManager.Stub
         public boolean wereDefaultPermissionsGrantedSinceBoot(int userId) {
             synchronized (mPackages) {
                 return mDefaultPermissionPolicy.wereDefaultPermissionsGrantedSinceBoot(userId);
+            }
+        }
+
+        @Override
+        public void setRuntimePermissionsFingerPrint(@NonNull String fingerPrint,
+                @UserIdInt int userId) {
+            synchronized (mPackages) {
+                mSettings.setRuntimePermissionsFingerPrintLPr(fingerPrint, userId);
             }
         }
     }
@@ -25149,6 +25171,21 @@ public class PackageManagerService extends IPackageManager.Stub
             int numPackages = mPackages.size();
             for (int i = 0; i < numPackages; i++) {
                 actionLocked.accept(mPackages.valueAt(i));
+            }
+        }
+    }
+
+    void forEachInstalledPackage(@NonNull Consumer<PackageParser.Package> actionLocked,
+            @UserIdInt int userId) {
+        synchronized (mPackages) {
+            int numPackages = mPackages.size();
+            for (int i = 0; i < numPackages; i++) {
+                PackageParser.Package pkg = mPackages.valueAt(i);
+                PackageSetting setting = mSettings.getPackageLPr(pkg.packageName);
+                if (setting == null || !setting.getInstalled(userId)) {
+                    continue;
+                }
+                actionLocked.accept(pkg);
             }
         }
     }
