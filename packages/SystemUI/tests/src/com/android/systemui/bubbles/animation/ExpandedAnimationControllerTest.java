@@ -45,14 +45,16 @@ public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestC
 
     private int mDisplayWidth = 500;
     private int mDisplayHeight = 1000;
+    private int mExpandedViewPadding = 10;
 
     @Spy
     private ExpandedAnimationController mExpandedController =
             new ExpandedAnimationController(
                     new Point(mDisplayWidth, mDisplayHeight) /* displaySize */,
-                    0 /* expandedViewPadding */);
+                    mExpandedViewPadding);
+
     private int mStackOffset;
-    private float mBubblePadding;
+    private float mBubblePaddingTop;
     private float mBubbleSize;
 
     private PointF mExpansionPoint;
@@ -175,7 +177,7 @@ public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestC
 
         waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
 
-        assertEquals(mBubblePadding, mViews.get(1).getTranslationX(), 1f);
+        assertEquals(mBubblePaddingTop, mViews.get(1).getTranslationX(), 1f);
     }
 
     @Test
@@ -257,8 +259,8 @@ public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestC
      * @return Bubble left x from left edge of screen.
      */
     public float getBubbleLeft(int index) {
-        float bubbleLeftFromRowLeft = index * (mBubbleSize + mBubblePadding);
-        return getRowLeft() + bubbleLeftFromRowLeft;
+        final float bubbleLeft = index * (mBubbleSize + getSpaceBetweenBubbles());
+        return getRowLeft() + bubbleLeft;
     }
 
     private float getRowLeft() {
@@ -266,16 +268,33 @@ public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestC
             return 0;
         }
         int bubbleCount = mLayout.getChildCount();
+        if (bubbleCount > mMaxRenderedBubbles) {
+            bubbleCount = mMaxRenderedBubbles;
+        }
+        final float totalBubbleWidth = bubbleCount * mBubbleSize;
+        final float totalGapWidth = (bubbleCount - 1) * getSpaceBetweenBubbles();
+        final float rowWidth = totalGapWidth + totalBubbleWidth;
 
-        // Width calculations.
-        double bubble = bubbleCount * mBubbleSize;
-        float gap = (bubbleCount - 1) * mBubblePadding;
-        float row = gap + (float) bubble;
+        final float centerScreen = mDisplayWidth / 2f;
+        final float halfRow = rowWidth / 2f;
+        final float rowLeft = centerScreen - halfRow;
 
-        float halfRow = row / 2f;
-        float centerScreen = mDisplayWidth / 2;
-        float rowLeftFromScreenLeft = centerScreen - halfRow;
+        return rowLeft;
+    }
 
-        return rowLeftFromScreenLeft;
+    /**
+     * @return Space between bubbles in row above expanded view.
+     */
+    private float getSpaceBetweenBubbles() {
+        final float launcherGridDiff = mBubbleSize / 2f;
+        final float rowMargins = (mExpandedViewPadding + launcherGridDiff) * 2;
+        final float maxRowWidth = mDisplayWidth - rowMargins;
+
+        final float totalBubbleWidth = mMaxRenderedBubbles * mBubbleSize;
+        final float totalGapWidth = maxRowWidth - totalBubbleWidth;
+
+        final int gapCount = mMaxRenderedBubbles - 1;
+        final float gapWidth = totalGapWidth / gapCount;
+        return gapWidth;
     }
 }
