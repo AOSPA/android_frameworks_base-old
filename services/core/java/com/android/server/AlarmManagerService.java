@@ -78,6 +78,7 @@ import android.util.ArraySet;
 import android.util.KeyValueListParser;
 import android.util.Log;
 import android.util.LongArrayQueue;
+import android.util.MutableBoolean;
 import android.util.NtpTrustedTime;
 import android.util.Pair;
 import android.util.Slog;
@@ -1137,8 +1138,8 @@ class AlarmManagerService extends SystemService {
                     ? clampPositive(whenElapsed + a.windowLength)
                     : maxTriggerTime(nowElapsed, whenElapsed, a.repeatInterval);
         }
-        a.whenElapsed = whenElapsed;
-        a.maxWhenElapsed = maxElapsed;
+        a.expectedWhenElapsed = a.whenElapsed = whenElapsed;
+        a.expectedMaxWhenElapsed = a.maxWhenElapsed = maxElapsed;
         setImplLocked(a, true, doValidate);
     }
 
@@ -1242,7 +1243,7 @@ class AlarmManagerService extends SystemService {
                 alarm.count += (nowELAPSED - alarm.expectedWhenElapsed) / alarm.repeatInterval;
                 // Also schedule its next recurrence
                 final long delta = alarm.count * alarm.repeatInterval;
-                final long nextElapsed = alarm.whenElapsed + delta;
+                final long nextElapsed = alarm.expectedWhenElapsed + delta;
                 setImplLocked(alarm.type, alarm.when + delta, nextElapsed, alarm.windowLength,
                         maxTriggerTime(nowELAPSED, nextElapsed, alarm.repeatInterval),
                         alarm.repeatInterval, alarm.operation, null, null, alarm.flags, true,
@@ -3187,6 +3188,16 @@ class AlarmManagerService extends SystemService {
                 mPendingBackgroundAlarms.removeAt(i);
             }
         }
+        // If we're currently keying off of this app's alarms for doze transitions,
+        // make sure to reset to other triggers.
+        if (mNextWakeFromIdle != null && mNextWakeFromIdle.uid == uid) {
+            mNextWakeFromIdle = null;
+        }
+        if (mPendingIdleUntil != null && mPendingIdleUntil.uid == uid) {
+            // Should never happen - only the system uid is allowed to set idle-until alarms
+            Slog.wtf(TAG, "Removed app uid " + uid + " set idle-until alarm!");
+            mPendingIdleUntil = null;
+        }
         if (didRemove) {
             if (DEBUG_BATCH) {
                 Slog.v(TAG, "remove(uid) changed bounds; rebatching");
@@ -3207,7 +3218,14 @@ class AlarmManagerService extends SystemService {
         }
 
         boolean didRemove = false;
-        final Predicate<Alarm> whichAlarms = (Alarm a) -> a.matches(packageName);
+        final MutableBoolean removedNextWakeFromIdle = new MutableBoolean(false);
+        final Predicate<Alarm> whichAlarms = (Alarm a) -> {
+            final boolean didMatch = a.matches(packageName);
+            if (didMatch && a == mNextWakeFromIdle) {
+                removedNextWakeFromIdle.value = true;
+            }
+            return didMatch;
+        };
         final boolean oldHasTick = haveBatchesTimeTickAlarm(mAlarmBatches);
         for (int i = mAlarmBatches.size() - 1; i >= 0; i--) {
             Batch b = mAlarmBatches.get(i);
@@ -3241,6 +3259,11 @@ class AlarmManagerService extends SystemService {
             if (alarmsForUid.size() == 0) {
                 mPendingBackgroundAlarms.removeAt(i);
             }
+        }
+        // If we're currently keying off of this app's alarms for doze transitions,
+        // make sure to reset to other triggers.
+        if (removedNextWakeFromIdle.value) {
+            mNextWakeFromIdle = null;
         }
         if (didRemove) {
             if (DEBUG_BATCH) {
@@ -3573,10 +3596,9 @@ class AlarmManagerService extends SystemService {
                     // this adjustment will be zero if we're late by
                     // less than one full repeat interval
                     alarm.count += (nowELAPSED - alarm.expectedWhenElapsed) / alarm.repeatInterval;
-
                     // Also schedule its next recurrence
                     final long delta = alarm.count * alarm.repeatInterval;
-                    final long nextElapsed = alarm.whenElapsed + delta;
+                    final long nextElapsed = alarm.expectedWhenElapsed + delta;
                     setImplLocked(alarm.type, alarm.when + delta, nextElapsed, alarm.windowLength,
                             maxTriggerTime(nowELAPSED, nextElapsed, alarm.repeatInterval),
                             alarm.repeatInterval, alarm.operation, null, null, alarm.flags, true,

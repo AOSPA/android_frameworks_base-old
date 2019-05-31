@@ -166,13 +166,16 @@
     <string name="usb_contaminant_title">USB port disabled</string>
 
     <!-- Message of USB contaminant presence dialog [CHAR LIMIT=NONE] -->
-    <string name="usb_contaminant_message">To protect your device from liquid or debris, the USB port is disabled and won\u2019t detect any accessories.\n\nYou\u2019ll be notified when it\u2019s safe to use the USB port again.</string>
+    <string name="usb_contaminant_message">To protect your device from liquid or debris, the USB port is disabled and won\u2019t detect any accessories.\n\nYou\u2019ll be notified when it\u2019s okay to use the USB port again.</string>
 
     <!-- Toast for enabling ports from USB contaminant dialog [CHAR LIMIT=NONE] -->
     <string name="usb_port_enabled">USB port enabled to detect chargers and accessories</string>
 
     <!-- Button text to disable contaminant detection [CHAR LIMIT=NONE] -->
     <string name="usb_disable_contaminant_detection">Enable USB</string>
+
+    <!-- Button text to disable contaminant detection [CHAR LIMIT=NONE] -->
+    <string name="learn_more">Learn more</string>
 
     <!-- Checkbox label for application compatibility mode ON (zooming app to look like it's running
          on a phone).  [CHAR LIMIT=25] -->
@@ -288,8 +291,18 @@
 
     <!-- Message shown when a biometric is authenticated, asking the user to confirm authentication [CHAR LIMIT=30] -->
     <string name="biometric_dialog_confirm">Confirm</string>
-    <!-- Button name on BiometricPrompt shown when a biometric is detected but not authenticated. Tapping the button resumes authentication [CHAR_LIMIT=30] -->
+    <!-- Button name on BiometricPrompt shown when a biometric is detected but not authenticated. Tapping the button resumes authentication [CHAR LIMIT=30] -->
     <string name="biometric_dialog_try_again">Try again</string>
+    <!-- Content description for empty spaces that are not taken by the biometric dialog. Clicking on these areas will cancel authentication and dismiss the biometric dialog [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_empty_space_description">Empty region, tap to cancel authentication</string>
+    <!-- Content description for the face icon when the device is not authenticating anymore [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_face_icon_description_idle">Please try again</string>
+    <!-- Content description for the face icon when the device is authenticating [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_face_icon_description_authenticating">Looking for your face</string>
+    <!-- Content description for the face icon when the user has been authenticated [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_face_icon_description_authenticated">Face authenticated</string>
+    <!-- Content description for the face icon when the user has been authenticated and the confirm button has been pressed [CHAR LIMIT=NONE] -->
+    <string name="biometric_dialog_face_icon_description_confirmed">Confirmed</string>
 
     <!-- Message shown when the system-provided fingerprint dialog is shown, asking for authentication -->
     <string name="fingerprint_dialog_touch_sensor">Touch the fingerprint sensor</string>
@@ -871,6 +884,8 @@
     <string name="quick_settings_secondary_label_until">Until <xliff:g id="time" example="7 am">%s</xliff:g></string>
     <!-- QuickSettings: Label for the toggle to activate Dark theme (A.K.A Dark Mode). [CHAR LIMIT=20] -->
     <string name="quick_settings_ui_mode_night_label">Dark Theme</string>
+    <!-- QuickSettings: Label for the Dark theme tile when enabled by battery saver. [CHAR LIMIT=40] -->
+    <string name="quick_settings_ui_mode_night_label_battery_saver">Dark Theme\nBattery saver</string>
 
     <!-- QuickSettings: NFC tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_nfc_label">NFC</string>
@@ -1088,7 +1103,10 @@
     <string name="battery_saver_notification_action_text">Turn off Battery Saver</string>
 
     <!-- Media projection permission dialog warning text. [CHAR LIMIT=NONE] -->
-    <string name="media_projection_dialog_text">While recording or casting, <xliff:g id="app_seeking_permission" example="Hangouts">%s</xliff:g> can capture any sensitive information, such as audio that you play and your passwords, payment info, photos, and messages.</string>
+    <string name="media_projection_dialog_text">While recording or casting, <xliff:g id="app_seeking_permission" example="Hangouts">%s</xliff:g> can capture any sensitive information that is displayed on your screen or played from your device, including sensitive information such as audio, passwords, payment info, photos and messages.</string>
+
+    <!-- Media projection permission dialog warning text for system services. [CHAR LIMIT=NONE] -->
+    <string name="media_projection_dialog_service_text">While recording or casting, the service providing this function can capture any sensitive information that is displayed on your screen or played from your device, including sensitive information such as audio, passwords, payment info, photos and messages.</string>
 
     <!-- Media projection permission dialog warning title. [CHAR LIMIT=NONE] -->
     <string name="media_projection_dialog_title">Exposing sensitive info during casting/recording </string>
@@ -1103,10 +1121,10 @@
     <string name="manage_notifications_text">Manage</string>
 
     <!-- Section title for notifications that do not vibrate or make noise. [CHAR LIMIT=40] -->
-    <string name="notification_section_header_gentle">Gentle notifications</string>
+    <string name="notification_section_header_gentle">Silent notifications</string>
 
     <!-- Content description for accessibility: Tapping this button will dismiss all gentle notifications [CHAR LIMIT=NONE] -->
-    <string name="accessibility_notification_section_header_gentle_clear_all">Clear all gentle notifications</string>
+    <string name="accessibility_notification_section_header_gentle_clear_all">Clear all silent notifications</string>
 
     <!-- The text to show in the notifications shade when dnd is suppressing notifications. [CHAR LIMIT=100] -->
     <string name="dnd_suppressing_shade_text">Notifications paused by Do Not Disturb</string>
@@ -1641,13 +1659,13 @@
     <string name="inline_minimize_button">Minimize</string>
 
     <!-- Notification inline controls: button to show notifications silently, without alerting the user [CHAR_LIMIT=35] -->
-    <string name="inline_silent_button_silent">Gentle</string>
+    <string name="inline_silent_button_silent">Silent</string>
 
     <!-- Notification inline controls: button to continue showing notifications silently [CHAR_LIMIT=35] -->
     <string name="inline_silent_button_stay_silent">Stay silent</string>
 
     <!-- Notification inline controls: button to make notifications alert the user [CHAR_LIMIT=35] -->
-    <string name="inline_silent_button_alert">Interruptive</string>
+    <string name="inline_silent_button_alert">Alerting</string>
 
     <!-- Notification inline controls: button to continue alerting the user when notifications arrive [CHAR_LIMIT=35] -->
     <string name="inline_silent_button_keep_alerting">Keep alerting</string>
@@ -1687,6 +1705,12 @@
 
     <!-- Notification: Control panel: Label for the app that posted this notification, if it's not the package that the notification was posted for -->
     <string name="notification_delegate_header">Proxied notification</string>
+
+    <!-- [CHAR LIMIT=40 Notification: Label for the inline channel blocking view -->
+    <string name="notification_channel_dialog_title">All <xliff:g id="app_name" example="YouTube">%1$s</xliff:g> notifications</string>
+
+    <!-- [CHAR LIMIT=20 Notification: "See more" button -->
+    <string name="see_more_title">See more</string>
 
     <!-- Notification Inline controls: describes what the app is doing in the background [CHAR_LIMIT=NONE] -->
     <string name="appops_camera">This app is using the camera.</string>
@@ -2355,7 +2379,7 @@
     <string name="auto_saver_title">Tap to schedule Battery Saver</string>
 
     <!-- The content of the notification to suggest enabling automatic battery saver.  [CHAR LIMIT=NONE]-->
-    <string name="auto_saver_text">Turn on automatically when battery is at <xliff:g id="percentage">%d</xliff:g>%%</string>
+    <string name="auto_saver_text">Turn on when battery is likely to run out</string>
 
     <!-- An action on the notification to suggest enabling automatic battery saver: Do not turn on automatic battery saver.  [CHAR LIMIT=NONE]-->
     <string name="no_auto_saver_action">No thanks</string>
@@ -2443,4 +2467,6 @@
     <string name="bubble_accessibility_action_move_bottom_left">Move bottom left</string>
     <!-- Action in accessibility menu to move the stack of bubbles to the bottom right of the screen. [CHAR LIMIT=30]-->
     <string name="bubble_accessibility_action_move_bottom_right">Move bottom right</string>
+    <!-- Text used for the bubble dismiss area. Bubbles dragged to, or flung towards, this area will go away. [CHAR LIMIT=20] -->
+    <string name="bubble_dismiss_text">Dismiss</string>
 </resources>

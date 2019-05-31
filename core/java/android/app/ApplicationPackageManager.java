@@ -1920,8 +1920,8 @@ public class ApplicationPackageManager extends PackageManager {
     private int installExistingPackageAsUser(String packageName, int installReason, int userId)
             throws NameNotFoundException {
         try {
-            int res = mPM.installExistingPackageAsUser(packageName, userId, 0 /*installFlags*/,
-                    installReason);
+            int res = mPM.installExistingPackageAsUser(packageName, userId,
+                    INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS, installReason, null);
             if (res == INSTALL_FAILED_INVALID_URI) {
                 throw new NameNotFoundException("Package " + packageName + " doesn't exist");
             }
@@ -2751,7 +2751,8 @@ public class ApplicationPackageManager extends PackageManager {
     /**
      * @hide
      */
-    public Drawable loadUnbadgedItemIcon(PackageItemInfo itemInfo, ApplicationInfo appInfo) {
+    public Drawable loadUnbadgedItemIcon(@NonNull PackageItemInfo itemInfo,
+            @Nullable ApplicationInfo appInfo) {
         if (itemInfo.showUserIcon != UserHandle.USER_NULL) {
             Bitmap bitmap = getUserManager().getUserIcon(itemInfo.showUserIcon);
             if (bitmap == null) {
@@ -2764,7 +2765,7 @@ public class ApplicationPackageManager extends PackageManager {
         if (itemInfo.packageName != null) {
             dr = getDrawable(itemInfo.packageName, itemInfo.icon, appInfo);
         }
-        if (dr == null && itemInfo != appInfo) {
+        if (dr == null && itemInfo != appInfo && appInfo != null) {
             dr = loadUnbadgedItemIcon(appInfo, appInfo);
         }
         if (dr == null) {

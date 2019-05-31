@@ -633,8 +633,8 @@
     <!-- Text shown when viewing channel settings for notifications related to vpn status -->
     <string name="notification_channel_vpn">VPN status</string>
 
-    <!-- Text shown when viewing channel settings for notifications related to remote device administration -->
-    <string name="notification_channel_device_admin">Device administration</string>
+    <!-- Notification channel name. This channel sends high-priority alerts from the user's IT admin for key updates about the user's work device or work profile. -->
+    <string name="notification_channel_device_admin">Alerts from your IT admin</string>
 
     <!-- Text shown when viewing channel settings for notifications related to important alerts -->
     <string name="notification_channel_alerts">Alerts</string>
@@ -1533,7 +1533,7 @@
     <!-- Message shown during face acquisition when only the left part of the user's face was detected [CHAR LIMIT=50] -->
     <string name="face_acquired_too_left">Move phone to the right.</string>
     <!-- Message shown during face acquisition when the user is not front facing the sensor [CHAR LIMIT=50] -->
-    <string name="face_acquired_poor_gaze">Look at the screen with your eyes open.</string>
+    <string name="face_acquired_poor_gaze">Please look more directly at your device.</string>
     <!-- Message shown during face acquisition when the user is not detected [CHAR LIMIT=50] -->
     <string name="face_acquired_not_detected">Can\u2019t see your face. Look at the phone.</string>
     <!-- Message shown during face acquisition when the device is not steady [CHAR LIMIT=50] -->
@@ -1561,7 +1561,7 @@
     <!-- Error message shown when the face hardware can't be accessed. [CHAR LIMIT=69] -->
     <string name="face_error_hw_not_available">Can\u2019t verify face. Hardware not available.</string>
     <!-- Error message shown when the face hardware timer has expired and the user needs to restart the operation. [CHAR LIMIT=50] -->
-    <string name="face_error_timeout">Face timeout reached. Try again.</string>
+    <string name="face_error_timeout">Try face authentication again.</string>
     <!-- Error message shown when the face hardware has run out of room for storing faces. [CHAR LIMIT=69] -->
     <string name="face_error_no_space">Can\u2019t store new face data. Delete an old one first.</string>
     <!-- Generic error message shown when the face operation (e.g. enrollment or authentication) is canceled. Generally not shown to the user. [CHAR LIMIT=50] -->
@@ -1725,6 +1725,11 @@
     <string name="permlab_access_notification_policy">access Do Not Disturb</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_access_notification_policy">Allows the app to read and write Do Not Disturb configuration.</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permlab_startViewPermissionUsage">start view permission usage</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_startViewPermissionUsage">Allows the holder to start the permission usage for an app. Should never be needed for normal apps.</string>
 
     <!-- Policy administration -->
 
@@ -3609,7 +3614,7 @@
     <!-- Message of notification shown when contaminant is detected on the USB port. [CHAR LIMIT=NONE] -->
     <string name="usb_contaminant_detected_message">USB port is automatically disabled. Tap to learn more.</string>
     <!-- Title of notification shown when contaminant is no longer detected on the USB port. [CHAR LIMIT=NONE] -->
-    <string name="usb_contaminant_not_detected_title">Safe to use USB port</string>
+    <string name="usb_contaminant_not_detected_title">OK to use USB port</string>
     <!-- Message of notification shown when contaminant is no longer detected on the USB port. [CHAR LIMIT=NONE] -->
     <string name="usb_contaminant_not_detected_message">Phone no longer detects liquid or debris.</string>
 
@@ -5035,13 +5040,8 @@
     <!-- Notification content shown when new SMS/MMS is received while the device is locked [CHAR LIMIT=NONE] -->
     <string name="new_sms_notification_content">Open SMS app to view</string>
 
-    <!-- Notification title shown when user profile is credential encrypted and requires the user to unlock before some features are usable [CHAR LIMIT=30] -->
-    <string name="user_encrypted_title">Some functionality may be limited</string>
-    <!-- Notification message shown when user profile is credential encrypted and requires the user to unlock before some features are usable [CHAR LIMIT=30] -->
-    <string name="user_encrypted_message">Tap to unlock</string>
-    <!-- Notification detail shown when user profile is credential encrypted and requires the user to unlock before some features are usable [CHAR LIMIT=30] -->
-    <string name="user_encrypted_detail">User data locked</string>
-
+    <!-- Notification title shown when user profile is credential encrypted and requires the user to unlock before some features are usable [CHAR LIMIT=36] -->
+    <string name="profile_encrypted_title">Some functionality may be limited</string>
     <!-- Notification detail shown when work profile is credential encrypted and requires the user to unlock before some features are usable [CHAR LIMIT=30] -->
     <string name="profile_encrypted_detail">Work profile locked</string>
     <!-- Notification message shown when work profile is credential encrypted and requires the user to unlock before some features are usable [CHAR LIMIT=30] -->

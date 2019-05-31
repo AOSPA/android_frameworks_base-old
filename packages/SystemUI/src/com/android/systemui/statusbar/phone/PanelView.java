@@ -43,8 +43,8 @@ import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.classifier.FalsingManagerFactory;
-import com.android.systemui.classifier.FalsingManagerFactory.FalsingManager;
 import com.android.systemui.doze.DozeLog;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.FlingAnimationUtils;
 import com.android.systemui.statusbar.StatusBarState;
@@ -1188,14 +1188,13 @@ public abstract class PanelView extends FrameLayout {
     }
 
     protected void notifyBarPanelExpansionChanged() {
-        float fraction = mInstantExpanding ? 1 : mExpandedFraction;
         if (mBar != null) {
-            mBar.panelExpansionChanged(fraction, fraction > 0f
+            mBar.panelExpansionChanged(mExpandedFraction, mExpandedFraction > 0f
                     || mPeekAnimator != null || mInstantExpanding
                     || isPanelVisibleBecauseOfHeadsUp() || mTracking || mHeightAnimator != null);
         }
         if (mExpansionListener != null) {
-            mExpansionListener.onPanelExpansionChanged(fraction, mTracking);
+            mExpansionListener.onPanelExpansionChanged(mExpandedFraction, mTracking);
         }
     }
 

@@ -29,6 +29,7 @@ import android.graphics.drawable.AnimatedVectorDrawable;
 import android.graphics.drawable.Drawable;
 import android.hardware.biometrics.BiometricSourceType;
 import android.os.Handler;
+import android.os.Trace;
 import android.util.AttributeSet;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -43,8 +44,10 @@ import com.android.systemui.R;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.KeyguardAffordanceView;
+import com.android.systemui.statusbar.phone.ScrimController.ScrimVisibility;
 import com.android.systemui.statusbar.policy.AccessibilityController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
+import com.android.systemui.statusbar.policy.KeyguardMonitor;
 import com.android.systemui.statusbar.policy.UserInfoController.OnUserInfoChangedListener;
 
 import javax.inject.Inject;
@@ -70,6 +73,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
     private final AccessibilityController mAccessibilityController;
     private final DockManager mDockManager;
     private final Handler mMainHandler;
+    private final KeyguardMonitor mKeyguardMonitor;
 
     private int mLastState = 0;
     private boolean mTransientBiometricsError;
@@ -89,7 +93,18 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
     private float mDozeAmount;
     private int mIconRes;
     private boolean mWasPulsingOnThisFrame;
+    private boolean mWakeAndUnlockRunning;
+    private boolean mKeyguardShowing;
+    private boolean mShowingLaunchAffordance;
 
+    private final KeyguardMonitor.Callback mKeyguardMonitorCallback =
+            new KeyguardMonitor.Callback() {
+                @Override
+                public void onKeyguardShowingChanged() {
+                    mKeyguardShowing = mKeyguardMonitor.isShowing();
+                    update(false /* force */);
+                }
+            };
     private final Runnable mDrawOffTimeout = () -> update(true /* forceUpdate */);
     private final DockManager.DockEventListener mDockEventListener =
             new DockManager.DockEventListener() {
@@ -148,6 +163,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
             StatusBarStateController statusBarStateController,
             ConfigurationController configurationController,
             AccessibilityController accessibilityController,
+            KeyguardMonitor keyguardMonitor,
             @Nullable DockManager dockManager,
             @Named(MAIN_HANDLER_NAME) Handler mainHandler) {
         super(context, attrs);
@@ -157,6 +173,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
         mAccessibilityController = accessibilityController;
         mConfigurationController = configurationController;
         mStatusBarStateController = statusBarStateController;
+        mKeyguardMonitor = keyguardMonitor;
         mDockManager = dockManager;
         mMainHandler = mainHandler;
     }
@@ -166,6 +183,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
         super.onAttachedToWindow();
         mStatusBarStateController.addCallback(this);
         mConfigurationController.addCallback(this);
+        mKeyguardMonitor.addCallback(mKeyguardMonitorCallback);
         mKeyguardUpdateMonitor.registerCallback(mUpdateMonitorCallback);
         mUnlockMethodCache.addListener(this);
         mSimLocked = mKeyguardUpdateMonitor.isSimPinSecure();
@@ -181,6 +199,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
         mStatusBarStateController.removeCallback(this);
         mConfigurationController.removeCallback(this);
         mKeyguardUpdateMonitor.removeCallback(mUpdateMonitorCallback);
+        mKeyguardMonitor.removeCallback(mKeyguardMonitorCallback);
         mUnlockMethodCache.removeListener(this);
         if (mDockManager != null) {
             mDockManager.removeListener(mDockEventListener);
@@ -255,9 +274,12 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
                             if (getDrawable() == animation && state == getState()
                                     && doesAnimationLoop(iconAnimRes)) {
                                 animation.start();
+                            } else {
+                                Trace.endAsyncSection("LockIcon#Animation", state);
                             }
                         }
                     });
+                    Trace.beginAsyncSection("LockIcon#Animation", state);
                     animation.start();
                 }
             }
@@ -277,7 +299,9 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
             mLastBouncerVisible = mBouncerVisible;
         }
 
-        boolean invisible = mDozing && (!mPulsing || mDocked);
+        boolean onAodNotPulsingOrDocked = mDozing && (!mPulsing || mDocked);
+        boolean invisible = onAodNotPulsingOrDocked || mWakeAndUnlockRunning
+                || mShowingLaunchAffordance;
         setVisibility(invisible ? INVISIBLE : VISIBLE);
         updateClickability();
     }
@@ -373,7 +397,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
         KeyguardUpdateMonitor updateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
         if (mTransientBiometricsError) {
             return STATE_BIOMETRICS_ERROR;
-        } else if (mUnlockMethodCache.canSkipBouncer() && !mSimLocked) {
+        } else if ((mUnlockMethodCache.canSkipBouncer() || !mKeyguardShowing) && !mSimLocked) {
             return STATE_LOCK_OPEN;
         } else if (updateMonitor.isFaceDetectionRunning()) {
             return STATE_SCANNING_FACE;
@@ -449,5 +473,35 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
     @Override
     public void onUnlockMethodStateChanged() {
         update();
+    }
+
+    /**
+     * We need to hide the lock whenever there's a fingerprint unlock, otherwise you'll see the
+     * icon on top of the black front scrim.
+     */
+    public void onBiometricAuthModeChanged(boolean wakeAndUnlock) {
+        if (wakeAndUnlock) {
+            mWakeAndUnlockRunning = true;
+        }
+        update();
+    }
+
+    /**
+     * When we're launching an affordance, like double pressing power to open camera.
+     */
+    public void onShowingLaunchAffordanceChanged(boolean showing) {
+        mShowingLaunchAffordance = showing;
+        update();
+    }
+
+    /**
+     * Called whenever the scrims become opaque, transparent or semi-transparent.
+     */
+    public void onScrimVisibilityChanged(@ScrimVisibility int scrimsVisible) {
+        if (mWakeAndUnlockRunning
+                && scrimsVisible == ScrimController.VISIBILITY_FULLY_TRANSPARENT) {
+            mWakeAndUnlockRunning = false;
+            update();
+        }
     }
 }

@@ -16,7 +16,6 @@
 
 package android.os.storage;
 
-import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.IVold;
 
@@ -85,30 +84,6 @@ public abstract class StorageManagerInternal {
     public abstract int getExternalStorageMountMode(int uid, String packageName);
 
     /**
-     * Create storage sandbox for the given package.
-     *
-     * <p> This will involve calling into vold to setup appropriate bind mounts.
-     *
-     * @param packageName The package for which the sandbox needs to be created.
-     * @param appId The appId for the given package.
-     * @param sharedUserId The sharedUserId for given package if it specified
-     *      {@code android:sharedUserId} in the manifest, otherwise {@code null}
-     * @param userId The userId in which the sandbox needs to be created.
-     */
-    public abstract void prepareSandboxForApp(@NonNull String packageName, int appId,
-            @Nullable String sharedUserId, int userId);
-
-    /**
-     * Delete storage sandbox for the given package.
-     *
-     * @param packageName The package for which the sandbox needs to be destroyed.
-     * @param sharedUserId The sharedUserId if specified by the package.
-     * @param userId The userId in which the sandbox needs to be destroyed.
-     */
-    public abstract void destroySandboxForApp(@NonNull String packageName,
-            @Nullable String sharedUserId, int userId);
-
-    /**
      * A listener for reset events in the StorageManagerService.
      */
     public interface ResetListener {
@@ -129,7 +104,9 @@ public abstract class StorageManagerInternal {
     public abstract void addResetListener(ResetListener listener);
 
     /**
-     * Return the sandboxId for the given package on external storage.
+     * Notified when any app op changes so that storage mount points can be updated if the app op
+     * affects them.
      */
-    public abstract String getSandboxId(String packageName);
+    public abstract void onAppOpsChanged(int code, int uid,
+            @Nullable String packageName, int mode);
 }

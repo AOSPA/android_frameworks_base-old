@@ -1881,6 +1881,31 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.action.REVIEW_PERMISSIONS";
 
     /**
+     * Activity action: Launch UI to show information about the usage
+     * of a given permission. This action would be handled by apps that
+     * want to show details about how and why given permission is being
+     * used.
+     * <p>
+     * <strong>Important:</strong>You must protect the activity that handles
+     * this action with the {@link android.Manifest.permission#START_VIEW_PERMISSION_USAGE
+     *  START_VIEW_PERMISSION_USAGE} permission to ensure that only the
+     * system can launch this activity. The system will not launch
+     * activities that are not properly protected.
+     *
+     * <p>
+     * Input: {@code android.intent.extra.PERMISSION_NAME} specifies the permission
+     * for which the launched UI would be targeted.
+     * </p>
+     * <p>
+     * Output: Nothing.
+     * </p>
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    @RequiresPermission(android.Manifest.permission.START_VIEW_PERMISSION_USAGE)
+    public static final String ACTION_VIEW_PERMISSION_USAGE =
+            "android.intent.action.VIEW_PERMISSION_USAGE";
+
+    /**
      * Activity action: Launch UI to manage a default app.
      * <p>
      * Input: {@link #EXTRA_ROLE_NAME} specifies the role of the default app which will be managed
@@ -2444,6 +2469,18 @@ public class Intent implements Parcelable, Cloneable {
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_PACKAGE_ENABLE_ROLLBACK =
             "android.intent.action.PACKAGE_ENABLE_ROLLBACK";
+    /**
+     * Broadcast Action: Sent to the system rollback manager when the rollback for a certain
+     * package needs to be cancelled.
+     *
+     * <p class="note">This intent is sent by PackageManagerService to notify RollbackManager
+     * that enabling a specific rollback has timed out.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_CANCEL_ENABLE_ROLLBACK =
+            "android.intent.action.CANCEL_ENABLE_ROLLBACK";
     /**
      * Broadcast Action: A rollback has been committed.
      *
