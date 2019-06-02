@@ -153,8 +153,8 @@ public class ChooserActivity extends ResolverActivity {
      * {@link AppPredictionManager} will be queried for direct share targets.
      */
     // TODO(b/123089490): Replace with system flag
-    private static final boolean USE_PREDICTION_MANAGER_FOR_DIRECT_TARGETS = false;
-    private static final boolean USE_PREDICTION_MANAGER_FOR_SHARE_ACTIVITIES = false;
+    private static final boolean USE_PREDICTION_MANAGER_FOR_DIRECT_TARGETS = true;
+    private static final boolean USE_PREDICTION_MANAGER_FOR_SHARE_ACTIVITIES = true;
     // TODO(b/123088566) Share these in a better way.
     private static final String APP_PREDICTION_SHARE_UI_SURFACE = "share";
     public static final String LAUNCH_LOCATON_DIRECT_SHARE = "direct_share";
@@ -177,7 +177,7 @@ public class ChooserActivity extends ResolverActivity {
      */
     private static final int NO_DIRECT_SHARE_ANIM_IN_MILLIS = 200;
 
-    private static final float DIRECT_SHARE_EXPANSION_RATE = 0.7f;
+    private static final float DIRECT_SHARE_EXPANSION_RATE = 0.78f;
 
     // TODO(b/121287224): Re-evaluate this limit
     private static final int SHARE_TARGET_QUERY_PACKAGE_LIMIT = 20;
@@ -201,6 +201,9 @@ public class ChooserActivity extends ResolverActivity {
 
     private long mChooserShownTime;
     protected boolean mIsSuccessfullySelected;
+
+    private long mQueriedTargetServicesTimeMs;
+    private long mQueriedSharingShortcutsTimeMs;
 
     private ChooserListAdapter mChooserListAdapter;
     private ChooserRowAdapter mChooserRowAdapter;
@@ -273,6 +276,8 @@ public class ChooserActivity extends ResolverActivity {
                     sri.connection.destroy();
                     mServiceConnections.remove(sri.connection);
                     if (mServiceConnections.isEmpty()) {
+                        logDirectShareTargetReceived(
+                                MetricsEvent.ACTION_DIRECT_SHARE_TARGETS_LOADED_CHOOSER_SERVICE);
                         sendVoiceChoicesIfNeeded();
                     }
                     break;
@@ -283,6 +288,8 @@ public class ChooserActivity extends ResolverActivity {
                     }
 
                     unbindRemainingServices();
+                    logDirectShareTargetReceived(
+                            MetricsEvent.ACTION_DIRECT_SHARE_TARGETS_LOADED_CHOOSER_SERVICE);
                     sendVoiceChoicesIfNeeded();
                     mChooserListAdapter.completeServiceTargetLoading();
                     break;
@@ -305,6 +312,8 @@ public class ChooserActivity extends ResolverActivity {
                     break;
 
                 case SHORTCUT_MANAGER_SHARE_TARGET_RESULT_COMPLETED:
+                    logDirectShareTargetReceived(
+                            MetricsEvent.ACTION_DIRECT_SHARE_TARGETS_LOADED_SHORTCUT_MANAGER);
                     sendVoiceChoicesIfNeeded();
                     break;
 
@@ -770,7 +779,7 @@ public class ChooserActivity extends ResolverActivity {
                 }
             }
         } catch (SecurityException | NullPointerException e) {
-            Log.w(TAG, "Error loading file preview", e);
+            logContentPreviewWarning(uri);
         }
 
         if (TextUtils.isEmpty(fileName)) {
@@ -782,6 +791,14 @@ public class ChooserActivity extends ResolverActivity {
         }
 
         return new FileInfo(fileName, hasThumbnail);
+    }
+
+    private void logContentPreviewWarning(Uri uri) {
+        // The ContentResolver already logs the exception. Log something more informative.
+        Log.w(TAG, "Could not load (" + uri.toString() + ") thumbnail/name for preview. If "
+                + "desired, consider using Intent#createChooser to launch the ChooserActivity, "
+                + "and set your Intent's clipData and flags in accordance with that method's "
+                + "documentation");
     }
 
     private ViewGroup displayFileContentPreview(Intent targetIntent, LayoutInflater layoutInflater,
@@ -1155,6 +1172,8 @@ public class ChooserActivity extends ResolverActivity {
     }
 
     void queryTargetServices(ChooserListAdapter adapter) {
+        mQueriedTargetServicesTimeMs = System.currentTimeMillis();
+
         final PackageManager pm = getPackageManager();
         ShortcutManager sm = (ShortcutManager) getSystemService(ShortcutManager.class);
         int targetsToQuery = 0;
@@ -1281,6 +1300,7 @@ public class ChooserActivity extends ResolverActivity {
 
     private void queryDirectShareTargets(
                 ChooserListAdapter adapter, boolean skipAppPredictionService) {
+        mQueriedSharingShortcutsTimeMs = System.currentTimeMillis();
         if (!skipAppPredictionService) {
             AppPredictor appPredictor = getAppPredictorForDirectShareIfEnabled();
             if (appPredictor != null) {
@@ -1389,6 +1409,14 @@ public class ChooserActivity extends ResolverActivity {
 
     public void onSetupVoiceInteraction() {
         // Do nothing. We'll send the voice stuff ourselves.
+    }
+
+    private void logDirectShareTargetReceived(int logCategory) {
+        final long queryTime =
+                logCategory == MetricsEvent.ACTION_DIRECT_SHARE_TARGETS_LOADED_SHORTCUT_MANAGER
+                        ? mQueriedSharingShortcutsTimeMs : mQueriedTargetServicesTimeMs;
+        final int apiLatency = (int) (System.currentTimeMillis() - queryTime);
+        getMetricsLogger().write(new LogMaker(logCategory).setSubtype(apiLatency));
     }
 
     void updateModelAndChooserCounts(TargetInfo info) {
@@ -1644,7 +1672,7 @@ public class ChooserActivity extends ResolverActivity {
         try {
             return ImageUtils.loadThumbnail(getContentResolver(), uri, size);
         } catch (IOException | NullPointerException | SecurityException ex) {
-            Log.w(TAG, "Error loading preview thumbnail for uri: " + uri.toString(), ex);
+            logContentPreviewWarning(uri);
         }
         return null;
     }
@@ -2037,21 +2065,29 @@ public class ChooserActivity extends ResolverActivity {
                     return;
                 }
 
-                int lastHeight = 0;
+                int directShareHeight = 0;
                 rowsToShow = Math.min(4, rowsToShow);
                 for (int i = 0; i < Math.min(rowsToShow, mAdapterView.getChildCount()); i++) {
-                    lastHeight = mAdapterView.getChildAt(i).getHeight();
-                    offset += lastHeight;
+                    View child = mAdapterView.getChildAt(i);
+                    int height = child.getHeight();
+                    offset += height;
+
+                    if (child.getTag() != null
+                            && (child.getTag() instanceof DirectShareViewHolder)) {
+                        directShareHeight = height;
+                    }
                 }
 
                 boolean isPortrait = getResources().getConfiguration().orientation
                                          == Configuration.ORIENTATION_PORTRAIT;
-                if (lastHeight != 0 && isSendAction(getTargetIntent()) && isPortrait) {
+                if (directShareHeight != 0 && isSendAction(getTargetIntent()) && isPortrait) {
                     // make sure to leave room for direct share 4->8 expansion
-                    int expansionArea =
-                            (int) (mResolverDrawerLayout.getAlwaysShowHeight()
-                                    / DIRECT_SHARE_EXPANSION_RATE);
-                    offset = Math.min(offset, bottom - top - lastHeight - expansionArea);
+                    int requiredExpansionHeight =
+                            (int) (directShareHeight / DIRECT_SHARE_EXPANSION_RATE);
+                    int minHeight = bottom - top - mResolverDrawerLayout.getAlwaysShowHeight()
+                                        - requiredExpansionHeight;
+
+                    offset = Math.min(offset, minHeight);
                 }
 
                 mResolverDrawerLayout.setCollapsibleHeightReserved(Math.min(offset, bottom - top));
@@ -2071,6 +2107,8 @@ public class ChooserActivity extends ResolverActivity {
         private static final int MAX_SHORTCUT_TARGETS_PER_APP = 8;
 
         private static final int MAX_SERVICE_TARGETS = 8;
+
+        private int mNumShortcutResults = 0;
 
         // Reserve spots for incoming direct share targets by adding placeholders
         private ChooserTargetInfo mPlaceHolderTargetInfo = new PlaceHolderTargetInfo();
@@ -2178,7 +2216,7 @@ public class ChooserActivity extends ResolverActivity {
         protected void onBindView(View view, TargetInfo info) {
             super.onBindView(view, info);
 
-            // If target is loading, show a special placeholder shape in the label
+            // If target is loading, show a special placeholder shape in the label, make unclickable
             final ViewHolder holder = (ViewHolder) view.getTag();
             if (info instanceof PlaceHolderTargetInfo) {
                 final int maxWidth = getResources().getDimensionPixelSize(
@@ -2186,9 +2224,12 @@ public class ChooserActivity extends ResolverActivity {
                 holder.text.setMaxWidth(maxWidth);
                 holder.text.setBackground(getResources().getDrawable(
                         R.drawable.chooser_direct_share_label_placeholder, getTheme()));
+                // Prevent rippling by removing background containing ripple
+                holder.itemView.setBackground(null);
             } else {
                 holder.text.setMaxWidth(Integer.MAX_VALUE);
                 holder.text.setBackground(null);
+                holder.itemView.setBackground(holder.defaultItemViewBackground);
             }
         }
 
@@ -2407,8 +2448,14 @@ public class ChooserActivity extends ResolverActivity {
                     // This incents ChooserTargetServices to define what's truly better.
                     targetScore = lastScore * 0.95f;
                 }
-                shouldNotify |= insertServiceTarget(
+                boolean isInserted = insertServiceTarget(
                         new SelectableTargetInfo(origTarget, target, targetScore));
+
+                if (isInserted && isShortcutResult) {
+                    mNumShortcutResults++;
+                }
+
+                shouldNotify |= isInserted;
 
                 if (DEBUG) {
                     Log.d(TAG, " => " + target.toString() + " score=" + targetScore
@@ -2423,6 +2470,10 @@ public class ChooserActivity extends ResolverActivity {
             if (shouldNotify) {
                 notifyDataSetChanged();
             }
+        }
+
+        private int getNumShortcutResults() {
+            return mNumShortcutResults;
         }
 
         /**
@@ -2881,10 +2932,10 @@ public class ChooserActivity extends ResolverActivity {
 
             if (startType != lastStartType
                     || rowPosition == getContentPreviewRowCount() + getProfileRowCount()) {
-                row.setBackground(
+                row.setForeground(
                         getResources().getDrawable(R.drawable.chooser_row_layer_list, null));
             } else {
-                row.setBackground(null);
+                row.setForeground(null);
             }
 
             int columnCount = holder.getColumnCount();
@@ -2955,7 +3006,15 @@ public class ChooserActivity extends ResolverActivity {
         }
 
         public void handleScroll(View v, int y, int oldy) {
-            if (mDirectShareViewHolder != null) {
+            // Only expand direct share area if there is a minimum number of shortcuts,
+            // which will help reduce the amount of visible shuffling due to older-style
+            // direct share targets.
+            int orientation = getResources().getConfiguration().orientation;
+            boolean canExpandDirectShare =
+                    mChooserListAdapter.getNumShortcutResults() > getMaxTargetsPerRow()
+                    && orientation == Configuration.ORIENTATION_PORTRAIT;
+
+            if (mDirectShareViewHolder != null && canExpandDirectShare) {
                 mDirectShareViewHolder.handleScroll(mAdapterView, y, oldy, getMaxTargetsPerRow());
             }
         }
