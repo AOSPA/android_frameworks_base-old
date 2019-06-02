@@ -2361,4 +2361,12 @@ enum PageId {
     // OPEN: Settings >  Network & internet > Mobile network > Delete sim > (answer yes to
     //       confirmation)
     DIALOG_DELETE_SIM_PROGRESS = 1714;
+
+    // Settings > Apps and notifications > Notifications > Gentle notifications
+    GENTLE_NOTIFICATIONS_SCREEN = 1715;
+
+    // OPEN: Settings > System > Gestures > Global Actions Panel
+    // CATEGORY: SETTINGS
+    // OS: Q
+    GLOBAL_ACTIONS_PANEL_SETTINGS = 1800;
 }

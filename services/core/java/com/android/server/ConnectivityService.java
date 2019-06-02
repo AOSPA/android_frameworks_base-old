@@ -45,6 +45,7 @@ import static android.net.shared.NetworkMonitorUtils.isValidationRequired;
 import static android.os.Process.INVALID_UID;
 import static android.system.OsConstants.IPPROTO_TCP;
 import static android.system.OsConstants.IPPROTO_UDP;
+import static android.telephony.PhoneStateListener.LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE;
 
 import static com.android.internal.util.Preconditions.checkNotNull;
 
@@ -142,6 +143,7 @@ import android.os.UserManager;
 import android.provider.Settings;
 import android.security.Credentials;
 import android.security.KeyStore;
+import android.telephony.PhoneStateListener;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
@@ -543,6 +545,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     private static final int EVENT_UPDATE_TCP_BUFFER_FOR_5G = 160;
 
+    /**
+     * Used to save the active subscription ID info.
+     * arg1 = subId
+     */
+    private static final int EVENT_UPDATE_ACTIVE_DATA_SUBID = 161;
+
     private static String eventName(int what) {
         return sMagicDecoderRing.get(what, Integer.toString(what));
     }
@@ -551,6 +559,17 @@ public class ConnectivityService extends IConnectivityManager.Stub
         return IDnsResolver.Stub
                 .asInterface(ServiceManager.getService("dnsresolver"));
     }
+
+    private PhoneStateListener mPhoneStateListener = new PhoneStateListener() {
+        @Override
+        public void onActiveDataSubscriptionIdChanged(int subId) {
+             if (subId != mPreferredSubId) {
+                 mHandler.sendMessage(mHandler.obtainMessage(EVENT_UPDATE_ACTIVE_DATA_SUBID, subId, 0));
+             }
+        }
+    };
+
+    private int mPreferredSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
 
     /** Handler thread used for both of the handlers below. */
     @VisibleForTesting
@@ -892,6 +911,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         mKeyStore = KeyStore.getInstance();
         mTelephonyManager = (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);
         mSubscriptionManager = SubscriptionManager.from(mContext);
+        mTelephonyManager.listen(mPhoneStateListener, LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE);
 
         // To ensure uid rules are synchronized with Network Policy, register for
         // NetworkPolicyManagerService events must happen prior to NetworkPolicyManagerService
@@ -3857,6 +3877,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     break;
                 case EVENT_UPDATE_TCP_BUFFER_FOR_5G:
                     handleUpdateTCPBuffersfor5G();
+                    break;
+                case EVENT_UPDATE_ACTIVE_DATA_SUBID:
+                    handleUpdateActiveDataSubId(msg.arg1);
                     break;
             }
         }
@@ -7209,12 +7232,13 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     private boolean satisfiesMobileNetworkDataCheck(NetworkCapabilities agentNc) {
         if (agentNc != null && agentNc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+            if (mPreferredSubId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) return true;
+
             if((agentNc.hasCapability(NET_CAPABILITY_EIMS) &&
                  (mSubscriptionManager != null &&
                   (mSubscriptionManager.getActiveSubscriptionInfoList() == null ||
                    mSubscriptionManager.getActiveSubscriptionInfoList().size()==0))) ||
-               (getIntSpecifier(agentNc.getNetworkSpecifier()) == SubscriptionManager
-                                    .getDefaultDataSubscriptionId())) {
+               (getIntSpecifier(agentNc.getNetworkSpecifier()) == mPreferredSubId)) {
                 return true;
             } else {
                 return false;
@@ -7269,5 +7293,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
             log("handleUpdateTCPBuffersfor5G nai " + ntwAgent);
         if (ntwAgent != null)
             updateTcpBufferSizes(ntwAgent);
+    }
+
+    private void handleUpdateActiveDataSubId(int subId) {
+        log("Setting mPreferredSubId to " + subId);
+        mPreferredSubId = subId;
+        rematchAllNetworksAndRequests(null, 0);
     }
 }

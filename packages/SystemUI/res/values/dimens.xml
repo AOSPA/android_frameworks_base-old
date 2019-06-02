@@ -60,6 +60,9 @@
     <!-- Height of notification icons in the status bar -->
     <dimen name="status_bar_icon_size">@*android:dimen/status_bar_icon_size</dimen>
 
+    <!-- Default horizontal drawable padding for status bar icons. -->
+    <dimen name="status_bar_horizontal_padding">2.5dp</dimen>
+
     <!-- Height of the battery icon in the status bar. -->
     <dimen name="status_bar_battery_icon_height">13.0dp</dimen>
 
@@ -591,6 +594,8 @@
     <dimen name="keyguard_clock_notifications_margin">30dp</dimen>
     <!-- Minimum margin between clock and status bar -->
     <dimen name="keyguard_clock_top_margin">36dp</dimen>
+    <!-- The margin between top of clock and bottom of lock icon. -->
+    <dimen name="keyguard_clock_lock_margin">16dp</dimen>
 
     <item name="scrim_behind_alpha" format="float" type="dimen">0.62</item>
 
@@ -689,6 +694,9 @@
 
     <!-- The top padding of the clear all button -->
     <dimen name="clear_all_padding_top">12dp</dimen>
+
+    <dimen name="notification_section_header_height">40dp</dimen>
+    <dimen name="notification_section_header_padding_left">16dp</dimen>
 
     <!-- Largest size an avatar might need to be drawn in the user picker, status bar, or
          quick settings header -->
@@ -1121,12 +1129,8 @@
     <dimen name="bubble_stack_starting_offset_y">100dp</dimen>
     <!-- Size of image buttons in the bubble header -->
     <dimen name="bubble_header_icon_size">48dp</dimen>
-    <!-- Size of the app icon shown in the bubble permission view -->
-    <dimen name="bubble_permission_icon_size">24dp</dimen>
     <!-- Space between the pointer triangle and the bubble expanded view -->
     <dimen name="bubble_pointer_margin">8dp</dimen>
-    <!-- Height of the permission prompt shown with bubbles -->
-    <dimen name="bubble_permission_height">120dp</dimen>
 
     <!-- Size of the RAT type for CellularTile -->
     <dimen name="celltile_rat_type_size">10sp</dimen>

@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static com.android.systemui.Dependency.MAIN_HANDLER_NAME;
 import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
 
 import android.content.Context;
@@ -27,6 +28,7 @@ import android.graphics.drawable.Animatable2;
 import android.graphics.drawable.AnimatedVectorDrawable;
 import android.graphics.drawable.Drawable;
 import android.hardware.biometrics.BiometricSourceType;
+import android.os.Handler;
 import android.util.AttributeSet;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -34,6 +36,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import androidx.annotation.Nullable;
 
 import com.android.internal.graphics.ColorUtils;
+import com.android.internal.telephony.IccCardConstants;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.systemui.R;
@@ -66,12 +69,14 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private final AccessibilityController mAccessibilityController;
     private final DockManager mDockManager;
+    private final Handler mMainHandler;
 
     private int mLastState = 0;
     private boolean mTransientBiometricsError;
     private boolean mScreenOn;
     private boolean mLastScreenOn;
     private boolean mIsFaceUnlockState;
+    private boolean mSimLocked;
     private int mDensity;
     private boolean mPulsing;
     private boolean mDozing;
@@ -82,6 +87,8 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
     private boolean mLastBouncerVisible;
     private int mIconColor;
     private float mDozeAmount;
+    private int mIconRes;
+    private boolean mWasPulsingOnThisFrame;
 
     private final Runnable mDrawOffTimeout = () -> update(true /* forceUpdate */);
     private final DockManager.DockEventListener mDockEventListener =
@@ -112,6 +119,14 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
                 }
 
                 @Override
+                public void onSimStateChanged(int subId, int slotId,
+                        IccCardConstants.State simState) {
+                    boolean oldSimLocked = mSimLocked;
+                    mSimLocked = mKeyguardUpdateMonitor.isSimPinSecure();
+                    update(oldSimLocked != mSimLocked);
+                }
+
+                @Override
                 public void onKeyguardVisibilityChanged(boolean showing) {
                     update();
                 }
@@ -133,7 +148,8 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
             StatusBarStateController statusBarStateController,
             ConfigurationController configurationController,
             AccessibilityController accessibilityController,
-            @Nullable DockManager dockManager) {
+            @Nullable DockManager dockManager,
+            @Named(MAIN_HANDLER_NAME) Handler mainHandler) {
         super(context, attrs);
         mContext = context;
         mUnlockMethodCache = UnlockMethodCache.getInstance(context);
@@ -142,6 +158,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
         mConfigurationController = configurationController;
         mStatusBarStateController = statusBarStateController;
         mDockManager = dockManager;
+        mMainHandler = mainHandler;
     }
 
     @Override
@@ -151,6 +168,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
         mConfigurationController.addCallback(this);
         mKeyguardUpdateMonitor.registerCallback(mUpdateMonitorCallback);
         mUnlockMethodCache.addListener(this);
+        mSimLocked = mKeyguardUpdateMonitor.isSimPinSecure();
         if (mDockManager != null) {
             mDockManager.addListener(mDockEventListener);
         }
@@ -214,39 +232,36 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
                     mPulsing, mLastDozing, mDozing, mBouncerVisible);
             boolean isAnim = iconAnimRes != -1;
 
-            Drawable icon;
-            if (isAnim) {
-                // Load the animation resource.
-                icon = mContext.getDrawable(iconAnimRes);
-            } else {
-                // Load the static icon resource based on the current state.
-                icon = getIconForState(state);
-            }
+            int iconRes = isAnim ? iconAnimRes : getIconForState(state);
+            if (iconRes != mIconRes) {
+                mIconRes = iconRes;
 
-            final AnimatedVectorDrawable animation = icon instanceof AnimatedVectorDrawable
-                    ? (AnimatedVectorDrawable) icon
-                    : null;
-            setImageDrawable(icon, false);
-            updateDarkTint();
-            if (mIsFaceUnlockState) {
-                announceForAccessibility(getContext().getString(
-                    R.string.accessibility_scanning_face));
-            }
+                Drawable icon = mContext.getDrawable(iconRes);
+                final AnimatedVectorDrawable animation = icon instanceof AnimatedVectorDrawable
+                        ? (AnimatedVectorDrawable) icon
+                        : null;
+                setImageDrawable(icon, false);
+                if (mIsFaceUnlockState) {
+                    announceForAccessibility(getContext().getString(
+                            R.string.accessibility_scanning_face));
+                }
 
-            if (animation != null && isAnim) {
-                animation.forceAnimationOnUI();
-                animation.clearAnimationCallbacks();
-                animation.registerAnimationCallback(new Animatable2.AnimationCallback() {
-                    @Override
-                    public void onAnimationEnd(Drawable drawable) {
-                        if (getDrawable() == animation && state == getState()
-                                && doesAnimationLoop(iconAnimRes)) {
-                            animation.start();
+                if (animation != null && isAnim) {
+                    animation.forceAnimationOnUI();
+                    animation.clearAnimationCallbacks();
+                    animation.registerAnimationCallback(new Animatable2.AnimationCallback() {
+                        @Override
+                        public void onAnimationEnd(Drawable drawable) {
+                            if (getDrawable() == animation && state == getState()
+                                    && doesAnimationLoop(iconAnimRes)) {
+                                animation.start();
+                            }
                         }
-                    }
-                });
-                animation.start();
+                    });
+                    animation.start();
+                }
             }
+            updateDarkTint();
 
             if (isAnim && !mLastScreenOn) {
                 removeCallbacks(mDrawOffTimeout);
@@ -300,7 +315,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
         }
     }
 
-    private Drawable getIconForState(int state) {
+    private int getIconForState(int state) {
         int iconRes;
         switch (state) {
             case STATE_LOCKED:
@@ -318,25 +333,27 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
                 throw new IllegalArgumentException();
         }
 
-        return mContext.getDrawable(iconRes);
+        return iconRes;
     }
 
     private boolean doesAnimationLoop(int resourceId) {
         return resourceId == com.android.internal.R.anim.lock_scanning;
     }
 
-    private static int getAnimationResForTransition(int oldState, int newState,
+    private int getAnimationResForTransition(int oldState, int newState,
             boolean wasPulsing, boolean pulsing, boolean wasDozing, boolean dozing,
             boolean bouncerVisible) {
 
         // Never animate when screen is off
-        if (dozing && !pulsing) {
+        if (dozing && !pulsing && !mWasPulsingOnThisFrame) {
             return -1;
         }
 
         boolean isError = oldState != STATE_BIOMETRICS_ERROR && newState == STATE_BIOMETRICS_ERROR;
         boolean justUnlocked = oldState != STATE_LOCK_OPEN && newState == STATE_LOCK_OPEN;
         boolean justLocked = oldState == STATE_LOCK_OPEN && newState == STATE_LOCKED;
+        boolean nowPulsing = !wasPulsing && pulsing;
+        boolean turningOn = wasDozing && !dozing && !mWasPulsingOnThisFrame;
 
         if (isError) {
             return com.android.internal.R.anim.lock_to_error;
@@ -346,7 +363,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
             return com.android.internal.R.anim.lock_lock;
         } else if (newState == STATE_SCANNING_FACE && bouncerVisible) {
             return com.android.internal.R.anim.lock_scanning;
-        } else if (!wasPulsing && pulsing && newState != STATE_LOCK_OPEN) {
+        } else if ((nowPulsing || turningOn) && newState != STATE_LOCK_OPEN) {
             return com.android.internal.R.anim.lock_in;
         }
         return -1;
@@ -356,7 +373,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
         KeyguardUpdateMonitor updateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
         if (mTransientBiometricsError) {
             return STATE_BIOMETRICS_ERROR;
-        } else if (mUnlockMethodCache.canSkipBouncer()) {
+        } else if (mUnlockMethodCache.canSkipBouncer() && !mSimLocked) {
             return STATE_LOCK_OPEN;
         } else if (updateMonitor.isFaceDetectionRunning()) {
             return STATE_SCANNING_FACE;
@@ -377,6 +394,12 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
      */
     public void setPulsing(boolean pulsing) {
         mPulsing = pulsing;
+        if (!mPulsing) {
+            mWasPulsingOnThisFrame = true;
+            mMainHandler.post(() -> {
+                mWasPulsingOnThisFrame = false;
+            });
+        }
         update();
     }
 
