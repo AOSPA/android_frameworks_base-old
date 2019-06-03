@@ -53,6 +53,7 @@ import com.android.systemui.R;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.StatusBarState;
+import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.policy.NextAlarmController;
 import com.android.systemui.statusbar.policy.NextAlarmControllerImpl;
 import com.android.systemui.statusbar.policy.ZenModeController;
@@ -123,6 +124,7 @@ public class KeyguardSliceProvider extends SliceProvider implements
     private PendingIntent mPendingIntent;
     protected NotificationMediaManager mMediaManager;
     private StatusBarStateController mStatusBarStateController;
+    private KeyguardBypassController mKeyguardBypassController;
     private CharSequence mMediaTitle;
     private CharSequence mMediaArtist;
     protected boolean mDozing;
@@ -200,11 +202,13 @@ public class KeyguardSliceProvider extends SliceProvider implements
      */
     public void initDependencies(
             NotificationMediaManager mediaManager,
-            StatusBarStateController statusBarStateController) {
+            StatusBarStateController statusBarStateController,
+            KeyguardBypassController keyguardBypassController) {
         mMediaManager = mediaManager;
         mMediaManager.addCallback(this);
         mStatusBarStateController = statusBarStateController;
         mStatusBarStateController.addCallback(this);
+        mKeyguardBypassController = keyguardBypassController;
     }
 
     @AnyThread
@@ -232,7 +236,10 @@ public class KeyguardSliceProvider extends SliceProvider implements
         // Show header if music is playing and the status bar is in the shade state. This way, an
         // animation isn't necessary when pressing power and transitioning to AOD.
         boolean keepWhenShade = mStatusBarState == StatusBarState.SHADE && mMediaIsVisible;
-        return !TextUtils.isEmpty(mMediaTitle) && mMediaIsVisible && (mDozing || keepWhenShade);
+        boolean isBypass = mKeyguardBypassController != null
+                && mKeyguardBypassController.getBypassEnabled();
+        return !TextUtils.isEmpty(mMediaTitle) && mMediaIsVisible && (mDozing || isBypass
+                || keepWhenShade);
     }
 
     protected void addMediaLocked(ListBuilder listBuilder) {
