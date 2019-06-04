@@ -383,9 +383,11 @@ public class ResolverActivity extends Activity {
                 mSystemWindowInsets.right, 0);
 
         View emptyView = findViewById(R.id.empty);
-        emptyView.setPadding(0, 0, 0, mSystemWindowInsets.bottom
-                + getResources().getDimensionPixelSize(
-                        R.dimen.chooser_edge_margin_normal) * 2);
+        if (emptyView != null) {
+            emptyView.setPadding(0, 0, 0, mSystemWindowInsets.bottom
+                    + getResources().getDimensionPixelSize(
+                            R.dimen.chooser_edge_margin_normal) * 2);
+        }
 
         if (mFooterSpacer == null) {
             mFooterSpacer = new Space(getApplicationContext());
@@ -1319,7 +1321,8 @@ public class ResolverActivity extends Activity {
             buttonLayout.setVisibility(View.VISIBLE);
             int inset = mSystemWindowInsets != null ? mSystemWindowInsets.bottom : 0;
             buttonLayout.setPadding(buttonLayout.getPaddingLeft(), buttonLayout.getPaddingTop(),
-                    buttonLayout.getPaddingRight(), buttonLayout.getPaddingBottom() + inset);
+                    buttonLayout.getPaddingRight(), getResources().getDimensionPixelSize(
+                        R.dimen.resolver_button_bar_spacing) + inset);
 
             mOnceButton = (Button) buttonLayout.findViewById(R.id.button_once);
             mSettingsButton = (Button) buttonLayout.findViewById(R.id.button_app_settings);
