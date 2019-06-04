@@ -460,13 +460,6 @@ interface ITelephony {
     void sendDialerSpecialCode(String callingPackageName, String inputCode);
 
     /**
-     * Returns the network type for data transmission
-     * Legacy call, permission-free
-     */
-    @UnsupportedAppUsage
-    int getNetworkType();
-
-    /**
      * Returns the network type of a subId.
      * @param subId user preferred subId.
      * @param callingPackage package making the call.
@@ -1993,4 +1986,14 @@ interface ITelephony {
      * outgoing SmsManager operation.
      */
     oneway void enqueueSmsPickResult(String callingPackage, IIntegerConsumer subIdResult);
+
+    /**
+     * Returns the MMS user agent.
+     */
+    String getMmsUserAgent(int subId);
+
+    /**
+     * Returns the MMS user agent profile URL.
+     */
+    String getMmsUAProfUrl(int subId);
 }

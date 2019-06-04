@@ -212,7 +212,9 @@ public class AmbientState {
     }
 
     public boolean isDimmed() {
-        return mDimmed;
+        // While we are expanding from pulse, we want the notifications not to be dimmed, otherwise
+        // you'd see the difference to the pulsing notification
+        return mDimmed && !(isPulseExpanding() && mDozeAmount == 1.0f);
     }
 
     public boolean isDark() {
@@ -393,6 +395,13 @@ public class AmbientState {
 
     public void setPulsing(boolean hasPulsing) {
         mPulsing = hasPulsing;
+    }
+
+    /**
+     * @return if we're pulsing in general
+     */
+    public boolean isPulsing() {
+        return mPulsing;
     }
 
     public boolean isPulsing(NotificationEntry entry) {
