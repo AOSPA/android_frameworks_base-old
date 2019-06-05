@@ -807,6 +807,20 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                 expandedBubble.setContentVisibility(true);
             }
         }
+
+        @Override
+        public void onSingleTaskDisplayEmpty(int displayId) {
+            final Bubble expandedBubble = getExpandedBubble(mContext);
+            if (expandedBubble == null) {
+                return;
+            }
+            if (expandedBubble.getDisplayId() == displayId) {
+                mBubbleData.setExpanded(false);
+            }
+            if (expandedBubble.expandedView != null) {
+                expandedBubble.expandedView.notifyDisplayEmpty();
+            }
+        }
     }
 
     private static boolean shouldAutoBubbleMessages(Context context) {

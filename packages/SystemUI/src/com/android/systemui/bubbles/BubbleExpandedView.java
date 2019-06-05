@@ -64,6 +64,17 @@ import com.android.systemui.statusbar.notification.stack.ExpandableViewState;
 public class BubbleExpandedView extends LinearLayout implements View.OnClickListener {
     private static final String TAG = "BubbleExpandedView";
 
+    private enum ActivityViewStatus {
+        // ActivityView is being initialized, cannot start an activity yet.
+        INITIALIZING,
+        // ActivityView is initialized, and ready to start an activity.
+        INITIALIZED,
+        // Activity runs in the ActivityView.
+        ACTIVITY_STARTED,
+        // ActivityView is released, so activity launching will no longer be permitted.
+        RELEASED,
+    }
+
     // The triangle pointing to the expanded view
     private View mPointerView;
     private int mPointerMargin;
@@ -74,7 +85,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
     private ExpandableNotificationRow mNotifRow;
     private ActivityView mActivityView;
 
-    private boolean mActivityViewReady = false;
+    private ActivityViewStatus mActivityViewStatus = ActivityViewStatus.INITIALIZING;
     private PendingIntent mBubbleIntent;
 
     private boolean mKeyboardVisible;
@@ -102,19 +113,21 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
     private ActivityView.StateCallback mStateCallback = new ActivityView.StateCallback() {
         @Override
         public void onActivityViewReady(ActivityView view) {
-            if (!mActivityViewReady) {
-                mActivityViewReady = true;
-                // Custom options so there is no activity transition animation
-                ActivityOptions options = ActivityOptions.makeCustomAnimation(getContext(),
-                        0 /* enterResId */, 0 /* exitResId */);
-                // Post to keep the lifecycle normal
-                post(() -> mActivityView.startActivity(mBubbleIntent, options));
+            switch (mActivityViewStatus) {
+                case INITIALIZING:
+                case INITIALIZED:
+                    // Custom options so there is no activity transition animation
+                    ActivityOptions options = ActivityOptions.makeCustomAnimation(getContext(),
+                            0 /* enterResId */, 0 /* exitResId */);
+                    // Post to keep the lifecycle normal
+                    post(() -> mActivityView.startActivity(mBubbleIntent, options));
+                    mActivityViewStatus = ActivityViewStatus.ACTIVITY_STARTED;
             }
         }
 
         @Override
         public void onActivityViewDestroyed(ActivityView view) {
-            mActivityViewReady = false;
+            mActivityViewStatus = ActivityViewStatus.RELEASED;
         }
 
         /**
@@ -472,12 +485,23 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
         if (mActivityView == null) {
             return;
         }
-        if (mActivityViewReady) {
-            mActivityView.release();
+        switch (mActivityViewStatus) {
+            case INITIALIZED:
+            case ACTIVITY_STARTED:
+                mActivityView.release();
         }
         removeView(mActivityView);
         mActivityView = null;
-        mActivityViewReady = false;
+    }
+
+    /**
+     * Called when the last task is removed from a {@link android.hardware.display.VirtualDisplay}
+     * which {@link ActivityView} uses.
+     */
+    void notifyDisplayEmpty() {
+        if (mActivityViewStatus == ActivityViewStatus.ACTIVITY_STARTED) {
+            mActivityViewStatus = ActivityViewStatus.INITIALIZED;
+        }
     }
 
     private boolean usingActivityView() {
