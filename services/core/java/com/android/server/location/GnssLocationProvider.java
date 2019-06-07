@@ -62,7 +62,6 @@ import android.os.WorkSource.WorkChain;
 import android.provider.Settings;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
-import android.telephony.SubscriptionManager.OnSubscriptionsChangedListener;
 import android.telephony.TelephonyManager;
 import android.telephony.gsm.GsmCellLocation;
 import android.text.TextUtils;
@@ -77,6 +76,7 @@ import com.android.internal.location.GpsNetInitiatedHandler.GpsNiNotification;
 import com.android.internal.location.ProviderProperties;
 import com.android.internal.location.ProviderRequest;
 import com.android.internal.location.gnssmetrics.GnssMetrics;
+import com.android.internal.telephony.TelephonyIntents;
 import com.android.server.location.GnssSatelliteBlacklistHelper.GnssSatelliteBlacklistCallback;
 import com.android.server.location.NtpTimeHelper.InjectNtpTimeCallback;
 
@@ -186,7 +186,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private static final int DOWNLOAD_PSDS_DATA = 6;
     private static final int UPDATE_LOCATION = 7;  // Handle external location from network listener
     private static final int DOWNLOAD_PSDS_DATA_FINISHED = 11;
-    private static final int SUBSCRIPTION_OR_CARRIER_CONFIG_CHANGED = 12;
     private static final int INITIALIZE_HANDLER = 13;
     private static final int REQUEST_LOCATION = 16;
     private static final int REPORT_LOCATION = 17; // HAL reports location
@@ -313,8 +312,9 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private final ExponentialBackOff mPsdsBackOff = new ExponentialBackOff(RETRY_INTERVAL,
             MAX_RETRY_INTERVAL);
 
-    // true if we are enabled, protected by this
-    private boolean mEnabled;
+    // True if we are enabled
+    @GuardedBy("mLock")
+    private boolean mGpsEnabled;
 
     private boolean mShutdown;
 
@@ -408,6 +408,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private final static String WAKELOCK_KEY = "GnssLocationProvider";
     private final PowerManager.WakeLock mWakeLock;
     private static final String DOWNLOAD_EXTRA_WAKELOCK_KEY = "GnssLocationProviderPsdsDownload";
+    @GuardedBy("mLock")
     private final PowerManager.WakeLock mDownloadPsdsWakeLock;
 
     // Alarms
@@ -484,21 +485,12 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                     updateLowPowerMode();
                     break;
                 case CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED:
+                case TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED:
                     subscriptionOrCarrierConfigChanged(context);
                     break;
             }
         }
     };
-
-    // TODO: replace OnSubscriptionsChangedListener with ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED
-    //       broadcast receiver.
-    private final OnSubscriptionsChangedListener mOnSubscriptionsChangedListener =
-            new OnSubscriptionsChangedListener() {
-                @Override
-                public void onSubscriptionsChanged() {
-                    sendMessage(SUBSCRIPTION_OR_CARRIER_CONFIG_CHANGED, 0, null);
-                }
-            };
 
     /**
      * Implements {@link GnssSatelliteBlacklistCallback#onUpdateSatelliteBlacklist}.
@@ -515,33 +507,33 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 mContext.getSystemService(Context.TELEPHONY_SERVICE);
         CarrierConfigManager configManager = (CarrierConfigManager)
                 mContext.getSystemService(Context.CARRIER_CONFIG_SERVICE);
-        String mccMnc = phone.getSimOperator();
+        int ddSubId = SubscriptionManager.getDefaultDataSubscriptionId();
+        String mccMnc = SubscriptionManager.isValidSubscriptionId(ddSubId)
+                ? phone.getSimOperator(ddSubId) : phone.getSimOperator();
         boolean isKeepLppProfile = false;
         if (!TextUtils.isEmpty(mccMnc)) {
             if (DEBUG) Log.d(TAG, "SIM MCC/MNC is available: " + mccMnc);
-            synchronized (mLock) {
-                if (configManager != null) {
-                    PersistableBundle b = configManager.getConfig();
-                    if (b != null) {
-                        isKeepLppProfile =
-                                b.getBoolean(CarrierConfigManager.Gps.KEY_PERSIST_LPP_MODE_BOOL);
-                    }
+            if (configManager != null) {
+                PersistableBundle b = SubscriptionManager.isValidSubscriptionId(ddSubId)
+                        ? configManager.getConfigForSubId(ddSubId) : null;
+                if (b != null) {
+                    isKeepLppProfile =
+                            b.getBoolean(CarrierConfigManager.Gps.KEY_PERSIST_LPP_MODE_BOOL);
                 }
-                if (isKeepLppProfile) {
-                    // load current properties for the carrier
-                    mGnssConfiguration.loadPropertiesFromCarrierConfig();
-                    String lpp_profile = mGnssConfiguration.getLppProfile();
-                    // set the persist property LPP_PROFILE for the value
-                    if (lpp_profile != null) {
-                        SystemProperties.set(GnssConfiguration.LPP_PROFILE, lpp_profile);
-                    }
-                } else {
-                    // reset the persist property
-                    SystemProperties.set(GnssConfiguration.LPP_PROFILE, "");
-                }
-                reloadGpsProperties();
-                mNIHandler.setSuplEsEnabled(mSuplEsEnabled);
             }
+            if (isKeepLppProfile) {
+                // load current properties for the carrier
+                mGnssConfiguration.loadPropertiesFromCarrierConfig();
+                String lpp_profile = mGnssConfiguration.getLppProfile();
+                // set the persist property LPP_PROFILE for the value
+                if (lpp_profile != null) {
+                    SystemProperties.set(GnssConfiguration.LPP_PROFILE, lpp_profile);
+                }
+            } else {
+                // reset the persist property
+                SystemProperties.set(GnssConfiguration.LPP_PROFILE, "");
+            }
+            reloadGpsProperties();
         } else {
             if (DEBUG) Log.d(TAG, "SIM MCC/MNC is still not available");
         }
@@ -579,8 +571,9 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mC2KServerPort = mGnssConfiguration.getC2KPort(TCP_MIN_PORT);
         mNIHandler.setEmergencyExtensionSeconds(mGnssConfiguration.getEsExtensionSec());
         mSuplEsEnabled = mGnssConfiguration.getSuplEs(0) == 1;
+        mNIHandler.setSuplEsEnabled(mSuplEsEnabled);
         if (mGnssVisibilityControl != null) {
-            mGnssVisibilityControl.updateProxyApps(mGnssConfiguration.getProxyApps());
+            mGnssVisibilityControl.onConfigurationUpdated(mGnssConfiguration);
         }
     }
 
@@ -638,14 +631,14 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
             @Override
             protected boolean isGpsEnabled() {
-                return isEnabled();
+                return GnssLocationProvider.this.isGpsEnabled();
             }
         };
 
         mGnssMeasurementsProvider = new GnssMeasurementsProvider(mContext, mHandler) {
             @Override
             protected boolean isGpsEnabled() {
-                return isEnabled();
+                return GnssLocationProvider.this.isGpsEnabled();
             }
         };
 
@@ -654,7 +647,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mGnssNavigationMessageProvider = new GnssNavigationMessageProvider(mContext, mHandler) {
             @Override
             protected boolean isGpsEnabled() {
-                return isEnabled();
+                return GnssLocationProvider.this.isGpsEnabled();
             }
         };
 
@@ -831,8 +824,10 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         }
         mDownloadPsdsDataPending = STATE_DOWNLOADING;
 
-        // hold wake lock while task runs
-        mDownloadPsdsWakeLock.acquire(DOWNLOAD_PSDS_DATA_TIMEOUT_MS);
+        synchronized (mLock) {
+            // hold wake lock while task runs
+            mDownloadPsdsWakeLock.acquire(DOWNLOAD_PSDS_DATA_TIMEOUT_MS);
+        }
         Log.i(TAG, "WakeLock acquired by handleDownloadPsdsData()");
         AsyncTask.THREAD_POOL_EXECUTOR.execute(() -> {
             GpsPsdsDownloader psdsDownloader = new GpsPsdsDownloader(
@@ -915,14 +910,19 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         return GPS_POSITION_MODE_STANDALONE;
     }
 
-    @GuardedBy("mLock")
-    private void handleEnableLocked() {
-        if (DEBUG) Log.d(TAG, "handleEnableLocked");
+    private void setGpsEnabled(boolean enabled) {
+        synchronized (mLock) {
+            mGpsEnabled = enabled;
+        }
+    }
+
+    private void handleEnable() {
+        if (DEBUG) Log.d(TAG, "handleEnable");
 
         boolean inited = native_init();
 
         if (inited) {
-            mEnabled = true;
+            setGpsEnabled(true);
             mSupportsPsds = native_supports_psds();
 
             // TODO: remove the following native calls if we can make sure they are redundant.
@@ -939,26 +939,25 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             mGnssNavigationMessageProvider.onGpsEnabledChanged();
             mGnssBatchingProvider.enable();
             if (mGnssVisibilityControl != null) {
-                mGnssVisibilityControl.onGpsEnabledChanged(mEnabled);
+                mGnssVisibilityControl.onGpsEnabledChanged(/* isEnabled= */true);
             }
         } else {
-            mEnabled = false;
+            setGpsEnabled(false);
             Log.w(TAG, "Failed to enable location provider");
         }
     }
 
-    @GuardedBy("mLock")
-    private void handleDisableLocked() {
-        if (DEBUG) Log.d(TAG, "handleDisableLocked");
+    private void handleDisable() {
+        if (DEBUG) Log.d(TAG, "handleDisable");
 
-        mEnabled = false;
+        setGpsEnabled(false);
         updateClientUids(new WorkSource());
         stopNavigating();
         mAlarmManager.cancel(mWakeupIntent);
         mAlarmManager.cancel(mTimeoutIntent);
 
         if (mGnssVisibilityControl != null) {
-            mGnssVisibilityControl.onGpsEnabledChanged(mEnabled);
+            mGnssVisibilityControl.onGpsEnabledChanged(/* isEnabled= */ false);
         }
         mGnssBatchingProvider.disable();
         // do this before releasing wakelock
@@ -969,35 +968,34 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     }
 
     private void updateEnabled() {
-        synchronized (mLock) {
-            // Generally follow location setting
-            boolean enabled = mContext.getSystemService(LocationManager.class).isLocationEnabled();
+        // Generally follow location setting for current user
+        boolean enabled = mContext.getSystemService(LocationManager.class)
+                .isLocationEnabledForUser(UserHandle.CURRENT);
 
-            // ... but disable if PowerManager overrides
-            enabled &= !mDisableGpsForPowerManager;
+        // ... but disable if PowerManager overrides
+        enabled &= !mDisableGpsForPowerManager;
 
-            // .. but enable anyway, if there's an active settings-ignored request (e.g. ELS)
-            enabled |= (mProviderRequest != null && mProviderRequest.reportLocation
-                            && mProviderRequest.locationSettingsIgnored);
+        // .. but enable anyway, if there's an active settings-ignored request (e.g. ELS)
+        enabled |= (mProviderRequest != null && mProviderRequest.reportLocation
+                        && mProviderRequest.locationSettingsIgnored);
 
-            // ... and, finally, disable anyway, if device is being shut down
-            enabled &= !mShutdown;
+        // ... and, finally, disable anyway, if device is being shut down
+        enabled &= !mShutdown;
 
-            if (enabled == mEnabled) {
-                return;
-            }
+        if (enabled == isGpsEnabled()) {
+            return;
+        }
 
-            if (enabled) {
-                handleEnableLocked();
-            } else {
-                handleDisableLocked();
-            }
+        if (enabled) {
+            handleEnable();
+        } else {
+            handleDisable();
         }
     }
 
-    public boolean isEnabled() {
+    private boolean isGpsEnabled() {
         synchronized (mLock) {
-            return mEnabled;
+            return mGpsEnabled;
         }
     }
 
@@ -1038,7 +1036,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         }
 
         if (DEBUG) Log.d(TAG, "setRequest " + mProviderRequest);
-        if (mProviderRequest.reportLocation && isEnabled()) {
+        if (mProviderRequest.reportLocation && isGpsEnabled()) {
             // update client uids
             updateClientUids(mWorkSource);
 
@@ -1600,10 +1598,9 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         if (DEBUG) Log.d(TAG, "reportGnssServiceDied");
         mHandler.post(() -> {
             setupNativeGnssService(/* reinitializeGnssServiceHandle = */ true);
-            if (isEnabled()) {
-                synchronized (mLock) {
-                    mEnabled = false;
-                }
+            if (isGpsEnabled()) {
+                setGpsEnabled(false);
+
                 updateEnabled();
 
                 // resend configuration into the restarted HAL service.
@@ -1811,7 +1808,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                     /* requestorIdEncoding= */ 0,
                     /* textEncoding= */ 0,
                     mSuplEsEnabled,
-                    isEnabled(),
+                    isGpsEnabled(),
                     userResponse);
 
             return true;
@@ -1877,7 +1874,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 notification.requestorIdEncoding,
                 notification.textEncoding,
                 mSuplEsEnabled,
-                isEnabled(),
+                isGpsEnabled(),
                 /* userResponse= */ 0);
     }
 
@@ -1890,28 +1887,34 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         TelephonyManager phone = (TelephonyManager)
                 mContext.getSystemService(Context.TELEPHONY_SERVICE);
         int type = AGPS_SETID_TYPE_NONE;
-        String data = "";
+        String setId = null;
 
+        int ddSubId = SubscriptionManager.getDefaultDataSubscriptionId();
         if ((flags & AGPS_RIL_REQUEST_SETID_IMSI) == AGPS_RIL_REQUEST_SETID_IMSI) {
-            String data_temp = phone.getSubscriberId();
-            if (data_temp == null) {
-                // This means the framework does not have the SIM card ready.
-            } else {
+            if (SubscriptionManager.isValidSubscriptionId(ddSubId)) {
+                setId = phone.getSubscriberId(ddSubId);
+            }
+            if (setId == null) {
+                setId = phone.getSubscriberId();
+            }
+            if (setId != null) {
                 // This means the framework has the SIM card.
-                data = data_temp;
                 type = AGPS_SETID_TYPE_IMSI;
             }
         } else if ((flags & AGPS_RIL_REQUEST_SETID_MSISDN) == AGPS_RIL_REQUEST_SETID_MSISDN) {
-            String data_temp = phone.getLine1Number();
-            if (data_temp == null) {
-                // This means the framework does not have the SIM card ready.
-            } else {
+            if (SubscriptionManager.isValidSubscriptionId(ddSubId)) {
+                setId = phone.getLine1Number(ddSubId);
+            }
+            if (setId == null) {
+                setId = phone.getLine1Number();
+            }
+            if (setId != null) {
                 // This means the framework has the SIM card.
-                data = data_temp;
                 type = AGPS_SETID_TYPE_MSISDN;
             }
         }
-        native_agps_set_id(type, data);
+
+        native_agps_set_id(type, (setId == null) ? "" : setId);
     }
 
     @NativeEntryPoint
@@ -2023,9 +2026,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 case UPDATE_LOCATION:
                     handleUpdateLocation((Location) msg.obj);
                     break;
-                case SUBSCRIPTION_OR_CARRIER_CONFIG_CHANGED:
-                    subscriptionOrCarrierConfigChanged(mContext);
-                    break;
                 case INITIALIZE_HANDLER:
                     handleInitialize();
                     break;
@@ -2057,23 +2057,12 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             setupNativeGnssService(/* reinitializeGnssServiceHandle = */ false);
 
             if (native_is_gnss_visibility_control_supported()) {
-                mGnssVisibilityControl = new GnssVisibilityControl(mContext, mLooper);
+                mGnssVisibilityControl = new GnssVisibilityControl(mContext, mLooper, mNIHandler);
             }
 
             // load default GPS configuration
             // (this configuration might change in the future based on SIM changes)
             reloadGpsProperties();
-
-            // TODO: When this object "finishes" we should unregister by invoking
-            // SubscriptionManager.getInstance(mContext).unregister
-            // (mOnSubscriptionsChangedListener);
-            // This is not strictly necessary because it will be unregistered if the
-            // notification fails but it is good form.
-
-            // Register for SubscriptionInfo list changes which is guaranteed
-            // to invoke onSubscriptionsChanged the first time.
-            SubscriptionManager.from(mContext)
-                    .addOnSubscriptionsChangedListener(mOnSubscriptionsChangedListener);
 
             // listen for events
             IntentFilter intentFilter = new IntentFilter();
@@ -2084,6 +2073,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             intentFilter.addAction(Intent.ACTION_SCREEN_OFF);
             intentFilter.addAction(Intent.ACTION_SCREEN_ON);
             intentFilter.addAction(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED);
+            intentFilter.addAction(TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED);
             mContext.registerReceiver(mBroadcastReceiver, intentFilter, null, this);
 
             mNetworkConnectivityHandler.registerNetworkCallbacks();
@@ -2162,8 +2152,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 return "DOWNLOAD_PSDS_DATA_FINISHED";
             case UPDATE_LOCATION:
                 return "UPDATE_LOCATION";
-            case SUBSCRIPTION_OR_CARRIER_CONFIG_CHANGED:
-                return "SUBSCRIPTION_OR_CARRIER_CONFIG_CHANGED";
             case INITIALIZE_HANDLER:
                 return "INITIALIZE_HANDLER";
             case REPORT_LOCATION:

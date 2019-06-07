@@ -52,6 +52,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Objects;
 import java.util.function.ToIntFunction;
 
 /**
@@ -264,13 +265,10 @@ public class ThumbnailUtils {
             }
         }
 
-        boolean isHeifFile = false;
-
         if (mimeType.equals("image/heif")
                 || mimeType.equals("image/heif-sequence")
                 || mimeType.equals("image/heic")
                 || mimeType.equals("image/heic-sequence")) {
-            isHeifFile = true;
             try (MediaMetadataRetriever retriever = new MediaMetadataRetriever()) {
                 retriever.setDataSource(file.getAbsolutePath());
                 bitmap = retriever.getThumbnailImageAtIndex(-1,
@@ -297,11 +295,8 @@ public class ThumbnailUtils {
 
         if (bitmap == null) {
             bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(file), resizer);
-            // Use ImageDecoder to do full image decode of heif format file
-            // will have right orientation. Don't rotate the bitmap again.
-            if (isHeifFile) {
-                return bitmap;
-            }
+            // Use ImageDecoder to do full file decoding, we don't need to handle the orientation
+            return bitmap;
         }
 
         // Transform the bitmap if the orientation of the image is not 0.
@@ -369,10 +364,12 @@ public class ThumbnailUtils {
             // If we're okay with something larger than native format, just
             // return a frame without up-scaling it
             if (size.getWidth() > width && size.getHeight() > height) {
-                return mmr.getFrameAtTime(duration / 2, OPTION_CLOSEST_SYNC);
+                return Objects.requireNonNull(
+                        mmr.getFrameAtTime(duration / 2, OPTION_CLOSEST_SYNC));
             } else {
-                return mmr.getScaledFrameAtTime(duration / 2, OPTION_CLOSEST_SYNC,
-                        size.getWidth(), size.getHeight());
+                return Objects.requireNonNull(
+                        mmr.getScaledFrameAtTime(duration / 2, OPTION_CLOSEST_SYNC,
+                        size.getWidth(), size.getHeight()));
             }
         } catch (RuntimeException e) {
             throw new IOException("Failed to create thumbnail", e);

@@ -18,6 +18,9 @@ package com.android.server.location;
 
 import android.annotation.SuppressLint;
 import android.app.AppOpsManager;
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -32,6 +35,10 @@ import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.StatsLog;
+
+import com.android.internal.R;
+import com.android.internal.location.GpsNetInitiatedHandler;
+import com.android.internal.notification.SystemNotificationChannels;
 
 import java.util.Arrays;
 import java.util.List;
@@ -65,6 +72,8 @@ class GnssVisibilityControl {
 
     private final Handler mHandler;
     private final Context mContext;
+    private final GpsNetInitiatedHandler mNiHandler;
+    private final Notification mEmergencyLocationUserNotification;
 
     private boolean mIsGpsEnabled;
 
@@ -76,13 +85,15 @@ class GnssVisibilityControl {
     private PackageManager.OnPermissionsChangedListener mOnPermissionsChangedListener =
             uid -> runOnHandler(() -> handlePermissionsChanged(uid));
 
-    GnssVisibilityControl(Context context, Looper looper) {
+    GnssVisibilityControl(Context context, Looper looper, GpsNetInitiatedHandler niHandler) {
         mContext = context;
         PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         mWakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_KEY);
         mHandler = new Handler(looper);
+        mNiHandler = niHandler;
         mAppOps = mContext.getSystemService(AppOpsManager.class);
         mPackageManager = mContext.getPackageManager();
+        mEmergencyLocationUserNotification = createEmergencyLocationUserNotification(mContext);
 
         // Complete initialization as the first event to run in mHandler thread. After that,
         // all object state read/update events run in the mHandler thread.
@@ -113,16 +124,18 @@ class GnssVisibilityControl {
         }
     }
 
-    void updateProxyApps(List<String> nfwLocationAccessProxyApps) {
-        runOnHandler(() -> handleUpdateProxyApps(nfwLocationAccessProxyApps));
-    }
-
     void reportNfwNotification(String proxyAppPackageName, byte protocolStack,
             String otherProtocolStackName, byte requestor, String requestorId, byte responseType,
             boolean inEmergencyMode, boolean isCachedLocation) {
         runOnHandler(() -> handleNfwNotification(
                 new NfwNotification(proxyAppPackageName, protocolStack, otherProtocolStackName,
                         requestor, requestorId, responseType, inEmergencyMode, isCachedLocation)));
+    }
+
+    void onConfigurationUpdated(GnssConfiguration configuration) {
+        // The configuration object must be accessed only in the caller thread and not in mHandler.
+        List<String> nfwLocationAccessProxyApps = configuration.getProxyApps();
+        runOnHandler(() -> handleUpdateProxyApps(nfwLocationAccessProxyApps));
     }
 
     private void handleInitialize() {
@@ -299,6 +312,10 @@ class GnssVisibilityControl {
             return mResponseType != NfwNotification.NFW_RESPONSE_TYPE_REJECTED;
         }
 
+        private boolean isLocationProvided() {
+            return mResponseType == NfwNotification.NFW_RESPONSE_TYPE_ACCEPTED_LOCATION_PROVIDED;
+        }
+
         private boolean isRequestAttributedToProxyApp() {
             return !TextUtils.isEmpty(mProxyAppPackageName);
         }
@@ -430,16 +447,15 @@ class GnssVisibilityControl {
                 return;
             }
 
-            Log.e(TAG, "ProxyAppPackageName field is not set. AppOps service not notified "
-                    + "for non-framework location access notification: " + nfwNotification);
+            Log.e(TAG, "ProxyAppPackageName field is not set. AppOps service not notified"
+                    + " for notification: " + nfwNotification);
             return;
         }
 
         if (isLocationPermissionEnabled == null) {
-            Log.w(TAG, "Could not find proxy app with name: " + proxyAppPkgName + " in the "
-                    + "value specified for config parameter: "
-                    + GnssConfiguration.CONFIG_NFW_PROXY_APPS + ". AppOps service not notified "
-                    + "for non-framework location access notification: " + nfwNotification);
+            Log.w(TAG, "Could not find proxy app " + proxyAppPkgName + " in the value specified for"
+                    + " config parameter: " + GnssConfiguration.CONFIG_NFW_PROXY_APPS
+                    + ". AppOps service not notified for notification: " + nfwNotification);
             return;
         }
 
@@ -447,8 +463,7 @@ class GnssVisibilityControl {
         final ApplicationInfo proxyAppInfo = getProxyAppInfo(proxyAppPkgName);
         if (proxyAppInfo == null) {
             Log.e(TAG, "Proxy app " + proxyAppPkgName + " is not found. AppOps service not "
-                    + "notified for non-framework location access notification: "
-                    + nfwNotification);
+                    + "notified for notification: " + nfwNotification);
             return;
         }
 
@@ -465,13 +480,57 @@ class GnssVisibilityControl {
     }
 
     private void handleEmergencyNfwNotification(NfwNotification nfwNotification) {
-        boolean isPermissionMismatched =
-                (nfwNotification.mResponseType == NfwNotification.NFW_RESPONSE_TYPE_REJECTED);
-        if (isPermissionMismatched) {
+        boolean isPermissionMismatched = false;
+        if (!nfwNotification.isRequestAccepted()) {
             Log.e(TAG, "Emergency non-framework location request incorrectly rejected."
                     + " Notification: " + nfwNotification);
+            isPermissionMismatched = true;
         }
+
+        if (!mNiHandler.getInEmergency()) {
+            Log.w(TAG, "Emergency state mismatch. Device currently not in user initiated emergency"
+                    + " session. Notification: " + nfwNotification);
+            isPermissionMismatched = true;
+        }
+
         logEvent(nfwNotification, isPermissionMismatched);
+
+        if (nfwNotification.isLocationProvided()) {
+            postEmergencyLocationUserNotification(nfwNotification);
+        }
+    }
+
+    private void postEmergencyLocationUserNotification(NfwNotification nfwNotification) {
+        // Emulate deprecated IGnssNi.hal user notification of emergency NI requests.
+        NotificationManager notificationManager = (NotificationManager) mContext
+                .getSystemService(Context.NOTIFICATION_SERVICE);
+        if (notificationManager == null) {
+            Log.w(TAG, "Could not notify user of emergency location request. Notification: "
+                    + nfwNotification);
+            return;
+        }
+
+        notificationManager.notifyAsUser(/* tag= */ null, /* notificationId= */ 0,
+                mEmergencyLocationUserNotification, UserHandle.ALL);
+    }
+
+    private static Notification createEmergencyLocationUserNotification(Context context) {
+        String firstLineText = context.getString(R.string.gpsNotifTitle);
+        String secondLineText =  context.getString(R.string.global_action_emergency);
+        String accessibilityServicesText = firstLineText + " (" + secondLineText + ")";
+        return new Notification.Builder(context, SystemNotificationChannels.NETWORK_ALERTS)
+                .setSmallIcon(com.android.internal.R.drawable.stat_sys_gps_on)
+                .setWhen(0)
+                .setOngoing(true)
+                .setAutoCancel(true)
+                .setColor(context.getColor(
+                        com.android.internal.R.color.system_notification_accent_color))
+                .setDefaults(0)
+                .setTicker(accessibilityServicesText)
+                .setContentTitle(firstLineText)
+                .setContentText(secondLineText)
+                .setContentIntent(PendingIntent.getBroadcast(context, 0, new Intent(), 0))
+                .build();
     }
 
     private void logEvent(NfwNotification notification, boolean isPermissionMismatched) {

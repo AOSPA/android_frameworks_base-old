@@ -267,8 +267,7 @@ class ZygoteConnection {
         pid = Zygote.forkAndSpecialize(parsedArgs.mUid, parsedArgs.mGid, parsedArgs.mGids,
                 parsedArgs.mRuntimeFlags, rlimits, parsedArgs.mMountExternal, parsedArgs.mSeInfo,
                 parsedArgs.mNiceName, fdsToClose, fdsToIgnore, parsedArgs.mStartChildZygote,
-                parsedArgs.mInstructionSet, parsedArgs.mAppDataDir, parsedArgs.mPackageName,
-                parsedArgs.mPackagesForUid, parsedArgs.mSandboxId, parsedArgs.mTargetSdkVersion);
+                parsedArgs.mInstructionSet, parsedArgs.mAppDataDir, parsedArgs.mTargetSdkVersion);
 
         try {
             if (pid == 0) {
@@ -347,7 +346,7 @@ class ZygoteConnection {
             if (zygoteServer.isUsapPoolEnabled()) {
                 Runnable fpResult =
                         zygoteServer.fillUsapPool(
-                                new int[]{mSocket.getFileDescriptor().getInt$()});
+                                new int[]{mSocket.getFileDescriptor().getInt$()}, false);
 
                 if (fpResult != null) {
                     zygoteServer.setForkChild();

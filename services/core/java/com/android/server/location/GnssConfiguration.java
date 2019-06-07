@@ -308,8 +308,10 @@ class GnssConfiguration {
         if (configManager == null) {
             return;
         }
-        PersistableBundle configs = configManager.getConfigForSubId(
-                SubscriptionManager.getDefaultDataSubscriptionId());
+
+        int ddSubId = SubscriptionManager.getDefaultDataSubscriptionId();
+        PersistableBundle configs = SubscriptionManager.isValidSubscriptionId(ddSubId)
+                ? configManager.getConfigForSubId(ddSubId) : null;
         if (configs == null) {
             if (DEBUG) Log.d(TAG, "SIM not ready, use default carrier config.");
             configs = CarrierConfigManager.getDefaultConfig();
@@ -320,10 +322,12 @@ class GnssConfiguration {
                         .substring(CarrierConfigManager.Gps.KEY_PREFIX.length())
                         .toUpperCase();
                 Object value = configs.get(configKey);
+                if (DEBUG) Log.d(TAG, "Gps config: " + key + " = " + value);
                 if (value instanceof String) {
-                    // All GPS properties are of String type; convert so.
-                    if (DEBUG) Log.d(TAG, "Gps config: " + key + " = " + value);
+                    // Most GPS properties are of String type; convert so.
                     mProperties.setProperty(key, (String) value);
+                } else if (value != null) {
+                    mProperties.setProperty(key, value.toString());
                 }
             }
         }

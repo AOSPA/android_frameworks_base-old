@@ -4123,7 +4123,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * completely transparent and 1 means completely opaque.
          */
         @ViewDebug.ExportedProperty
-        float mAlpha = 1f;
+        private float mAlpha = 1f;
 
         /**
          * The opacity of the view as manipulated by the Fade transition. This is a
@@ -8852,6 +8852,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * @hide
      */
+    @TestApi
     public boolean isAutofilled() {
         return (mPrivateFlags3 & PFLAG3_IS_AUTOFILLED) != 0;
     }
@@ -9076,18 +9077,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * <pre>
      *   ContentCaptureSession mainSession = rootView.getContentCaptureSession();
      *   mainSession.setContentCaptureContext(ContentCaptureContext.forLocusId(Uri.parse(myUrl));
-     * <pre>
+     * </pre>
      *
      * <p>Then if the page had an {@code IFRAME}, you would create a new session for it:
-     *
-     * <p>For example, if your activity is associated with a web domain, you could create a session
-     * {@code onCreate()} and associate it with the root view of the activity:
      *
      * <pre>
      *   ContentCaptureSession iframeSession = mainSession.createContentCaptureSession(
      *       ContentCaptureContext.forLocusId(Uri.parse(iframeUrl)));
      *   iframeView.setContentCaptureSession(iframeSession);
-     * <pre>
+     * </pre>
      *
      * @param contentCaptureSession a session created by
      * {@link ContentCaptureSession#createContentCaptureSession(
@@ -16194,7 +16192,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         return false;
     }
 
-    private void setAlphaInternal(float alpha) {
+    void setAlphaInternal(float alpha) {
         float oldAlpha = mTransformationInfo.mAlpha;
         mTransformationInfo.mAlpha = alpha;
         // Report visibility changes, which can affect children, to accessibility
@@ -21515,23 +21513,27 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         saveCount = canvas.getSaveCount();
+        int topSaveCount = -1;
+        int bottomSaveCount = -1;
+        int leftSaveCount = -1;
+        int rightSaveCount = -1;
 
         int solidColor = getSolidColor();
         if (solidColor == 0) {
             if (drawTop) {
-                canvas.saveUnclippedLayer(left, top, right, top + length);
+                topSaveCount = canvas.saveUnclippedLayer(left, top, right, top + length);
             }
 
             if (drawBottom) {
-                canvas.saveUnclippedLayer(left, bottom - length, right, bottom);
+                bottomSaveCount = canvas.saveUnclippedLayer(left, bottom - length, right, bottom);
             }
 
             if (drawLeft) {
-                canvas.saveUnclippedLayer(left, top, left + length, bottom);
+                leftSaveCount = canvas.saveUnclippedLayer(left, top, left + length, bottom);
             }
 
             if (drawRight) {
-                canvas.saveUnclippedLayer(right - length, top, right, bottom);
+                rightSaveCount = canvas.saveUnclippedLayer(right - length, top, right, bottom);
             }
         } else {
             scrollabilityCache.setFadeColor(solidColor);
@@ -21548,21 +21550,19 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         final Matrix matrix = scrollabilityCache.matrix;
         final Shader fade = scrollabilityCache.shader;
 
-        if (drawTop) {
-            matrix.setScale(1, fadeHeight * topFadeStrength);
-            matrix.postTranslate(left, top);
+        // must be restored in the reverse order that they were saved
+        if (drawRight) {
+            matrix.setScale(1, fadeHeight * rightFadeStrength);
+            matrix.postRotate(90);
+            matrix.postTranslate(right, top);
             fade.setLocalMatrix(matrix);
             p.setShader(fade);
-            canvas.drawRect(left, top, right, top + length, p);
-        }
+            if (solidColor == 0) {
+                canvas.restoreUnclippedLayer(rightSaveCount, p);
 
-        if (drawBottom) {
-            matrix.setScale(1, fadeHeight * bottomFadeStrength);
-            matrix.postRotate(180);
-            matrix.postTranslate(left, bottom);
-            fade.setLocalMatrix(matrix);
-            p.setShader(fade);
-            canvas.drawRect(left, bottom - length, right, bottom, p);
+            } else {
+                canvas.drawRect(right - length, top, right, bottom, p);
+            }
         }
 
         if (drawLeft) {
@@ -21571,16 +21571,36 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             matrix.postTranslate(left, top);
             fade.setLocalMatrix(matrix);
             p.setShader(fade);
-            canvas.drawRect(left, top, left + length, bottom, p);
+            if (solidColor == 0) {
+                canvas.restoreUnclippedLayer(leftSaveCount, p);
+            } else {
+                canvas.drawRect(left, top, left + length, bottom, p);
+            }
         }
 
-        if (drawRight) {
-            matrix.setScale(1, fadeHeight * rightFadeStrength);
-            matrix.postRotate(90);
-            matrix.postTranslate(right, top);
+        if (drawBottom) {
+            matrix.setScale(1, fadeHeight * bottomFadeStrength);
+            matrix.postRotate(180);
+            matrix.postTranslate(left, bottom);
             fade.setLocalMatrix(matrix);
             p.setShader(fade);
-            canvas.drawRect(right - length, top, right, bottom, p);
+            if (solidColor == 0) {
+                canvas.restoreUnclippedLayer(bottomSaveCount, p);
+            } else {
+                canvas.drawRect(left, bottom - length, right, bottom, p);
+            }
+        }
+
+        if (drawTop) {
+            matrix.setScale(1, fadeHeight * topFadeStrength);
+            matrix.postTranslate(left, top);
+            fade.setLocalMatrix(matrix);
+            p.setShader(fade);
+            if (solidColor == 0) {
+                canvas.restoreUnclippedLayer(topSaveCount, p);
+            } else {
+                canvas.drawRect(left, top, right, top + length, p);
+            }
         }
 
         canvas.restoreToCount(saveCount);
@@ -25521,6 +25541,21 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             Log.e(VIEW_LOG_TAG, "Unable to start moving", e);
         }
         return false;
+    }
+
+    /**
+     * Finish a window move task.
+     * @hide
+     */
+    public void finishMovingTask() {
+        if (ViewDebug.DEBUG_POSITIONING) {
+            Log.d(VIEW_LOG_TAG, "finishMovingTask");
+        }
+        try {
+            mAttachInfo.mSession.finishMovingTask(mAttachInfo.mWindow);
+        } catch (RemoteException e) {
+            Log.e(VIEW_LOG_TAG, "Unable to finish moving", e);
+        }
     }
 
     /**
