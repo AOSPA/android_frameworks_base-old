@@ -621,7 +621,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
            if (mPerfHandle > 0)
                mIsPerfBoostAcquired = true;
            // Start IOP
-           if(r.appInfo.sourceDir != null) {
+           if(r.appInfo != null && r.appInfo.sourceDir != null) {
                mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
                    r.appInfo.sourceDir.substring(0, r.appInfo.sourceDir.lastIndexOf('/')));
            }

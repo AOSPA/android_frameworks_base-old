@@ -905,6 +905,8 @@ public class AppOpsService extends IAppOpsService.Stub {
                     }
                 }
             }
+
+            mHistoricalRegistry.clearHistory(uid, packageName);
         }
     }
 
@@ -1312,6 +1314,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         }
 
         if (callbackSpecs == null) {
+            notifyOpChangedSync(code, uid, null, mode);
             return;
         }
 
@@ -1332,6 +1335,16 @@ public class AppOpsService extends IAppOpsService.Stub {
                             this, callback, code, uid, reportedPackageName));
                 }
             }
+        }
+
+        notifyOpChangedSync(code, uid, null, mode);
+    }
+
+    private void notifyOpChangedSync(int code, int uid, @NonNull String packageName, int mode) {
+        final StorageManagerInternal storageManagerInternal =
+                LocalServices.getService(StorageManagerInternal.class);
+        if (storageManagerInternal != null) {
+            storageManagerInternal.onAppOpsChanged(code, uid, packageName, mode);
         }
     }
 
@@ -1436,6 +1449,8 @@ public class AppOpsService extends IAppOpsService.Stub {
                     AppOpsService::notifyOpChanged,
                     this, repCbs, code, uid, packageName));
         }
+
+        notifyOpChangedSync(code, uid, packageName, mode);
     }
 
     private void notifyOpChanged(ArraySet<ModeCallback> callbacks, int code,
@@ -3559,8 +3574,6 @@ public class AppOpsService extends IAppOpsService.Stub {
         pw.println("    Limit output to data associated with the given package name.");
         pw.println("  --watchers");
         pw.println("    Only output the watcher sections.");
-        pw.println("  --history");
-        pw.println("    Output the historical data.");
     }
 
     private void dumpStatesLocked(@NonNull PrintWriter pw, @NonNull Op op,
@@ -3696,8 +3709,6 @@ public class AppOpsService extends IAppOpsService.Stub {
                     }
                 } else if ("--watchers".equals(arg)) {
                     dumpWatchers = true;
-                } else if ("--history".equals(arg)) {
-                    dumpHistory = true;
                 } else if (arg.length() > 0 && arg.charAt(0) == '-'){
                     pw.println("Unknown option: " + arg);
                     return;
@@ -3803,8 +3814,9 @@ public class AppOpsService extends IAppOpsService.Stub {
             if (mActiveWatchers.size() > 0 && dumpMode < 0) {
                 needSep = true;
                 boolean printedHeader = false;
-                for (int i = 0; i < mActiveWatchers.size(); i++) {
-                    final SparseArray<ActiveCallback> activeWatchers = mActiveWatchers.valueAt(i);
+                for (int watcherNum = 0; watcherNum < mActiveWatchers.size(); watcherNum++) {
+                    final SparseArray<ActiveCallback> activeWatchers =
+                            mActiveWatchers.valueAt(watcherNum);
                     if (activeWatchers.size() <= 0) {
                         continue;
                     }
@@ -3822,16 +3834,16 @@ public class AppOpsService extends IAppOpsService.Stub {
                     }
                     pw.print("    ");
                     pw.print(Integer.toHexString(System.identityHashCode(
-                            mActiveWatchers.keyAt(i))));
+                            mActiveWatchers.keyAt(watcherNum))));
                     pw.println(" ->");
                     pw.print("        [");
                     final int opCount = activeWatchers.size();
-                    for (i = 0; i < opCount; i++) {
-                        if (i > 0) {
+                    for (int opNum = 0; opNum < opCount; opNum++) {
+                        if (opNum > 0) {
                             pw.print(' ');
                         }
-                        pw.print(AppOpsManager.opToName(activeWatchers.keyAt(i)));
-                        if (i < opCount - 1) {
+                        pw.print(AppOpsManager.opToName(activeWatchers.keyAt(opNum)));
+                        if (opNum < opCount - 1) {
                             pw.print(',');
                         }
                     }

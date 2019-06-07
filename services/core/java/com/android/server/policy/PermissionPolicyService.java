@@ -25,6 +25,8 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.AppOpsManager;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
@@ -37,6 +39,8 @@ import android.os.Process;
 import android.os.UserHandle;
 import android.permission.PermissionControllerManager;
 import android.permission.PermissionManagerInternal;
+import android.provider.Telephony;
+import android.telecom.TelecomManager;
 import android.util.Slog;
 import android.util.SparseIntArray;
 
@@ -59,6 +63,8 @@ public final class PermissionPolicyService extends SystemService {
 
     public PermissionPolicyService(@NonNull Context context) {
         super(context);
+
+        LocalServices.addService(PermissionPolicyInternal.class, new Internal());
     }
 
     @Override
@@ -104,7 +110,8 @@ public final class PermissionPolicyService extends SystemService {
             // there as we are on the main thread and want to block until the work is
             // completed or we time out.
             final PermissionControllerManager permissionControllerManager =
-                    new PermissionControllerManager(context, FgThread.getHandler());
+                    new PermissionControllerManager(getUserContext(context, UserHandle.of(userId)),
+                            FgThread.getHandler());
             permissionControllerManager.grantOrUpgradeDefaultRuntimePermissions(
                     FgThread.getExecutor(),
                     (Boolean success) -> {
@@ -222,6 +229,15 @@ public final class PermissionPolicyService extends SystemService {
          *
          * @see #syncRestrictedOps
          */
+        private final @NonNull ArrayList<OpToUnrestrict> mOpsToAllowIfDefault = new ArrayList<>();
+
+        /**
+         * All ops that need to be flipped to allow.
+         *
+         * Currently, only used by the restricted permissions logic.
+         *
+         * @see #syncRestrictedOps
+         */
         private final @NonNull ArrayList<OpToUnrestrict> mOpsToAllow = new ArrayList<>();
 
         /**
@@ -231,7 +247,7 @@ public final class PermissionPolicyService extends SystemService {
          *
          * @see #syncRestrictedOps
          */
-        private final @NonNull ArrayList<OpToUnrestrict> mOpsToIgnore = new ArrayList<>();
+        private final @NonNull ArrayList<OpToUnrestrict> mOpsToIgnoreIfDefault = new ArrayList<>();
 
         /**
          * All foreground permissions
@@ -255,11 +271,16 @@ public final class PermissionPolicyService extends SystemService {
             final int allowCount = mOpsToAllow.size();
             for (int i = 0; i < allowCount; i++) {
                 final OpToUnrestrict op = mOpsToAllow.get(i);
+                setUidModeAllowed(op.code, op.uid);
+            }
+            final int allowIfDefaultCount = mOpsToAllowIfDefault.size();
+            for (int i = 0; i < allowIfDefaultCount; i++) {
+                final OpToUnrestrict op = mOpsToAllowIfDefault.get(i);
                 setUidModeAllowedIfDefault(op.code, op.uid, op.packageName);
             }
-            final int ignoreCount = mOpsToIgnore.size();
-            for (int i = 0; i < ignoreCount; i++) {
-                final OpToUnrestrict op = mOpsToIgnore.get(i);
+            final int ignoreIfDefaultCount = mOpsToIgnoreIfDefault.size();
+            for (int i = 0; i < ignoreIfDefaultCount; i++) {
+                final OpToUnrestrict op = mOpsToIgnoreIfDefault.get(i);
                 setUidModeIgnoredIfDefault(op.code, op.uid, op.packageName);
             }
             final int defaultCount = mOpsToDefault.size();
@@ -334,7 +355,7 @@ public final class PermissionPolicyService extends SystemService {
                 if (applyRestriction) {
                     mOpsToDefault.add(new OpToRestrict(uid, opCode));
                 } else {
-                    mOpsToAllow.add(new OpToUnrestrict(uid, pkg.packageName, opCode));
+                    mOpsToAllowIfDefault.add(new OpToUnrestrict(uid, pkg.packageName, opCode));
                 }
             } else if (permissionInfo.isSoftRestricted()) {
                 // Storage uses a special app op to decide the mount state and
@@ -349,7 +370,7 @@ public final class PermissionPolicyService extends SystemService {
                         mOpsToAllow.add(new OpToUnrestrict(uid, pkg.packageName,
                                 AppOpsManager.OP_LEGACY_STORAGE));
                     } else {
-                        mOpsToIgnore.add(new OpToUnrestrict(uid, pkg.packageName,
+                        mOpsToIgnoreIfDefault.add(new OpToUnrestrict(uid, pkg.packageName,
                                 AppOpsManager.OP_LEGACY_STORAGE));
                     }
                 }
@@ -414,6 +435,10 @@ public final class PermissionPolicyService extends SystemService {
             setUidModeIfDefault(opCode, uid, AppOpsManager.MODE_ALLOWED, packageName);
         }
 
+        private void setUidModeAllowed(int opCode, int uid) {
+            mAppOpsManager.setUidMode(opCode, uid, AppOpsManager.MODE_ALLOWED);
+        }
+
         private void setUidModeIgnoredIfDefault(int opCode, int uid, @NonNull String packageName) {
             setUidModeIfDefault(opCode, uid, AppOpsManager.MODE_IGNORED, packageName);
         }
@@ -465,6 +490,50 @@ public final class PermissionPolicyService extends SystemService {
                 this.packageName = packageName;
                 this.fgPermissionName = fgPermissionName;
                 this.bgPermissionName = bgPermissionName;
+            }
+        }
+    }
+
+    private class Internal extends PermissionPolicyInternal {
+
+        @Override
+        public boolean checkStartActivity(@NonNull Intent intent, int callingUid,
+                @Nullable String callingPackage) {
+            if (callingPackage != null && isActionRemovedForCallingPackage(intent.getAction(),
+                    callingPackage)) {
+                Slog.w(LOG_TAG, "Action Removed: starting " + intent.toString() + " from "
+                        + callingPackage + " (uid=" + callingUid + ")");
+                return false;
+            }
+            return true;
+        }
+
+        /**
+         * Check if the intent action is removed for the calling package (often based on target SDK
+         * version). If the action is removed, we'll silently cancel the activity launch.
+         */
+        private boolean isActionRemovedForCallingPackage(@Nullable String action,
+                @NonNull String callingPackage) {
+            if (action == null) {
+                return false;
+            }
+            switch (action) {
+                case TelecomManager.ACTION_CHANGE_DEFAULT_DIALER:
+                case Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT: {
+                    ApplicationInfo applicationInfo;
+                    try {
+                        applicationInfo = getContext().getPackageManager().getApplicationInfo(
+                                callingPackage, 0);
+                    } catch (PackageManager.NameNotFoundException e) {
+                        Slog.i(LOG_TAG, "Cannot find application info for " + callingPackage);
+                        return false;
+                    }
+                    // Applications targeting Q should use RoleManager.createRequestRoleIntent()
+                    // instead.
+                    return applicationInfo.targetSdkVersion >= Build.VERSION_CODES.Q;
+                }
+                default:
+                    return false;
             }
         }
     }

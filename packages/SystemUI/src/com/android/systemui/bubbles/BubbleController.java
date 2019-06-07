@@ -16,6 +16,7 @@
 
 package com.android.systemui.bubbles;
 
+import static android.content.pm.ActivityInfo.DOCUMENT_LAUNCH_ALWAYS;
 import static android.service.notification.NotificationListenerService.REASON_APP_CANCEL;
 import static android.service.notification.NotificationListenerService.REASON_APP_CANCEL_ALL;
 import static android.service.notification.NotificationListenerService.REASON_CANCEL;
@@ -40,7 +41,10 @@ import android.app.ActivityManager.RunningTaskInfo;
 import android.app.ActivityTaskManager;
 import android.app.IActivityTaskManager;
 import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ParceledListSlice;
 import android.content.res.Configuration;
 import android.graphics.Rect;
@@ -108,10 +112,10 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     static final int DISMISS_ACCESSIBILITY_ACTION = 6;
     static final int DISMISS_NO_LONGER_BUBBLE = 7;
 
-    static final int MAX_BUBBLES = 5; // TODO: actually enforce this
+    public static final int MAX_BUBBLES = 5; // TODO: actually enforce this
 
     // Enables some subset of notifs to automatically become bubbles
-    private static final boolean DEBUG_ENABLE_AUTO_BUBBLE = false;
+    public static final boolean DEBUG_ENABLE_AUTO_BUBBLE = false;
 
     /** Flag to enable or disable the entire feature */
     private static final String ENABLE_BUBBLES = "experiment_enable_bubbles";
@@ -193,7 +197,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             if (shouldCollapse) {
                 collapseStack();
             }
-            updateVisibility();
+            updateStack();
         }
     }
 
@@ -381,6 +385,10 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
      * @param notif the notification associated with this bubble.
      */
     void updateBubble(NotificationEntry notif) {
+        // If this is an interruptive notif, mark that it's interrupted
+        if (notif.importance >= NotificationManager.IMPORTANCE_HIGH) {
+            notif.setInterruption();
+        }
         mBubbleData.notificationEntryUpdated(notif);
     }
 
@@ -445,7 +453,8 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             if (!areBubblesEnabled(mContext)) {
                 return;
             }
-            if (mNotificationInterruptionStateProvider.shouldBubbleUp(entry)) {
+            if (mNotificationInterruptionStateProvider.shouldBubbleUp(entry)
+                    && canLaunchInActivityView(mContext, entry)) {
                 updateShowInShadeForSuppressNotification(entry);
             }
         }
@@ -455,7 +464,8 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             if (!areBubblesEnabled(mContext)) {
                 return;
             }
-            if (mNotificationInterruptionStateProvider.shouldBubbleUp(entry)) {
+            if (mNotificationInterruptionStateProvider.shouldBubbleUp(entry)
+                    && canLaunchInActivityView(mContext, entry)) {
                 updateBubble(entry);
             }
         }
@@ -465,7 +475,8 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             if (!areBubblesEnabled(mContext)) {
                 return;
             }
-            boolean shouldBubble = mNotificationInterruptionStateProvider.shouldBubbleUp(entry);
+            boolean shouldBubble = mNotificationInterruptionStateProvider.shouldBubbleUp(entry)
+                    && canLaunchInActivityView(mContext, entry);
             if (!shouldBubble && mBubbleData.hasBubbleWithKey(entry.key)) {
                 // It was previously a bubble but no longer a bubble -- lets remove it
                 removeBubble(entry.key, DISMISS_NO_LONGER_BUBBLE);
@@ -534,10 +545,11 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             }
         }
 
+        // Runs on state change.
         @Override
         public void apply() {
             mNotificationEntryManager.updateNotifications();
-            updateVisibility();
+            updateStack();
 
             if (DEBUG) {
                 Log.d(TAG, "[BubbleData]");
@@ -554,34 +566,31 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     };
 
     /**
-     * Lets any listeners know if bubble state has changed.
+     * Updates the visibility of the bubbles based on current state.
+     * Does not un-bubble, just hides or un-hides. Notifies any
+     * {@link BubbleStateChangeListener}s of visibility changes.
+     * Updates stack description for TalkBack focus.
      */
-    private void updateBubblesShowing() {
+    public void updateStack() {
         if (mStackView == null) {
             return;
         }
-
-        boolean hadBubbles = mStatusBarWindowController.getBubblesShowing();
-        boolean hasBubblesShowing = hasBubbles() && mStackView.getVisibility() == VISIBLE;
-        mStatusBarWindowController.setBubblesShowing(hasBubblesShowing);
-        if (mStateChangeListener != null && hadBubbles != hasBubblesShowing) {
-            mStateChangeListener.onHasBubblesChanged(hasBubblesShowing);
-        }
-    }
-
-    /**
-     * Updates the visibility of the bubbles based on current state.
-     * Does not un-bubble, just hides or un-hides. Will notify any
-     * {@link BubbleStateChangeListener}s if visibility changes.
-     */
-    public void updateVisibility() {
         if (mStatusBarStateListener.getCurrentState() == SHADE && hasBubbles()) {
             // Bubbles only appear in unlocked shade
             mStackView.setVisibility(hasBubbles() ? VISIBLE : INVISIBLE);
         } else if (mStackView != null) {
             mStackView.setVisibility(INVISIBLE);
         }
-        updateBubblesShowing();
+
+        // Let listeners know if bubble state changed.
+        boolean hadBubbles = mStatusBarWindowController.getBubblesShowing();
+        boolean hasBubblesShowing = hasBubbles() && mStackView.getVisibility() == VISIBLE;
+        mStatusBarWindowController.setBubblesShowing(hasBubblesShowing);
+        if (mStateChangeListener != null && hadBubbles != hasBubblesShowing) {
+            mStateChangeListener.onHasBubblesChanged(hasBubblesShowing);
+        }
+
+        mStackView.updateContentDescription();
     }
 
     /**
@@ -652,12 +661,6 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         return (((isMessageType && hasRemoteInput) || isMessageStyle) && autoBubbleMessages)
                 || (isImportantOngoing && autoBubbleOngoing)
                 || autoBubbleAll;
-    }
-
-    private boolean shouldAutoExpand(NotificationEntry entry) {
-        Notification.BubbleMetadata metadata = entry.getBubbleMetadata();
-        return metadata != null && metadata.getAutoExpandBubble()
-                && isForegroundApp(mContext, entry.notification.getPackageName());
     }
 
     private void updateShowInShadeForSuppressNotification(NotificationEntry entry) {
@@ -766,6 +769,48 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                 context.getContentResolver(),
                 BUBBLE_BOUNCINESS,
                 (int) (defaultBounciness * 100)) / 100f;
+    }
+
+    /**
+     * Whether an intent is properly configured to display in an {@link android.app.ActivityView}.
+     *
+     * Keep checks in sync with NotificationManagerService#canLaunchInActivityView. Typically
+     * that should filter out any invalid bubbles, but should protect SysUI side just in case.
+     *
+     * @param context the context to use.
+     * @param entry the entry to bubble.
+     */
+    static boolean canLaunchInActivityView(Context context, NotificationEntry entry) {
+        PendingIntent intent = entry.getBubbleMetadata() != null
+                ? entry.getBubbleMetadata().getIntent()
+                : null;
+        if (intent == null) {
+            Log.w(TAG, "Unable to create bubble -- no intent");
+            return false;
+        }
+        ActivityInfo info =
+                intent.getIntent().resolveActivityInfo(context.getPackageManager(), 0);
+        if (info == null) {
+            Log.w(TAG, "Unable to send as bubble -- couldn't find activity info for intent: "
+                    + intent);
+            return false;
+        }
+        if (!ActivityInfo.isResizeableMode(info.resizeMode)) {
+            Log.w(TAG, "Unable to send as bubble -- activity is not resizable for intent: "
+                    + intent);
+            return false;
+        }
+        if (info.documentLaunchMode != DOCUMENT_LAUNCH_ALWAYS) {
+            Log.w(TAG, "Unable to send as bubble -- activity is not documentLaunchMode=always "
+                    + "for intent: " + intent);
+            return false;
+        }
+        if ((info.flags & ActivityInfo.FLAG_ALLOW_EMBEDDED) == 0) {
+            Log.w(TAG, "Unable to send as bubble -- activity is not embeddable for intent: "
+                    + intent);
+            return false;
+        }
+        return true;
     }
 
     /** PinnedStackListener that dispatches IME visibility updates to the stack. */

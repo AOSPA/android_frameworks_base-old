@@ -261,7 +261,7 @@
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"네트워크 알림"</string>
     <string name="notification_channel_network_available" msgid="4531717914138179517">"네트워크 사용 가능"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"VPN 상태"</string>
-    <string name="notification_channel_device_admin" msgid="1568154104368069249">"기기 관리"</string>
+    <string name="notification_channel_device_admin" msgid="8353118887482520565">"IT 관리자가 보낸 알림"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"알림"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"소매 데모"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"USB 연결"</string>
@@ -304,7 +304,7 @@
     <string name="permgrouprequest_camera" msgid="1299833592069671756">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;에서 사진을 촬영하고 동영상을 녹화하도록 허용하시겠습니까?"</string>
     <string name="permgrouplab_calllog" msgid="8798646184930388160">"통화 기록"</string>
     <string name="permgroupdesc_calllog" msgid="3006237336748283775">"통화 기록 읽고 쓰기"</string>
-    <string name="permgrouprequest_calllog" msgid="8487355309583773267">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;이(가) 통화 기록에 액세스하도록 허용하시겠습니까?"</string>
+    <string name="permgrouprequest_calllog" msgid="8487355309583773267">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;에서 통화 기록에 액세스하도록 허용하시겠습니까?"</string>
     <string name="permgrouplab_phone" msgid="5229115638567440675">"전화"</string>
     <string name="permgroupdesc_phone" msgid="6234224354060641055">"전화 걸기 및 관리"</string>
     <string name="permgrouprequest_phone" msgid="9166979577750581037">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;에서 전화를 걸고 관리하도록 허용하시겠습니까?"</string>
@@ -565,23 +565,23 @@
     <string name="face_acquired_too_low" msgid="488983581737550912">"휴대전화를 아래쪽으로 이동하세요."</string>
     <string name="face_acquired_too_right" msgid="3667075962661863218">"휴대전화를 왼쪽으로 이동하세요."</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"휴대전화를 오른쪽으로 이동하세요."</string>
-    <string name="face_acquired_poor_gaze" msgid="8471716624377228327">"눈을 뜨고 화면을 바라보세요."</string>
+    <!-- no translation found for face_acquired_poor_gaze (5606479370806754905) -->
+    <skip />
     <string name="face_acquired_not_detected" msgid="4885504661626728809">"얼굴이 보이지 않습니다. 휴대전화를 바라보세요."</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"너무 많이 움직였습니다. 휴대전화를 흔들리지 않게 잡으세요."</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"얼굴을 다시 등록해 주세요."</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"더 이상 얼굴을 인식할 수 없습니다. 다시 시도하세요."</string>
     <string name="face_acquired_too_similar" msgid="1508776858407646460">"너무 비슷합니다. 다른 포즈를 취해 보세요."</string>
-    <!-- no translation found for face_acquired_pan_too_extreme (4581629343077288178) -->
-    <skip />
-    <!-- no translation found for face_acquired_tilt_too_extreme (4019954263012496468) -->
-    <skip />
-    <string name="face_acquired_roll_too_extreme" msgid="1444829237745898619">"고개를 똑바로 세워 주세요."</string>
-    <string name="face_acquired_obscured" msgid="5747521031647744553">"얼굴과 휴대전화 사이의 공간을 비워두세요."</string>
-    <string name="face_acquired_sensor_dirty" msgid="364493868630891300">"카메라의 이물질을 제거하세요."</string>
+    <string name="face_acquired_pan_too_extreme" msgid="4581629343077288178">"고개를 조금 덜 돌려 보세요."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"고개를 조금 덜 돌려 보세요."</string>
+    <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"고개를 조금 덜 돌려 보세요."</string>
+    <string name="face_acquired_obscured" msgid="5357207702967893283">"얼굴이 가려지지 않도록 해 주세요."</string>
+    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"화면 상단 가장자리의 센서를 깨끗하게 닦아 주세요."</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"얼굴을 확인할 수 없습니다. 하드웨어를 사용할 수 없습니다."</string>
-    <string name="face_error_timeout" msgid="2605673935810019129">"얼굴 인식 제한시간에 도달했습니다. 다시 시도하세요."</string>
+    <!-- no translation found for face_error_timeout (3202585609451248103) -->
+    <skip />
     <string name="face_error_no_space" msgid="2712120617457553825">"새 얼굴 데이터를 저장할 수 없습니다. 먼저 기존 얼굴 데이터를 삭제하세요."</string>
     <string name="face_error_canceled" msgid="2768146728600802422">"얼굴 인식 작업이 취소되었습니다."</string>
     <string name="face_error_user_canceled" msgid="9003022830076496163">"사용자가 얼굴 인증을 취소했습니다."</string>
@@ -650,6 +650,10 @@
     <string name="permdesc_bindCarrierServices" msgid="1391552602551084192">"권한을 가진 애플리케이션에서 이동통신사 서비스를 사용하도록 허용합니다. 일반 앱에는 필요하지 않습니다."</string>
     <string name="permlab_access_notification_policy" msgid="4247510821662059671">"방해 금지 모드에 접근"</string>
     <string name="permdesc_access_notification_policy" msgid="3296832375218749580">"앱에서 방해 금지 모드 설정을 읽고 작성하도록 허용합니다."</string>
+    <!-- no translation found for permlab_startViewPermissionUsage (5484728591597709944) -->
+    <skip />
+    <!-- no translation found for permdesc_startViewPermissionUsage (4808345878203594428) -->
+    <skip />
     <string name="policylab_limitPassword" msgid="4497420728857585791">"비밀번호 규칙 설정"</string>
     <string name="policydesc_limitPassword" msgid="2502021457917874968">"화면 잠금 비밀번호와 PIN에 허용되는 길이와 문자 수를 제어합니다."</string>
     <string name="policylab_watchLogin" msgid="5091404125971980158">"화면 잠금 해제 시도 모니터링"</string>
@@ -984,8 +988,8 @@
     <string name="preposition_for_year" msgid="5040395640711867177">"<xliff:g id="YEAR">%s</xliff:g>년"</string>
     <string name="day" msgid="8144195776058119424">"일"</string>
     <string name="days" msgid="4774547661021344602">"일"</string>
-    <string name="hour" msgid="2126771916426189481">"시간"</string>
-    <string name="hours" msgid="894424005266852993">"시간"</string>
+    <string name="hour" msgid="2126771916426189481">"시"</string>
+    <string name="hours" msgid="894424005266852993">"시"</string>
     <string name="minute" msgid="9148878657703769868">"분"</string>
     <string name="minutes" msgid="5646001005827034509">"분"</string>
     <string name="second" msgid="3184235808021478">"초"</string>
@@ -1848,7 +1852,7 @@
     <string name="zen_mode_downtime_feature_name" msgid="2626974636779860146">"다운타임"</string>
     <string name="zen_mode_default_weeknights_name" msgid="3081318299464998143">"평일 밤"</string>
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"주말"</string>
-    <string name="zen_mode_default_events_name" msgid="8158334939013085363">"캘린더 일정"</string>
+    <string name="zen_mode_default_events_name" msgid="8158334939013085363">"캘린더 일정 중"</string>
     <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"수면 중"</string>
     <string name="muted_by" msgid="5942954724562097128">"<xliff:g id="THIRD_PARTY">%1$s</xliff:g>(이)가 일부 소리를 음소거함"</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"사용 중인 기기 내부에 문제가 발생했습니다. 초기화할 때까지 불안정할 수 있습니다."</string>
@@ -1900,9 +1904,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"업데이트 확인"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"새 메시지 있음"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"SMS 앱을 열고 확인"</string>
-    <string name="user_encrypted_title" msgid="9054897468831672082">"일부 기능이 제한될 수 있습니다."</string>
-    <string name="user_encrypted_message" msgid="4923292604515744267">"잠금 해제하려면 탭하세요."</string>
-    <string name="user_encrypted_detail" msgid="5708447464349420392">"사용자 데이터 잠김"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"일부 기능이 제한될 수 있음"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"직장 프로필 잠김"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"탭하여 직장 프로필 잠금 해제"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"<xliff:g id="PRODUCT_NAME">%1$s</xliff:g>에 연결됨"</string>
@@ -1924,7 +1926,7 @@
     <string name="app_category_productivity" msgid="3742083261781538852">"생산성"</string>
     <string name="device_storage_monitor_notification_channel" msgid="3295871267414816228">"기기 저장용량"</string>
     <string name="adb_debugging_notification_channel_tv" msgid="5537766997350092316">"USB 디버깅"</string>
-    <string name="time_picker_hour_label" msgid="2979075098868106450">"시간"</string>
+    <string name="time_picker_hour_label" msgid="2979075098868106450">"시"</string>
     <string name="time_picker_minute_label" msgid="5168864173796598399">"분"</string>
     <string name="time_picker_header_text" msgid="143536825321922567">"시간 설정"</string>
     <string name="time_picker_input_error" msgid="7574999942502513765">"올바른 시간을 입력하세요."</string>

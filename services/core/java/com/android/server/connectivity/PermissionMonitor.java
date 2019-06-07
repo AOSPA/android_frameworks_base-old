@@ -199,15 +199,13 @@ public class PermissionMonitor {
             ArraySet<String> perms = systemPermission.valueAt(i);
             int uid = systemPermission.keyAt(i);
             int netdPermission = 0;
-            // Get the uids of native services that have UPDATE_DEVICE_STATS permission.
+            // Get the uids of native services that have UPDATE_DEVICE_STATS or INTERNET permission.
             if (perms != null) {
                 netdPermission |= perms.contains(UPDATE_DEVICE_STATS)
                         ? INetd.PERMISSION_UPDATE_DEVICE_STATS : 0;
+                netdPermission |= perms.contains(INTERNET)
+                        ? INetd.PERMISSION_INTERNET : 0;
             }
-            // For internet permission, the native services have their own selinux domains and
-            // sepolicy will control the socket creation during run time. netd cannot block the
-            // socket creation based on the permission information here.
-            netdPermission |= INetd.PERMISSION_INTERNET;
             netdPermsUids.put(uid, netdPermsUids.get(uid) | netdPermission);
         }
         log("Users: " + mUsers.size() + ", Apps: " + mApps.size());
@@ -650,7 +648,7 @@ public class PermissionMonitor {
                 case INetd.PERMISSION_UPDATE_DEVICE_STATS:
                     updateStatsPermissionAppIds.add(netdPermissionsAppIds.keyAt(i));
                     break;
-                case INetd.NO_PERMISSIONS:
+                case INetd.PERMISSION_NONE:
                     noPermissionAppIds.add(netdPermissionsAppIds.keyAt(i));
                     break;
                 case INetd.PERMISSION_UNINSTALLED:
@@ -676,7 +674,7 @@ public class PermissionMonitor {
                         ArrayUtils.convertToIntArray(updateStatsPermissionAppIds));
             }
             if (noPermissionAppIds.size() != 0) {
-                mNetd.trafficSetNetPermForUids(INetd.NO_PERMISSIONS,
+                mNetd.trafficSetNetPermForUids(INetd.PERMISSION_NONE,
                         ArrayUtils.convertToIntArray(noPermissionAppIds));
             }
             if (uninstalledAppIds.size() != 0) {

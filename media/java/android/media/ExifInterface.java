@@ -82,7 +82,7 @@ import java.util.regex.Pattern;
  */
 public class ExifInterface {
     private static final String TAG = "ExifInterface";
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     // The Exif tag names. See Tiff 6.0 Section 3 and Section 8.
     /** Type is String. */
@@ -233,6 +233,12 @@ public class ExifInterface {
     public static final String TAG_NEW_SUBFILE_TYPE = "NewSubfileType";
     /** Type is String. */
     public static final String TAG_OECF = "OECF";
+    /** Type is String. {@hide} */
+    public static final String TAG_OFFSET_TIME = "OffsetTime";
+    /** Type is String. {@hide} */
+    public static final String TAG_OFFSET_TIME_ORIGINAL = "OffsetTimeOriginal";
+    /** Type is String. {@hide} */
+    public static final String TAG_OFFSET_TIME_DIGITIZED = "OffsetTimeDigitized";
     /** Type is int. */
     public static final String TAG_PIXEL_X_DIMENSION = "PixelXDimension";
     /** Type is int. */
@@ -486,6 +492,7 @@ public class ExifInterface {
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private static SimpleDateFormat sFormatter;
+    private static SimpleDateFormat sFormatterTz;
 
     // See Exchangeable image file format for digital still cameras: Exif version 2.2.
     // The following values are for parsing EXIF data area. There are tag groups in EXIF data area.
@@ -1041,6 +1048,9 @@ public class ExifInterface {
             new ExifTag(TAG_EXIF_VERSION, 36864, IFD_FORMAT_STRING),
             new ExifTag(TAG_DATETIME_ORIGINAL, 36867, IFD_FORMAT_STRING),
             new ExifTag(TAG_DATETIME_DIGITIZED, 36868, IFD_FORMAT_STRING),
+            new ExifTag(TAG_OFFSET_TIME, 36880, IFD_FORMAT_STRING),
+            new ExifTag(TAG_OFFSET_TIME_ORIGINAL, 36881, IFD_FORMAT_STRING),
+            new ExifTag(TAG_OFFSET_TIME_DIGITIZED, 36882, IFD_FORMAT_STRING),
             new ExifTag(TAG_COMPONENTS_CONFIGURATION, 37121, IFD_FORMAT_UNDEFINED),
             new ExifTag(TAG_COMPRESSED_BITS_PER_PIXEL, 37122, IFD_FORMAT_URATIONAL),
             new ExifTag(TAG_SHUTTER_SPEED_VALUE, 37377, IFD_FORMAT_SRATIONAL),
@@ -1301,6 +1311,8 @@ public class ExifInterface {
     static {
         sFormatter = new SimpleDateFormat("yyyy:MM:dd HH:mm:ss");
         sFormatter.setTimeZone(TimeZone.getTimeZone("UTC"));
+        sFormatterTz = new SimpleDateFormat("yyyy:MM:dd HH:mm:ss XXX");
+        sFormatterTz.setTimeZone(TimeZone.getTimeZone("UTC"));
 
         // Build up the hash tables to look up Exif tags for reading Exif tags.
         for (int ifdType = 0; ifdType < EXIF_TAGS.length; ++ifdType) {
@@ -1593,12 +1605,15 @@ public class ExifInterface {
                         || exifTag.primaryFormat == IFD_FORMAT_STRING) {
                     dataFormat = exifTag.primaryFormat;
                 } else {
-                    Log.w(TAG, "Given tag (" + tag + ") value didn't match with one of expected "
-                            + "formats: " + IFD_FORMAT_NAMES[exifTag.primaryFormat]
-                            + (exifTag.secondaryFormat == -1 ? "" : ", "
-                            + IFD_FORMAT_NAMES[exifTag.secondaryFormat]) + " (guess: "
-                            + IFD_FORMAT_NAMES[guess.first] + (guess.second == -1 ? "" : ", "
-                            + IFD_FORMAT_NAMES[guess.second]) + ")");
+                    if (DEBUG) {
+                        Log.d(TAG, "Given tag (" + tag
+                                + ") value didn't match with one of expected "
+                                + "formats: " + IFD_FORMAT_NAMES[exifTag.primaryFormat]
+                                + (exifTag.secondaryFormat == -1 ? "" : ", "
+                                + IFD_FORMAT_NAMES[exifTag.secondaryFormat]) + " (guess: "
+                                + IFD_FORMAT_NAMES[guess.first] + (guess.second == -1 ? "" : ", "
+                                + IFD_FORMAT_NAMES[guess.second]) + ")");
+                    }
                     continue;
                 }
                 switch (dataFormat) {
@@ -1676,7 +1691,9 @@ public class ExifInterface {
                         break;
                     }
                     default:
-                        Log.w(TAG, "Data format isn't one of expected formats: " + dataFormat);
+                        if (DEBUG) {
+                            Log.d(TAG, "Data format isn't one of expected formats: " + dataFormat);
+                        }
                         continue;
                 }
             }
@@ -1778,7 +1795,7 @@ public class ExifInterface {
             // ExifInterface.
             mIsSupportedFile = false;
             if (DEBUG) {
-                Log.w(TAG, "Invalid image: ExifInterface got an unsupported image format file"
+                Log.d(TAG, "Invalid image: ExifInterface got an unsupported image format file"
                         + "(ExifInterface supports JPEG and some RAW image formats only) "
                         + "or a corrupted JPEG file to ExifInterface.", e);
             }
@@ -2140,7 +2157,8 @@ public class ExifInterface {
     @UnsupportedAppUsage
     public @CurrentTimeMillisLong long getDateTime() {
         return parseDateTime(getAttribute(TAG_DATETIME),
-                getAttribute(TAG_SUBSEC_TIME));
+                getAttribute(TAG_SUBSEC_TIME),
+                getAttribute(TAG_OFFSET_TIME));
     }
 
     /**
@@ -2151,7 +2169,8 @@ public class ExifInterface {
      */
     public @CurrentTimeMillisLong long getDateTimeDigitized() {
         return parseDateTime(getAttribute(TAG_DATETIME_DIGITIZED),
-                getAttribute(TAG_SUBSEC_TIME_DIGITIZED));
+                getAttribute(TAG_SUBSEC_TIME_DIGITIZED),
+                getAttribute(TAG_OFFSET_TIME_DIGITIZED));
     }
 
     /**
@@ -2163,11 +2182,12 @@ public class ExifInterface {
     @UnsupportedAppUsage
     public @CurrentTimeMillisLong long getDateTimeOriginal() {
         return parseDateTime(getAttribute(TAG_DATETIME_ORIGINAL),
-                getAttribute(TAG_SUBSEC_TIME_ORIGINAL));
+                getAttribute(TAG_SUBSEC_TIME_ORIGINAL),
+                getAttribute(TAG_OFFSET_TIME_ORIGINAL));
     }
 
     private static @CurrentTimeMillisLong long parseDateTime(@Nullable String dateTimeString,
-            @Nullable String subSecs) {
+            @Nullable String subSecs, @Nullable String offsetString) {
         if (dateTimeString == null
                 || !sNonZeroTimePattern.matcher(dateTimeString).matches()) return -1;
 
@@ -2176,6 +2196,13 @@ public class ExifInterface {
             // The exif field is in local time. Parsing it as if it is UTC will yield time
             // since 1/1/1970 local time
             Date datetime = sFormatter.parse(dateTimeString, pos);
+
+            if (offsetString != null) {
+                dateTimeString = dateTimeString + " " + offsetString;
+                ParsePosition position = new ParsePosition(0);
+                datetime = sFormatterTz.parse(dateTimeString, position);
+            }
+
             if (datetime == null) return -1;
             long msecs = datetime.getTime();
 
@@ -3161,14 +3188,20 @@ public class ExifInterface {
             long byteCount = 0;
             boolean valid = false;
             if (tag == null) {
-                Log.w(TAG, "Skip the tag entry since tag number is not defined: " + tagNumber);
+                if (DEBUG) {
+                    Log.d(TAG, "Skip the tag entry since tag number is not defined: " + tagNumber);
+                }
             } else if (dataFormat <= 0 || dataFormat >= IFD_FORMAT_BYTES_PER_FORMAT.length) {
-                Log.w(TAG, "Skip the tag entry since data format is invalid: " + dataFormat);
+                if (DEBUG) {
+                    Log.d(TAG, "Skip the tag entry since data format is invalid: " + dataFormat);
+                }
             } else {
                 byteCount = (long) numberOfComponents * IFD_FORMAT_BYTES_PER_FORMAT[dataFormat];
                 if (byteCount < 0 || byteCount > Integer.MAX_VALUE) {
-                    Log.w(TAG, "Skip the tag entry since the number of components is invalid: "
-                            + numberOfComponents);
+                    if (DEBUG) {
+                        Log.d(TAG, "Skip the tag entry since the number of components is invalid: "
+                                + numberOfComponents);
+                    }
                 } else {
                     valid = true;
                 }
@@ -3217,7 +3250,9 @@ public class ExifInterface {
                     dataInputStream.seek(offset);
                 } else {
                     // Skip if invalid data offset.
-                    Log.w(TAG, "Skip the tag entry since data offset is invalid: " + offset);
+                    if (DEBUG) {
+                        Log.d(TAG, "Skip the tag entry since data offset is invalid: " + offset);
+                    }
                     dataInputStream.seek(nextEntryOffset);
                     continue;
                 }
@@ -3267,11 +3302,15 @@ public class ExifInterface {
                         dataInputStream.seek(offset);
                         readImageFileDirectory(dataInputStream, nextIfdType);
                     } else {
-                        Log.w(TAG, "Skip jump into the IFD since it has already been read: "
-                                + "IfdType " + nextIfdType + " (at " + offset + ")");
+                        if (DEBUG) {
+                            Log.d(TAG, "Skip jump into the IFD since it has already been read: "
+                                    + "IfdType " + nextIfdType + " (at " + offset + ")");
+                        }
                     }
                 } else {
-                    Log.w(TAG, "Skip jump into the IFD since its offset is invalid: " + offset);
+                    if (DEBUG) {
+                        Log.d(TAG, "Skip jump into the IFD since its offset is invalid: " + offset);
+                    }
                 }
 
                 dataInputStream.seek(nextEntryOffset);
@@ -3326,12 +3365,16 @@ public class ExifInterface {
                         readImageFileDirectory(dataInputStream, IFD_TYPE_PREVIEW);
                     }
                 } else {
-                    Log.w(TAG, "Stop reading file since re-reading an IFD may cause an "
-                            + "infinite loop: " + nextIfdOffset);
+                    if (DEBUG) {
+                        Log.d(TAG, "Stop reading file since re-reading an IFD may cause an "
+                                + "infinite loop: " + nextIfdOffset);
+                    }
                 }
             } else {
-                Log.w(TAG, "Stop reading file since a wrong offset may cause an infinite loop: "
-                        + nextIfdOffset);
+                if (DEBUG) {
+                    Log.d(TAG, "Stop reading file since a wrong offset may cause an infinite loop: "
+                            + nextIfdOffset);
+                }
             }
         }
     }

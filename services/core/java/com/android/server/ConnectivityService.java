@@ -41,7 +41,7 @@ import static android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED;
 import static android.net.NetworkCapabilities.TRANSPORT_VPN;
 import static android.net.NetworkPolicyManager.RULE_NONE;
 import static android.net.NetworkPolicyManager.uidRulesToString;
-import static android.net.shared.NetworkMonitorUtils.isValidationRequired;
+import static android.net.shared.NetworkMonitorUtils.isPrivateDnsValidationRequired;
 import static android.os.Process.INVALID_UID;
 import static android.system.OsConstants.IPPROTO_TCP;
 import static android.system.OsConstants.IPPROTO_UDP;
@@ -2869,8 +2869,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     }
 
-    private boolean networkRequiresValidation(NetworkAgentInfo nai) {
-        return isValidationRequired(nai.networkCapabilities);
+    private boolean networkRequiresPrivateDnsValidation(NetworkAgentInfo nai) {
+        return isPrivateDnsValidationRequired(nai.networkCapabilities);
     }
 
     private void handleFreshlyValidatedNetwork(NetworkAgentInfo nai) {
@@ -2888,7 +2888,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         for (NetworkAgentInfo nai : mNetworkAgentInfos.values()) {
             handlePerNetworkPrivateDnsConfig(nai, cfg);
-            if (networkRequiresValidation(nai)) {
+            if (networkRequiresPrivateDnsValidation(nai)) {
                 handleUpdateLinkProperties(nai, new LinkProperties(nai.linkProperties));
             }
         }
@@ -2897,7 +2897,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private void handlePerNetworkPrivateDnsConfig(NetworkAgentInfo nai, PrivateDnsConfig cfg) {
         // Private DNS only ever applies to networks that might provide
         // Internet access and therefore also require validation.
-        if (!networkRequiresValidation(nai)) return;
+        if (!networkRequiresPrivateDnsValidation(nai)) return;
 
         // Notify the NetworkAgentInfo/NetworkMonitor in case NetworkMonitor needs to cancel or
         // schedule DNS resolutions. If a DNS resolution is required the
@@ -3544,7 +3544,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
      */
     @Override
     public void startCaptivePortalAppInternal(Network network, Bundle appExtras) {
-        mContext.checkCallingOrSelfPermission(NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK);
+        mContext.enforceCallingOrSelfPermission(NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK,
+                "ConnectivityService");
 
         final Intent appIntent = new Intent(ConnectivityManager.ACTION_CAPTIVE_PORTAL_SIGN_IN);
         appIntent.putExtras(appExtras);

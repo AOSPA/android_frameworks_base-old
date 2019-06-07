@@ -306,7 +306,6 @@ public class ZygoteProcess {
      * @param appDataDir null-ok the data directory of the app.
      * @param invokeWith null-ok the command to invoke with.
      * @param packageName null-ok the name of the package this process belongs to.
-     * @param packagesForUid null-ok all the packages with the same uid as this process.
      * @param zygoteArgs Additional arguments to supply to the zygote process.
      * @param useSystemGraphicsDriver whether the process uses system graphics driver.
      *
@@ -324,8 +323,6 @@ public class ZygoteProcess {
                                                   @Nullable String appDataDir,
                                                   @Nullable String invokeWith,
                                                   @Nullable String packageName,
-                                                  @Nullable String[] packagesForUid,
-                                                  @Nullable String sandboxId,
                                                   boolean useUsapPool,
                                                   boolean useSystemGraphicsDriver,
                                                   @Nullable String[] zygoteArgs) {
@@ -338,8 +335,7 @@ public class ZygoteProcess {
             return startViaZygote(processClass, niceName, uid, gid, gids,
                     runtimeFlags, mountExternal, targetSdkVersion, seInfo,
                     abi, instructionSet, appDataDir, invokeWith, /*startChildZygote=*/ false,
-                    packageName, packagesForUid, sandboxId,
-                    useUsapPool, useSystemGraphicsDriver, zygoteArgs);
+                    packageName, useUsapPool, useSystemGraphicsDriver, zygoteArgs);
         } catch (ZygoteStartFailedEx ex) {
             Log.e(LOG_TAG,
                     "Starting VM process through Zygote failed");
@@ -532,7 +528,6 @@ public class ZygoteProcess {
      * @param startChildZygote Start a sub-zygote. This creates a new zygote process
      * that has its state cloned from this zygote process.
      * @param packageName null-ok the name of the package this process belongs to.
-     * @param packagesForUid null-ok all the packages with the same uid as this process.
      * @param extraArgs Additional arguments to supply to the zygote process.
      * @return An object that describes the result of the attempt to start the process.
      * @throws ZygoteStartFailedEx if process start failed for any reason
@@ -550,8 +545,6 @@ public class ZygoteProcess {
                                                       @Nullable String invokeWith,
                                                       boolean startChildZygote,
                                                       @Nullable String packageName,
-                                                      @Nullable String[] packagesForUid,
-                                                      @Nullable String sandboxId,
                                                       boolean useUsapPool,
                                                       boolean useSystemGraphicsDriver,
                                                       @Nullable String[] extraArgs)
@@ -625,14 +618,6 @@ public class ZygoteProcess {
             argsForZygote.add("--package-name=" + packageName);
         }
 
-        if (packagesForUid != null && packagesForUid.length > 0) {
-            argsForZygote.add("--packages-for-uid=" + String.join(",", packagesForUid));
-        }
-
-        if (sandboxId != null) {
-            argsForZygote.add("--sandbox-id=" + sandboxId);
-        }
-
         argsForZygote.add(processClass);
 
         if (extraArgs != null) {
@@ -655,14 +640,9 @@ public class ZygoteProcess {
                 ZygoteConfig.USAP_POOL_ENABLED, USAP_POOL_ENABLED_DEFAULT);
 
         if (!propertyString.isEmpty()) {
-            if (SystemProperties.get("dalvik.vm.boot-image", "").endsWith("apex.art")) {
-                // TODO(b/119800099): Tweak usap configuration in jitzygote mode.
-                mUsapPoolEnabled = false;
-            } else {
-                mUsapPoolEnabled = Zygote.getConfigurationPropertyBoolean(
-                    ZygoteConfig.USAP_POOL_ENABLED,
-                    Boolean.parseBoolean(USAP_POOL_ENABLED_DEFAULT));
-            }
+            mUsapPoolEnabled = Zygote.getConfigurationPropertyBoolean(
+                  ZygoteConfig.USAP_POOL_ENABLED,
+                  Boolean.parseBoolean(USAP_POOL_ENABLED_DEFAULT));
         }
 
         boolean valueChanged = origVal != mUsapPoolEnabled;
@@ -679,6 +659,16 @@ public class ZygoteProcess {
 
     private boolean fetchUsapPoolEnabledPropWithMinInterval() {
         final long currentTimestamp = SystemClock.elapsedRealtime();
+
+        if (SystemProperties.get("dalvik.vm.boot-image", "").endsWith("apex.art")) {
+            // TODO(b/119800099): In jitzygote mode, we want to start using USAP processes
+            // only once the boot classpath has been compiled. There is currently no callback
+            // from the runtime to notify the zygote about end of compilation, so for now just
+            // arbitrarily start USAP processes 15 seconds after boot.
+            if (currentTimestamp <= 15000) {
+                return false;
+            }
+        }
 
         if (mIsFirstPropCheck
                 || (currentTimestamp - mLastPropCheckTimestamp >= Zygote.PROPERTY_CHECK_INTERVAL)) {
@@ -1149,7 +1139,6 @@ public class ZygoteProcess {
                     gids, runtimeFlags, 0 /* mountExternal */, 0 /* targetSdkVersion */, seInfo,
                     abi, instructionSet, null /* appDataDir */, null /* invokeWith */,
                     true /* startChildZygote */, null /* packageName */,
-                    null /* packagesForUid */, null /* sandboxId */,
                     false /* useUsapPool */, false /*useSystemGraphicsDriver*/,
                     extraArgs);
         } catch (ZygoteStartFailedEx ex) {

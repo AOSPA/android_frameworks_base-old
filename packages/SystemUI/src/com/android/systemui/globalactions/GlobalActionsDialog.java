@@ -25,6 +25,7 @@ import android.app.ActivityManager;
 import android.app.Dialog;
 import android.app.KeyguardManager;
 import android.app.PendingIntent;
+import android.app.StatusBarManager;
 import android.app.WallpaperManager;
 import android.app.admin.DevicePolicyManager;
 import android.app.trust.TrustManager;
@@ -38,7 +39,9 @@ import android.database.ContentObserver;
 import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
+import android.os.Binder;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -75,6 +78,7 @@ import com.android.internal.colorextraction.ColorExtractor.GradientColors;
 import com.android.internal.colorextraction.drawable.ScrimDrawable;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.telephony.TelephonyProperties;
 import com.android.internal.util.EmergencyAffordanceManager;
@@ -91,6 +95,7 @@ import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.GlobalActions.GlobalActionsManager;
 import com.android.systemui.plugins.GlobalActionsPanelPlugin;
 import com.android.systemui.statusbar.phone.ScrimController;
+import com.android.systemui.statusbar.phone.UnlockMethodCache;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.util.EmergencyDialerConstants;
 import com.android.systemui.util.leak.RotationUtils;
@@ -207,6 +212,14 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         Dependency.get(ConfigurationController.class).addCallback(this);
 
         mActivityStarter = Dependency.get(ActivityStarter.class);
+        UnlockMethodCache unlockMethodCache = UnlockMethodCache.getInstance(context);
+        unlockMethodCache.addListener(
+                () -> {
+                    if (mDialog != null && mDialog.mPanelController != null) {
+                        boolean locked = !unlockMethodCache.canSkipBouncer();
+                        mDialog.mPanelController.onDeviceLockStateChanged(locked);
+                    }
+                });
     }
 
     /**
@@ -1492,6 +1505,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
         private final Context mContext;
         private final MyAdapter mAdapter;
+        private final IStatusBarService mStatusBarService;
+        private final IBinder mToken = new Binder();
         private MultiListLayout mGlobalActionsLayout;
         private Drawable mBackgroundDrawable;
         private final SysuiColorExtractor mColorExtractor;
@@ -1507,6 +1522,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             mContext = context;
             mAdapter = adapter;
             mColorExtractor = Dependency.get(SysuiColorExtractor.class);
+            mStatusBarService = Dependency.get(IStatusBarService.class);
 
             // Window initialization
             Window window = getWindow();
@@ -1533,9 +1549,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         }
 
         private boolean shouldUsePanel() {
-            return isPanelEnabled(mContext)
-                    && mPanelController != null
-                    && mPanelController.getPanelContent() != null;
+            return mPanelController != null && mPanelController.getPanelContent() != null;
         }
 
         private void initializePanel() {
@@ -1550,8 +1564,11 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                     }
 
                     // Unlock rotation, so user can choose to rotate to portrait to see the panel.
-                    RotationPolicy.setRotationLockAtAngle(
-                            mContext, false, RotationUtils.ROTATION_NONE);
+                    // This call is posted so that the rotation does not change until post-layout,
+                    // otherwise onConfigurationChanged() may not get invoked.
+                    mGlobalActionsLayout.post(() ->
+                            RotationPolicy.setRotationLockAtAngle(
+                                    mContext, false, RotationUtils.ROTATION_NONE));
                 }
             } else {
                 if (!rotationLocked) {
@@ -1561,9 +1578,15 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                     }
 
                     // Lock to portrait, so the user doesn't accidentally hide the panel.
-                    RotationPolicy.setRotationLockAtAngle(
-                            mContext, true, RotationUtils.ROTATION_NONE);
+                    // This call is posted so that the rotation does not change until post-layout,
+                    // otherwise onConfigurationChanged() may not get invoked.
+                    mGlobalActionsLayout.post(() ->
+                            RotationPolicy.setRotationLockAtAngle(
+                                    mContext, true, RotationUtils.ROTATION_NONE));
                 }
+
+                // Disable rotation suggestions, if enabled
+                setRotationSuggestionsEnabled(false);
 
                 FrameLayout panelContainer = new FrameLayout(mContext);
                 FrameLayout.LayoutParams panelParams =
@@ -1576,6 +1599,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                         new ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT));
+                mBackgroundDrawable = mPanelController.getBackgroundDrawable();
+                mScrimAlpha = 1f;
             }
         }
 
@@ -1595,16 +1620,12 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             mGlobalActionsLayout.setRotationListener(this::onRotate);
             mGlobalActionsLayout.setAdapter(mAdapter);
 
-            if (!shouldUsePanel()) {
-                if (mBackgroundDrawable == null) {
-                    mBackgroundDrawable = new ScrimDrawable();
-                }
-                mScrimAlpha = ScrimController.GRADIENT_SCRIM_ALPHA;
-            } else {
-                mBackgroundDrawable = mContext.getDrawable(
-                        com.android.systemui.R.drawable.global_action_panel_scrim);
-                mScrimAlpha = 1f;
+            if (shouldUsePanel()) {
                 initializePanel();
+            }
+            if (mBackgroundDrawable == null) {
+                mBackgroundDrawable = new ScrimDrawable();
+                mScrimAlpha = ScrimController.GRADIENT_SCRIM_ALPHA;
             }
             getWindow().setBackgroundDrawable(mBackgroundDrawable);
         }
@@ -1725,11 +1746,24 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             }
         }
 
+        private void setRotationSuggestionsEnabled(boolean enabled) {
+            try {
+                final int userId = Binder.getCallingUserHandle().getIdentifier();
+                final int what = enabled
+                        ? StatusBarManager.DISABLE2_NONE
+                        : StatusBarManager.DISABLE2_ROTATE_SUGGESTIONS;
+                mStatusBarService.disable2ForUser(what, mToken, mContext.getPackageName(), userId);
+            } catch (RemoteException ex) {
+                throw ex.rethrowFromSystemServer();
+            }
+        }
+
         private void resetOrientation() {
             if (mResetOrientationData != null) {
                 RotationPolicy.setRotationLockAtAngle(mContext, mResetOrientationData.locked,
                         mResetOrientationData.rotation);
             }
+            setRotationSuggestionsEnabled(true);
         }
 
         @Override
@@ -1769,21 +1803,19 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     }
 
     /**
+     * Determines whether or not debug mode has been activated for the Global Actions Panel.
+     */
+    private static boolean isPanelDebugModeEnabled(Context context) {
+        return Settings.Secure.getInt(context.getContentResolver(),
+                Settings.Secure.GLOBAL_ACTIONS_PANEL_DEBUG_ENABLED, 0) == 1;
+    }
+
+    /**
      * Determines whether or not the Global Actions menu should be forced to
      * use the newer grid-style layout.
      */
     private static boolean isForceGridEnabled(Context context) {
-        return FeatureFlagUtils.isEnabled(context,
-                FeatureFlagUtils.FORCE_GLOBAL_ACTIONS_GRID_ENABLED);
-    }
-
-    /**
-     * Determines whether or not the Global Actions Panel should appear when the power button
-     * is held.
-     */
-    private static boolean isPanelEnabled(Context context) {
-        return FeatureFlagUtils.isEnabled(
-                context, FeatureFlagUtils.GLOBAL_ACTIONS_PANEL_ENABLED);
+        return isPanelDebugModeEnabled(context);
     }
 
     /**

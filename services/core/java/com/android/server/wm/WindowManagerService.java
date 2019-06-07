@@ -849,6 +849,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
     final Configuration mTempConfiguration = new Configuration();
 
+    final HighRefreshRateBlacklist mHighRefreshRateBlacklist = HighRefreshRateBlacklist.create();
+
     // If true, only the core apps and services are being launched because the device
     // is in a special boot mode, such as being encrypted or waiting for a decryption password.
     // For example, when this flag is true, there will be no wallpaper service.
@@ -6992,6 +6994,10 @@ public class WindowManagerService extends IWindowManager.Stub
                         + "not exist: " + displayId);
                 return;
             }
+            if (displayContent.isUntrustedVirtualDisplay()) {
+                throw new SecurityException("Attempted to set system decors flag to an untrusted "
+                        + "virtual display: " + displayId);
+            }
 
             mDisplayWindowSettings.setShouldShowSystemDecorsLocked(displayContent, shouldShow);
 
@@ -7032,6 +7038,10 @@ public class WindowManagerService extends IWindowManager.Stub
                 Slog.w(TAG_WM, "Attempted to set IME flag to a display that does not exist: "
                         + displayId);
                 return;
+            }
+            if (displayContent.isUntrustedVirtualDisplay()) {
+                throw new SecurityException("Attempted to set IME flag to an untrusted "
+                        + "virtual display: " + displayId);
             }
 
             mDisplayWindowSettings.setShouldShowImeLocked(displayContent, shouldShow);
@@ -7465,6 +7475,22 @@ public class WindowManagerService extends IWindowManager.Stub
         public boolean shouldShowIme(int displayId) {
             synchronized (mGlobalLock) {
                 return WindowManagerService.this.shouldShowIme(displayId);
+            }
+        }
+
+        @Override
+        public void addNonHighRefreshRatePackage(@NonNull String packageName) {
+            synchronized (mGlobalLock) {
+                mRoot.forAllDisplays(dc -> dc.getDisplayPolicy().getRefreshRatePolicy()
+                        .addNonHighRefreshRatePackage(packageName));
+            }
+        }
+
+        @Override
+        public void removeNonHighRefreshRatePackage(@NonNull String packageName) {
+            synchronized (mGlobalLock) {
+                mRoot.forAllDisplays(dc -> dc.getDisplayPolicy().getRefreshRatePolicy()
+                        .removeNonHighRefreshRatePackage(packageName));
             }
         }
     }

@@ -63,11 +63,12 @@ import com.android.systemui.Dependency;
 import com.android.systemui.ExpandHelper;
 import com.android.systemui.R;
 import com.android.systemui.classifier.FalsingManagerFactory;
-import com.android.systemui.classifier.FalsingManagerFactory.FalsingManager;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.DragDownHelper;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
+import com.android.systemui.statusbar.phone.ScrimController.ScrimVisibility;
 import com.android.systemui.tuner.TunerService;
 
 import java.io.FileDescriptor;
@@ -262,7 +263,19 @@ public class StatusBarWindowView extends FrameLayout {
      * Propagate {@link StatusBar} pulsing state.
      */
     public void setPulsing(boolean pulsing) {
-        mLockIcon.setPulsing(pulsing);
+        if (mLockIcon != null) {
+            mLockIcon.setPulsing(pulsing);
+        }
+    }
+
+    /**
+     * Called when the biometric authentication mode changes.
+     * @param wakeAndUnlock If the type is {@link BiometricUnlockController#isWakeAndUnlock()}
+     */
+    public void onBiometricAuthModeChanged(boolean wakeAndUnlock) {
+        if (mLockIcon != null) {
+            mLockIcon.onBiometricAuthModeChanged(wakeAndUnlock);
+        }
     }
 
     public void setStatusBarView(PhoneStatusBarView statusBarView) {
@@ -486,6 +499,24 @@ public class StatusBarWindowView extends FrameLayout {
         pw.print("  mExpandAnimationRunning="); pw.println(mExpandAnimationRunning);
         pw.print("  mTouchCancelled="); pw.println(mTouchCancelled);
         pw.print("  mTouchActive="); pw.println(mTouchActive);
+    }
+
+    /**
+     * Called whenever the scrims become opaque, transparent or semi-transparent.
+     */
+    public void onScrimVisibilityChanged(@ScrimVisibility int scrimsVisible) {
+        if (mLockIcon != null) {
+            mLockIcon.onScrimVisibilityChanged(scrimsVisible);
+        }
+    }
+
+    /**
+     * When we're launching an affordance, like double pressing power to open camera.
+     */
+    public void onShowingLaunchAffordanceChanged(boolean showing) {
+        if (mLockIcon != null) {
+            mLockIcon.onShowingLaunchAffordanceChanged(showing);
+        }
     }
 
     public class LayoutParams extends FrameLayout.LayoutParams {

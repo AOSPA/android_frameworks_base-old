@@ -78,7 +78,7 @@
     <string name="CLIRDefaultOffNextCallOn" msgid="6179425182856418465">"V predvolenom nastavení nie je identifikácia volajúceho obmedzená. Ďalší hovor: Obmedzené"</string>
     <string name="CLIRDefaultOffNextCallOff" msgid="2567998633124408552">"V predvolenom nastavení nie je identifikácia volajúceho obmedzená. Ďalší hovor: Bez obmedzenia"</string>
     <string name="serviceNotProvisioned" msgid="8614830180508686666">"Služba nie je poskytovaná."</string>
-    <string name="CLIRPermanent" msgid="3377371145926835671">"Nemôžete meniť nastavenia identifikácie volajúceho."</string>
+    <string name="CLIRPermanent" msgid="3377371145926835671">"Nemôžete meniť nastavenie identifikácie volajúcich."</string>
     <string name="RestrictedOnDataTitle" msgid="5221736429761078014">"Žiadna mobilná dátová služba"</string>
     <string name="RestrictedOnEmergencyTitle" msgid="6855466023161191166">"Tiesňové volania nie sú k dispozícii"</string>
     <string name="RestrictedOnNormalTitle" msgid="3179574012752700984">"Žiadne hlasové hovory"</string>
@@ -267,7 +267,7 @@
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"Upozornenia týkajúce sa siete"</string>
     <string name="notification_channel_network_available" msgid="4531717914138179517">"Sieť je k dispozícii"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"Stav pripojenia VPN"</string>
-    <string name="notification_channel_device_admin" msgid="1568154104368069249">"Správa zariadenia"</string>
+    <string name="notification_channel_device_admin" msgid="8353118887482520565">"Upozornenia od vášho správcu IT"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"Upozornenia"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"Predajná ukážka"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"Pripojenie USB"</string>
@@ -308,9 +308,9 @@
     <string name="permgrouplab_camera" msgid="4820372495894586615">"Fotoaparát"</string>
     <string name="permgroupdesc_camera" msgid="3250611594678347720">"fotenie a natáčanie videí"</string>
     <string name="permgrouprequest_camera" msgid="1299833592069671756">"Povoliť aplikácii &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; snímať fotky a zaznamenávať video?"</string>
-    <string name="permgrouplab_calllog" msgid="8798646184930388160">"Denníky hovorov"</string>
-    <string name="permgroupdesc_calllog" msgid="3006237336748283775">"čítanie a zapisovanie do denníka hovorov telefónu"</string>
-    <string name="permgrouprequest_calllog" msgid="8487355309583773267">"Povoliť aplikácii &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; prístup k denníku hovorov telefónu?"</string>
+    <string name="permgrouplab_calllog" msgid="8798646184930388160">"Zoznam hovorov"</string>
+    <string name="permgroupdesc_calllog" msgid="3006237336748283775">"čítať a zapisovať do zoznamu hovorov"</string>
+    <string name="permgrouprequest_calllog" msgid="8487355309583773267">"Povoliť aplikácii &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; prístup k zoznamu hovorov?"</string>
     <string name="permgrouplab_phone" msgid="5229115638567440675">"Telefón"</string>
     <string name="permgroupdesc_phone" msgid="6234224354060641055">"telefonovanie a správu hovorov"</string>
     <string name="permgrouprequest_phone" msgid="9166979577750581037">"Povoliť aplikácii &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; uskutočňovať a spravovať telefonické hovory?"</string>
@@ -406,7 +406,7 @@
     <string name="permlab_writeCallLog" msgid="8552045664743499354">"zapisovať do denníka hovorov"</string>
     <string name="permdesc_writeCallLog" product="tablet" msgid="6661806062274119245">"Umožňuje aplikácii upravovať denník hovorov vo vašom tablete vrátane údajov o prichádzajúcich a odchádzajúcich hovoroch. Škodlivé aplikácie to môžu zneužiť na vymazanie alebo úpravu vášho denníka hovorov."</string>
     <string name="permdesc_writeCallLog" product="tv" msgid="4225034892248398019">"Umožňuje aplikácii upravovať denník hovorov vo vašom televízore vrátane údajov o prichádzajúcich a odchádzajúcich hovoroch. Škodlivé aplikácie to môžu zneužiť na vymazanie alebo úpravu vášho denníka hovorov."</string>
-    <string name="permdesc_writeCallLog" product="default" msgid="683941736352787842">"Umožňuje aplikácii upravovať denník hovorov vo vašom telefóne vrátane údajov o prichádzajúcich a odchádzajúcich hovoroch. Škodlivé aplikácie to môžu zneužiť na vymazanie alebo úpravu vášho denníka hovorov."</string>
+    <string name="permdesc_writeCallLog" product="default" msgid="683941736352787842">"Umožňuje aplikácii upravovať zoznam hovorov vo vašom telefóne vrátane údajov o prichádzajúcich a odchádzajúcich hovoroch. Škodlivé aplikácie to môžu zneužiť na vymazanie alebo úpravu vášho zoznamu hovorov."</string>
     <string name="permlab_bodySensors" msgid="4683341291818520277">"prístup k telesným senzorom (ako sú snímače tepu)"</string>
     <string name="permdesc_bodySensors" product="default" msgid="4380015021754180431">"Umožňuje aplikácii získať prístup k údajom senzorov monitorujúcich vašu fyzickú kondíciu (napríklad pulz)."</string>
     <string name="permlab_readCalendar" msgid="6716116972752441641">"Čítanie udalostí kalendára a podrobností"</string>
@@ -571,23 +571,21 @@
     <string name="face_acquired_too_low" msgid="488983581737550912">"Posuňte telefón nižšie."</string>
     <string name="face_acquired_too_right" msgid="3667075962661863218">"Posuňte telefón doľava."</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"Posuňte telefón doprava."</string>
-    <string name="face_acquired_poor_gaze" msgid="8471716624377228327">"Pozrite sa na obrazovku s otvorenými očami."</string>
+    <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"Pozrite sa priamejšie na zariadenie."</string>
     <string name="face_acquired_not_detected" msgid="4885504661626728809">"Nie je vidieť vašu tvár. Pozrite sa na telefón."</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"Priveľa pohybu. Nehýbte telefónom."</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"Znova zaregistrujte svoju tvár."</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"Tvár už nie je možné rozpoznať. Skúste to znova."</string>
     <string name="face_acquired_too_similar" msgid="1508776858407646460">"Príliš rovnaké, zmeňte postoj."</string>
-    <!-- no translation found for face_acquired_pan_too_extreme (4581629343077288178) -->
-    <skip />
-    <!-- no translation found for face_acquired_tilt_too_extreme (4019954263012496468) -->
-    <skip />
-    <string name="face_acquired_roll_too_extreme" msgid="1444829237745898619">"Zvisle vyrovnajte hlavu."</string>
-    <string name="face_acquired_obscured" msgid="5747521031647744553">"Odstráňte prekážky medzi vašou hlavou a telefónom."</string>
-    <string name="face_acquired_sensor_dirty" msgid="364493868630891300">"Vyčistite fotoaparát."</string>
+    <string name="face_acquired_pan_too_extreme" msgid="4581629343077288178">"Otočte hlavu o niečo menej."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"Otočte hlavu o niečo menej."</string>
+    <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"Otočte hlavu o niečo menej."</string>
+    <string name="face_acquired_obscured" msgid="5357207702967893283">"Odstráňte všetko, čo vám zakrýva tvár."</string>
+    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"Vyčistite senzor v hornom okraji obrazovky."</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"Tvár sa nedá overiť. Hardvér nie je k dispozícii."</string>
-    <string name="face_error_timeout" msgid="2605673935810019129">"Vypršal časový limit tváre. Skúste to znova."</string>
+    <string name="face_error_timeout" msgid="3202585609451248103">"Vyskúšajte znova overenie tváre."</string>
     <string name="face_error_no_space" msgid="2712120617457553825">"Nové údaje o tvári sa nedajú uložiť. Najprv odstráňte jeden zo starých záznamov."</string>
     <string name="face_error_canceled" msgid="2768146728600802422">"Operácia týkajúca sa tváre bola zrušená"</string>
     <string name="face_error_user_canceled" msgid="9003022830076496163">"Overenie tváre bolo zrušené používateľom"</string>
@@ -656,6 +654,8 @@
     <string name="permdesc_bindCarrierServices" msgid="1391552602551084192">"Umožňuje držiteľovi povolenia naviazať sa na služby operátora. Bežné aplikácie by toto povolenie nemali nikdy nepotrebovať."</string>
     <string name="permlab_access_notification_policy" msgid="4247510821662059671">"prístup k režimu bez vyrušení"</string>
     <string name="permdesc_access_notification_policy" msgid="3296832375218749580">"Umožňuje aplikácii čítať a zapisovať konfiguráciu režimu bez vyrušení."</string>
+    <string name="permlab_startViewPermissionUsage" msgid="5484728591597709944">"spustenie používania povolenia na zobrazenie"</string>
+    <string name="permdesc_startViewPermissionUsage" msgid="4808345878203594428">"Umožňuje držiteľovi spustiť používanie povolenia aplikáciou. Bežné aplikácie by toto povolenie nemali nikdy potrebovať."</string>
     <string name="policylab_limitPassword" msgid="4497420728857585791">"Nastaviť pravidlá pre heslo"</string>
     <string name="policydesc_limitPassword" msgid="2502021457917874968">"Nastavte dĺžku hesiel na odomknutie obrazovky aj kódov PIN a v nich používané znaky."</string>
     <string name="policylab_watchLogin" msgid="5091404125971980158">"Sledovanie pokusov o odomknutie obrazovky"</string>
@@ -1968,9 +1968,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Skontrolovať dostupnosť aktualizácie"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"Máte nové správy."</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"Otvorte aplikáciu pre SMS a zobrazte správu"</string>
-    <string name="user_encrypted_title" msgid="9054897468831672082">"Niektoré funkcie môžu byť obmedzené"</string>
-    <string name="user_encrypted_message" msgid="4923292604515744267">"Odomknite klepnutím"</string>
-    <string name="user_encrypted_detail" msgid="5708447464349420392">"Údaje používateľa sú uzamknuté"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"Niektoré funkcie môžu byť obmedzené"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"Pracovný profil je uzamknutý"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"Profil odomknete klepnutím"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"Pripojené k zariadeniu <xliff:g id="PRODUCT_NAME">%1$s</xliff:g>"</string>
