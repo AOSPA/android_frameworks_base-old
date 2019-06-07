@@ -237,8 +237,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
     public void update(boolean force) {
         int state = getState();
         mIsFaceUnlockState = state == STATE_SCANNING_FACE;
-        if (state != mLastState || mLastDozing != mDozing || mLastPulsing != mPulsing
-                || mLastScreenOn != mScreenOn || force) {
+        if (state != mLastState || mLastDozing != mDozing || mLastPulsing != mPulsing || force) {
             @LockAnimIndex final int lockAnimIndex = getAnimationIndexForTransition(mLastState,
                     state, mLastPulsing, mPulsing, mLastDozing, mDozing);
             boolean isAnim = false; // iconAnimIndex != -1;
