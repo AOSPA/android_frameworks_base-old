@@ -138,6 +138,16 @@ public class PhysicsAnimationLayoutTestCase extends SysuiTestCase {
         }
 
         @Override
+        public boolean post(Runnable action) {
+            return mMainThreadHandler.post(action);
+        }
+
+        @Override
+        public boolean postDelayed(Runnable action, long delayMillis) {
+            return mMainThreadHandler.postDelayed(action, delayMillis);
+        }
+
+        @Override
         public void setController(PhysicsAnimationController controller) {
             runOnMainThreadAndBlock(
                     () -> super.setController(
@@ -195,9 +205,11 @@ public class PhysicsAnimationLayoutTestCase extends SysuiTestCase {
 
             @Override
             protected void animateValueForChild(DynamicAnimation.ViewProperty property, View view,
-                    float value, float startVel, long startDelay, Runnable[] afterCallbacks) {
+                    float value, float startVel, long startDelay, float stiffness,
+                    float dampingRatio, Runnable[] afterCallbacks) {
                 mMainThreadHandler.post(() -> super.animateValueForChild(
-                        property, view, value, startVel, startDelay, afterCallbacks));
+                        property, view, value, startVel, startDelay, stiffness, dampingRatio,
+                        afterCallbacks));
             }
         }
 

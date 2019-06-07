@@ -1161,6 +1161,19 @@ class TaskRecord extends ConfigurationContainer {
         return false;
     }
 
+    /**
+     * Return true if any activities in this task belongs to input uid.
+     */
+    boolean containsAppUid(int uid) {
+        for (int i = mActivities.size() - 1; i >= 0; --i) {
+            final ActivityRecord r = mActivities.get(i);
+            if (r.getUid() == uid) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void getAllRunningVisibleActivitiesLocked(ArrayList<ActivityRecord> outActivities) {
         if (mStack != null) {
             for (int activityNdx = mActivities.size() - 1; activityNdx >= 0; --activityNdx) {
@@ -1480,7 +1493,7 @@ class TaskRecord extends ConfigurationContainer {
                     if (r.finishing) {
                         continue;
                     }
-                    ActivityOptions opts = r.takeOptionsLocked();
+                    ActivityOptions opts = r.takeOptionsLocked(false /* fromClient */);
                     if (opts != null) {
                         ret.updateOptionsLocked(opts);
                     }

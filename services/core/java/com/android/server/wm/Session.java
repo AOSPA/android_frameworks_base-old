@@ -316,6 +316,18 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     }
 
     @Override
+    public void finishMovingTask(IWindow window) {
+        if (DEBUG_TASK_POSITIONING) Slog.d(TAG_WM, "finishMovingTask");
+
+        long ident = Binder.clearCallingIdentity();
+        try {
+            mService.mTaskPositioningController.finishTaskPositioning(window);
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
+    }
+
+    @Override
     public void reportSystemGestureExclusionChanged(IWindow window, List<Rect> exclusionRects) {
         long ident = Binder.clearCallingIdentity();
         try {
@@ -423,6 +435,16 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
+    }
+
+    @Override
+    public void reparentDisplayContent(IWindow window, SurfaceControl sc, int displayId) {
+        mService.reparentDisplayContent(window, sc, displayId);
+    }
+
+    @Override
+    public void updateDisplayContentLocation(IWindow window, int x, int y, int displayId) {
+        mService.updateDisplayContentLocation(window, x, y, displayId);
     }
 
     @Override

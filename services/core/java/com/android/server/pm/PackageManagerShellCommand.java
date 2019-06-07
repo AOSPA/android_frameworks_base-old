@@ -39,6 +39,7 @@ import android.content.pm.IPackageDataObserver;
 import android.content.pm.IPackageInstaller;
 import android.content.pm.IPackageManager;
 import android.content.pm.InstrumentationInfo;
+import android.content.pm.ModuleInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageInstaller.SessionInfo;
@@ -273,6 +274,8 @@ class PackageManagerShellCommand extends ShellCommand {
                     return uninstallSystemUpdates();
                 case "rollback-app":
                     return runRollbackApp();
+                case "get-moduleinfo":
+                    return runGetModuleInfo();
                 default: {
                     String nextArg = getNextArg();
                     if (nextArg == null) {
@@ -293,6 +296,49 @@ class PackageManagerShellCommand extends ShellCommand {
             pw.println("Remote exception: " + e);
         }
         return -1;
+    }
+
+    /**
+     * Shows module info
+     *
+     * Usage: get-moduleinfo [--all | --installed] [module-name]
+     * Example: get-moduleinfo, get-moduleinfo --all, get-moduleinfo xyz
+     */
+    private int runGetModuleInfo() {
+        final PrintWriter pw = getOutPrintWriter();
+        int flags = 0;
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "--all":
+                    flags |= PackageManager.MATCH_ALL;
+                    break;
+                case "--installed":
+                    break;
+                default:
+                    pw.println("Error: Unknown option: " + opt);
+                    return -1;
+            }
+        }
+
+        String moduleName = getNextArg();
+        try {
+            if (moduleName != null) {
+                ModuleInfo m = mInterface.getModuleInfo(moduleName, flags);
+                pw.println(m.toString() + " packageName: " + m.getPackageName());
+
+            } else {
+                List<ModuleInfo> modules = mInterface.getInstalledModules(flags);
+                for (ModuleInfo m: modules) {
+                    pw.println(m.toString() + " packageName: " + m.getPackageName());
+                }
+            }
+        } catch (RemoteException e) {
+            pw.println("Failure [" + e.getClass().getName() + " - " + e.getMessage() + "]");
+            return -1;
+        }
+        return 1;
     }
 
     private int getStagedSessions() {
@@ -723,7 +769,7 @@ class PackageManagerShellCommand extends ShellCommand {
                         pw.print(info.getLongVersionCode());
                     }
                 }
-                if (listInstaller && !isApex) {
+                if (listInstaller) {
                     pw.print("  installer=");
                     pw.print(mInterface.getInstallerPackageName(info.packageName));
                 }
@@ -1116,7 +1162,7 @@ class PackageManagerShellCommand extends ShellCommand {
     private int runInstallExisting() throws RemoteException {
         final PrintWriter pw = getOutPrintWriter();
         int userId = UserHandle.USER_SYSTEM;
-        int installFlags = 0;
+        int installFlags = PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS;
         String opt;
         boolean waitTillComplete = false;
         while ((opt = getNextOption()) != null) {
@@ -1135,6 +1181,9 @@ class PackageManagerShellCommand extends ShellCommand {
                     break;
                 case "--wait":
                     waitTillComplete = true;
+                    break;
+                case "--restrict-permissions":
+                    installFlags &= ~PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS;
                     break;
                 default:
                     pw.println("Error: Unknown option: " + opt);
@@ -1155,7 +1204,7 @@ class PackageManagerShellCommand extends ShellCommand {
                 final IPackageInstaller installer = mInterface.getPackageInstaller();
                 pw.println("Installing package " + packageName + " for user: " + userId);
                 installer.installExistingPackage(packageName, installFlags, installReason,
-                        receiver.getIntentSender(), userId);
+                        receiver.getIntentSender(), userId, null);
                 final Intent result = receiver.getResult();
                 final int status = result.getIntExtra(PackageInstaller.EXTRA_STATUS,
                         PackageInstaller.STATUS_FAILURE);
@@ -1164,7 +1213,7 @@ class PackageManagerShellCommand extends ShellCommand {
             }
 
             final int res = mInterface.installExistingPackageAsUser(packageName, userId,
-                    installFlags, installReason);
+                    installFlags, installReason, null);
             if (res == PackageManager.INSTALL_FAILED_INVALID_URI) {
                 throw new NameNotFoundException("Package " + packageName + " doesn't exist");
             }
@@ -2324,7 +2373,11 @@ class PackageManagerShellCommand extends ShellCommand {
     private InstallParams makeInstallParams() {
         final SessionParams sessionParams = new SessionParams(SessionParams.MODE_FULL_INSTALL);
         final InstallParams params = new InstallParams();
+
         params.sessionParams = sessionParams;
+        // Whitelist all permissions by default
+        sessionParams.installFlags |= PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS;
+
         String opt;
         boolean replaceExisting = true;
         while ((opt = getNextOption()) != null) {
@@ -2351,9 +2404,10 @@ class PackageManagerShellCommand extends ShellCommand {
                     break;
                 case "-g":
                     sessionParams.installFlags |= PackageManager.INSTALL_GRANT_RUNTIME_PERMISSIONS;
-                case "-w":
-                    sessionParams.installFlags |=
-                            PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS;
+                    break;
+                case "--restrict-permissions":
+                    sessionParams.installFlags &=
+                            ~PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS;
                     break;
                 case "--dont-kill":
                     sessionParams.installFlags |= PackageManager.INSTALL_DONT_KILL_APP;
@@ -2442,9 +2496,9 @@ class PackageManagerShellCommand extends ShellCommand {
                 default:
                     throw new IllegalArgumentException("Unknown option " + opt);
             }
-            if (replaceExisting) {
-                sessionParams.installFlags |= PackageManager.INSTALL_REPLACE_EXISTING;
-            }
+        }
+        if (replaceExisting) {
+            sessionParams.installFlags |= PackageManager.INSTALL_REPLACE_EXISTING;
         }
         return params;
     }
@@ -3004,10 +3058,10 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("      -d: allow version code downgrade (debuggable packages only)");
         pw.println("      -p: partial application install (new split on top of existing pkg)");
         pw.println("      -g: grant all runtime permissions");
-        pw.println("      -w: whitelist all restricted permissions");
         pw.println("      -S: size in bytes of package, required for stdin");
         pw.println("      --user: install under the given user.");
         pw.println("      --dont-kill: installing a new feature split, don't kill running app");
+        pw.println("      --restrict-permissions: don't whitelist restricted permissions at install");
         pw.println("      --originating-uri: set URI where app was downloaded from");
         pw.println("      --referrer: set URI that instigated the install of the app");
         pw.println("      --pkg: specify expected package name of app being installed");
@@ -3204,6 +3258,12 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("    Remove updates to all system applications and fall back to their /system " +
                 "version.");
         pw.println();
+        pw.println("  get-moduleinfo [--all | --installed] [module-name]");
+        pw.println("    Displays module info. If module-name is specified only that info is shown");
+        pw.println("    By default, without any argument only installed modules are shown.");
+        pw.println("      --all: show all module info");
+        pw.println("      --installed: show only installed modules");
+        pw.println("");
         Intent.printIntentArgsHelp(pw , "");
     }
 

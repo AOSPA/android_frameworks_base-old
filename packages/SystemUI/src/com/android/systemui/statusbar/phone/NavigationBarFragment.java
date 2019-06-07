@@ -86,6 +86,7 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.LatencyTracker;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
+import com.android.systemui.ScreenDecorations;
 import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.fragments.FragmentHostManager;
@@ -170,6 +171,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     public int mDisplayId;
     private boolean mIsOnDefaultDisplay;
     public boolean mHomeBlockedThisTouch;
+    private ScreenDecorations mScreenDecorations;
 
     private Handler mHandler = Dependency.get(Dependency.MAIN_HANDLER);
 
@@ -188,7 +190,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         @Override
         public void onQuickStepStarted() {
             // Use navbar dragging as a signal to hide the rotate button
-            mNavigationBarView.getRotateSuggestionButton().setRotateSuggestionButtonState(false);
+            mNavigationBarView.getRotationButtonController().setRotateSuggestionButtonState(false);
 
             // Hide the notifications panel when quick step starts
             mStatusBar.collapsePanel(true /* animate */);
@@ -329,32 +331,36 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         notifyNavigationBarScreenOn();
 
         mOverviewProxyService.addCallback(mOverviewProxyListener);
-        mOverviewProxyService.setSystemUiStateFlag(SYSUI_STATE_NAV_BAR_HIDDEN,
-                !isNavBarWindowVisible(), mDisplayId);
+        updateSystemUiStateFlags(-1);
 
         // Currently there is no accelerometer sensor on non-default display.
         if (mIsOnDefaultDisplay) {
-            final RotationContextButton rotationButton =
-                    mNavigationBarView.getRotateSuggestionButton();
-            rotationButton.setListener(mRotationButtonListener);
-            rotationButton.addRotationCallback(mRotationWatcher);
+            mNavigationBarView.getRotateSuggestionButton().setListener(mRotationButtonListener);
+
+            final RotationButtonController rotationButtonController =
+                    mNavigationBarView.getRotationButtonController();
+            rotationButtonController.addRotationCallback(mRotationWatcher);
 
             // Reset user rotation pref to match that of the WindowManager if starting in locked
             // mode. This will automatically happen when switching from auto-rotate to locked mode.
-            if (display != null && rotationButton.isRotationLocked()) {
-                final int winRotation = display.getRotation();
-                rotationButton.setRotationLockedAtAngle(winRotation);
+            if (display != null && rotationButtonController.isRotationLocked()) {
+                rotationButtonController.setRotationLockedAtAngle(display.getRotation());
             }
         } else {
             mDisabledFlags2 |= StatusBarManager.DISABLE2_ROTATE_SUGGESTIONS;
         }
         setDisabled2Flags(mDisabledFlags2);
+
+        mScreenDecorations = SysUiServiceProvider.getComponent(getContext(),
+                ScreenDecorations.class);
+        getBarTransitions().addDarkIntensityListener(mScreenDecorations);
     }
 
     @Override
     public void onDestroyView() {
         super.onDestroyView();
         if (mNavigationBarView != null) {
+            mNavigationBarView.getBarTransitions().removeDarkIntensityListener(mScreenDecorations);
             mNavigationBarView.getBarTransitions().destroy();
             mNavigationBarView.getLightTransitionsController().destroy(getContext());
         }
@@ -449,13 +455,6 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     }
 
     @Override
-    public void topAppWindowChanged(int displayId, boolean showMenu) {
-        if (displayId == mDisplayId && mNavigationBarView != null) {
-            mNavigationBarView.setMenuVisibility(showMenu);
-        }
-    }
-
-    @Override
     public void setWindowState(
             int displayId, @WindowType int window, @WindowVisibleState int state) {
         if (displayId == mDisplayId
@@ -465,36 +464,35 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             mNavigationBarWindowState = state;
             if (DEBUG_WINDOW_STATE) Log.d(TAG, "Navigation bar " + windowStateToString(state));
 
-            mOverviewProxyService.setSystemUiStateFlag(SYSUI_STATE_NAV_BAR_HIDDEN,
-                    !isNavBarWindowVisible(), mDisplayId);
-            mNavigationBarView.getRotateSuggestionButton()
-                    .onNavigationBarWindowVisibilityChange(isNavBarWindowVisible());
+            updateSystemUiStateFlags(-1);
+            mNavigationBarView.getRotationButtonController().onNavigationBarWindowVisibilityChange(
+                    isNavBarWindowVisible());
         }
     }
 
     @Override
     public void onRotationProposal(final int rotation, boolean isValid) {
         final int winRotation = mNavigationBarView.getDisplay().getRotation();
-        final boolean rotateSuggestionsDisabled = RotationContextButton
+        final boolean rotateSuggestionsDisabled = RotationButtonController
                 .hasDisable2RotateSuggestionFlag(mDisabledFlags2);
+        final RotationButtonController rotationButtonController =
+                mNavigationBarView.getRotationButtonController();
+        final RotationButton rotationButton = rotationButtonController.getRotationButton();
+
         if (RotationContextButton.DEBUG_ROTATION) {
             Log.v(TAG, "onRotationProposal proposedRotation=" + Surface.rotationToString(rotation)
                     + ", winRotation=" + Surface.rotationToString(winRotation)
                     + ", isValid=" + isValid + ", mNavBarWindowState="
                     + StatusBarManager.windowStateToString(mNavigationBarWindowState)
                     + ", rotateSuggestionsDisabled=" + rotateSuggestionsDisabled
-                    + ", isRotateButtonVisible=" + (mNavigationBarView == null ? "null" :
-                        mNavigationBarView.getRotateSuggestionButton().isVisible()));
+                    + ", isRotateButtonVisible=" + (mNavigationBarView == null ? "null"
+                    : rotationButton.isVisible()));
         }
 
         // Respect the disabled flag, no need for action as flag change callback will handle hiding
         if (rotateSuggestionsDisabled) return;
 
-        View rotationButton = mNavigationBarView.getRotateSuggestionButton().getCurrentView();
-        if (rotationButton != null && rotationButton.isAttachedToWindow()) {
-            mNavigationBarView.getRotateSuggestionButton()
-                    .onRotationProposal(rotation, winRotation, isValid);
-        }
+        rotationButtonController.onRotationProposal(rotation, winRotation, isValid);
     }
 
     /** Restores the System UI flags saved state to {@link NavigationBarFragment}. */
@@ -583,7 +581,9 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
                 | StatusBarManager.DISABLE_SEARCH);
         if (masked != mDisabledFlags1) {
             mDisabledFlags1 = masked;
-            if (mNavigationBarView != null) mNavigationBarView.setDisabledFlags(state1);
+            if (mNavigationBarView != null) {
+                mNavigationBarView.setDisabledFlags(state1);
+            }
             updateScreenPinningGestures();
         }
 
@@ -600,7 +600,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     private void setDisabled2Flags(int state2) {
         // Method only called on change of disable2 flags
         if (mNavigationBarView != null) {
-            mNavigationBarView.getRotateSuggestionButton().onDisable2FlagChanged(state2);
+            mNavigationBarView.getRotationButtonController().onDisable2FlagChanged(state2);
         }
     }
 
@@ -716,7 +716,6 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         if (shouldDisableNavbarGestures()) {
             return false;
         }
-        mNavigationBarView.onNavigationButtonLongPress(v);
         mMetricsLogger.action(MetricsEvent.ACTION_ASSIST_LONG_PRESS);
         Bundle args  = new Bundle();
         args.putInt(
@@ -756,12 +755,10 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     }
 
     private boolean onLongPressBackHome(View v) {
-        mNavigationBarView.onNavigationButtonLongPress(v);
         return onLongPressNavigationButtons(v, R.id.back, R.id.home);
     }
 
     private boolean onLongPressBackRecents(View v) {
-        mNavigationBarView.onNavigationButtonLongPress(v);
         return onLongPressNavigationButtons(v, R.id.back, R.id.recent_apps);
     }
 
@@ -870,18 +867,30 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
 
     private void updateAccessibilityServicesState(AccessibilityManager accessibilityManager) {
         boolean[] feedbackEnabled = new boolean[1];
-        int flags = getA11yButtonState(feedbackEnabled);
+        int a11yFlags = getA11yButtonState(feedbackEnabled);
 
-        mNavigationBarView.getRotateSuggestionButton()
-                .setAccessibilityFeedbackEnabled(feedbackEnabled[0]);
+        mNavigationBarView.getRotationButtonController().setAccessibilityFeedbackEnabled(
+                feedbackEnabled[0]);
 
-        boolean clickable = (flags & SYSUI_STATE_A11Y_BUTTON_CLICKABLE) != 0;
-        boolean longClickable = (flags & SYSUI_STATE_A11Y_BUTTON_LONG_CLICKABLE) != 0;
+        boolean clickable = (a11yFlags & SYSUI_STATE_A11Y_BUTTON_CLICKABLE) != 0;
+        boolean longClickable = (a11yFlags & SYSUI_STATE_A11Y_BUTTON_LONG_CLICKABLE) != 0;
         mNavigationBarView.setAccessibilityButtonState(clickable, longClickable);
-        mOverviewProxyService.setSystemUiStateFlag(
-                SYSUI_STATE_A11Y_BUTTON_CLICKABLE, clickable, mDisplayId);
-        mOverviewProxyService.setSystemUiStateFlag(
-                SYSUI_STATE_A11Y_BUTTON_LONG_CLICKABLE, longClickable, mDisplayId);
+
+        updateSystemUiStateFlags(a11yFlags);
+    }
+
+    public void updateSystemUiStateFlags(int a11yFlags) {
+        if (a11yFlags < 0) {
+            a11yFlags = getA11yButtonState(null);
+        }
+        boolean clickable = (a11yFlags & SYSUI_STATE_A11Y_BUTTON_CLICKABLE) != 0;
+        boolean longClickable = (a11yFlags & SYSUI_STATE_A11Y_BUTTON_LONG_CLICKABLE) != 0;
+        mOverviewProxyService.setSystemUiStateFlag(SYSUI_STATE_A11Y_BUTTON_CLICKABLE,
+                clickable, mDisplayId);
+        mOverviewProxyService.setSystemUiStateFlag(SYSUI_STATE_A11Y_BUTTON_LONG_CLICKABLE,
+                longClickable, mDisplayId);
+        mOverviewProxyService.setSystemUiStateFlag(SYSUI_STATE_NAV_BAR_HIDDEN,
+                !isNavBarWindowVisible(), mDisplayId);
     }
 
     /**
@@ -988,6 +997,18 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     @Override
     public void onNavigationModeChanged(int mode) {
         mNavBarMode = mode;
+        updateScreenPinningGestures();
+
+        // Workaround for b/132825155, for secondary users, we currently don't receive configuration
+        // changes on overlay package change since SystemUI runs for the system user. In this case,
+        // trigger a new configuration change to ensure that the nav bar is updated in the same way.
+        int userId = ActivityManagerWrapper.getInstance().getCurrentUserId();
+        if (userId != UserHandle.USER_SYSTEM) {
+            mHandler.post(() -> {
+                FragmentHostManager fragmentHost = FragmentHostManager.get(mNavigationBarView);
+                fragmentHost.reloadFragments();
+            });
+        }
     }
 
     public void disableAnimationsDuringHide(long delay) {
@@ -1006,7 +1027,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         getBarTransitions().transitionTo(barMode, animate);
     }
 
-    private BarTransitions getBarTransitions() {
+    public NavigationBarTransitions getBarTransitions() {
         return mNavigationBarView.getBarTransitions();
     }
 

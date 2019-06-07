@@ -22,7 +22,8 @@
         android:sharedUserId="android.uid.shell"
         >
 
-    <!-- Standard permissions granted to the shell. -->
+        <!-- Standard permissions granted to the shell. -->
+    <uses-permission android:name="android.permission.GET_RUNTIME_PERMISSIONS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
@@ -152,6 +153,7 @@
     <uses-permission android:name="android.permission.MANAGE_ROLE_HOLDERS" />
     <uses-permission android:name="android.permission.OBSERVE_ROLE_HOLDERS" />
     <uses-permission android:name="android.permission.STATUS_BAR_SERVICE" />
+    <uses-permission android:name="android.permission.STATUS_BAR" />
     <!-- Permission needed to rename bugreport notifications (so they're not shown as Shell) -->
     <uses-permission android:name="android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME" />
     <uses-permission android:name="android.permission.REQUEST_NOTIFICATION_ASSISTANT_SERVICE" />
@@ -169,7 +171,6 @@
     <!-- Permission needed to enable/disable Bluetooth/Wifi -->
     <uses-permission android:name="android.permission.MANAGE_BLUETOOTH_WHEN_WIRELESS_CONSENT_REQUIRED" />
     <uses-permission android:name="android.permission.MANAGE_WIFI_WHEN_WIRELESS_CONSENT_REQUIRED" />
-    <uses-permission android:name="android.permission.WATCH_APPOPS" />
     <!-- Permission needed to invoke DynamicSystem (AOT) -->
     <uses-permission android:name="android.permission.INSTALL_DYNAMIC_SYSTEM" />
 
@@ -198,9 +199,16 @@
     <!-- Permission required to test ContentResolver caching. -->
     <uses-permission android:name="android.permission.CACHE_CONTENT" />
 
+    <!-- Permission required to test ExplicitHealthCheckServiceImpl. -->
+    <uses-permission android:name="android.permission.BIND_EXPLICIT_HEALTH_CHECK_SERVICE" />
+    
+    <!-- Permission required for CTS test - CrossProfileAppsHostSideTest -->
+    <uses-permission android:name="android.permission.INTERACT_ACROSS_PROFILES"/>
+
     <application android:label="@string/app_label"
-                 android:defaultToDeviceProtectedStorage="true"
-                 android:directBootAware="true">
+                android:theme="@android:style/Theme.DeviceDefault.DayNight"
+                android:defaultToDeviceProtectedStorage="true"
+                android:directBootAware="true">
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.android.shell"
@@ -225,7 +233,6 @@
 
         <activity
             android:name=".BugreportWarningActivity"
-            android:theme="@android:style/Theme.DeviceDefault.Light.Dialog.Alert"
             android:finishOnCloseSystemDialogs="true"
             android:excludeFromRecents="true"
             android:exported="false" />

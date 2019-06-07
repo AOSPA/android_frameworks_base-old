@@ -32,11 +32,14 @@ import android.os.FileUtils;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.PowerManager;
+import android.os.SystemProperties;
 import android.text.TextUtils;
+import android.util.ArraySet;
 import android.util.Slog;
 import android.util.StatsLog;
 
 import com.android.internal.R;
+import com.android.internal.annotations.GuardedBy;
 import com.android.server.PackageWatchdog;
 import com.android.server.PackageWatchdog.PackageHealthObserver;
 import com.android.server.PackageWatchdog.PackageHealthObserverImpact;
@@ -49,9 +52,13 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 /**
- * {@code PackageHealthObserver} for {@code RollbackManagerService}.
+ * {@link PackageHealthObserver} for {@link RollbackManagerService}.
+ * This class monitors crashes and triggers RollbackManager rollback accordingly.
+ * It also monitors native crashes for some short while after boot.
  *
  * @hide
  */
@@ -59,12 +66,24 @@ public final class RollbackPackageHealthObserver implements PackageHealthObserve
     private static final String TAG = "RollbackPackageHealthObserver";
     private static final String NAME = "rollback-observer";
     private static final int INVALID_ROLLBACK_ID = -1;
+    // TODO: make the following values configurable via DeviceConfig
+    private static final long NATIVE_CRASH_POLLING_INTERVAL_MILLIS =
+            TimeUnit.SECONDS.toMillis(30);
+    private static final long NUMBER_OF_NATIVE_CRASH_POLLS = 10;
+
     private final Context mContext;
     private final Handler mHandler;
     private final File mLastStagedRollbackIdFile;
+    // Staged rollback ids that have been committed but their session is not yet ready
+    @GuardedBy("mPendingStagedRollbackIds")
+    private final Set<Integer> mPendingStagedRollbackIds = new ArraySet<>();
+    // this field is initialized in the c'tor and then only accessed from mHandler thread, so
+    // no need to guard with a lock
+    private long mNumberOfNativeCrashPollsRemaining;
 
     RollbackPackageHealthObserver(Context context) {
         mContext = context;
+        mNumberOfNativeCrashPollsRemaining = NUMBER_OF_NATIVE_CRASH_POLLS;
         HandlerThread handlerThread = new HandlerThread("RollbackPackageHealthObserver");
         handlerThread.start();
         mHandler = handlerThread.getThreadHandler();
@@ -76,8 +95,6 @@ public final class RollbackPackageHealthObserver implements PackageHealthObserve
 
     @Override
     public int onHealthCheckFailed(VersionedPackage failedPackage) {
-        VersionedPackage moduleMetadataPackage = getModuleMetadataPackage();
-
         if (getAvailableRollback(mContext.getSystemService(RollbackManager.class), failedPackage)
                 == null) {
             // Don't handle the notification, no rollbacks available for the package
@@ -109,6 +126,9 @@ public final class RollbackPackageHealthObserver implements PackageHealthObserve
             if (status == RollbackManager.STATUS_SUCCESS) {
                 if (rollback.isStaged()) {
                     int rollbackId = rollback.getRollbackId();
+                    synchronized (mPendingStagedRollbackIds) {
+                        mPendingStagedRollbackIds.add(rollbackId);
+                    }
                     BroadcastReceiver listener =
                             listenForStagedSessionReady(rollbackManager, rollbackId,
                                     moduleMetadataPackage);
@@ -145,16 +165,29 @@ public final class RollbackPackageHealthObserver implements PackageHealthObserve
         PackageWatchdog.getInstance(mContext).startObservingHealth(this, packages, durationMs);
     }
 
-    /** Verifies the rollback state after a reboot. */
-    public void onBootCompleted() {
+    /** Verifies the rollback state after a reboot and schedules polling for sometime after reboot
+     * to check for native crashes and mitigate them if needed.
+     */
+    public void onBootCompletedAsync() {
+        mHandler.post(()->onBootCompleted());
+    }
+
+    private void onBootCompleted() {
+        RollbackManager rollbackManager = mContext.getSystemService(RollbackManager.class);
+        PackageInstaller packageInstaller = mContext.getPackageManager().getPackageInstaller();
+        String moduleMetadataPackageName = getModuleMetadataPackageName();
+        VersionedPackage newModuleMetadataPackage = getModuleMetadataPackage();
+
+        if (getAvailableRollback(rollbackManager, newModuleMetadataPackage) != null) {
+            scheduleCheckAndMitigateNativeCrashes();
+        }
+
         int rollbackId = popLastStagedRollbackId();
         if (rollbackId == INVALID_ROLLBACK_ID) {
             // No staged rollback before reboot
             return;
         }
 
-        RollbackManager rollbackManager = mContext.getSystemService(RollbackManager.class);
-        PackageInstaller packageInstaller = mContext.getPackageManager().getPackageInstaller();
         RollbackInfo rollback = null;
         for (RollbackInfo info : rollbackManager.getRecentlyCommittedRollbacks()) {
             if (rollbackId == info.getRollbackId()) {
@@ -168,14 +201,12 @@ public final class RollbackPackageHealthObserver implements PackageHealthObserve
             return;
         }
 
-        String moduleMetadataPackageName = getModuleMetadataPackageName();
-
         // Use the version of the metadata package that was installed before
         // we rolled back for logging purposes.
-        VersionedPackage moduleMetadataPackage = null;
+        VersionedPackage oldModuleMetadataPackage = null;
         for (PackageRollbackInfo packageRollback : rollback.getPackages()) {
             if (packageRollback.getPackageName().equals(moduleMetadataPackageName)) {
-                moduleMetadataPackage = packageRollback.getVersionRolledBackFrom();
+                oldModuleMetadataPackage = packageRollback.getVersionRolledBackFrom();
                 break;
             }
         }
@@ -187,12 +218,12 @@ public final class RollbackPackageHealthObserver implements PackageHealthObserve
             return;
         }
         if (sessionInfo.isStagedSessionApplied()) {
-            logEvent(moduleMetadataPackage,
+            logEvent(oldModuleMetadataPackage,
                     StatsLog.WATCHDOG_ROLLBACK_OCCURRED__ROLLBACK_TYPE__ROLLBACK_SUCCESS);
         } else if (sessionInfo.isStagedSessionReady()) {
             // TODO: What do for staged session ready but not applied
         } else {
-            logEvent(moduleMetadataPackage,
+            logEvent(oldModuleMetadataPackage,
                     StatsLog.WATCHDOG_ROLLBACK_OCCURRED__ROLLBACK_TYPE__ROLLBACK_FAILURE);
         }
     }
@@ -267,19 +298,30 @@ public final class RollbackPackageHealthObserver implements PackageHealthObserve
                     && (sessionId != PackageInstaller.SessionInfo.INVALID_ID)) {
                 PackageInstaller.SessionInfo sessionInfo =
                         packageInstaller.getSessionInfo(sessionId);
-                if (sessionInfo.isStagedSessionReady()) {
+                if (sessionInfo.isStagedSessionReady() && markStagedSessionHandled(rollbackId)) {
                     mContext.unregisterReceiver(listener);
                     saveLastStagedRollbackId(rollbackId);
                     logEvent(moduleMetadataPackage,
                             StatsLog
                             .WATCHDOG_ROLLBACK_OCCURRED__ROLLBACK_TYPE__ROLLBACK_BOOT_TRIGGERED);
                     mContext.getSystemService(PowerManager.class).reboot("Rollback staged install");
-                } else if (sessionInfo.isStagedSessionFailed()) {
+                } else if (sessionInfo.isStagedSessionFailed()
+                        && markStagedSessionHandled(rollbackId)) {
                     logEvent(moduleMetadataPackage,
                             StatsLog.WATCHDOG_ROLLBACK_OCCURRED__ROLLBACK_TYPE__ROLLBACK_FAILURE);
                     mContext.unregisterReceiver(listener);
                 }
             }
+        }
+    }
+
+    /**
+     * Returns {@code true} if staged session associated with {@code rollbackId} was marked
+     * as handled, {@code false} if already handled.
+     */
+    private boolean markStagedSessionHandled(int rollbackId) {
+        synchronized (mPendingStagedRollbackIds) {
+            return mPendingStagedRollbackIds.remove(rollbackId);
         }
     }
 
@@ -316,8 +358,38 @@ public final class RollbackPackageHealthObserver implements PackageHealthObserve
     private static void logEvent(@Nullable VersionedPackage moduleMetadataPackage, int type) {
         Slog.i(TAG, "Watchdog event occurred of type: " + type);
         if (moduleMetadataPackage != null) {
-            StatsLog.write(StatsLog.WATCHDOG_ROLLBACK_OCCURRED, type,
-                    moduleMetadataPackage.getPackageName(), moduleMetadataPackage.getVersionCode());
+            StatsLog.logWatchdogRollbackOccurred(type, moduleMetadataPackage.getPackageName(),
+                    moduleMetadataPackage.getVersionCode());
         }
+    }
+
+    /**
+     * This method should be only called on mHandler thread, since it modifies
+     * {@link #mNumberOfNativeCrashPollsRemaining} and we want to keep this class lock free.
+     */
+    private void checkAndMitigateNativeCrashes() {
+        mNumberOfNativeCrashPollsRemaining--;
+        // Check if native watchdog reported a crash
+        if ("1".equals(SystemProperties.get("ro.init.updatable_crashing"))) {
+            execute(getModuleMetadataPackage());
+            // we stop polling after an attempt to execute rollback, regardless of whether the
+            // attempt succeeds or not
+        } else {
+            if (mNumberOfNativeCrashPollsRemaining > 0) {
+                mHandler.postDelayed(() -> checkAndMitigateNativeCrashes(),
+                        NATIVE_CRASH_POLLING_INTERVAL_MILLIS);
+            }
+        }
+    }
+
+    /**
+     * Since this method can eventually trigger a RollbackManager rollback, it should be called
+     * only once boot has completed {@code onBootCompleted} and not earlier, because the install
+     * session must be entirely completed before we try to rollback.
+     */
+    private void scheduleCheckAndMitigateNativeCrashes() {
+        Slog.i(TAG, "Scheduling " + mNumberOfNativeCrashPollsRemaining + " polls to check "
+                + "and mitigate native crashes");
+        mHandler.post(()->checkAndMitigateNativeCrashes());
     }
 }

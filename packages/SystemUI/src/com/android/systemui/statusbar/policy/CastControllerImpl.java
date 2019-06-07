@@ -35,6 +35,7 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.systemui.R;
+import com.android.systemui.util.Utils;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -70,6 +71,7 @@ public class CastControllerImpl implements CastController {
     public CastControllerImpl(Context context) {
         mContext = context;
         mMediaRouter = (MediaRouter) context.getSystemService(Context.MEDIA_ROUTER_SERVICE);
+        mMediaRouter.setRouterGroupId(MediaRouter.MIRRORING_GROUP_ID);
         mProjectionManager = (MediaProjectionManager)
                 context.getSystemService(Context.MEDIA_PROJECTION_SERVICE);
         mProjection = mProjectionManager.getActiveProjectionInfo();
@@ -234,6 +236,10 @@ public class CastControllerImpl implements CastController {
 
     private String getAppName(String packageName) {
         final PackageManager pm = mContext.getPackageManager();
+        if (Utils.isHeadlessRemoteDisplayProvider(pm, packageName)) {
+            return "";
+        }
+
         try {
             final ApplicationInfo appInfo = pm.getApplicationInfo(packageName, 0);
             if (appInfo != null) {

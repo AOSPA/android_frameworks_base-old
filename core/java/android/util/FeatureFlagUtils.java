@@ -16,6 +16,7 @@
 
 package android.util;
 
+import android.annotation.TestApi;
 import android.content.Context;
 import android.os.SystemProperties;
 import android.provider.Settings;
@@ -29,6 +30,7 @@ import java.util.Map;
  *
  * @hide
  */
+@TestApi
 public class FeatureFlagUtils {
 
     public static final String FFLAG_PREFIX = "sys.fflag.";
@@ -36,12 +38,7 @@ public class FeatureFlagUtils {
     public static final String PERSIST_PREFIX = "persist." + FFLAG_OVERRIDE_PREFIX;
     public static final String SEAMLESS_TRANSFER = "settings_seamless_transfer";
     public static final String HEARING_AID_SETTINGS = "settings_bluetooth_hearing_aid";
-    public static final String SAFETY_HUB = "settings_safety_hub";
     public static final String SCREENRECORD_LONG_PRESS = "settings_screenrecord_long_press";
-    public static final String FORCE_GLOBAL_ACTIONS_GRID_ENABLED =
-            "settings_global_actions_force_grid_enabled";
-    public static final String GLOBAL_ACTIONS_PANEL_ENABLED =
-            "settings_global_actions_panel_enabled";
     public static final String PIXEL_WALLPAPER_CATEGORY_SWITCH =
             "settings_pixel_wallpaper_category_switch";
     public static final String DYNAMIC_SYSTEM = "settings_dynamic_system";
@@ -57,10 +54,7 @@ public class FeatureFlagUtils {
         DEFAULT_FLAGS.put(DYNAMIC_SYSTEM, "false");
         DEFAULT_FLAGS.put(SEAMLESS_TRANSFER, "false");
         DEFAULT_FLAGS.put(HEARING_AID_SETTINGS, "false");
-        DEFAULT_FLAGS.put(SAFETY_HUB, "true");
         DEFAULT_FLAGS.put(SCREENRECORD_LONG_PRESS, "false");
-        DEFAULT_FLAGS.put(FORCE_GLOBAL_ACTIONS_GRID_ENABLED, "false");
-        DEFAULT_FLAGS.put(GLOBAL_ACTIONS_PANEL_ENABLED, "true");
         DEFAULT_FLAGS.put(PIXEL_WALLPAPER_CATEGORY_SWITCH, "false");
         DEFAULT_FLAGS.put("settings_wifi_details_datausage_header", "false");
     }

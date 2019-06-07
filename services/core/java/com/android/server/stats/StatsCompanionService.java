@@ -15,6 +15,7 @@
  */
 package com.android.server.stats;
 
+import static android.app.AppOpsManager.OP_FLAGS_ALL_TRUSTED;
 import static android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED;
 import static android.content.pm.PermissionInfo.PROTECTION_DANGEROUS;
 import static android.os.Process.getPidsForCommands;
@@ -33,6 +34,11 @@ import android.annotation.Nullable;
 import android.app.ActivityManagerInternal;
 import android.app.AlarmManager;
 import android.app.AlarmManager.OnAlarmListener;
+import android.app.AppOpsManager;
+import android.app.AppOpsManager.HistoricalOps;
+import android.app.AppOpsManager.HistoricalOpsRequest;
+import android.app.AppOpsManager.HistoricalPackageOps;
+import android.app.AppOpsManager.HistoricalUidOps;
 import android.app.ProcessMemoryHighWaterMark;
 import android.app.ProcessMemoryState;
 import android.app.StatsManager;
@@ -103,10 +109,12 @@ import android.util.Log;
 import android.util.Slog;
 import android.util.StatsLog;
 import android.util.proto.ProtoOutputStream;
+import android.util.proto.ProtoStream;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.procstats.IProcessStats;
 import com.android.internal.app.procstats.ProcessStats;
+import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.BatterySipper;
 import com.android.internal.os.BatteryStatsHelper;
 import com.android.internal.os.BinderCallsStats.ExportedCallStat;
@@ -146,6 +154,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -154,6 +164,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -175,6 +186,16 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
 
     static final String TAG = "StatsCompanionService";
     static final boolean DEBUG = false;
+    /**
+     * Hard coded field ids of frameworks/base/cmds/statsd/src/uid_data.proto
+     * to be used in ProtoOutputStream.
+     */
+    private static final int APPLICATION_INFO_FIELD_ID = 1;
+    private static final int UID_FIELD_ID = 1;
+    private static final int VERSION_FIELD_ID = 2;
+    private static final int VERSION_STRING_FIELD_ID = 3;
+    private static final int PACKAGE_NAME_FIELD_ID = 4;
+    private static final int INSTALLER_FIELD_ID = 5;
 
     public static final int CODE_DATA_BROADCAST = 1;
     public static final int CODE_SUBSCRIBER_BROADCAST = 1;
@@ -329,8 +350,8 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         if (b != null) {
             sThermalService = IThermalService.Stub.asInterface(b);
             try {
-                sThermalService.registerThermalEventListenerWithType(
-                        new ThermalEventListener(), Temperature.TYPE_SKIN);
+                sThermalService.registerThermalEventListener(
+                        new ThermalEventListener());
                 Slog.i(TAG, "register thermal listener successfully");
             } catch (RemoteException e) {
                 // Should never happen.
@@ -446,39 +467,72 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             Slog.d(TAG, "Iterating over " + users.size() + " profiles.");
         }
 
-        List<Integer> uids = new ArrayList<>();
-        List<Long> versions = new ArrayList<>();
-        List<String> apps = new ArrayList<>();
-        List<String> versionStrings = new ArrayList<>();
-        List<String> installers = new ArrayList<>();
-
-        // Add in all the apps for every user/profile.
-        for (UserInfo profile : users) {
-            List<PackageInfo> pi =
-                    pm.getInstalledPackagesAsUser(PackageManager.MATCH_KNOWN_PACKAGES, profile.id);
-            for (int j = 0; j < pi.size(); j++) {
-                if (pi.get(j).applicationInfo != null) {
-                    String installer;
-                    try {
-                        installer = pm.getInstallerPackageName(pi.get(j).packageName);
-                    } catch (IllegalArgumentException e) {
-                        installer = "";
+        ParcelFileDescriptor[] fds;
+        try {
+            fds = ParcelFileDescriptor.createPipe();
+        } catch (IOException e) {
+            Slog.e(TAG, "Failed to create a pipe to send uid map data.", e);
+            return;
+        }
+        sStatsd.informAllUidData(fds[0]);
+        try {
+            fds[0].close();
+        } catch (IOException e) {
+            Slog.e(TAG, "Failed to close the read side of the pipe.", e);
+        }
+        final ParcelFileDescriptor writeFd = fds[1];
+        BackgroundThread.getHandler().post(() -> {
+            FileOutputStream fout = new ParcelFileDescriptor.AutoCloseOutputStream(writeFd);
+            try {
+                ProtoOutputStream output = new ProtoOutputStream(fout);
+                int numRecords = 0;
+                // Add in all the apps for every user/profile.
+                for (UserInfo profile : users) {
+                    List<PackageInfo> pi =
+                            pm.getInstalledPackagesAsUser(
+                                    PackageManager.MATCH_KNOWN_PACKAGES | PackageManager.MATCH_APEX,
+                                    profile.id);
+                    for (int j = 0; j < pi.size(); j++) {
+                        if (pi.get(j).applicationInfo != null) {
+                            String installer;
+                            try {
+                                installer = pm.getInstallerPackageName(pi.get(j).packageName);
+                            } catch (IllegalArgumentException e) {
+                                installer = "";
+                            }
+                            long applicationInfoToken =
+                                    output.start(ProtoStream.FIELD_TYPE_MESSAGE
+                                            | ProtoStream.FIELD_COUNT_REPEATED
+                                                    | APPLICATION_INFO_FIELD_ID);
+                            output.write(ProtoStream.FIELD_TYPE_INT32
+                                    | ProtoStream.FIELD_COUNT_SINGLE | UID_FIELD_ID,
+                                            pi.get(j).applicationInfo.uid);
+                            output.write(ProtoStream.FIELD_TYPE_INT64
+                                    | ProtoStream.FIELD_COUNT_SINGLE
+                                            | VERSION_FIELD_ID, pi.get(j).getLongVersionCode());
+                            output.write(ProtoStream.FIELD_TYPE_STRING
+                                    | ProtoStream.FIELD_COUNT_SINGLE | VERSION_STRING_FIELD_ID,
+                                            pi.get(j).versionName);
+                            output.write(ProtoStream.FIELD_TYPE_STRING
+                                    | ProtoStream.FIELD_COUNT_SINGLE
+                                            | PACKAGE_NAME_FIELD_ID, pi.get(j).packageName);
+                            output.write(ProtoStream.FIELD_TYPE_STRING
+                                    | ProtoStream.FIELD_COUNT_SINGLE
+                                            | INSTALLER_FIELD_ID,
+                                                    installer == null ? "" : installer);
+                            numRecords++;
+                            output.end(applicationInfoToken);
+                        }
                     }
-                    installers.add(installer == null ? "" : installer);
-                    uids.add(pi.get(j).applicationInfo.uid);
-                    versions.add(pi.get(j).getLongVersionCode());
-                    versionStrings.add(pi.get(j).versionName);
-                    apps.add(pi.get(j).packageName);
                 }
+                output.flush();
+                if (DEBUG) {
+                    Slog.d(TAG, "Sent data for " + numRecords + " apps");
+                }
+            } finally {
+                IoUtils.closeQuietly(fout);
             }
-        }
-        sStatsd.informAllUidData(toIntArray(uids), toLongArray(versions),
-                versionStrings.toArray(new String[versionStrings.size()]),
-                apps.toArray(new String[apps.size()]),
-                installers.toArray(new String[installers.size()]));
-        if (DEBUG) {
-            Slog.d(TAG, "Sent data for " + uids.size() + " apps");
-        }
+        });
     }
 
     private final static class AppUpdateReceiver extends BroadcastReceiver {
@@ -1910,8 +1964,12 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                         String permName = pkg.requestedPermissions[permNum];
 
                         PermissionInfo permissionInfo;
+                        int permissionFlags = 0;
                         try {
                             permissionInfo = pm.getPermissionInfo(permName, 0);
+                            permissionFlags =
+                                pm.getPermissionFlags(permName, pkg.packageName, user);
+
                         } catch (PackageManager.NameNotFoundException ignored) {
                             continue;
                         }
@@ -1926,6 +1984,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                         e.writeString(permName);
                         e.writeInt(pkg.applicationInfo.uid);
                         e.writeString(pkg.packageName);
+                        e.writeInt(permissionFlags);
 
                         e.writeBoolean((pkg.requestedPermissionsFlags[permNum]
                                 & REQUESTED_PERMISSION_GRANTED) != 0);
@@ -1940,6 +1999,53 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             Binder.restoreCallingIdentity(token);
         }
     }
+
+    private void pullAppOps(long elapsedNanos, final long wallClockNanos,
+            List<StatsLogEventWrapper> pulledData) {
+        long token = Binder.clearCallingIdentity();
+        try {
+            AppOpsManager appOps = mContext.getSystemService(AppOpsManager.class);
+
+            CompletableFuture<HistoricalOps> ops = new CompletableFuture<>();
+            HistoricalOpsRequest histOpsRequest =
+                    new HistoricalOpsRequest.Builder(
+                            Instant.now().minus(1, ChronoUnit.HOURS).toEpochMilli(),
+                            Long.MAX_VALUE).build();
+            appOps.getHistoricalOps(histOpsRequest, mContext.getMainExecutor(), ops::complete);
+
+            HistoricalOps histOps = ops.get(EXTERNAL_STATS_SYNC_TIMEOUT_MILLIS,
+                    TimeUnit.MILLISECONDS);
+
+            StatsLogEventWrapper e = new StatsLogEventWrapper(StatsLog.APP_OPS, elapsedNanos,
+                    wallClockNanos);
+
+            for (int uidIdx = 0; uidIdx < histOps.getUidCount(); uidIdx++) {
+                final HistoricalUidOps uidOps = histOps.getUidOpsAt(uidIdx);
+                final int uid = uidOps.getUid();
+                for (int pkgIdx = 0; pkgIdx < uidOps.getPackageCount(); pkgIdx++) {
+                    final HistoricalPackageOps packageOps = uidOps.getPackageOpsAt(pkgIdx);
+                    for (int opIdx = 0; opIdx < packageOps.getOpCount(); opIdx++) {
+                        final AppOpsManager.HistoricalOp op  = packageOps.getOpAt(opIdx);
+                        e.writeInt(uid);
+                        e.writeString(packageOps.getPackageName());
+                        e.writeInt(op.getOpCode());
+                        e.writeLong(op.getForegroundAccessCount(OP_FLAGS_ALL_TRUSTED));
+                        e.writeLong(op.getBackgroundAccessCount(OP_FLAGS_ALL_TRUSTED));
+                        e.writeLong(op.getForegroundRejectCount(OP_FLAGS_ALL_TRUSTED));
+                        e.writeLong(op.getBackgroundRejectCount(OP_FLAGS_ALL_TRUSTED));
+                        e.writeLong(op.getForegroundAccessDuration(OP_FLAGS_ALL_TRUSTED));
+                        e.writeLong(op.getBackgroundAccessDuration(OP_FLAGS_ALL_TRUSTED));
+                        pulledData.add(e);
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "Could not read appops", t);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
 
     /**
      * Add a RoleHolder atom for each package that holds a role.
@@ -2331,6 +2437,10 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 pullFaceSettings(tagId, elapsedNanos, wallClockNanos, ret);
                 break;
             }
+            case StatsLog.APP_OPS: {
+                pullAppOps(elapsedNanos, wallClockNanos, ret);
+                break;
+            }
             default:
                 Slog.w(TAG, "No such tagId data as " + tagId);
                 return null;
@@ -2403,7 +2513,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         @Override
         public void onBootPhase(int phase) {
             super.onBootPhase(phase);
-            if (phase == PHASE_THIRD_PARTY_APPS_CAN_START) {
+            if (phase == PHASE_BOOT_COMPLETED) {
                 mStatsCompanionService.systemReady();
             }
         }

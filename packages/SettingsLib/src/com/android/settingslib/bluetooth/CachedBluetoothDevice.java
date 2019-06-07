@@ -51,6 +51,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     // See mConnectAttempted
     private static final long MAX_UUID_DELAY_FOR_AUTO_CONNECT = 5000;
+    // Some Hearing Aids (especially the 2nd device) needs more time to do service discovery
+    private static final long MAX_HEARING_AIDS_DELAY_FOR_AUTO_CONNECT = 15000;
     private static final long MAX_HOGP_DELAY_FOR_AUTO_CONNECT = 30000;
     private static final boolean mIsTwsConnectEnabled = false;
 
@@ -241,7 +243,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                 // various profiles
                 // If UUIDs are not available yet, connect will be happen
                 // upon arrival of the ACTION_UUID intent.
-                Log.d(TAG, "No profiles. Maybe we will connect later");
+                Log.d(TAG, "No profiles. Maybe we will connect later for device " + mDevice);
                 return;
             }
 
@@ -637,10 +639,12 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         long timeout = MAX_UUID_DELAY_FOR_AUTO_CONNECT;
         if (BluetoothUuid.isUuidPresent(uuids, BluetoothUuid.Hogp)) {
             timeout = MAX_HOGP_DELAY_FOR_AUTO_CONNECT;
+        } else if (BluetoothUuid.isUuidPresent(uuids, BluetoothUuid.HearingAid)) {
+            timeout = MAX_HEARING_AIDS_DELAY_FOR_AUTO_CONNECT;
         }
 
         if (BluetoothUtils.D) {
-            Log.d(TAG, "onUuidChanged: Time since last connect"
+            Log.d(TAG, "onUuidChanged: Time since last connect="
                     + (SystemClock.elapsedRealtime() - mConnectAttempted));
         }
 
@@ -857,11 +861,22 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     }
 
     /**
-     * @return resource for string that discribes the connection state of this device.
-     * case 1: idle or playing media, show "Active" on the only one A2DP active device.
-     * case 2: in phone call, show "Active" on the only one HFP active device
+     * Return full summary that describes connection state of this device
+     *
+     * @see #getConnectionSummary(boolean shortSummary)
      */
     public String getConnectionSummary() {
+        return getConnectionSummary(false /* shortSummary */);
+    }
+
+    /**
+     * Return summary that describes connection state of this device. Summary depends on:
+     * 1. Whether device has battery info
+     * 2. Whether device is in active usage(or in phone call)
+     *
+     * @param shortSummary {@code true} if need to return short version summary
+     */
+    public String getConnectionSummary(boolean shortSummary) {
         boolean profileConnected = false;    // Updated as long as BluetoothProfile is connected
         boolean a2dpConnected = true;        // A2DP is connected
         boolean hfpConnected = true;         // HFP is connected
@@ -940,9 +955,9 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                 if ((mIsActiveDeviceHearingAid)
                         || (mIsActiveDeviceHeadset && isOnCall)
                         || (mIsActiveDeviceA2dp && !isOnCall)) {
-                    if (isTwsBatteryAvailable(leftBattery, rightBattery)) {
+                    if (isTwsBatteryAvailable(leftBattery, rightBattery) && !shortSummary) {
                         stringRes = R.string.bluetooth_active_battery_level_untethered;
-                    } else if (batteryLevelPercentageString != null) {
+                    } else if (batteryLevelPercentageString != null && !shortSummary) {
                         stringRes = R.string.bluetooth_active_battery_level;
                     } else {
                         stringRes = R.string.bluetooth_active_no_battery_level;

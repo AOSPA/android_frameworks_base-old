@@ -18,6 +18,9 @@ package com.android.systemui.bubbles;
 
 import static com.android.internal.annotations.VisibleForTesting.Visibility.PRIVATE;
 
+import android.content.Context;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.os.UserHandle;
 import android.view.LayoutInflater;
 
@@ -37,6 +40,7 @@ class Bubble {
 
     private final String mKey;
     private final String mGroupId;
+    private String mAppName;
     private final BubbleExpandedView.OnBubbleBlockedListener mListener;
 
     private boolean mInflated;
@@ -45,24 +49,42 @@ class Bubble {
     BubbleExpandedView expandedView;
     private long mLastUpdated;
     private long mLastAccessed;
+    private PackageManager mPm;
 
-    private static String groupId(NotificationEntry entry) {
+    public static String groupId(NotificationEntry entry) {
         UserHandle user = entry.notification.getUser();
         return user.getIdentifier() + "|" + entry.notification.getPackageName();
     }
 
     /** Used in tests when no UI is required. */
     @VisibleForTesting(visibility = PRIVATE)
-    Bubble(NotificationEntry e) {
-        this (e, null);
+    Bubble(Context context, NotificationEntry e) {
+        this (context, e, null);
     }
 
-    Bubble(NotificationEntry e, BubbleExpandedView.OnBubbleBlockedListener listener) {
+    Bubble(Context context, NotificationEntry e,
+            BubbleExpandedView.OnBubbleBlockedListener listener) {
         entry = e;
         mKey = e.key;
         mLastUpdated = e.notification.getPostTime();
         mGroupId = groupId(e);
         mListener = listener;
+
+        mPm = context.getPackageManager();
+        ApplicationInfo info;
+        try {
+            info = mPm.getApplicationInfo(
+                entry.notification.getPackageName(),
+                PackageManager.MATCH_UNINSTALLED_PACKAGES
+                    | PackageManager.MATCH_DISABLED_COMPONENTS
+                    | PackageManager.MATCH_DIRECT_BOOT_UNAWARE
+                    | PackageManager.MATCH_DIRECT_BOOT_AWARE);
+            if (info != null) {
+                mAppName = String.valueOf(mPm.getApplicationLabel(info));
+            }
+        } catch (PackageManager.NameNotFoundException unused) {
+            mAppName = entry.notification.getPackageName();
+        }
     }
 
     public String getKey() {
@@ -77,13 +99,17 @@ class Bubble {
         return entry.notification.getPackageName();
     }
 
+    public String getAppName() {
+        return mAppName;
+    }
+
     boolean isInflated() {
         return mInflated;
     }
 
     public void updateDotVisibility() {
         if (iconView != null) {
-            iconView.updateDotVisibility();
+            iconView.updateDotVisibility(true /* animate */);
         }
     }
 
@@ -97,9 +123,9 @@ class Bubble {
 
         expandedView = (BubbleExpandedView) inflater.inflate(
                 R.layout.bubble_expanded_view, stackView, false /* attachToRoot */);
-        expandedView.setEntry(entry, stackView);
-
+        expandedView.setEntry(entry, stackView, mAppName);
         expandedView.setOnBlockedListener(mListener);
+
         mInflated = true;
     }
 
@@ -120,8 +146,25 @@ class Bubble {
         }
     }
 
+    /**
+     * @return the newer of {@link #getLastUpdateTime()} and {@link #getLastAccessTime()}
+     */
     public long getLastActivity() {
         return Math.max(mLastUpdated, mLastAccessed);
+    }
+
+    /**
+     * @return the timestamp in milliseconds of the most recent notification entry for this bubble
+     */
+    public long getLastUpdateTime() {
+        return mLastUpdated;
+    }
+
+    /**
+     * @return the timestamp in milliseconds when this bubble was last displayed in expanded state
+     */
+    public long getLastAccessTime() {
+        return mLastAccessed;
     }
 
     /**

@@ -223,11 +223,11 @@
     <string name="global_actions" product="tv" msgid="7240386462508182976">"TV ਚੋਣਾਂ"</string>
     <string name="global_actions" product="default" msgid="2406416831541615258">"ਫ਼ੋਨ ਚੋਣਾਂ"</string>
     <string name="global_action_lock" msgid="2844945191792119712">"ਸਕ੍ਰੀਨ ਲਾਕ"</string>
-    <string name="global_action_power_off" msgid="4471879440839879722">"ਪਾਵਰ ਬੰਦ"</string>
+    <string name="global_action_power_off" msgid="4471879440839879722">"ਫ਼ੋਨ ਬੰਦ ਕਰੋ"</string>
     <string name="global_action_emergency" msgid="7112311161137421166">"ਸੰਕਟਕਾਲ"</string>
     <string name="global_action_bug_report" msgid="7934010578922304799">"ਬਗ ਰਿਪੋਰਟ"</string>
     <string name="global_action_logout" msgid="935179188218826050">"ਸੈਸ਼ਨ ਸਮਾਪਤ ਕਰੋ"</string>
-    <string name="global_action_screenshot" msgid="8329831278085426283">"ਸਕ੍ਰੀਨਸ਼ਾਟ"</string>
+    <string name="global_action_screenshot" msgid="8329831278085426283">"ਸਕ੍ਰੀਨਸ਼ਾਟ ਲਵੋ"</string>
     <string name="bugreport_title" msgid="5981047024855257269">"ਬੱਗ ਰਿਪੋਰਟ"</string>
     <string name="bugreport_message" msgid="398447048750350456">"ਇਹ ਇੱਕ ਈਮੇਲ ਸੁਨੇਹਾ ਭੇਜਣ ਲਈ, ਤੁਹਾਡੇ ਵਰਤਮਾਨ ਡੀਵਾਈਸ ਬਾਰੇ ਜਾਣਕਾਰੀ ਇਕੱਠੀ ਕਰੇਗਾ। ਬੱਗ ਰਿਪੋਰਟ ਸ਼ੁਰੂ ਕਰਨ ਵਿੱਚ ਥੋੜ੍ਹਾ ਸਮਾਂ ਲੱਗੇਗਾ ਜਦੋਂ ਤੱਕ ਇਹ ਭੇਜੇ ਜਾਣ ਲਈ ਤਿਆਰ ਨਾ ਹੋਵੇ, ਕਿਰਪਾ ਕਰਕੇ ਧੀਰਜ ਰੱਖੋ।"</string>
     <string name="bugreport_option_interactive_title" msgid="8635056131768862479">"ਅੰਤਰਕਿਰਿਆਤਮਕ ਰਿਪੋਰਟ"</string>
@@ -261,7 +261,7 @@
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"ਨੈੱਟਵਰਕ ਸੁਚੇਤਨਾਵਾਂ"</string>
     <string name="notification_channel_network_available" msgid="4531717914138179517">"ਨੈੱਟਵਰਕ ਉਪਲਬਧ ਹੈ"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"VPN ਅਵਸਥਾ"</string>
-    <string name="notification_channel_device_admin" msgid="1568154104368069249">"ਡੀਵਾਈਸ ਪ੍ਰਸ਼ਾਸਨ"</string>
+    <string name="notification_channel_device_admin" msgid="8353118887482520565">"ਤੁਹਾਡੇ ਆਈ.ਟੀ. ਪ੍ਰਸ਼ਾਸਕ ਵੱਲੋਂ ਸੁਚੇਤਨਾਵਾਂ"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"ਸੁਚੇਤਨਾਵਾਂ"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"ਪ੍ਰਚੂਨ ਸਟੋਰਾਂ ਲਈ ਡੈਮੋ"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"USB ਕਨੈਕਸ਼ਨ"</string>
@@ -565,21 +565,21 @@
     <string name="face_acquired_too_low" msgid="488983581737550912">"ਫ਼ੋਨ ਨੂੰ ਥੋੜ੍ਹਾ ਹੇਠਾਂ ਵੱਲ ਕਰੋ।"</string>
     <string name="face_acquired_too_right" msgid="3667075962661863218">"ਫ਼ੋਨ ਨੂੰ ਖੱਬੇ ਪਾਸੇ ਲਿਜਾਓ।"</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"ਫ਼ੋਨ ਨੂੰ ਸੱਜੇ ਪਾਸੇ ਲਿਜਾਓ।"</string>
-    <string name="face_acquired_poor_gaze" msgid="8471716624377228327">"ਧਿਆਨ ਨਾਲ ਸਕ੍ਰੀਨ ਵੱਲ ਦੇਖੋ।"</string>
+    <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"ਕਿਰਪਾ ਕਰਕੇ ਸਿੱਧਾ ਆਪਣੇ ਡੀਵਾਈਸ ਵੱਲ ਦੇਖੋ।"</string>
     <string name="face_acquired_not_detected" msgid="4885504661626728809">"ਤੁਹਾਡਾ ਚਿਹਰਾ ਨਹੀਂ ਦਿਸ ਰਿਹਾ। ਫ਼ੋਨ ਵੱਲ ਦੇਖੋ।"</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"ਬਹੁਤ ਜ਼ਿਆਦਾ ਹਿਲਜੁਲ। ਫ਼ੋਨ ਨੂੰ ਸਥਿਰ ਰੱਖੋ।"</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"ਕਿਰਪਾ ਕਰਕੇ ਆਪਣਾ ਚਿਹਰਾ ਦੁਬਾਰਾ ਦਰਜ ਕਰੋ।"</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"ਹੁਣ ਚਿਹਰਾ ਪਛਾਣਿਆ ਨਹੀਂ ਜਾ ਸਕਦਾ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"</string>
     <string name="face_acquired_too_similar" msgid="1508776858407646460">"ਬਹੁਤ ਮਿਲਦਾ-ਜੁਲਦਾ ਹੈ, ਕਿਰਪਾ ਕਰਕੇ ਆਪਣਾ ਅੰਦਾਜ਼ ਬਦਲੋ।"</string>
-    <string name="face_acquired_pan_too_extreme" msgid="1852495480382773759">"ਕਿਰਪਾ ਕਰਕੇ ਸਿੱਧਾ ਸਕ੍ਰੀਨ ਵੱਲ ਦੇਖੋ।"</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="1290820400317982049">"ਕਿਰਪਾ ਕਰਕੇ ਸਿੱਧਾ ਸਕ੍ਰੀਨ ਵੱਲ ਦੇਖੋ।"</string>
-    <string name="face_acquired_roll_too_extreme" msgid="1444829237745898619">"ਕਿਰਪਾ ਕਰਕੇ ਆਪਣੇ ਸਿਰ ਨੂੰ ਸਿੱਧਾ ਖੜ੍ਹਵਾਂ ਰੱਖੋ।"</string>
-    <string name="face_acquired_obscured" msgid="5747521031647744553">"ਤੁਹਾਡੇ ਸਿਰ ਅਤੇ ਫ਼ੋਨ ਵਿਚਾਲੇ ਕੁਝ ਨਾ ਹੋਵੇ।"</string>
-    <string name="face_acquired_sensor_dirty" msgid="364493868630891300">"ਕਿਰਪਾ ਕਰਕੇ ਕੈਮਰਾ ਸਾਫ਼ ਕਰੋ।"</string>
+    <string name="face_acquired_pan_too_extreme" msgid="4581629343077288178">"ਆਪਣਾ ਸਿਰ ਥੋੜਾ ਜਿਹਾ ਝੁਕਾਓ।"</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"ਆਪਣਾ ਸਿਰ ਥੋੜਾ ਜਿਹਾ ਝੁਕਾਓ।"</string>
+    <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"ਆਪਣਾ ਸਿਰ ਥੋੜਾ ਜਿਹਾ ਝੁਕਾਓ।"</string>
+    <string name="face_acquired_obscured" msgid="5357207702967893283">"ਤੁਹਾਡਾ ਚਿਹਰਾ ਲੁਕਾਉਣ ਵਾਲੀ ਕੋਈ ਵੀ ਚੀਜ਼ ਹਟਾਓ।"</string>
+    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"ਸਕ੍ਰੀਨ ਦੇ ਸਿਖਰਲੇ ਕਿਨਾਰੇ ਦਾ ਸੈਂਸਰ ਸਾਫ਼ ਕਰੋ।"</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"ਚਿਹਰੇ ਦੀ ਪੁਸ਼ਟੀ ਨਹੀਂ ਹੋ ਸਕੀ। ਹਾਰਡਵੇਅਰ ਉਪਲਬਧ ਨਹੀਂ।"</string>
-    <string name="face_error_timeout" msgid="2605673935810019129">"ਚਿਹਰਾ ਪਛਾਣਨ ਦਾ ਸਮਾਂ ਸਮਾਪਤ ਹੋਇਆ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।"</string>
+    <string name="face_error_timeout" msgid="3202585609451248103">"ਚਿਹਰਾ ਪ੍ਰਮਾਣੀਕਰਨ ਦੁਬਾਰਾ ਵਰਤ ਕੇ ਦੇਖੋ।"</string>
     <string name="face_error_no_space" msgid="2712120617457553825">"ਨਵਾਂ ਚਿਹਰਾ ਡਾਟਾ ਸਟੋਰ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ। ਪਹਿਲਾਂ ਪੁਰਾਣਾ ਹਟਾਓ।"</string>
     <string name="face_error_canceled" msgid="2768146728600802422">"ਚਿਹਰਾ ਪਛਾਣਨ ਦੀ ਪ੍ਰਕਿਰਿਆ ਰੱਦ ਕੀਤੀ ਗਈ"</string>
     <string name="face_error_user_canceled" msgid="9003022830076496163">"ਵਰਤੋਂਕਾਰ ਵੱਲੋਂ ਚਿਹਰਾ ਪ੍ਰਮਾਣੀਕਰਨ ਨੂੰ ਰੱਦ ਕੀਤਾ ਗਿਆ"</string>
@@ -648,6 +648,8 @@
     <string name="permdesc_bindCarrierServices" msgid="1391552602551084192">"ਹੋਲਡਰ ਨੂੰ ਕੈਰੀਅਰ ਸੇਵਾਵਾਂ ਨਾਲ ਜੋੜਨ ਦੀ ਆਗਿਆ ਦਿੰਦਾ ਹੈ। ਸਧਾਰਨ ਐਪਸ ਲਈ ਕਦੇ ਵੀ ਲੁੜੀਂਦਾ ਨਹੀਂ ਹੋਣਾ ਚਾਹੀਦਾ ਹੈ।"</string>
     <string name="permlab_access_notification_policy" msgid="4247510821662059671">"ਪਰੇਸ਼ਾਨ ਨਾ ਕਰੋ ਤੱਕ ਪਹੁੰਚ ਪ੍ਰਾਪਤ ਕਰੋ"</string>
     <string name="permdesc_access_notification_policy" msgid="3296832375218749580">"ਐਪ ਨੂੰ ਪਰੇਸ਼ਾਨ ਨਾ ਕਰੋ ਕੌਂਫਿਗਰੇਸ਼ਨ ਨੂੰ ਪੜ੍ਹਨ ਅਤੇ ਲਿਖਣ ਦੀ ਆਗਿਆ ਦਿੰਦਾ ਹੈ।"</string>
+    <string name="permlab_startViewPermissionUsage" msgid="5484728591597709944">"ਇਜਾਜ਼ਤ ਵਰਤੋਂ ਦੇਖਣਾ ਸ਼ੁਰੂ ਕਰੋ"</string>
+    <string name="permdesc_startViewPermissionUsage" msgid="4808345878203594428">"ਧਾਰਕ ਨੂੰ ਕਿਸੇ ਹੋਰ ਐਪ ਲਈ ਇਜਾਜ਼ਤ ਵਰਤੋਂ ਨੂੰ ਸ਼ੁਰੂ ਕਰਨ ਦਿੰਦਾ ਹੈ। ਸਧਾਰਨ ਐਪਾਂ ਲਈ ਕਦੇ ਵੀ ਲੋੜੀਂਦਾ ਨਹੀਂ ਹੋਵੇਗਾ।"</string>
     <string name="policylab_limitPassword" msgid="4497420728857585791">"ਪਾਸਵਰਡ ਨਿਯਮ ਸੈੱਟ ਕਰੋ"</string>
     <string name="policydesc_limitPassword" msgid="2502021457917874968">"ਸਕ੍ਰੀਨ ਲਾਕ ਪਾਸਵਰਡਾਂ ਅਤੇ ਪਿੰਨ ਵਿੱਚ ਆਗਿਆ ਦਿੱਤੀ ਲੰਮਾਈ ਅਤੇ ਅੱਖਰਾਂ ਤੇ ਨਿਯੰਤਰਣ ਪਾਓ।"</string>
     <string name="policylab_watchLogin" msgid="5091404125971980158">"ਸਕ੍ਰੀਨ ਅਣਲਾਕ ਕਰਨ ਦੀਆਂ ਕੋਸ਼ਿਸ਼ਾਂ \'ਤੇ ਨਿਗਰਾਨੀ ਰੱਖੋ"</string>
@@ -1322,7 +1324,7 @@
     <string name="sim_done_button" msgid="827949989369963775">"ਹੋ ਗਿਆ"</string>
     <string name="sim_added_title" msgid="3719670512889674693">"SIM ਕਾਰਡ ਜੋੜਿਆ ਗਿਆ"</string>
     <string name="sim_added_message" msgid="6599945301141050216">"ਮੋਬਾਈਲ ਨੈੱਟਵਰਕ ਤੱਕ ਪਹੁੰਚ ਲਈ ਤੁਹਾਡਾ ਡੀਵਾਈਸ ਮੁੜ-ਚਾਲੂ ਕਰੋ।"</string>
-    <string name="sim_restart_button" msgid="4722407842815232347">"ਰੀਸਟਾਰਟ ਕਰੋ"</string>
+    <string name="sim_restart_button" msgid="4722407842815232347">"ਮੁੜ-ਸ਼ੁਰੂ ਕਰੋ"</string>
     <string name="install_carrier_app_notification_title" msgid="9056007111024059888">"ਮੋਬਾਈਲ ਸੇਵਾ ਕਿਰਿਆਸ਼ੀਲ ਕਰੋ"</string>
     <string name="install_carrier_app_notification_text" msgid="3346681446158696001">"ਆਪਣੇ ਨਵੇਂ ਸਿਮ ਨੂੰ ਕਿਰਿਆਸ਼ੀਲ ਕਰਨ ਲਈ ਕੈਰੀਅਰ ਐਪ ਡਾਊਨਲੋਡ ਕਰੋ"</string>
     <string name="install_carrier_app_notification_text_app_name" msgid="1196505084835248137">"ਆਪਣੇ ਨਵੇਂ ਸਿਮ ਨੂੰ ਕਿਰਿਆਸ਼ੀਲ ਕਰਨ ਲਈ <xliff:g id="APP_NAME">%1$s</xliff:g> ਐਪ ਡਾਊਨਲੋਡ ਕਰੋ"</string>
@@ -1356,7 +1358,8 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"ਟੈਸਟ ਹਾਰਨੈੱਸ ਮੋਡ ਬੰਦ ਕਰਨ ਲਈ ਫੈਕਟਰੀ ਰੀਸੈੱਟ ਕਰੋ।"</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"USB ਪੋਰਟ ਵਿੱਚ ਪਾਣੀ ਜਾਂ ਧੂੜ-ਮਿੱਟੀ"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB ਪੋਰਟ ਸਵੈਚਲਿਤ ਤੌਰ \'ਤੇ ਬੰਦ ਕੀਤਾ ਗਿਆ। ਹੋਰ ਜਾਣਨ ਲਈ ਟੈਪ ਕਰੋ।"</string>
-    <string name="usb_contaminant_not_detected_title" msgid="4202417484434906086">"USB ਪੋਰਟ ਵਰਤਣਾ ਸੁਰੱਖਿਅਤ ਹੈ"</string>
+    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
+    <skip />
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"ਫ਼ੋਨ ਹੁਣ ਪਾਣੀ ਜਾਂ ਧੂੜ-ਮਿੱਟੀ ਦਾ ਪਤਾ ਨਹੀਂ ਲਗਾਉਂਦਾ ਹੈ।"</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"ਬੱਗ ਰਿਪਰੋਟ ਪ੍ਰਾਪਤ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ..."</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"ਕੀ ਬੱਗ ਰਿਪੋਰਟ ਸਾਂਝੀ ਕਰਨੀ ਹੈ?"</string>
@@ -1596,8 +1599,8 @@
     <string name="wireless_display_route_description" msgid="9070346425023979651">"ਵਾਇਰਲੈੱਸ ਡਿਸਪਲੇ"</string>
     <string name="media_route_button_content_description" msgid="591703006349356016">"ਪ੍ਰਸਾਰਿਤ ਕਰੋ"</string>
     <string name="media_route_chooser_title" msgid="1751618554539087622">"ਡੀਵਾਈਸ ਨਾਲ ਕਨੈਕਟ ਕਰੋ"</string>
-    <string name="media_route_chooser_title_for_remote_display" msgid="3395541745872017583">"ਡੀਵਾਈਸ ਨਾਲ ਸਕ੍ਰੀਨ ਜੋੜੋ"</string>
-    <string name="media_route_chooser_searching" msgid="4776236202610828706">"ਡਿਵਾਈਸਾਂ ਦੀ ਖੋਜ ਕਰ ਰਿਹਾ ਹੈ…"</string>
+    <string name="media_route_chooser_title_for_remote_display" msgid="3395541745872017583">"ਡੀਵਾਈਸ ਨਾਲ ਸਕ੍ਰੀਨ ਕਾਸਟ ਕਰੋ"</string>
+    <string name="media_route_chooser_searching" msgid="4776236202610828706">"ਡੀਵਾਈਸਾਂ ਦੀ ਖੋਜ ਹੋ ਰਹੀ ਹੈ…"</string>
     <string name="media_route_chooser_extended_settings" msgid="87015534236701604">"ਸੈਟਿੰਗਾਂ"</string>
     <string name="media_route_controller_disconnect" msgid="8966120286374158649">"ਡਿਸਕਨੈਕਟ ਕਰੋ"</string>
     <string name="media_route_status_scanning" msgid="7279908761758293783">"ਸਕੈਨ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ..."</string>
@@ -1899,9 +1902,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"ਅੱਪਡੇਟ ਦੀ ਜਾਂਚ ਕਰੋ"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"ਤੁਹਾਨੂੰ ਨਵੇਂ ਸੁਨੇਹੇ ਪ੍ਰਾਪਤ ਹੋਏ ਹਨ"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"ਦੇਖਣ ਲਈ SMS ਐਪ ਖੋਲ੍ਹੋ"</string>
-    <string name="user_encrypted_title" msgid="9054897468831672082">"ਕੁਝ ਪ੍ਰਕਾਰਜਾਤਮਕਤਾ ਸੀਮਿਤ ਹੋ ਸਕਦੀ ਹੈ"</string>
-    <string name="user_encrypted_message" msgid="4923292604515744267">"ਅਣਲਾਕ ਕਰਨ ਲਈ ਟੈਪ ਕਰੋ"</string>
-    <string name="user_encrypted_detail" msgid="5708447464349420392">"ਵਰਤੋਂਕਾਰ  ਡਾਟਾ   ਲਾਕ  ਕੀਤਾ ਗਿਆ"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"ਕੁਝ ਪ੍ਰਕਾਰਜਾਤਮਕਤਾ ਸੀਮਤ ਹੋ ਸਕਦੀ ਹੈ"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"ਕਾਰਜ ਪ੍ਰੋਫਾਈਲ ਲਾਕ ਕੀਤੀ ਗਈ"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"ਕਾਰਜ ਪ੍ਰੋਫਾਈਲ ਨੂੰ ਅਣਲਾਕ ਕਰਨ ਲਈ ਟੈਪ ਕਰੋ"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"<xliff:g id="PRODUCT_NAME">%1$s</xliff:g> ਨਾਲ ਕਨੈਕਟ ਹੋਈ"</string>
@@ -2028,4 +2029,5 @@
       <item quantity="other"><xliff:g id="FILE_NAME_2">%s</xliff:g> + <xliff:g id="COUNT_3">%d</xliff:g> ਫ਼ਾਈਲਾਂ</item>
     </plurals>
     <string name="chooser_no_direct_share_targets" msgid="997970693708458895">"ਸਿੱਧਾ ਸਾਂਝਾ ਕਰਨ ਦੀ ਸੁਵਿਧਾ ਉਪਲਬਧ ਨਹੀਂ ਹੈ"</string>
+    <string name="chooser_all_apps_button_label" msgid="3631524352936289457">"ਐਪ ਸੂਚੀ"</string>
 </resources>

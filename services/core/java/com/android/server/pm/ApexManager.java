@@ -16,178 +16,244 @@
 
 package com.android.server.pm;
 
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.apex.ApexInfo;
 import android.apex.ApexInfoList;
 import android.apex.ApexSessionInfo;
 import android.apex.IApexService;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageParser;
 import android.content.pm.PackageParser.PackageParserException;
-import android.os.HandlerThread;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ServiceManager.ServiceNotFoundException;
-import android.os.SystemClock;
 import android.sysprop.ApexProperties;
+import android.util.ArrayMap;
 import android.util.Slog;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.IndentingPrintWriter;
-import com.android.server.SystemService;
 
 import java.io.File;
 import java.io.PrintWriter;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
  * ApexManager class handles communications with the apex service to perform operation and queries,
  * as well as providing caching to avoid unnecessary calls to the service.
- *
- * @hide
  */
-public final class ApexManager extends SystemService {
-    private static final String TAG = "ApexManager";
-    private IApexService mApexService;
+class ApexManager {
+    static final String TAG = "ApexManager";
+    private final IApexService mApexService;
+    private final Context mContext;
+    private final Object mLock = new Object();
+    /**
+     * A map from {@code APEX packageName} to the {@Link PackageInfo} generated from the {@code
+     * AndroidManifest.xml}
+     *
+     * <p>Note that key of this map is {@code packageName} field of the corresponding {@code
+     * AndroidManifest.xml}.
+      */
+    @GuardedBy("mLock")
+    private List<PackageInfo> mAllPackagesCache;
+    /**
+     * A map from {@code apexName} to the {@Link PackageInfo} generated from the {@code
+     * AndroidManifest.xml}.
+     *
+     * <p>Note that key of this map is {@code apexName} field which corresponds to the {@code name}
+     * field of {@code apex_manifest.json}.
+     */
+    // TODO(b/132324953): remove.
+    @GuardedBy("mLock")
+    private ArrayMap<String, PackageInfo> mApexNameToPackageInfoCache;
 
-    private final CountDownLatch mActivePackagesCacheLatch = new CountDownLatch(1);
-    private Map<String, PackageInfo> mActivePackagesCache;
 
-    private final CountDownLatch mApexFilesCacheLatch = new CountDownLatch(1);
-    private ApexInfo[] mApexFiles;
-
-    public ApexManager(Context context) {
-        super(context);
-    }
-
-    @Override
-    public void onStart() {
+    ApexManager(Context context) {
         try {
             mApexService = IApexService.Stub.asInterface(
-                    ServiceManager.getServiceOrThrow("apexservice"));
+                ServiceManager.getServiceOrThrow("apexservice"));
         } catch (ServiceNotFoundException e) {
             throw new IllegalStateException("Required service apexservice not available");
         }
-        publishLocalService(ApexManager.class, this);
-        HandlerThread oneShotThread = new HandlerThread("ApexManagerOneShotHandler");
-        oneShotThread.start();
-        oneShotThread.getThreadHandler().post(this::initSequence);
-        oneShotThread.quitSafely();
+        mContext = context;
     }
 
-    private void initSequence() {
-        populateApexFilesCache();
-        parseApexFiles();
+    static final int MATCH_ACTIVE_PACKAGE = 1 << 0;
+    static final int MATCH_FACTORY_PACKAGE = 1 << 1;
+    @IntDef(
+            flag = true,
+            prefix = { "MATCH_"},
+            value = {MATCH_ACTIVE_PACKAGE, MATCH_FACTORY_PACKAGE})
+    @Retention(RetentionPolicy.SOURCE)
+    @interface PackageInfoFlags{}
+
+    void systemReady() {
+        mContext.registerReceiver(new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                onBootCompleted();
+                mContext.unregisterReceiver(this);
+            }
+        }, new IntentFilter(Intent.ACTION_BOOT_COMPLETED));
     }
 
-    private void populateApexFilesCache() {
-        if (mApexFiles != null) {
-            return;
-        }
-        long startTimeMicros = SystemClock.currentTimeMicro();
-        Slog.i(TAG, "Starting to populate apex files cache");
-        try {
-            mApexFiles = mApexService.getActivePackages();
-            Slog.i(TAG, "IPC to apexd finished in " + (SystemClock.currentTimeMicro()
-                    - startTimeMicros) + " μs");
-        } catch (RemoteException re) {
-            // TODO: make sure this error is propagated to system server.
-            Slog.e(TAG, "Unable to retrieve packages from apexservice: " + re.toString());
-            re.rethrowAsRuntimeException();
-        }
-        mApexFilesCacheLatch.countDown();
-        Slog.i(TAG, "Finished populating apex files cache in " + (SystemClock.currentTimeMicro()
-                - startTimeMicros) + " μs");
-    }
-
-    private void parseApexFiles() {
-        waitForLatch(mApexFilesCacheLatch);
-        if (mApexFiles == null) {
-            throw new IllegalStateException("mApexFiles must be populated");
-        }
-        long startTimeMicros = SystemClock.currentTimeMicro();
-        Slog.i(TAG, "Starting to parse apex files");
-        List<PackageInfo> list = new ArrayList<>();
-        // TODO: this can be parallelized.
-        for (ApexInfo ai : mApexFiles) {
+    private void populateAllPackagesCacheIfNeeded() {
+        synchronized (mLock) {
+            if (mAllPackagesCache != null) {
+                return;
+            }
+            mApexNameToPackageInfoCache = new ArrayMap<>();
             try {
-                // If the device is using flattened APEX, don't report any APEX
-                // packages since they won't be managed or updated by PackageManager.
-                if ((new File(ai.packagePath)).isDirectory()) {
-                    break;
+                mAllPackagesCache = new ArrayList<>();
+                HashSet<String> activePackagesSet = new HashSet<>();
+                HashSet<String> factoryPackagesSet = new HashSet<>();
+                final ApexInfo[] allPkgs = mApexService.getAllPackages();
+                for (ApexInfo ai : allPkgs) {
+                    // If the device is using flattened APEX, don't report any APEX
+                    // packages since they won't be managed or updated by PackageManager.
+                    if ((new File(ai.packagePath)).isDirectory()) {
+                        break;
+                    }
+                    try {
+                        final PackageInfo pkg = PackageParser.generatePackageInfoFromApex(
+                                ai, PackageManager.GET_META_DATA
+                                        | PackageManager.GET_SIGNING_CERTIFICATES);
+                        mAllPackagesCache.add(pkg);
+                        if (ai.isActive) {
+                            if (activePackagesSet.contains(pkg.packageName)) {
+                                throw new IllegalStateException(
+                                        "Two active packages have the same name: "
+                                                + pkg.packageName);
+                            }
+                            activePackagesSet.add(ai.packageName);
+                            // TODO(b/132324953): remove.
+                            mApexNameToPackageInfoCache.put(ai.packageName, pkg);
+                        }
+                        if (ai.isFactory) {
+                            if (factoryPackagesSet.contains(pkg.packageName)) {
+                                throw new IllegalStateException(
+                                        "Two factory packages have the same name: "
+                                                + pkg.packageName);
+                            }
+                            factoryPackagesSet.add(ai.packageName);
+                        }
+                    } catch (PackageParserException pe) {
+                        throw new IllegalStateException("Unable to parse: " + ai, pe);
+                    }
                 }
-                list.add(PackageParser.generatePackageInfoFromApex(
-                        new File(ai.packagePath), PackageManager.GET_META_DATA
-                                | PackageManager.GET_SIGNING_CERTIFICATES));
-            } catch (PackageParserException pe) {
-                // TODO: make sure this error is propagated to system server.
-                throw new IllegalStateException("Unable to parse: " + ai, pe);
+            } catch (RemoteException re) {
+                Slog.e(TAG, "Unable to retrieve packages from apexservice: " + re.toString());
+                throw new RuntimeException(re);
             }
         }
-        mActivePackagesCache = list.stream().collect(
-                Collectors.toMap(p -> p.packageName, Function.identity()));
-        mActivePackagesCacheLatch.countDown();
-        Slog.i(TAG, "Finished parsing apex files in " + (SystemClock.currentTimeMicro()
-                - startTimeMicros) + " μs");
     }
 
     /**
-     * Retrieves information about an active APEX package.
-     *
-     * <p>This method blocks caller thread until {@link #parseApexFiles()} succeeds. Note that in
-     * case {@link #parseApexFiles()}} throws an exception this method will never finish
-     * essentially putting device into a boot loop.
+     * Retrieves information about an APEX package.
      *
      * @param packageName the package name to look for. Note that this is the package name reported
      *                    in the APK container manifest (i.e. AndroidManifest.xml), which might
      *                    differ from the one reported in the APEX manifest (i.e.
      *                    apex_manifest.json).
+     * @param flags the type of package to return. This may match to active packages
+     *              and factory (pre-installed) packages.
      * @return a PackageInfo object with the information about the package, or null if the package
      *         is not found.
      */
-    @Nullable PackageInfo getActivePackage(String packageName) {
-        waitForLatch(mActivePackagesCacheLatch);
-        return mActivePackagesCache.get(packageName);
+    @Nullable PackageInfo getPackageInfo(String packageName, @PackageInfoFlags int flags) {
+        populateAllPackagesCacheIfNeeded();
+        boolean matchActive = (flags & MATCH_ACTIVE_PACKAGE) != 0;
+        boolean matchFactory = (flags & MATCH_FACTORY_PACKAGE) != 0;
+        for (PackageInfo packageInfo: mAllPackagesCache) {
+            if (!packageInfo.packageName.equals(packageName)) {
+                continue;
+            }
+            if ((!matchActive || isActive(packageInfo))
+                    && (!matchFactory || isFactory(packageInfo))) {
+                return packageInfo;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns a {@link PackageInfo} for an active APEX package keyed by it's {@code apexName}.
+     *
+     * @deprecated this API will soon be deleted, please don't depend on it.
+     */
+    // TODO(b/132324953): delete.
+    @Deprecated
+    @Nullable PackageInfo getPackageInfoForApexName(String apexName) {
+        populateAllPackagesCacheIfNeeded();
+        return mApexNameToPackageInfoCache.get(apexName);
     }
 
     /**
      * Retrieves information about all active APEX packages.
      *
-     * <p>This method blocks caller thread until {@link #parseApexFiles()} succeeds. Note that in
-     * case {@link #parseApexFiles()}} throws an exception this method will never finish
-     * essentially putting device into a boot loop.
-     *
-     * @return a Collection of PackageInfo object, each one containing information about a different
+     * @return a List of PackageInfo object, each one containing information about a different
      *         active package.
      */
-    Collection<PackageInfo> getActivePackages() {
-        waitForLatch(mActivePackagesCacheLatch);
-        return mActivePackagesCache.values();
+    List<PackageInfo> getActivePackages() {
+        populateAllPackagesCacheIfNeeded();
+        return mAllPackagesCache
+                .stream()
+                .filter(item -> isActive(item))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Retrieves information about all active pre-installed APEX packages.
+     *
+     * @return a List of PackageInfo object, each one containing information about a different
+     *         active pre-installed package.
+     */
+    List<PackageInfo> getFactoryPackages() {
+        populateAllPackagesCacheIfNeeded();
+        return mAllPackagesCache
+                .stream()
+                .filter(item -> isFactory(item))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Retrieves information about all inactive APEX packages.
+     *
+     * @return a List of PackageInfo object, each one containing information about a different
+     *         inactive package.
+     */
+    List<PackageInfo> getInactivePackages() {
+        populateAllPackagesCacheIfNeeded();
+        return mAllPackagesCache
+                .stream()
+                .filter(item -> !isActive(item))
+                .collect(Collectors.toList());
     }
 
     /**
      * Checks if {@code packageName} is an apex package.
      *
-     * <p>This method blocks caller thread until {@link #populateApexFilesCache()} succeeds. Note
-     * that in case {@link #populateApexFilesCache()} throws an exception this method will never
-     * finish essentially putting device into a boot loop.
-     *
      * @param packageName package to check.
      * @return {@code true} if {@code packageName} is an apex package.
      */
     boolean isApexPackage(String packageName) {
-        waitForLatch(mApexFilesCacheLatch);
-        for (ApexInfo ai : mApexFiles) {
-            if (ai.packageName.equals(packageName)) {
+        populateAllPackagesCacheIfNeeded();
+        for (PackageInfo packageInfo : mAllPackagesCache) {
+            if (packageInfo.packageName.equals(packageName)) {
                 return true;
             }
         }
@@ -319,16 +385,52 @@ public final class ApexManager extends SystemService {
     }
 
     /**
-     * Blocks current thread until {@code latch} has counted down to zero.
+     * Whether an APEX package is active or not.
      *
-     * @throws RuntimeException if thread was interrupted while waiting.
+     * @param packageInfo the package to check
+     * @return {@code true} if this package is active, {@code false} otherwise.
      */
-    private void waitForLatch(CountDownLatch latch) {
-        try {
-            latch.await();
-        } catch (InterruptedException e) {
-            throw new RuntimeException("Interrupted waiting for cache to be populated", e);
+    private static boolean isActive(PackageInfo packageInfo) {
+        return (packageInfo.applicationInfo.flags & ApplicationInfo.FLAG_INSTALLED) != 0;
+    }
+
+    /**
+     * Whether the APEX package is pre-installed or not.
+     *
+     * @param packageInfo the package to check
+     * @return {@code true} if this package is pre-installed, {@code false} otherwise.
+     */
+    private static boolean isFactory(PackageInfo packageInfo) {
+        return (packageInfo.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+    }
+
+    /**
+     * Dump information about the packages contained in a particular cache
+     * @param packagesCache the cache to print information about.
+     * @param packageName a {@link String} containing a package name, or {@code null}. If set, only
+     *                    information about that specific package will be dumped.
+     * @param ipw the {@link IndentingPrintWriter} object to send information to.
+     */
+    void dumpFromPackagesCache(
+            List<PackageInfo> packagesCache,
+            @Nullable String packageName,
+            IndentingPrintWriter ipw) {
+        ipw.println();
+        ipw.increaseIndent();
+        for (PackageInfo pi : packagesCache) {
+            if (packageName != null && !packageName.equals(pi.packageName)) {
+                continue;
+            }
+            ipw.println(pi.packageName);
+            ipw.increaseIndent();
+            ipw.println("Version: " + pi.versionCode);
+            ipw.println("Path: " + pi.applicationInfo.sourceDir);
+            ipw.println("IsActive: " + isActive(pi));
+            ipw.println("IsFactory: " + isFactory(pi));
+            ipw.decreaseIndent();
         }
+        ipw.decreaseIndent();
+        ipw.println();
     }
 
     /**
@@ -340,23 +442,16 @@ public final class ApexManager extends SystemService {
      */
     void dump(PrintWriter pw, @Nullable String packageName) {
         final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ", 120);
-        ipw.println();
-        ipw.println("Active APEX packages:");
-        ipw.increaseIndent();
         try {
-            waitForLatch(mActivePackagesCacheLatch);
-            for (PackageInfo pi : mActivePackagesCache.values()) {
-                if (packageName != null && !packageName.equals(pi.packageName)) {
-                    continue;
-                }
-                ipw.println(pi.packageName);
-                ipw.increaseIndent();
-                ipw.println("Version: " + pi.versionCode);
-                ipw.println("Path: " + pi.applicationInfo.sourceDir);
-                ipw.decreaseIndent();
-            }
-            ipw.decreaseIndent();
+            populateAllPackagesCacheIfNeeded();
             ipw.println();
+            ipw.println("Active APEX packages:");
+            dumpFromPackagesCache(getActivePackages(), packageName, ipw);
+            ipw.println("Inactive APEX packages:");
+            dumpFromPackagesCache(getInactivePackages(), packageName, ipw);
+            ipw.println("Factory APEX packages:");
+            dumpFromPackagesCache(getFactoryPackages(), packageName, ipw);
+            ipw.increaseIndent();
             ipw.println("APEX session state:");
             ipw.increaseIndent();
             final ApexSessionInfo[] sessions = mApexService.getSessions();
@@ -388,5 +483,9 @@ public final class ApexManager extends SystemService {
         } catch (RemoteException e) {
             ipw.println("Couldn't communicate with apexd.");
         }
+    }
+
+    public void onBootCompleted() {
+        populateAllPackagesCacheIfNeeded();
     }
 }

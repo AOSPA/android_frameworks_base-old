@@ -222,10 +222,10 @@ public final class AudioAttributes implements Parcelable {
     public final static int SUPPRESSIBLE_MEDIA = 5;
     /**
      * @hide
-     * Denotes a usage for all other sounds not caught in SUPPRESSIBLE_NOTIFICATION,
+     * Denotes a usage for sounds not caught in SUPPRESSIBLE_NOTIFICATION,
      * SUPPRESSIBLE_CALL,SUPPRESSIBLE_NEVER, SUPPRESSIBLE_ALARM or SUPPRESSIBLE_MEDIA.
-     * This includes system, sonification and unknown sounds.
-     * These will be muted when the Zen priority mode doesn't allow sytem sounds
+     * This includes sonification sounds.
+     * These will be muted when the Zen priority mode doesn't allow system sounds
      * @see #SUPPRESSIBLE_USAGES
      */
     public final static int SUPPRESSIBLE_SYSTEM = 6;
@@ -248,6 +248,7 @@ public final class AudioAttributes implements Parcelable {
         SUPPRESSIBLE_USAGES.put(USAGE_NOTIFICATION_EVENT,                SUPPRESSIBLE_NOTIFICATION);
         SUPPRESSIBLE_USAGES.put(USAGE_ASSISTANCE_ACCESSIBILITY,          SUPPRESSIBLE_NEVER);
         SUPPRESSIBLE_USAGES.put(USAGE_VOICE_COMMUNICATION,               SUPPRESSIBLE_NEVER);
+        SUPPRESSIBLE_USAGES.put(USAGE_VOICE_COMMUNICATION_SIGNALLING,    SUPPRESSIBLE_NEVER);
         SUPPRESSIBLE_USAGES.put(USAGE_ALARM,                             SUPPRESSIBLE_ALARM);
         SUPPRESSIBLE_USAGES.put(USAGE_MEDIA,                             SUPPRESSIBLE_MEDIA);
         SUPPRESSIBLE_USAGES.put(USAGE_ASSISTANCE_NAVIGATION_GUIDANCE,    SUPPRESSIBLE_MEDIA);
@@ -255,7 +256,6 @@ public final class AudioAttributes implements Parcelable {
         SUPPRESSIBLE_USAGES.put(USAGE_ASSISTANT,                         SUPPRESSIBLE_MEDIA);
         /** default volume assignment is STREAM_MUSIC, handle unknown usage as media */
         SUPPRESSIBLE_USAGES.put(USAGE_UNKNOWN,                           SUPPRESSIBLE_MEDIA);
-        SUPPRESSIBLE_USAGES.put(USAGE_VOICE_COMMUNICATION_SIGNALLING,    SUPPRESSIBLE_SYSTEM);
         SUPPRESSIBLE_USAGES.put(USAGE_ASSISTANCE_SONIFICATION,           SUPPRESSIBLE_SYSTEM);
     }
 
@@ -400,7 +400,7 @@ public final class AudioAttributes implements Parcelable {
     /**
      * Indicates that the audio may be captured by any app.
      *
-     * For privacy, the following usages can not be recorded: VOICE_COMMUNICATION*,
+     * For privacy, the following usages cannot be recorded: VOICE_COMMUNICATION*,
      * USAGE_NOTIFICATION*, USAGE_ASSISTANCE* and USAGE_ASSISTANT.
      *
      * On {@link android.os.Build.VERSION_CODES#Q}, this means only {@link #USAGE_UNKNOWN},
@@ -413,11 +413,11 @@ public final class AudioAttributes implements Parcelable {
     /**
      * Indicates that the audio may only be captured by system apps.
      *
-     * System apps can capture for many purposes like accessibility, user guidance...
+     * System apps can capture for many purposes like accessibility, live captions, user guidance...
      * but abide to the following restrictions:
-     *  - the audio can not leave the device
-     *  - the audio can not be passed to a third party app
-     *  - the audio can not be recorded at a higher quality then 16kHz 16bit mono
+     *  - the audio cannot leave the device
+     *  - the audio cannot be passed to a third party app
+     *  - the audio cannot be recorded at a higher quality than 16kHz 16bit mono
      *
      * See {@link Builder#setAllowedCapturePolicy}.
      */
@@ -716,24 +716,23 @@ public final class AudioAttributes implements Parcelable {
         }
 
         /**
-         * Specifies weather the audio may or may not be captured by other apps or the system.
+         * Specifies whether the audio may or may not be captured by other apps or the system.
          *
          * The default is {@link AudioAttributes#ALLOW_CAPTURE_BY_ALL}.
          *
          * There are multiple ways to set this policy:
-         *  - for each tracks independently, with this method
-         *  - application wide at runtime, with {@link AudioManager#setAllowedCapturePolicy(int)}
-         *  - application wide at build time, see {@code allowAudioPlaybackCapture} in the
-         *    application manifest.
+         * <ul>
+         * <li> for each track independently, with this method </li>
+         * <li> application-wide at runtime, with
+         *      {@link AudioManager#setAllowedCapturePolicy(int)} </li>
+         * <li> application-wide at build time, see {@code allowAudioPlaybackCapture} in the
+         *      application manifest. </li>
+         * </ul>
          * The most restrictive policy is always applied.
          *
-         * See {@link AudioPlaybackCaptureConfiguration} for more details on the restrictions
+         * See {@link AudioPlaybackCaptureConfiguration} for more details on
          * which audio signals can be captured.
          *
-         * @param capturePolicy one of
-         *     {@link #ALLOW_CAPTURE_BY_ALL},
-         *     {@link #ALLOW_CAPTURE_BY_SYSTEM},
-         *     {@link #ALLOW_CAPTURE_BY_NONE}.
          * @return the same Builder instance
          * @throws IllegalArgumentException if the argument is not a valid value.
          */

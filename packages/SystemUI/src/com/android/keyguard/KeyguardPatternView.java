@@ -64,10 +64,16 @@ public class KeyguardPatternView extends LinearLayout implements KeyguardSecurit
     // How much we scale up the duration of the disappear animation when the current user is locked
     public static final float DISAPPEAR_MULTIPLIER_LOCKED = 1.5f;
 
+    // Extra padding, in pixels, that should eat touch events.
+    private static final int PATTERNS_TOUCH_AREA_EXTENSION = 40;
+
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private final AppearAnimationUtils mAppearAnimationUtils;
     private final DisappearAnimationUtils mDisappearAnimationUtils;
     private final DisappearAnimationUtils mDisappearAnimationUtilsLocked;
+    private final int[] mTmpPosition = new int[2];
+    private final Rect mTempRect = new Rect();
+    private final Rect mLockPatternScreenBounds = new Rect();
 
     private CountDownTimer mCountdownTimer = null;
     private LockPatternUtils mLockPatternUtils;
@@ -92,7 +98,6 @@ public class KeyguardPatternView extends LinearLayout implements KeyguardSecurit
             mLockPatternView.clearPattern();
         }
     };
-    private Rect mTempRect = new Rect();
     @VisibleForTesting
     KeyguardMessageArea mSecurityMessageDisplay;
     private View mEcaView;
@@ -199,6 +204,16 @@ public class KeyguardPatternView extends LinearLayout implements KeyguardSecurit
     }
 
     @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        super.onLayout(changed, l, t, r, b);
+        mLockPatternView.getLocationOnScreen(mTmpPosition);
+        mLockPatternScreenBounds.set(mTmpPosition[0] - PATTERNS_TOUCH_AREA_EXTENSION,
+                mTmpPosition[1] - PATTERNS_TOUCH_AREA_EXTENSION,
+                mTmpPosition[0] + mLockPatternView.getWidth() + PATTERNS_TOUCH_AREA_EXTENSION,
+                mTmpPosition[1] + mLockPatternView.getHeight() + PATTERNS_TOUCH_AREA_EXTENSION);
+    }
+
+    @Override
     public void reset() {
         // reset lock pattern
         mLockPatternView.setInStealthMode(!mLockPatternUtils.isVisiblePatternEnabled(
@@ -229,6 +244,11 @@ public class KeyguardPatternView extends LinearLayout implements KeyguardSecurit
 
     @Override
     public void showUsabilityHint() {
+    }
+
+    @Override
+    public boolean disallowInterceptTouch(MotionEvent event) {
+        return mLockPatternScreenBounds.contains((int) event.getRawX(), (int) event.getRawY());
     }
 
     /** TODO: hook this up */

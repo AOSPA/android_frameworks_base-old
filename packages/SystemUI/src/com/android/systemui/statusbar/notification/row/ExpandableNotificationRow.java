@@ -76,7 +76,8 @@ import com.android.internal.widget.CachingIconView;
 import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
-import com.android.systemui.classifier.FalsingManager;
+import com.android.systemui.classifier.FalsingManagerFactory;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.PluginListener;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.MenuItem;
@@ -647,6 +648,9 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         if (!getShowingLayout().isDimmable()) {
             return false;
         }
+        if (showingAmbientPulsing()) {
+            return false;
+        }
         return super.isDimmable();
     }
 
@@ -769,7 +773,9 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     public void setHeaderVisibleAmount(float headerVisibleAmount) {
         if (mHeaderVisibleAmount != headerVisibleAmount) {
             mHeaderVisibleAmount = headerVisibleAmount;
-            mPrivateLayout.setHeaderVisibleAmount(headerVisibleAmount);
+            for (NotificationContentView l : mLayouts) {
+                l.setHeaderVisibleAmount(headerVisibleAmount);
+            }
             if (mChildrenContainer != null) {
                 mChildrenContainer.setHeaderVisibleAmount(headerVisibleAmount);
             }
@@ -1241,7 +1247,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         }
         mStatusBarNotification.clearPackageContext();
         mNotificationInflater.clearCachesAndReInflate();
-        onNotificationUpdated();
     }
 
     @Override
@@ -1646,7 +1651,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
     public ExpandableNotificationRow(Context context, AttributeSet attrs) {
         super(context, attrs);
-        mFalsingManager = FalsingManager.getInstance(context);
+        mFalsingManager = FalsingManagerFactory.getInstance(context);
         mNotificationInflater = new NotificationContentInflater(this);
         mMenuRow = new NotificationMenuRow(mContext);
         mImageResolver = new NotificationInlineImageResolver(context,
@@ -1874,6 +1879,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     void onGutsOpened() {
+        resetTranslation();
         updateContentAccessibilityImportanceForGuts(false /* isEnabled */);
     }
 
@@ -2019,10 +2025,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private void updateChildrenVisibility() {
         boolean hideContentWhileLaunching = mExpandAnimationRunning && mGuts != null
                 && mGuts.isExposed();
-        mPrivateLayout.setVisibility(!shouldShowPublic() && !mIsSummaryWithChildren
+        mPrivateLayout.setVisibility(!mShowingPublic && !mIsSummaryWithChildren
                 && !hideContentWhileLaunching ? VISIBLE : INVISIBLE);
         if (mChildrenContainer != null) {
-            mChildrenContainer.setVisibility(!shouldShowPublic() && mIsSummaryWithChildren
+            mChildrenContainer.setVisibility(!mShowingPublic && mIsSummaryWithChildren
                     && !hideContentWhileLaunching ? VISIBLE
                     : INVISIBLE);
         }
@@ -2397,6 +2403,14 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      * it's a summary notification).
      */
     public int getNumUniqueChannels() {
+        return getUniqueChannels().size();
+    }
+
+    /**
+     * Returns the channels covered by the notification row (including its children if
+     * it's a summary notification).
+     */
+    public ArraySet<NotificationChannel> getUniqueChannels() {
         ArraySet<NotificationChannel> channels = new ArraySet<>();
 
         channels.add(mEntry.channel);
@@ -2416,7 +2430,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 }
             }
         }
-        return channels.size();
+
+        return channels;
     }
 
     public void updateChildrenHeaderAppearance() {

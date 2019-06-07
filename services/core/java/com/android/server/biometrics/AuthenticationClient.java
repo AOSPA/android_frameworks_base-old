@@ -63,11 +63,13 @@ public abstract class AuthenticationClient extends ClientMonitor {
      */
     public abstract boolean shouldFrameworkHandleLockout();
 
-    public AuthenticationClient(Context context, Metrics metrics,
+    public abstract boolean wasUserDetected();
+
+    public AuthenticationClient(Context context, Constants constants,
             BiometricServiceBase.DaemonWrapper daemon, long halDeviceId, IBinder token,
             BiometricServiceBase.ServiceListener listener, int targetUserId, int groupId, long opId,
             boolean restricted, String owner, int cookie, boolean requireConfirmation) {
-        super(context, metrics, daemon, halDeviceId, token, listener, targetUserId, groupId,
+        super(context, constants, daemon, halDeviceId, token, listener, targetUserId, groupId,
                 restricted, owner, cookie);
         mOpId = opId;
         mRequireConfirmation = requireConfirmation;
@@ -105,6 +107,10 @@ public abstract class AuthenticationClient extends ClientMonitor {
         if (!shouldFrameworkHandleLockout()) {
             switch (error) {
                 case BiometricConstants.BIOMETRIC_ERROR_TIMEOUT:
+                    if (!wasUserDetected() && !isBiometricPrompt()) {
+                        // No vibration if user was not detected on keyguard
+                        break;
+                    }
                 case BiometricConstants.BIOMETRIC_ERROR_LOCKOUT:
                 case BiometricConstants.BIOMETRIC_ERROR_LOCKOUT_PERMANENT:
                     if (mStarted) {
@@ -126,7 +132,7 @@ public abstract class AuthenticationClient extends ClientMonitor {
 
         final BiometricServiceBase.ServiceListener listener = getListener();
 
-        mMetricsLogger.action(mMetrics.actionBiometricAuth(), authenticated);
+        mMetricsLogger.action(mConstants.actionBiometricAuth(), authenticated);
         boolean result = false;
 
         try {
@@ -225,7 +231,7 @@ public abstract class AuthenticationClient extends ClientMonitor {
             final int result = getDaemonWrapper().authenticate(mOpId, getGroupId());
             if (result != 0) {
                 Slog.w(getLogTag(), "startAuthentication failed, result=" + result);
-                mMetricsLogger.histogram(mMetrics.tagAuthStartError(), result);
+                mMetricsLogger.histogram(mConstants.tagAuthStartError(), result);
                 onError(getHalDeviceId(), BiometricConstants.BIOMETRIC_ERROR_HW_UNAVAILABLE,
                         0 /* vendorCode */);
                 return result;

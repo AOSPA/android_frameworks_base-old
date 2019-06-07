@@ -905,6 +905,8 @@ public class AppOpsService extends IAppOpsService.Stub {
                     }
                 }
             }
+
+            mHistoricalRegistry.clearHistory(uid, packageName);
         }
     }
 
@@ -1312,6 +1314,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         }
 
         if (callbackSpecs == null) {
+            notifyOpChangedSync(code, uid, null, mode);
             return;
         }
 
@@ -1332,6 +1335,16 @@ public class AppOpsService extends IAppOpsService.Stub {
                             this, callback, code, uid, reportedPackageName));
                 }
             }
+        }
+
+        notifyOpChangedSync(code, uid, null, mode);
+    }
+
+    private void notifyOpChangedSync(int code, int uid, @NonNull String packageName, int mode) {
+        final StorageManagerInternal storageManagerInternal =
+                LocalServices.getService(StorageManagerInternal.class);
+        if (storageManagerInternal != null) {
+            storageManagerInternal.onAppOpsChanged(code, uid, packageName, mode);
         }
     }
 
@@ -1436,6 +1449,8 @@ public class AppOpsService extends IAppOpsService.Stub {
                     AppOpsService::notifyOpChanged,
                     this, repCbs, code, uid, packageName));
         }
+
+        notifyOpChangedSync(code, uid, packageName, mode);
     }
 
     private void notifyOpChanged(ArraySet<ModeCallback> callbacks, int code,
@@ -3292,7 +3307,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         pw.println("    Starts a given operation for a particular application.");
         pw.println("  stop [--user <USER_ID>] <PACKAGE | UID> <OP> ");
         pw.println("    Stops a given operation for a particular application.");
-        pw.println("  set [--user <USER_ID>] <--uid PACKAGE | PACKAGE | UID> <OP> <MODE>");
+        pw.println("  set [--user <USER_ID>] <[--uid] PACKAGE | UID> <OP> <MODE>");
         pw.println("    Set the mode for a particular application and operation.");
         pw.println("  get [--user <USER_ID>] <PACKAGE | UID> [<OP>]");
         pw.println("    Return the mode for a particular application and optional operation.");
@@ -3305,12 +3320,11 @@ public class AppOpsService extends IAppOpsService.Stub {
         pw.println("  read-settings");
         pw.println("    Read the last written settings, replacing current state in RAM.");
         pw.println("  options:");
-        pw.println("    <PACKAGE> an Android package name.");
+        pw.println("    <PACKAGE> an Android package name or its UID if prefixed by --uid");
         pw.println("    <OP>      an AppOps operation.");
         pw.println("    <MODE>    one of allow, ignore, deny, or default");
         pw.println("    <USER_ID> the user id under which the package is installed. If --user is not");
         pw.println("              specified, the current user is assumed.");
-        pw.println("    --uid PACKAGE refer to the UID of the package");
     }
 
     static int onShellCommand(Shell shell, String cmd) {
@@ -3560,8 +3574,6 @@ public class AppOpsService extends IAppOpsService.Stub {
         pw.println("    Limit output to data associated with the given package name.");
         pw.println("  --watchers");
         pw.println("    Only output the watcher sections.");
-        pw.println("  --history");
-        pw.println("    Output the historical data.");
     }
 
     private void dumpStatesLocked(@NonNull PrintWriter pw, @NonNull Op op,
@@ -3697,8 +3709,6 @@ public class AppOpsService extends IAppOpsService.Stub {
                     }
                 } else if ("--watchers".equals(arg)) {
                     dumpWatchers = true;
-                } else if ("--history".equals(arg)) {
-                    dumpHistory = true;
                 } else if (arg.length() > 0 && arg.charAt(0) == '-'){
                     pw.println("Unknown option: " + arg);
                     return;
@@ -3804,8 +3814,9 @@ public class AppOpsService extends IAppOpsService.Stub {
             if (mActiveWatchers.size() > 0 && dumpMode < 0) {
                 needSep = true;
                 boolean printedHeader = false;
-                for (int i = 0; i < mActiveWatchers.size(); i++) {
-                    final SparseArray<ActiveCallback> activeWatchers = mActiveWatchers.valueAt(i);
+                for (int watcherNum = 0; watcherNum < mActiveWatchers.size(); watcherNum++) {
+                    final SparseArray<ActiveCallback> activeWatchers =
+                            mActiveWatchers.valueAt(watcherNum);
                     if (activeWatchers.size() <= 0) {
                         continue;
                     }
@@ -3823,16 +3834,16 @@ public class AppOpsService extends IAppOpsService.Stub {
                     }
                     pw.print("    ");
                     pw.print(Integer.toHexString(System.identityHashCode(
-                            mActiveWatchers.keyAt(i))));
+                            mActiveWatchers.keyAt(watcherNum))));
                     pw.println(" ->");
                     pw.print("        [");
                     final int opCount = activeWatchers.size();
-                    for (i = 0; i < opCount; i++) {
-                        if (i > 0) {
+                    for (int opNum = 0; opNum < opCount; opNum++) {
+                        if (opNum > 0) {
                             pw.print(' ');
                         }
-                        pw.print(AppOpsManager.opToName(activeWatchers.keyAt(i)));
-                        if (i < opCount - 1) {
+                        pw.print(AppOpsManager.opToName(activeWatchers.keyAt(opNum)));
+                        if (opNum < opCount - 1) {
                             pw.print(',');
                         }
                     }

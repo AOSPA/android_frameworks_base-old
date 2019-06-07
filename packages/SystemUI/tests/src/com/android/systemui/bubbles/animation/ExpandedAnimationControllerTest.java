@@ -17,6 +17,8 @@
 package com.android.systemui.bubbles.animation;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.mockito.Mockito.verify;
 
 import android.content.res.Resources;
 import android.graphics.Point;
@@ -31,6 +33,7 @@ import androidx.test.filters.SmallTest;
 import com.android.systemui.R;
 
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
@@ -40,9 +43,14 @@ import org.mockito.Spy;
 @RunWith(AndroidTestingRunner.class)
 public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestCase {
 
+    private int mDisplayWidth = 500;
+    private int mDisplayHeight = 1000;
+
     @Spy
     private ExpandedAnimationController mExpandedController =
-            new ExpandedAnimationController(new Point(500, 1000) /* displaySize */);
+            new ExpandedAnimationController(
+                    new Point(mDisplayWidth, mDisplayHeight) /* displaySize */,
+                    0 /* expandedViewPadding */);
     private int mStackOffset;
     private float mBubblePadding;
     private float mBubbleSize;
@@ -54,11 +62,11 @@ public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestC
         super.setUp();
         addOneMoreThanRenderLimitBubbles();
         mLayout.setController(mExpandedController);
+
         Resources res = mLayout.getResources();
         mStackOffset = res.getDimensionPixelSize(R.dimen.bubble_stack_offset);
         mBubblePadding = res.getDimensionPixelSize(R.dimen.bubble_padding);
         mBubbleSize = res.getDimensionPixelSize(R.dimen.individual_bubble_size);
-
         mExpansionPoint = new PointF(100, 100);
     }
 
@@ -69,14 +77,14 @@ public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestC
         waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
 
         testBubblesInCorrectExpandedPositions();
-        Mockito.verify(afterExpand).run();
+        verify(afterExpand).run();
 
         Runnable afterCollapse = Mockito.mock(Runnable.class);
         mExpandedController.collapseBackToStack(afterCollapse);
         waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
 
         testStackedAtPosition(mExpansionPoint.x, mExpansionPoint.y, -1);
-        Mockito.verify(afterExpand).run();
+        verify(afterExpand).run();
     }
 
     @Test
@@ -140,6 +148,80 @@ public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestC
         testBubblesInCorrectExpandedPositions();
     }
 
+    @Test
+    @Ignore("Flaky")
+    public void testMagnetToDismiss_dismiss() throws InterruptedException {
+        expand();
+
+        final View draggedOutView = mViews.get(0);
+        final Runnable after = Mockito.mock(Runnable.class);
+
+        mExpandedController.prepareForBubbleDrag(draggedOutView);
+        mExpandedController.dragBubbleOut(draggedOutView, 25, 25);
+
+        // Magnet to dismiss, verify the bubble is at the dismiss target and the callback was
+        // called.
+        mExpandedController.magnetBubbleToDismiss(
+                mViews.get(0), 100 /* velX */, 100 /* velY */, 1000 /* destY */, after);
+        waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
+        verify(after).run();
+        assertEquals(1000, mViews.get(0).getTranslationY(), .1f);
+
+        // Dismiss the now-magneted bubble, verify that the callback was called.
+        final Runnable afterDismiss = Mockito.mock(Runnable.class);
+        mExpandedController.dismissDraggedOutBubble(afterDismiss);
+        waitForPropertyAnimations(DynamicAnimation.ALPHA);
+        verify(after).run();
+
+        waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
+
+        assertEquals(mBubblePadding, mViews.get(1).getTranslationX(), 1f);
+    }
+
+    @Test
+    @Ignore("Flaky")
+    public void testMagnetToDismiss_demagnetizeThenDrag() throws InterruptedException {
+        expand();
+
+        final View draggedOutView = mViews.get(0);
+        final Runnable after = Mockito.mock(Runnable.class);
+
+        mExpandedController.prepareForBubbleDrag(draggedOutView);
+        mExpandedController.dragBubbleOut(draggedOutView, 25, 25);
+
+        // Magnet to dismiss, verify the bubble is at the dismiss target and the callback was
+        // called.
+        mExpandedController.magnetBubbleToDismiss(
+                draggedOutView, 100 /* velX */, 100 /* velY */, 1000 /* destY */, after);
+        waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
+        verify(after).run();
+        assertEquals(1000, mViews.get(0).getTranslationY(), .1f);
+
+        // Demagnetize the bubble towards (25, 25).
+        mExpandedController.demagnetizeBubbleTo(25 /* x */, 25 /* y */, 100, 100);
+
+        // Start dragging towards (20, 20).
+        mExpandedController.dragBubbleOut(draggedOutView, 20, 20);
+
+        // Since we just demagnetized, the bubble shouldn't be at (20, 20), it should be animating
+        // towards it.
+        assertNotEquals(20, draggedOutView.getTranslationX());
+        assertNotEquals(20, draggedOutView.getTranslationY());
+        waitForPropertyAnimations(DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
+
+        // Waiting for the animations should result in the bubble ending at (20, 20) since the
+        // animation end value was updated.
+        assertEquals(20, draggedOutView.getTranslationX(), 1f);
+        assertEquals(20, draggedOutView.getTranslationY(), 1f);
+
+        // Drag to (30, 30).
+        mExpandedController.dragBubbleOut(draggedOutView, 30, 30);
+
+        // It should go there instantly since the animations finished.
+        assertEquals(30, draggedOutView.getTranslationX(), 1f);
+        assertEquals(30, draggedOutView.getTranslationY(), 1f);
+    }
+
     /** Expand the stack and wait for animations to finish. */
     private void expand() throws InterruptedException {
         mExpandedController.expandFromStack(mExpansionPoint, Mockito.mock(Runnable.class));
@@ -165,7 +247,7 @@ public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestC
     private void testBubblesInCorrectExpandedPositions() {
         // Check all the visible bubbles to see if they're in the right place.
         for (int i = 0; i < Math.min(mLayout.getChildCount(), mMaxRenderedBubbles); i++) {
-            assertEquals(mBubblePadding + (i * (mBubbleSize + mBubblePadding)),
+            assertEquals(getBubbleLeft(i),
                     mLayout.getChildAt(i).getTranslationX(),
                     2f);
             assertEquals(mExpandedController.getExpandedY(),
@@ -175,5 +257,34 @@ public class ExpandedAnimationControllerTest extends PhysicsAnimationLayoutTestC
                 assertEquals(1f, mLayout.getChildAt(i).getAlpha(), .01f);
             }
         }
+    }
+
+    /**
+     * @param index Bubble index in row.
+     * @return Bubble left x from left edge of screen.
+     */
+    public float getBubbleLeft(int index) {
+        float bubbleLeftFromRowLeft = index * (mBubbleSize + mBubblePadding);
+        return getRowLeft() + bubbleLeftFromRowLeft;
+    }
+
+    private float getRowLeft() {
+        if (mLayout == null) {
+            return 0;
+        }
+        int bubbleCount = mLayout.getChildCount();
+        if (bubbleCount > mMaxRenderedBubbles) {
+            bubbleCount = mMaxRenderedBubbles;
+        }
+        // Width calculations.
+        double bubble = bubbleCount * mBubbleSize;
+        float gap = (bubbleCount - 1) * mBubblePadding;
+        float row = gap + (float) bubble;
+
+        float halfRow = row / 2f;
+        float centerScreen = mDisplayWidth / 2;
+        float rowLeftFromScreenLeft = centerScreen - halfRow;
+
+        return rowLeftFromScreenLeft;
     }
 }

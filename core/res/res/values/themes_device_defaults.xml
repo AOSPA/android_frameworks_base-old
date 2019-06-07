@@ -216,6 +216,7 @@ easier.
         <item name="colorAccent">@color/accent_device_default_dark</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
         <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
+        <item name="colorPopupBackground">?attr/colorBackgroundFloating</item>
     </style>
 
     <style name="Theme.DeviceDefault" parent="Theme.DeviceDefaultBase" />
@@ -943,6 +944,7 @@ easier.
         <item name="colorAccent">@color/accent_device_default_light</item>
         <item name="colorError">@color/error_color_device_default_light</item>
         <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
+        <item name="colorPopupBackground">?attr/colorBackgroundFloating</item>
     </style>
 
     <!-- Variant of the DeviceDefault (light) theme that has a solid (opaque) action bar with an
@@ -1469,12 +1471,16 @@ easier.
         <item name="colorSecondary">@color/secondary_device_default_settings_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
         <item name="colorError">@color/error_color_device_default_light</item>
-        <item name="colorEdgeEffect">@android:color/black</item>
+        <item name="colorEdgeEffect">@color/edge_effect_device_default_light</item>
 
-        <!-- Add white nav bar with divider that matches material -->
+        <!-- Add divider that matches material -->
         <item name="navigationBarDividerColor">@color/navigation_bar_divider_device_default_settings</item>
-        <item name="navigationBarColor">@android:color/white</item>
+
+        <!-- Add transparent nav and status bars with light icons to support drawing edge-to-edge
+        for Q gestural navigation-->
+        <item name="navigationBarColor">@android:color/transparent</item>
         <item name="windowLightNavigationBar">true</item>
+        <item name="statusBarColor">@android:color/transparent</item>
 
         <!-- Dialog attributes -->
         <item name="dialogCornerRadius">@dimen/config_dialogCornerRadius</item>
@@ -1486,7 +1492,8 @@ easier.
         <!-- Progress bar attributes -->
         <item name="progressBarCornerRadius">@dimen/config_progressBarCornerRadius</item>
 
-        <item name="listDivider">@color/list_divider_color_light</item>
+        <item name="colorListDivider">@color/list_divider_color_light</item>
+        <item name="opacityListDivider">@color/list_divider_opacity_device_default_light</item>
     </style>
 
     <!-- @hide DeviceDefault theme for a window that should use Settings theme colors
@@ -1665,8 +1672,7 @@ easier.
 
     <!-- Theme used for the intent picker activity. -->
     <style name="Theme.DeviceDefault.ResolverCommon" parent="Theme.DeviceDefault.DayNight">
-        <item name="windowEnterTransition">@empty</item>
-        <item name="windowExitTransition">@empty</item>
+        <item name="windowAnimationStyle">@style/Animation.DeviceDefault.Activity.Resolver</item>
         <item name="windowIsTranslucent">true</item>
         <item name="windowNoTitle">true</item>
         <item name="windowBackground">@color/transparent</item>
@@ -1676,12 +1682,19 @@ easier.
         <item name="colorControlActivated">?attr/colorControlHighlight</item>
         <item name="listPreferredItemPaddingStart">?attr/dialogPreferredPadding</item>
         <item name="listPreferredItemPaddingEnd">?attr/dialogPreferredPadding</item>
-        <item name="navigationBarColor">?attr/colorBackgroundFloating</item>
-        <item name="navigationBarDividerColor">@color/chooser_row_divider</item>
+        <item name="navigationBarColor">@android:color/transparent</item>
     </style>
 
     <style name="Theme.DeviceDefault.Resolver" parent="Theme.DeviceDefault.ResolverCommon">
         <item name="windowLightNavigationBar">true</item>
+    </style>
+
+    <style name="Animation.DeviceDefault.Activity.Resolver" parent="Animation.DeviceDefault.Activity">
+        <item name="activityOpenEnterAnimation">@anim/resolver_launch_anim</item>
+        <item name="taskOpenEnterAnimation">@anim/resolver_launch_anim</item>
+        <!-- Handle close for profile switching -->
+        <item name="activityOpenExitAnimation">@anim/resolver_close_anim</item>
+        <item name="taskOpenExitAnimation">@anim/resolver_close_anim</item>
     </style>
 
     <!-- @hide DeviceDefault themes for the autofill FillUi -->

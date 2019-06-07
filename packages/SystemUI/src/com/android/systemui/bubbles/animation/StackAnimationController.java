@@ -30,7 +30,6 @@ import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
 
 import com.android.systemui.R;
-import com.android.systemui.bubbles.BubbleController;
 
 import com.google.android.collect.Sets;
 
@@ -87,7 +86,10 @@ public class StackAnimationController extends
      * we need to keep track of it separately from the first bubble's translation in case there are
      * no bubbles, or the first bubble was just added and being animated to its new position.
      */
-    private PointF mStackPosition = new PointF();
+    private PointF mStackPosition = new PointF(-1, -1);
+
+    /** Whether or not the stack's start position has been set. */
+    private boolean mStackMovedToStartPosition = false;
 
     /** The most recent position in which the stack was resting on the edge of the screen. */
     private PointF mRestingStackPosition;
@@ -115,6 +117,25 @@ public class StackAnimationController extends
      * manually).
      */
     private boolean mIsMovingFromFlinging = false;
+
+    /**
+     * Whether the stack is within the dismiss target (either by being dragged, magnet'd, or flung).
+     */
+    private boolean mWithinDismissTarget = false;
+
+    /**
+     * Whether the first bubble is springing towards the touch point, rather than using the default
+     * behavior of moving directly to the touch point with the rest of the stack following it.
+     *
+     * This happens when the user's finger exits the dismiss area while the stack is magnetized to
+     * the center. Since the touch point differs from the stack location, we need to animate the
+     * stack back to the touch point to avoid a jarring instant location change from the center of
+     * the target to the touch point just outside the target bounds.
+     *
+     * This is reset once the spring animations end, since that means the first bubble has
+     * successfully 'caught up' to the touch.
+     */
+    private boolean mFirstBubbleSpringingToTouch = false;
 
     /** Horizontal offset of bubbles in the stack. */
     private float mStackOffset;
@@ -175,18 +196,43 @@ public class StackAnimationController extends
 
     /** Whether the stack is on the left side of the screen. */
     public boolean isStackOnLeftSide() {
-        if (mLayout != null) {
-            return mStackPosition.x - mIndividualBubbleSize / 2 < mLayout.getWidth() / 2;
-        } else {
+        if (mLayout == null || !isStackPositionSet()) {
             return false;
         }
+
+        float stackCenter = mStackPosition.x + mIndividualBubbleSize / 2;
+        float screenCenter = mLayout.getWidth() / 2;
+        return stackCenter < screenCenter;
+    }
+
+    /**
+     * Fling stack to given corner, within allowable screen bounds.
+     * Note that we need new SpringForce instances per animation despite identical configs because
+     * SpringAnimation uses SpringForce's internal (changing) velocity while the animation runs.
+     */
+    public void springStack(float destinationX, float destinationY) {
+        springFirstBubbleWithStackFollowing(DynamicAnimation.TRANSLATION_X,
+                    new SpringForce()
+                        .setStiffness(SPRING_AFTER_FLING_STIFFNESS)
+                        .setDampingRatio(SPRING_AFTER_FLING_DAMPING_RATIO),
+                    0 /* startXVelocity */,
+                    destinationX);
+
+        springFirstBubbleWithStackFollowing(DynamicAnimation.TRANSLATION_Y,
+                    new SpringForce()
+                        .setStiffness(SPRING_AFTER_FLING_STIFFNESS)
+                        .setDampingRatio(SPRING_AFTER_FLING_DAMPING_RATIO),
+                    0 /* startYVelocity */,
+                    destinationY);
     }
 
     /**
      * Flings the stack starting with the given velocities, springing it to the nearest edge
      * afterward.
+     *
+     * @return The X value that the stack will end up at after the fling/spring.
      */
-    public void flingStackThenSpringToEdge(float x, float velX, float velY) {
+    public float flingStackThenSpringToEdge(float x, float velX, float velY) {
         final boolean stackOnLeftSide = x - mIndividualBubbleSize / 2 < mLayout.getWidth() / 2;
 
         final boolean stackShouldFlingLeft = stackOnLeftSide
@@ -241,6 +287,7 @@ public class StackAnimationController extends
                 DynamicAnimation.TRANSLATION_X, DynamicAnimation.TRANSLATION_Y);
 
         mIsMovingFromFlinging = true;
+        return destinationRelativeX;
     }
 
     /**
@@ -352,6 +399,7 @@ public class StackAnimationController extends
         float destinationY = Float.MIN_VALUE;
 
         if (imeVisible) {
+            // Stack is lower than it should be and overlaps the now-visible IME.
             if (mStackPosition.y > maxBubbleY && mPreImeY == Float.MIN_VALUE) {
                 mPreImeY = mStackPosition.y;
                 destinationY = maxBubbleY;
@@ -422,6 +470,120 @@ public class StackAnimationController extends
         return allowableRegion;
     }
 
+    /** Moves the stack in response to a touch event. */
+    public void moveStackFromTouch(float x, float y) {
+
+        // If we're springing to the touch point to 'catch up' after dragging out of the dismiss
+        // target, then update the stack position animations instead of moving the bubble directly.
+        if (mFirstBubbleSpringingToTouch) {
+            final SpringAnimation springToTouchX =
+                    (SpringAnimation) mStackPositionAnimations.get(DynamicAnimation.TRANSLATION_X);
+            final SpringAnimation springToTouchY =
+                    (SpringAnimation) mStackPositionAnimations.get(DynamicAnimation.TRANSLATION_Y);
+
+            // If either animation is still running, we haven't caught up. Update the animations.
+            if (springToTouchX.isRunning() || springToTouchY.isRunning()) {
+                springToTouchX.animateToFinalPosition(x);
+                springToTouchY.animateToFinalPosition(y);
+            } else {
+                // If the animations have finished, the stack is now at the touch point. We can
+                // resume moving the bubble directly.
+                mFirstBubbleSpringingToTouch = false;
+            }
+        }
+
+        if (!mFirstBubbleSpringingToTouch && !mWithinDismissTarget) {
+            moveFirstBubbleWithStackFollowing(x, y);
+        }
+    }
+
+    /**
+     * Demagnetizes the stack, springing it towards the given point. This also sets flags so that
+     * subsequent touch events will update the final position of the demagnetization spring instead
+     * of directly moving the bubbles, until demagnetization is complete.
+     */
+    public void demagnetizeFromDismissToPoint(float x, float y, float velX, float velY) {
+        mWithinDismissTarget = false;
+        mFirstBubbleSpringingToTouch = true;
+
+        springFirstBubbleWithStackFollowing(
+                DynamicAnimation.TRANSLATION_X,
+                new SpringForce()
+                        .setDampingRatio(DEFAULT_BOUNCINESS)
+                        .setStiffness(DEFAULT_STIFFNESS),
+                velX, x);
+
+        springFirstBubbleWithStackFollowing(
+                DynamicAnimation.TRANSLATION_Y,
+                new SpringForce()
+                        .setDampingRatio(DEFAULT_BOUNCINESS)
+                        .setStiffness(DEFAULT_STIFFNESS),
+                velY, y);
+    }
+
+    /**
+     * Spring the stack towards the dismiss target, respecting existing velocity. This also sets
+     * flags so that subsequent touch events will not move the stack until it's demagnetized.
+     */
+    public void magnetToDismiss(float velX, float velY, float destY, Runnable after) {
+        mWithinDismissTarget = true;
+        mFirstBubbleSpringingToTouch = false;
+
+        animationForChildAtIndex(0)
+                .translationX(mLayout.getWidth() / 2f - mIndividualBubbleSize / 2f)
+                .translationY(destY, after)
+                .withPositionStartVelocities(velX, velY)
+                .withStiffness(SpringForce.STIFFNESS_MEDIUM)
+                .withDampingRatio(SpringForce.DAMPING_RATIO_LOW_BOUNCY)
+                .start();
+    }
+
+    /**
+     * 'Implode' the stack by shrinking the bubbles via chained animations and fading them out.
+     */
+    public void implodeStack(Runnable after) {
+        // Pop and fade the bubbles sequentially.
+        animationForChildAtIndex(0)
+                .scaleX(0.5f)
+                .scaleY(0.5f)
+                .alpha(0f)
+                .withDampingRatio(SpringForce.DAMPING_RATIO_NO_BOUNCY)
+                .withStiffness(SpringForce.STIFFNESS_HIGH)
+                .start(() -> {
+                    // Run the callback and reset flags. The child translation animations might
+                    // still be running, but that's fine. Once the alpha is at 0f they're no longer
+                    // visible anyway.
+                    after.run();
+                    mWithinDismissTarget = false;
+                });
+    }
+
+    /**
+     * Springs the first bubble to the given final position, with the rest of the stack 'following'.
+     */
+    protected void springFirstBubbleWithStackFollowing(
+            DynamicAnimation.ViewProperty property, SpringForce spring,
+            float vel, float finalPosition) {
+
+        if (mLayout.getChildCount() == 0) {
+            return;
+        }
+
+        Log.d(TAG, String.format("Springing %s to final position %f.",
+                PhysicsAnimationLayout.getReadablePropertyName(property),
+                finalPosition));
+
+        StackPositionProperty firstBubbleProperty = new StackPositionProperty(property);
+        SpringAnimation springAnimation =
+                new SpringAnimation(this, firstBubbleProperty)
+                        .setSpring(spring)
+                        .setStartVelocity(vel);
+
+        cancelStackPositionAnimation(property);
+        mStackPositionAnimations.put(property, springAnimation);
+        springAnimation.animateToFinalPosition(finalPosition);
+    }
+
     @Override
     Set<DynamicAnimation.ViewProperty> getAnimatedProperties() {
         return Sets.newHashSet(
@@ -436,7 +598,9 @@ public class StackAnimationController extends
     int getNextAnimationInChain(DynamicAnimation.ViewProperty property, int index) {
         if (property.equals(DynamicAnimation.TRANSLATION_X)
                 || property.equals(DynamicAnimation.TRANSLATION_Y)) {
-            return index + 1; // Just chain them linearly.
+            return index + 1;
+        } else if (mWithinDismissTarget) {
+            return index + 1; // Chain all animations in dismiss (scale, alpha, etc. are used).
         } else {
             return NONE;
         }
@@ -446,9 +610,15 @@ public class StackAnimationController extends
     @Override
     float getOffsetForChainedPropertyAnimation(DynamicAnimation.ViewProperty property) {
         if (property.equals(DynamicAnimation.TRANSLATION_X)) {
-            // Offset to the left if we're on the left, or the right otherwise.
-            return mLayout.isFirstChildXLeftOfCenter(mStackPosition.x)
-                    ? -mStackOffset : mStackOffset;
+            // If we're in the dismiss target, have the bubbles pile on top of each other with no
+            // offset.
+            if (mWithinDismissTarget) {
+                return 0f;
+            } else {
+                // Offset to the left if we're on the left, or the right otherwise.
+                return mLayout.isFirstChildXLeftOfCenter(mStackPosition.x)
+                        ? -mStackOffset : mStackOffset;
+            }
         } else {
             return 0f;
         }
@@ -457,20 +627,16 @@ public class StackAnimationController extends
     @Override
     SpringForce getSpringForce(DynamicAnimation.ViewProperty property, View view) {
         return new SpringForce()
-                .setDampingRatio(BubbleController.getBubbleBounciness(
-                        mLayout.getContext(), DEFAULT_BOUNCINESS))
-                .setStiffness(BubbleController.getBubbleStiffness(
-                        mLayout.getContext(),
-                        mIsMovingFromFlinging ? FLING_FOLLOW_STIFFNESS : DEFAULT_STIFFNESS));
+                .setDampingRatio(DEFAULT_BOUNCINESS)
+                .setStiffness(mIsMovingFromFlinging ? FLING_FOLLOW_STIFFNESS : DEFAULT_STIFFNESS);
     }
 
     @Override
     void onChildAdded(View child, int index) {
         if (mLayout.getChildCount() == 1) {
-            // If this is the first child added, position the stack in its starting position before
-            // animating in.
-            moveStackToStartPosition(() -> animateInBubble(child));
-        } else if (mLayout.indexOfChild(child) == 0) {
+            // If this is the first child added, position the stack in its starting position.
+            moveStackToStartPosition();
+        } else if (isStackPositionSet() && mLayout.indexOfChild(child) == 0) {
             // Otherwise, animate the bubble in if it's the newest bubble. If we're adding a bubble
             // to the back of the stack, it'll be largely invisible so don't bother animating it in.
             animateInBubble(child);
@@ -494,16 +660,21 @@ public class StackAnimationController extends
     }
 
     /** Moves the stack, without any animation, to the starting position. */
-    private void moveStackToStartPosition(Runnable after) {
+    private void moveStackToStartPosition() {
         // Post to ensure that the layout's width and height have been calculated.
         mLayout.setVisibility(View.INVISIBLE);
         mLayout.post(() -> {
+            mStackMovedToStartPosition = true;
             setStackPosition(
                     mRestingStackPosition == null
                             ? getDefaultStartPosition()
                             : mRestingStackPosition);
             mLayout.setVisibility(View.VISIBLE);
-            after.run();
+
+            // Animate in the top bubble now that we're visible.
+            if (mLayout.getChildCount() > 0) {
+                animateInBubble(mLayout.getChildAt(0));
+            }
         });
     }
 
@@ -555,6 +726,10 @@ public class StackAnimationController extends
                 getAllowableStackPositionRegion().top + mStackStartingVerticalOffset);
     }
 
+    private boolean isStackPositionSet() {
+        return mStackMovedToStartPosition;
+    }
+
     /** Animates in the given bubble. */
     private void animateInBubble(View child) {
         child.setTranslationY(mStackPosition.y);
@@ -568,32 +743,6 @@ public class StackAnimationController extends
                         mStackPosition.x - ANIMATE_TRANSLATION_FACTOR * xOffset /* from */,
                         mStackPosition.x /* to */)
                 .start();
-    }
-
-    /**
-     * Springs the first bubble to the given final position, with the rest of the stack 'following'.
-     */
-    private void springFirstBubbleWithStackFollowing(
-            DynamicAnimation.ViewProperty property, SpringForce spring,
-            float vel, float finalPosition) {
-
-        if (mLayout.getChildCount() == 0) {
-            return;
-        }
-
-        Log.d(TAG, String.format("Springing %s to final position %f.",
-                PhysicsAnimationLayout.getReadablePropertyName(property),
-                finalPosition));
-
-        StackPositionProperty firstBubbleProperty = new StackPositionProperty(property);
-        SpringAnimation springAnimation =
-                new SpringAnimation(this, firstBubbleProperty)
-                        .setSpring(spring)
-                        .setStartVelocity(vel);
-
-        cancelStackPositionAnimation(property);
-        mStackPositionAnimations.put(property, springAnimation);
-        springAnimation.animateToFinalPosition(finalPosition);
     }
 
     /**

@@ -93,6 +93,8 @@ import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.RILConstants;
 import com.android.internal.telephony.TelephonyProperties;
 
+import dalvik.system.VMRuntime;
+
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.lang.annotation.Retention;
@@ -107,8 +109,6 @@ import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import dalvik.system.VMRuntime;
 
 /**
  * Provides access to information about the telephony services on
@@ -1551,6 +1551,17 @@ public class TelephonyManager {
      * href="https://developer.android.com/work/managed-profiles">Work profiles</a>. Profile owner
      * access is deprecated and will be removed in a future release.
      *
+     * <p>If the calling app does not meet one of these requirements then this method will behave
+     * as follows:
+     *
+     * <ul>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app has the
+     *     READ_PHONE_STATE permission then null is returned.</li>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app does not have
+     *     the READ_PHONE_STATE permission, or if the calling app is targeting API level 29 or
+     *     higher, then a SecurityException is thrown.</li>
+     * </ul>
+     *
      * @deprecated Use (@link getImei} which returns IMEI for GSM or (@link getMeid} which returns
      * MEID for CDMA.
      */
@@ -1580,6 +1591,17 @@ public class TelephonyManager {
      * managed profile on the device; for more details see <a
      * href="https://developer.android.com/work/managed-profiles">Work profiles</a>. Profile owner
      * access is deprecated and will be removed in a future release.
+     *
+     * <p>If the calling app does not meet one of these requirements then this method will behave
+     * as follows:
+     *
+     * <ul>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app has the
+     *     READ_PHONE_STATE permission then null is returned.</li>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app does not have
+     *     the READ_PHONE_STATE permission, or if the calling app is targeting API level 29 or
+     *     higher, then a SecurityException is thrown.</li>
+     * </ul>
      *
      * @param slotIndex of which deviceID is returned
      *
@@ -1614,6 +1636,17 @@ public class TelephonyManager {
      * managed profile on the device; for more details see <a
      * href="https://developer.android.com/work/managed-profiles">Work profiles</a>. Profile owner
      * access is deprecated and will be removed in a future release.
+     *
+     * <p>If the calling app does not meet one of these requirements then this method will behave
+     * as follows:
+     *
+     * <ul>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app has the
+     *     READ_PHONE_STATE permission then null is returned.</li>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app does not have
+     *     the READ_PHONE_STATE permission, or if the calling app is targeting API level 29 or
+     *     higher, then a SecurityException is thrown.</li>
+     * </ul>
      */
     @SuppressAutoDoc // No support for device / profile owner or carrier privileges (b/72967236).
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
@@ -1631,6 +1664,17 @@ public class TelephonyManager {
      * managed profile on the device; for more details see <a
      * href="https://developer.android.com/work/managed-profiles">Work profiles</a>. Profile owner
      * access is deprecated and will be removed in a future release.
+     *
+     * <p>If the calling app does not meet one of these requirements then this method will behave
+     * as follows:
+     *
+     * <ul>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app has the
+     *     READ_PHONE_STATE permission then null is returned.</li>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app does not have
+     *     the READ_PHONE_STATE permission, or if the calling app is targeting API level 29 or
+     *     higher, then a SecurityException is thrown.</li>
+     * </ul>
      *
      * @param slotIndex of which IMEI is returned
      */
@@ -1687,6 +1731,17 @@ public class TelephonyManager {
      * managed profile on the device; for more details see <a
      * href="https://developer.android.com/work/managed-profiles">Work profiles</a>. Profile owner
      * access is deprecated and will be removed in a future release.
+     *
+     * <p>If the calling app does not meet one of these requirements then this method will behave
+     * as follows:
+     *
+     * <ul>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app has the
+     *     READ_PHONE_STATE permission then null is returned.</li>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app does not have
+     *     the READ_PHONE_STATE permission, or if the calling app is targeting API level 29 or
+     *     higher, then a SecurityException is thrown.</li>
+     * </ul>
      */
     @SuppressAutoDoc // No support for device / profile owner or carrier privileges (b/72967236).
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
@@ -1703,6 +1758,17 @@ public class TelephonyManager {
      * managed profile on the device; for more details see <a
      * href="https://developer.android.com/work/managed-profiles">Work profiles</a>. Profile owner
      * access is deprecated and will be removed in a future release.
+     *
+     * <p>If the calling app does not meet one of these requirements then this method will behave
+     * as follows:
+     *
+     * <ul>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app has the
+     *     READ_PHONE_STATE permission then null is returned.</li>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app does not have
+     *     the READ_PHONE_STATE permission, or if the calling app is targeting API level 29 or
+     *     higher, then a SecurityException is thrown.</li>
+     * </ul>
      *
      * @param slotIndex of which MEID is returned
      */
@@ -2249,7 +2315,7 @@ public class TelephonyManager {
     @UnsupportedAppUsage
     public String getNetworkOperatorForPhone(int phoneId) {
         return getTelephonyProperty(phoneId, TelephonyProperties.PROPERTY_OPERATOR_NUMERIC, "");
-     }
+    }
 
 
     /**
@@ -2449,21 +2515,7 @@ public class TelephonyManager {
      * @return the NETWORK_TYPE_xxxx for current data connection.
      */
     public @NetworkType int getNetworkType() {
-       try {
-           ITelephony telephony = getITelephony();
-           if (telephony != null) {
-               return telephony.getNetworkType();
-            } else {
-                // This can happen when the ITelephony interface is not up yet.
-                return NETWORK_TYPE_UNKNOWN;
-            }
-        } catch(RemoteException ex) {
-            // This shouldn't happen in the normal case
-            return NETWORK_TYPE_UNKNOWN;
-        } catch (NullPointerException ex) {
-            // This could happen before phone restarts due to crashing
-            return NETWORK_TYPE_UNKNOWN;
-        }
+        return getNetworkType(getSubId(SubscriptionManager.getDefaultDataSubscriptionId()));
     }
 
     /**
@@ -2494,7 +2546,7 @@ public class TelephonyManager {
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public int getNetworkType(int subId) {
         try {
             ITelephony telephony = getITelephony();
@@ -3220,6 +3272,17 @@ public class TelephonyManager {
      * managed profile on the device; for more details see <a
      * href="https://developer.android.com/work/managed-profiles">Work profiles</a>. Profile owner
      * access is deprecated and will be removed in a future release.
+     *
+     * <p>If the calling app does not meet one of these requirements then this method will behave
+     * as follows:
+     *
+     * <ul>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app has the
+     *     READ_PHONE_STATE permission then null is returned.</li>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app does not have
+     *     the READ_PHONE_STATE permission, or if the calling app is targeting API level 29 or
+     *     higher, then a SecurityException is thrown.</li>
+     * </ul>
      */
     @SuppressAutoDoc // No support for device / profile owner or carrier privileges (b/72967236).
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
@@ -3237,6 +3300,17 @@ public class TelephonyManager {
      * managed profile on the device; for more details see <a
      * href="https://developer.android.com/work/managed-profiles">Work profiles</a>. Profile owner
      * access is deprecated and will be removed in a future release.
+     *
+     * <p>If the calling app does not meet one of these requirements then this method will behave
+     * as follows:
+     *
+     * <ul>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app has the
+     *     READ_PHONE_STATE permission then null is returned.</li>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app does not have
+     *     the READ_PHONE_STATE permission, or if the calling app is targeting API level 29 or
+     *     higher, then a SecurityException is thrown.</li>
+     * </ul>
      *
      * @param subId for which Sim Serial number is returned
      * @hide
@@ -3470,6 +3544,17 @@ public class TelephonyManager {
      * managed profile on the device; for more details see <a
      * href="https://developer.android.com/work/managed-profiles">Work profiles</a>. Profile owner
      * access is deprecated and will be removed in a future release.
+     *
+     * <p>If the calling app does not meet one of these requirements then this method will behave
+     * as follows:
+     *
+     * <ul>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app has the
+     *     READ_PHONE_STATE permission then null is returned.</li>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app does not have
+     *     the READ_PHONE_STATE permission, or if the calling app is targeting API level 29 or
+     *     higher, then a SecurityException is thrown.</li>
+     * </ul>
      */
     @SuppressAutoDoc // No support for device / profile owner or carrier privileges (b/72967236).
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
@@ -3488,6 +3573,17 @@ public class TelephonyManager {
      * managed profile on the device; for more details see <a
      * href="https://developer.android.com/work/managed-profiles">Work profiles</a>. Profile owner
      * access is deprecated and will be removed in a future release.
+     *
+     * <p>If the calling app does not meet one of these requirements then this method will behave
+     * as follows:
+     *
+     * <ul>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app has the
+     *     READ_PHONE_STATE permission then null is returned.</li>
+     *     <li>If the calling app's target SDK is API level 28 or lower and the app does not have
+     *     the READ_PHONE_STATE permission, or if the calling app is targeting API level 29 or
+     *     higher, then a SecurityException is thrown.</li>
+     * </ul>
      *
      * @param subId whose subscriber id is returned
      * @hide
@@ -3842,10 +3938,12 @@ public class TelephonyManager {
     }
 
     /**
-     * Return the set of subscriber IDs that should be considered as "merged
-     * together" for data usage purposes. This is commonly {@code null} to
-     * indicate no merging is required. Any returned subscribers are sorted in a
-     * deterministic order.
+     * Return the set of subscriber IDs that should be considered "merged together" for data usage
+     * purposes. This is commonly {@code null} to indicate no merging is required. Any returned
+     * subscribers are sorted in a deterministic order.
+     * <p>
+     * The returned set of subscriber IDs will include the subscriber ID corresponding to this
+     * TelephonyManager's subId.
      *
      * @hide
      */
@@ -3854,7 +3952,7 @@ public class TelephonyManager {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null)
-                return telephony.getMergedSubscriberIds(getOpPackageName());
+                return telephony.getMergedSubscriberIds(getSubId(), getOpPackageName());
         } catch (RemoteException ex) {
         } catch (NullPointerException ex) {
         }
@@ -4903,24 +5001,20 @@ public class TelephonyManager {
             boolean notifyNow = (getITelephony() != null);
             ITelephonyRegistry registry = getTelephonyRegistry();
             if (registry != null) {
-                int subId;
-                // subId from phonestatelistner is deprecated Q on forward, use the subId from
-                // TelephonyManager instance.
-                if (VMRuntime.getRuntime().getTargetSdkVersion() >= Build.VERSION_CODES.Q
-                        || listener.mSubId == null) {
-                    subId = mSubId;
-                } else {
+                // subId from PhoneStateListener is deprecated Q on forward, use the subId from
+                // TelephonyManager instance. keep using subId from PhoneStateListener for pre-Q.
+                int subId = mSubId;
+                if (VMRuntime.getRuntime().getTargetSdkVersion() >= Build.VERSION_CODES.Q) {
+                    // since mSubId in PhoneStateListener is deprecated from Q on forward, this is
+                    // the only place to set mSubId and its for "informational" only.
+                    //  TODO: remove this once we completely get rid of mSubId in PhoneStateListener
+                    listener.mSubId = (events == PhoneStateListener.LISTEN_NONE)
+                            ? SubscriptionManager.INVALID_SUBSCRIPTION_ID : subId;
+                } else if (listener.mSubId != null) {
                     subId = listener.mSubId;
                 }
-
                 registry.listenForSubscriber(subId, getOpPackageName(),
                         listener.callback, events, notifyNow);
-                // TODO: remove this once we remove PhoneStateListener constructor with subId.
-                if (events == PhoneStateListener.LISTEN_NONE) {
-                    listener.mSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
-                } else {
-                    listener.mSubId = subId;
-                }
             } else {
                 Rlog.w(TAG, "telephony registry not ready.");
             }
@@ -5268,18 +5362,30 @@ public class TelephonyManager {
      * Returns the MMS user agent.
      */
     public String getMmsUserAgent() {
-        if (mContext == null) return null;
-        return mContext.getResources().getString(
-                com.android.internal.R.string.config_mms_user_agent);
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.getMmsUserAgent(getSubId());
+            }
+        } catch (RemoteException ex) {
+        } catch (NullPointerException ex) {
+        }
+        return null;
     }
 
     /**
      * Returns the MMS user agent profile URL.
      */
     public String getMmsUAProfUrl() {
-        if (mContext == null) return null;
-        return mContext.getResources().getString(
-                com.android.internal.R.string.config_mms_user_agent_profile_url);
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.getMmsUAProfUrl(getSubId());
+            }
+        } catch (RemoteException ex) {
+        } catch (NullPointerException ex) {
+        }
+        return null;
     }
 
     /**
@@ -7483,7 +7589,7 @@ public class TelephonyManager {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null)
-                return telephony.checkCarrierPrivilegesForPackage(pkgName);
+                return telephony.checkCarrierPrivilegesForPackage(getSubId(), pkgName);
         } catch (RemoteException ex) {
             Rlog.e(TAG, "checkCarrierPrivilegesForPackage RemoteException", ex);
         } catch (NullPointerException ex) {
@@ -7534,7 +7640,7 @@ public class TelephonyManager {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.getPackagesWithCarrierPrivileges();
+                return telephony.getPackagesWithCarrierPrivileges(getPhoneId());
             }
         } catch (RemoteException ex) {
             Rlog.e(TAG, "getPackagesWithCarrierPrivileges RemoteException", ex);
@@ -7543,6 +7649,22 @@ public class TelephonyManager {
         }
         return Collections.EMPTY_LIST;
     }
+
+    /** @hide */
+    public List<String> getPackagesWithCarrierPrivilegesForAllPhones() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.getPackagesWithCarrierPrivilegesForAllPhones();
+            }
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "getPackagesWithCarrierPrivilegesForAllPhones RemoteException", ex);
+        } catch (NullPointerException ex) {
+            Rlog.e(TAG, "getPackagesWithCarrierPrivilegesForAllPhones NPE", ex);
+        }
+        return Collections.EMPTY_LIST;
+    }
+
 
     /** @hide */
     @SystemApi

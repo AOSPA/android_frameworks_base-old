@@ -123,7 +123,6 @@ import android.provider.Settings;
 import android.renderscript.RenderScriptCacheDir;
 import android.security.NetworkSecurityPolicy;
 import android.security.net.config.NetworkSecurityConfigProvider;
-import android.service.voice.VoiceInteractionSession;
 import android.system.ErrnoException;
 import android.system.OsConstants;
 import android.system.StructStat;
@@ -881,6 +880,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     static final class DumpHeapData {
+        // Whether to dump the native or managed heap.
         public boolean managed;
         public boolean mallocInfo;
         public boolean runGc;
@@ -1070,7 +1070,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
 
         public void scheduleApplicationInfoChanged(ApplicationInfo ai) {
-            mH.removeMessages(H.APPLICATION_INFO_CHANGED);
+            mH.removeMessages(H.APPLICATION_INFO_CHANGED, ai);
             sendMessage(H.APPLICATION_INFO_CHANGED, ai);
         }
 
@@ -1139,7 +1139,14 @@ public final class ActivityThread extends ClientTransactionHandler {
             dhd.mallocInfo = mallocInfo;
             dhd.runGc = runGc;
             dhd.path = path;
-            dhd.fd = fd;
+            try {
+                // Since we're going to dump the heap asynchronously, dup the file descriptor before
+                // it's closed on returning from the IPC call.
+                dhd.fd = fd.dup();
+            } catch (IOException e) {
+                Slog.e(TAG, "Failed to duplicate heap dump file descriptor", e);
+                return;
+            }
             dhd.finishCallback = finishCallback;
             sendMessage(H.DUMP_HEAP, dhd, 0, 0, true /*async*/);
         }
@@ -3108,9 +3115,10 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     private void sendMessage(int what, Object obj, int arg1, int arg2, boolean async) {
-        if (DEBUG_MESSAGES) Slog.v(
-            TAG, "SCHEDULE " + what + " " + mH.codeToString(what)
-            + ": " + arg1 + " / " + obj);
+        if (DEBUG_MESSAGES) {
+            Slog.v(TAG,
+                    "SCHEDULE " + what + " " + mH.codeToString(what) + ": " + arg1 + " / " + obj);
+        }
         Message msg = Message.obtain();
         msg.what = what;
         msg.obj = obj;
@@ -3394,6 +3402,9 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
         WindowManagerGlobal.initialize();
 
+        // Hint the GraphicsEnvironment that an activity is launching on the process.
+        GraphicsEnvironment.hintActivityLaunch();
+
         final Activity a = performLaunchActivity(r, customIntent);
 
         if (a != null) {
@@ -3553,11 +3564,13 @@ public final class ActivityThread extends ClientTransactionHandler {
             @NonNull RemoteCallback callback) {
         final ActivityClientRecord r = mActivities.get(activityToken);
         if (r == null) {
+            Log.w(TAG, "requestDirectActions(): no activity for " + activityToken);
             callback.sendResult(null);
             return;
         }
         final int lifecycleState = r.getLifecycleState();
         if (lifecycleState < ON_START || lifecycleState >= ON_STOP) {
+            Log.w(TAG, "requestDirectActions(" + r + "): wrong lifecycle: " + lifecycleState);
             callback.sendResult(null);
             return;
         }
@@ -5625,6 +5638,16 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
+    /**
+     * Updates the application info.
+     *
+     * This only works in the system process. Must be called on the main thread.
+     */
+    public void handleSystemApplicationInfoChanged(@NonNull ApplicationInfo ai) {
+        Preconditions.checkState(mSystemThread, "Must only be called in the system process");
+        handleApplicationInfoChanged(ai);
+    }
+
     @VisibleForTesting(visibility = PACKAGE)
     public void handleApplicationInfoChanged(@NonNull final ApplicationInfo ai) {
         // Updates triggered by package installation go through a package update
@@ -5814,23 +5837,24 @@ public final class ActivityThread extends ClientTransactionHandler {
             System.runFinalization();
             System.gc();
         }
-        if (dhd.managed) {
-            try {
-                Debug.dumpHprofData(dhd.path, dhd.fd.getFileDescriptor());
-            } catch (IOException e) {
-                Slog.w(TAG, "Managed heap dump failed on path " + dhd.path
-                        + " -- can the process access this path?");
-            } finally {
-                try {
-                    dhd.fd.close();
-                } catch (IOException e) {
-                    Slog.w(TAG, "Failure closing profile fd", e);
-                }
+        try (ParcelFileDescriptor fd = dhd.fd) {
+            if (dhd.managed) {
+                Debug.dumpHprofData(dhd.path, fd.getFileDescriptor());
+            } else if (dhd.mallocInfo) {
+                Debug.dumpNativeMallocInfo(fd.getFileDescriptor());
+            } else {
+                Debug.dumpNativeHeap(fd.getFileDescriptor());
             }
-        } else if (dhd.mallocInfo) {
-            Debug.dumpNativeMallocInfo(dhd.fd.getFileDescriptor());
-        } else {
-            Debug.dumpNativeHeap(dhd.fd.getFileDescriptor());
+        } catch (IOException e) {
+            if (dhd.managed) {
+                Slog.w(TAG, "Managed heap dump failed on path " + dhd.path
+                        + " -- can the process access this path?", e);
+            } else {
+                Slog.w(TAG, "Failed to dump heap", e);
+            }
+        } catch (RuntimeException e) {
+            // This should no longer happening now that we're copying the file descriptor.
+            Slog.wtf(TAG, "Heap dumper threw a runtime exception", e);
         }
         try {
             ActivityManager.getService().dumpHeapFinished(dhd.path);
@@ -6483,7 +6507,20 @@ public final class ActivityThread extends ClientTransactionHandler {
             pkg_name = appContext.getPackageName();
         }
         if (ux_perf != null && !Process.isIsolated() && pkg_name != null) {
-            ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_BINDAPP, 0, pkg_name, bindApp_dur);
+            String pkgDir = null;
+            try
+            {
+                String codePath = appContext.getPackageCodePath();
+                pkgDir =  codePath.substring(0, codePath.lastIndexOf('/'));
+            }
+            catch(Exception e)
+            {
+                Slog.e(TAG, "HeavyGameThread () : Exception_1 = " + e);
+            }
+            ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_BINDAPP, 0,
+                                           pkg_name,
+                                           bindApp_dur,
+                                           pkgDir);
         }
     }
 

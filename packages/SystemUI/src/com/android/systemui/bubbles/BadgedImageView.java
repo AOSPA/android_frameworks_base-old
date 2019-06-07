@@ -23,6 +23,7 @@ import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.widget.ImageView;
 
+import com.android.internal.graphics.ColorUtils;
 import com.android.systemui.R;
 
 /**
@@ -56,7 +57,7 @@ public class BadgedImageView extends ImageView {
             int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
         mIconSize = getResources().getDimensionPixelSize(R.dimen.individual_bubble_size);
-        mDotRenderer = new BadgeRenderer(mIconSize);
+        mDotRenderer = new BadgeRenderer(getContext());
 
         TypedArray ta = context.obtainStyledAttributes(
                 new int[] {android.R.attr.colorBackgroundFloating});
@@ -82,6 +83,10 @@ public class BadgedImageView extends ImageView {
         invalidate();
     }
 
+    public boolean getDotPosition() {
+        return mOnLeft;
+    }
+
     /**
      * Set whether the dot should show or not.
      */
@@ -101,7 +106,7 @@ public class BadgedImageView extends ImageView {
      * The colour to use for the dot.
      */
     public void setDotColor(int color) {
-        mUpdateDotColor = color;
+        mUpdateDotColor = ColorUtils.setAlphaComponent(color, 255 /* alpha */);
         invalidate();
     }
 

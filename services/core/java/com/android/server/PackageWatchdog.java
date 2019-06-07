@@ -529,8 +529,7 @@ public class PackageWatchdog {
             while (pit.hasNext()) {
                 MonitoredPackage monitoredPackage = pit.next();
                 String packageName = monitoredPackage.getName();
-                if (monitoredPackage.getHealthCheckStateLocked()
-                        != MonitoredPackage.STATE_PASSED) {
+                if (monitoredPackage.isPendingHealthChecksLocked()) {
                     packages.add(packageName);
                 }
             }
@@ -685,13 +684,13 @@ public class PackageWatchdog {
         }
     }
 
-    /** Adds a {@link DeviceConfig#OnPropertyChangedListener}. */
+    /** Adds a {@link DeviceConfig#OnPropertiesChangedListener}. */
     private void setPropertyChangedListenerLocked() {
-        DeviceConfig.addOnPropertyChangedListener(
+        DeviceConfig.addOnPropertiesChangedListener(
                 DeviceConfig.NAMESPACE_ROLLBACK,
                 mContext.getMainExecutor(),
-                (namespace, name, value) -> {
-                    if (!DeviceConfig.NAMESPACE_ROLLBACK.equals(namespace)) {
+                (properties) -> {
+                    if (!DeviceConfig.NAMESPACE_ROLLBACK.equals(properties.getNamespace())) {
                         return;
                     }
                     updateConfigs();
@@ -1093,7 +1092,10 @@ public class PackageWatchdog {
          */
         @GuardedBy("mLock")
         public long getShortestScheduleDurationMsLocked() {
-            return Math.min(toPositive(mDurationMs), toPositive(mHealthCheckDurationMs));
+            // Consider health check duration only if #isPendingHealthChecksLocked is true
+            return Math.min(toPositive(mDurationMs),
+                    isPendingHealthChecksLocked()
+                    ? toPositive(mHealthCheckDurationMs) : Long.MAX_VALUE);
         }
 
         /**
@@ -1103,6 +1105,15 @@ public class PackageWatchdog {
         @GuardedBy("mLock")
         public boolean isExpiredLocked() {
             return mDurationMs <= 0;
+        }
+
+        /**
+         * Returns {@code true} if the package, {@link #getName} is expecting health check results
+         * {@code false} otherwise.
+         */
+        @GuardedBy("mLock")
+        public boolean isPendingHealthChecksLocked() {
+            return mHealthCheckState == STATE_ACTIVE || mHealthCheckState == STATE_INACTIVE;
         }
 
         /**

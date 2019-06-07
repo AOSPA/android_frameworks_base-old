@@ -16,12 +16,15 @@
 
 package com.android.server.display;
 
+import static android.Manifest.permission.CAPTURE_SECURE_VIDEO_OUTPUT;
+import static android.Manifest.permission.CAPTURE_VIDEO_OUTPUT;
+import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR;
-import static android.hardware.display.DisplayManager
-        .VIRTUAL_DISPLAY_FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD;
+import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC;
 import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_SECURE;
+import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS;
 import static android.hardware.display.DisplayViewport.VIEWPORT_EXTERNAL;
 import static android.hardware.display.DisplayViewport.VIEWPORT_INTERNAL;
 import static android.hardware.display.DisplayViewport.VIEWPORT_VIRTUAL;
@@ -253,6 +256,9 @@ public final class DisplayManagerService extends SystemService {
     // device).
     private Point mStableDisplaySize = new Point();
 
+    // Whether the system has finished booting or not.
+    private boolean mSystemReady;
+
     // The top inset of the default display.
     // This gets persisted so that the boot animation knows how to transition from the display's
     // full size to the size configured by the user. Right now we only persist and animate the top
@@ -329,6 +335,8 @@ public final class DisplayManagerService extends SystemService {
         mCurrentUserId = UserHandle.USER_SYSTEM;
         ColorSpace[] colorSpaces = SurfaceControl.getCompositionColorSpaces();
         mWideColorSpace = colorSpaces[1];
+
+        mSystemReady = false;
     }
 
     public void setupSchedulerPolicies() {
@@ -417,6 +425,10 @@ public final class DisplayManagerService extends SystemService {
         synchronized (mSyncRoot) {
             mSafeMode = safeMode;
             mOnlyCore = onlyCore;
+            mSystemReady = true;
+            // Just in case the top inset changed before the system was ready. At this point, any
+            // relevant configuration should be in place.
+            recordTopInsetLocked(mLogicalDisplays.get(Display.DEFAULT_DISPLAY));
         }
 
         mDisplayModeDirector.setListener(new AllowedDisplayModeObserver());
@@ -1069,7 +1081,10 @@ public final class DisplayManagerService extends SystemService {
     }
 
     private void recordTopInsetLocked(@Nullable LogicalDisplay d) {
-        if (d == null) {
+        // We must only persist the inset after boot has completed, otherwise we will end up
+        // overwriting the persisted value before the masking flag has been loaded from the
+        // resource overlay.
+        if (!mSystemReady || d == null) {
             return;
         }
         int topInset = d.getInsets().top;
@@ -1994,6 +2009,18 @@ public final class DisplayManagerService extends SystemService {
                 }
             }
 
+            // Sometimes users can have sensitive information in system decoration windows. An app
+            // could create a virtual display with system decorations support and read the user info
+            // from the surface.
+            // We should only allow adding flag VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
+            // to virtual displays that are owned by the system.
+            if (callingUid != Process.SYSTEM_UID
+                    && (flags & VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS) != 0) {
+                if (!checkCallingPermission(INTERNAL_SYSTEM_WINDOW, "createVirtualDisplay()")) {
+                    throw new SecurityException("Requires INTERNAL_SYSTEM_WINDOW permission");
+                }
+            }
+
             final long token = Binder.clearCallingIdentity();
             try {
                 return createVirtualDisplayInternal(callback, projection, callingUid, packageName,
@@ -2294,9 +2321,7 @@ public final class DisplayManagerService extends SystemService {
                     Slog.e(TAG, "Unable to query projection service for permissions", e);
                 }
             }
-            if (mContext.checkCallingPermission(
-                    android.Manifest.permission.CAPTURE_VIDEO_OUTPUT)
-                    == PackageManager.PERMISSION_GRANTED) {
+            if (checkCallingPermission(CAPTURE_VIDEO_OUTPUT, "canProjectVideo()")) {
                 return true;
             }
             return canProjectSecureVideo(projection);
@@ -2312,9 +2337,17 @@ public final class DisplayManagerService extends SystemService {
                     Slog.e(TAG, "Unable to query projection service for permissions", e);
                 }
             }
-            return mContext.checkCallingPermission(
-                    android.Manifest.permission.CAPTURE_SECURE_VIDEO_OUTPUT)
-                    == PackageManager.PERMISSION_GRANTED;
+            return checkCallingPermission(CAPTURE_SECURE_VIDEO_OUTPUT, "canProjectSecureVideo()");
+        }
+
+        private boolean checkCallingPermission(String permission, String func) {
+            if (mContext.checkCallingPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+                return true;
+            }
+            final String msg = "Permission Denial: " + func + " from pid=" + Binder.getCallingPid()
+                    + ", uid=" + Binder.getCallingUid() + " requires " + permission;
+            Slog.w(TAG, msg);
+            return false;
         }
     }
 
