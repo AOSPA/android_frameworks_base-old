@@ -67,7 +67,6 @@ import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationFilter;
 import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
 import com.android.systemui.statusbar.notification.collection.NotificationData;
-import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
@@ -653,11 +652,6 @@ public class BubbleControllerTest extends SysuiTestCase {
                 ZenModeController zenModeController) {
             super(context, statusBarWindowController, data, Runnable::run,
                     configurationController, interruptionStateProvider, zenModeController);
-        }
-
-        @Override
-        public boolean shouldAutoBubbleForFlags(Context c, NotificationEntry entry) {
-            return entry.notification.getNotification().getBubbleMetadata() != null;
         }
     }
 
