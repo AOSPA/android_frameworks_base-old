@@ -20,6 +20,8 @@ import static android.app.Notification.FLAG_BUBBLE;
 import static android.app.NotificationManager.IMPORTANCE_DEFAULT;
 import static android.app.NotificationManager.IMPORTANCE_HIGH;
 
+import static org.mockito.Mockito.mock;
+
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.Instrumentation;
@@ -39,6 +41,7 @@ import android.widget.RemoteViews;
 import androidx.test.InstrumentationRegistry;
 
 import com.android.systemui.bubbles.BubblesTestActivity;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.NotificationContentInflater.InflationFlag;
@@ -65,14 +68,17 @@ public class NotificationTestHelper {
     private final Context mContext;
     private final Instrumentation mInstrumentation;
     private int mId;
-    private final NotificationGroupManager mGroupManager = new NotificationGroupManager();
+    private final NotificationGroupManager mGroupManager;
     private ExpandableNotificationRow mRow;
-    private HeadsUpManager mHeadsUpManager;
+    private HeadsUpManagerPhone mHeadsUpManager;
 
     public NotificationTestHelper(Context context) {
         mContext = context;
         mInstrumentation = InstrumentationRegistry.getInstrumentation();
-        mHeadsUpManager = new HeadsUpManagerPhone(mContext, null, mGroupManager, null, null);
+        StatusBarStateController stateController = mock(StatusBarStateController.class);
+        mGroupManager = new NotificationGroupManager(stateController);
+        mHeadsUpManager = new HeadsUpManagerPhone(mContext, stateController);
+        mHeadsUpManager.setUp(null, mGroupManager, null, null);
         mGroupManager.setHeadsUpManager(mHeadsUpManager);
     }
 

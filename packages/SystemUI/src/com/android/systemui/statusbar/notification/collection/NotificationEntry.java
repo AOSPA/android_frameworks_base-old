@@ -644,10 +644,6 @@ public final class NotificationEntry {
         if (row != null) row.freeContentViewWhenSafe(inflationFlag);
     }
 
-    public void setAmbientPulsing(boolean pulsing) {
-        if (row != null) row.setAmbientPulsing(pulsing);
-    }
-
     public boolean rowExists() {
         return row != null;
     }
@@ -676,10 +672,6 @@ public final class NotificationEntry {
         if (row != null) row.setPinned(pinned);
     }
 
-    public boolean isRowAnimatingAway() {
-        return row != null && row.isHeadsUpAnimatingAway();
-    }
-
     public boolean isRowHeadsUp() {
         return row != null && row.isHeadsUp();
     }
@@ -689,8 +681,8 @@ public final class NotificationEntry {
     }
 
 
-    public void setAmbientGoingAway(boolean goingAway) {
-        if (row != null) row.setAmbientGoingAway(goingAway);
+    public void setHeadsUpAnimatingAway(boolean animatingAway) {
+        if (row != null) row.setHeadsUpAnimatingAway(animatingAway);
     }
 
 
