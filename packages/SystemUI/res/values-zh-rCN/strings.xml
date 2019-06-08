@@ -401,7 +401,7 @@
     <string name="keyguard_more_overflow_text" msgid="9195222469041601365">"+<xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g>"</string>
     <string name="speed_bump_explanation" msgid="1288875699658819755">"不太紧急的通知会显示在下方"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"再次点按即可打开"</string>
-    <string name="keyguard_unlock" msgid="8043466894212841998">"向上滑动即可解锁"</string>
+    <string name="keyguard_unlock" msgid="6035822649218712063">"向上滑动即可打开"</string>
     <string name="do_disclosure_generic" msgid="5615898451805157556">"此设备由您所属单位管理"</string>
     <string name="do_disclosure_with_name" msgid="5640615509915445501">"此设备是由<xliff:g id="ORGANIZATION_NAME">%s</xliff:g>托管"</string>
     <string name="phone_hint" msgid="4872890986869209950">"滑动图标即可拨打电话"</string>

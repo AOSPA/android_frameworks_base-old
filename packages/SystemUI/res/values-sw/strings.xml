@@ -401,7 +401,7 @@
     <string name="keyguard_more_overflow_text" msgid="9195222469041601365">"<xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g>+"</string>
     <string name="speed_bump_explanation" msgid="1288875699658819755">"Arifa zisizo za dharura sana ziko hapo chini"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"Gusa tena ili ufungue"</string>
-    <string name="keyguard_unlock" msgid="8043466894212841998">"Telezesha kidole ili ufungue"</string>
+    <string name="keyguard_unlock" msgid="6035822649218712063">"Telezesha kidole juu ili ufungue"</string>
     <string name="do_disclosure_generic" msgid="5615898451805157556">"Kifaa hiki kinasimamiwa na shirika lako"</string>
     <string name="do_disclosure_with_name" msgid="5640615509915445501">"Kifaa hiki kinadhibitiwa na <xliff:g id="ORGANIZATION_NAME">%s</xliff:g>"</string>
     <string name="phone_hint" msgid="4872890986869209950">"Telezesha kidole kutoka kwa aikoni ili ufikie simu"</string>

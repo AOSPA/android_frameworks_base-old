@@ -401,7 +401,7 @@
     <string name="keyguard_more_overflow_text" msgid="9195222469041601365">"+<xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g>"</string>
     <string name="speed_bump_explanation" msgid="1288875699658819755">"ქვემოთ მითითებულია ნაკლებად სასწრაფო შეტყობინებები"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"შეეხეთ ისევ გასახსნელად"</string>
-    <string name="keyguard_unlock" msgid="8043466894212841998">"გაასრიალეთ ზევით განსაბლოკად"</string>
+    <string name="keyguard_unlock" msgid="6035822649218712063">"გასახსნელად გადაფურცლეთ ზემოთ"</string>
     <string name="do_disclosure_generic" msgid="5615898451805157556">"ამ მოწყობილობას მართავს თქვენი ორგანიზაცია"</string>
     <string name="do_disclosure_with_name" msgid="5640615509915445501">"ამ მოწყობილობას მართავს <xliff:g id="ORGANIZATION_NAME">%s</xliff:g>"</string>
     <string name="phone_hint" msgid="4872890986869209950">"ტელეფონისთვის გადაფურცლეთ ხატულადან"</string>

@@ -401,7 +401,7 @@
     <string name="keyguard_more_overflow_text" msgid="9195222469041601365">"+<xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g>"</string>
     <string name="speed_bump_explanation" msgid="1288875699658819755">"तल कम जरुरी सूचनाहरू"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"खोल्न पुनः ट्याप गर्नुहोस्"</string>
-    <string name="keyguard_unlock" msgid="8043466894212841998">"अनलक गर्न स्वाप गर्नुहोस्"</string>
+    <string name="keyguard_unlock" msgid="6035822649218712063">"खोल्न माथितिर स्वाइप गर्नुहोस्"</string>
     <string name="do_disclosure_generic" msgid="5615898451805157556">"तपाईंको संगठनले यस यन्त्रलाई व्यवस्थापन गर्दछ"</string>
     <string name="do_disclosure_with_name" msgid="5640615509915445501">"यो यन्त्र <xliff:g id="ORGANIZATION_NAME">%s</xliff:g> द्वारा व्यवस्थापन गरिएको छ"</string>
     <string name="phone_hint" msgid="4872890986869209950">"फोनको लागि आइकनबाट स्वाइप गर्नुहोस्"</string>

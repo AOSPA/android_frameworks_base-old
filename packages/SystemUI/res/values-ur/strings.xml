@@ -400,7 +400,7 @@
     <string name="keyguard_more_overflow_text" msgid="9195222469041601365">"‎+<xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g>‎"</string>
     <string name="speed_bump_explanation" msgid="1288875699658819755">"کم اہم اطلاعات ذیل میں ہیں"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"کھولنے کیلئے دوبارہ تھپتھپائیں"</string>
-    <string name="keyguard_unlock" msgid="8043466894212841998">"غیر مقفل کرنے کیلئے اوپر سوائپ کریں"</string>
+    <string name="keyguard_unlock" msgid="6035822649218712063">"کھولنے کے لیے اوپر سوائپ کريں"</string>
     <string name="do_disclosure_generic" msgid="5615898451805157556">"یہ آلہ آپ کی تنظیم کے زیر انتظام ہے"</string>
     <string name="do_disclosure_with_name" msgid="5640615509915445501">"یہ آلہ <xliff:g id="ORGANIZATION_NAME">%s</xliff:g> کے زیر انتظام ہے"</string>
     <string name="phone_hint" msgid="4872890986869209950">"فون کیلئے آئیکن سے سوائپ کریں"</string>

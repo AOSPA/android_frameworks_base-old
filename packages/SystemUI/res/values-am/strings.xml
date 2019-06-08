@@ -400,7 +400,7 @@
     <string name="keyguard_more_overflow_text" msgid="9195222469041601365">"+<xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g>"</string>
     <string name="speed_bump_explanation" msgid="1288875699658819755">"በጣም አስቸካይ ያልሆኑ ማሳወቂያዎች ከታች"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"ለመክፈት ዳግም መታ ያድርጉ"</string>
-    <string name="keyguard_unlock" msgid="8043466894212841998">"ለማስከፈት ወደ ላይ ያንሸራትቱ"</string>
+    <string name="keyguard_unlock" msgid="6035822649218712063">"ለመክፈት በጣት ወደ ላይ ጠረግ ያድርጉ"</string>
     <string name="do_disclosure_generic" msgid="5615898451805157556">"ይህ መሣሪያ በእርስዎ ድርጅት የሚተዳደር ነው"</string>
     <string name="do_disclosure_with_name" msgid="5640615509915445501">"ይህ መሣሪያ በ<xliff:g id="ORGANIZATION_NAME">%s</xliff:g> የሚተዳደር ነው"</string>
     <string name="phone_hint" msgid="4872890986869209950">"ለስልክ ከአዶ ላይ ጠረግ ያድርጉ"</string>

@@ -401,7 +401,7 @@
     <string name="keyguard_more_overflow_text" msgid="9195222469041601365">"+<xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g>"</string>
     <string name="speed_bump_explanation" msgid="1288875699658819755">"ការ​ជូន​ដំណឹង​​មិន​សូវ​បន្ទាន់​ខាង​ក្រោម"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"ប៉ះ​ម្ដង​ទៀត ដើម្បី​បើក"</string>
-    <string name="keyguard_unlock" msgid="8043466894212841998">"អូស​ឡើង​លើ ដើម្បី​ដោះ​សោ"</string>
+    <string name="keyguard_unlock" msgid="6035822649218712063">"អូសឡើងលើ​ដើម្បីបើក"</string>
     <string name="do_disclosure_generic" msgid="5615898451805157556">"ឧបករណ៍​នេះ​ស្ថិត​ក្រោម​ការ​គ្រប់គ្រង​​របស់ស្ថាប័ន​​អ្នក"</string>
     <string name="do_disclosure_with_name" msgid="5640615509915445501">"ឧបករណ៍នេះស្ថិតក្រោមការគ្រប់គ្រងរបស់ <xliff:g id="ORGANIZATION_NAME">%s</xliff:g>"</string>
     <string name="phone_hint" msgid="4872890986869209950">"អូសចេញពីរូបតំណាងដើម្បីប្រើទូរស័ព្ទ"</string>
