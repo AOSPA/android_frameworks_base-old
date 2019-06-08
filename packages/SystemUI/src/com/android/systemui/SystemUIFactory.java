@@ -46,6 +46,7 @@ import com.android.systemui.statusbar.NotificationLockscreenUserManagerImpl;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.ScrimView;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
+import com.android.systemui.statusbar.notification.NotificationFilter;
 import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
 import com.android.systemui.statusbar.notification.collection.NotificationData;
@@ -221,8 +222,8 @@ public class SystemUIFactory {
     @Singleton
     @Provides
     public NotificationInterruptionStateProvider provideNotificationInterruptionStateProvider(
-            Context context) {
-        return new NotificationInterruptionStateProvider(context);
+            Context context, NotificationFilter filter, StatusBarStateController controller) {
+        return new NotificationInterruptionStateProvider(context, filter, controller);
     }
 
     @Singleton
