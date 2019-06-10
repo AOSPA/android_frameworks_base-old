@@ -211,6 +211,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private boolean mHasLockscreenWallpaper;
     private boolean mAssistantVisible;
     private boolean mKeyguardOccluded;
+    private boolean mSecureCameraLaunched;
     @VisibleForTesting
     protected boolean mTelephonyCapable;
 
@@ -518,6 +519,14 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
      */
     public void setKeyguardOccluded(boolean occluded) {
         mKeyguardOccluded = occluded;
+        updateBiometricListeningState();
+    }
+
+    /**
+     * Invoked when the secure camera is launched.
+     */
+    public void onCameraLaunched() {
+        mSecureCameraLaunched = true;
         updateBiometricListeningState();
     }
 
@@ -1649,7 +1658,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         return (mBouncer || mAuthInterruptActive || awakeKeyguard || shouldListenForFaceAssistant())
                 && !mSwitchingUser && !getUserCanSkipBouncer(user) && !isFaceDisabled(user)
                 && !mKeyguardGoingAway && mFaceSettingEnabledForUser && !mLockIconPressed
-                && mUserManager.isUserUnlocked(user) && mIsPrimaryUser;
+                && mUserManager.isUserUnlocked(user) && mIsPrimaryUser
+                && !mSecureCameraLaunched;
     }
 
     /**
@@ -2098,6 +2108,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         checkIsHandlerThread();
         Log.d(TAG, "onKeyguardVisibilityChanged(" + showing + ")");
         mKeyguardIsVisible = showing;
+
+        if (showing) {
+            mSecureCameraLaunched = false;
+        }
+
         for (int i = 0; i < mCallbacks.size(); i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
             if (cb != null) {
