@@ -489,6 +489,8 @@ public class FaceService extends BiometricServiceBase {
                 return;
             }
 
+            Slog.d(TAG, "Resetting lockout for user: " + mCurrentUserId);
+
             try {
                 mDaemonWrapper.resetLockout(token);
             } catch (RemoteException e) {
