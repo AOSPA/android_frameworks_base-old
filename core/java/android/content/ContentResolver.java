@@ -16,6 +16,8 @@
 
 package android.content;
 
+import static android.provider.DocumentsContract.EXTRA_ORIENTATION;
+
 import android.accounts.Account;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -40,6 +42,7 @@ import android.graphics.Bitmap;
 import android.graphics.ImageDecoder;
 import android.graphics.ImageDecoder.ImageInfo;
 import android.graphics.ImageDecoder.Source;
+import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
@@ -56,6 +59,7 @@ import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.storage.StorageManager;
+import android.system.Int32Ref;
 import android.text.TextUtils;
 import android.util.EventLog;
 import android.util.Log;
@@ -821,7 +825,9 @@ public abstract class ContentResolver implements ContentInterface {
      * @param sortOrder How to order the rows, formatted as an SQL ORDER BY
      *         clause (excluding the ORDER BY itself). Passing null will use the
      *         default sort order, which may be unordered.
-     * @return A Cursor object, which is positioned before the first entry, or null
+     * @return A Cursor object, which is positioned before the first entry. May return
+     *         <code>null</code> if the underlying content provider returns <code>null</code>,
+     *         or if it crashes.
      * @see Cursor
      */
     public final @Nullable Cursor query(@RequiresPermission.Read @NonNull Uri uri,
@@ -862,7 +868,9 @@ public abstract class ContentResolver implements ContentInterface {
      * @param cancellationSignal A signal to cancel the operation in progress, or null if none.
      * If the operation is canceled, then {@link OperationCanceledException} will be thrown
      * when the query is executed.
-     * @return A Cursor object, which is positioned before the first entry, or null
+     * @return A Cursor object, which is positioned before the first entry. May return
+     *         <code>null</code> if the underlying content provider returns <code>null</code>,
+     *         or if it crashes.
      * @see Cursor
      */
     public final @Nullable Cursor query(@RequiresPermission.Read @NonNull Uri uri,
@@ -899,7 +907,9 @@ public abstract class ContentResolver implements ContentInterface {
      * @param cancellationSignal A signal to cancel the operation in progress, or null if none.
      * If the operation is canceled, then {@link OperationCanceledException} will be thrown
      * when the query is executed.
-     * @return A Cursor object, which is positioned before the first entry, or null
+     * @return A Cursor object, which is positioned before the first entry. May return
+     *         <code>null</code> if the underlying content provider returns <code>null</code>,
+     *         or if it crashes.
      * @see Cursor
      */
     @Override
@@ -1797,7 +1807,8 @@ public abstract class ContentResolver implements ContentInterface {
      * @param url The URL of the table to insert into.
      * @param values The initial values for the newly inserted row. The key is the column name for
      *               the field. Passing an empty ContentValues will create an empty row.
-     * @return the URL of the newly created row.
+     * @return the URL of the newly created row. May return <code>null</code> if the underlying
+     *         content provider returns <code>null</code>, or if it crashes.
      */
     @Override
     public final @Nullable Uri insert(@RequiresPermission.Write @NonNull Uri url,
@@ -2474,8 +2485,8 @@ public abstract class ContentResolver implements ContentInterface {
      */
     public @NonNull List<UriPermission> getPersistedUriPermissions() {
         try {
-            return UriGrantsManager.getService()
-                    .getPersistedUriPermissions(mPackageName, true).getList();
+            return UriGrantsManager.getService().getUriPermissions(
+                    mPackageName, true /* incoming */, true /* persistedOnly */).getList();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2490,8 +2501,18 @@ public abstract class ContentResolver implements ContentInterface {
      */
     public @NonNull List<UriPermission> getOutgoingPersistedUriPermissions() {
         try {
-            return UriGrantsManager.getService()
-                    .getPersistedUriPermissions(mPackageName, false).getList();
+            return UriGrantsManager.getService().getUriPermissions(
+                    mPackageName, false /* incoming */, true /* persistedOnly */).getList();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /** @hide */
+    public @NonNull List<UriPermission> getOutgoingUriPermissions() {
+        try {
+            return UriGrantsManager.getService().getUriPermissions(
+                    mPackageName, false /* incoming */, false /* persistedOnly */).getList();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3566,9 +3587,14 @@ public abstract class ContentResolver implements ContentInterface {
         // Convert to Point, since that's what the API is defined as
         final Bundle opts = new Bundle();
         opts.putParcelable(EXTRA_SIZE, Point.convert(size));
+        final Int32Ref orientation = new Int32Ref(0);
 
-        return ImageDecoder.decodeBitmap(ImageDecoder.createSource(() -> {
-            return content.openTypedAssetFile(uri, "image/*", opts, signal);
+        Bitmap bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(() -> {
+            final AssetFileDescriptor afd = content.openTypedAssetFile(uri, "image/*", opts,
+                    signal);
+            final Bundle extras = afd.getExtras();
+            orientation.value = (extras != null) ? extras.getInt(EXTRA_ORIENTATION, 0) : 0;
+            return afd;
         }), (ImageDecoder decoder, ImageInfo info, Source source) -> {
             decoder.setAllocator(allocator);
 
@@ -3584,6 +3610,20 @@ public abstract class ContentResolver implements ContentInterface {
                 decoder.setTargetSampleSize(sample);
             }
         });
+
+        // Transform the bitmap if requested. We use a side-channel to
+        // communicate the orientation, since EXIF thumbnails don't contain
+        // the rotation flags of the original image.
+        if (orientation.value != 0) {
+            final int width = bitmap.getWidth();
+            final int height = bitmap.getHeight();
+
+            final Matrix m = new Matrix();
+            m.setRotate(orientation.value, width / 2, height / 2);
+            bitmap = Bitmap.createBitmap(bitmap, 0, 0, width, height, m, false);
+        }
+
+        return bitmap;
     }
 
     /** {@hide} */

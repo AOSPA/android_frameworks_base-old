@@ -26,7 +26,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
-import android.os.Handler;
 import android.os.Message;
 import android.os.UserHandle;
 import android.util.Log;
@@ -37,6 +36,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
 
 /**
  * Uses an {@link AppPredictor} to sort Resolver targets. If the AppPredictionService appears to be
@@ -46,7 +46,7 @@ import java.util.Map;
 class AppPredictionServiceResolverComparator extends AbstractResolverComparator {
 
     private static final String TAG = "APSResolverComparator";
-    private static final long DELAY_COMPUTE_WHEN_DEFAULTING_TO_RESOLVER_MILLIS = 200;
+    private static final boolean DEBUG = false;
 
     private final AppPredictor mAppPredictor;
     private final Context mContext;
@@ -99,27 +99,30 @@ class AppPredictionServiceResolverComparator extends AbstractResolverComparator 
         }
         List<AppTarget> appTargets = new ArrayList<>();
         for (ResolvedComponentInfo target : targets) {
-            appTargets.add(new AppTarget.Builder(new AppTargetId(target.name.flattenToString()))
-                    .setTarget(target.name.getPackageName(), mUser)
-                    .setClassName(target.name.getClassName()).build());
+            appTargets.add(
+                    new AppTarget.Builder(
+                        new AppTargetId(target.name.flattenToString()),
+                            target.name.getPackageName(),
+                            mUser)
+                    .setClassName(target.name.getClassName())
+                    .build());
         }
-        mAppPredictor.sortTargets(appTargets, mContext.getMainExecutor(),
+        mAppPredictor.sortTargets(appTargets, Executors.newSingleThreadExecutor(),
                 sortedAppTargets -> {
                     if (sortedAppTargets.isEmpty()) {
+                        if (DEBUG) {
+                            Log.d(TAG, "AppPredictionService disabled. Using resolver.");
+                        }
                         // APS for chooser is disabled. Fallback to resolver.
                         mResolverRankerService =
                                 new ResolverRankerServiceResolverComparator(
                                     mContext, mIntent, mReferrerPackage,
                                         () -> mHandler.sendEmptyMessage(RANKER_SERVICE_RESULT));
-                        mResolverRankerService.initRanker(mContext);
-                        Handler computeHandler =
-                                new Handler(msg -> {
-                                    mResolverRankerService.compute(targets);
-                                    return true;
-                                });
-                        computeHandler.sendEmptyMessageDelayed(
-                                0, DELAY_COMPUTE_WHEN_DEFAULTING_TO_RESOLVER_MILLIS);
+                        mResolverRankerService.compute(targets);
                     } else {
+                        if (DEBUG) {
+                            Log.d(TAG, "AppPredictionService response received");
+                        }
                         Message msg =
                             Message.obtain(mHandler, RANKER_SERVICE_RESULT, sortedAppTargets);
                         msg.sendToTarget();

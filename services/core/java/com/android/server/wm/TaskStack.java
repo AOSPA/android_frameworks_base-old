@@ -93,10 +93,6 @@ public class TaskStack extends WindowContainer<Task> implements
     /** Unique identifier */
     final int mStackId;
 
-    /** The display this stack sits under. */
-    // TODO: Track parent marks like this in WindowContainer.
-    private DisplayContent mDisplayContent;
-
     /** For comparison with DisplayContent bounds. */
     private Rect mTmpRect = new Rect();
     private Rect mTmpRect2 = new Rect();
@@ -175,10 +171,6 @@ public class TaskStack extends WindowContainer<Task> implements
         mDockedStackMinimizeThickness = service.mContext.getResources().getDimensionPixelSize(
                 com.android.internal.R.dimen.docked_stack_minimize_thickness);
         EventLog.writeEvent(EventLogTags.WM_STACK_CREATED, stackId);
-    }
-
-    DisplayContent getDisplayContent() {
-        return mDisplayContent;
     }
 
     Task findHomeTask() {
@@ -327,7 +319,8 @@ public class TaskStack extends WindowContainer<Task> implements
      * Sets the bounds animation target bounds ahead of an animation.  This can't currently be done
      * in onAnimationStart() since that is started on the UiThread.
      */
-    void setAnimationFinalBounds(Rect sourceHintBounds, Rect destBounds, boolean toFullscreen) {
+    private void setAnimationFinalBounds(Rect sourceHintBounds, Rect destBounds,
+            boolean toFullscreen) {
         mBoundsAnimatingRequested = true;
         mBoundsAnimatingToFullscreen = toFullscreen;
         if (destBounds != null) {
@@ -337,7 +330,11 @@ public class TaskStack extends WindowContainer<Task> implements
         }
         if (sourceHintBounds != null) {
             mBoundsAnimationSourceHintBounds.set(sourceHintBounds);
-        } else {
+        } else if (!mBoundsAnimating) {
+            // If the bounds are already animating, we don't want to reset the source hint. This is
+            // because the source hint is sent when starting the animation from the client that
+            // requested to enter pip. Other requests can adjust the pip bounds during an animation,
+            // but could accidentally reset the source hint bounds.
             mBoundsAnimationSourceHintBounds.setEmpty();
         }
 
@@ -805,7 +802,12 @@ public class TaskStack extends WindowContainer<Task> implements
         if (width == mLastSurfaceSize.x && height == mLastSurfaceSize.y) {
             return;
         }
-        transaction.setWindowCrop(mSurfaceControl, width, height);
+        if (getWindowConfiguration().tasksAreFloating()) {
+            // Don't crop freeform windows to the stack.
+            transaction.setWindowCrop(mSurfaceControl, -1, -1);
+        } else {
+            transaction.setWindowCrop(mSurfaceControl, width, height);
+        }
         mLastSurfaceSize.set(width, height);
     }
 
@@ -820,8 +822,7 @@ public class TaskStack extends WindowContainer<Task> implements
             throw new IllegalStateException("onDisplayChanged: Already attached");
         }
 
-        final boolean movedToNewDisplay = mDisplayContent == null;
-        mDisplayContent = dc;
+        super.onDisplayChanged(dc);
 
         updateSurfaceBounds();
         if (mAnimationBackgroundSurface == null) {
@@ -829,8 +830,6 @@ public class TaskStack extends WindowContainer<Task> implements
                     .setName("animation background stackId=" + mStackId)
                     .build();
         }
-
-        super.onDisplayChanged(dc);
     }
 
     /**
@@ -1627,21 +1626,6 @@ public class TaskStack extends WindowContainer<Task> implements
     @Override  // AnimatesBounds
     public void onAnimationEnd(boolean schedulePipModeChangedCallback, Rect finalStackSize,
             boolean moveToFullscreen) {
-        if (mAnimationType == BoundsAnimationController.FADE_IN) {
-            setPinnedStackAlpha(1f);
-            try {
-                mWmService.mActivityTaskManager.notifyPinnedStackAnimationEnded();
-            } catch (RemoteException e) {
-                // I don't believe you...
-            }
-            return;
-        }
-
-        onBoundAnimationEnd(schedulePipModeChangedCallback, finalStackSize, moveToFullscreen);
-    }
-
-    private void onBoundAnimationEnd(boolean schedulePipModeChangedCallback, Rect finalStackSize,
-            boolean moveToFullscreen) {
         if (inPinnedWindowingMode()) {
             // Update to the final bounds if requested. This is done here instead of in the bounds
             // animator to allow us to coordinate this after we notify the PiP mode changed
@@ -1653,6 +1637,11 @@ public class TaskStack extends WindowContainer<Task> implements
                         mBoundsAnimationTarget, false /* forceUpdate */);
             }
 
+            if (mAnimationType == BoundsAnimationController.FADE_IN) {
+                setPinnedStackAlpha(1f);
+                mActivityStack.mService.notifyPinnedStackAnimationEnded();
+            }
+
             if (finalStackSize != null && !mCancelCurrentBoundsAnimation) {
                 setPinnedStackSize(finalStackSize, null);
             } else {
@@ -1661,14 +1650,9 @@ public class TaskStack extends WindowContainer<Task> implements
                 onPipAnimationEndResize();
             }
 
-            try {
-                mWmService.mActivityTaskManager.notifyPinnedStackAnimationEnded();
-                if (moveToFullscreen) {
-                    mWmService.mActivityTaskManager.moveTasksToFullscreenStack(mStackId,
-                            true /* onTop */);
-                }
-            } catch (RemoteException e) {
-                // I don't believe you...
+            mActivityStack.mService.notifyPinnedStackAnimationEnded();
+            if (moveToFullscreen) {
+                mActivityStack.mService.moveTasksToFullscreenStack(mStackId, true /* onTop */);
             }
         } else {
             // No PiP animation, just run the normal animation-end logic

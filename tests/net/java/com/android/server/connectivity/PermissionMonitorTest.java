@@ -65,6 +65,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.SparseIntArray;
 
+import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
@@ -96,6 +97,7 @@ public class PermissionMonitorTest {
     private static final int SYSTEM_UID1 = 1000;
     private static final int SYSTEM_UID2 = 1008;
     private static final int VPN_UID = 10002;
+    private static final String REAL_SYSTEM_PACKAGE_NAME = "android";
     private static final String MOCK_PACKAGE1 = "appName1";
     private static final String MOCK_PACKAGE2 = "appName2";
     private static final String SYSTEM_PACKAGE1 = "sysName1";
@@ -188,8 +190,10 @@ public class PermissionMonitorTest {
     private static PackageInfo buildPackageInfo(boolean hasSystemPermission, int uid, int userId) {
         final PackageInfo pkgInfo;
         if (hasSystemPermission) {
-            pkgInfo = packageInfoWithPermissions(new String[] {CHANGE_NETWORK_STATE, NETWORK_STACK},
-                    PARTITION_SYSTEM);
+            final String[] systemPermissions = new String[]{
+                    CHANGE_NETWORK_STATE, NETWORK_STACK, CONNECTIVITY_USE_RESTRICTED_NETWORKS
+            };
+            pkgInfo = packageInfoWithPermissions(systemPermissions, PARTITION_SYSTEM);
         } else {
             pkgInfo = packageInfoWithPermissions(new String[] {}, "");
         }
@@ -524,7 +528,7 @@ public class PermissionMonitorTest {
 
         SparseIntArray netdPermissionsAppIds = new SparseIntArray();
         netdPermissionsAppIds.put(MOCK_UID1, INetd.PERMISSION_INTERNET);
-        netdPermissionsAppIds.put(MOCK_UID2, INetd.NO_PERMISSIONS);
+        netdPermissionsAppIds.put(MOCK_UID2, INetd.PERMISSION_NONE);
         netdPermissionsAppIds.put(SYSTEM_UID1, INetd.PERMISSION_INTERNET
                 | INetd.PERMISSION_UPDATE_DEVICE_STATS);
         netdPermissionsAppIds.put(SYSTEM_UID2, INetd.PERMISSION_UPDATE_DEVICE_STATS);
@@ -534,7 +538,7 @@ public class PermissionMonitorTest {
 
         mNetdServiceMonitor.expectPermission(INetd.PERMISSION_INTERNET,
                 new int[]{MOCK_UID1});
-        mNetdServiceMonitor.expectPermission(INetd.NO_PERMISSIONS, new int[]{MOCK_UID2});
+        mNetdServiceMonitor.expectPermission(INetd.PERMISSION_NONE, new int[]{MOCK_UID2});
         mNetdServiceMonitor.expectPermission(INetd.PERMISSION_INTERNET
                 | INetd.PERMISSION_UPDATE_DEVICE_STATS, new int[]{SYSTEM_UID1});
         mNetdServiceMonitor.expectPermission(INetd.PERMISSION_UPDATE_DEVICE_STATS,
@@ -553,8 +557,8 @@ public class PermissionMonitorTest {
         mNetdServiceMonitor.expectPermission(INetd.PERMISSION_INTERNET, new int[]{SYSTEM_UID2});
 
         // Revoke permission from SYSTEM_UID1, expect no permission stored.
-        mPermissionMonitor.sendPackagePermissionsForUid(SYSTEM_UID1, INetd.NO_PERMISSIONS);
-        mNetdServiceMonitor.expectPermission(INetd.NO_PERMISSIONS, new int[]{SYSTEM_UID1});
+        mPermissionMonitor.sendPackagePermissionsForUid(SYSTEM_UID1, INetd.PERMISSION_NONE);
+        mNetdServiceMonitor.expectPermission(INetd.PERMISSION_NONE, new int[]{SYSTEM_UID1});
     }
 
     private PackageInfo addPackage(String packageName, int uid, String[] permissions)
@@ -645,5 +649,17 @@ public class PermissionMonitorTest {
 
         mObserver.onPackageRemoved(MOCK_PACKAGE1, MOCK_UID1);
         mNetdServiceMonitor.expectPermission(INetd.PERMISSION_INTERNET, new int[]{MOCK_UID1});
+    }
+
+    @Test
+    public void testRealSystemPermission() throws Exception {
+        // Use the real context as this test must ensure the *real* system package holds the
+        // necessary permission.
+        final Context realContext = InstrumentationRegistry.getContext();
+        final PermissionMonitor monitor = new PermissionMonitor(realContext, mNetdService);
+        final PackageManager manager = realContext.getPackageManager();
+        final PackageInfo systemInfo = manager.getPackageInfo(REAL_SYSTEM_PACKAGE_NAME,
+                GET_PERMISSIONS | MATCH_ANY_USER);
+        assertTrue(monitor.hasPermission(systemInfo, CONNECTIVITY_USE_RESTRICTED_NETWORKS));
     }
 }

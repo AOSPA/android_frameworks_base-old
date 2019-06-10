@@ -48,6 +48,7 @@ import android.annotation.Nullable;
 import android.annotation.StringRes;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
+import android.apex.ApexInfo;
 import android.app.ActivityTaskManager;
 import android.app.ActivityThread;
 import android.app.ResourcesManager;
@@ -236,24 +237,6 @@ public class PackageParser {
         CHILD_PACKAGE_TAGS.add(TAG_COMPATIBLE_SCREENS);
         CHILD_PACKAGE_TAGS.add(TAG_SUPPORTS_INPUT);
         CHILD_PACKAGE_TAGS.add(TAG_EAT_COMMENT);
-    }
-
-    // STOPSHIP(b/112545973): remove once feature enabled by default
-    private static final Set<String> FORCE_AUDIO_PACKAGES;
-    private static final Set<String> FORCE_VIDEO_PACKAGES;
-    private static final Set<String> FORCE_IMAGES_PACKAGES;
-    static {
-        FORCE_AUDIO_PACKAGES = parsePackageList(
-                SystemProperties.get(StorageManager.PROP_FORCE_AUDIO));
-        FORCE_VIDEO_PACKAGES = parsePackageList(
-                SystemProperties.get(StorageManager.PROP_FORCE_VIDEO));
-        FORCE_IMAGES_PACKAGES = parsePackageList(
-                SystemProperties.get(StorageManager.PROP_FORCE_IMAGES));
-    }
-
-    private static Set<String> parsePackageList(String pkgs) {
-        if (TextUtils.isEmpty(pkgs)) return Collections.emptySet();
-        return new ArraySet<String>(Arrays.asList(pkgs.split(",")));
     }
 
     private static final boolean LOG_UNSAFE_BROADCASTS = false;
@@ -2552,34 +2535,6 @@ public class PackageParser {
         // pre-Doughnut applications.
         if (pkg.applicationInfo.usesCompatibilityMode()) {
             adjustPackageToBeUnresizeableAndUnpipable(pkg);
-        }
-
-        // If the storage model feature flag is disabled, we need to fiddle
-        // around with permission definitions to return us to pre-Q behavior.
-        // STOPSHIP(b/112545973): remove once feature enabled by default
-        if (!StorageManager.hasIsolatedStorage()) {
-            if ("android".equals(pkg.packageName)) {
-                final ArraySet<String> newPermissions = new ArraySet<>();
-                newPermissions.add(android.Manifest.permission.ACCESS_MEDIA_LOCATION);
-                newPermissions.add(android.Manifest.permission.WRITE_OBB);
-
-                for (int i = pkg.permissions.size() - 1; i >= 0; i--) {
-                    final Permission p = pkg.permissions.get(i);
-                    if (newPermissions.contains(p.info.name)) {
-                        pkg.permissions.remove(i);
-                    }
-                }
-            }
-        } else {
-            if (FORCE_AUDIO_PACKAGES.contains(pkg.packageName)) {
-                pkg.requestedPermissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE);
-            }
-            if (FORCE_VIDEO_PACKAGES.contains(pkg.packageName)) {
-                pkg.requestedPermissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE);
-            }
-            if (FORCE_IMAGES_PACKAGES.contains(pkg.packageName)) {
-                pkg.requestedPermissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE);
-            }
         }
 
         return pkg;
@@ -8428,20 +8383,29 @@ public class PackageParser {
      * PackageInfo parser specifically for apex files.
      * NOTE: It will collect certificates
      *
-     * @param apexFile
+     * @param apexInfo
      * @return PackageInfo
      * @throws PackageParserException
      */
-    public static PackageInfo generatePackageInfoFromApex(File apexFile, int flags)
+    public static PackageInfo generatePackageInfoFromApex(ApexInfo apexInfo, int flags)
             throws PackageParserException {
         PackageParser pp = new PackageParser();
+        File apexFile = new File(apexInfo.packagePath);
         final Package p = pp.parsePackage(apexFile, flags, false);
         PackageUserState state = new PackageUserState();
         PackageInfo pi = generatePackageInfo(p, EmptyArray.INT, flags, 0, 0,
                 Collections.emptySet(), state);
-
         pi.applicationInfo.sourceDir = apexFile.getPath();
-        pi.applicationInfo.flags |= ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_INSTALLED;
+        if (apexInfo.isFactory) {
+            pi.applicationInfo.flags |= ApplicationInfo.FLAG_SYSTEM;
+        } else {
+            pi.applicationInfo.flags &= ~ApplicationInfo.FLAG_SYSTEM;
+        }
+        if (apexInfo.isActive) {
+            pi.applicationInfo.flags |= ApplicationInfo.FLAG_INSTALLED;
+        } else {
+            pi.applicationInfo.flags &= ~ApplicationInfo.FLAG_INSTALLED;
+        }
         pi.isApex = true;
 
         // Collect certificates

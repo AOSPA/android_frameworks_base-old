@@ -43,6 +43,7 @@
     <protected-broadcast android:name="android.intent.action.PACKAGE_FULLY_REMOVED" />
     <protected-broadcast android:name="android.intent.action.PACKAGE_CHANGED" />
     <protected-broadcast android:name="android.intent.action.PACKAGE_ENABLE_ROLLBACK" />
+    <protected-broadcast android:name="android.intent.action.CANCEL_ENABLE_ROLLBACK" />
     <protected-broadcast android:name="android.intent.action.ROLLBACK_COMMITTED" />
     <protected-broadcast android:name="android.intent.action.PACKAGE_RESTARTED" />
     <protected-broadcast android:name="android.intent.action.PACKAGE_DATA_CLEARED" />
@@ -934,15 +935,16 @@
         android:backgroundPermission="android.permission.ACCESS_BACKGROUND_LOCATION"
         android:protectionLevel="dangerous|instant" />
 
-    <!-- Allows an app to access location in the background.  If you
-         are requesting this, you should also request {@link #ACCESS_FINE_LOCATION}.
-         Requesting this by itself is not sufficient to give you
+    <!-- Allows an app to access location in the background. If you're requesting this permission,
+         you must also request either {@link #ACCESS_COARSE_LOCATION} or
+         {@link #ACCESS_FINE_LOCATION}. Requesting this permission by itself doesn't give you
          location access.
          <p>Protection level: dangerous
     -->
     <permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_accessBackgroundLocation"
+        android:permissionFlags="hardRestricted"
         android:description="@string/permdesc_accessBackgroundLocation"
         android:protectionLevel="dangerous|instant" />
 
@@ -1731,6 +1733,7 @@
          @hide -->
     <permission android:name="android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS"
         android:protectionLevel="signature|privileged" />
+    <uses-permission android:name="android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS"/>
 
     <!-- @SystemApi Allows an internal user to set signal strength in NetworkRequest. This kind of
          request will wake up device when signal strength meets the given value.
@@ -2370,7 +2373,7 @@
          The app can check whether it has this authorization by calling
          {@link android.provider.Settings#canDrawOverlays
          Settings.canDrawOverlays()}.
-         <p>Protection level: signature -->
+         <p>Protection level: signature|preinstalled|appop|pre23|development -->
     <permission android:name="android.permission.SYSTEM_ALERT_WINDOW"
         android:label="@string/permlab_systemAlertWindow"
         android:description="@string/permdesc_systemAlertWindow"
@@ -2555,7 +2558,7 @@
         can check whether it has this authorization by calling {@link
         android.provider.Settings.System#canWrite Settings.System.canWrite()}.
 
-        <p>Protection level: signature
+        <p>Protection level: signature|preinstalled|appop|pre23
     -->
     <permission android:name="android.permission.WRITE_SETTINGS"
         android:label="@string/permlab_writeSettings"
@@ -4248,6 +4251,15 @@
         android:description="@string/permdesc_bindCarrierServices"
         android:protectionLevel="signature|privileged" />
 
+    <!--
+        Allows the holder to start the permission usage screen for an app.
+        <p>Protection level: signature|installer
+    -->
+    <permission android:name="android.permission.START_VIEW_PERMISSION_USAGE"
+        android:label="@string/permlab_startViewPermissionUsage"
+        android:description="@string/permdesc_startViewPermissionUsage"
+        android:protectionLevel="signature|installer" />
+
     <!-- Allows an application to query whether DO_NOT_ASK_CREDENTIALS_ON_BOOT
          flag is set.
          @hide -->
@@ -4460,7 +4472,7 @@
     <!-- Allows an application to watch changes and/or active state of app ops.
          @hide <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.WATCH_APPOPS"
-        android:protectionLevel="signature" />
+        android:protectionLevel="signature|privileged" />
 
     <!-- Allows an application to directly open the "Open by default" page inside a package's
          Details screen.

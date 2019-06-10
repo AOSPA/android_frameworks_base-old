@@ -24,8 +24,10 @@ import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.res.CompatibilityInfo.Translator;
 import android.content.res.Configuration;
+import android.graphics.BlendMode;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
@@ -127,6 +129,8 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
     final Rect mTmpRect = new Rect();
     final Configuration mConfiguration = new Configuration();
 
+    Paint mRoundedViewportPaint;
+
     int mSubLayer = APPLICATION_MEDIA_SUBLAYER;
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
@@ -180,6 +184,7 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
     int mWindowSpaceTop = -1;
     int mSurfaceWidth = -1;
     int mSurfaceHeight = -1;
+    float mCornerRadius;
     @UnsupportedAppUsage
     int mFormat = -1;
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
@@ -395,7 +400,7 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
             // draw() is not called when SKIP_DRAW is set
             if ((mPrivateFlags & PFLAG_SKIP_DRAW) == 0) {
                 // punch a whole in the view-hierarchy below us
-                canvas.drawColor(0, PorterDuff.Mode.CLEAR);
+                clearSurfaceViewPort(canvas);
             }
         }
         super.draw(canvas);
@@ -407,10 +412,37 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
             // draw() is not called when SKIP_DRAW is set
             if ((mPrivateFlags & PFLAG_SKIP_DRAW) == PFLAG_SKIP_DRAW) {
                 // punch a whole in the view-hierarchy below us
-                canvas.drawColor(0, PorterDuff.Mode.CLEAR);
+                clearSurfaceViewPort(canvas);
             }
         }
         super.dispatchDraw(canvas);
+    }
+
+    private void clearSurfaceViewPort(Canvas canvas) {
+        if (mCornerRadius > 0f) {
+            canvas.getClipBounds(mTmpRect);
+            canvas.drawRoundRect(mTmpRect.left, mTmpRect.top, mTmpRect.right, mTmpRect.bottom,
+                    mCornerRadius, mCornerRadius, mRoundedViewportPaint);
+        } else {
+            canvas.drawColor(0, PorterDuff.Mode.CLEAR);
+        }
+    }
+
+    /**
+     * Sets the corner radius for the SurfaceView. This will round both the corners of the
+     * underlying surface, as well as the corners of the hole created to expose the surface.
+     *
+     * @param cornerRadius the new radius of the corners in pixels
+     * @hide
+     */
+    public void setCornerRadius(float cornerRadius) {
+        mCornerRadius = cornerRadius;
+        if (mCornerRadius > 0f && mRoundedViewportPaint == null) {
+            mRoundedViewportPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            mRoundedViewportPaint.setBlendMode(BlendMode.CLEAR);
+            mRoundedViewportPaint.setColor(0);
+        }
+        invalidate();
     }
 
     /**
@@ -487,13 +519,13 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
         }
     }
 
-    private void updateBackgroundVisibilityInTransaction() {
+    private void updateBackgroundVisibilityInTransaction(SurfaceControl viewRoot) {
         if (mBackgroundControl == null) {
             return;
         }
         if ((mSubLayer < 0) && ((mSurfaceFlags & SurfaceControl.OPAQUE) != 0)) {
             mBackgroundControl.show();
-            mBackgroundControl.setLayer(Integer.MIN_VALUE);
+            mBackgroundControl.setRelativeLayer(viewRoot, Integer.MIN_VALUE);
         } else {
             mBackgroundControl.hide();
         }
@@ -613,7 +645,7 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
                         } else {
                             mSurfaceControl.hide();
                         }
-                        updateBackgroundVisibilityInTransaction();
+                        updateBackgroundVisibilityInTransaction(viewRoot.getSurfaceControl());
 
                         // While creating the surface, we will set it's initial
                         // geometry. Outside of that though, we should generally
@@ -634,6 +666,7 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
                             // size.
                             mSurfaceControl.setWindowCrop(mSurfaceWidth, mSurfaceHeight);
                         }
+                        mSurfaceControl.setCornerRadius(mCornerRadius);
                         if (sizeChanged && !creating) {
                             mSurfaceControl.setBufferSize(mSurfaceWidth, mSurfaceHeight);
                         }
@@ -848,6 +881,10 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
                 position.width() / (float) mSurfaceWidth,
                 0.0f, 0.0f,
                 position.height() / (float) mSurfaceHeight);
+        if (mViewVisibility) {
+            mRtTransaction.show(surface);
+        }
+
     }
 
     private void setParentSpaceRectangle(Rect position, long frameNumber) {
@@ -914,27 +951,15 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
             if (mSurfaceControl == null) {
                 return;
             }
-            if (mRtHandlingPositionUpdates) {
-                mRtHandlingPositionUpdates = false;
-                // This callback will happen while the UI thread is blocked, so we can
-                // safely access other member variables at this time.
-                // So do what the UI thread would have done if RT wasn't handling position
-                // updates.
-                if (!mScreenRect.isEmpty() && !mScreenRect.equals(mRTLastReportedPosition)) {
-                    try {
-                        if (DEBUG) {
-                            Log.d(TAG, String.format("%d updateSurfacePosition, "
-                                            + "postion = [%d, %d, %d, %d]",
-                                    System.identityHashCode(this),
-                                    mScreenRect.left, mScreenRect.top,
-                                    mScreenRect.right, mScreenRect.bottom));
-                        }
-                        setParentSpaceRectangle(mScreenRect, frameNumber);
-                    } catch (Exception ex) {
-                        Log.e(TAG, "Exception configuring surface", ex);
-                    }
-                }
+
+            if (frameNumber > 0) {
+                final ViewRootImpl viewRoot = getViewRootImpl();
+
+                mRtTransaction.deferTransactionUntilSurface(mSurfaceControl, viewRoot.mSurface,
+                        frameNumber);
             }
+            mRtTransaction.hide(mSurfaceControl);
+            mRtTransaction.apply();
         }
     };
 

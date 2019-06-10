@@ -39,7 +39,6 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECOND
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
-import static android.content.Intent.FLAG_ACTIVITY_TASK_ON_HOME;
 import static android.content.pm.ApplicationInfo.FLAG_FACTORY_TEST;
 import static android.content.pm.ConfigurationInfo.GL_ES_VERSION_UNDEFINED;
 import static android.content.pm.PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_DISPLAYS;
@@ -141,6 +140,7 @@ import android.app.IActivityTaskManager;
 import android.app.IApplicationThread;
 import android.app.IAssistDataReceiver;
 import android.app.INotificationManager;
+import android.app.IRequestFinishCallback;
 import android.app.ITaskStackListener;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -264,6 +264,7 @@ import com.android.server.am.UserState;
 import com.android.server.appop.AppOpsService;
 import com.android.server.firewall.IntentFirewall;
 import com.android.server.pm.UserManagerService;
+import com.android.server.policy.PermissionPolicyInternal;
 import com.android.server.uri.UriGrantsManagerInternal;
 import com.android.server.vr.VrManagerInternal;
 
@@ -310,6 +311,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public static final int KEY_DISPATCHING_TIMEOUT_MS = 5 * 1000;
     // How long we wait until we timeout on key dispatching during instrumentation.
     static final int INSTRUMENTATION_KEY_DISPATCHING_TIMEOUT_MS = 60 * 1000;
+    // How long we permit background activity starts after an activity in the process
+    // started or finished.
+    static final long ACTIVITY_BG_START_GRACE_PERIOD_MS = 10 * 1000;
 
     /** Used to indicate that an app transition should be animated. */
     static final boolean ANIMATE = true;
@@ -346,6 +350,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     ActivityManagerInternal mAmInternal;
     UriGrantsManagerInternal mUgmInternal;
     private PackageManagerInternal mPmInternal;
+    private PermissionPolicyInternal mPermissionPolicyInternal;
     @VisibleForTesting
     final ActivityTaskManagerInternal mInternal;
     PowerManagerInternal mPowerManagerInternal;
@@ -1374,6 +1379,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     .setMayWait(userId)
                     .setIgnoreTargetSecurity(ignoreTargetSecurity)
                     .setFilterCallingUid(isResolver ? 0 /* system */ : targetUid)
+                    // The target may well be in the background, which would normally prevent it
+                    // from starting an activity. Here we definitely want the start to succeed.
+                    .setAllowBackgroundActivityStart(true)
                     .execute();
         } catch (SecurityException e) {
             // XXX need to figure out how to propagate to original app.
@@ -1570,6 +1578,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     }
                 }
             }
+
+            // note down that the process has finished an activity and is in background activity
+            // starts grace period
+            if (r.app != null) {
+                r.app.setLastActivityFinishTimeIfNeeded(SystemClock.uptimeMillis());
+            }
+
             final long origId = Binder.clearCallingIdentity();
             try {
                 boolean res;
@@ -2288,6 +2303,32 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
+    @Override
+    public void onBackPressedOnTaskRoot(IBinder token, IRequestFinishCallback callback) {
+        synchronized (mGlobalLock) {
+            ActivityRecord r = ActivityRecord.isInStackLocked(token);
+            if (r == null) {
+                return;
+            }
+            ActivityStack stack = r.getActivityStack();
+            if (stack != null && stack.isSingleTaskInstance()) {
+                // Single-task stacks are used for activities which are presented in floating
+                // windows above full screen activities. Instead of directly finishing the
+                // task, a task change listener is used to notify SystemUI so the action can be
+                // handled specially.
+                final TaskRecord task = r.getTaskRecord();
+                mTaskChangeNotificationController
+                        .notifyBackPressedOnTaskRoot(task.getTaskInfo());
+            } else {
+                try {
+                    callback.requestFinish();
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Failed to invoke request finish callback", e);
+                }
+            }
+        }
+    }
+
     /**
      * TODO: Add mController hook
      */
@@ -2904,7 +2945,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             synchronized (mGlobalLock) {
                 final ActivityRecord r = ActivityRecord.isInStackLocked(token);
                 if (r != null) {
-                    final ActivityOptions activityOptions = r.takeOptionsLocked();
+                    final ActivityOptions activityOptions = r.takeOptionsLocked(
+                            true /* fromClient */);
                     return activityOptions == null ? null : activityOptions.toBundle();
                 }
                 return null;
@@ -5794,6 +5836,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         return mPmInternal;
     }
 
+    PermissionPolicyInternal getPermissionPolicyInternal() {
+        if (mPermissionPolicyInternal == null) {
+            mPermissionPolicyInternal = LocalServices.getService(PermissionPolicyInternal.class);
+        }
+        return mPermissionPolicyInternal;
+    }
+
     AppWarnings getAppWarningsLocked() {
         return mAppWarnings;
     }
@@ -6852,15 +6901,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             synchronized (mGlobalLock) {
                 final long ident = Binder.clearCallingIdentity();
                 try {
-                    intent.addFlags(FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS |
-                            FLAG_ACTIVITY_TASK_ON_HOME);
-                    ActivityOptions activityOptions = options != null
+                    intent.addFlags(FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+                    final ActivityOptions activityOptions = options != null
                             ? new ActivityOptions(options) : ActivityOptions.makeBasic();
-                    final ActivityRecord homeActivity =
-                            mRootActivityContainer.getDefaultDisplayHomeActivity();
-                    if (homeActivity != null) {
-                        activityOptions.setLaunchTaskId(homeActivity.getTaskRecord().taskId);
-                    }
                     mContext.startActivityAsUser(intent, activityOptions.toBundle(),
                             UserHandle.CURRENT);
                 } finally {

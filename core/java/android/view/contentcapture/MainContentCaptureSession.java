@@ -498,7 +498,7 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
             }
 
             final ParceledListSlice<ContentCaptureEvent> events = clearEvents();
-            mDirectServiceInterface.sendEvents(events);
+            mDirectServiceInterface.sendEvents(events, reason, mManager.mOptions);
         } catch (RemoteException e) {
             Log.w(TAG, "Error sending " + numberEvents + " for " + getDebugState()
                     + ": " + e);
@@ -593,7 +593,7 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
     }
 
     /**
-     * Called by ContentCaptureManager.setContentCaptureEnabled
+     * Sets the disabled state of content capture.
      *
      * @return whether disabled state was changed.
      */

@@ -267,8 +267,7 @@ class ZygoteConnection {
         pid = Zygote.forkAndSpecialize(parsedArgs.mUid, parsedArgs.mGid, parsedArgs.mGids,
                 parsedArgs.mRuntimeFlags, rlimits, parsedArgs.mMountExternal, parsedArgs.mSeInfo,
                 parsedArgs.mNiceName, fdsToClose, fdsToIgnore, parsedArgs.mStartChildZygote,
-                parsedArgs.mInstructionSet, parsedArgs.mAppDataDir, parsedArgs.mPackageName,
-                parsedArgs.mPackagesForUid, parsedArgs.mSandboxId, parsedArgs.mTargetSdkVersion);
+                parsedArgs.mInstructionSet, parsedArgs.mAppDataDir, parsedArgs.mTargetSdkVersion);
 
         try {
             if (pid == 0) {
@@ -406,8 +405,13 @@ class ZygoteConnection {
         private int mHiddenApiAccessStatslogSampleRate = 0;
 
         public static void setHiddenApiAccessLogSampleRates(int sampleRate, int newSampleRate) {
-            sInstance.mHiddenApiAccessLogSampleRate = sampleRate;
-            sInstance.mHiddenApiAccessStatslogSampleRate = newSampleRate;
+            if (sampleRate != -1) {
+                sInstance.mHiddenApiAccessLogSampleRate = sampleRate;
+            }
+
+            if (newSampleRate != -1) {
+                sInstance.mHiddenApiAccessStatslogSampleRate = newSampleRate;
+            }
         }
 
         public static HiddenApiUsageLogger getInstance() {

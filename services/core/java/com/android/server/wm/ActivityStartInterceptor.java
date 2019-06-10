@@ -46,7 +46,6 @@ import android.content.pm.PackageManagerInternal;
 import android.content.pm.ResolveInfo;
 import android.content.pm.SuspendDialogInfo;
 import android.content.pm.UserInfo;
-import android.os.Binder;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.os.UserHandle;
@@ -281,13 +280,6 @@ class ActivityStartInterceptor {
             mActivityOptions = ActivityOptions.makeBasic();
         }
 
-        ActivityRecord homeActivityRecord = mRootActivityContainer.getDefaultDisplayHomeActivity();
-        if (homeActivityRecord != null && homeActivityRecord.getTaskRecord() != null) {
-            // Showing credential confirmation activity in home task to avoid stopping
-            // multi-windowed mode after showing the full-screen credential confirmation activity.
-            mActivityOptions.setLaunchTaskId(homeActivityRecord.getTaskRecord().taskId);
-        }
-
         final UserInfo parent = mUserManager.getProfileParent(mUserId);
         mRInfo = mSupervisor.resolveIntent(mIntent, mResolvedType, parent.id, 0, mRealCallingUid);
         mAInfo = mSupervisor.resolveActivity(mIntent, mRInfo, mStartFlags, null /*profilerInfo*/);
@@ -304,7 +296,7 @@ class ActivityStartInterceptor {
             return null;
         }
         // TODO(b/28935539): should allow certain activities to bypass work challenge
-        final IntentSender target = createIntentSenderForOriginalIntent(Binder.getCallingUid(),
+        final IntentSender target = createIntentSenderForOriginalIntent(mCallingUid,
                 FLAG_CANCEL_CURRENT | FLAG_ONE_SHOT | FLAG_IMMUTABLE);
         final KeyguardManager km = (KeyguardManager) mServiceContext
                 .getSystemService(KEYGUARD_SERVICE);

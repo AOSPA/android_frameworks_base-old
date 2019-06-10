@@ -20,6 +20,7 @@ import static com.android.internal.util.function.pooled.PooledLambda.obtainMessa
 import android.annotation.CallSuper;
 import android.annotation.MainThread;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.app.Service;
@@ -38,6 +39,7 @@ import android.os.Looper;
 import android.os.RemoteException;
 import android.service.appprediction.IPredictionService.Stub;
 import android.util.ArrayMap;
+import android.util.Log;
 import android.util.Slog;
 
 import java.util.ArrayList;
@@ -45,7 +47,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * TODO(b/111701043): Add java docs
+ * A service used to predict app and shortcut usage.
  *
  * @hide
  */
@@ -57,7 +59,9 @@ public abstract class AppPredictionService extends Service {
 
     /**
      * The {@link Intent} that must be declared as handled by the service.
-     * TODO(b/111701043): Add any docs about permissions the service must hold
+     *
+     * <p>The service must also require the {@link android.permission#MANAGE_APP_PREDICTIONS}
+     * permission.
      *
      * @hide
      */
@@ -100,7 +104,7 @@ public abstract class AppPredictionService extends Service {
             mHandler.sendMessage(
                     obtainMessage(AppPredictionService::onSortAppTargets,
                             AppPredictionService.this, sessionId, targets.getList(), null,
-                            new CallbackWrapper(callback)));
+                            new CallbackWrapper(callback, null)));
         }
 
         @Override
@@ -144,8 +148,11 @@ public abstract class AppPredictionService extends Service {
     @Override
     @NonNull
     public final IBinder onBind(@NonNull Intent intent) {
-        // TODO(b/111701043): Verify that the action is valid
-        return mInterface.asBinder();
+        if (SERVICE_INTERFACE.equals(intent.getAction())) {
+            return mInterface.asBinder();
+        }
+        Log.w(TAG, "Tried to bind to wrong intent (should be " + SERVICE_INTERFACE + ": " + intent);
+        return null;
     }
 
     /**
@@ -179,7 +186,6 @@ public abstract class AppPredictionService extends Service {
 
     /**
      * Called by the client app to request sorting of targets based on prediction rank.
-     * TODO(b/111701043): Implement CancellationSignal so caller can cancel a long running request
      */
     @MainThread
     public abstract void onSortAppTargets(@NonNull AppPredictionSessionId sessionId,
@@ -196,7 +202,9 @@ public abstract class AppPredictionService extends Service {
 
         final CallbackWrapper wrapper = findCallbackWrapper(callbacks, callback);
         if (wrapper == null) {
-            callbacks.add(new CallbackWrapper(callback));
+            callbacks.add(new CallbackWrapper(callback,
+                    callbackWrapper ->
+                        mHandler.post(() -> removeCallbackWrapper(callbacks, callbackWrapper))));
             if (callbacks.size() == 1) {
                 onStartPredictionUpdates();
             }
@@ -219,10 +227,18 @@ public abstract class AppPredictionService extends Service {
 
         final CallbackWrapper wrapper = findCallbackWrapper(callbacks, callback);
         if (wrapper != null) {
-            callbacks.remove(wrapper);
-            if (callbacks.isEmpty()) {
-                onStopPredictionUpdates();
-            }
+            removeCallbackWrapper(callbacks, wrapper);
+        }
+    }
+
+    private void removeCallbackWrapper(
+                ArrayList<CallbackWrapper> callbacks, CallbackWrapper wrapper) {
+        if (callbacks == null) {
+            return;
+        }
+        callbacks.remove(wrapper);
+        if (callbacks.isEmpty()) {
+            onStopPredictionUpdates();
         }
     }
 
@@ -243,7 +259,6 @@ public abstract class AppPredictionService extends Service {
     /**
      * Called by the client app to request target predictions. This method is only called if there
      * are one or more prediction callbacks registered.
-     * TODO(b/111701043): Add java docs
      *
      * @see #updatePredictions(AppPredictionSessionId, List)
      */
@@ -295,9 +310,12 @@ public abstract class AppPredictionService extends Service {
             IBinder.DeathRecipient {
 
         private IPredictionCallback mCallback;
+        private final Consumer<CallbackWrapper> mOnBinderDied;
 
-        CallbackWrapper(IPredictionCallback callback) {
+        CallbackWrapper(IPredictionCallback callback,
+                @Nullable Consumer<CallbackWrapper> onBinderDied) {
             mCallback = callback;
+            mOnBinderDied = onBinderDied;
             try {
                 mCallback.asBinder().linkToDeath(this, 0);
             } catch (RemoteException e) {
@@ -306,6 +324,10 @@ public abstract class AppPredictionService extends Service {
         }
 
         public boolean isCallback(@NonNull IPredictionCallback callback) {
+            if (mCallback == null) {
+                Slog.e(TAG, "Callback is null, likely the binder has died.");
+                return false;
+            }
             return mCallback.equals(callback);
         }
 
@@ -323,6 +345,9 @@ public abstract class AppPredictionService extends Service {
         @Override
         public void binderDied() {
             mCallback = null;
+            if (mOnBinderDied != null) {
+                mOnBinderDied.accept(this);
+            }
         }
     }
 }

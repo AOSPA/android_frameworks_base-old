@@ -35,6 +35,18 @@ namespace android {
 namespace os {
 namespace statsd {
 
+// Keep this in sync with DumpReportReason enum in stats_log.proto
+enum DumpReportReason {
+    DEVICE_SHUTDOWN = 1,
+    CONFIG_UPDATED = 2,
+    CONFIG_REMOVED = 3,
+    GET_DATA_CALLED = 4,
+    ADB_DUMP = 5,
+    CONFIG_RESET = 6,
+    STATSCOMPANION_DIED = 7,
+    TERMINATION_SIGNAL_RECEIVED = 8
+};
+
 // If the metric has no activation requirement, it will be active once the metric producer is
 // created.
 // If the metric needs to be activated by atoms, the metric producer will start
@@ -236,15 +248,15 @@ public:
     void addActivation(int activationTrackerIndex, const ActivationType& activationType,
             int64_t ttl_seconds, int deactivationTrackerIndex = -1);
 
-    void prepareFistBucket() {
+    void prepareFirstBucket() {
         std::lock_guard<std::mutex> lock(mMutex);
-        prepareFistBucketLocked();
+        prepareFirstBucketLocked();
     }
 
     void flushIfExpire(int64_t elapsedTimestampNs);
 
     void writeActiveMetricToProtoOutputStream(
-            int64_t currentTimeNs, ProtoOutputStream* proto);
+            int64_t currentTimeNs, const DumpReportReason reason, ProtoOutputStream* proto);
 protected:
     virtual void onConditionChangedLocked(const bool condition, const int64_t eventTime) = 0;
     virtual void onSlicedConditionMayChangeLocked(bool overallCondition,
@@ -268,11 +280,9 @@ protected:
         return mIsActive;
     }
 
-    void prepActiveForBootIfNecessaryLocked(int64_t currentTimeNs);
-
     void loadActiveMetricLocked(const ActiveMetric& activeMetric, int64_t currentTimeNs);
 
-    virtual void prepareFistBucketLocked() {};
+    virtual void prepareFirstBucketLocked() {};
     /**
      * Flushes the current bucket if the eventTime is after the current bucket's end time. This will
        also flush the current partial bucket in memory.
@@ -412,6 +422,7 @@ protected:
     FRIEND_TEST(StatsLogProcessorTest, TestActivationOnBootMultipleActivations);
     FRIEND_TEST(StatsLogProcessorTest,
             TestActivationOnBootMultipleActivationsDifferentActivationTypes);
+    FRIEND_TEST(StatsLogProcessorTest, TestActivationsPersistAcrossSystemServerRestart);
 };
 
 }  // namespace statsd

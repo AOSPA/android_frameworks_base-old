@@ -64,8 +64,8 @@ import com.android.server.SystemServerInitThreadPool;
 import com.android.server.biometrics.AuthenticationClient;
 import com.android.server.biometrics.BiometricServiceBase;
 import com.android.server.biometrics.BiometricUtils;
+import com.android.server.biometrics.Constants;
 import com.android.server.biometrics.EnumerateClient;
-import com.android.server.biometrics.Metrics;
 import com.android.server.biometrics.RemovalClient;
 
 import org.json.JSONArray;
@@ -98,6 +98,8 @@ public class FaceService extends BiometricServiceBase {
     private static final int CHALLENGE_TIMEOUT_SEC = 600; // 10 minutes
 
     private final class FaceAuthClient extends AuthenticationClientImpl {
+        private int mLastAcquire;
+
         public FaceAuthClient(Context context,
                 DaemonWrapper daemon, long halDeviceId, IBinder token,
                 ServiceListener listener, int targetUserId, int groupId, long opId,
@@ -117,6 +119,11 @@ public class FaceService extends BiometricServiceBase {
         }
 
         @Override
+        public boolean wasUserDetected() {
+            return mLastAcquire != FaceManager.FACE_ACQUIRED_NOT_DETECTED;
+        }
+
+        @Override
         public boolean onAuthenticated(BiometricAuthenticator.Identifier identifier,
                 boolean authenticated, ArrayList<Byte> token) {
             final boolean result = super.onAuthenticated(identifier, authenticated, token);
@@ -131,7 +138,29 @@ public class FaceService extends BiometricServiceBase {
         }
 
         @Override
+        public int[] getAcquireIgnorelist() {
+            if (isBiometricPrompt()) {
+                return mBiometricPromptIgnoreList;
+            } else {
+                // Keyguard
+                return mKeyguardIgnoreList;
+            }
+        }
+
+        @Override
+        public int[] getAcquireVendorIgnorelist() {
+            if (isBiometricPrompt()) {
+                return mBiometricPromptIgnoreListVendor;
+            } else {
+                // Keyguard
+                return mKeyguardIgnoreListVendor;
+            }
+        }
+
+        @Override
         public boolean onAcquired(int acquireInfo, int vendorCode) {
+
+            mLastAcquire = acquireInfo;
 
             if (acquireInfo == FaceManager.FACE_ACQUIRED_RECALIBRATE) {
                 final String name =
@@ -205,6 +234,17 @@ public class FaceService extends BiometricServiceBase {
             final EnrollClientImpl client = new EnrollClientImpl(getContext(), mDaemonWrapper,
                     mHalDeviceId, token, new ServiceListenerImpl(receiver), mCurrentUserId,
                     0 /* groupId */, cryptoToken, restricted, opPackageName, disabledFeatures) {
+
+                @Override
+                public int[] getAcquireIgnorelist() {
+                    return mEnrollIgnoreList;
+                }
+
+                @Override
+                public int[] getAcquireVendorIgnorelist() {
+                    return mEnrollIgnoreListVendor;
+                }
+
                 @Override
                 public boolean shouldVibrate() {
                     return false;
@@ -293,7 +333,7 @@ public class FaceService extends BiometricServiceBase {
             }
 
             final boolean restricted = isRestricted();
-            final RemovalClient client = new RemovalClient(getContext(), getMetrics(),
+            final RemovalClient client = new RemovalClient(getContext(), getConstants(),
                     mDaemonWrapper, mHalDeviceId, token, new ServiceListenerImpl(receiver), faceId,
                     0 /* groupId */, userId, restricted, token.toString(), getBiometricUtils()) {
                 @Override
@@ -310,7 +350,7 @@ public class FaceService extends BiometricServiceBase {
             checkPermission(MANAGE_BIOMETRIC);
 
             final boolean restricted = isRestricted();
-            final EnumerateClient client = new EnumerateClient(getContext(), getMetrics(),
+            final EnumerateClient client = new EnumerateClient(getContext(), getConstants(),
                     mDaemonWrapper, mHalDeviceId, token, new ServiceListenerImpl(receiver), userId,
                     userId, restricted, getContext().getOpPackageName()) {
                 @Override
@@ -638,12 +678,19 @@ public class FaceService extends BiometricServiceBase {
         }
     }
 
-    private final FaceMetrics mFaceMetrics = new FaceMetrics();
+    private final FaceConstants mFaceConstants = new FaceConstants();
 
     @GuardedBy("this")
     private IBiometricsFace mDaemon;
     // One of the AuthenticationClient constants
     private int mCurrentUserLockoutMode;
+
+    private int[] mBiometricPromptIgnoreList;
+    private int[] mBiometricPromptIgnoreListVendor;
+    private int[] mKeyguardIgnoreList;
+    private int[] mKeyguardIgnoreListVendor;
+    private int[] mEnrollIgnoreList;
+    private int[] mEnrollIgnoreListVendor;
 
     /**
      * Receives callbacks from the HAL.
@@ -830,6 +877,19 @@ public class FaceService extends BiometricServiceBase {
 
     public FaceService(Context context) {
         super(context);
+
+        mBiometricPromptIgnoreList = getContext().getResources()
+                .getIntArray(R.array.config_face_acquire_biometricprompt_ignorelist);
+        mBiometricPromptIgnoreListVendor = getContext().getResources()
+                .getIntArray(R.array.config_face_acquire_vendor_biometricprompt_ignorelist);
+        mKeyguardIgnoreList = getContext().getResources()
+                .getIntArray(R.array.config_face_acquire_keyguard_ignorelist);
+        mKeyguardIgnoreListVendor = getContext().getResources()
+                .getIntArray(R.array.config_face_acquire_vendor_keyguard_ignorelist);
+        mEnrollIgnoreList = getContext().getResources()
+                .getIntArray(R.array.config_face_acquire_enroll_ignorelist);
+        mEnrollIgnoreListVendor = getContext().getResources()
+                .getIntArray(R.array.config_face_acquire_vendor_enroll_ignorelist);
     }
 
     @Override
@@ -855,8 +915,8 @@ public class FaceService extends BiometricServiceBase {
     }
 
     @Override
-    protected Metrics getMetrics() {
-        return mFaceMetrics;
+    protected Constants getConstants() {
+        return mFaceConstants;
     }
 
     @Override
@@ -887,7 +947,7 @@ public class FaceService extends BiometricServiceBase {
             try {
                 userId = getUserOrWorkProfileId(clientPackage, userId);
                 if (userId != mCurrentUserId) {
-                    final File baseDir = Environment.getDataVendorCeDirectory(userId);
+                    final File baseDir = Environment.getDataVendorDeDirectory(userId);
                     final File faceDir = new File(baseDir, FACE_DATA_DIR);
                     if (!faceDir.exists()) {
                         if (!faceDir.mkdir()) {

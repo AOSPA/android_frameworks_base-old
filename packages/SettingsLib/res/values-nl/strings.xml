@@ -23,6 +23,7 @@
     <string name="wifi_fail_to_scan" msgid="1265540342578081461">"Kan niet zoeken naar netwerken"</string>
     <string name="wifi_security_none" msgid="7985461072596594400">"Geen"</string>
     <string name="wifi_remembered" msgid="4955746899347821096">"Opgeslagen"</string>
+    <string name="wifi_disconnected" msgid="8085419869003922556">"Verbinding verbroken"</string>
     <string name="wifi_disabled_generic" msgid="4259794910584943386">"Uitgeschakeld"</string>
     <string name="wifi_disabled_network_failure" msgid="2364951338436007124">"IP-configuratie mislukt"</string>
     <string name="wifi_disabled_by_recommendation_provider" msgid="5168315140978066096">"Niet verbonden wegens netwerk van lage kwaliteit"</string>
@@ -36,7 +37,7 @@
     <string name="wifi_no_internet" msgid="4663834955626848401">"Geen internettoegang"</string>
     <string name="saved_network" msgid="4352716707126620811">"Opgeslagen door \'<xliff:g id="NAME">%1$s</xliff:g>\'"</string>
     <string name="connected_via_network_scorer" msgid="5713793306870815341">"Automatisch verbonden via %1$s"</string>
-    <string name="connected_via_network_scorer_default" msgid="7867260222020343104">"Automatisch verbonden via provider van netwerkbeoordelingen"</string>
+    <string name="connected_via_network_scorer_default" msgid="7867260222020343104">"Automatisch verbonden via netwerkbeoordelaar"</string>
     <string name="connected_via_passpoint" msgid="2826205693803088747">"Verbonden via %1$s"</string>
     <string name="connected_via_app" msgid="5571999941988929520">"Verbonden via <xliff:g id="NAME">%1$s</xliff:g>"</string>
     <string name="available_via_passpoint" msgid="1617440946846329613">"Beschikbaar via %1$s"</string>

@@ -42,8 +42,8 @@ android_library {
     static_libs: [
         "androidx.annotation_annotation",
         "ipmemorystore-client",
-        "netd_aidl_interface-java",
-        "networkstack-aidl-interfaces-java",
+        "netd_aidl_interface-V2-java",
+        "networkstack-aidl-interfaces-V3-java",
         "datastallprotosnano",
         "networkstackprotosnano",
         "captiveportal-lib",
@@ -98,8 +98,6 @@ java_defaults {
     optimize: {
         proguard_flags_files: ["proguard.flags"],
     },
-    // The permission configuration *must* be included to ensure security of the device
-    required: ["NetworkPermissionConfig"],
 }
 
 // Non-updatable network stack running in the system server process for devices not using the module
@@ -108,6 +106,12 @@ android_app {
     defaults: ["NetworkStackAppCommon"],
     certificate: "platform",
     manifest: "AndroidManifest_InProcess.xml",
+    // InProcessNetworkStack is a replacement for NetworkStack
+    overrides: ["NetworkStack"],
+    // The permission configuration *must* be included to ensure security of the device
+    // The InProcessNetworkStack goes together with the PlatformCaptivePortalLogin, which replaces
+    // the default CaptivePortalLogin.
+    required: ["PlatformNetworkPermissionConfig", "PlatformCaptivePortalLogin"],
 }
 
 // Updatable network stack packaged as an application
@@ -116,6 +120,9 @@ android_app {
     defaults: ["NetworkStackAppCommon"],
     certificate: "networkstack",
     manifest: "AndroidManifest.xml",
+    use_embedded_native_libs: true,
+    // The permission configuration *must* be included to ensure security of the device
+    required: ["NetworkPermissionConfig"],
 }
 
 genrule {

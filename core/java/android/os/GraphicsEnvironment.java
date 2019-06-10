@@ -71,6 +71,8 @@ public class GraphicsEnvironment {
             "android.app.action.ANGLE_FOR_ANDROID_TOAST_MESSAGE";
     private static final String INTENT_KEY_A4A_TOAST_MESSAGE = "A4A Toast Message";
     private static final String GAME_DRIVER_WHITELIST_ALL = "*";
+    private static final int VULKAN_1_0 = 0x00400000;
+    private static final int VULKAN_1_1 = 0x00401000;
 
     // GAME_DRIVER_ALL_APPS
     // 0: Default (Invalid values fallback to default as well)
@@ -99,10 +101,17 @@ public class GraphicsEnvironment {
         Trace.traceBegin(Trace.TRACE_TAG_GRAPHICS, "chooseDriver");
         if (!chooseDriver(context, coreSettings, pm, packageName)) {
             setGpuStats(SYSTEM_DRIVER_NAME, SYSTEM_DRIVER_VERSION_NAME, SYSTEM_DRIVER_VERSION_CODE,
-                    SystemProperties.getLong(PROPERTY_GFX_DRIVER_BUILD_TIME, 0), packageName);
+                    SystemProperties.getLong(PROPERTY_GFX_DRIVER_BUILD_TIME, 0), packageName,
+                    getVulkanVersion(pm));
         }
         Trace.traceEnd(Trace.TRACE_TAG_GRAPHICS);
     }
+
+    /**
+     * Hint for GraphicsEnvironment that an activity is launching on the process.
+     * Then the app process is allowed to send stats to GpuStats module.
+     */
+    public static native void hintActivityLaunch();
 
     /**
      * Allow to query whether an application will use Game Driver.
@@ -200,18 +209,25 @@ public class GraphicsEnvironment {
         return true;
     }
 
+    private static int getVulkanVersion(PackageManager pm) {
+        // PackageManager doesn't have an API to retrieve the version of a specific feature, and we
+        // need to avoid retrieving all system features here and looping through them.
+        if (pm.hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_VERSION, VULKAN_1_1)) {
+            return VULKAN_1_1;
+        }
+
+        if (pm.hasSystemFeature(PackageManager.FEATURE_VULKAN_HARDWARE_VERSION, VULKAN_1_0)) {
+            return VULKAN_1_0;
+        }
+
+        return 0;
+    }
+
     /**
      * Check whether application is debuggable
      */
     private static boolean isDebuggable(Context context) {
         return (context.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) > 0;
-    }
-
-    /**
-     * Check whether application is profileable
-     */
-    private static boolean isProfileable(Context context) {
-        return context.getApplicationInfo().isProfileableByShell();
     }
 
     /**
@@ -264,11 +280,11 @@ public class GraphicsEnvironment {
         String layerPaths = "";
 
         // Only enable additional debug functionality if the following conditions are met:
-        // 1. App is debuggable, profileable, or device is rooted
+        // 1. App is debuggable or device is rooted
         // 2. ENABLE_GPU_DEBUG_LAYERS is true
         // 3. Package name is equal to GPU_DEBUG_APP
 
-        if (isDebuggable(context) || isProfileable(context) || (getCanLoadSystemLibraries() == 1)) {
+        if (isDebuggable(context) || (getCanLoadSystemLibraries() == 1)) {
 
             final int enable = coreSettings.getInt(Settings.Global.ENABLE_GPU_DEBUG_LAYERS, 0);
 
@@ -450,9 +466,8 @@ public class GraphicsEnvironment {
      */
     private String getAngleDebugPackage(Context context, Bundle coreSettings) {
         final boolean appIsDebuggable = isDebuggable(context);
-        final boolean appIsProfileable = isProfileable(context);
         final boolean deviceIsDebuggable = getCanLoadSystemLibraries() == 1;
-        if (appIsDebuggable || appIsProfileable || deviceIsDebuggable) {
+        if (appIsDebuggable || deviceIsDebuggable) {
             String debugPackage;
 
             if (coreSettings != null) {
@@ -601,28 +616,36 @@ public class GraphicsEnvironment {
             return false;
         }
 
-        final String anglePkgName = getAnglePackageName(pm);
-        if (anglePkgName.isEmpty()) {
-            Log.e(TAG, "Failed to find ANGLE package.");
-            return false;
-        }
+        ApplicationInfo angleInfo = null;
 
-        final ApplicationInfo angleInfo;
-        String angleDebugPackage = getAngleDebugPackage(context, bundle);
-        if (!angleDebugPackage.isEmpty()) {
-            Log.i(TAG, "ANGLE debug package enabled: " + angleDebugPackage);
+        // If the developer has specified a debug package over ADB, attempt to find it
+        String anglePkgName = getAngleDebugPackage(context, bundle);
+        if (!anglePkgName.isEmpty()) {
+            Log.i(TAG, "ANGLE debug package enabled: " + anglePkgName);
             try {
                 // Note the debug package does not have to be pre-installed
-                angleInfo = pm.getApplicationInfo(angleDebugPackage, 0);
+                angleInfo = pm.getApplicationInfo(anglePkgName, 0);
             } catch (PackageManager.NameNotFoundException e) {
-                Log.w(TAG, "ANGLE debug package '" + angleDebugPackage + "' not installed");
+                Log.w(TAG, "ANGLE debug package '" + anglePkgName + "' not installed");
                 return false;
             }
-        } else {
-            try {
-                angleInfo = pm.getApplicationInfo(anglePkgName, PackageManager.MATCH_SYSTEM_ONLY);
-            } catch (PackageManager.NameNotFoundException e) {
-                Log.w(TAG, "ANGLE package '" + anglePkgName + "' not installed");
+        }
+
+        // Otherwise, check to see if ANGLE is properly installed
+        if (angleInfo == null) {
+            anglePkgName = getAnglePackageName(pm);
+            if (!anglePkgName.isEmpty()) {
+                Log.i(TAG, "ANGLE package enabled: " + anglePkgName);
+                try {
+                    // Production ANGLE libraries must be pre-installed as a system app
+                    angleInfo = pm.getApplicationInfo(anglePkgName,
+                            PackageManager.MATCH_SYSTEM_ONLY);
+                } catch (PackageManager.NameNotFoundException e) {
+                    Log.w(TAG, "ANGLE package '" + anglePkgName + "' not installed");
+                    return false;
+                }
+            } else {
+                Log.e(TAG, "Failed to find ANGLE package.");
                 return false;
             }
         }
@@ -683,7 +706,7 @@ public class GraphicsEnvironment {
     private boolean setupAndUseAngle(Context context, String packageName) {
         // Need to make sure we are evaluating ANGLE usage for the correct circumstances
         if (!setupAngle(context, null, context.getPackageManager(), packageName)) {
-            Log.v(TAG, "Package '" + packageName + "' should use not ANGLE");
+            Log.v(TAG, "Package '" + packageName + "' should not use ANGLE");
             return false;
         }
 
@@ -791,7 +814,7 @@ public class GraphicsEnvironment {
         // driver_build_time in the meta-data is in "L<Unix epoch timestamp>" format. e.g. L123456.
         // Long.parseLong will throw if the meta-data "driver_build_time" is not set properly.
         setGpuStats(driverPackageName, driverPackageInfo.versionName, driverAppInfo.longVersionCode,
-                Long.parseLong(driverBuildTime.substring(1)), packageName);
+                Long.parseLong(driverBuildTime.substring(1)), packageName, 0);
 
         return true;
     }
@@ -815,7 +838,7 @@ public class GraphicsEnvironment {
     private static native void setDebugLayersGLES(String layers);
     private static native void setDriverPathAndSphalLibraries(String path, String sphalLibraries);
     private static native void setGpuStats(String driverPackageName, String driverVersionName,
-            long driverVersionCode, long driverBuildTime, String appPackageName);
+            long driverVersionCode, long driverBuildTime, String appPackageName, int vulkanVersion);
     private static native void setAngleInfo(String path, String appPackage, String devOptIn,
             FileDescriptor rulesFd, long rulesOffset, long rulesLength);
     private static native boolean getShouldUseAngle(String packageName);
