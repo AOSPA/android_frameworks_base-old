@@ -62,6 +62,7 @@ public class KeyguardStatusView extends GridLayout implements
     private KeyguardClockSwitch mClockView;
     private TextView mOwnerInfo;
     private KeyguardSliceView mKeyguardSlice;
+    private View mNotificationIcons;
     private Runnable mPendingMarqueeStart;
     private Handler mHandler;
 
@@ -181,6 +182,7 @@ public class KeyguardStatusView extends GridLayout implements
         super.onFinishInflate();
         mStatusViewContainer = findViewById(R.id.status_view_container);
         mLogoutView = findViewById(R.id.logout);
+        mNotificationIcons = findViewById(R.id.clock_notification_icon_container);
         if (mLogoutView != null) {
             mLogoutView.setOnClickListener(this::onLogoutClicked);
         }
@@ -420,6 +422,11 @@ public class KeyguardStatusView extends GridLayout implements
             int expanded = mOwnerInfo.getBottom() + mOwnerInfo.getPaddingBottom();
             int toRemove = (int) ((expanded - collapsed) * ratio);
             setBottom(getMeasuredHeight() - toRemove);
+            // We're using scrolling in order not to overload the translation which is used
+            // when appearing the icons
+            mNotificationIcons.setScrollY(toRemove);
+        } else {
+            mNotificationIcons.setScrollY(0);
         }
     }
 
