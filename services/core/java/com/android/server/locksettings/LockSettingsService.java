@@ -586,7 +586,8 @@ public class LockSettingsService extends ILockSettings.Stub {
                 // If boot took too long and the password in vold got expired, parent keystore will
                 // be still locked, we ignore this case since the user will be prompted to unlock
                 // the device after boot.
-                unlockChildProfile(userId, true /* ignoreUserNotAuthenticated */);
+                unlockChildProfile(userId, true /* ignoreUserNotAuthenticated */,
+                        false /* hasChallenge */, 0 /* challenge */);
             } catch (RemoteException e) {
                 Slog.e(TAG, "Failed to unlock child profile");
             }
@@ -1201,12 +1202,13 @@ public class LockSettingsService extends ILockSettings.Stub {
         return decryptionResult;
     }
 
-    private void unlockChildProfile(int profileHandle, boolean ignoreUserNotAuthenticated)
+    private void unlockChildProfile(int profileHandle, boolean ignoreUserNotAuthenticated,
+            boolean hasChallenge, long challenge)
             throws RemoteException {
         try {
             doVerifyCredential(getDecryptedPasswordForTiedProfile(profileHandle),
                     CREDENTIAL_TYPE_PASSWORD,
-                    false, 0 /* no challenge */, profileHandle, null /* progressCallback */);
+                    hasChallenge, challenge, profileHandle, null /* progressCallback */);
         } catch (UnrecoverableKeyException | InvalidKeyException | KeyStoreException
                 | NoSuchAlgorithmException | NoSuchPaddingException
                 | InvalidAlgorithmParameterException | IllegalBlockSizeException
@@ -1221,6 +1223,10 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
     }
 
+    private void unlockUser(int userId, byte[] token, byte[] secret) {
+        unlockUser(userId, token, secret, false /* hasChallenge */, 0 /* challenge */);
+    }
+
     /**
      * Unlock the user (both storage and user state) and its associated managed profiles
      * synchronously.
@@ -1229,7 +1235,8 @@ public class LockSettingsService extends ILockSettings.Stub {
      * can end up calling into other system services to process user unlock request (via
      * {@link com.android.server.SystemServiceManager#unlockUser} </em>
      */
-    private void unlockUser(int userId, byte[] token, byte[] secret) {
+    private void unlockUser(int userId, byte[] token, byte[] secret,
+            boolean hasChallenge, long challenge) {
         // TODO: make this method fully async so we can update UI with progress strings
         final boolean alreadyUnlocked = mUserManager.isUserUnlockingOrUnlocked(userId);
         final CountDownLatch latch = new CountDownLatch(1);
@@ -1271,7 +1278,10 @@ public class LockSettingsService extends ILockSettings.Stub {
             // Unlock managed profile with unified lock
             if (tiedManagedProfileReadyToUnlock(profile)) {
                 try {
-                    unlockChildProfile(profile.id, false /* ignoreUserNotAuthenticated */);
+                    // Must pass the challenge on for resetLockout, so it's not over-written, which
+                    // causes LockSettingsService to revokeChallenge inappropriately.
+                    unlockChildProfile(profile.id, false /* ignoreUserNotAuthenticated */,
+                            hasChallenge, challenge);
                 } catch (RemoteException e) {
                     Log.d(TAG, "Failed to unlock child profile", e);
                 }
@@ -2619,7 +2629,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
             final byte[] secret = authResult.authToken.deriveDiskEncryptionKey();
             Slog.i(TAG, "Unlocking user " + userId + " with secret only, length " + secret.length);
-            unlockUser(userId, null, secret);
+            unlockUser(userId, null, secret, hasChallenge, challenge);
 
             activateEscrowTokens(authResult.authToken, userId);
 
