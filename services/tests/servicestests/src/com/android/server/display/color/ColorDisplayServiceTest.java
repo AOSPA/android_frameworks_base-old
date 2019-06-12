@@ -125,6 +125,8 @@ public class ColorDisplayServiceTest {
         mUserId = UserHandle.USER_NULL;
         mContext = null;
 
+        FakeSettingsProvider.clearSettingsProvider();
+
         LocalServices.removeServiceForTest(ColorDisplayService.ColorDisplayServiceInternal.class);
     }
 
@@ -936,11 +938,8 @@ public class ColorDisplayServiceTest {
 
         startService();
         assertUserColorMode(ColorDisplayManager.COLOR_MODE_NATURAL);
-        if (isColorModeValid(ColorDisplayManager.COLOR_MODE_SATURATED)) {
-            assertActiveColorMode(ColorDisplayManager.COLOR_MODE_SATURATED);
-        } else if (isColorModeValid(ColorDisplayManager.COLOR_MODE_AUTOMATIC)) {
-            assertActiveColorMode(ColorDisplayManager.COLOR_MODE_AUTOMATIC);
-        }
+        assertActiveColorMode(mContext.getResources().getInteger(
+                R.integer.config_accessibilityColorMode));
     }
 
     @Test
@@ -954,11 +953,8 @@ public class ColorDisplayServiceTest {
 
         startService();
         assertUserColorMode(ColorDisplayManager.COLOR_MODE_NATURAL);
-        if (isColorModeValid(ColorDisplayManager.COLOR_MODE_SATURATED)) {
-            assertActiveColorMode(ColorDisplayManager.COLOR_MODE_SATURATED);
-        } else if (isColorModeValid(ColorDisplayManager.COLOR_MODE_AUTOMATIC)) {
-            assertActiveColorMode(ColorDisplayManager.COLOR_MODE_AUTOMATIC);
-        }
+        assertActiveColorMode(mContext.getResources().getInteger(
+                R.integer.config_accessibilityColorMode));
     }
 
     @Test
@@ -973,11 +969,8 @@ public class ColorDisplayServiceTest {
 
         startService();
         assertUserColorMode(ColorDisplayManager.COLOR_MODE_NATURAL);
-        if (isColorModeValid(ColorDisplayManager.COLOR_MODE_SATURATED)) {
-            assertActiveColorMode(ColorDisplayManager.COLOR_MODE_SATURATED);
-        } else if (isColorModeValid(ColorDisplayManager.COLOR_MODE_AUTOMATIC)) {
-            assertActiveColorMode(ColorDisplayManager.COLOR_MODE_AUTOMATIC);
-        }
+        assertActiveColorMode(mContext.getResources().getInteger(
+                R.integer.config_accessibilityColorMode));
     }
 
     @Test
@@ -1032,11 +1025,15 @@ public class ColorDisplayServiceTest {
 
     @Test
     public void displayWhiteBalance_enabledAfterLinearColorModeSelected() {
+        if (!isColorModeValid(ColorDisplayManager.COLOR_MODE_SATURATED)) {
+            return;
+        }
         setDisplayWhiteBalanceEnabled(true);
-        setNightDisplayActivated(false /* activated */, -30 /* lastActivatedTimeOffset */);
+        mBinderService.setColorMode(ColorDisplayManager.COLOR_MODE_SATURATED);
         startService();
-        mBinderService.setColorMode(ColorDisplayManager.COLOR_MODE_NATURAL);
+        assertDwbActive(false);
 
+        mBinderService.setColorMode(ColorDisplayManager.COLOR_MODE_NATURAL);
         mCds.updateDisplayWhiteBalanceStatus();
         assertDwbActive(true);
     }
@@ -1044,10 +1041,8 @@ public class ColorDisplayServiceTest {
     @Test
     public void displayWhiteBalance_disabledWhileAccessibilityColorCorrectionEnabled() {
         setDisplayWhiteBalanceEnabled(true);
-        startService();
         setAccessibilityColorCorrection(true);
-
-        mCds.updateDisplayWhiteBalanceStatus();
+        startService();
         assertDwbActive(false);
 
         setAccessibilityColorCorrection(false);
@@ -1058,10 +1053,8 @@ public class ColorDisplayServiceTest {
     @Test
     public void displayWhiteBalance_disabledWhileAccessibilityColorInversionEnabled() {
         setDisplayWhiteBalanceEnabled(true);
-        startService();
         setAccessibilityColorInversion(true);
-
-        mCds.updateDisplayWhiteBalanceStatus();
+        startService();
         assertDwbActive(false);
 
         setAccessibilityColorInversion(false);
@@ -1245,7 +1238,7 @@ public class ColorDisplayServiceTest {
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
             mCds.onBootPhase(SystemService.PHASE_BOOT_COMPLETED);
-            mCds.onStartUser(mUserId);
+            mCds.onUserChanged(mUserId);
         });
     }
 
