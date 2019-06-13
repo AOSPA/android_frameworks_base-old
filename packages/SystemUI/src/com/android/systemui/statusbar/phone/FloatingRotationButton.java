@@ -51,9 +51,10 @@ public class FloatingRotationButton implements RotationButton {
                 R.layout.rotate_suggestion, null);
         mKeyButtonView.setVisibility(View.VISIBLE);
 
-        Resources resources = mContext.getResources();
-        mDiameter = resources.getDimensionPixelSize(R.dimen.floating_rotation_button_diameter);
-        mMargin = resources.getDimensionPixelSize(R.dimen.floating_rotation_button_margin);
+        Resources res = mContext.getResources();
+        mDiameter = res.getDimensionPixelSize(R.dimen.floating_rotation_button_diameter);
+        mMargin = Math.max(res.getDimensionPixelSize(R.dimen.floating_rotation_button_min_margin),
+                res.getDimensionPixelSize(R.dimen.rounded_corner_content_padding));
     }
 
     @Override
@@ -72,8 +73,7 @@ public class FloatingRotationButton implements RotationButton {
             return false;
         }
         mIsShowing = true;
-        int flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
+        int flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
         final WindowManager.LayoutParams lp = new WindowManager.LayoutParams(mDiameter, mDiameter,
                 mMargin, mMargin, WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL, flags,
                 PixelFormat.TRANSLUCENT);

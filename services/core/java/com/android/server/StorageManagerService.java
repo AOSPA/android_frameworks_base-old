@@ -2875,8 +2875,9 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    /** Not thread safe */
     class AppFuseMountScope extends AppFuseBridge.MountScope {
-        boolean opened = false;
+        private boolean mMounted = false;
 
         public AppFuseMountScope(int uid, int mountId) {
             super(uid, mountId);
@@ -2885,8 +2886,9 @@ class StorageManagerService extends IStorageManager.Stub
         @Override
         public ParcelFileDescriptor open() throws NativeDaemonConnectorException {
             try {
-                return new ParcelFileDescriptor(
-                        mVold.mountAppFuse(uid, mountId));
+                final FileDescriptor fd = mVold.mountAppFuse(uid, mountId);
+                mMounted = true;
+                return new ParcelFileDescriptor(fd);
             } catch (Exception e) {
                 throw new NativeDaemonConnectorException("Failed to mount", e);
             }
@@ -2905,9 +2907,9 @@ class StorageManagerService extends IStorageManager.Stub
 
         @Override
         public void close() throws Exception {
-            if (opened) {
+            if (mMounted) {
                 mVold.unmountAppFuse(uid, mountId);
-                opened = false;
+                mMounted = false;
             }
         }
     }
