@@ -32,9 +32,7 @@ import android.content.DialogInterface;
 import android.content.ServiceConnection;
 import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
-import android.graphics.Color;
 import android.graphics.PixelFormat;
-import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.media.AudioManager;
 import android.os.Debug;
@@ -247,7 +245,6 @@ public class CarVolumeDialogImpl implements VolumeDialog {
         mExpanded = false;
         mWindow = mDialog.getWindow();
         mWindow.requestFeature(Window.FEATURE_NO_TITLE);
-        mWindow.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         mWindow.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND
                 | WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR);
         mWindow.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE

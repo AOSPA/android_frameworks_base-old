@@ -1160,17 +1160,16 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
         // Note: We don't need to check for IN_SCREEN or INSET_DECOR because unlike the status bar,
         // these flags wouldn't make the window draw behind the navigation bar, unless
         // LAYOUT_HIDE_NAVIGATION was set.
-        boolean hideNavigation = (sysUiVisibility & SYSTEM_UI_FLAG_HIDE_NAVIGATION) != 0;
         boolean forceConsumingNavBar = (mForceWindowDrawsBarBackgrounds
                         && (attrs.flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) == 0
                         && (sysUiVisibility & SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION) == 0
-                        && !hideNavigation)
-                || (mLastShouldAlwaysConsumeSystemBars && hideNavigation);
+                        && (sysUiVisibility & SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0)
+                || mLastShouldAlwaysConsumeSystemBars;
 
         boolean consumingNavBar =
                 ((attrs.flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) != 0
                         && (sysUiVisibility & SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION) == 0
-                        && !hideNavigation)
+                        && (sysUiVisibility & SYSTEM_UI_FLAG_HIDE_NAVIGATION) == 0)
                 || forceConsumingNavBar;
 
         // If we didn't request fullscreen layout, but we still got it because of the

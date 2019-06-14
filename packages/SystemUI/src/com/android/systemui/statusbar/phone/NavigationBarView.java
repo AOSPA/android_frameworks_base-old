@@ -238,19 +238,7 @@ public class NavigationBarView extends FrameLayout implements
             info.setTouchableInsets(InternalInsetsInfo.TOUCHABLE_INSETS_FRAME);
             return;
         }
-
         info.setTouchableInsets(InternalInsetsInfo.TOUCHABLE_INSETS_REGION);
-        ButtonDispatcher imeSwitchButton = getImeSwitchButton();
-        if (imeSwitchButton.getVisibility() == VISIBLE) {
-            // If the IME is not up, but the ime switch button is visible, then make sure that
-            // button is touchable
-            int[] loc = new int[2];
-            View buttonView = imeSwitchButton.getCurrentView();
-            buttonView.getLocationInWindow(loc);
-            info.touchableRegion.set(loc[0], loc[1], loc[0] + buttonView.getWidth(),
-                    loc[1] + buttonView.getHeight());
-            return;
-        }
         info.touchableRegion.setEmpty();
     };
 
@@ -608,6 +596,10 @@ public class NavigationBarView extends FrameLayout implements
 
         boolean disableHome = isGesturalMode(mNavBarMode)
                 || ((mDisabledFlags & View.STATUS_BAR_DISABLE_HOME) != 0);
+
+        // TODO(b/113914868): investigation log for disappearing home button
+        Log.i(TAG, "updateNavButtonIcons (b/113914868): home disabled=" + disableHome
+                + " mDisabledFlags=" + mDisabledFlags);
 
         // Always disable recents when alternate car mode UI is active and for secondary displays.
         boolean disableRecent = isRecentsButtonDisabled();
@@ -1107,13 +1099,8 @@ public class NavigationBarView extends FrameLayout implements
 
     @Override
     public WindowInsets onApplyWindowInsets(WindowInsets insets) {
-        int leftInset = insets.getSystemWindowInsetLeft();
-        int rightInset = insets.getSystemWindowInsetRight();
-        setPadding(leftInset, insets.getSystemWindowInsetTop(), rightInset,
-                insets.getSystemWindowInsetBottom());
-        // we're passing the insets onto the gesture handler since the back arrow is only
-        // conditionally added and doesn't always get all the insets.
-        mEdgeBackGestureHandler.setInsets(leftInset, rightInset);
+        setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
+                insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
         return super.onApplyWindowInsets(insets);
     }
 

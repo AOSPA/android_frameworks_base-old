@@ -756,8 +756,4 @@ public class ArrayUtils {
             return String.valueOf(value);
         }
     }
-
-    public static @Nullable <T> T firstOrNull(T[] items) {
-        return items.length > 0 ? items[0] : null;
-    }
 }

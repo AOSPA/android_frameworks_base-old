@@ -3681,7 +3681,7 @@ public class Activity extends ContextThemeWrapper
             ActivityTaskManager.getService().onBackPressedOnTaskRoot(mToken,
                     new IRequestFinishCallback.Stub() {
                         public void requestFinish() {
-                            mHandler.post(() -> finishAfterTransition());
+                            finishAfterTransition();
                         }
                     });
         } catch (RemoteException e) {

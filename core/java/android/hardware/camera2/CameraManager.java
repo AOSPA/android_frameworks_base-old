@@ -860,10 +860,8 @@ public final class CameraManager {
      *
      * @param cameraId a non-{@code null} camera identifier
      * @return {@code true} if cameraId is a hidden physical camera device
-     *
-     * @hide
      */
-    public static boolean isHiddenPhysicalCamera(String cameraId) {
+    private boolean isHiddenPhysicalCamera(String cameraId) {
         try {
             ICameraService cameraService = CameraManagerGlobal.get().getCameraService();
             // If no camera service, no support

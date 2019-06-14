@@ -98,7 +98,7 @@ public final class ContentSuggestionsPerUserService extends
         RemoteContentSuggestionsService service = getRemoteServiceLocked();
         if (service != null) {
             ActivityManager.TaskSnapshot snapshot =
-                    mActivityTaskManagerInternal.getTaskSnapshotNoRestore(taskId, false);
+                    mActivityTaskManagerInternal.getTaskSnapshot(taskId, false);
             GraphicBuffer snapshotBuffer = null;
             int colorSpaceId = 0;
             if (snapshot != null) {

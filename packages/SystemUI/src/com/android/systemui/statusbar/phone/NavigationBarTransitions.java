@@ -213,12 +213,9 @@ public final class NavigationBarTransitions extends BarTransitions implements
 
     /**
      * Register {@code listener} to be notified when the color of nav bar elements changes.
-     *
-     * Returns the current nav bar color.
      */
-    public float addDarkIntensityListener(DarkIntensityListener listener) {
+    public void addDarkIntensityListener(DarkIntensityListener listener) {
         mDarkIntensityListeners.add(listener);
-        return mLightTransitionsController.getCurrentDarkIntensity();
     }
 
     /**

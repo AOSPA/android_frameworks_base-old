@@ -16,30 +16,28 @@
 
 package com.android.systemui.assist;
 
-import android.content.ComponentName;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.os.Build;
 import android.os.Handler;
 import android.os.SystemClock;
+import android.os.SystemProperties;
+import android.provider.DeviceConfig;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.app.AssistUtils;
 import com.android.internal.config.sysui.SystemUiDeviceConfigFlags;
-import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.Dependency;
-import com.android.systemui.DumpController;
-import com.android.systemui.Dumpable;
 import com.android.systemui.ScreenDecorations;
 import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.statusbar.phone.NavigationModeController;
 
-import java.io.FileDescriptor;
-import java.io.PrintWriter;
-import java.util.EnumMap;
-import java.util.Map;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
@@ -49,125 +47,98 @@ import java.util.function.Supplier;
  * Controls when visual handles for Assistant gesture affordance should be shown or hidden using an
  * {@link AssistHandleBehavior}.
  */
-public final class AssistHandleBehaviorController implements AssistHandleCallbacks, Dumpable {
+public final class AssistHandleBehaviorController implements AssistHandleCallbacks {
 
     private static final String TAG = "AssistHandleBehavior";
 
-    private static final long DEFAULT_SHOWN_FREQUENCY_THRESHOLD_MS = 0;
-    private static final long DEFAULT_SHOW_AND_GO_DURATION_MS = TimeUnit.SECONDS.toMillis(3);
+    private static final boolean IS_DEBUG_DEVICE =
+            Build.TYPE.toLowerCase(Locale.ROOT).contains("debug")
+                    || Build.TYPE.toLowerCase(Locale.ROOT).equals("eng");
 
-    /**
-     * This is the default behavior that will be used once the system is up. It will be set once the
-     * behavior dependencies are available. This ensures proper behavior lifecycle.
-     */
-    private static final AssistHandleBehavior DEFAULT_BEHAVIOR = AssistHandleBehavior.REMINDER_EXP;
+    private static final String SHOWN_FREQUENCY_THRESHOLD_KEY =
+            "ASSIST_HANDLES_SHOWN_FREQUENCY_THRESHOLD_MS";
+    private static final long DEFAULT_SHOWN_FREQUENCY_THRESHOLD_MS = TimeUnit.SECONDS.toMillis(10);
+    private static final String SHOW_AND_GO_DURATION_KEY = "ASSIST_HANDLES_SHOW_AND_GO_DURATION_MS";
+    private static final long DEFAULT_SHOW_AND_GO_DURATION_MS = TimeUnit.SECONDS.toMillis(3);
+    private static final String BEHAVIOR_KEY = "behavior";
+    private static final String SET_BEHAVIOR_ACTION =
+            "com.android.systemui.SET_ASSIST_HANDLE_BEHAVIOR";
 
     private final Context mContext;
-    private final AssistUtils mAssistUtils;
     private final Handler mHandler;
     private final Runnable mHideHandles = this::hideHandles;
-    private final Runnable mShowAndGo = this::showAndGoInternal;
     private final Supplier<ScreenDecorations> mScreenDecorationsSupplier;
-    private final PhenotypeHelper mPhenotypeHelper;
-    private final Map<AssistHandleBehavior, BehaviorController> mBehaviorMap =
-            new EnumMap<>(AssistHandleBehavior.class);
 
     private boolean mHandlesShowing = false;
     private long mHandlesLastHiddenAt;
-    /**
-     * This should always be initialized as {@link AssistHandleBehavior#OFF} to ensure proper
-     * behavior lifecycle.
-     */
     private AssistHandleBehavior mCurrentBehavior = AssistHandleBehavior.OFF;
     private boolean mInGesturalMode;
 
-    AssistHandleBehaviorController(Context context, AssistUtils assistUtils, Handler handler) {
-        this(
-                context,
-                assistUtils,
-                handler,
-                () -> SysUiServiceProvider.getComponent(context, ScreenDecorations.class),
-                new PhenotypeHelper(),
-                /* testBehavior = */ null);
+    AssistHandleBehaviorController(Context context, Handler handler) {
+        this(context, handler, () ->
+                SysUiServiceProvider.getComponent(context, ScreenDecorations.class));
     }
 
     @VisibleForTesting
     AssistHandleBehaviorController(
             Context context,
-            AssistUtils assistUtils,
             Handler handler,
-            Supplier<ScreenDecorations> screenDecorationsSupplier,
-            PhenotypeHelper phenotypeHelper,
-            @Nullable BehaviorController testBehavior) {
+            Supplier<ScreenDecorations> screenDecorationsSupplier) {
         mContext = context;
-        mAssistUtils = assistUtils;
         mHandler = handler;
         mScreenDecorationsSupplier = screenDecorationsSupplier;
-        mPhenotypeHelper = phenotypeHelper;
-        mBehaviorMap.put(AssistHandleBehavior.OFF, new AssistHandleOffBehavior());
-        mBehaviorMap.put(AssistHandleBehavior.LIKE_HOME, new AssistHandleLikeHomeBehavior());
-        mBehaviorMap.put(
-                AssistHandleBehavior.REMINDER_EXP,
-                new AssistHandleReminderExpBehavior(handler, phenotypeHelper));
-        if (testBehavior != null) {
-            mBehaviorMap.put(AssistHandleBehavior.TEST, testBehavior);
-        }
 
         mInGesturalMode = QuickStepContract.isGesturalMode(
                 Dependency.get(NavigationModeController.class)
                         .addListener(this::handleNavigationModeChange));
 
-        setBehavior(getBehaviorMode());
-        mPhenotypeHelper.addOnPropertiesChangedListener(
+        setBehavior(DeviceConfig.getString(
+                DeviceConfig.NAMESPACE_SYSTEMUI,
+                SystemUiDeviceConfigFlags.ASSIST_HANDLES_BEHAVIOR_MODE,
+                mCurrentBehavior.toString()));
+        DeviceConfig.addOnPropertyChangedListener(
+                DeviceConfig.NAMESPACE_SYSTEMUI,
                 mHandler::post,
-                (properties) -> {
-                    if (properties.getKeyset().contains(
-                            SystemUiDeviceConfigFlags.ASSIST_HANDLES_BEHAVIOR_MODE)) {
-                        setBehavior(properties.getString(
-                                SystemUiDeviceConfigFlags.ASSIST_HANDLES_BEHAVIOR_MODE, null));
+                (namespace, name, value) -> {
+                    if (SystemUiDeviceConfigFlags.ASSIST_HANDLES_BEHAVIOR_MODE.equals(name)) {
+                        setBehavior(value);
                     }
                 });
-        Dependency.get(DumpController.class).addListener(this);
+
+        if (IS_DEBUG_DEVICE) {
+            context.registerReceiver(new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    String behaviorString = intent.getExtras().getString(BEHAVIOR_KEY);
+                    try {
+                        setBehavior(AssistHandleBehavior.valueOf(behaviorString));
+                    } catch (IllegalArgumentException e) {
+                        Log.e(TAG, "Invalid behavior identifier: " + behaviorString);
+                    }
+                }
+            }, new IntentFilter(SET_BEHAVIOR_ACTION));
+        }
     }
 
-    @Override // AssistHandleCallbacks
+    @Override
     public void hide() {
-        clearPendingCommands();
+        mHandler.removeCallbacks(mHideHandles);
         mHandler.post(mHideHandles);
     }
 
-    @Override // AssistHandleCallbacks
+    @Override
     public void showAndGo() {
-        clearPendingCommands();
-        mHandler.post(mShowAndGo);
+        mHandler.removeCallbacks(mHideHandles);
+        mHandler.post(() -> {
+            maybeShowHandles(/* ignoreThreshold = */ false);
+            mHandler.postDelayed(mHideHandles, getShowAndGoDuration());
+        });
     }
 
-    private void showAndGoInternal() {
-        maybeShowHandles(/* ignoreThreshold = */ false);
-        mHandler.postDelayed(mHideHandles, getShowAndGoDuration());
-    }
-
-    @Override // AssistHandleCallbacks
-    public void showAndGoDelayed(long delayMs, boolean hideIfShowing) {
-        clearPendingCommands();
-        if (hideIfShowing) {
-            mHandler.post(mHideHandles);
-        }
-        mHandler.postDelayed(mShowAndGo, delayMs);
-    }
-
-    @Override // AssistHandleCallbacks
+    @Override
     public void showAndStay() {
-        clearPendingCommands();
+        mHandler.removeCallbacks(mHideHandles);
         mHandler.post(() -> maybeShowHandles(/* ignoreThreshold = */ true));
-    }
-
-    boolean areHandlesShowing() {
-        return mHandlesShowing;
-    }
-
-    void onAssistantGesturePerformed() {
-        mBehaviorMap.get(mCurrentBehavior).onAssistantGesturePerformed();
     }
 
     void setBehavior(AssistHandleBehavior behavior) {
@@ -175,14 +146,9 @@ public final class AssistHandleBehaviorController implements AssistHandleCallbac
             return;
         }
 
-        if (!mBehaviorMap.containsKey(behavior)) {
-            Log.e(TAG, "Unsupported behavior requested: " + behavior.toString());
-            return;
-        }
-
         if (mInGesturalMode) {
-            mBehaviorMap.get(mCurrentBehavior).onModeDeactivated();
-            mBehaviorMap.get(behavior).onModeActivated(mContext, /* callbacks = */ this);
+            mCurrentBehavior.getController().onModeDeactivated();
+            behavior.getController().onModeActivated(mContext, this);
         }
 
         mCurrentBehavior = behavior;
@@ -196,30 +162,21 @@ public final class AssistHandleBehaviorController implements AssistHandleCallbac
         }
     }
 
-    private boolean handlesUnblocked(boolean ignoreThreshold) {
-        long timeSinceHidden = SystemClock.elapsedRealtime() - mHandlesLastHiddenAt;
-        boolean notThrottled = ignoreThreshold || timeSinceHidden >= getShownFrequencyThreshold();
-        ComponentName assistantComponent =
-                mAssistUtils.getAssistComponentForUser(KeyguardUpdateMonitor.getCurrentUser());
-        return notThrottled && assistantComponent != null;
-    }
-
     private long getShownFrequencyThreshold() {
-        return mPhenotypeHelper.getLong(
+        long configValue = DeviceConfig.getLong(
+                DeviceConfig.NAMESPACE_SYSTEMUI,
                 SystemUiDeviceConfigFlags.ASSIST_HANDLES_SHOWN_FREQUENCY_THRESHOLD_MS,
                 DEFAULT_SHOWN_FREQUENCY_THRESHOLD_MS);
+        return SystemProperties.getLong(
+                SHOWN_FREQUENCY_THRESHOLD_KEY, configValue);
     }
 
     private long getShowAndGoDuration() {
-        return mPhenotypeHelper.getLong(
+        long configValue = DeviceConfig.getLong(
+                DeviceConfig.NAMESPACE_SYSTEMUI,
                 SystemUiDeviceConfigFlags.ASSIST_HANDLES_SHOW_AND_GO_DURATION_MS,
                 DEFAULT_SHOW_AND_GO_DURATION_MS);
-    }
-
-    private String getBehaviorMode() {
-        return mPhenotypeHelper.getString(
-                SystemUiDeviceConfigFlags.ASSIST_HANDLES_BEHAVIOR_MODE,
-                DEFAULT_BEHAVIOR.toString());
+        return SystemProperties.getLong(SHOW_AND_GO_DURATION_KEY, configValue);
     }
 
     private void maybeShowHandles(boolean ignoreThreshold) {
@@ -227,12 +184,13 @@ public final class AssistHandleBehaviorController implements AssistHandleCallbac
             return;
         }
 
-        if (handlesUnblocked(ignoreThreshold)) {
+        long timeSinceHidden = SystemClock.elapsedRealtime() - mHandlesLastHiddenAt;
+        if (ignoreThreshold || timeSinceHidden > getShownFrequencyThreshold()) {
+            mHandlesShowing = true;
             ScreenDecorations screenDecorations = mScreenDecorationsSupplier.get();
             if (screenDecorations == null) {
                 Log.w(TAG, "Couldn't show handles, ScreenDecorations unavailable");
             } else {
-                mHandlesShowing = true;
                 screenDecorations.setAssistHintVisible(true);
             }
         }
@@ -261,16 +219,11 @@ public final class AssistHandleBehaviorController implements AssistHandleCallbac
 
         mInGesturalMode = inGesturalMode;
         if (mInGesturalMode) {
-            mBehaviorMap.get(mCurrentBehavior).onModeActivated(mContext, /* callbacks = */ this);
+            mCurrentBehavior.getController().onModeActivated(mContext, this);
         } else {
-            mBehaviorMap.get(mCurrentBehavior).onModeDeactivated();
+            mCurrentBehavior.getController().onModeDeactivated();
             hide();
         }
-    }
-
-    private void clearPendingCommands() {
-        mHandler.removeCallbacks(mHideHandles);
-        mHandler.removeCallbacks(mShowAndGo);
     }
 
     @VisibleForTesting
@@ -278,36 +231,8 @@ public final class AssistHandleBehaviorController implements AssistHandleCallbac
         mInGesturalMode = inGesturalMode;
     }
 
-    @Override // Dumpable
-    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        pw.println("Current AssistHandleBehaviorController State:");
-
-        pw.println("   mHandlesShowing=" + mHandlesShowing);
-        pw.println("   mHandlesLastHiddenAt=" + mHandlesLastHiddenAt);
-        pw.println("   mInGesturalMode=" + mInGesturalMode);
-
-        pw.println("   Phenotype Flags:");
-        pw.println("      "
-                + SystemUiDeviceConfigFlags.ASSIST_HANDLES_SHOW_AND_GO_DURATION_MS
-                + "="
-                + getShowAndGoDuration());
-        pw.println("      "
-                + SystemUiDeviceConfigFlags.ASSIST_HANDLES_SHOWN_FREQUENCY_THRESHOLD_MS
-                + "="
-                + getShownFrequencyThreshold());
-        pw.println("      "
-                + SystemUiDeviceConfigFlags.ASSIST_HANDLES_BEHAVIOR_MODE
-                + "="
-                + getBehaviorMode());
-
-        pw.println("   mCurrentBehavior=" + mCurrentBehavior.toString());
-        mBehaviorMap.get(mCurrentBehavior).dump(pw, "   ");
-    }
-
     interface BehaviorController {
         void onModeActivated(Context context, AssistHandleCallbacks callbacks);
-        default void onModeDeactivated() {}
-        default void onAssistantGesturePerformed() {}
-        default void dump(PrintWriter pw, String prefix) {}
+        void onModeDeactivated();
     }
 }

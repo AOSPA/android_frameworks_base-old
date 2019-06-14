@@ -278,7 +278,7 @@ public abstract class ActivityManagerInternal {
             String resolvedType, boolean fgRequired, String callingPackage, int userId,
             boolean allowBackgroundActivityStarts) throws TransactionTooLargeException;
 
-    public abstract void disconnectActivityFromServices(Object connectionHolder, Object conns);
+    public abstract void disconnectActivityFromServices(Object connectionHolder);
     public abstract void cleanUpServices(int userId, ComponentName component, Intent baseIntent);
     public abstract ActivityInfo getActivityInfoForUser(ActivityInfo aInfo, int userId);
     public abstract void ensureBootCompleted();
@@ -286,6 +286,7 @@ public abstract class ActivityManagerInternal {
     public abstract boolean isActivityStartsLoggingEnabled();
     /** Returns true if the background activity starts is enabled. */
     public abstract boolean isBackgroundActivityStartsEnabled();
+    public abstract boolean isPackageNameWhitelistedForBgActivityStarts(String packageName);
     public abstract void reportCurKeyguardUsageEvent(boolean keyguardShowing);
 
     /** Input dispatch timeout to a window, start the ANR process. */

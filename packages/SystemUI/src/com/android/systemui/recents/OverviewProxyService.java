@@ -41,6 +41,7 @@ import android.graphics.Region;
 import android.hardware.input.InputManager;
 import android.os.Binder;
 import android.os.Bundle;
+import android.os.Debug;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -68,7 +69,6 @@ import com.android.systemui.statusbar.phone.NavigationBarFragment;
 import com.android.systemui.statusbar.phone.NavigationBarView;
 import com.android.systemui.statusbar.phone.NavigationModeController;
 import com.android.systemui.statusbar.phone.StatusBar;
-import com.android.systemui.statusbar.phone.StatusBarWindowController;
 import com.android.systemui.statusbar.policy.CallbackController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
@@ -516,8 +516,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         final NavigationBarController navBar = Dependency.get(NavigationBarController.class);
         final NavigationBarFragment navBarFragment = navBar.getDefaultNavigationBarFragment();
         final NavigationBarView navBarView = navBar.getNavigationBarView(mContext.getDisplayId());
-        final StatusBarWindowController statusBarController =
-                Dependency.get(StatusBarWindowController.class);
+        final StatusBar statusBar = SysUiServiceProvider.getComponent(mContext, StatusBar.class);
 
         mSysUiStateFlags = 0;
         if (navBarFragment != null) {
@@ -526,8 +525,8 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         if (navBarView != null) {
             navBarView.updateSystemUiStateFlags();
         }
-        if (statusBarController != null) {
-            statusBarController.updateSystemUiStateFlags();
+        if (statusBar != null) {
+            statusBar.updateSystemUiStateFlags();
         }
         notifySystemUiStateFlags(mSysUiStateFlags);
     }

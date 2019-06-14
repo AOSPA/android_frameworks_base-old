@@ -283,7 +283,6 @@ private:
     FRIEND_TEST(MetricActivationE2eTest, TestCountMetric);
     FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithOneDeactivation);
     FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithTwoDeactivations);
-    FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithSameDeactivation);
     FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithTwoMetricsTwoDeactivations);
 
     FRIEND_TEST(StatsLogProcessorTest, TestActiveConfigMetricDiskWriteRead);
@@ -292,13 +291,6 @@ private:
     FRIEND_TEST(StatsLogProcessorTest,
             TestActivationOnBootMultipleActivationsDifferentActivationTypes);
     FRIEND_TEST(StatsLogProcessorTest, TestActivationsPersistAcrossSystemServerRestart);
-
-    FRIEND_TEST(DurationMetricE2eTest, TestOneBucket);
-    FRIEND_TEST(DurationMetricE2eTest, TestTwoBuckets);
-    FRIEND_TEST(DurationMetricE2eTest, TestWithActivation);
-    FRIEND_TEST(DurationMetricE2eTest, TestWithCondition);
-    FRIEND_TEST(DurationMetricE2eTest, TestWithSlicedCondition);
-    FRIEND_TEST(DurationMetricE2eTest, TestWithActivationAndSlicedCondition);
 };
 
 }  // namespace statsd

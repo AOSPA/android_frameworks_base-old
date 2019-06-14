@@ -108,12 +108,6 @@ import java.util.concurrent.TimeUnit;
  * must be called with the mInMemoryLock, xxxDMLocked suffix means the method
  * must be called with the mOnDiskLock and mInMemoryLock locks acquired in that
  * exact order.
- * <p>
- * INITIALIZATION: We can initialize persistence only after the system is ready
- * as we need to check the optional configuration override from the settings
- * database which is not initialized at the time the app ops service is created.
- * This means that all entry points that touch persistence should be short
- * circuited via isPersistenceInitialized() check.
  */
 // TODO (bug:122218838): Make sure we handle start of epoch time
 // TODO (bug:122218838): Validate changed time is handled correctly
@@ -183,33 +177,14 @@ final class HistoricalRegistry {
 
     // Object managing persistence (read/write)
     @GuardedBy("mOnDiskLock")
-    private Persistence mPersistence;
+    private Persistence mPersistence = new Persistence(mBaseSnapshotInterval,
+            mIntervalCompressionMultiplier);
 
     HistoricalRegistry(@NonNull Object lock) {
         mInMemoryLock = lock;
-    }
-
-    void systemReady(@NonNull ContentResolver resolver) {
-        final Uri uri = Settings.Global.getUriFor(Settings.Global.APPOP_HISTORY_PARAMETERS);
-        resolver.registerContentObserver(uri, false, new ContentObserver(
-                FgThread.getHandler()) {
-            @Override
-            public void onChange(boolean selfChange) {
-                updateParametersFromSetting(resolver);
-            }
-        });
-
-        updateParametersFromSetting(resolver);
-
-        synchronized (mOnDiskLock) {
-            synchronized (mInMemoryLock) {
-                if (mMode != AppOpsManager.HISTORICAL_MODE_DISABLED) {
-                    // Can be uninitialized if there is no config in the settings table.
-                    if (!isPersistenceInitializedMLocked()) {
-                        mPersistence = new Persistence(mBaseSnapshotInterval,
-                                mIntervalCompressionMultiplier);
-                    }
-
+        if (mMode != AppOpsManager.HISTORICAL_MODE_DISABLED) {
+            synchronized (mOnDiskLock) {
+                synchronized (mInMemoryLock) {
                     // When starting always adjust history to now.
                     final long lastPersistTimeMills =
                             mPersistence.getLastPersistTimeMillisDLocked();
@@ -222,8 +197,16 @@ final class HistoricalRegistry {
         }
     }
 
-    private boolean isPersistenceInitializedMLocked() {
-        return mPersistence != null;
+    void systemReady(@NonNull ContentResolver resolver) {
+        updateParametersFromSetting(resolver);
+        final Uri uri = Settings.Global.getUriFor(Settings.Global.APPOP_HISTORY_PARAMETERS);
+        resolver.registerContentObserver(uri, false, new ContentObserver(
+                FgThread.getHandler()) {
+            @Override
+            public void onChange(boolean selfChange) {
+                updateParametersFromSetting(resolver);
+            }
+        });
     }
 
     private void updateParametersFromSetting(@NonNull ContentResolver resolver) {
@@ -291,11 +274,6 @@ final class HistoricalRegistry {
                 makeRelativeToEpochStart(currentOps, nowMillis);
                 currentOps.accept(visitor);
 
-                if(isPersistenceInitializedMLocked()) {
-                    Slog.e(LOG_TAG, "Interaction before persistence initialized");
-                    return;
-                }
-
                 final List<HistoricalOps> ops = mPersistence.readHistoryDLocked();
                 if (ops != null) {
                     // TODO (bug:122218838): Make sure this is properly dumped
@@ -324,21 +302,12 @@ final class HistoricalRegistry {
     void getHistoricalOpsFromDiskRaw(int uid, @NonNull String packageName,
             @Nullable String[] opNames, long beginTimeMillis, long endTimeMillis,
             @OpFlags int flags, @NonNull RemoteCallback callback) {
-        synchronized (mOnDiskLock) {
-            synchronized (mInMemoryLock) {
-                if (!isPersistenceInitializedMLocked()) {
-                    Slog.e(LOG_TAG, "Interaction before persistence initialized");
-                    callback.sendResult(new Bundle());
-                    return;
-                }
-                final HistoricalOps result = new HistoricalOps(beginTimeMillis, endTimeMillis);
-                mPersistence.collectHistoricalOpsDLocked(result, uid, packageName, opNames,
-                        beginTimeMillis, endTimeMillis, flags);
-                final Bundle payload = new Bundle();
-                payload.putParcelable(AppOpsManager.KEY_HISTORICAL_OPS, result);
-                callback.sendResult(payload);
-            }
-        }
+        final HistoricalOps result = new HistoricalOps(beginTimeMillis, endTimeMillis);
+        mPersistence.collectHistoricalOpsDLocked(result, uid, packageName, opNames,
+                beginTimeMillis, endTimeMillis, flags);
+        final Bundle payload = new Bundle();
+        payload.putParcelable(AppOpsManager.KEY_HISTORICAL_OPS, result);
+        callback.sendResult(payload);
     }
 
     void getHistoricalOps(int uid, @NonNull String packageName,
@@ -362,12 +331,6 @@ final class HistoricalRegistry {
             boolean collectOpsFromDisk;
 
             synchronized (mInMemoryLock) {
-                if (!isPersistenceInitializedMLocked()) {
-                    Slog.e(LOG_TAG, "Interaction before persistence initialized");
-                    callback.sendResult(new Bundle());
-                    return;
-                }
-
                 currentOps = getUpdatedPendingHistoricalOpsMLocked(currentTimeMillis);
                 if (!(inMemoryAdjBeginTimeMillis >= currentOps.getEndTimeMillis()
                         || inMemoryAdjEndTimeMillis <= currentOps.getBeginTimeMillis())) {
@@ -411,10 +374,6 @@ final class HistoricalRegistry {
             @UidState int uidState, @OpFlags int flags) {
         synchronized (mInMemoryLock) {
             if (mMode == AppOpsManager.HISTORICAL_MODE_ENABLED_ACTIVE) {
-                if (!isPersistenceInitializedMLocked()) {
-                    Slog.e(LOG_TAG, "Interaction before persistence initialized");
-                    return;
-                }
                 getUpdatedPendingHistoricalOpsMLocked(System.currentTimeMillis())
                         .increaseAccessCount(op, uid, packageName, uidState, flags, 1);
             }
@@ -425,10 +384,6 @@ final class HistoricalRegistry {
             @UidState int uidState, @OpFlags int flags) {
         synchronized (mInMemoryLock) {
             if (mMode == AppOpsManager.HISTORICAL_MODE_ENABLED_ACTIVE) {
-                if (!isPersistenceInitializedMLocked()) {
-                    Slog.e(LOG_TAG, "Interaction before persistence initialized");
-                    return;
-                }
                 getUpdatedPendingHistoricalOpsMLocked(System.currentTimeMillis())
                         .increaseRejectCount(op, uid, packageName, uidState, flags, 1);
             }
@@ -439,10 +394,6 @@ final class HistoricalRegistry {
             @UidState int uidState, @OpFlags int flags, long increment) {
         synchronized (mInMemoryLock) {
             if (mMode == AppOpsManager.HISTORICAL_MODE_ENABLED_ACTIVE) {
-                if (!isPersistenceInitializedMLocked()) {
-                    Slog.e(LOG_TAG, "Interaction before persistence initialized");
-                    return;
-                }
                 getUpdatedPendingHistoricalOpsMLocked(System.currentTimeMillis())
                         .increaseAccessDuration(op, uid, packageName, uidState, flags, increment);
             }
@@ -453,8 +404,6 @@ final class HistoricalRegistry {
             long baseSnapshotInterval, long intervalCompressionMultiplier) {
         synchronized (mOnDiskLock) {
             synchronized (mInMemoryLock) {
-                // NOTE: We allow this call if persistence is not initialized as
-                // it is a part of the persistence initialization process.
                 boolean resampleHistory = false;
                 Slog.i(LOG_TAG, "New history parameters: mode:"
                         + AppOpsManager.historicalModeToString(mMode) + " baseSnapshotInterval:"
@@ -463,7 +412,7 @@ final class HistoricalRegistry {
                 if (mMode != mode) {
                     mMode = mode;
                     if (mMode == AppOpsManager.HISTORICAL_MODE_DISABLED) {
-                        clearHistoryOnDiskDLocked();
+                        clearHistoryOnDiskLocked();
                     }
                 }
                 if (mBaseSnapshotInterval != baseSnapshotInterval) {
@@ -484,10 +433,6 @@ final class HistoricalRegistry {
     void offsetHistory(long offsetMillis) {
         synchronized (mOnDiskLock) {
             synchronized (mInMemoryLock) {
-                if (!isPersistenceInitializedMLocked()) {
-                    Slog.e(LOG_TAG, "Interaction before persistence initialized");
-                    return;
-                }
                 final List<HistoricalOps> history = mPersistence.readHistoryDLocked();
                 clearHistory();
                 if (history != null) {
@@ -508,10 +453,6 @@ final class HistoricalRegistry {
     void addHistoricalOps(HistoricalOps ops) {
         final List<HistoricalOps> pendingWrites;
         synchronized (mInMemoryLock) {
-            if (!isPersistenceInitializedMLocked()) {
-                Slog.e(LOG_TAG, "Interaction before persistence initialized");
-                return;
-            }
             // The history files start from mBaseSnapshotInterval - take this into account.
             ops.offsetBeginAndEndTime(mBaseSnapshotInterval);
             mPendingWrites.offerFirst(ops);
@@ -527,10 +468,6 @@ final class HistoricalRegistry {
     }
 
     void resetHistoryParameters() {
-        if (!isPersistenceInitializedMLocked()) {
-            Slog.e(LOG_TAG, "Interaction before persistence initialized");
-            return;
-        }
         setHistoryParameters(DEFAULT_MODE, DEFAULT_SNAPSHOT_INTERVAL_MILLIS,
                 DEFAULT_COMPRESSION_STEP);
     }
@@ -538,10 +475,6 @@ final class HistoricalRegistry {
     void clearHistory(int uid, String packageName) {
         synchronized (mOnDiskLock) {
             synchronized (mInMemoryLock) {
-                if (!isPersistenceInitializedMLocked()) {
-                    Slog.e(LOG_TAG, "Interaction before persistence initialized");
-                    return;
-                }
                 if (mMode != AppOpsManager.HISTORICAL_MODE_ENABLED_ACTIVE) {
                     return;
                 }
@@ -560,24 +493,18 @@ final class HistoricalRegistry {
 
     void clearHistory() {
         synchronized (mOnDiskLock) {
-            synchronized (mInMemoryLock) {
-                if (!isPersistenceInitializedMLocked()) {
-                    Slog.e(LOG_TAG, "Interaction before persistence initialized");
-                    return;
-                }
-                clearHistoryOnDiskDLocked();
-            }
+            clearHistoryOnDiskLocked();
         }
     }
 
-    private void clearHistoryOnDiskDLocked() {
+    private void clearHistoryOnDiskLocked() {
         BackgroundThread.getHandler().removeMessages(MSG_WRITE_PENDING_HISTORY);
         synchronized (mInMemoryLock) {
             mCurrentHistoricalOps = null;
             mNextPersistDueTimeMillis = System.currentTimeMillis();
             mPendingWrites.clear();
         }
-        Persistence.clearHistoryDLocked();
+        mPersistence.clearHistoryDLocked();
     }
 
     private @NonNull HistoricalOps getUpdatedPendingHistoricalOpsMLocked(long now) {
@@ -712,7 +639,7 @@ final class HistoricalRegistry {
             mIntervalCompressionMultiplier = intervalCompressionMultiplier;
         }
 
-        private static final AtomicDirectory sHistoricalAppOpsDir = new AtomicDirectory(
+        private final AtomicDirectory mHistoricalAppOpsDir = new AtomicDirectory(
                 new File(new File(Environment.getDataSystemDirectory(), "appops"), "history"));
 
         private File generateFile(@NonNull File baseDir, int depth) {
@@ -736,8 +663,8 @@ final class HistoricalRegistry {
             persistHistoricalOpsDLocked(historicalOps);
         }
 
-        static void clearHistoryDLocked() {
-            sHistoricalAppOpsDir.delete();
+        void clearHistoryDLocked() {
+            mHistoricalAppOpsDir.delete();
         }
 
         void persistHistoricalOpsDLocked(@NonNull List<HistoricalOps> ops) {
@@ -746,8 +673,8 @@ final class HistoricalRegistry {
                 enforceOpsWellFormed(ops);
             }
             try {
-                final File newBaseDir = sHistoricalAppOpsDir.startWrite();
-                final File oldBaseDir = sHistoricalAppOpsDir.getBackupDirectory();
+                final File newBaseDir = mHistoricalAppOpsDir.startWrite();
+                final File oldBaseDir = mHistoricalAppOpsDir.getBackupDirectory();
                 final HistoricalFilesInvariant filesInvariant;
                 if (DEBUG) {
                     filesInvariant = new HistoricalFilesInvariant();
@@ -759,10 +686,10 @@ final class HistoricalRegistry {
                 if (DEBUG) {
                     filesInvariant.stopTracking(newBaseDir);
                 }
-                sHistoricalAppOpsDir.finishWrite();
+                mHistoricalAppOpsDir.finishWrite();
             } catch (Throwable t) {
                 wtf("Failed to write historical app ops, restoring backup", t, null);
-                sHistoricalAppOpsDir.failWrite();
+                mHistoricalAppOpsDir.failWrite();
             }
         }
 
@@ -788,36 +715,22 @@ final class HistoricalRegistry {
         long getLastPersistTimeMillisDLocked() {
             File baseDir = null;
             try {
-                baseDir = sHistoricalAppOpsDir.startRead();
+                baseDir = mHistoricalAppOpsDir.startRead();
                 final File[] files = baseDir.listFiles();
                 if (files != null && files.length > 0) {
-                    File shortestFile = null;
-                    for (File candidate : files) {
-                        final String candidateName = candidate.getName();
-                        if (!candidateName.endsWith(HISTORY_FILE_SUFFIX)) {
-                            continue;
+                    final Set<File> historyFiles = new ArraySet<>();
+                    Collections.addAll(historyFiles, files);
+                    for (int i = 0;; i++) {
+                        final File file = generateFile(baseDir, i);
+                        if (historyFiles.contains(file)) {
+                            return file.lastModified();
                         }
-                        if (shortestFile == null) {
-                            shortestFile = candidate;
-                        } else if (candidateName.length() < shortestFile.getName().length()) {
-                            shortestFile = candidate;
-                        }
-                    }
-                    if (shortestFile == null) {
-                        return 0;
-                    }
-                    final String shortestNameNoExtension = shortestFile.getName()
-                            .replace(HISTORY_FILE_SUFFIX, "");
-                    try {
-                        return Long.parseLong(shortestNameNoExtension);
-                    } catch (NumberFormatException e) {
-                        return 0;
                     }
                 }
-                sHistoricalAppOpsDir.finishRead();
+                mHistoricalAppOpsDir.finishRead();
             } catch (Throwable e) {
                 wtf("Error reading historical app ops. Deleting history.", e, baseDir);
-                sHistoricalAppOpsDir.delete();
+                mHistoricalAppOpsDir.delete();
             }
             return 0;
         }
@@ -842,7 +755,7 @@ final class HistoricalRegistry {
                 long filterBeginTimeMillis, long filterEndTimeMillis, @OpFlags int filterFlags) {
             File baseDir = null;
             try {
-                baseDir = sHistoricalAppOpsDir.startRead();
+                baseDir = mHistoricalAppOpsDir.startRead();
                 final HistoricalFilesInvariant filesInvariant;
                 if (DEBUG) {
                     filesInvariant = new HistoricalFilesInvariant();
@@ -857,11 +770,11 @@ final class HistoricalRegistry {
                 if (DEBUG) {
                     filesInvariant.stopTracking(baseDir);
                 }
-                sHistoricalAppOpsDir.finishRead();
+                mHistoricalAppOpsDir.finishRead();
                 return ops;
             } catch (Throwable t) {
                 wtf("Error reading historical app ops. Deleting history.", t, baseDir);
-                sHistoricalAppOpsDir.delete();
+                mHistoricalAppOpsDir.delete();
             }
             return null;
         }
@@ -1328,7 +1241,7 @@ final class HistoricalRegistry {
 
         private void writeHistoricalOpsDLocked(@Nullable List<HistoricalOps> allOps,
                 long intervalOverflowMillis, @NonNull File file) throws IOException {
-            final FileOutputStream output = sHistoricalAppOpsDir.openWrite(file);
+            final FileOutputStream output = mHistoricalAppOpsDir.openWrite(file);
             try {
                 final XmlSerializer serializer = Xml.newSerializer();
                 serializer.setOutput(output, StandardCharsets.UTF_8.name());
@@ -1350,9 +1263,9 @@ final class HistoricalRegistry {
                 }
                 serializer.endTag(null, TAG_HISTORY);
                 serializer.endDocument();
-                sHistoricalAppOpsDir.closeWrite(output);
+                mHistoricalAppOpsDir.closeWrite(output);
             } catch (IOException e) {
-                sHistoricalAppOpsDir.failWrite(output);
+                mHistoricalAppOpsDir.failWrite(output);
                 throw e;
             }
         }

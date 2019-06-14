@@ -39,7 +39,7 @@ public final class SQLiteDebug {
      *
      * {@hide}
      */
-    public static final class NoPreloadHolder {
+    public static final class Consts {
         /**
          * Controls the printing of informational SQL log messages.
          *
@@ -103,9 +103,8 @@ public final class SQLiteDebug {
      */
     public static boolean shouldLogSlowQuery(long elapsedTimeMillis) {
         final int slowQueryMillis = Math.min(
-                SystemProperties.getInt(NoPreloadHolder.SLOW_QUERY_THRESHOLD_PROP,
-                        Integer.MAX_VALUE),
-                SystemProperties.getInt(NoPreloadHolder.SLOW_QUERY_THRESHOLD_UID_PROP,
+                SystemProperties.getInt(Consts.SLOW_QUERY_THRESHOLD_PROP, Integer.MAX_VALUE),
+                SystemProperties.getInt(Consts.SLOW_QUERY_THRESHOLD_UID_PROP,
                         Integer.MAX_VALUE));
         return elapsedTimeMillis >= slowQueryMillis;
     }

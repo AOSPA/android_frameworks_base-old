@@ -201,8 +201,6 @@ public class DisplayPolicy {
     private static final int NAV_BAR_OPAQUE_WHEN_FREEFORM_OR_DOCKED = 0;
     // Nav bar is always translucent when the freeform stack is visible, otherwise always opaque.
     private static final int NAV_BAR_TRANSLUCENT_WHEN_FREEFORM_OPAQUE_OTHERWISE = 1;
-    // Nav bar is never forced opaque.
-    private static final int NAV_BAR_FORCE_TRANSPARENT = 2;
 
     /**
      * These are the system UI flags that, when changing, can cause the layout
@@ -2812,9 +2810,9 @@ public class DisplayPolicy {
                 res.getBoolean(R.bool.config_navBarAlwaysShowOnSideEdgeGesture);
 
         // This should calculate how much above the frame we accept gestures.
-        mBottomGestureAdditionalInset =
+        mBottomGestureAdditionalInset = Math.max(0,
                 res.getDimensionPixelSize(R.dimen.navigation_bar_gesture_height)
-                        - getNavigationBarFrameHeight(portraitRotation, uiMode);
+                        - getNavigationBarFrameHeight(portraitRotation, uiMode));
 
         updateConfigurationAndScreenSizeDependentBehaviors();
         mWindowOutsetBottom = ScreenShapeHelper.getWindowOutsetBottomPx(mContext.getResources());
@@ -3380,10 +3378,8 @@ public class DisplayPolicy {
                 : mTopFullscreenOpaqueWindowState;
         vis = mStatusBarController.applyTranslucentFlagLw(fullscreenTransWin, vis, oldVis);
         vis = mNavigationBarController.applyTranslucentFlagLw(fullscreenTransWin, vis, oldVis);
-        int dockedVis = mStatusBarController.applyTranslucentFlagLw(
+        final int dockedVis = mStatusBarController.applyTranslucentFlagLw(
                 mTopDockedOpaqueWindowState, 0, 0);
-        dockedVis = mNavigationBarController.applyTranslucentFlagLw(
-                mTopDockedOpaqueWindowState, dockedVis, 0);
 
         final boolean fullscreenDrawsStatusBarBackground =
                 drawsStatusBarBackground(vis, mTopFullscreenOpaqueWindowState);
@@ -3391,8 +3387,6 @@ public class DisplayPolicy {
                 drawsStatusBarBackground(dockedVis, mTopDockedOpaqueWindowState);
         final boolean fullscreenDrawsNavBarBackground =
                 drawsNavigationBarBackground(vis, mTopFullscreenOpaqueWindowState);
-        final boolean dockedDrawsNavigationBarBackground =
-                drawsNavigationBarBackground(dockedVis, mTopDockedOpaqueWindowState);
 
         // prevent status bar interaction from clearing certain flags
         int type = win.getAttrs().type;
@@ -3417,7 +3411,7 @@ public class DisplayPolicy {
         }
 
         vis = configureNavBarOpacity(vis, dockedStackVisible, freeformStackVisible, resizing,
-                fullscreenDrawsNavBarBackground, dockedDrawsNavigationBarBackground);
+                fullscreenDrawsNavBarBackground);
 
         // update status bar
         boolean immersiveSticky =
@@ -3535,14 +3529,8 @@ public class DisplayPolicy {
      */
     private int configureNavBarOpacity(int visibility, boolean dockedStackVisible,
             boolean freeformStackVisible, boolean isDockedDividerResizing,
-            boolean fullscreenDrawsBackground, boolean dockedDrawsNavigationBarBackground) {
-        if (mNavBarOpacityMode == NAV_BAR_FORCE_TRANSPARENT) {
-            if (fullscreenDrawsBackground && dockedDrawsNavigationBarBackground) {
-                visibility = setNavBarTransparentFlag(visibility);
-            } else if (dockedStackVisible) {
-                visibility = setNavBarOpaqueFlag(visibility);
-            }
-        } else if (mNavBarOpacityMode == NAV_BAR_OPAQUE_WHEN_FREEFORM_OR_DOCKED) {
+            boolean fullscreenDrawsBackground) {
+        if (mNavBarOpacityMode == NAV_BAR_OPAQUE_WHEN_FREEFORM_OR_DOCKED) {
             if (dockedStackVisible || freeformStackVisible || isDockedDividerResizing) {
                 visibility = setNavBarOpaqueFlag(visibility);
             } else if (fullscreenDrawsBackground) {

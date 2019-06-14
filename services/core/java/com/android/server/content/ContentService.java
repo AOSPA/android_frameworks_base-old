@@ -22,7 +22,6 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
-import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.job.JobInfo;
 import android.content.BroadcastReceiver;
@@ -57,7 +56,6 @@ import android.os.ShellCallback;
 import android.os.UserHandle;
 import android.text.TextUtils;
 import android.util.ArrayMap;
-import android.util.ArraySet;
 import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
@@ -65,7 +63,6 @@ import android.util.SparseArray;
 import android.util.SparseIntArray;
 
 import com.android.internal.annotations.GuardedBy;
-import com.android.internal.os.BinderDeathDispatcher;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
@@ -85,9 +82,6 @@ import java.util.List;
 public final class ContentService extends IContentService.Stub {
     static final String TAG = "ContentService";
     static final boolean DEBUG = false;
-
-    /** Do a WTF if a single observer is registered more than this times. */
-    private static final int TOO_MANY_OBSERVERS_THRESHOLD = 1000;
 
     public static class Lifecycle extends SystemService {
         private ContentService mService;
@@ -140,12 +134,6 @@ public final class ContentService extends IContentService.Stub {
 
     private SyncManager mSyncManager = null;
     private final Object mSyncManagerLock = new Object();
-
-    private static final BinderDeathDispatcher<IContentObserver> sObserverDeathDispatcher =
-            new BinderDeathDispatcher<>();
-
-    @GuardedBy("sObserverLeakDetectedUid")
-    private static final ArraySet<Integer> sObserverLeakDetectedUid = new ArraySet<>(0);
 
     /**
      * Map from userId to providerPackageName to [clientPackageName, uri] to
@@ -248,13 +236,6 @@ public final class ContentService extends IContentService.Stub {
                 pw.println();
                 pw.print(" Total number of nodes: "); pw.println(counts[0]);
                 pw.print(" Total number of observers: "); pw.println(counts[1]);
-
-                sObserverDeathDispatcher.dump(pw, " ");
-            }
-            synchronized (sObserverLeakDetectedUid) {
-                pw.println();
-                pw.print("Observer leaking UIDs: ");
-                pw.println(sObserverLeakDetectedUid.toString());
             }
 
             synchronized (mCache) {
@@ -1364,40 +1345,18 @@ public final class ContentService extends IContentService.Stub {
             private final Object observersLock;
 
             public ObserverEntry(IContentObserver o, boolean n, Object observersLock,
-                                 int _uid, int _pid, int _userHandle, Uri uri) {
+                                 int _uid, int _pid, int _userHandle) {
                 this.observersLock = observersLock;
                 observer = o;
                 uid = _uid;
                 pid = _pid;
                 userHandle = _userHandle;
                 notifyForDescendants = n;
-
-                final int entries = sObserverDeathDispatcher.linkToDeath(observer, this);
-                if (entries == -1) {
+                try {
+                    observer.asBinder().linkToDeath(this, 0);
+                } catch (RemoteException e) {
                     binderDied();
-                } else if (entries == TOO_MANY_OBSERVERS_THRESHOLD) {
-                    boolean alreadyDetected;
-
-                    synchronized (sObserverLeakDetectedUid) {
-                        alreadyDetected = sObserverLeakDetectedUid.contains(uid);
-                        if (!alreadyDetected) {
-                            sObserverLeakDetectedUid.add(uid);
-                        }
-                    }
-                    if (!alreadyDetected) {
-                        String caller = null;
-                        try {
-                            caller = ArrayUtils.firstOrNull(AppGlobals.getPackageManager()
-                                    .getPackagesForUid(uid));
-                        } catch (RemoteException ignore) {
-                        }
-                        Slog.wtf(TAG, "Observer registered too many times. Leak? cpid=" + pid
-                                + " cuid=" + uid
-                                + " cpkg=" + caller
-                                + " url=" + uri);
-                    }
                 }
-
             }
 
             @Override
@@ -1495,7 +1454,7 @@ public final class ContentService extends IContentService.Stub {
             // If this is the leaf node add the observer
             if (index == countUriSegments(uri)) {
                 mObservers.add(new ObserverEntry(observer, notifyForDescendants, observersLock,
-                        uid, pid, userHandle, uri));
+                        uid, pid, userHandle));
                 return;
             }
 
@@ -1539,7 +1498,7 @@ public final class ContentService extends IContentService.Stub {
                 if (entry.observer.asBinder() == observerBinder) {
                     mObservers.remove(i);
                     // We no longer need to listen for death notifications. Remove it.
-                    sObserverDeathDispatcher.unlinkToDeath(observer, entry);
+                    observerBinder.unlinkToDeath(entry, 0);
                     break;
                 }
             }

@@ -68,13 +68,9 @@ struct InputOverlay {
 };
 
 bool VendorIsQOrLater() {
-  constexpr int kQSdkVersion = 29;
-  constexpr int kBase = 10;
-  std::string version_prop = android::base::GetProperty("ro.vndk.version", "29");
-  int version = strtol(version_prop.data(), nullptr, kBase);
-
-  // If the string cannot be parsed, it is a development sdk codename.
-  return version >= kQSdkVersion || version == 0;
+  // STOPSHIP(b/119390857): Check api version once Q sdk version is finalized
+  std::string version = android::base::GetProperty("ro.vndk.version", "Q");
+  return version == "Q" || version == "q";
 }
 
 Result<std::unique_ptr<std::vector<std::string>>> FindApkFiles(const std::vector<std::string>& dirs,

@@ -100,7 +100,6 @@ import com.android.systemui.util.InjectionInflationController;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -142,7 +141,6 @@ public class NotificationPanelView extends PanelView implements
     private static final String COUNTER_PANEL_OPEN_PEEK = "panel_open_peek";
 
     private static final Rect mDummyDirtyRect = new Rect(0, 0, 1, 1);
-    private static final Rect mEmptyRect = new Rect();
 
     private static final AnimationProperties CLOCK_ANIMATION_PROPERTIES = new AnimationProperties()
             .setDuration(StackStateAnimator.ANIMATION_DURATION_STANDARD);
@@ -303,8 +301,6 @@ public class NotificationPanelView extends PanelView implements
     private int mCurrentPanelAlpha;
     private final Paint mAlphaPaint = new Paint();
     private Runnable mPanelAlphaEndAction;
-    private float mBottomAreaShadeAlpha;
-    private final ValueAnimator mBottomAreaShadeAlphaAnimator;
     private AnimatorListenerAdapter mAnimatorListenerAdapter = new AnimatorListenerAdapter() {
         @Override
         public void onAnimationEnd(Animator animation) {
@@ -368,14 +364,6 @@ public class NotificationPanelView extends PanelView implements
         mPulseExpansionHandler = pulseExpansionHandler;
         mThemeResId = context.getThemeResId();
         dynamicPrivacyController.addListener(this);
-
-        mBottomAreaShadeAlphaAnimator = ValueAnimator.ofFloat(1f, 0);
-        mBottomAreaShadeAlphaAnimator.addUpdateListener(animation -> {
-            mBottomAreaShadeAlpha = (float) animation.getAnimatedValue();
-            updateKeyguardBottomAreaAlpha();
-        });
-        mBottomAreaShadeAlphaAnimator.setDuration(160);
-        mBottomAreaShadeAlphaAnimator.setInterpolator(Interpolators.ALPHA_OUT);
     }
 
     /**
@@ -608,25 +596,6 @@ public class NotificationPanelView extends PanelView implements
             mQs.setHeightOverride(mQs.getDesiredHeight());
         }
         updateMaxHeadsUpTranslation();
-        updateGestureExclusionRect();
-    }
-
-    private void updateGestureExclusionRect() {
-        Rect exclusionRect = calculateGestureExclusionRect();
-        setSystemGestureExclusionRects(exclusionRect.isEmpty()
-                ? Collections.EMPTY_LIST
-                : Collections.singletonList(exclusionRect));
-    }
-
-    private Rect calculateGestureExclusionRect() {
-        Rect exclusionRect = null;
-        if (isFullyCollapsed()) {
-            // Note: The heads up manager also calculates the non-pinned touchable region
-            exclusionRect = mHeadsUpManager.calculateTouchableRegion();
-        }
-        return exclusionRect != null
-                ? exclusionRect
-                : mEmptyRect;
     }
 
     private void setIsFullWidth(boolean isFullWidth) {
@@ -692,7 +661,6 @@ public class NotificationPanelView extends PanelView implements
                     mClockPositionResult.clockX, CLOCK_ANIMATION_PROPERTIES, animateClock);
             PropertyAnimator.setProperty(mKeyguardStatusView, AnimatableProperty.Y,
                     mClockPositionResult.clockY, CLOCK_ANIMATION_PROPERTIES, animateClock);
-            updateNotificationTranslucency();
             updateClock();
             stackScrollerPadding = mClockPositionResult.stackScrollerPadding;
         }
@@ -1378,18 +1346,8 @@ public class NotificationPanelView extends PanelView implements
             updateDozingVisibilities(false /* animate */);
         }
 
-        maybeAnimateBottomAreaAlpha();
         resetHorizontalPanelPosition();
         updateQsState();
-    }
-
-    private void maybeAnimateBottomAreaAlpha() {
-        mBottomAreaShadeAlphaAnimator.cancel();
-        if (mBarState == StatusBarState.SHADE_LOCKED) {
-            mBottomAreaShadeAlphaAnimator.start();
-        } else {
-            mBottomAreaShadeAlpha = 1f;
-        }
     }
 
     private final Runnable mAnimateKeyguardStatusViewInvisibleEndRunnable = new Runnable() {
@@ -1482,7 +1440,6 @@ public class NotificationPanelView extends PanelView implements
         } else if (statusBarState == StatusBarState.KEYGUARD
                 || statusBarState == StatusBarState.SHADE_LOCKED) {
             mKeyguardBottomArea.setVisibility(View.VISIBLE);
-            mKeyguardBottomArea.setAlpha(1f);
         } else {
             mKeyguardBottomArea.setVisibility(View.GONE);
         }
@@ -1841,7 +1798,6 @@ public class NotificationPanelView extends PanelView implements
         updateHeader();
         updateNotificationTranslucency();
         updatePanelExpanded();
-        updateGestureExclusionRect();
         if (DEBUG) {
             invalidate();
         }
@@ -2001,7 +1957,6 @@ public class NotificationPanelView extends PanelView implements
                         ? 0 : KeyguardBouncer.ALPHA_EXPANSION_THRESHOLD, 1f,
                 0f, 1f, getExpandedFraction());
         float alpha = Math.min(expansionAlpha, 1 - getQsExpansionFraction());
-        alpha *= mBottomAreaShadeAlpha;
         mKeyguardBottomArea.setAffordanceAlpha(alpha);
         mKeyguardBottomArea.setImportantForAccessibility(alpha == 0f
                 ? IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
@@ -2613,7 +2568,6 @@ public class NotificationPanelView extends PanelView implements
             mNotificationStackScroller.runAfterAnimationFinished(
                     mHeadsUpExistenceChangedRunnable);
         }
-        updateGestureExclusionRect();
     }
 
     public void setHeadsUpAnimatingAway(boolean headsUpAnimatingAway) {
@@ -2912,10 +2866,6 @@ public class NotificationPanelView extends PanelView implements
         mNotificationStackScroller.setDark(mDozing, animate, wakeUpTouchLocation);
         mKeyguardBottomArea.setDozing(mDozing, animate);
 
-        if (dozing) {
-            mBottomAreaShadeAlphaAnimator.cancel();
-        }
-
         if (mBarState == StatusBarState.KEYGUARD
                 || mBarState == StatusBarState.SHADE_LOCKED) {
             updateDozingVisibilities(animate);
@@ -3042,7 +2992,6 @@ public class NotificationPanelView extends PanelView implements
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         super.dump(fd, pw, args);
-        pw.println("    gestureExclusionRect: " + calculateGestureExclusionRect());
         if (mKeyguardStatusBar != null) {
             mKeyguardStatusBar.dump(fd, pw, args);
         }

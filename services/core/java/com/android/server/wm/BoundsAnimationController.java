@@ -410,7 +410,7 @@ public class BoundsAnimationController {
         @VisibleForTesting
         boolean animatingToLargerSize() {
             // TODO: Fix this check for aspect ratio changes
-            return (mFrom.width() * mFrom.height() < mTo.width() * mTo.height());
+            return (mFrom.width() * mFrom.height() <= mTo.width() * mTo.height());
         }
 
         @Override
@@ -453,10 +453,16 @@ public class BoundsAnimationController {
             boolean moveFromFullscreen, boolean moveToFullscreen,
             @AnimationType int animationType) {
         final BoundsAnimator existing = mRunningAnimations.get(target);
-
-        if (isRunningFadeInAnimation(target) && from.width() == to.width()
-                && from.height() == to.height()) {
-            animationType = FADE_IN;
+        // animateBoundsImpl gets called twice for each animation. The second time we get the final
+        // to rect that respects the shelf, which is when we want to resize. Our signal for fade in
+        // comes in from how to enter into pip, but we also need to use the to and from rect to
+        // decide which animation we want to run finally.
+        boolean shouldResize = false;
+        if (isRunningFadeInAnimation(target)) {
+            shouldResize = true;
+            if (from.contains(to)) {
+                animationType = FADE_IN;
+            }
         }
         final boolean replacing = existing != null;
         @SchedulePipModeChangedState int prevSchedulePipModeChangedState =
@@ -517,10 +523,9 @@ public class BoundsAnimationController {
             // Since we are replacing, we skip both animation start and end callbacks
             existing.cancel();
         }
-        if (animationType == FADE_IN) {
+        if (shouldResize) {
             target.setPinnedStackSize(to, null);
         }
-
         final BoundsAnimator animator = new BoundsAnimator(target, animationType, from, to,
                 schedulePipModeChangedState, prevSchedulePipModeChangedState,
                 moveFromFullscreen, moveToFullscreen, frozenTask);

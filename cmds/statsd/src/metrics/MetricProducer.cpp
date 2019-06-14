@@ -107,7 +107,7 @@ void MetricProducer::flushIfExpire(int64_t elapsedTimestampNs) {
     }
     mIsActive = evaluateActiveStateLocked(elapsedTimestampNs);
     if (!mIsActive) {
-        onActiveStateChangedLocked(elapsedTimestampNs);
+        flushLocked(elapsedTimestampNs);
     }
 }
 
@@ -124,8 +124,7 @@ void MetricProducer::addActivation(int activationTrackerIndex, const ActivationT
             std::make_shared<Activation>(activationType, ttl_seconds * NS_PER_SEC);
     mEventActivationMap.emplace(activationTrackerIndex, activation);
     if (-1 != deactivationTrackerIndex) {
-        auto& deactivationList = mEventDeactivationMap[deactivationTrackerIndex];
-        deactivationList.push_back(activation);
+        mEventDeactivationMap.emplace(deactivationTrackerIndex, activation);
     }
 }
 
@@ -144,11 +143,7 @@ void MetricProducer::activateLocked(int activationTrackerIndex, int64_t elapsedT
     }
     activation->start_ns = elapsedTimestampNs;
     activation->state = ActivationState::kActive;
-    bool oldActiveState = mIsActive;
     mIsActive = true;
-    if (!oldActiveState) { // Metric went from not active to active.
-        onActiveStateChangedLocked(elapsedTimestampNs);
-    }
 }
 
 void MetricProducer::cancelEventActivationLocked(int deactivationTrackerIndex) {
@@ -156,9 +151,7 @@ void MetricProducer::cancelEventActivationLocked(int deactivationTrackerIndex) {
     if (it == mEventDeactivationMap.end()) {
         return;
     }
-    for (auto activationToCancelIt : it->second)  {
-        activationToCancelIt->state = ActivationState::kNotActive;
-    }
+    it->second->state = ActivationState::kNotActive;
 }
 
 void MetricProducer::loadActiveMetricLocked(const ActiveMetric& activeMetric,
@@ -174,9 +167,7 @@ void MetricProducer::loadActiveMetricLocked(const ActiveMetric& activeMetric,
             continue;
         }
         auto& activation = it->second;
-        // If the event activation does not have a state, assume it is active.
-        if (!activeEventActivation.has_state() ||
-                activeEventActivation.state() == ActiveEventActivation::ACTIVE) {
+        if (activeEventActivation.state() == ActiveEventActivation::ACTIVE) {
             // We don't want to change the ttl for future activations, so we set the start_ns
             // such that start_ns + ttl_ns == currentTimeNs + remaining_ttl_nanos
             activation->start_ns =

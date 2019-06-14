@@ -16,26 +16,18 @@
 
 package com.android.systemui.statusbar.notification;
 
-import static com.android.systemui.Dependency.MAIN_HANDLER_NAME;
-
-import android.os.Handler;
-import android.os.SystemClock;
 import android.view.View;
 
 import androidx.collection.ArraySet;
 
-import com.android.systemui.Dumpable;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.policy.OnHeadsUpChangedListener;
 
-import java.io.FileDescriptor;
-import java.io.PrintWriter;
 import java.util.ArrayList;
 
 import javax.inject.Inject;
-import javax.inject.Named;
 import javax.inject.Singleton;
 
 /**
@@ -43,19 +35,14 @@ import javax.inject.Singleton;
  * and reorder at the right time when they are out of view.
  */
 @Singleton
-public class VisualStabilityManager implements OnHeadsUpChangedListener, Dumpable {
-
-    private static final long TEMPORARY_REORDERING_ALLOWED_DURATION = 1000;
+public class VisualStabilityManager implements OnHeadsUpChangedListener {
 
     private final ArrayList<Callback> mCallbacks =  new ArrayList<>();
-    private final Handler mHandler;
 
     private NotificationPresenter mPresenter;
     private boolean mPanelExpanded;
     private boolean mScreenOn;
     private boolean mReorderingAllowed;
-    private boolean mIsTemporaryReorderingAllowed;
-    private long mTemporaryReorderingStart;
     private VisibilityLocationProvider mVisibilityLocationProvider;
     private ArraySet<View> mAllowedReorderViews = new ArraySet<>();
     private ArraySet<NotificationEntry> mLowPriorityReorderingViews = new ArraySet<>();
@@ -63,12 +50,7 @@ public class VisualStabilityManager implements OnHeadsUpChangedListener, Dumpabl
     private boolean mPulsing;
 
     @Inject
-    public VisualStabilityManager(
-            NotificationEntryManager notificationEntryManager,
-            @Named(MAIN_HANDLER_NAME) Handler handler) {
-
-        mHandler = handler;
-
+    public VisualStabilityManager(NotificationEntryManager notificationEntryManager) {
         notificationEntryManager.addNotificationEntryListener(new NotificationEntryListener() {
             @Override
             public void onPreEntryUpdated(NotificationEntry entry) {
@@ -132,11 +114,10 @@ public class VisualStabilityManager implements OnHeadsUpChangedListener, Dumpabl
     }
 
     private void updateReorderingAllowed() {
-        boolean reorderingAllowed =
-                (!mScreenOn || !mPanelExpanded || mIsTemporaryReorderingAllowed) && !mPulsing;
-        boolean changedToTrue = reorderingAllowed && !mReorderingAllowed;
+        boolean reorderingAllowed = (!mScreenOn || !mPanelExpanded) && !mPulsing;
+        boolean changed = reorderingAllowed && !mReorderingAllowed;
         mReorderingAllowed = reorderingAllowed;
-        if (changedToTrue) {
+        if (changed) {
             notifyCallbacks();
         }
     }
@@ -199,44 +180,11 @@ public class VisualStabilityManager implements OnHeadsUpChangedListener, Dumpabl
     }
 
     /**
-     * Temporarily allows reordering of the entire shade for a period of 1000ms. Subsequent calls
-     * to this method will extend the timer.
-     */
-    public void temporarilyAllowReordering() {
-        mHandler.removeCallbacks(mOnTemporaryReorderingExpired);
-        mHandler.postDelayed(mOnTemporaryReorderingExpired, TEMPORARY_REORDERING_ALLOWED_DURATION);
-        if (!mIsTemporaryReorderingAllowed) {
-            mTemporaryReorderingStart = SystemClock.elapsedRealtime();
-        }
-        mIsTemporaryReorderingAllowed = true;
-        updateReorderingAllowed();
-    }
-
-    private final Runnable mOnTemporaryReorderingExpired = () -> {
-        mIsTemporaryReorderingAllowed = false;
-        updateReorderingAllowed();
-    };
-
-    /**
      * Notify the visual stability manager that a new view was added and should be allowed to
      * reorder next time.
      */
     public void notifyViewAddition(View view) {
         mAddedChildren.add(view);
-    }
-
-    @Override
-    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        pw.println("VisualStabilityManager state:");
-        pw.print("  mIsTemporaryReorderingAllowed="); pw.println(mIsTemporaryReorderingAllowed);
-        pw.print("  mTemporaryReorderingStart="); pw.println(mTemporaryReorderingStart);
-
-        long now = SystemClock.elapsedRealtime();
-        pw.print("    Temporary reordering window has been open for ");
-        pw.print(now - (mIsTemporaryReorderingAllowed ? mTemporaryReorderingStart : now));
-        pw.println("ms");
-
-        pw.println();
     }
 
     public interface Callback {

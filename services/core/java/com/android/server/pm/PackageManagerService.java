@@ -2580,7 +2580,9 @@ public class PackageManagerService extends IPackageManager.Stub
             mIsPreNUpgrade = mIsUpgrade && ver.sdkVersion < Build.VERSION_CODES.N;
 
             mIsPreNMR1Upgrade = mIsUpgrade && ver.sdkVersion < Build.VERSION_CODES.N_MR1;
-            mIsPreQUpgrade = mIsUpgrade && ver.sdkVersion < Build.VERSION_CODES.Q;
+            mIsPreQUpgrade = mIsUpgrade && ver.sdkVersion < Build.VERSION_CODES.Q
+                    // STOPSHIP: Remove next line when API level for Q is defined.
+                    && Build.VERSION.SDK_INT > Build.VERSION_CODES.P;
 
             int preUpgradeSdkVersion = ver.sdkVersion;
 
@@ -14786,7 +14788,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
             if (ps != null) {
                 try {
-                    rm.snapshotAndRestoreUserData(packageName, installedUsers, appId, ceDataInode,
+                    rm.restoreUserData(packageName, installedUsers, appId, ceDataInode,
                             seInfo, token);
                 } catch (RemoteException re) {
                     // Cannot happen, the RollbackManager is hosted in the same process.
@@ -15043,6 +15045,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 params.handleStartCopy();
                 if (params.mRet != INSTALL_SUCCEEDED) {
                     mRet = params.mRet;
+                    break;
                 }
             }
         }
@@ -15053,32 +15056,31 @@ public class PackageManagerService extends IPackageManager.Stub
                 params.handleReturnCode();
                 if (params.mRet != INSTALL_SUCCEEDED) {
                     mRet = params.mRet;
+                    break;
                 }
             }
         }
 
         void tryProcessInstallRequest(InstallArgs args, int currentStatus) {
             mCurrentState.put(args, currentStatus);
+            boolean success = true;
             if (mCurrentState.size() != mChildParams.size()) {
                 return;
             }
-            int completeStatus = PackageManager.INSTALL_SUCCEEDED;
             for (Integer status : mCurrentState.values()) {
                 if (status == PackageManager.INSTALL_UNKNOWN) {
                     return;
                 } else if (status != PackageManager.INSTALL_SUCCEEDED) {
-                    completeStatus = status;
+                    success = false;
                     break;
                 }
             }
             final List<InstallRequest> installRequests = new ArrayList<>(mCurrentState.size());
             for (Map.Entry<InstallArgs, Integer> entry : mCurrentState.entrySet()) {
                 installRequests.add(new InstallRequest(entry.getKey(),
-                        createPackageInstalledInfo(completeStatus)));
+                        createPackageInstalledInfo(entry.getValue())));
             }
-            processInstallRequestsAsync(
-                    completeStatus == PackageManager.INSTALL_SUCCEEDED,
-                    installRequests);
+            processInstallRequestsAsync(success, installRequests);
         }
     }
 
@@ -15626,22 +15628,6 @@ public class PackageManagerService extends IPackageManager.Stub
         @Override
         void handleReturnCode() {
             if (mVerificationCompleted && mEnableRollbackCompleted) {
-                if ((installFlags & PackageManager.INSTALL_DRY_RUN) != 0) {
-                    String packageName = "";
-                    try {
-                        PackageLite packageInfo =
-                                new PackageParser().parsePackageLite(origin.file, 0);
-                        packageName = packageInfo.packageName;
-                    } catch (PackageParserException e) {
-                        Slog.e(TAG, "Can't parse package at " + origin.file.getAbsolutePath(), e);
-                    }
-                    try {
-                        observer.onPackageInstalled(packageName, mRet, "Dry run", new Bundle());
-                    } catch (RemoteException e) {
-                        Slog.i(TAG, "Observer no longer exists.");
-                    }
-                    return;
-                }
                 if (mRet == PackageManager.INSTALL_SUCCEEDED) {
                     mRet = mArgs.copyApk();
                 }
@@ -18116,15 +18102,9 @@ public class PackageManagerService extends IPackageManager.Stub
                 if (Build.IS_DEBUGGABLE) Slog.i(TAG, "Enabling verity to " + filePath);
                 final FileDescriptor fd = result.getUnownedFileDescriptor();
                 try {
+                    mInstaller.installApkVerity(filePath, fd, result.getContentSize());
                     final byte[] rootHash = VerityUtils.generateApkVerityRootHash(filePath);
-                    try {
-                        // A file may already have fs-verity, e.g. when reused during a split
-                        // install. If the measurement succeeds, no need to attempt to set up.
-                        mInstaller.assertFsverityRootHashMatches(filePath, rootHash);
-                    } catch (InstallerException e) {
-                        mInstaller.installApkVerity(filePath, fd, result.getContentSize());
-                        mInstaller.assertFsverityRootHashMatches(filePath, rootHash);
-                    }
+                    mInstaller.assertFsverityRootHashMatches(filePath, rootHash);
                 } finally {
                     IoUtils.closeQuietly(fd);
                 }

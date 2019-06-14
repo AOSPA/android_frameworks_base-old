@@ -1982,10 +1982,8 @@ public final class SmsManager {
      */
     public static int getDefaultSmsSubscriptionId() {
         try {
-            return getISmsService().getPreferredSmsSubscription();
+            return getISmsServiceOrThrow().getPreferredSmsSubscription();
         } catch (RemoteException e) {
-            return SubscriptionManager.INVALID_SUBSCRIPTION_ID;
-        } catch (NullPointerException e) {
             return SubscriptionManager.INVALID_SUBSCRIPTION_ID;
         }
     }

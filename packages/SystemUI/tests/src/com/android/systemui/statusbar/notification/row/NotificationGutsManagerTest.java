@@ -63,11 +63,9 @@ import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationTestHelper;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
-import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager.OnSettingsClickListener;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
-import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.util.Assert;
 
@@ -99,14 +97,12 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
 
     @Rule public MockitoRule mockito = MockitoJUnit.rule();
     @Mock private MetricsLogger mMetricsLogger;
-    @Mock private VisualStabilityManager mVisualStabilityManager;
     @Mock private NotificationPresenter mPresenter;
     @Mock private NotificationActivityStarter mNotificationActivityStarter;
     @Mock private NotificationStackScrollLayout mStackScroller;
     @Mock private NotificationInfo.CheckSaveListener mCheckSaveListener;
     @Mock private OnSettingsClickListener mOnSettingsClickListener;
     @Mock private DeviceProvisionedController mDeviceProvisionedController;
-    @Mock private StatusBar mStatusBar;
 
     @Before
     public void setUp() {
@@ -115,12 +111,11 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
         mDependency.injectTestDependency(DeviceProvisionedController.class,
                 mDeviceProvisionedController);
         mDependency.injectTestDependency(MetricsLogger.class, mMetricsLogger);
-        mDependency.injectTestDependency(VisualStabilityManager.class, mVisualStabilityManager);
         mHandler = Handler.createAsync(mTestableLooper.getLooper());
-        mContext.putComponent(StatusBar.class, mStatusBar);
+
         mHelper = new NotificationTestHelper(mContext);
 
-        mGutsManager = new NotificationGutsManager(mContext, mVisualStabilityManager);
+        mGutsManager = new NotificationGutsManager(mContext);
         mGutsManager.setUpWithPresenter(mPresenter, mStackScroller,
                 mCheckSaveListener, mOnSettingsClickListener);
         mGutsManager.setNotificationActivityStarter(mNotificationActivityStarter);
@@ -152,7 +147,7 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
         when(row.getWindowToken()).thenReturn(new Binder());
         when(row.getGuts()).thenReturn(guts);
 
-        assertTrue(mGutsManager.openGutsInternal(row, 0, 0, menuItem));
+        assertTrue(mGutsManager.openGuts(row, 0, 0, menuItem));
         assertEquals(View.INVISIBLE, guts.getVisibility());
         mTestableLooper.processAllMessages();
         verify(guts).openControls(
@@ -200,7 +195,7 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
         when(entry.getRow()).thenReturn(row);
         when(entry.getGuts()).thenReturn(guts);
 
-        assertTrue(mGutsManager.openGutsInternal(row, 0, 0, menuItem));
+        assertTrue(mGutsManager.openGuts(row, 0, 0, menuItem));
         mTestableLooper.processAllMessages();
         verify(guts).openControls(
                 eq(true),
@@ -321,7 +316,6 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
         verify(notificationInfoView).bindNotification(
                 any(PackageManager.class),
                 any(INotificationManager.class),
-                eq(mVisualStabilityManager),
                 eq(statusBarNotification.getPackageName()),
                 any(NotificationChannel.class),
                 anySet(),
@@ -350,7 +344,6 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
         verify(notificationInfoView).bindNotification(
                 any(PackageManager.class),
                 any(INotificationManager.class),
-                eq(mVisualStabilityManager),
                 eq(statusBarNotification.getPackageName()),
                 any(NotificationChannel.class),
                 anySet(),
@@ -381,7 +374,6 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
         verify(notificationInfoView).bindNotification(
                 any(PackageManager.class),
                 any(INotificationManager.class),
-                eq(mVisualStabilityManager),
                 eq(statusBarNotification.getPackageName()),
                 any(NotificationChannel.class),
                 anySet(),
@@ -411,7 +403,6 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
         verify(notificationInfoView).bindNotification(
                 any(PackageManager.class),
                 any(INotificationManager.class),
-                eq(mVisualStabilityManager),
                 eq(statusBarNotification.getPackageName()),
                 any(NotificationChannel.class),
                 anySet(),
@@ -440,7 +431,6 @@ public class NotificationGutsManagerTest extends SysuiTestCase {
         verify(notificationInfoView).bindNotification(
                 any(PackageManager.class),
                 any(INotificationManager.class),
-                eq(mVisualStabilityManager),
                 eq(statusBarNotification.getPackageName()),
                 any(NotificationChannel.class),
                 anySet(),

@@ -283,9 +283,14 @@ void GaugeMetricProducer::onDumpReportLocked(const int64_t dumpTimeNs,
                     writeFieldValueTreeToStream(mAtomId, *(atom.mFields), protoOutput);
                     protoOutput->end(atomsToken);
                 }
+                const bool truncateTimestamp =
+                        android::util::AtomsInfo::kNotTruncatingTimestampAtomWhiteList.find(
+                                mAtomId) ==
+                        android::util::AtomsInfo::kNotTruncatingTimestampAtomWhiteList.end();
                 for (const auto& atom : bucket.mGaugeAtoms) {
-                    const int64_t elapsedTimestampNs =
-                            truncateTimestampIfNecessary(mAtomId, atom.mElapsedTimestamps);
+                    const int64_t elapsedTimestampNs =  truncateTimestamp ?
+                        truncateTimestampNsToFiveMinutes(atom.mElapsedTimestamps) :
+                            atom.mElapsedTimestamps;
                     protoOutput->write(
                         FIELD_TYPE_INT64 | FIELD_COUNT_REPEATED | FIELD_ID_ELAPSED_ATOM_TIMESTAMP,
                         (long long)elapsedTimestampNs);
@@ -359,27 +364,11 @@ void GaugeMetricProducer::pullAndMatchEventsLocked(const int64_t timestampNs) {
     }
 }
 
-void GaugeMetricProducer::onActiveStateChangedLocked(const int64_t& eventTimeNs) {
-    MetricProducer::onActiveStateChangedLocked(eventTimeNs);
-    if (ConditionState::kTrue != mCondition || !mIsPulled) {
-        return;
-    }
-    if (mTriggerAtomId == -1 || (mIsActive && mSamplingType == GaugeMetric::RANDOM_ONE_SAMPLE)) {
-        pullAndMatchEventsLocked(eventTimeNs);
-    }
-
-}
-
 void GaugeMetricProducer::onConditionChangedLocked(const bool conditionMet,
                                                    const int64_t eventTimeNs) {
     VLOG("GaugeMetric %lld onConditionChanged", (long long)mMetricId);
-
-    mCondition = conditionMet ? ConditionState::kTrue : ConditionState::kFalse;
-    if (!mIsActive) {
-        return;
-    }
-
     flushIfNeededLocked(eventTimeNs);
+    mCondition = conditionMet ? ConditionState::kTrue : ConditionState::kFalse;
     if (mIsPulled && mTriggerAtomId == -1) {
         pullAndMatchEventsLocked(eventTimeNs);
     }  // else: Push mode. No need to proactively pull the gauge data.
@@ -389,14 +378,10 @@ void GaugeMetricProducer::onSlicedConditionMayChangeLocked(bool overallCondition
                                                            const int64_t eventTimeNs) {
     VLOG("GaugeMetric %lld onSlicedConditionMayChange overall condition %d", (long long)mMetricId,
          overallCondition);
-    mCondition = overallCondition ? ConditionState::kTrue : ConditionState::kFalse;
-    if (!mIsActive) {
-        return;
-    }
-
     flushIfNeededLocked(eventTimeNs);
     // If the condition is sliced, mCondition is true if any of the dimensions is true. And we will
     // pull for every dimension.
+    mCondition = overallCondition ? ConditionState::kTrue : ConditionState::kFalse;
     if (mIsPulled && mTriggerAtomId == -1) {
         pullAndMatchEventsLocked(eventTimeNs);
     }  // else: Push mode. No need to proactively pull the gauge data.

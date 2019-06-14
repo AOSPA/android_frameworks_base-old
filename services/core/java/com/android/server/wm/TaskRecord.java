@@ -851,12 +851,11 @@ class TaskRecord extends ConfigurationContainer {
     /**
      * DO NOT HOLD THE ACTIVITY MANAGER LOCK WHEN CALLING THIS METHOD!
      */
-    TaskSnapshot getSnapshot(boolean reducedResolution, boolean restoreFromDisk) {
+    TaskSnapshot getSnapshot(boolean reducedResolution) {
 
         // TODO: Move this to {@link TaskWindowContainerController} once recent tasks are more
         // synchronized between AM and WM.
-        return mService.mWindowManager.getTaskSnapshot(taskId, userId, reducedResolution,
-                restoreFromDisk);
+        return mService.mWindowManager.getTaskSnapshot(taskId, userId, reducedResolution);
     }
 
     void touchActiveTime() {

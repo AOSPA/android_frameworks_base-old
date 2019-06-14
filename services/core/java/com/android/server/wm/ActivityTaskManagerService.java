@@ -508,12 +508,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     private boolean mDidAppSwitch;
 
-    /**
-     * Last stop app switches time, apps finished before this time cannot start background activity
-     * even if they are in grace period.
-     */
-    private long mLastStopAppSwitchesTime;
-
     IActivityController mController = null;
     boolean mControllerIsAMonkey = false;
 
@@ -2375,7 +2369,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 null /* intent */, "moveTaskToFront");
         if (starter.shouldAbortBackgroundActivityStart(callingUid, callingPid, callingPackage, -1,
                 -1, callerApp, null, false, null)) {
-            if (!isBackgroundActivityStartsEnabled()) {
+            boolean abort = !isBackgroundActivityStartsEnabled();
+            starter.showBackgroundActivityBlockedToast(abort, callingPackage);
+            if (abort) {
                 return;
             }
         }
@@ -4521,25 +4517,20 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         enforceCallerIsRecentsOrHasPermission(READ_FRAME_BUFFER, "getTaskSnapshot()");
         final long ident = Binder.clearCallingIdentity();
         try {
-            return getTaskSnapshot(taskId, reducedResolution, true /* restoreFromDisk */);
+            final TaskRecord task;
+            synchronized (mGlobalLock) {
+                task = mRootActivityContainer.anyTaskForId(taskId,
+                        MATCH_TASK_IN_STACKS_OR_RECENT_TASKS);
+                if (task == null) {
+                    Slog.w(TAG, "getTaskSnapshot: taskId=" + taskId + " not found");
+                    return null;
+                }
+            }
+            // Don't call this while holding the lock as this operation might hit the disk.
+            return task.getSnapshot(reducedResolution);
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
-    }
-
-    private ActivityManager.TaskSnapshot getTaskSnapshot(int taskId, boolean reducedResolution,
-            boolean restoreFromDisk) {
-        final TaskRecord task;
-        synchronized (mGlobalLock) {
-            task = mRootActivityContainer.anyTaskForId(taskId,
-                    MATCH_TASK_IN_STACKS_OR_RECENT_TASKS);
-            if (task == null) {
-                Slog.w(TAG, "getTaskSnapshot: taskId=" + taskId + " not found");
-                return null;
-            }
-        }
-        // Don't call this while holding the lock as this operation might hit the disk.
-        return task.getSnapshot(reducedResolution, restoreFromDisk);
     }
 
     @Override
@@ -4740,7 +4731,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         enforceCallerIsRecentsOrHasPermission(STOP_APP_SWITCHES, "stopAppSwitches");
         synchronized (mGlobalLock) {
             mAppSwitchesAllowedTime = SystemClock.uptimeMillis() + APP_SWITCH_DELAY_TIME;
-            mLastStopAppSwitchesTime = SystemClock.uptimeMillis();
             mDidAppSwitch = false;
             getActivityStartController().schedulePendingActivityLaunches(APP_SWITCH_DELAY_TIME);
         }
@@ -4755,10 +4745,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             // activity request.
             mAppSwitchesAllowedTime = 0;
         }
-    }
-
-    long getLastStopAppSwitchesTime() {
-        return mLastStopAppSwitchesTime;
     }
 
     void onStartActivitySetDidAppSwitch() {
@@ -5411,6 +5397,13 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         return mAmInternal.isBackgroundActivityStartsEnabled();
     }
 
+    boolean isPackageNameWhitelistedForBgActivityStarts(@Nullable String packageName) {
+        if (packageName == null) {
+            return false;
+        }
+        return mAmInternal.isPackageNameWhitelistedForBgActivityStarts(packageName);
+    }
+
     void enableScreenAfterBoot(boolean booted) {
         EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_ENABLE_SCREEN,
                 SystemClock.uptimeMillis());
@@ -5874,10 +5867,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     Intent getSecondaryHomeIntent(String preferredPackage) {
         final Intent intent = new Intent(mTopAction, mTopData != null ? Uri.parse(mTopData) : null);
-        final boolean useSystemProvidedLauncher = mContext.getResources().getBoolean(
-                com.android.internal.R.bool.config_useSystemProvidedLauncherForSecondary);
-        if (preferredPackage == null || useSystemProvidedLauncher) {
-            // Using the component stored in config if no package name or forced.
+        if (preferredPackage == null) {
+            // Using the component stored in config if no package name.
             final String secondaryHomeComponent = mContext.getResources().getString(
                     com.android.internal.R.string.config_secondaryHomeComponent);
             intent.setComponent(ComponentName.unflattenFromString(secondaryHomeComponent));
@@ -7418,10 +7409,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         @Override
-        public ActivityManager.TaskSnapshot getTaskSnapshotNoRestore(int taskId,
-                boolean reducedResolution) {
-            return ActivityTaskManagerService.this.getTaskSnapshot(taskId, reducedResolution,
-                    false /* restoreFromDisk */);
+        public ActivityManager.TaskSnapshot getTaskSnapshot(int taskId, boolean reducedResolution) {
+            synchronized (mGlobalLock) {
+                return ActivityTaskManagerService.this.getTaskSnapshot(taskId, reducedResolution);
+            }
         }
 
         @Override

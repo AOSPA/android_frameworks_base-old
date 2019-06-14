@@ -477,6 +477,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     private float mHorizontalPanelTranslation;
     private final NotificationLockscreenUserManager mLockscreenUserManager =
             Dependency.get(NotificationLockscreenUserManager.class);
+    protected final NotificationGutsManager mGutsManager =
+            Dependency.get(NotificationGutsManager.class);
     private final Rect mTmpRect = new Rect();
     private final NotificationEntryManager mEntryManager =
             Dependency.get(NotificationEntryManager.class);
@@ -623,7 +625,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         inflateFooterView();
         mVisualStabilityManager.setVisibilityLocationProvider(this::isInVisibleLocation);
         if (mAllowLongPress) {
-            setLongPressListener(mNotificationGutsManager::openGuts);
+            setLongPressListener(mGutsManager::openGuts);
         }
     }
 
@@ -937,11 +939,18 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             return;
         }
 
+        float alpha =
+                BACKGROUND_ALPHA_DIMMED + (1 - BACKGROUND_ALPHA_DIMMED) * (1.0f - mDimAmount);
+        alpha *= 1f - mInterpolatedDarkAmount;
+        // We need to manually blend in the background color.
+        int scrimColor = mScrimController.getBackgroundColor();
+        int awakeColor = ColorUtils.blendARGB(scrimColor, mBgColor, alpha);
+
         // Interpolate between semi-transparent notification panel background color
         // and white AOD separator.
         float colorInterpolation = MathUtils.smoothStep(0.4f /* start */, 1f /* end */,
                 mLinearDarkAmount);
-        int color = ColorUtils.blendARGB(mBgColor, Color.WHITE, colorInterpolation);
+        int color = ColorUtils.blendARGB(awakeColor, Color.WHITE, colorInterpolation);
 
         if (mCachedBackgroundColor != color) {
             mCachedBackgroundColor = color;
@@ -3223,7 +3232,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     private void updateNotificationAnimationStates() {
         boolean running = mAnimationsEnabled || hasPulsingNotifications();
         mShelf.setAnimationsEnabled(running);
-        mIconAreaController.setAnimationsEnabled(running);
         int childCount = getChildCount();
         for (int i = 0; i < childCount; i++) {
             View child = getChildAt(i);
@@ -6144,9 +6152,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
                         .setType(MetricsEvent.TYPE_ACTION));
                 mHeadsUpManager.setMenuShown(notificationRow.getEntry(), true);
                 mSwipeHelper.onMenuShown(row);
-                mNotificationGutsManager.closeAndSaveGuts(true /* removeLeavebehind */,
-                        false /* force */, false /* removeControls */, -1 /* x */, -1 /* y */,
-                        false /* resetMenu */);
 
                 // Check to see if we want to go directly to the notfication guts
                 NotificationMenuRowPlugin provider = notificationRow.getProvider();
@@ -6154,7 +6159,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
                     MenuItem item = provider.menuItemToExposeOnSnap();
                     if (item != null) {
                         Point origin = provider.getRevealAnimationOrigin();
-                        mNotificationGutsManager.openGuts(row, origin.x, origin.y, item);
+                        mGutsManager.openGuts(row, origin.x, origin.y, item);
                     } else  {
                         Log.e(TAG, "Provider has shouldShowGutsOnSnapOpen, but provided no "
                                 + "menu item in menuItemtoExposeOnSnap. Skipping.");

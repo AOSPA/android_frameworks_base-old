@@ -2088,11 +2088,7 @@ public abstract class ConnectionService extends Service {
                     conference.getConnectTimeMillis(),
                     conference.getConnectionStartElapsedRealTime(),
                     conference.getStatusHints(),
-                    conference.getExtras(),
-                    conference.getAddress(),
-                    conference.getAddressPresentation(),
-                    conference.getCallerDisplayName(),
-                    conference.getCallerDisplayNamePresentation());
+                    conference.getExtras());
 
             mAdapter.addConferenceCall(id, parcelableConference);
             mAdapter.setVideoProvider(id, conference.getVideoProvider());
