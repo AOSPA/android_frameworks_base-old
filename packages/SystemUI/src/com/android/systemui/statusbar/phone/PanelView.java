@@ -310,7 +310,7 @@ public abstract class PanelView extends FrameLayout {
         final float y = event.getY(pointerIndex);
 
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-            mGestureWaitForTouchSlop = isFullyCollapsed() || hasConflictingGestures();
+            mGestureWaitForTouchSlop = shouldGestureWaitForTouchSlop();
             mIgnoreXTouchSlop = isFullyCollapsed() || shouldGestureIgnoreXTouchSlop(x, y);
         }
 
@@ -528,7 +528,7 @@ public abstract class PanelView extends FrameLayout {
         return (int) (mUnlockFalsingThreshold * factor);
     }
 
-    protected abstract boolean hasConflictingGestures();
+    protected abstract boolean shouldGestureWaitForTouchSlop();
 
     protected abstract boolean shouldGestureIgnoreXTouchSlop(float x, float y);
 
