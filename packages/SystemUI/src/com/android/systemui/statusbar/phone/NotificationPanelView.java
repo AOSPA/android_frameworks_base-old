@@ -219,6 +219,8 @@ public class NotificationPanelView extends PanelView implements
     private int mNotificationsHeaderCollideDistance;
     private int mUnlockMoveDistance;
     private float mEmptyDragAmount;
+    private float mDownX;
+    private float mDownY;
 
     private final KeyguardClockPositionAlgorithm mClockPositionAlgorithm =
             new KeyguardClockPositionAlgorithm();
@@ -911,7 +913,8 @@ public class NotificationPanelView extends PanelView implements
             MetricsLogger.count(mContext, COUNTER_PANEL_OPEN_PEEK, 1);
             return true;
         }
-        if (mPulseExpansionHandler.onInterceptTouchEvent(event)) {
+        if (!shouldQuickSettingsIntercept(mDownX, mDownY, 0)
+                && mPulseExpansionHandler.onInterceptTouchEvent(event)) {
             return true;
         }
 
@@ -1013,6 +1016,8 @@ public class NotificationPanelView extends PanelView implements
             mOnlyAffordanceInThisMotion = false;
             mQsTouchAboveFalsingThreshold = mQsFullyExpanded;
             mDozingOnDown = isDozing();
+            mDownX = event.getX();
+            mDownY = event.getY();
             mCollapsedOnDown = isFullyCollapsed();
             mListenForHeadsUp = mCollapsedOnDown && mHeadsUpManager.hasPinnedHeadsUp();
         }
@@ -1086,7 +1091,8 @@ public class NotificationPanelView extends PanelView implements
                 || event.getAction() == MotionEvent.ACTION_CANCEL) {
             mBlockingExpansionForCurrentTouch = false;
         }
-        if (!mIsExpanding && mPulseExpansionHandler.onTouchEvent(event)) {
+        if (!mIsExpanding && !shouldQuickSettingsIntercept(mDownX, mDownY, 0)
+                && mPulseExpansionHandler.onTouchEvent(event)) {
             // We're expanding all the other ones shouldn't get this anymore
             return true;
         }
