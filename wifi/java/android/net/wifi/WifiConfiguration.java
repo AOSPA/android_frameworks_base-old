@@ -184,8 +184,8 @@ public class WifiConfiguration implements Parcelable {
 
         public static final String[] strings = { "NONE", "WPA_PSK", "WPA_EAP",
                 "IEEE8021X", "WPA2_PSK", "OSEN", "FT_PSK", "FT_EAP",
-                "SAE", "OWE", "SUITE_B_192", "FILS_SHA256", "FILS_SHA384",
-                "DPP", "WPA_PSK_SHA256", "WPA_EAP_SHA256",
+                "SAE", "OWE", "SUITE_B_192", "WPA_PSK_SHA256", "WPA_EAP_SHA256",
+                "FILS_SHA256", "FILS_SHA384", "DPP",
         };
     }
 
@@ -1967,7 +1967,8 @@ public class WifiConfiguration implements Parcelable {
         if (this.meteredOverride != METERED_OVERRIDE_NONE) {
             sbuf.append(" meteredOverride ").append(meteredOverride).append("\n");
         }
-        sbuf.append(" macRandomizationSetting ").append(macRandomizationSetting).append("\n");
+        sbuf.append(" macRandomizationSetting: ").append(macRandomizationSetting).append("\n");
+        sbuf.append(" mRandomizedMacAddress: ").append(mRandomizedMacAddress).append("\n");
         sbuf.append(" KeyMgmt:");
         for (int k = 0; k < this.allowedKeyManagement.size(); k++) {
             if (this.allowedKeyManagement.get(k)) {

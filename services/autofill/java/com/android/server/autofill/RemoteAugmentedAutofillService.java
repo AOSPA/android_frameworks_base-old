@@ -16,6 +16,8 @@
 
 package com.android.server.autofill;
 
+import static android.service.autofill.augmented.Helper.logResponse;
+
 import static com.android.server.autofill.Helper.sDebug;
 import static com.android.server.autofill.Helper.sVerbose;
 
@@ -43,6 +45,7 @@ import android.view.autofill.AutofillValue;
 import android.view.autofill.IAutoFillManagerClient;
 
 import com.android.internal.infra.AbstractSinglePendingRequestRemoteService;
+import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.os.IResultReceiver;
 
 final class RemoteAugmentedAutofillService
@@ -173,6 +176,7 @@ final class RemoteAugmentedAutofillService
         private final @Nullable AutofillValue mFocusedValue;
         private final @NonNull IAutoFillManagerClient mClient;
         private final @NonNull ComponentName mActivityComponent;
+        private final int mSessionId;
         private final int mTaskId;
         private final long mRequestTime = SystemClock.elapsedRealtime();
         private final @NonNull IFillCallback mCallback;
@@ -184,6 +188,7 @@ final class RemoteAugmentedAutofillService
                 @Nullable AutofillValue focusedValue) {
             super(service, sessionId);
             mClient = client;
+            mSessionId = sessionId;
             mTaskId = taskId;
             mActivityComponent = activityComponent;
             mFocusedId = focusedId;
@@ -220,17 +225,7 @@ final class RemoteAugmentedAutofillService
 
                 @Override
                 public void cancel() {
-                    synchronized (mLock) {
-                        final boolean cancelled = isCancelledLocked();
-                        final ICancellationSignal cancellation = mCancellation;
-                        if (!cancelled) {
-                            try {
-                                cancellation.cancel();
-                            } catch (RemoteException e) {
-                                Slog.e(mTag, "Error requesting a cancellation", e);
-                            }
-                        }
-                    }
+                    PendingAutofillRequest.this.cancel();
                 }
             };
         }
@@ -283,6 +278,8 @@ final class RemoteAugmentedAutofillService
                 remoteService.dispatchOnFillTimeout(cancellation);
             }
             finish();
+            logResponse(MetricsEvent.TYPE_ERROR, remoteService.getComponentName().getPackageName(),
+                    mActivityComponent, mSessionId, remoteService.mRequestTimeoutMs);
         }
 
         @Override
@@ -297,7 +294,7 @@ final class RemoteAugmentedAutofillService
                 try {
                     cancellation.cancel();
                 } catch (RemoteException e) {
-                    Slog.e(mTag, "Error cancelling a fill request", e);
+                    Slog.e(mTag, "Error cancelling an augmented fill request", e);
                 }
             }
             return true;

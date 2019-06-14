@@ -18,10 +18,39 @@
             ]
         },
         {
+            "name": "CtsAppSecurityHostTestCases",
+            "options": [
+                {
+                    "include-filter": "android.appsecurity.cts.AppSecurityTests#rebootWithDuplicatePermission"
+                }
+            ]
+        },
+        {
+            "name": "CtsPermission2TestCases",
+            "options": [
+                {
+                    "include-filter": "android.permission2.cts.RestrictedPermissionsTest"
+                },
+                {
+                    "include-filter": "android.permission.cts.PermissionMaxSdkVersionTest"
+                }
+            ]
+        },
+        {
             "name": "CtsStatsdHostTestCases",
             "options": [
                 {
                     "include-filter": "android.cts.statsd.atom.UidAtomTests#testDangerousPermissionState"
+                }
+            ]
+        }
+    ],
+    "postsubmit": [
+        {
+            "name": "CtsAppSecurityHostTestCases",
+            "options": [
+                {
+                    "include-filter": "android.appsecurity.cts.AppSecurityTests#testPermissionDiffCert"
                 }
             ]
         }

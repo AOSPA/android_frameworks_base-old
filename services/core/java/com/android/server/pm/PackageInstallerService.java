@@ -532,16 +532,6 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                         + "to use the PackageManager.INSTALL_GRANT_RUNTIME_PERMISSIONS flag");
             }
 
-            // Only system components can circumvent restricted whitelisting when installing.
-            if ((params.installFlags
-                    & PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS) != 0
-                    && mContext.checkCallingOrSelfPermission(Manifest.permission
-                    .WHITELIST_RESTRICTED_PERMISSIONS) == PackageManager.PERMISSION_DENIED) {
-                throw new SecurityException("You need the "
-                        + "android.permission.WHITELIST_RESTRICTED_PERMISSIONS permission to"
-                        + " use the PackageManager.INSTALL_WHITELIST_RESTRICTED_PERMISSIONS flag");
-            }
-
             // Defensively resize giant app icons
             if (params.appIcon != null) {
                 final ActivityManager am = (ActivityManager) mContext.getSystemService(
@@ -865,9 +855,9 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
 
     @Override
     public void installExistingPackage(String packageName, int installFlags, int installReason,
-            IntentSender statusReceiver, int userId) {
+            IntentSender statusReceiver, int userId, List<String> whiteListedPermissions) {
         mPm.installExistingPackageAsUser(packageName, userId, installFlags, installReason,
-                statusReceiver);
+                whiteListedPermissions, statusReceiver);
     }
 
     @Override

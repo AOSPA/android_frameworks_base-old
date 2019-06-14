@@ -155,7 +155,7 @@
     <string name="httpErrorOk" msgid="1191919378083472204">"Uredu"</string>
     <string name="httpError" msgid="7956392511146698522">"Došlo je do greške na mreži."</string>
     <string name="httpErrorLookup" msgid="4711687456111963163">"Pronalaženje URL-a nije uspjelo."</string>
-    <string name="httpErrorUnsupportedAuthScheme" msgid="6299980280442076799">"Shema za autentifikaciju stranice nije podržana."</string>
+    <string name="httpErrorUnsupportedAuthScheme" msgid="6299980280442076799">"Šema za autentifikaciju stranice nije podržana."</string>
     <string name="httpErrorAuth" msgid="1435065629438044534">"Došlo je do greške prilikom autentifikacije."</string>
     <string name="httpErrorProxyAuth" msgid="1788207010559081331">"Došlo je do greške prilikom autentifikacije preko proksi servera."</string>
     <string name="httpErrorConnect" msgid="8714273236364640549">"Povezivanje sa serverom nije uspjelo."</string>
@@ -169,7 +169,7 @@
     <string name="httpErrorFileNotFound" msgid="6203856612042655084">"Pronalaženje traženog fajla nije uspjelo."</string>
     <string name="httpErrorTooManyRequests" msgid="1235396927087188253">"Trenutno se obrađuje previše zahtjeva. Pokušajte ponovo kasnije."</string>
     <string name="notification_title" msgid="8967710025036163822">"Greška u prijavi za račun <xliff:g id="ACCOUNT">%1$s</xliff:g>"</string>
-    <string name="contentServiceSync" msgid="8353523060269335667">"Sinhroniziranje"</string>
+    <string name="contentServiceSync" msgid="8353523060269335667">"Sinhronizacija"</string>
     <string name="contentServiceSyncNotificationTitle" msgid="7036196943673524858">"Nije moguće sinhronizirati"</string>
     <string name="contentServiceTooManyDeletesNotificationDesc" msgid="4884451152168188763">"Pokušali ste izbrisati previše sadržaja iz kategorije <xliff:g id="CONTENT_TYPE">%s</xliff:g>."</string>
     <string name="low_memory" product="tablet" msgid="6494019234102154896">"Pohrana tableta je puna. Izbrišite fajlove kako biste oslobodili prostor."</string>
@@ -264,7 +264,7 @@
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"Mrežna upozorenja"</string>
     <string name="notification_channel_network_available" msgid="4531717914138179517">"Mreža je dostupna"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"Status VPN-a"</string>
-    <string name="notification_channel_device_admin" msgid="1568154104368069249">"Administracija uređaja"</string>
+    <string name="notification_channel_device_admin" msgid="8353118887482520565">"Upozorenja od IT administratora"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"Upozorenja"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"Prodajna demonstracija"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"USB veza"</string>
@@ -280,7 +280,7 @@
     <string name="managed_profile_label" msgid="8947929265267690522">"Pređite na radni profil"</string>
     <string name="permgrouplab_contacts" msgid="3657758145679177612">"Kontakti"</string>
     <string name="permgroupdesc_contacts" msgid="6951499528303668046">"pristupa vašim kontaktima"</string>
-    <string name="permgrouprequest_contacts" msgid="6032805601881764300">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; pristup vašim kontaktima?"</string>
+    <string name="permgrouprequest_contacts" msgid="6032805601881764300">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; da pristupa vašim kontaktima?"</string>
     <string name="permgrouplab_location" msgid="7275582855722310164">"Lokacija"</string>
     <string name="permgroupdesc_location" msgid="1346617465127855033">"pristupa lokaciji ovog uređaja"</string>
     <string name="permgrouprequest_location" msgid="3788275734953323491">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; da pristupi lokaciji ovog uređaja?"</string>
@@ -295,22 +295,22 @@
     <string name="permgrouprequest_sms" msgid="7168124215838204719">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; slanje i pregled SMS poruka?"</string>
     <string name="permgrouplab_storage" msgid="1971118770546336966">"Pohrana"</string>
     <string name="permgroupdesc_storage" msgid="637758554581589203">"pristupa slikama, medijskim fajlovima i fajlovima na vašem uređaju"</string>
-    <string name="permgrouprequest_storage" msgid="7885942926944299560">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; pristup fotografijama, medijima i fajlovima na vašem uređaju?"</string>
+    <string name="permgrouprequest_storage" msgid="7885942926944299560">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; da pristupa fotografijama, medijima i fajlovima na vašem uređaju?"</string>
     <string name="permgrouplab_microphone" msgid="171539900250043464">"Mikrofon"</string>
     <string name="permgroupdesc_microphone" msgid="4988812113943554584">"snima zvuk"</string>
-    <string name="permgrouprequest_microphone" msgid="9167492350681916038">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; snimanje zvuka?"</string>
+    <string name="permgrouprequest_microphone" msgid="9167492350681916038">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; da snima zvuk?"</string>
     <string name="permgrouplab_activityRecognition" msgid="1565108047054378642">"Fizička aktivnost"</string>
     <string name="permgroupdesc_activityRecognition" msgid="6949472038320473478">"pristup vašoj fizičkoj aktivnosti"</string>
     <string name="permgrouprequest_activityRecognition" msgid="7626438016904799383">"Dopustiti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; da pristupi informacijama o vašoj fizičkoj aktivnosti?"</string>
     <string name="permgrouplab_camera" msgid="4820372495894586615">"Kamera"</string>
     <string name="permgroupdesc_camera" msgid="3250611594678347720">"snima fotografije i videozapise"</string>
-    <string name="permgrouprequest_camera" msgid="1299833592069671756">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; snimanje fotografija i videozapisa?"</string>
+    <string name="permgrouprequest_camera" msgid="1299833592069671756">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; da snima fotografije i videozapise?"</string>
     <string name="permgrouplab_calllog" msgid="8798646184930388160">"Zapisnici poziva"</string>
     <string name="permgroupdesc_calllog" msgid="3006237336748283775">"čitanje i pisanje zapisnika telefonskih poziva"</string>
-    <string name="permgrouprequest_calllog" msgid="8487355309583773267">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; pristup zapisnicima poziva?"</string>
+    <string name="permgrouprequest_calllog" msgid="8487355309583773267">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; da pristupa zapisnicima poziva?"</string>
     <string name="permgrouplab_phone" msgid="5229115638567440675">"Telefon"</string>
     <string name="permgroupdesc_phone" msgid="6234224354060641055">"poziva i upravlja pozivima"</string>
-    <string name="permgrouprequest_phone" msgid="9166979577750581037">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; upućivanje poziva i upravljanje njima?"</string>
+    <string name="permgrouprequest_phone" msgid="9166979577750581037">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; da upućuje pozove i upravlja njima?"</string>
     <string name="permgrouplab_sensors" msgid="4838614103153567532">"Tjelesni senzori"</string>
     <string name="permgroupdesc_sensors" msgid="7147968539346634043">"pristupa podacima senzora o vašim vitalnim funkcijama"</string>
     <string name="permgrouprequest_sensors" msgid="6349806962814556786">"Dozvoliti aplikaciji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; pristup senzornim podacima o vašim vitalnim znacima?"</string>
@@ -568,21 +568,21 @@
     <string name="face_acquired_too_low" msgid="488983581737550912">"Spustite telefon."</string>
     <string name="face_acquired_too_right" msgid="3667075962661863218">"Pomjerite telefon ulijevo."</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"Pomjerite telefon udesno."</string>
-    <string name="face_acquired_poor_gaze" msgid="8471716624377228327">"Gledajte u ekran i otvorite oči."</string>
+    <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"Gledajte direktno u uređaj."</string>
     <string name="face_acquired_not_detected" msgid="4885504661626728809">"Ne vidi se lice. Gledajte u telefon."</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"Previše pokreta. Držite telefon mirno."</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"Ponovo registrirajte lice."</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"Nije više moguće prepoznati lice. Pokušajte opet."</string>
     <string name="face_acquired_too_similar" msgid="1508776858407646460">"Previše slično, promijenite položaj."</string>
-    <string name="face_acquired_pan_too_extreme" msgid="1852495480382773759">"Gledajte direktno u ekran."</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="1290820400317982049">"Gledajte direktno u ekran."</string>
-    <string name="face_acquired_roll_too_extreme" msgid="1444829237745898619">"Poravnajte položaj glave vertikalno."</string>
-    <string name="face_acquired_obscured" msgid="5747521031647744553">"Sklonite prepreke između vaše glave i telefona."</string>
-    <string name="face_acquired_sensor_dirty" msgid="364493868630891300">"Očistite kameru."</string>
+    <string name="face_acquired_pan_too_extreme" msgid="4581629343077288178">"Malo manje zakrenite glavu."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"Malo manje zakrenite glavu."</string>
+    <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"Malo manje zakrenite glavu."</string>
+    <string name="face_acquired_obscured" msgid="5357207702967893283">"Uklonite prepreke koje blokiraju vaše lice."</string>
+    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"Očistite senzor na gornjem rubu ekrana."</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"Nije moguće potvrditi lice. Hardver nije dostupan."</string>
-    <string name="face_error_timeout" msgid="2605673935810019129">"Vrijeme za prepoznavanje je isteklo. Ponovite."</string>
+    <string name="face_error_timeout" msgid="3202585609451248103">"Pokušajte ponovo s autentifikacijom lica."</string>
     <string name="face_error_no_space" msgid="2712120617457553825">"Nije moguće sačuvati nove podatke o licu. Prvo izbrišite stare."</string>
     <string name="face_error_canceled" msgid="2768146728600802422">"Prepoznavanje lica je otkazano"</string>
     <string name="face_error_user_canceled" msgid="9003022830076496163">"Korisnik je otkazao provjeru lica"</string>
@@ -651,6 +651,8 @@
     <string name="permdesc_bindCarrierServices" msgid="1391552602551084192">"Omogućava vlasniku povezivanje sa uslugama operatera. Obično nije potrebno za obične aplikacije."</string>
     <string name="permlab_access_notification_policy" msgid="4247510821662059671">"pristup načinu rada Ne ometaj"</string>
     <string name="permdesc_access_notification_policy" msgid="3296832375218749580">"Omogućava aplikaciji da čita i upisuje konfiguraciju načina rada Ne ometaj."</string>
+    <string name="permlab_startViewPermissionUsage" msgid="5484728591597709944">"pokrenuti korištenje odobrenja za pregled"</string>
+    <string name="permdesc_startViewPermissionUsage" msgid="4808345878203594428">"Dozvoljava vlasniku da pokrene korištenje odobrenja za aplikaciju. Ne bi trebalo biti potrebno za obične aplikacije."</string>
     <string name="policylab_limitPassword" msgid="4497420728857585791">"Postavljanje pravila za lozinke"</string>
     <string name="policydesc_limitPassword" msgid="2502021457917874968">"Kontrolira dužinu i znakove koji su dozvoljeni u lozinkama za zaključavanje ekrana i PIN-ovima."</string>
     <string name="policylab_watchLogin" msgid="5091404125971980158">"Prati pokušaje otključavanja ekrana"</string>
@@ -1379,7 +1381,8 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Izvršite vraćanje na fabričke postavke da onemogućite način rada okvira za testiranje."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"Tečnost ili nečistoće u USB priključku"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB priključak je automatski onemogućen. Dodirnite da saznate više."</string>
-    <string name="usb_contaminant_not_detected_title" msgid="4202417484434906086">"USB priključak je sada sigurno koristiti"</string>
+    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
+    <skip />
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"Telefon više ne detektira tečnost ili nečistoće."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"Prijem izvještaja o grešci..."</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"Podijeliti izvještaj o grešci?"</string>
@@ -1621,7 +1624,7 @@
     <string name="media_route_button_content_description" msgid="591703006349356016">"Emitiranje"</string>
     <string name="media_route_chooser_title" msgid="1751618554539087622">"Poveži na uređaj"</string>
     <string name="media_route_chooser_title_for_remote_display" msgid="3395541745872017583">"Emitiranje ekrana na uređaj"</string>
-    <string name="media_route_chooser_searching" msgid="4776236202610828706">"Traženje uređajā…"</string>
+    <string name="media_route_chooser_searching" msgid="4776236202610828706">"Traženje uređaja…"</string>
     <string name="media_route_chooser_extended_settings" msgid="87015534236701604">"Postavke"</string>
     <string name="media_route_controller_disconnect" msgid="8966120286374158649">"Prekini vezu"</string>
     <string name="media_route_status_scanning" msgid="7279908761758293783">"Skeniranje…"</string>
@@ -1825,7 +1828,7 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"Instalirao je vaš administrator"</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"Ažurirao je vaš administrator"</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"Izbrisao je vaš administrator"</string>
-    <string name="confirm_battery_saver" msgid="639106420541753635">"UREDU"</string>
+    <string name="confirm_battery_saver" msgid="639106420541753635">"Uredu"</string>
     <string name="battery_saver_description_with_learn_more" msgid="2108984221113106294">"U cilju produženja trajanja baterije, funkcija Ušteda baterije isključuje ili ograničava aktivnost u pozadini, neke vizuelne efekte i druge funkcije koje troše puno energije. "<annotation id="url">"Saznajte više"</annotation></string>
     <string name="battery_saver_description" msgid="6413346684861241431">"U cilju produženja trajanja baterije, funkcija Ušteda baterije isključuje ili ograničava aktivnost u pozadini, neke vizuelne efekte i druge funkcije koje troše puno energije."</string>
     <string name="data_saver_description" msgid="6015391409098303235">"Da bi se smanjio prijenos podataka, Ušteda podataka sprečava da neke aplikacije šalju ili primaju podatke u pozadini. Aplikacija koju trenutno koristite može pristupiti podacima, ali će to činiti rjeđe. To može značiti, naprimjer, da se slike ne prikazuju sve dok ih ne dodirnete."</string>
@@ -1934,9 +1937,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Provjeri je li dostupno ažuriranje"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"Imate nove poruke"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"Otvorite SMS aplikaciju da biste pregledali poruke"</string>
-    <string name="user_encrypted_title" msgid="9054897468831672082">"Neke funkcije mogu biti ograničene"</string>
-    <string name="user_encrypted_message" msgid="4923292604515744267">"Dodirnite da biste otključali"</string>
-    <string name="user_encrypted_detail" msgid="5708447464349420392">"Podaci korisnika su zaključani"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"Neke funkcije mogu biti ograničene"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"Radni profil je zaključan"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"Dodirnite da biste otključali radni profil"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"Povezan na uređaj <xliff:g id="PRODUCT_NAME">%1$s</xliff:g>"</string>
@@ -2065,4 +2066,5 @@
       <item quantity="other"><xliff:g id="FILE_NAME_2">%s</xliff:g> + <xliff:g id="COUNT_3">%d</xliff:g> fajlova</item>
     </plurals>
     <string name="chooser_no_direct_share_targets" msgid="997970693708458895">"Direktno dijeljenje nije dostupno"</string>
+    <string name="chooser_all_apps_button_label" msgid="3631524352936289457">"Spisak aplikacija"</string>
 </resources>

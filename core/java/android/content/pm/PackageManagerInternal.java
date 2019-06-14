@@ -174,6 +174,22 @@ public abstract class PackageManagerInternal {
     }
 
     /**
+     * Provider for default dialer
+     */
+    public interface DefaultDialerProvider {
+
+        /**
+         * Get the package name of the default dialer.
+         *
+         * @param userId the user id
+         *
+         * @return the package name of the default dialer, or {@code null} if none
+         */
+        @Nullable
+        String getDefaultDialer(@UserIdInt int userId);
+    }
+
+    /**
      * Provider for default home
      */
     public interface DefaultHomeProvider {
@@ -228,14 +244,6 @@ public abstract class PackageManagerInternal {
      * @param provider The provider.
      */
     public abstract void setSyncAdapterPackagesprovider(SyncAdapterPackagesProvider provider);
-
-    /**
-     * Called when the package for the default dialer changed
-     *
-     * @param packageName the new dialer package
-     * @param userId user for which the change was made
-     */
-    public void onDefaultDialerAppChanged(String packageName, int userId) {}
 
     /**
      * Called when the package for the default SMS handler changed
@@ -836,6 +844,13 @@ public abstract class PackageManagerInternal {
      */
     public abstract void forEachPackage(Consumer<PackageParser.Package> actionLocked);
 
+    /**
+     * Perform the given action for each installed package for a user.
+     * Note that packages lock will be held while performin the actions.
+     */
+    public abstract void forEachInstalledPackage(
+            @NonNull Consumer<PackageParser.Package> actionLocked, @UserIdInt int userId);
+
     /** Returns the list of enabled components */
     public abstract ArraySet<String> getEnabledComponents(String packageName, int userId);
 
@@ -932,6 +947,13 @@ public abstract class PackageManagerInternal {
     public abstract void setDefaultBrowserProvider(@NonNull DefaultBrowserProvider provider);
 
     /**
+     * Sets the default dialer provider.
+     *
+     * @param provider the provider
+     */
+    public abstract void setDefaultDialerProvider(@NonNull DefaultDialerProvider provider);
+
+    /**
      * Sets the default home provider.
      *
      * @param provider the provider
@@ -963,4 +985,13 @@ public abstract class PackageManagerInternal {
      * @return true if default permissions
      */
     public abstract boolean wereDefaultPermissionsGrantedSinceBoot(int userId);
+
+    /**
+     * Get fingerprint of build that updated the runtime permissions for a user.
+     *
+     * @param userId The user to update
+     * @param fingerPrint The fingerprint to set
+     */
+    public abstract void setRuntimePermissionsFingerPrint(@NonNull String fingerPrint,
+            @UserIdInt int userId);
 }

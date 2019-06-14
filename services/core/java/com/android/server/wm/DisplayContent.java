@@ -26,6 +26,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMAR
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_USER;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
@@ -78,6 +79,8 @@ import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_W
 import static com.android.server.wm.DisplayContentProto.ABOVE_APP_WINDOWS;
 import static com.android.server.wm.DisplayContentProto.APP_TRANSITION;
 import static com.android.server.wm.DisplayContentProto.BELOW_APP_WINDOWS;
+import static com.android.server.wm.DisplayContentProto.CHANGING_APPS;
+import static com.android.server.wm.DisplayContentProto.CLOSING_APPS;
 import static com.android.server.wm.DisplayContentProto.DISPLAY_FRAMES;
 import static com.android.server.wm.DisplayContentProto.DISPLAY_INFO;
 import static com.android.server.wm.DisplayContentProto.DOCKED_STACK_DIVIDER_CONTROLLER;
@@ -85,6 +88,7 @@ import static com.android.server.wm.DisplayContentProto.DPI;
 import static com.android.server.wm.DisplayContentProto.FOCUSED_APP;
 import static com.android.server.wm.DisplayContentProto.ID;
 import static com.android.server.wm.DisplayContentProto.IME_WINDOWS;
+import static com.android.server.wm.DisplayContentProto.OPENING_APPS;
 import static com.android.server.wm.DisplayContentProto.PINNED_STACK_CONTROLLER;
 import static com.android.server.wm.DisplayContentProto.ROTATION;
 import static com.android.server.wm.DisplayContentProto.SCREEN_ROTATION_ANIMATION;
@@ -144,6 +148,7 @@ import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Insets;
 import android.graphics.Matrix;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Region;
@@ -371,6 +376,20 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     private int mLastKeyguardForcedOrientation = SCREEN_ORIENTATION_UNSPECIFIED;
 
     /**
+     * The maximum aspect ratio (longerSide/shorterSide) that is treated as close-to-square. The
+     * orientation requests from apps would be ignored if the display is close-to-square.
+     */
+    @VisibleForTesting
+    final float mCloseToSquareMaxAspectRatio;
+
+    /**
+     * If this is true, we would not rotate the display for apps. The rotation would be either the
+     * sensor rotation or the user rotation, controlled by
+     * {@link WindowManagerPolicy.UserRotationMode}.
+     */
+    private boolean mIgnoreRotationForApps;
+
+    /**
      * Keep track of wallpaper visibility to notify changes.
      */
     private boolean mLastWallpaperVisible = false;
@@ -541,6 +560,10 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
     private final InsetsStateController mInsetsStateController;
 
+    /** @see #getParentWindow() */
+    private WindowState mParentWindow;
+
+    private Point mLocationInParentWindow = new Point();
     private SurfaceControl mParentSurfaceControl;
     private InputWindowHandle mPortalWindowHandle;
 
@@ -548,6 +571,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     private int mLastStatusBarVisibility = 0;
     // Last systemUiVisibility we dispatched to windows.
     private int mLastDispatchedSystemUiVisibility = 0;
+
+    /** Corner radius that windows should have in order to match the display. */
+    private final float mWindowCornerRadius;
 
     private final Consumer<WindowState> mUpdateWindowsForAnimator = w -> {
         WindowStateAnimator winAnimator = w.mWinAnimator;
@@ -778,10 +804,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                     mTmpApplySurfaceChangesTransactionState.preferredRefreshRate
                             = w.mAttrs.preferredRefreshRate;
                 }
+                final int preferredModeId = getDisplayPolicy().getRefreshRatePolicy()
+                        .getPreferredModeId(w);
                 if (mTmpApplySurfaceChangesTransactionState.preferredModeId == 0
-                        && w.mAttrs.preferredDisplayModeId != 0) {
-                    mTmpApplySurfaceChangesTransactionState.preferredModeId
-                            = w.mAttrs.preferredDisplayModeId;
+                        && preferredModeId != 0) {
+                    mTmpApplySurfaceChangesTransactionState.preferredModeId = preferredModeId;
                 }
             }
         }
@@ -898,6 +925,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         mDisplayPolicy = new DisplayPolicy(service, this);
         mDisplayRotation = new DisplayRotation(service, this);
+        mCloseToSquareMaxAspectRatio = service.mContext.getResources().getFloat(
+                com.android.internal.R.dimen.config_closeToSquareDisplayMaxAspectRatio);
         if (isDefaultDisplay) {
             // The policy may be invoked right after here, so it requires the necessary default
             // fields of this display content.
@@ -909,6 +938,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         if (mWmService.mSystemReady) {
             mDisplayPolicy.systemReady();
         }
+        mWindowCornerRadius = mDisplayPolicy.getWindowCornerRadius();
         mDividerControllerLocked = new DockedStackDividerController(service, this);
         mPinnedStackControllerLocked = new PinnedStackController(service, this);
 
@@ -951,6 +981,10 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
     int getDisplayId() {
         return mDisplayId;
+    }
+
+    float getWindowCornerRadius() {
+        return mWindowCornerRadius;
     }
 
     WindowToken getWindowToken(IBinder binder) {
@@ -1447,7 +1481,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         // the top of the method, the caller is obligated to call computeNewConfigurationLocked().
         // By updating the Display info here it will be available to
         // #computeScreenConfiguration() later.
-        updateDisplayAndOrientation(getConfiguration().uiMode);
+        updateDisplayAndOrientation(getConfiguration().uiMode, null /* outConfig */);
 
         // NOTE: We disable the rotation in the emulator because
         //       it doesn't support hardware OpenGL emulation yet.
@@ -1523,6 +1557,21 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         mDisplayFrames.onDisplayInfoUpdated(mDisplayInfo,
                 calculateDisplayCutoutForRotation(mDisplayInfo.rotation));
+
+        // Not much of use to rotate the display for apps since it's close to square.
+        mIgnoreRotationForApps = isNonDecorDisplayCloseToSquare(Surface.ROTATION_0, width, height);
+    }
+
+    private boolean isNonDecorDisplayCloseToSquare(int rotation, int width, int height) {
+        final DisplayCutout displayCutout =
+                calculateDisplayCutoutForRotation(rotation).getDisplayCutout();
+        final int uiMode = mWmService.mPolicy.getUiMode();
+        final int w = mDisplayPolicy.getNonDecorDisplayWidth(
+                width, height, rotation, uiMode, displayCutout);
+        final int h = mDisplayPolicy.getNonDecorDisplayHeight(
+                width, height, rotation, uiMode, displayCutout);
+        final float aspectRatio = Math.max(w, h) / (float) Math.min(w, h);
+        return aspectRatio <= mCloseToSquareMaxAspectRatio;
     }
 
     /**
@@ -1530,7 +1579,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      * changed.
      * Do not call if {@link WindowManagerService#mDisplayReady} == false.
      */
-    private DisplayInfo updateDisplayAndOrientation(int uiMode) {
+    private DisplayInfo updateDisplayAndOrientation(int uiMode, Configuration outConfig) {
         // Use the effective "visual" dimensions based on current rotation
         final boolean rotated = (mRotation == ROTATION_90 || mRotation == ROTATION_270);
         final int dw = rotated ? mBaseDisplayHeight : mBaseDisplayWidth;
@@ -1561,6 +1610,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         } else {
             mDisplayInfo.flags &= ~Display.FLAG_SCALING_DISABLED;
         }
+
+        computeSizeRangesAndScreenLayout(mDisplayInfo, rotated, uiMode, dw, dh,
+                mDisplayMetrics.density, outConfig);
 
         // We usually set the override info in DisplayManager so that we get consistent display
         // metrics values when displays are changing and don't send out new values until WM is aware
@@ -1610,7 +1662,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      * Do not call if mDisplayReady == false.
      */
     void computeScreenConfiguration(Configuration config) {
-        final DisplayInfo displayInfo = updateDisplayAndOrientation(config.uiMode);
+        final DisplayInfo displayInfo = updateDisplayAndOrientation(config.uiMode, config);
         calculateBounds(displayInfo, mTmpBounds);
         config.windowConfiguration.setBounds(mTmpBounds);
 
@@ -1639,9 +1691,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 topInset + displayInfo.appHeight /* bottom */);
         final boolean rotated = (displayInfo.rotation == Surface.ROTATION_90
                 || displayInfo.rotation == Surface.ROTATION_270);
-
-        computeSizeRangesAndScreenLayout(displayInfo, rotated, config.uiMode, dw, dh, density,
-                config);
 
         config.screenLayout = (config.screenLayout & ~Configuration.SCREENLAYOUT_ROUND_MASK)
                 | ((displayInfo.flags & Display.FLAG_ROUND) != 0
@@ -1796,6 +1845,10 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         adjustDisplaySizeRanges(displayInfo, Surface.ROTATION_90, uiMode, unrotDh, unrotDw);
         adjustDisplaySizeRanges(displayInfo, Surface.ROTATION_180, uiMode, unrotDw, unrotDh);
         adjustDisplaySizeRanges(displayInfo, Surface.ROTATION_270, uiMode, unrotDh, unrotDw);
+
+        if (outConfig == null) {
+            return;
+        }
         int sl = Configuration.resetScreenLayout(outConfig.screenLayout);
         sl = reduceConfigLayout(sl, Surface.ROTATION_0, density, unrotDw, unrotDh, uiMode,
                 displayInfo.displayCutout);
@@ -2102,6 +2155,10 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     @Override
     int getOrientation() {
         final WindowManagerPolicy policy = mWmService.mPolicy;
+
+        if (mIgnoreRotationForApps) {
+            return SCREEN_ORIENTATION_USER;
+        }
 
         if (mWmService.mDisplayFrozen) {
             if (mLastWindowForcedOrientation != SCREEN_ORIENTATION_UNSPECIFIED) {
@@ -2580,16 +2637,24 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         final WindowState imeWin = mInputMethodWindow;
         final boolean imeVisible = imeWin != null && imeWin.isVisibleLw() && imeWin.isDisplayedLw()
                 && !mDividerControllerLocked.isImeHideRequested();
-        final boolean dockVisible = isStackVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
+        final TaskStack dockedStack = getSplitScreenPrimaryStack();
+        final boolean dockVisible = dockedStack != null;
+        final Task topDockedTask = dockVisible ? dockedStack.getTopChild() : null;
         final TaskStack imeTargetStack = mWmService.getImeFocusStackLocked();
         final int imeDockSide = (dockVisible && imeTargetStack != null) ?
                 imeTargetStack.getDockSide() : DOCKED_INVALID;
         final boolean imeOnTop = (imeDockSide == DOCKED_TOP);
         final boolean imeOnBottom = (imeDockSide == DOCKED_BOTTOM);
-        final boolean dockMinimized = mDividerControllerLocked.isMinimizedDock();
         final int imeHeight = mDisplayFrames.getInputMethodWindowVisibleHeight();
         final boolean imeHeightChanged = imeVisible &&
                 imeHeight != mDividerControllerLocked.getImeHeightAdjustedFor();
+
+        // This includes a case where the docked stack is unminimizing and IME is visible for the
+        // bottom side stack. The condition prevents adjusting the override task bounds for IME to
+        // the minimized docked stack bounds.
+        final boolean dockMinimized = mDividerControllerLocked.isMinimizedDock()
+                || (topDockedTask != null && imeOnBottom && !dockedStack.isAdjustedForIme()
+                        && dockedStack.getBounds().height() < topDockedTask.getBounds().height());
 
         // The divider could be adjusted for IME position, or be thinner than usual,
         // or both. There are three possible cases:
@@ -2722,6 +2787,15 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         mAppTransition.writeToProto(proto, APP_TRANSITION);
         if (mFocusedApp != null) {
             mFocusedApp.writeNameToProto(proto, FOCUSED_APP);
+        }
+        for (int i = mOpeningApps.size() - 1; i >= 0; i--) {
+            mOpeningApps.valueAt(i).mActivityRecord.writeIdentifierToProto(proto, OPENING_APPS);
+        }
+        for (int i = mClosingApps.size() - 1; i >= 0; i--) {
+            mClosingApps.valueAt(i).mActivityRecord.writeIdentifierToProto(proto, CLOSING_APPS);
+        }
+        for (int i = mChangingApps.size() - 1; i >= 0; i--) {
+            mChangingApps.valueAt(i).mActivityRecord.writeIdentifierToProto(proto, CHANGING_APPS);
         }
         proto.end(token);
     }
@@ -2920,9 +2994,16 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         forAllWindows(mScheduleToastTimeout, false /* traverseTopToBottom */);
     }
 
-    WindowState findFocusedWindowIfNeeded() {
-        return (mWmService.mPerDisplayFocusEnabled
-                || mWmService.mRoot.mTopFocusedAppByProcess.isEmpty()) ? findFocusedWindow() : null;
+    /**
+     * Looking for the focused window on this display if the top focused display hasn't been
+     * found yet (topFocusedDisplayId is INVALID_DISPLAY) or per-display focused was allowed.
+     *
+     * @param topFocusedDisplayId Id of the top focused display.
+     * @return The focused window or null if there isn't any or no need to seek.
+     */
+    WindowState findFocusedWindowIfNeeded(int topFocusedDisplayId) {
+        return (mWmService.mPerDisplayFocusEnabled || topFocusedDisplayId == INVALID_DISPLAY)
+                ? findFocusedWindow() : null;
     }
 
     WindowState findFocusedWindow() {
@@ -2946,10 +3027,12 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      *             {@link WindowManagerService#UPDATE_FOCUS_WILL_PLACE_SURFACES},
      *             {@link WindowManagerService#UPDATE_FOCUS_REMOVING_FOCUS}
      * @param updateInputWindows Whether to sync the window information to the input module.
+     * @param topFocusedDisplayId Display id of current top focused display.
      * @return {@code true} if the focused window has changed.
      */
-    boolean updateFocusedWindowLocked(int mode, boolean updateInputWindows) {
-        WindowState newFocus = findFocusedWindowIfNeeded();
+    boolean updateFocusedWindowLocked(int mode, boolean updateInputWindows,
+            int topFocusedDisplayId) {
+        WindowState newFocus = findFocusedWindowIfNeeded(topFocusedDisplayId);
         if (mCurrentFocus == newFocus) {
             return false;
         }
@@ -2969,7 +3052,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         if (imWindowChanged) {
             mWmService.mWindowsChanged = true;
             setLayoutNeeded();
-            newFocus = findFocusedWindowIfNeeded();
+            newFocus = findFocusedWindowIfNeeded(topFocusedDisplayId);
         }
         if (mCurrentFocus != newFocus) {
             mWmService.mH.obtainMessage(REPORT_FOCUS_CHANGE, this).sendToTarget();
@@ -3270,7 +3353,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         final SurfaceControl newParent =
                 shouldAttachToDisplay ? mWindowingLayer : computeImeParent();
         if (newParent != null) {
-            mPendingTransaction.reparent(mImeWindowsContainers.mSurfaceControl, newParent);
+            getPendingTransaction().reparent(mImeWindowsContainers.mSurfaceControl, newParent);
             scheduleAnimation();
         }
     }
@@ -3677,7 +3760,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             mPortalWindowHandle.touchableRegion.getBounds(mTmpRect);
             if (!mTmpBounds.equals(mTmpRect)) {
                 mPortalWindowHandle.touchableRegion.set(mTmpBounds);
-                mPendingTransaction.setInputWindowInfo(mParentSurfaceControl, mPortalWindowHandle);
+                getPendingTransaction().setInputWindowInfo(
+                        mParentSurfaceControl, mPortalWindowHandle);
             }
         }
     }
@@ -4776,18 +4860,23 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         try {
             final ScreenRotationAnimation screenRotationAnimation =
                     mWmService.mAnimator.getScreenRotationAnimationLocked(mDisplayId);
+            final Transaction transaction = getPendingTransaction();
             if (screenRotationAnimation != null && screenRotationAnimation.isAnimating()) {
                 screenRotationAnimation.getEnterTransformation().getMatrix().getValues(mTmpFloats);
-                mPendingTransaction.setMatrix(mWindowingLayer,
+                transaction.setMatrix(mWindowingLayer,
                         mTmpFloats[Matrix.MSCALE_X], mTmpFloats[Matrix.MSKEW_Y],
                         mTmpFloats[Matrix.MSKEW_X], mTmpFloats[Matrix.MSCALE_Y]);
-                mPendingTransaction.setPosition(mWindowingLayer,
+                transaction.setPosition(mWindowingLayer,
                         mTmpFloats[Matrix.MTRANS_X], mTmpFloats[Matrix.MTRANS_Y]);
-                mPendingTransaction.setAlpha(mWindowingLayer,
+                transaction.setAlpha(mWindowingLayer,
                         screenRotationAnimation.getEnterTransformation().getAlpha());
             }
 
             super.prepareSurfaces();
+
+            // TODO: Once we totally eliminate global transaction we will pass transaction in here
+            //       rather than merging to global.
+            SurfaceControl.mergeToGlobalTransaction(transaction);
         } finally {
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
@@ -4916,24 +5005,70 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     boolean supportsSystemDecorations() {
         return (mWmService.mDisplayWindowSettings.shouldShowSystemDecorsLocked(this)
                 || (mDisplay.getFlags() & FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS) != 0
-                || mWmService.mForceDesktopModeOnExternalDisplays)
+                || (mWmService.mForceDesktopModeOnExternalDisplays && !isUntrustedVirtualDisplay()))
                 // VR virtual display will be used to run and render 2D app within a VR experience.
                 && mDisplayId != mWmService.mVr2dDisplayId;
     }
 
     /**
+     * @return {@code true} if the display is non-system created virtual display.
+     */
+    boolean isUntrustedVirtualDisplay() {
+        return mDisplay.getType() == Display.TYPE_VIRTUAL
+                && mDisplay.getOwnerUid() != Process.SYSTEM_UID;
+    }
+
+    /**
      * Re-parent the DisplayContent's top surfaces, {@link #mWindowingLayer} and
-     * {@link #mOverlayLayer} to the specified surfaceControl.
+     * {@link #mOverlayLayer} to the specified SurfaceControl.
      *
+     * @param win The window which owns the SurfaceControl. This indicates the z-order of the
+     *            windows of this display against the windows on the parent display.
      * @param sc The new SurfaceControl, where the DisplayContent's surfaces will be re-parented to.
      */
-    void reparentDisplayContent(SurfaceControl sc) {
+    void reparentDisplayContent(WindowState win, SurfaceControl sc) {
+        mParentWindow = win;
         mParentSurfaceControl = sc;
         if (mPortalWindowHandle == null) {
             mPortalWindowHandle = createPortalWindowHandle(sc.toString());
         }
-        mPendingTransaction.setInputWindowInfo(sc, mPortalWindowHandle)
+        getPendingTransaction().setInputWindowInfo(sc, mPortalWindowHandle)
                 .reparent(mWindowingLayer, sc).reparent(mOverlayLayer, sc);
+    }
+
+    /**
+     * Get the window which owns the surface that this DisplayContent is re-parented to.
+     *
+     * @return the parent window.
+     */
+    WindowState getParentWindow() {
+        return mParentWindow;
+    }
+
+    /**
+     * Update the location of this display in the parent window. This enables windows in this
+     * display to compute the global transformation matrix.
+     *
+     * @param win The parent window of this display.
+     * @param x The x coordinate in the parent window.
+     * @param y The y coordinate in the parent window.
+     */
+    void updateLocation(WindowState win, int x, int y) {
+        if (mParentWindow != win) {
+            throw new IllegalArgumentException(
+                    "The given window is not the parent window of this display.");
+        }
+        if (mLocationInParentWindow.x != x || mLocationInParentWindow.y != y) {
+            mLocationInParentWindow.x = x;
+            mLocationInParentWindow.y = y;
+            if (mWmService.mAccessibilityController != null) {
+                mWmService.mAccessibilityController.onSomeWindowResizedOrMovedLocked();
+            }
+        }
+    }
+
+    Point getLocationInParentWindow() {
+        return mLocationInParentWindow;
     }
 
     @VisibleForTesting

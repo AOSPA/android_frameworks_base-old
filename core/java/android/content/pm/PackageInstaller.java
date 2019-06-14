@@ -627,6 +627,10 @@ public class PackageInstaller {
      * Install the given package, which already exists on the device, for the user for which this
      * installer was created.
      *
+     * <p>This will
+     * {@link PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set) whitelist
+     * all restricted permissions}.
+     *
      * @param packageName The package to install.
      * @param installReason Reason for install.
      * @param statusReceiver Where to deliver the result.
@@ -639,8 +643,9 @@ public class PackageInstaller {
             @Nullable IntentSender statusReceiver) {
         Preconditions.checkNotNull(packageName, "packageName cannot be null");
         try {
-            mInstaller.installExistingPackage(packageName, 0, installReason, statusReceiver,
-                    mUserId);
+            mInstaller.installExistingPackage(packageName,
+                    PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS, installReason,
+                    statusReceiver, mUserId, null);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1278,7 +1283,7 @@ public class PackageInstaller {
         public int mode = MODE_INVALID;
         /** {@hide} */
         @UnsupportedAppUsage
-        public int installFlags;
+        public int installFlags = PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS;
         /** {@hide} */
         public int installLocation = PackageInfo.INSTALL_LOCATION_INTERNAL_ONLY;
         /** {@hide} */
@@ -1318,6 +1323,8 @@ public class PackageInstaller {
         public boolean isMultiPackage;
         /** {@hide} */
         public boolean isStaged;
+        /** {@hide} */
+        public long requiredInstalledVersionCode = PackageManager.VERSION_CODE_HIGHEST;
 
         /**
          * Construct parameters for a new package install session.
@@ -1350,6 +1357,7 @@ public class PackageInstaller {
             installerPackageName = source.readString();
             isMultiPackage = source.readBoolean();
             isStaged = source.readBoolean();
+            requiredInstalledVersionCode = source.readLong();
         }
 
         /** {@hide} */
@@ -1372,6 +1380,7 @@ public class PackageInstaller {
             ret.installerPackageName = installerPackageName;
             ret.isMultiPackage = isMultiPackage;
             ret.isStaged = isStaged;
+            ret.requiredInstalledVersionCode = requiredInstalledVersionCode;
             return ret;
         }
 
@@ -1509,10 +1518,9 @@ public class PackageInstaller {
          * state of the permission can be determined only at install time and cannot be
          * changed on updated or at a later point via the package manager APIs.
          *
-         * <p>The whitelisted non-immutably restricted permissions would be added to
-         * the {@link PackageManager#FLAG_PERMISSION_WHITELIST_INSTALLER installer whitelist}
-         * while the immutably restricted permissions would be added to the {@link
-         * PackageManager#FLAG_PERMISSION_WHITELIST_SYSTEM system whitelist}
+         * <p>Initially, all restricted permissions are whitelisted but you can change
+         * which ones are whitelisted by calling this method or the corresponding ones
+         * on the {@link PackageManager}.
          *
          * @see PackageManager#addWhitelistedRestrictedPermission(String, String, int)
          * @see PackageManager#removeWhitelistedRestrictedPermission(String, String, int)
@@ -1520,12 +1528,11 @@ public class PackageInstaller {
         public void setWhitelistedRestrictedPermissions(@Nullable Set<String> permissions) {
             if (permissions == RESTRICTED_PERMISSIONS_ALL) {
                 installFlags |= PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS;
-            }
-            if (permissions != null) {
-                this.whitelistedRestrictedPermissions = new ArrayList<>(permissions);
+                whitelistedRestrictedPermissions = null;
             } else {
                 installFlags &= ~PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS;
-                this.whitelistedRestrictedPermissions = null;
+                whitelistedRestrictedPermissions = (permissions != null)
+                        ? new ArrayList<>(permissions) : null;
             }
         }
 
@@ -1565,6 +1572,19 @@ public class PackageInstaller {
             } else {
                 installFlags &= ~PackageManager.INSTALL_REQUEST_DOWNGRADE;
             }
+        }
+
+        /**
+         * Require the given version of the package be installed.
+         * The install will only be allowed if the existing version code of
+         * the package installed on the device matches the given version code.
+         * Use {@link * PackageManager#VERSION_CODE_HIGHEST} to allow
+         * installation regardless of the currently installed package version.
+         *
+         * @hide
+         */
+        public void setRequiredInstalledVersionCode(long versionCode) {
+            requiredInstalledVersionCode = versionCode;
         }
 
         /** {@hide} */
@@ -1708,6 +1728,7 @@ public class PackageInstaller {
             pw.printPair("installerPackageName", installerPackageName);
             pw.printPair("isMultiPackage", isMultiPackage);
             pw.printPair("isStaged", isStaged);
+            pw.printPair("requiredInstalledVersionCode", requiredInstalledVersionCode);
             pw.println();
         }
 
@@ -1736,6 +1757,7 @@ public class PackageInstaller {
             dest.writeString(installerPackageName);
             dest.writeBoolean(isMultiPackage);
             dest.writeBoolean(isStaged);
+            dest.writeLong(requiredInstalledVersionCode);
         }
 
         public static final Parcelable.Creator<SessionParams>

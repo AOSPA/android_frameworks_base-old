@@ -78,7 +78,7 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     private static final int MSG_COLLAPSE_PANELS               = 4 << MSG_SHIFT;
     private static final int MSG_EXPAND_SETTINGS               = 5 << MSG_SHIFT;
     private static final int MSG_SET_SYSTEMUI_VISIBILITY       = 6 << MSG_SHIFT;
-    private static final int MSG_TOP_APP_WINDOW_CHANGED        = 7 << MSG_SHIFT;
+    private static final int MSG_DISPLAY_READY                 = 7 << MSG_SHIFT;
     private static final int MSG_SHOW_IME_BUTTON               = 8 << MSG_SHIFT;
     private static final int MSG_TOGGLE_RECENT_APPS            = 9 << MSG_SHIFT;
     private static final int MSG_PRELOAD_RECENT_APPS           = 10 << MSG_SHIFT;
@@ -115,7 +115,7 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     private static final int MSG_SHOW_CHARGING_ANIMATION       = 44 << MSG_SHIFT;
     private static final int MSG_SHOW_PINNING_TOAST_ENTER_EXIT = 45 << MSG_SHIFT;
     private static final int MSG_SHOW_PINNING_TOAST_ESCAPE     = 46 << MSG_SHIFT;
-    private static final int MSG_DISPLAY_READY                 = 47 << MSG_SHIFT;
+    private static final int MSG_RECENTS_ANIMATION_STATE_CHANGED = 47 << MSG_SHIFT;
 
     public static final int FLAG_EXCLUDE_NONE = 0;
     public static final int FLAG_EXCLUDE_SEARCH_PANEL = 1 << 0;
@@ -181,15 +181,6 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                 int dockedStackVis, int mask, Rect fullscreenStackBounds, Rect dockedStackBounds,
                 boolean navbarColorManagedByIme) {
         }
-
-        /**
-         * Called to notify top app window changes.
-         * @see IStatusBar#topAppWindowChanged(int, boolean)
-         *
-         * @param displayId The id of the display to notify.
-         * @param visible {@code true} to show menu button.
-         */
-        default void topAppWindowChanged(int displayId, boolean visible) { }
 
         /**
          * Called to notify IME window status changes.
@@ -291,10 +282,16 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
          * @see IStatusBar#onDisplayReady(int)
          */
         default void onDisplayReady(int displayId) { }
+
         /**
          * @see DisplayManager.DisplayListener#onDisplayRemoved(int)
          */
         default void onDisplayRemoved(int displayId) { }
+
+        /**
+         * @see IStatusBar#onRecentsAnimationStateChanged(boolean)
+         */
+        default void onRecentsAnimationStateChanged(boolean running) { }
     }
 
     @VisibleForTesting
@@ -480,13 +477,7 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     }
 
     @Override
-    public void topAppWindowChanged(int displayId, boolean menuVisible) {
-        synchronized (mLock) {
-            mHandler.removeMessages(MSG_TOP_APP_WINDOW_CHANGED);
-            mHandler.obtainMessage(MSG_TOP_APP_WINDOW_CHANGED,
-                    displayId, menuVisible ? 1 : 0, null).sendToTarget();
-        }
-    }
+    public void topAppWindowChanged(int displayId, boolean menuVisible) { }
 
     @Override
     public void setImeWindowStatus(int displayId, IBinder token, int vis, int backDisposition,
@@ -801,6 +792,14 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
         }
     }
 
+    @Override
+    public void onRecentsAnimationStateChanged(boolean running) {
+        synchronized (mLock) {
+            mHandler.obtainMessage(MSG_RECENTS_ANIMATION_STATE_CHANGED, running ? 1 : 0, 0)
+                    .sendToTarget();
+        }
+    }
+
     private void handleShowImeButton(int displayId, IBinder token, int vis, int backDisposition,
             boolean showImeSwitcher) {
         if (displayId == INVALID_DISPLAY) return;
@@ -887,11 +886,6 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                                 args.argi6 == 1);
                     }
                     args.recycle();
-                    break;
-                case MSG_TOP_APP_WINDOW_CHANGED:
-                    for (int i = 0; i < mCallbacks.size(); i++) {
-                        mCallbacks.get(i).topAppWindowChanged(msg.arg1, msg.arg2 != 0);
-                    }
                     break;
                 case MSG_SHOW_IME_BUTTON:
                     args = (SomeArgs) msg.obj;
@@ -1090,6 +1084,11 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                 case MSG_DISPLAY_READY:
                     for (int i = 0; i < mCallbacks.size(); i++) {
                         mCallbacks.get(i).onDisplayReady(msg.arg1);
+                    }
+                    break;
+                case MSG_RECENTS_ANIMATION_STATE_CHANGED:
+                    for (int i = 0; i < mCallbacks.size(); i++) {
+                        mCallbacks.get(i).onRecentsAnimationStateChanged(msg.arg1 > 0);
                     }
                     break;
             }

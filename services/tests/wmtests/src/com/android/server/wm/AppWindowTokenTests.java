@@ -150,6 +150,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
     }
 
     @Test
+    @FlakyTest(bugId = 131005232)
     public void testLandscapeSeascapeRotationByApp() {
         // Some plumbing to get the service ready for rotation updates.
         mWm.mDisplayReady = true;
@@ -378,6 +379,7 @@ public class AppWindowTokenTests extends WindowTestsBase {
     }
 
     @Test
+    @FlakyTest(bugId = 131176283)
     public void testCreateRemoveStartingWindow() {
         mToken.addStartingWindow(mPackageName,
                 android.R.style.Theme, null, "Test", 0, 0, 0, 0, null, true, true, false, true,
@@ -504,14 +506,14 @@ public class AppWindowTokenTests extends WindowTestsBase {
 
     private void assertHasStartingWindow(AppWindowToken atoken) {
         assertNotNull(atoken.startingSurface);
-        assertNotNull(atoken.startingData);
+        assertNotNull(atoken.mStartingData);
         assertNotNull(atoken.startingWindow);
     }
 
     private void assertNoStartingWindow(AppWindowToken atoken) {
         assertNull(atoken.startingSurface);
         assertNull(atoken.startingWindow);
-        assertNull(atoken.startingData);
+        assertNull(atoken.mStartingData);
         atoken.forAllWindows(windowState -> {
             assertFalse(windowState.getBaseType() == TYPE_APPLICATION_STARTING);
         }, true);

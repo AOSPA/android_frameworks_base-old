@@ -261,7 +261,7 @@
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"Alertas de red"</string>
     <string name="notification_channel_network_available" msgid="4531717914138179517">"Red disponible"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"Estado de VPN"</string>
-    <string name="notification_channel_device_admin" msgid="1568154104368069249">"Administración del dispositivo"</string>
+    <string name="notification_channel_device_admin" msgid="8353118887482520565">"Alertas de tu administrador de TI"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"Alertas"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"Demo para punto de venta"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"Conexión USB"</string>
@@ -302,7 +302,7 @@
     <string name="permgrouplab_camera" msgid="4820372495894586615">"Cámara"</string>
     <string name="permgroupdesc_camera" msgid="3250611594678347720">"tomar fotografías y grabar videos"</string>
     <string name="permgrouprequest_camera" msgid="1299833592069671756">"¿Permitir que &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; tome fotos y grabe videos?"</string>
-    <string name="permgrouplab_calllog" msgid="8798646184930388160">"Registro de llamadas"</string>
+    <string name="permgrouplab_calllog" msgid="8798646184930388160">"Llamadas"</string>
     <string name="permgroupdesc_calllog" msgid="3006237336748283775">"leer y escribir el registro de llamadas telefónicas"</string>
     <string name="permgrouprequest_calllog" msgid="8487355309583773267">"¿Permitir que &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; acceda al registro de las llamadas telefónicas?"</string>
     <string name="permgrouplab_phone" msgid="5229115638567440675">"Teléfono"</string>
@@ -402,7 +402,7 @@
     <string name="permdesc_writeCallLog" product="tv" msgid="4225034892248398019">"Permite que la aplicación modifique el registro de llamadas de la TV, incluidos los datos sobre llamadas entrantes y salientes. Las aplicaciones malintencionadas pueden usar este permiso para borrar o modificar el registro de llamadas."</string>
     <string name="permdesc_writeCallLog" product="default" msgid="683941736352787842">"Permite que la aplicación modifique el registro de llamadas del dispositivo, incluidos los datos sobre llamadas entrantes y salientes. Las aplicaciones malintencionadas pueden usar este permiso para borrar o modificar el registro de llamadas."</string>
     <string name="permlab_bodySensors" msgid="4683341291818520277">"acceder a los sensores corporales (como los monitores de frecuencia cardíaca)"</string>
-    <string name="permdesc_bodySensors" product="default" msgid="4380015021754180431">"Permite que la app acceda a datos de sensores que monitorean tu estado físico, como el ritmo cardíaco."</string>
+    <string name="permdesc_bodySensors" product="default" msgid="4380015021754180431">"Permite que la app acceda a datos de sensores que monitorean tu estado físico, como la frecuencia cardíaca."</string>
     <string name="permlab_readCalendar" msgid="6716116972752441641">"Leer eventos y detalles del calendario"</string>
     <string name="permdesc_readCalendar" product="tablet" msgid="4993979255403945892">"Esta app puede leer todos los eventos del calendario de tu tablet y compartir o guardar los datos correspondientes."</string>
     <string name="permdesc_readCalendar" product="tv" msgid="8837931557573064315">"Esta app puede leer todos los eventos del calendario de tu TV y compartir o guardar los datos correspondientes."</string>
@@ -565,21 +565,21 @@
     <string name="face_acquired_too_low" msgid="488983581737550912">"Mueve el teléfono hacia abajo."</string>
     <string name="face_acquired_too_right" msgid="3667075962661863218">"Mueve el teléfono hacia la izquierda."</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"Mueve el teléfono hacia la derecha."</string>
-    <string name="face_acquired_poor_gaze" msgid="8471716624377228327">"Mira la pantalla con los ojos abiertos."</string>
+    <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"Mira directamente al dispositivo."</string>
     <string name="face_acquired_not_detected" msgid="4885504661626728809">"No se ve tu cara. Mira el teléfono."</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"Te estás moviendo demasiado. No muevas el teléfono"</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"Vuelve a registrar tu cara."</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"Ya no se reconoce la cara. Vuelve a intentarlo."</string>
     <string name="face_acquired_too_similar" msgid="1508776858407646460">"Es muy similar a la anterior. Haz otra pose."</string>
-    <string name="face_acquired_pan_too_extreme" msgid="1852495480382773759">"Mira directamente a la pantalla."</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="1290820400317982049">"Mira directamente a la pantalla."</string>
-    <string name="face_acquired_roll_too_extreme" msgid="1444829237745898619">"Mantén la cabeza en posición vertical."</string>
-    <string name="face_acquired_obscured" msgid="5747521031647744553">"Ilumina el espacio entre tu cabeza y el teléfono."</string>
-    <string name="face_acquired_sensor_dirty" msgid="364493868630891300">"Limpia la cámara."</string>
+    <string name="face_acquired_pan_too_extreme" msgid="4581629343077288178">"Gira la cabeza un poco menos."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"Gira la cabeza un poco menos."</string>
+    <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"Gira la cabeza un poco menos."</string>
+    <string name="face_acquired_obscured" msgid="5357207702967893283">"Quítate cualquier objeto que te cubra el rostro."</string>
+    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"Limpiar sensor del borde superior de la pantalla."</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"No se verificó el rostro. Hardware no disponible."</string>
-    <string name="face_error_timeout" msgid="2605673935810019129">"Finalizó el tiempo de espera. Vuelve a intentarlo."</string>
+    <string name="face_error_timeout" msgid="3202585609451248103">"Vuelve a realizar la autenticación de rostro."</string>
     <string name="face_error_no_space" msgid="2712120617457553825">"No hay espacio para datos faciales nuevos. Borra uno viejo."</string>
     <string name="face_error_canceled" msgid="2768146728600802422">"Se canceló el reconocimiento facial"</string>
     <string name="face_error_user_canceled" msgid="9003022830076496163">"El usuario canceló la autenticación facial"</string>
@@ -648,6 +648,8 @@
     <string name="permdesc_bindCarrierServices" msgid="1391552602551084192">"Permite al propietario vincular con servicios de proveedores. Las aplicaciones normales no deberían necesitar este permiso."</string>
     <string name="permlab_access_notification_policy" msgid="4247510821662059671">"Acceso a la función No interrumpir"</string>
     <string name="permdesc_access_notification_policy" msgid="3296832375218749580">"Permite que la aplicación lea y modifique la configuración de la función No interrumpir."</string>
+    <string name="permlab_startViewPermissionUsage" msgid="5484728591597709944">"iniciar uso de permiso de vista"</string>
+    <string name="permdesc_startViewPermissionUsage" msgid="4808345878203594428">"Permite que el propietario inicie el uso de permisos para una app. No debería requerirse para apps normales."</string>
     <string name="policylab_limitPassword" msgid="4497420728857585791">"Establecer reglas de contraseña"</string>
     <string name="policydesc_limitPassword" msgid="2502021457917874968">"Controlar la longitud y los caracteres permitidos en las contraseñas y los PIN para el bloqueo de pantalla."</string>
     <string name="policylab_watchLogin" msgid="5091404125971980158">"Supervisa los intentos para desbloquear la pantalla"</string>
@@ -1355,7 +1357,8 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Restablece la configuración de fábrica para inhabilitar el modo de agente de prueba."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"Hay líquido o suciedad en el puerto USB"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"El puerto USB se inhabilitó automáticamente. Presiona para obtener más información."</string>
-    <string name="usb_contaminant_not_detected_title" msgid="4202417484434906086">"Es seguro usar el puerto USB"</string>
+    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
+    <skip />
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"El teléfono ya no detecta líquidos o suciedad."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"Realizando un informe de errores…"</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"¿Compartir informe de errores?"</string>
@@ -1898,9 +1901,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Buscar actualización"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"Tienes mensajes nuevos"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"Abrir app de SMS para ver el mensaje"</string>
-    <string name="user_encrypted_title" msgid="9054897468831672082">"Funciones limitadas"</string>
-    <string name="user_encrypted_message" msgid="4923292604515744267">"Presiona para desbloquear"</string>
-    <string name="user_encrypted_detail" msgid="5708447464349420392">"Datos del usuario bloqueados"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"Podrían limitarse algunas funciones"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"Perfil de trabajo bloqueado"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"Presiona para desbloquear"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"Conectado a <xliff:g id="PRODUCT_NAME">%1$s</xliff:g>"</string>
@@ -2027,4 +2028,5 @@
       <item quantity="one"><xliff:g id="FILE_NAME_0">%s</xliff:g> y <xliff:g id="COUNT_1">%d</xliff:g> archivo más</item>
     </plurals>
     <string name="chooser_no_direct_share_targets" msgid="997970693708458895">"No está disponible el uso compartido directo"</string>
+    <string name="chooser_all_apps_button_label" msgid="3631524352936289457">"Lista de apps"</string>
 </resources>

@@ -542,6 +542,12 @@ public class NotificationContentView extends FrameLayout {
     }
 
     @Override
+    public void onViewAdded(View child) {
+        super.onViewAdded(child);
+        child.setTag(R.id.row_tag_for_content_view, mContainingNotification);
+    }
+
+    @Override
     protected void onVisibilityChanged(View changedView, int visibility) {
         super.onVisibilityChanged(changedView, visibility);
         updateVisibility();
@@ -1438,6 +1444,8 @@ public class NotificationContentView extends FrameLayout {
             smartReplyView.resetSmartSuggestions(smartReplyContainer);
             smartReplyView.addPreInflatedButtons(
                     inflatedSmartReplyView.getSmartSuggestionButtons());
+            // Ensure the colors of the smart suggestion buttons are up-to-date.
+            smartReplyView.setBackgroundTintColor(entry.getRow().getCurrentBackgroundTint());
             smartReplyContainer.setVisibility(View.VISIBLE);
         }
         return smartReplyView;
@@ -1892,5 +1900,9 @@ public class NotificationContentView extends FrameLayout {
             pw.print("null");
         }
         pw.println();
+    }
+
+    public RemoteInputView getExpandedRemoteInput() {
+        return mExpandedRemoteInput;
     }
 }

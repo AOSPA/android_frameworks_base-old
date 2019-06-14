@@ -261,7 +261,7 @@
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"Ağ uyarıları"</string>
     <string name="notification_channel_network_available" msgid="4531717914138179517">"Ağ mevcut"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"VPN durumu"</string>
-    <string name="notification_channel_device_admin" msgid="1568154104368069249">"Cihaz yönetimi"</string>
+    <string name="notification_channel_device_admin" msgid="8353118887482520565">"IT yöneticinizden uyarılar"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"Uyarılar"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"Mağaza demo"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"USB bağlantısı"</string>
@@ -565,21 +565,21 @@
     <string name="face_acquired_too_low" msgid="488983581737550912">"Telefonu aşağı indirin."</string>
     <string name="face_acquired_too_right" msgid="3667075962661863218">"Telefonu sola hareket ettirin."</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"Telefonu sağa hareket ettirin."</string>
-    <string name="face_acquired_poor_gaze" msgid="8471716624377228327">"Gözleriniz açık olarak ekrana bakın."</string>
+    <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"Lütfen cihazınıza daha doğrudan bakın."</string>
     <string name="face_acquired_not_detected" msgid="4885504661626728809">"Yüzünüz görülmüyor. Telefona bakın."</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"Çok fazla hareket ediyorsunuz. Telefonu sabit tutun."</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"Lütfen yüzünüzü yeniden kaydedin."</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"Yüz artık tanınamıyor. Tekrar deneyin."</string>
     <string name="face_acquired_too_similar" msgid="1508776858407646460">"Duruşunuz çok benzer, lütfen pozunuzu değiştirin."</string>
-    <string name="face_acquired_pan_too_extreme" msgid="1852495480382773759">"Lütfen ekrana daha doğrudan bakın."</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="1290820400317982049">"Lütfen ekrana daha doğrudan bakın."</string>
-    <string name="face_acquired_roll_too_extreme" msgid="1444829237745898619">"Lütfen başınızı tam dik olacak şekilde tutun."</string>
-    <string name="face_acquired_obscured" msgid="5747521031647744553">"Başınız ve telefon arasındaki engelleri ortadan kaldırın."</string>
-    <string name="face_acquired_sensor_dirty" msgid="364493868630891300">"Lütfen kamerayı temizleyin."</string>
+    <string name="face_acquired_pan_too_extreme" msgid="4581629343077288178">"Başınızı biraz daha az çevirin."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"Başınızı biraz daha az çevirin."</string>
+    <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"Başınızı biraz daha az çevirin."</string>
+    <string name="face_acquired_obscured" msgid="5357207702967893283">"Yüzünüzün görünmesini engelleyen şeyleri kaldırın."</string>
+    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"Ekranın üst kenarındaki sensörü temizleyin."</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"Yüz doğrulanamıyor. Donanım kullanılamıyor."</string>
-    <string name="face_error_timeout" msgid="2605673935810019129">"Yüz için zaman aşımı oluştu. Tekrar deneyin."</string>
+    <string name="face_error_timeout" msgid="3202585609451248103">"Yüzle kimlik doğrulamayı tekrar deneyin."</string>
     <string name="face_error_no_space" msgid="2712120617457553825">"Yeni yüz verisi depolanamıyor. Önce eski bir tanesini silin."</string>
     <string name="face_error_canceled" msgid="2768146728600802422">"Yüz işlemi iptal edildi"</string>
     <string name="face_error_user_canceled" msgid="9003022830076496163">"Yüz kimlik doğrulama işlemini kullanıcı iptal etti"</string>
@@ -648,6 +648,8 @@
     <string name="permdesc_bindCarrierServices" msgid="1391552602551084192">"İzin sahibinin, operatör hizmetlerine bağlanmasına olanak tanır. Normal uygulamalarda hiçbir zaman gerekmez."</string>
     <string name="permlab_access_notification_policy" msgid="4247510821662059671">"Rahatsız Etmeyin özelliğine erişme"</string>
     <string name="permdesc_access_notification_policy" msgid="3296832375218749580">"Uygulamaya, Rahatsız Etmeyin yapılandırmasını okuma ve yazma izni verir."</string>
+    <string name="permlab_startViewPermissionUsage" msgid="5484728591597709944">"izin kullanımı görüntülemeye başlama"</string>
+    <string name="permdesc_startViewPermissionUsage" msgid="4808345878203594428">"İzin sahibinin bir uygulama için izin kullanımı başlatmasına olanak tanır. Normal uygulamalar için hiçbir zaman kullanılmamalıdır."</string>
     <string name="policylab_limitPassword" msgid="4497420728857585791">"Şifre kuralları ayarla"</string>
     <string name="policydesc_limitPassword" msgid="2502021457917874968">"Ekran kilidini açma şifrelerinde ve PIN\'lerde izin verilen uzunluğu ve karakterleri denetleyin."</string>
     <string name="policylab_watchLogin" msgid="5091404125971980158">"Ekran kilidini açma denemelerini izle"</string>
@@ -1355,7 +1357,8 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Test Bandı Modu\'nu devre dışı bırakmak için cihazı fabrika ayarlarına sıfırlayın."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"USB bağlantı noktasında sıvı veya toz var"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB bağlantı noktası otomatik olarak devre dışı bırakıldı. Daha fazla bilgi için dokunun."</string>
-    <string name="usb_contaminant_not_detected_title" msgid="4202417484434906086">"USB bağlantı noktası güvenli bir şekilde kullanılabilir"</string>
+    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
+    <skip />
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"Telefon artık sıvıları veya tozları algılamıyor."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"Hata raporu alınıyor…"</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"Hata raporu paylaşılsın mı?"</string>
@@ -1813,12 +1816,12 @@
       <item quantity="one">1 dakika için (şu saate kadar: <xliff:g id="FORMATTEDTIME_0">%2$s</xliff:g>)</item>
     </plurals>
     <plurals name="zen_mode_duration_hours_summary" formatted="false" msgid="736789408293052283">
-      <item quantity="other">%1$d saat için (şu saate kadar: <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
-      <item quantity="one">1 saat için (şu saate kadar: <xliff:g id="FORMATTEDTIME_0">%2$s</xliff:g>)</item>
+      <item quantity="other">%1$d saat (şu saate kadar: <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
+      <item quantity="one">1 saat (şu saate kadar: <xliff:g id="FORMATTEDTIME_0">%2$s</xliff:g>)</item>
     </plurals>
     <plurals name="zen_mode_duration_hours_summary_short" formatted="false" msgid="4787552595253082371">
-      <item quantity="other">%1$d saat için (şu saate kadar: <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
-      <item quantity="one">1 saat için (şu saate kadar: <xliff:g id="FORMATTEDTIME_0">%2$s</xliff:g>)</item>
+      <item quantity="other">%1$d saat (şu saate kadar: <xliff:g id="FORMATTEDTIME_1">%2$s</xliff:g>)</item>
+      <item quantity="one">1 saat (şu saate kadar: <xliff:g id="FORMATTEDTIME_0">%2$s</xliff:g>)</item>
     </plurals>
     <plurals name="zen_mode_duration_minutes" formatted="false" msgid="5127407202506485571">
       <item quantity="other">%d dakika süreyle</item>
@@ -1829,12 +1832,12 @@
       <item quantity="one">1 dakika için</item>
     </plurals>
     <plurals name="zen_mode_duration_hours" formatted="false" msgid="6571961796799076730">
-      <item quantity="other">%d saat için</item>
-      <item quantity="one">1 saat için</item>
+      <item quantity="other">%d saat</item>
+      <item quantity="one">1 saat</item>
     </plurals>
     <plurals name="zen_mode_duration_hours_short" formatted="false" msgid="6748277774662434217">
-      <item quantity="other">%d saat için</item>
-      <item quantity="one">1 saat için</item>
+      <item quantity="other">%d saat</item>
+      <item quantity="one">1 saat</item>
     </plurals>
     <string name="zen_mode_until" msgid="7336308492289875088">"Şu saate kadar: <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_alarm" msgid="9128205721301330797">"<xliff:g id="FORMATTEDTIME">%1$s</xliff:g> (sonraki alarma) saatine kadar"</string>
@@ -1898,9 +1901,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Güncellemeleri denetle"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"Yeni mesajlarınız var"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"Görüntülemek için SMS uygulamasını açın"</string>
-    <string name="user_encrypted_title" msgid="9054897468831672082">"Bazı işlevler sınırlı olabilir"</string>
-    <string name="user_encrypted_message" msgid="4923292604515744267">"Kilidi açmak için dokunun"</string>
-    <string name="user_encrypted_detail" msgid="5708447464349420392">"Kullanıcı verileri kilitlendi"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"Bazı işlevler sınırlı olabilir"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"İş profili kilitlendi"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"İş profilinin kilidini açmak için dokunun"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"<xliff:g id="PRODUCT_NAME">%1$s</xliff:g> cihazına bağlandı"</string>
@@ -2027,4 +2028,5 @@
       <item quantity="one"><xliff:g id="FILE_NAME_0">%s</xliff:g> + <xliff:g id="COUNT_1">%d</xliff:g> dosya</item>
     </plurals>
     <string name="chooser_no_direct_share_targets" msgid="997970693708458895">"Doğrudan paylaşım mevcut değil"</string>
+    <string name="chooser_all_apps_button_label" msgid="3631524352936289457">"Uygulama listesi"</string>
 </resources>

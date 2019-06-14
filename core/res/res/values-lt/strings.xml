@@ -267,7 +267,7 @@
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"Tinklo įspėjimai"</string>
     <string name="notification_channel_network_available" msgid="4531717914138179517">"Tinklas pasiekiamas"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"VPN būsena"</string>
-    <string name="notification_channel_device_admin" msgid="1568154104368069249">"Įrenginio administravimas"</string>
+    <string name="notification_channel_device_admin" msgid="8353118887482520565">"IT administratoriaus įspėjimai"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"Įspėjimai"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"Demonstracinė versija mažmenininkams"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"USB jungtis"</string>
@@ -571,21 +571,21 @@
     <string name="face_acquired_too_low" msgid="488983581737550912">"Laikykite telefoną žemiau."</string>
     <string name="face_acquired_too_right" msgid="3667075962661863218">"Pasukite telefoną kairėn."</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"Pasukite telefoną dešinėn."</string>
-    <string name="face_acquired_poor_gaze" msgid="8471716624377228327">"Žiūrėkite į ekraną atsimerkę."</string>
+    <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"Žiūrėkite tiesiai į įrenginį."</string>
     <string name="face_acquired_not_detected" msgid="4885504661626728809">"Nematau jūsų veido. Žiūrėkite į telefoną."</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"Įrenginys per daug judinamas. Nejudink. telefono."</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"Užregistruokite veidą iš naujo."</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"Nebegalima atpažinti veido. Bandykite dar kartą."</string>
     <string name="face_acquired_too_similar" msgid="1508776858407646460">"Per daug panašu, pakeiskite veido išraišką."</string>
-    <string name="face_acquired_pan_too_extreme" msgid="1852495480382773759">"Žiūrėkite tiesiai į ekraną."</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="1290820400317982049">"Žiūrėkite tiesiai į ekraną."</string>
-    <string name="face_acquired_roll_too_extreme" msgid="1444829237745898619">"Laikykite galvą vertikaliai."</string>
-    <string name="face_acquired_obscured" msgid="5747521031647744553">"Nieko negali būti tarp galvos ir telefono."</string>
-    <string name="face_acquired_sensor_dirty" msgid="364493868630891300">"Nuvalykite fotoaparatą."</string>
+    <string name="face_acquired_pan_too_extreme" msgid="4581629343077288178">"Nesukite tiek galvos."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"Nesukite tiek galvos."</string>
+    <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"Nesukite tiek galvos."</string>
+    <string name="face_acquired_obscured" msgid="5357207702967893283">"Patraukite viską, kas užstoja jūsų veidą."</string>
+    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"Nuvalykite jutiklį, esantį ekrano viršuje."</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"Nepavyko patv. veido. Aparatinė įranga negalima."</string>
-    <string name="face_error_timeout" msgid="2605673935810019129">"Baigėsi veido atpaž. skirt. laik. Band. dar kartą."</string>
+    <string name="face_error_timeout" msgid="3202585609451248103">"Bandykite naudoti veido autentifikavimą dar kartą."</string>
     <string name="face_error_no_space" msgid="2712120617457553825">"Nepavyko išs. naujų veido duomenų. Pirm. ištrinkite senus."</string>
     <string name="face_error_canceled" msgid="2768146728600802422">"Veido atpažinimo operacija atšaukta"</string>
     <string name="face_error_user_canceled" msgid="9003022830076496163">"Veido autentifikavimą atšaukė naudotojas"</string>
@@ -654,6 +654,8 @@
     <string name="permdesc_bindCarrierServices" msgid="1391552602551084192">"Savininkui leidžiama susisaistyti su operatoriaus paslaugomis. To niekada neturėtų prireikti naudojant įprastas programas."</string>
     <string name="permlab_access_notification_policy" msgid="4247510821662059671">"pasiekti „Do Not Disturb“"</string>
     <string name="permdesc_access_notification_policy" msgid="3296832375218749580">"Leidžiama programai skaityti ir rašyti „Do Not Disturb“ konfigūraciją."</string>
+    <string name="permlab_startViewPermissionUsage" msgid="5484728591597709944">"pradėti peržiūrėti leidimo naudojimą"</string>
+    <string name="permdesc_startViewPermissionUsage" msgid="4808345878203594428">"Leidžia savininkui pradėti naudoti programos leidimą. Įprastoms programoms to neturėtų prireikti."</string>
     <string name="policylab_limitPassword" msgid="4497420728857585791">"Nustatyti slaptažodžio taisykles"</string>
     <string name="policydesc_limitPassword" msgid="2502021457917874968">"Valdykite, kokio ilgio ekrano užrakto slaptažodžius ir PIN kodus galima naudoti."</string>
     <string name="policylab_watchLogin" msgid="5091404125971980158">"Stebėti bandymus atrakinti ekraną"</string>
@@ -1399,7 +1401,8 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Atkurkite gamyklinius duomenis, kad išjungtumėte testavimo sistemos režimą."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"USB prievade yra skysčių ar smulkių dalelių"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB prievadas automatiškai išjungtas. Palieskite, kad sužinotumėte daugiau."</string>
-    <string name="usb_contaminant_not_detected_title" msgid="4202417484434906086">"Saugu naudoti USB prievadą"</string>
+    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
+    <skip />
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"Telefonas nebeaptinka skysčių ar smulkių dalelių."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"Pateikiamas pranešimas apie riktą…"</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"Bendrinti pranešimą apie riktą?"</string>
@@ -1966,9 +1969,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Tikrinti, ar yra naujinių"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"Turite naujų pranešimų"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"Atidaryti SMS programą, norint peržiūrėti"</string>
-    <string name="user_encrypted_title" msgid="9054897468831672082">"Kai kurios funkcijos gali būti ribojamos"</string>
-    <string name="user_encrypted_message" msgid="4923292604515744267">"Palieskite, kad atrakintumėte"</string>
-    <string name="user_encrypted_detail" msgid="5708447464349420392">"Naudotojo duomenys užrakinti"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"Kai kurios funkcijos ribojamos"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"Darbo profilis užrakintas"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"Paliesk., kad atr. darbo prof."</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"Prisijungta prie „<xliff:g id="PRODUCT_NAME">%1$s</xliff:g>“"</string>
@@ -2099,4 +2100,5 @@
       <item quantity="other">„<xliff:g id="FILE_NAME_2">%s</xliff:g>“ ir <xliff:g id="COUNT_3">%d</xliff:g> failų</item>
     </plurals>
     <string name="chooser_no_direct_share_targets" msgid="997970693708458895">"Tiesioginio bendrinimo funkcija nepasiekiama"</string>
+    <string name="chooser_all_apps_button_label" msgid="3631524352936289457">"Programų sąrašas"</string>
 </resources>

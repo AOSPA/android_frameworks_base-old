@@ -73,6 +73,7 @@ public class Installer extends SystemService {
 
     public static final int FLAG_STORAGE_DE = IInstalld.FLAG_STORAGE_DE;
     public static final int FLAG_STORAGE_CE = IInstalld.FLAG_STORAGE_CE;
+    public static final int FLAG_STORAGE_EXTERNAL = IInstalld.FLAG_STORAGE_EXTERNAL;
 
     public static final int FLAG_CLEAR_CACHE_ONLY = IInstalld.FLAG_CLEAR_CACHE_ONLY;
     public static final int FLAG_CLEAR_CODE_CACHE_ONLY = IInstalld.FLAG_CLEAR_CODE_CACHE_ONLY;
@@ -117,6 +118,24 @@ public class Installer extends SystemService {
             mInstalld = null;
         } else {
             connect();
+        }
+    }
+
+    @Override
+    public void onUnlockUser(int userId) {
+        if (userId == 0) {
+            if (!checkBeforeRemote()) return;
+
+            if (mInstalld == null) {
+                Slog.wtf(TAG, "Call to onUnlockUser prior to onStart.");
+                return;
+            }
+
+            try {
+                mInstalld.migrateLegacyObbData();
+            } catch (RemoteException re) {
+                Slog.wtf(TAG, "Error migrating legacy OBB data.", re);
+            }
         }
     }
 

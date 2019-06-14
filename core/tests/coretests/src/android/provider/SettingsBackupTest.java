@@ -636,6 +636,8 @@ public class SettingsBackupTest {
                  Settings.Secure.ENABLED_NOTIFICATION_LISTENERS,
                  Settings.Secure.ENABLED_NOTIFICATION_POLICY_ACCESS_PACKAGES,
                  Settings.Secure.ENABLED_PRINT_SERVICES,
+                 Settings.Secure.GLOBAL_ACTIONS_PANEL_AVAILABLE,
+                 Settings.Secure.GLOBAL_ACTIONS_PANEL_DEBUG_ENABLED,
                  Settings.Secure.IMMERSIVE_MODE_CONFIRMATIONS,
                  Settings.Secure.INCALL_BACK_BUTTON_BEHAVIOR,
                  Settings.Secure.INPUT_METHOD_SELECTOR_VISIBILITY,
@@ -695,7 +697,6 @@ public class SettingsBackupTest {
                  Settings.Secure.TV_INPUT_CUSTOM_LABELS,
                  Settings.Secure.TV_INPUT_HIDDEN_INPUTS,
                  Settings.Secure.TV_USER_SETUP_COMPLETE,
-                 Settings.Secure.UI_NIGHT_MODE, // candidate?
                  Settings.Secure.UNKNOWN_SOURCES_DEFAULT_REVERSED,
                  Settings.Secure.UNSAFE_VOLUME_MUSIC_ACTIVE_MS,
                  Settings.Secure.USB_AUDIO_AUTOMATIC_ROUTING_DISABLED,
@@ -721,7 +722,8 @@ public class SettingsBackupTest {
                  Settings.Secure.LOCATION_ACCESS_CHECK_DELAY_MILLIS,
                  Settings.Secure.BIOMETRIC_DEBUG_ENABLED,
                  Settings.Secure.FACE_UNLOCK_ATTENTION_REQUIRED,
-                 Settings.Secure.FACE_UNLOCK_DIVERSITY_REQUIRED);
+                 Settings.Secure.FACE_UNLOCK_DIVERSITY_REQUIRED,
+                 Settings.Secure.FACE_UNLOCK_EDUCATION_INFO_DISPLAYED);
 
     @Test
     public void systemSettingsBackedUpOrBlacklisted() {
@@ -799,4 +801,3 @@ public class SettingsBackupTest {
     }
 
 }
-

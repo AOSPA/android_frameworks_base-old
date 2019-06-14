@@ -264,7 +264,7 @@
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"Alerte privind rețeaua"</string>
     <string name="notification_channel_network_available" msgid="4531717914138179517">"Rețea disponibilă"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"Stare VPN"</string>
-    <string name="notification_channel_device_admin" msgid="1568154104368069249">"Administrarea dispozitivului"</string>
+    <string name="notification_channel_device_admin" msgid="8353118887482520565">"Alerte de la administratorul IT"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"Alerte"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"Demonstrație comercială"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"Conexiune USB"</string>
@@ -568,21 +568,21 @@
     <string name="face_acquired_too_low" msgid="488983581737550912">"Mutați telefonul mai jos."</string>
     <string name="face_acquired_too_right" msgid="3667075962661863218">"Mutați telefonul spre stânga."</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"Mutați telefonul spre dreapta."</string>
-    <string name="face_acquired_poor_gaze" msgid="8471716624377228327">"Uitați-vă spre ecran cu ochii deschiși."</string>
+    <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"Priviți mai direct spre dispozitiv."</string>
     <string name="face_acquired_not_detected" msgid="4885504661626728809">"Nu vi se vede fața. Uitați-vă la telefon."</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"Prea multă mișcare. Țineți telefonul nemișcat."</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"Reînregistrați-vă chipul."</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"Nu se mai poate recunoaște fața. Încercați din nou."</string>
     <string name="face_acquired_too_similar" msgid="1508776858407646460">"Prea asemănător, schimbați poziția."</string>
-    <string name="face_acquired_pan_too_extreme" msgid="1852495480382773759">"Priviți mai direct spre ecran."</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="1290820400317982049">"Priviți mai direct spre ecran."</string>
-    <string name="face_acquired_roll_too_extreme" msgid="1444829237745898619">"Îndreptați capul pe verticală."</string>
-    <string name="face_acquired_obscured" msgid="5747521031647744553">"Eliberați spațiul dintre cap și telefon."</string>
-    <string name="face_acquired_sensor_dirty" msgid="364493868630891300">"Curățați camera foto."</string>
+    <string name="face_acquired_pan_too_extreme" msgid="4581629343077288178">"Întoarceți capul mai puțin."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"Întoarceți capul mai puțin."</string>
+    <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"Întoarceți capul mai puțin."</string>
+    <string name="face_acquired_obscured" msgid="5357207702967893283">"Eliminați orice vă ascunde chipul."</string>
+    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"Curățați senzorul de la marginea de sus a ecranului."</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"Nu se poate confirma fața. Hardware-ul nu este disponibil."</string>
-    <string name="face_error_timeout" msgid="2605673935810019129">"Timpul limită pentru recunoașterea facială a trecut. Încercați din nou."</string>
+    <string name="face_error_timeout" msgid="3202585609451248103">"Încercați din nou autentificarea facială."</string>
     <string name="face_error_no_space" msgid="2712120617457553825">"Nu se pot stoca date faciale noi. Ștergeți întâi unele vechi."</string>
     <string name="face_error_canceled" msgid="2768146728600802422">"Operațiunea privind fața a fost anulată"</string>
     <string name="face_error_user_canceled" msgid="9003022830076496163">"Autentificarea chipului este anulată de utilizator"</string>
@@ -651,6 +651,8 @@
     <string name="permdesc_bindCarrierServices" msgid="1391552602551084192">"Permite aplicației să se conecteze la serviciile operatorului. Nu ar trebui să fie niciodată necesară pentru aplicațiile obișnuite."</string>
     <string name="permlab_access_notification_policy" msgid="4247510821662059671">"accesează Nu deranja"</string>
     <string name="permdesc_access_notification_policy" msgid="3296832375218749580">"Permite aplicației să citească și să scrie configurația Nu deranja."</string>
+    <string name="permlab_startViewPermissionUsage" msgid="5484728591597709944">"porniți folosirea permisiunii de vizualizare"</string>
+    <string name="permdesc_startViewPermissionUsage" msgid="4808345878203594428">"Permite proprietarului să pornească folosirea permisiunii pentru o aplicație. Nu ar trebui să fie necesară pentru aplicațiile obișnuite."</string>
     <string name="policylab_limitPassword" msgid="4497420728857585791">"Să seteze reguli pentru parolă"</string>
     <string name="policydesc_limitPassword" msgid="2502021457917874968">"Stabiliți lungimea și tipul de caractere permise pentru parolele și codurile PIN de blocare a ecranului."</string>
     <string name="policylab_watchLogin" msgid="5091404125971980158">"Să monitorizeze încercările de deblocare a ecranului"</string>
@@ -1377,7 +1379,8 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Reveniți la setările din fabrică pentru a dezactiva modul Set de testare."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"Lichide sau reziduuri în portul USB"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"Portul USB este dezactivat automat. Atingeți ca să aflați mai multe."</string>
-    <string name="usb_contaminant_not_detected_title" msgid="4202417484434906086">"Portul USB poate fi folosit în siguranță"</string>
+    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
+    <skip />
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"Telefonul nu mai detectează lichide sau reziduuri."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"Se creează un raport de eroare…"</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"Trimiteți raportul de eroare?"</string>
@@ -1932,9 +1935,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Căutați actualizări"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"Aveți mesaje noi"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"Deschideți aplicația pentru SMS-uri ca să vizualizați"</string>
-    <string name="user_encrypted_title" msgid="9054897468831672082">"Unele funcții ar putea fi limitate"</string>
-    <string name="user_encrypted_message" msgid="4923292604515744267">"Atingeți pentru a debloca"</string>
-    <string name="user_encrypted_detail" msgid="5708447464349420392">"Datele utilizatorului: blocate"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"Unele funcții ar putea fi limitate"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"Profil de serviciu blocat"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"Atingeți ca să deblocați"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"Conectat la <xliff:g id="PRODUCT_NAME">%1$s</xliff:g>"</string>
@@ -2063,4 +2064,5 @@
       <item quantity="one"><xliff:g id="FILE_NAME_0">%s</xliff:g> + <xliff:g id="COUNT_1">%d</xliff:g> fișier</item>
     </plurals>
     <string name="chooser_no_direct_share_targets" msgid="997970693708458895">"Trimiterea directă nu este disponibilă"</string>
+    <string name="chooser_all_apps_button_label" msgid="3631524352936289457">"Lista de aplicații"</string>
 </resources>
