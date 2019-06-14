@@ -3801,6 +3801,7 @@
   <java-symbol type="drawable" name="iconfactory_adaptive_icon_drawable_wrapper"/>
   <java-symbol type="dimen" name="resolver_icon_size"/>
   <java-symbol type="dimen" name="resolver_badge_size"/>
+  <java-symbol type="dimen" name="resolver_button_bar_spacing"/>
 
   <!-- For DropBox -->
   <java-symbol type="integer" name="config_dropboxLowPriorityBroadcastRateLimitPeriod" />
@@ -3822,4 +3823,5 @@
   <java-symbol type="style" name="Animation.DeviceDefault.Activity.Resolver" />
   
   <java-symbol type="string" name="config_defaultSupervisionProfileOwnerComponent" />
+  <java-symbol type="bool" name="config_inflateSignalStrength" />
 </resources>
