@@ -1152,7 +1152,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     res.getBoolean(com.android.internal.R.bool.config_alwaysUseCdmaRssi);
             config.hspaDataDistinguishable =
                     res.getBoolean(R.bool.config_hspa_data_distinguishable);
-            config.inflateSignalStrengths = res.getBoolean(R.bool.config_inflateSignalStrength);
+            config.inflateSignalStrengths = res.getBoolean(
+                    com.android.internal.R.bool.config_inflateSignalStrength);
 
             config.alwaysShowNetworkTypeIcon =
                     context.getResources().getBoolean(R.bool.config_alwaysShowTypeIcon);
