@@ -131,6 +131,7 @@
     <!-- no translation found for wfcSpnFormat_spn (4998685024207291232) -->
     <skip />
     <string name="wfcSpnFormat_spn_wifi_calling" msgid="136001023263502280">"<xliff:g id="SPN">%s</xliff:g> वाय-फाय कॉलिंग"</string>
+    <string name="wfcSpnFormat_spn_wifi_calling_vo_hyphen" msgid="1730997175789582756">"<xliff:g id="SPN">%s</xliff:g> वाय-फाय कॉलिंग"</string>
     <string name="wfcSpnFormat_wlan_call" msgid="2533371081782489793">"WLAN कॉल"</string>
     <string name="wfcSpnFormat_spn_wlan_call" msgid="2315240198303197168">"<xliff:g id="SPN">%s</xliff:g> WLAN कॉल"</string>
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> वाय-फाय"</string>
@@ -280,7 +281,7 @@
     <string name="permgrouprequest_contacts" msgid="6032805601881764300">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; ला तुमचे संपर्क अॅक्सेस करू द्यायचे?"</string>
     <string name="permgrouplab_location" msgid="7275582855722310164">"स्थान"</string>
     <string name="permgroupdesc_location" msgid="1346617465127855033">"या डिव्हाइसच्या स्थानावर प्रवेश"</string>
-    <string name="permgrouprequest_location" msgid="3788275734953323491">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; ला या डिव्हाइसचे स्थान अॅक्सेस करू द्यायचे?"</string>
+    <string name="permgrouprequest_location" msgid="3788275734953323491">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; ला या डिव्हाइसचे स्थान अ‍ॅक्सेस करू द्यायचे?"</string>
     <string name="permgrouprequestdetail_location" msgid="1347189607421252902">"तुम्ही अ‍ॅप वापरत असताना अ‍ॅपला फक्त स्थानाचा अॅक्सेस असेल"</string>
     <string name="permgroupbackgroundrequest_location" msgid="5039063878675613235">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; ला &lt;b&gt;प्रत्येक वेळी&lt;/b&gt; या डिव्हाइसच्या स्थानाचा अ‍ॅक्सेस द्यायचा?"</string>
     <string name="permgroupbackgroundrequestdetail_location" msgid="4597006851453417387">"अ‍ॅप सध्या फक्त तुम्ही अ‍ॅप वापरत असतानाच स्थान अ‍ॅक्सेस करू शकते"</string>
@@ -1358,8 +1359,7 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"टेस्ट हार्नेस मोड बंद करण्यासाठी फॅक्टरी रीसेट करा."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"USB पोर्ट मध्ये ओलावा किंवा धूळ आहे"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB पोर्ट आपोआप बंद होईल. अधिक जाणून घेण्यासाठी टॅप करा."</string>
-    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
-    <skip />
+    <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"USB पोर्ट वापरण्यासाठी ठीक आहे"</string>
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"फोनला धूळ किंवा ओलावा आढळला नाही."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"बग रीपोर्ट घेत आहे..."</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"बग अहवाल शेअर करायचा?"</string>
@@ -1613,8 +1613,6 @@
     <string name="display_manager_overlay_display_name" msgid="5142365982271620716">"ओव्हरले #<xliff:g id="ID">%1$d</xliff:g>"</string>
     <string name="display_manager_overlay_display_title" msgid="652124517672257172">"<xliff:g id="NAME">%1$s</xliff:g>: <xliff:g id="WIDTH">%2$d</xliff:g>x<xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> dpi"</string>
     <string name="display_manager_overlay_display_secure_suffix" msgid="6022119702628572080">", सुरक्षित"</string>
-    <string name="activity_starter_block_bg_activity_starts_permissive" msgid="6995473033438879646">"<xliff:g id="PACKAGENAME">%1$s</xliff:g> पासून सुरू होणारी ही बॅकग्राउंड अ‍ॅक्टिव्हिटी भविष्यातील Q बिल्डमध्ये ब्लॉक केली जाईल. g.co/dev/bgblock पाहा."</string>
-    <string name="activity_starter_block_bg_activity_starts_enforcing" msgid="3317816771072146229">"<xliff:g id="PACKAGENAME">%1$s</xliff:g> वरून सुरू होणारी बॅकग्राउंड अ‍ॅक्टिव्हिटी ब्लॉक केली आहे. g.co/dev/bgblock पाहा."</string>
     <string name="kg_forgot_pattern_button_text" msgid="8852021467868220608">"पॅटर्न विसरलात"</string>
     <string name="kg_wrong_pattern" msgid="1850806070801358830">"चुकीचा पॅटर्न"</string>
     <string name="kg_wrong_password" msgid="2333281762128113157">"चुकीचा पासवर्ड"</string>
@@ -1668,8 +1666,12 @@
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"प्रवेशयोग्यता शॉर्टकटने <xliff:g id="SERVICE_NAME">%1$s</xliff:g> चालू केली"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"प्रवेशयोग्यता शॉर्टकटने <xliff:g id="SERVICE_NAME">%1$s</xliff:g> बंद केली"</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g> वापरण्यासाठी दोन्ही व्हॉल्युम की तीन सेकंद दाबा आणि धरून ठेवा"</string>
-    <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"तुम्ही प्रवेशयोग्यता बटण दाबल्यावर वापरण्यासाठी वैशिष्ट्य निवडा:"</string>
-    <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"वैशिष्ट्ये बदलण्यासाठी, प्रवेशयोग्यता बटणाला स्पर्श करा आणि धरून ठेवा."</string>
+    <string name="accessibility_button_prompt_text" msgid="1176658502969738564">"तुम्ही अ‍ॅक्सेसिबिलिटी बटण दाबल्यावर वापरण्यासाठी वैशिष्ट्य निवडा:"</string>
+    <string name="accessibility_gesture_prompt_text" msgid="8259145549733019401">"अ‍ॅक्सेसिबिलिटी जेश्चर ज्या सोबत वापराचे आहे अशी सेवा निवडा (स्क्रीनच्या खालच्या बाजूने दोन बोटांनी स्वाइप करा):"</string>
+    <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"अ‍ॅक्सेसिबिलिटी जेश्चर ज्या सोबत वापराचे आहे अशी सेवा निवडा (स्क्रीनच्या खालच्या बाजूने तीन बोटांनी स्वाइप करा):"</string>
+    <string name="accessibility_button_instructional_text" msgid="7003212763213614833">"सेवांदरम्यान स्विच करण्यासाठी, अ‍ॅक्सेसिबिलिटी बटणाला स्पर्श करा आणि धरून ठेवा."</string>
+    <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"सेवांदरम्यान स्विच करण्यासाठी, दोन बोटांनी वरच्या दिशेला स्वाइप करा आणि धरून ठेवा."</string>
+    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"सेवांदरम्यान स्विच करण्यासाठी, तीन बोटांनी वरच्या दिशेला स्वाइप करा आणि धरून ठेवा."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"मोठे करणे"</string>
     <string name="user_switched" msgid="3768006783166984410">"वर्तमान वापरकर्ता <xliff:g id="NAME">%1$s</xliff:g>."</string>
     <string name="user_switching_message" msgid="2871009331809089783">"<xliff:g id="NAME">%1$s</xliff:g> वर स्विच करत आहे…"</string>
@@ -1851,7 +1853,7 @@
     <string name="zen_mode_default_weeknights_name" msgid="3081318299464998143">"आठवड्याची शेवटची रात्र"</string>
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"आठवड्याच्या शेवटी"</string>
     <string name="zen_mode_default_events_name" msgid="8158334939013085363">"इव्‍हेंट"</string>
-    <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"निष्क्रिय आहे"</string>
+    <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"झोपताना"</string>
     <string name="muted_by" msgid="5942954724562097128">"<xliff:g id="THIRD_PARTY">%1$s</xliff:g> काही ध्‍वनी म्‍यूट करत आहे"</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"आपल्‍या डिव्‍हाइसमध्‍ये अंतर्गत समस्‍या आहे आणि तुमचा फॅक्‍टरी डेटा रीसेट होईपर्यंत ती अस्‍थिर असू शकते."</string>
     <string name="system_error_manufacturer" msgid="8086872414744210668">"आपल्‍या डिव्‍हाइसमध्‍ये अंतर्गत समस्‍या आहे. तपशीलांसाठी आपल्‍या निर्मात्याशी संपर्क साधा."</string>

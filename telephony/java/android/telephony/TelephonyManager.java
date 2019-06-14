@@ -105,6 +105,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
@@ -1497,6 +1498,48 @@ public class TelephonyManager {
      */
     public static final int EXTRA_DEFAULT_SUBSCRIPTION_SELECT_TYPE_ALL = 4;
 
+    /**
+     * Integer intent extra to be used with {@link #ACTION_PRIMARY_SUBSCRIPTION_LIST_CHANGED}
+     * to indicate if the SIM combination in DSDS has limitation or compatible issue.
+     * e.g. two CDMA SIMs may disrupt each other's voice call in certain scenarios.
+     *
+     * @hide
+     */
+    public static final String EXTRA_SIM_COMBINATION_WARNING_TYPE =
+            "android.telephony.extra.SIM_COMBINATION_WARNING_TYPE";
+
+    /** @hide */
+    @IntDef({
+            EXTRA_SIM_COMBINATION_WARNING_TYPE_NONE,
+            EXTRA_SIM_COMBINATION_WARNING_TYPE_DUAL_CDMA
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SimCombinationWarningType{}
+
+    /**
+     * Used as an int value for {@link #EXTRA_DEFAULT_SUBSCRIPTION_SELECT_TYPE}
+     * to indicate there's no SIM combination warning.
+     * @hide
+     */
+    public static final int EXTRA_SIM_COMBINATION_WARNING_TYPE_NONE = 0;
+
+    /**
+     * Used as an int value for {@link #EXTRA_DEFAULT_SUBSCRIPTION_SELECT_TYPE}
+     * to indicate two active SIMs are both CDMA hence there might be functional limitation.
+     * @hide
+     */
+    public static final int EXTRA_SIM_COMBINATION_WARNING_TYPE_DUAL_CDMA = 1;
+
+    /**
+     * String intent extra to be used with {@link #ACTION_PRIMARY_SUBSCRIPTION_LIST_CHANGED}
+     * to indicate what's the name of SIM combination it has limitation or compatible issue.
+     * e.g. two CDMA SIMs may disrupt each other's voice call in certain scenarios, and the
+     * name will be "operator1 & operator2".
+     *
+     * @hide
+     */
+    public static final String EXTRA_SIM_COMBINATION_NAMES =
+            "android.telephony.extra.SIM_COMBINATION_NAMES";
     //
     //
     // Device Info
@@ -9245,6 +9288,10 @@ public class TelephonyManager {
             }
         } catch (RemoteException e) {
             Log.e(TAG, "Error calling ITelephony#getServiceStateForSubscriber", e);
+        } catch (NullPointerException e) {
+            AnomalyReporter.reportAnomaly(
+                    UUID.fromString("a3ab0b9d-f2aa-4baf-911d-7096c0d4645a"),
+                    "getServiceStateForSubscriber " + subId + " NPE");
         }
         return null;
     }
@@ -11146,5 +11193,53 @@ public class TelephonyManager {
             }
         }
         return true;
+    }
+
+    /**
+     * Set allowing mobile data during voice call.
+     *
+     * @param allow {@code true} if allowing using data during voice call, {@code false} if
+     * disallowed
+     *
+     * @return {@code false} if the setting is changed.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    public boolean setDataAllowedDuringVoiceCall(boolean allow) {
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                return service.setDataAllowedDuringVoiceCall(getSubId(), allow);
+            }
+        } catch (RemoteException ex) {
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check whether data is allowed during voice call. Note this is for dual sim device that
+     * data might be disabled on non-default data subscription but explicitly turned on by settings.
+     *
+     * @return {@code true} if data is allowed during voice call.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    public boolean isDataAllowedInVoiceCall() {
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                return service.isDataAllowedInVoiceCall(getSubId());
+            }
+        } catch (RemoteException ex) {
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
+        }
+        return false;
     }
 }
