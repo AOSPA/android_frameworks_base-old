@@ -438,8 +438,16 @@ public abstract class Connection extends Conferenceable {
      */
     public static final int PROPERTY_NETWORK_IDENTIFIED_EMERGENCY_CALL = 1 << 10;
 
+    /**
+     * Set by the framework to indicate that a Conference or Connection is hosted by a device other
+     * than the current one.  Used in scenarios where the conference originator is the remote device
+     * and the current device is a participant of that conference.
+     * @hide
+     */
+    public static final int PROPERTY_REMOTELY_HOSTED = 1 << 11;
+
     //**********************************************************************************************
-    // Next PROPERTY value: 1<<10
+    // Next PROPERTY value: 1<<12
     //**********************************************************************************************
 
     /**
@@ -864,6 +872,10 @@ public abstract class Connection extends Conferenceable {
 
         if (can(properties, PROPERTY_NETWORK_IDENTIFIED_EMERGENCY_CALL)) {
             builder.append(isLong ? " PROPERTY_NETWORK_IDENTIFIED_EMERGENCY_CALL" : " ecall");
+        }
+
+        if (can(properties, PROPERTY_REMOTELY_HOSTED)) {
+            builder.append(isLong ? " PROPERTY_REMOTELY_HOSTED" : " remote_hst");
         }
 
         builder.append("]");
