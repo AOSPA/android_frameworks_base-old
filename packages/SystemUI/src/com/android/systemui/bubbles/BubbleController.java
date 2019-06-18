@@ -80,7 +80,6 @@ import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
-import com.android.systemui.statusbar.notification.row.NotificationContentInflater.InflationFlag;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.ZenModeController;
@@ -346,6 +345,17 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         mBubbleData.setExpanded(false /* expanded */);
     }
 
+    /**
+     * Whether (1) there is a bubble associated with the provided key and
+     *         (2) if the notification for that bubble is hidden from the shade.
+     *
+     * False if there isn't a bubble or if the notification for that bubble appears in the shade.
+     */
+    public boolean isBubbleNotificationSuppressedFromShade(String key) {
+        return mBubbleData.hasBubbleWithKey(key)
+                && !mBubbleData.getBubbleWithKey(key).showInShadeWhenBubble();
+    }
+
     void selectBubble(Bubble bubble) {
         mBubbleData.setSelectedBubble(bubble);
     }
@@ -439,7 +449,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                 boolean bubbleExtended = entry.isBubble() && !bubble.isRemoved()
                         && userRemovedNotif;
                 if (bubbleExtended) {
-                    entry.setShowInShadeWhenBubble(false);
+                    bubble.setShowInShadeWhenBubble(false);
                     if (mStackView != null) {
                         mStackView.updateDotVisibility(entry.key);
                     }
@@ -463,17 +473,6 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             }
             if (mNotificationInterruptionStateProvider.shouldBubbleUp(entry)
                     && canLaunchInActivityView(mContext, entry)) {
-                updateShowInShadeForSuppressNotification(entry);
-            }
-        }
-
-        @Override
-        public void onEntryInflated(NotificationEntry entry, @InflationFlag int inflatedFlags) {
-            if (!areBubblesEnabled(mContext)) {
-                return;
-            }
-            if (mNotificationInterruptionStateProvider.shouldBubbleUp(entry)
-                    && canLaunchInActivityView(mContext, entry)) {
                 updateBubble(entry);
             }
         }
@@ -489,7 +488,6 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                 // It was previously a bubble but no longer a bubble -- lets remove it
                 removeBubble(entry.key, DISMISS_NO_LONGER_BUBBLE);
             } else if (shouldBubble) {
-                updateShowInShadeForSuppressNotification(entry);
                 Bubble b = mBubbleData.getBubbleWithKey(entry.key);
                 b.setRemoved(false); // updates come back as bubbles even if dismissed
                 updateBubble(entry);
@@ -682,17 +680,6 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     @VisibleForTesting
     BubbleStackView getStackView() {
         return mStackView;
-    }
-
-    private void updateShowInShadeForSuppressNotification(NotificationEntry entry) {
-        boolean suppressNotification = entry.getBubbleMetadata() != null
-                && entry.getBubbleMetadata().isNotificationSuppressed();
-        Bubble b = mBubbleData.getBubbleWithKey(entry.key);
-        if (b != null && mBubbleData.getSelectedBubble() == b && mBubbleData.isExpanded()) {
-            // If we're expanded & selected don't show in shade
-            suppressNotification = true;
-        }
-        entry.setShowInShadeWhenBubble(!suppressNotification);
     }
 
     static String formatBubblesString(List<Bubble> bubbles, Bubble selected) {
