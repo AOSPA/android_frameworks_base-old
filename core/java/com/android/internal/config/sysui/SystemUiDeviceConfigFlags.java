@@ -113,7 +113,7 @@ public final class SystemUiDeviceConfigFlags {
      */
     public static final String PROPERTY_PERMISSIONS_HUB_ENABLED = "permissions_hub_enabled";
 
-    // Flags related to Assistant Handles
+    // Flags related to Assistant
 
     /**
      * (String) Which behavior mode for the Assistant Handles to use.
@@ -283,6 +283,10 @@ public final class SystemUiDeviceConfigFlags {
     public static final String BRIGHTLINE_FALSING_ZIGZAG_Y_SECONDARY_DEVIANCE =
             "brightline_falsing_zigzag_y_secondary_deviance";
 
+   /**
+     * Allow touch passthrough above assist area during a session.
+     */
+    public static final String ASSIST_TAP_PASSTHROUGH = "assist_tap_passthrough";
 
     private SystemUiDeviceConfigFlags() { }
 }
