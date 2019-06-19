@@ -31,6 +31,7 @@ import com.android.systemui.SysuiTestCase;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.NotificationMediaManager;
+import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -50,6 +51,10 @@ public class NotificationIconAreaControllerTest extends SysuiTestCase {
     @Mock
     StatusBarStateController mStatusBarStateController;
     @Mock
+    NotificationWakeUpCoordinator mNotificationWakeUpCoordinator;
+    @Mock
+    KeyguardBypassController mBypassController;
+    @Mock
     private NotificationMediaManager mMediaManager;
     private NotificationIconAreaController mController;
 
@@ -58,7 +63,8 @@ public class NotificationIconAreaControllerTest extends SysuiTestCase {
         MockitoAnnotations.initMocks(this);
 
         mController = new NotificationIconAreaController(mContext, mStatusBar,
-                mStatusBarStateController, mListener, mMediaManager);
+                mStatusBarStateController, mNotificationWakeUpCoordinator, mBypassController,
+                mListener, mMediaManager);
     }
 
     @Test

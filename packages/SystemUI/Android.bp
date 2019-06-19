@@ -75,6 +75,7 @@ android_library {
         "telephony-ext",
         "ims-common",
     ],
+    kotlincflags: ["-Xjvm-default=enable"],
 
     plugins: ["dagger2-compiler-2.19"],
 }
@@ -130,6 +131,7 @@ android_library {
         "telephony-ext",
         "ims-common",
     ],
+    kotlincflags: ["-Xjvm-default=enable"],
     aaptflags: [
         "--extra-packages",
         "com.android.systemui",
@@ -161,6 +163,8 @@ android_app {
         "telephony-ext",
     ],
 
+    kotlincflags: ["-Xjvm-default=enable"],
+
     dxflags: ["--multi-dex"],
     required: ["privapp_whitelist_com.android.systemui"],
 
@@ -190,6 +194,8 @@ android_app {
         "telephony-ext",
         "ims-common",
     ],
+
+    kotlincflags: ["-Xjvm-default=enable"],
 
     srcs: [
         "legacy/recents/src/**/*.java",
