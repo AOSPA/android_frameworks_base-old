@@ -22,6 +22,7 @@ import com.android.systemui.R;
 import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.plugins.DarkIconDispatcher.DarkReceiver;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.statusbar.CrossFadeHelper;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.CrossFadeHelper;
 import com.android.systemui.statusbar.NotificationMediaManager;
@@ -81,6 +82,7 @@ public class NotificationIconAreaController implements DarkReceiver,
     private boolean mAnimationsEnabled;
     private int mAodIconTint;
     private boolean mFullyHidden;
+    private boolean mAodIconsVisible;
 
     public NotificationIconAreaController(Context context, StatusBar statusBar,
             StatusBarStateController statusBarStateController,
@@ -139,10 +141,10 @@ public class NotificationIconAreaController implements DarkReceiver,
         mAodIcons = mStatusBar.getStatusBarWindow().findViewById(
                 R.id.clock_notification_icon_container);
         mAodIcons.setOnLockScreen(true);
-        updateAodIconsVisibility();
+        updateAodIconsVisibility(false /* animate */);
         updateAnimations();
         if (changed) {
-            updateAodIcons();
+            updateAodNotificationIcons();
         }
     }
 
@@ -289,7 +291,7 @@ public class NotificationIconAreaController implements DarkReceiver,
         updateStatusBarIcons();
         updateShelfIcons();
         updateCenterIcon();
-        updateAodIcons();
+        updateAodNotificationIcons();
 
         applyNotificationIconsTint();
     }
@@ -330,7 +332,7 @@ public class NotificationIconAreaController implements DarkReceiver,
                 true/* onlyShowCenteredIcon */);
     }
 
-    public void updateAodIcons() {
+    public void updateAodNotificationIcons() {
         updateIconsForLayout(entry -> entry.aodIcon, mAodIcons,
                 false /* showAmbient */,
                 mShowSilentOnLockscreen /* showLowPriority */,
@@ -528,7 +530,7 @@ public class NotificationIconAreaController implements DarkReceiver,
 
     @Override
     public void onStateChanged(int newState) {
-        updateAodIconsVisibility();
+        updateAodIconsVisibility(false /* animate */);
         updateAnimations();
     }
 
@@ -579,21 +581,25 @@ public class NotificationIconAreaController implements DarkReceiver,
 
     @Override
     public void onFullyHiddenChanged(boolean fullyHidden) {
-        if (fullyHidden && !mBypassController.getBypassEnabled()) {
-            appearAodIcons();
+        boolean animate = true;
+        if (!mBypassController.getBypassEnabled()) {
+            animate = mDozeParameters.getAlwaysOn() && !mDozeParameters.getDisplayNeedsBlanking();
+            // We only want the appear animations to happen when the notifications get fully hidden,
+            // since otherwise the unhide animation overlaps
+            animate &= fullyHidden;
         }
-        updateAodIconsVisibility();
-        updateAodIcons();
+        updateAodIconsVisibility(animate);
+        updateAodNotificationIcons();
     }
 
     @Override
     public void onPulseExpansionChanged(boolean expandingChanged) {
         if (expandingChanged) {
-            updateAodIconsVisibility();
+            updateAodIconsVisibility(true /* animate */);
         }
     }
 
-    private void updateAodIconsVisibility() {
+    private void updateAodIconsVisibility(boolean animate) {
         boolean visible = mBypassController.getBypassEnabled()
                 || mWakeUpCoordinator.getNotificationsFullyHidden();
         if (mStatusBarStateController.getState() != StatusBarState.KEYGUARD) {
@@ -602,6 +608,28 @@ public class NotificationIconAreaController implements DarkReceiver,
         if (visible && mWakeUpCoordinator.isPulseExpanding()) {
             visible = false;
         }
-        mAodIcons.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+        if (mAodIconsVisible != visible) {
+            mAodIconsVisible = visible;
+            mAodIcons.animate().cancel();
+            if (animate) {
+                boolean wasFullyInvisible = mAodIcons.getVisibility() != View.VISIBLE;
+                if (mAodIconsVisible) {
+                    if (wasFullyInvisible) {
+                        // No fading here, let's just appear the icons instead!
+                        mAodIcons.setVisibility(View.VISIBLE);
+                        mAodIcons.setAlpha(1.0f);
+                        appearAodIcons();
+                    } else {
+                        // We were fading out, let's fade in instead
+                        CrossFadeHelper.fadeIn(mAodIcons);
+                    }
+                } else {
+                    CrossFadeHelper.fadeOut(mAodIcons);
+                }
+            } else {
+                mAodIcons.setAlpha(1.0f);
+                mAodIcons.setVisibility(visible ? View.VISIBLE : View.INVISIBLE);
+            }
+        }
     }
 }
