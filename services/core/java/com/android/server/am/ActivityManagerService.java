@@ -559,6 +559,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     public static BoostFramework mPerfServiceStartHint = null;
     /* UX perf event object */
     public static BoostFramework mUxPerf = new BoostFramework();
+    public static boolean mForceStopKill = false;
 
     OomAdjuster mOomAdjuster;
     final LowMemDetector mLowMemDetector;
@@ -3719,7 +3720,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 doLowMem = false;
             }
 
-            if (mUxPerf != null) {
+            if (mUxPerf != null && !mForceStopKill) {
                 mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, app.processName, 0);
             }
 
@@ -4624,12 +4625,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                 Slog.i(TAG, "Force stopping u" + userId + ": " + reason);
             }
 
-            if (mUxPerf != null) {
-                mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, packageName, 0);
-            }
-
             mAppErrors.resetProcessCrashTimeLocked(packageName == null, appId, userId);
         }
+        mForceStopKill = true;
 
         boolean didSomething = mProcessList.killPackageProcessesLocked(packageName, appId, userId,
                 ProcessList.INVALID_ADJ, callerWillRestart, true /* allowRestart */, doit,
