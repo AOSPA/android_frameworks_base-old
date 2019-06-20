@@ -69,6 +69,7 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
     @VisibleForTesting
     final int mExtensionTime;
     private final StatusBarStateController mStatusBarStateController;
+    private final KeyguardBypassController mBypassController;
     private View mStatusBarWindowView;
     private NotificationGroupManager mGroupManager;
     private VisualStabilityManager mVisualStabilityManager;
@@ -116,7 +117,8 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
 
     @Inject
     public HeadsUpManagerPhone(@NonNull final Context context,
-            StatusBarStateController statusBarStateController) {
+            StatusBarStateController statusBarStateController,
+            KeyguardBypassController bypassController) {
         super(context);
         Resources resources = mContext.getResources();
         mAutoDismissNotificationDecayDozing = resources.getInteger(
@@ -124,6 +126,7 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
         mExtensionTime = resources.getInteger(R.integer.ambient_notification_extension_time);
         mStatusBarStateController = statusBarStateController;
         mStatusBarStateController.addCallback(this);
+        mBypassController = bypassController;
 
         initResources();
     }
@@ -430,8 +433,11 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
 
     @Override
     protected boolean shouldHeadsUpBecomePinned(NotificationEntry entry) {
-        return mStatusBarState != StatusBarState.KEYGUARD && !mIsExpanded
-                || super.shouldHeadsUpBecomePinned(entry);
+        boolean pin = mStatusBarState == StatusBarState.SHADE && !mIsExpanded;
+        if (mBypassController.getBypassEnabled()) {
+            pin |= mStatusBarState == StatusBarState.KEYGUARD;
+        }
+        return pin || super.shouldHeadsUpBecomePinned(entry);
     }
 
     @Override
