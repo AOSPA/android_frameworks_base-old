@@ -3028,7 +3028,6 @@ public class NotificationPanelView extends PanelView implements
         // nor setting these flags, since the occluded state doesn't change anymore, hence it's
         // never reset.
         if (!isFullyCollapsed()) {
-            mLaunchingAffordance = true;
             setLaunchingAffordance(true);
         } else {
             animate = false;
@@ -3038,7 +3037,6 @@ public class NotificationPanelView extends PanelView implements
     }
 
     public void onAffordanceLaunchEnded() {
-        mLaunchingAffordance = false;
         setLaunchingAffordance(false);
     }
 
@@ -3047,8 +3045,10 @@ public class NotificationPanelView extends PanelView implements
      * launched via a camera gesture.
      */
     private void setLaunchingAffordance(boolean launchingAffordance) {
+        mLaunchingAffordance = launchingAffordance;
         getLeftIcon().setLaunchingAffordance(launchingAffordance);
         getRightIcon().setLaunchingAffordance(launchingAffordance);
+        mKeyguardBypassController.setLaunchingAffordance(launchingAffordance);
         if (mAffordanceLaunchListener != null) {
             mAffordanceLaunchListener.accept(launchingAffordance);
         }
