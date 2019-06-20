@@ -2639,7 +2639,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
 
     private int getHeadsUpHeight() {
-        return getShowingLayout().getHeadsUpHeight();
+        return getShowingLayout().getHeadsUpHeight(false /* forceNoHeader */);
     }
 
     public boolean areGutsExposed() {
@@ -2774,6 +2774,17 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             return mChildrenContainer.getCollapsedHeight();
         }
         return getMinHeight();
+    }
+
+    @Override
+    public int getHeadsUpHeightWithoutHeader() {
+        if (!canShowHeadsUp() || !mIsHeadsUp) {
+            return getCollapsedHeight();
+        }
+        if (mIsSummaryWithChildren && !shouldShowPublic()) {
+            return mChildrenContainer.getCollapsedHeightWithoutHeader();
+        }
+        return getShowingLayout().getHeadsUpHeight(true /* forceNoHeader */);
     }
 
     @Override

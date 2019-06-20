@@ -322,7 +322,7 @@ public class NotificationIconContainer extends AlphaOptimizedFrameLayout {
         if (child instanceof StatusBarIconView) {
             boolean isReplacingIcon = isReplacingIcon(child);
             final StatusBarIconView icon = (StatusBarIconView) child;
-            if (mAnimationsEnabled && icon.getVisibleState() != StatusBarIconView.STATE_HIDDEN
+            if (areAnimationsEnabled(icon) && icon.getVisibleState() != StatusBarIconView.STATE_HIDDEN
                     && child.getVisibility() == VISIBLE && isReplacingIcon) {
                 int animationStartIndex = findFirstViewIndexAfter(icon.getTranslationX());
                 if (mAddAnimationStartIndex < 0) {
@@ -333,7 +333,7 @@ public class NotificationIconContainer extends AlphaOptimizedFrameLayout {
             }
             if (!mChangingViewPositions) {
                 mIconStates.remove(child);
-                if (mAnimationsEnabled && !isReplacingIcon) {
+                if (areAnimationsEnabled(icon) && !isReplacingIcon) {
                     addTransientView(icon, 0);
                     boolean isIsolatedIcon = child == mIsolatedIcon;
                     icon.setVisibleState(StatusBarIconView.STATE_HIDDEN, true /* animate */,
@@ -342,6 +342,10 @@ public class NotificationIconContainer extends AlphaOptimizedFrameLayout {
                 }
             }
         }
+    }
+
+    private boolean areAnimationsEnabled(StatusBarIconView icon) {
+        return mAnimationsEnabled || icon == mIsolatedIcon;
     }
 
     /**
@@ -697,7 +701,7 @@ public class NotificationIconContainer extends AlphaOptimizedFrameLayout {
                 StatusBarIconView icon = (StatusBarIconView) view;
                 boolean animate = false;
                 AnimationProperties animationProperties = null;
-                boolean animationsAllowed = mAnimationsEnabled && !mDisallowNextAnimation
+                boolean animationsAllowed = areAnimationsEnabled(icon) && !mDisallowNextAnimation
                         && !noAnimations;
                 if (animationsAllowed) {
                     if (justAdded || justReplaced) {

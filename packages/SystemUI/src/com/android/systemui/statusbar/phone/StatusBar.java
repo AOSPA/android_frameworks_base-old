@@ -849,7 +849,8 @@ public class StatusBar extends SystemUI implements DemoMode,
                         mHeadsUpAppearanceController.destroy();
                     }
                     mHeadsUpAppearanceController = new HeadsUpAppearanceController(
-                            mNotificationIconAreaController, mHeadsUpManager, mStatusBarWindow);
+                            mNotificationIconAreaController, mHeadsUpManager, mStatusBarWindow,
+                            mStatusBarStateController, mKeyguardBypassController);
                     mHeadsUpAppearanceController.readFrom(oldController);
                     mStatusBarWindow.setStatusBarView(mStatusBarView);
                     updateAreThereNotifications();
@@ -1674,7 +1675,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         }
     }
 
-    public boolean isHeadsUpShouldBeVisible() {
+    public boolean headsUpShouldBeVisible() {
         return mHeadsUpAppearanceController.shouldBeVisible();
     }
 

@@ -467,12 +467,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     private int mCornerRadius;
     private int mSidePaddings;
     private final Rect mBackgroundAnimationRect = new Rect();
-    private int mAntiBurnInOffsetX;
     private ArrayList<BiConsumer<Float, Float>> mExpandedHeightListeners = new ArrayList<>();
     private int mHeadsUpInset;
     private HeadsUpAppearanceController mHeadsUpAppearanceController;
     private NotificationIconAreaController mIconAreaController;
-    private float mHorizontalPanelTranslation;
     private final NotificationLockscreenUserManager mLockscreenUserManager =
             Dependency.get(NotificationLockscreenUserManager.class);
     private final Rect mTmpRect = new Rect();
@@ -501,6 +499,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             mNotificationGutsManager = Dependency.get(NotificationGutsManager.class);
     private final NotificationSectionsManager mSectionsManager;
     private boolean mAnimateBottomOnLayout;
+    private float mLastSentAppear;
+    private float mLastSentExpandedHeight;
 
     @Inject
     public NotificationStackScrollLayout(
@@ -562,13 +562,13 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
                 res.getBoolean(R.bool.config_fadeNotificationsOnDismiss);
         mRoundnessManager.setAnimatedChildren(mChildrenToAddAnimated);
         mRoundnessManager.setOnRoundingChangedCallback(this::invalidate);
-        addOnExpandedHeightListener(mRoundnessManager::setExpanded);
+        addOnExpandedHeightChangedListener(mRoundnessManager::setExpanded);
         setOutlineProvider(mOutlineProvider);
 
         // Blocking helper manager wants to know the expanded state, update as well.
         NotificationBlockingHelperManager blockingHelperManager =
                 Dependency.get(NotificationBlockingHelperManager.class);
-        addOnExpandedHeightListener((height, unused) -> {
+        addOnExpandedHeightChangedListener((height, unused) -> {
             blockingHelperManager.setNotificationShadeExpanded(height);
         });
 
@@ -635,7 +635,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     public float getWakeUpHeight() {
         ActivatableNotificationView firstChild = getFirstChildWithBackground();
         if (firstChild != null) {
-            return firstChild.getCollapsedHeight();
+            if (mKeyguardBypassController.getBypassEnabled()) {
+                return firstChild.getHeadsUpHeightWithoutHeader();
+            } else {
+                return firstChild.getCollapsedHeight();
+            }
         }
         return 0f;
     }
@@ -1314,7 +1318,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
                 stackHeight = (int) height;
             }
         } else {
-            appearFraction = getAppearFraction(height);
+            appearFraction = calculateAppearFraction(height);
             if (appearFraction >= 0) {
                 translationY = NotificationUtils.interpolate(getExpandTranslationStart(), 0,
                         appearFraction);
@@ -1337,9 +1341,26 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             requestChildrenUpdate();
         }
         setStackTranslation(translationY);
-        for (int i = 0; i < mExpandedHeightListeners.size(); i++) {
-            BiConsumer<Float, Float> listener = mExpandedHeightListeners.get(i);
-            listener.accept(mExpandedHeight, appearFraction);
+        notifyAppearChangedListeners();
+    }
+
+    private void notifyAppearChangedListeners() {
+        float appear;
+        float expandAmount;
+        if (mKeyguardBypassController.getBypassEnabled() && onKeyguard()) {
+            appear = calculateAppearFractionBypass();
+            expandAmount = getPulseHeight();
+        } else {
+            appear = MathUtils.saturate(calculateAppearFraction(mExpandedHeight));
+            expandAmount = mExpandedHeight;
+        }
+        if (appear != mLastSentAppear || expandAmount != mLastSentExpandedHeight) {
+            mLastSentAppear = appear;
+            mLastSentExpandedHeight = expandAmount;
+            for (int i = 0; i < mExpandedHeightListeners.size(); i++) {
+                BiConsumer<Float, Float> listener = mExpandedHeightListeners.get(i);
+                listener.accept(expandAmount, appear);
+            }
         }
     }
 
@@ -1461,7 +1482,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
      * @return the fraction of the appear animation that has been performed
      */
     @ShadeViewRefactor(RefactorComponent.COORDINATOR)
-    public float getAppearFraction(float height) {
+    public float calculateAppearFraction(float height) {
         float appearEndPosition = getAppearEndPosition();
         float appearStartPosition = getAppearStartPosition();
         return (height - appearStartPosition)
@@ -4715,17 +4736,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         notifyHeightChangeListener(mShelf);
     }
 
-    @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
-    private void updatePanelTranslation() {
-        setTranslationX(mHorizontalPanelTranslation + mAntiBurnInOffsetX * mInterpolatedHideAmount);
-    }
-
-    @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
-    public void setHorizontalPanelTranslation(float verticalPanelTranslation) {
-        mHorizontalPanelTranslation = verticalPanelTranslation;
-        updatePanelTranslation();
-    }
-
     /**
      * Sets the current hide amount.
      *
@@ -4755,7 +4765,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         }
         updateAlgorithmHeightAndPadding();
         updateBackgroundDimming();
-        updatePanelTranslation();
         requestChildrenUpdate();
         updateOwnTranslationZ();
     }
@@ -5319,12 +5328,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     }
 
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
-    public void setAntiBurnInOffsetX(int antiBurnInOffsetX) {
-        mAntiBurnInOffsetX = antiBurnInOffsetX;
-        updatePanelTranslation();
-    }
-
-    @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println(String.format("[%s: pulsing=%s qsCustomizerShowing=%s visibility=%s"
                         + " alpha:%f scrollY:%d maxTopPadding:%d showShelfOnly=%s"
@@ -5382,13 +5385,13 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     }
 
     /**
-     * Add a listener whenever the expanded height changes. The first value passed as an argument
-     * is the expanded height and the second one is the appearFraction.
+     * Add a listener whenever the expanded height changes. The first value passed as an
+     * argument is the expanded height and the second one is the appearFraction.
      *
      * @param listener the listener to notify.
      */
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
-    public void addOnExpandedHeightListener(BiConsumer<Float, Float> listener) {
+    public void addOnExpandedHeightChangedListener(BiConsumer<Float, Float> listener) {
         mExpandedHeightListeners.add(listener);
     }
 
@@ -5396,7 +5399,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
      * Stop a listener from listening to the expandedHeight.
      */
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
-    public void removeOnExpandedHeightListener(BiConsumer<Float, Float> listener) {
+    public void removeOnExpandedHeightChangedListener(BiConsumer<Float, Float> listener) {
         mExpandedHeightListeners.remove(listener);
     }
 
@@ -5617,6 +5620,9 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
      */
     public float setPulseHeight(float height) {
         mAmbientState.setPulseHeight(height);
+        if (mKeyguardBypassController.getBypassEnabled()) {
+            notifyAppearChangedListeners();
+        }
         requestChildrenUpdate();
         return Math.max(0, height - mAmbientState.getInnerHeight(true /* ignorePulseHeight */));
     }
@@ -5674,6 +5680,16 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
 
     public void setOnPulseHeightChangedListener(Runnable listener) {
         mAmbientState.setOnPulseHeightChangedListener(listener);
+    }
+
+    public float calculateAppearFractionBypass() {
+        float pulseHeight = getPulseHeight();
+        float wakeUpHeight = getWakeUpHeight();
+        float dragDownAmount = pulseHeight - wakeUpHeight;
+
+        // The total distance required to fully reveal the header
+        float totalDistance = getIntrinsicPadding();
+        return MathUtils.smoothStep(0, totalDistance, dragDownAmount);
     }
 
     /**
