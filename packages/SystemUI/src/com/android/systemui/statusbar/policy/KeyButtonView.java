@@ -25,6 +25,8 @@ import android.app.ActivityManager;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.TypedArray;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.hardware.input.InputManager;
@@ -54,9 +56,9 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.bubbles.BubbleController;
-import com.android.systemui.plugins.statusbar.phone.NavBarButtonProvider.ButtonInterface;
 import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.shared.system.QuickStepContract;
+import com.android.systemui.statusbar.phone.ButtonInterface;
 
 public class KeyButtonView extends ImageView implements ButtonInterface {
     private static final String TAG = KeyButtonView.class.getSimpleName();
@@ -76,6 +78,8 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
     private final OverviewProxyService mOverviewProxyService;
     private final MetricsLogger mMetricsLogger = Dependency.get(MetricsLogger.class);
     private final InputManager mInputManager;
+    private final Paint mOvalBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private boolean mHasOvalBg = false;
 
     private final Runnable mCheckLongPress = new Runnable() {
         public void run() {
@@ -127,6 +131,7 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
         mOverviewProxyService = Dependency.get(OverviewProxyService.class);
         mInputManager = manager;
         setBackground(mRipple);
+        setWillNotDraw(false);
         forceHasOverlappingRendering(false);
     }
 
@@ -357,7 +362,14 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
     public void setDarkIntensity(float darkIntensity) {
         Drawable drawable = getDrawable();
         if (drawable != null) {
-            ((KeyButtonDrawable) getDrawable()).setDarkIntensity(darkIntensity);
+            KeyButtonDrawable keyButtonDrawable = (KeyButtonDrawable) drawable;
+            keyButtonDrawable.setDarkIntensity(darkIntensity);
+            mHasOvalBg = keyButtonDrawable.hasOvalBg();
+            if (mHasOvalBg) {
+                mOvalBgPaint.setColor(keyButtonDrawable.getDarkColor());
+            }
+            mRipple.setType(keyButtonDrawable.hasOvalBg() ? KeyButtonRipple.Type.OVAL
+                    : KeyButtonRipple.Type.ROUNDED_RECT);
 
             // Since we reuse the same drawable for multiple views, we need to invalidate the view
             // manually.
@@ -372,9 +384,22 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
     }
 
     @Override
+    public void draw(Canvas canvas) {
+        if (mHasOvalBg) {
+            canvas.save();
+            int cx = (getLeft() + getRight()) / 2;
+            int cy = (getTop() + getBottom()) / 2;
+            canvas.translate(cx, cy);
+            int d = Math.min(getWidth(), getHeight());
+            int r = d / 2;
+            canvas.drawOval(-r, -r, r, r, mOvalBgPaint);
+            canvas.restore();
+        }
+        super.draw(canvas);
+    }
+
+    @Override
     public void setVertical(boolean vertical) {
         mIsVertical = vertical;
     }
 }
-
-

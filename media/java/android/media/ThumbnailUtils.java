@@ -52,6 +52,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Objects;
 import java.util.function.ToIntFunction;
 
 /**
@@ -244,30 +245,71 @@ public class ThumbnailUtils {
 
         final Resizer resizer = new Resizer(size, signal);
         final String mimeType = MediaFile.getMimeTypeForFile(file.getName());
+        Bitmap bitmap = null;
+        ExifInterface exif = null;
+        int orientation = 0;
+
+        // get orientation
+        if (MediaFile.isExifMimeType(mimeType)) {
+            exif = new ExifInterface(file);
+            switch (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, 0)) {
+                case ExifInterface.ORIENTATION_ROTATE_90:
+                    orientation = 90;
+                    break;
+                case ExifInterface.ORIENTATION_ROTATE_180:
+                    orientation = 180;
+                    break;
+                case ExifInterface.ORIENTATION_ROTATE_270:
+                    orientation = 270;
+                    break;
+            }
+        }
+
         if (mimeType.equals("image/heif")
                 || mimeType.equals("image/heif-sequence")
                 || mimeType.equals("image/heic")
                 || mimeType.equals("image/heic-sequence")) {
             try (MediaMetadataRetriever retriever = new MediaMetadataRetriever()) {
                 retriever.setDataSource(file.getAbsolutePath());
-                return retriever.getThumbnailImageAtIndex(-1,
+                bitmap = retriever.getThumbnailImageAtIndex(-1,
                         new MediaMetadataRetriever.BitmapParams(), size.getWidth(),
                         size.getWidth() * size.getHeight());
             } catch (RuntimeException e) {
                 throw new IOException("Failed to create thumbnail", e);
             }
-        } else if (MediaFile.isExifMimeType(mimeType)) {
-            final ExifInterface exif = new ExifInterface(file);
+        }
+
+        if (bitmap == null && exif != null) {
             final byte[] raw = exif.getThumbnailBytes();
             if (raw != null) {
-                return ImageDecoder.decodeBitmap(ImageDecoder.createSource(raw), resizer);
+                try {
+                    bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(raw), resizer);
+                } catch (ImageDecoder.DecodeException e) {
+                    Log.w(TAG, e);
+                }
             }
         }
 
         // Checkpoint before going deeper
         if (signal != null) signal.throwIfCanceled();
 
-        return ImageDecoder.decodeBitmap(ImageDecoder.createSource(file), resizer);
+        if (bitmap == null) {
+            bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(file), resizer);
+            // Use ImageDecoder to do full file decoding, we don't need to handle the orientation
+            return bitmap;
+        }
+
+        // Transform the bitmap if the orientation of the image is not 0.
+        if (orientation != 0 && bitmap != null) {
+            final int width = bitmap.getWidth();
+            final int height = bitmap.getHeight();
+
+            final Matrix m = new Matrix();
+            m.setRotate(orientation, width / 2, height / 2);
+            bitmap = Bitmap.createBitmap(bitmap, 0, 0, width, height, m, false);
+        }
+
+        return bitmap;
     }
 
     /**
@@ -322,10 +364,12 @@ public class ThumbnailUtils {
             // If we're okay with something larger than native format, just
             // return a frame without up-scaling it
             if (size.getWidth() > width && size.getHeight() > height) {
-                return mmr.getFrameAtTime(duration / 2, OPTION_CLOSEST_SYNC);
+                return Objects.requireNonNull(
+                        mmr.getFrameAtTime(duration / 2, OPTION_CLOSEST_SYNC));
             } else {
-                return mmr.getScaledFrameAtTime(duration / 2, OPTION_CLOSEST_SYNC,
-                        size.getWidth(), size.getHeight());
+                return Objects.requireNonNull(
+                        mmr.getScaledFrameAtTime(duration / 2, OPTION_CLOSEST_SYNC,
+                        size.getWidth(), size.getHeight()));
             }
         } catch (RuntimeException e) {
             throw new IOException("Failed to create thumbnail", e);

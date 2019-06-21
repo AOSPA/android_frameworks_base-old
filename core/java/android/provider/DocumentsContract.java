@@ -916,8 +916,17 @@ public final class DocumentsContract {
      * @see #getDocumentId(Uri)
      */
     public static Uri buildDocumentUri(String authority, String documentId) {
+        return getBaseDocumentUriBuilder(authority).appendPath(documentId).build();
+    }
+
+    /** {@hide} */
+    public static Uri buildBaseDocumentUri(String authority) {
+        return getBaseDocumentUriBuilder(authority).build();
+    }
+
+    private static Uri.Builder getBaseDocumentUriBuilder(String authority) {
         return new Uri.Builder().scheme(ContentResolver.SCHEME_CONTENT)
-                .authority(authority).appendPath(PATH_DOCUMENT).appendPath(documentId).build();
+            .authority(authority).appendPath(PATH_DOCUMENT);
     }
 
     /**
@@ -1671,34 +1680,35 @@ public final class DocumentsContract {
     public static AssetFileDescriptor openImageThumbnail(File file) throws FileNotFoundException {
         final ParcelFileDescriptor pfd = ParcelFileDescriptor.open(
                 file, ParcelFileDescriptor.MODE_READ_ONLY);
-        Bundle extras = null;
-
         try {
             final ExifInterface exif = new ExifInterface(file.getAbsolutePath());
 
-            switch (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, -1)) {
-                case ExifInterface.ORIENTATION_ROTATE_90:
-                    extras = new Bundle(1);
-                    extras.putInt(EXTRA_ORIENTATION, 90);
-                    break;
-                case ExifInterface.ORIENTATION_ROTATE_180:
-                    extras = new Bundle(1);
-                    extras.putInt(EXTRA_ORIENTATION, 180);
-                    break;
-                case ExifInterface.ORIENTATION_ROTATE_270:
-                    extras = new Bundle(1);
-                    extras.putInt(EXTRA_ORIENTATION, 270);
-                    break;
-            }
-
             final long[] thumb = exif.getThumbnailRange();
             if (thumb != null) {
+                // If we use thumb to decode, we need to handle the rotation by ourselves.
+                Bundle extras = null;
+                switch (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, -1)) {
+                    case ExifInterface.ORIENTATION_ROTATE_90:
+                        extras = new Bundle(1);
+                        extras.putInt(EXTRA_ORIENTATION, 90);
+                        break;
+                    case ExifInterface.ORIENTATION_ROTATE_180:
+                        extras = new Bundle(1);
+                        extras.putInt(EXTRA_ORIENTATION, 180);
+                        break;
+                    case ExifInterface.ORIENTATION_ROTATE_270:
+                        extras = new Bundle(1);
+                        extras.putInt(EXTRA_ORIENTATION, 270);
+                        break;
+                }
+
                 return new AssetFileDescriptor(pfd, thumb[0], thumb[1], extras);
             }
         } catch (IOException e) {
         }
 
-        return new AssetFileDescriptor(pfd, 0, AssetFileDescriptor.UNKNOWN_LENGTH, extras);
+        // Do full file decoding, we don't need to handle the orientation
+        return new AssetFileDescriptor(pfd, 0, AssetFileDescriptor.UNKNOWN_LENGTH, null);
     }
 
     private static void rethrowIfNecessary(Exception e) throws FileNotFoundException {

@@ -62,7 +62,6 @@ import android.os.WorkSource.WorkChain;
 import android.provider.Settings;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
-import android.telephony.SubscriptionManager.OnSubscriptionsChangedListener;
 import android.telephony.TelephonyManager;
 import android.telephony.gsm.GsmCellLocation;
 import android.text.TextUtils;
@@ -77,6 +76,7 @@ import com.android.internal.location.GpsNetInitiatedHandler.GpsNiNotification;
 import com.android.internal.location.ProviderProperties;
 import com.android.internal.location.ProviderRequest;
 import com.android.internal.location.gnssmetrics.GnssMetrics;
+import com.android.internal.telephony.TelephonyIntents;
 import com.android.server.location.GnssSatelliteBlacklistHelper.GnssSatelliteBlacklistCallback;
 import com.android.server.location.NtpTimeHelper.InjectNtpTimeCallback;
 
@@ -182,10 +182,10 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
     private static final int SET_REQUEST = 3;
     private static final int INJECT_NTP_TIME = 5;
-    private static final int DOWNLOAD_XTRA_DATA = 6;
+    // PSDS stands for Predicted Satellite Data Service
+    private static final int DOWNLOAD_PSDS_DATA = 6;
     private static final int UPDATE_LOCATION = 7;  // Handle external location from network listener
-    private static final int DOWNLOAD_XTRA_DATA_FINISHED = 11;
-    private static final int SUBSCRIPTION_OR_CARRIER_CONFIG_CHANGED = 12;
+    private static final int DOWNLOAD_PSDS_DATA_FINISHED = 11;
     private static final int INITIALIZE_HANDLER = 13;
     private static final int REQUEST_LOCATION = 16;
     private static final int REPORT_LOCATION = 17; // HAL reports location
@@ -297,34 +297,35 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     // Typical hot TTTF is ~5 seconds, so 10 seconds seems sane.
     private static final int GPS_POLLING_THRESHOLD_INTERVAL = 10 * 1000;
 
-    // how long to wait if we have a network error in NTP or XTRA downloading
+    // how long to wait if we have a network error in NTP or PSDS downloading
     // the initial value of the exponential backoff
     // current setting - 5 minutes
     private static final long RETRY_INTERVAL = 5 * 60 * 1000;
-    // how long to wait if we have a network error in NTP or XTRA downloading
+    // how long to wait if we have a network error in NTP or PSDS downloading
     // the max value of the exponential backoff
     // current setting - 4 hours
     private static final long MAX_RETRY_INTERVAL = 4 * 60 * 60 * 1000;
 
-    // Timeout when holding wakelocks for downloading XTRA data.
-    private static final long DOWNLOAD_XTRA_DATA_TIMEOUT_MS = 60 * 1000;
+    // Timeout when holding wakelocks for downloading PSDS data.
+    private static final long DOWNLOAD_PSDS_DATA_TIMEOUT_MS = 60 * 1000;
 
-    private final ExponentialBackOff mXtraBackOff = new ExponentialBackOff(RETRY_INTERVAL,
+    private final ExponentialBackOff mPsdsBackOff = new ExponentialBackOff(RETRY_INTERVAL,
             MAX_RETRY_INTERVAL);
 
-    // true if we are enabled, protected by this
-    private boolean mEnabled;
+    // True if we are enabled
+    @GuardedBy("mLock")
+    private boolean mGpsEnabled;
 
     private boolean mShutdown;
 
-    // states for injecting ntp and downloading xtra data
+    // states for injecting ntp and downloading psds data
     private static final int STATE_PENDING_NETWORK = 0;
     private static final int STATE_DOWNLOADING = 1;
     private static final int STATE_IDLE = 2;
 
-    // flags to trigger NTP or XTRA data download when network becomes available
-    // initialized to true so we do NTP and XTRA when the network comes up after booting
-    private int mDownloadXtraDataPending = STATE_PENDING_NETWORK;
+    // flags to trigger NTP or PSDS data download when network becomes available
+    // initialized to true so we do NTP and PSDS when the network comes up after booting
+    private int mDownloadPsdsDataPending = STATE_PENDING_NETWORK;
 
     // true if GPS is navigating
     private boolean mNavigating;
@@ -348,8 +349,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     // capabilities reported through the top level IGnssCallback.hal
     private volatile int mTopHalCapabilities;
 
-    // true if XTRA is supported
-    private boolean mSupportsXtra;
+    // true if PSDS is supported
+    private boolean mSupportsPsds;
 
     // for calculating time to first fix
     private long mFixRequestTime = 0;
@@ -406,8 +407,9 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     // Wakelocks
     private final static String WAKELOCK_KEY = "GnssLocationProvider";
     private final PowerManager.WakeLock mWakeLock;
-    private static final String DOWNLOAD_EXTRA_WAKELOCK_KEY = "GnssLocationProviderXtraDownload";
-    private final PowerManager.WakeLock mDownloadXtraWakeLock;
+    private static final String DOWNLOAD_EXTRA_WAKELOCK_KEY = "GnssLocationProviderPsdsDownload";
+    @GuardedBy("mLock")
+    private final PowerManager.WakeLock mDownloadPsdsWakeLock;
 
     // Alarms
     private final static String ALARM_WAKEUP = "com.android.internal.location.ALARM_WAKEUP";
@@ -483,21 +485,12 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                     updateLowPowerMode();
                     break;
                 case CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED:
+                case TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED:
                     subscriptionOrCarrierConfigChanged(context);
                     break;
             }
         }
     };
-
-    // TODO: replace OnSubscriptionsChangedListener with ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED
-    //       broadcast receiver.
-    private final OnSubscriptionsChangedListener mOnSubscriptionsChangedListener =
-            new OnSubscriptionsChangedListener() {
-                @Override
-                public void onSubscriptionsChanged() {
-                    sendMessage(SUBSCRIPTION_OR_CARRIER_CONFIG_CHANGED, 0, null);
-                }
-            };
 
     /**
      * Implements {@link GnssSatelliteBlacklistCallback#onUpdateSatelliteBlacklist}.
@@ -514,33 +507,33 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 mContext.getSystemService(Context.TELEPHONY_SERVICE);
         CarrierConfigManager configManager = (CarrierConfigManager)
                 mContext.getSystemService(Context.CARRIER_CONFIG_SERVICE);
-        String mccMnc = phone.getSimOperator();
+        int ddSubId = SubscriptionManager.getDefaultDataSubscriptionId();
+        String mccMnc = SubscriptionManager.isValidSubscriptionId(ddSubId)
+                ? phone.getSimOperator(ddSubId) : phone.getSimOperator();
         boolean isKeepLppProfile = false;
         if (!TextUtils.isEmpty(mccMnc)) {
             if (DEBUG) Log.d(TAG, "SIM MCC/MNC is available: " + mccMnc);
-            synchronized (mLock) {
-                if (configManager != null) {
-                    PersistableBundle b = configManager.getConfig();
-                    if (b != null) {
-                        isKeepLppProfile =
-                                b.getBoolean(CarrierConfigManager.Gps.KEY_PERSIST_LPP_MODE_BOOL);
-                    }
+            if (configManager != null) {
+                PersistableBundle b = SubscriptionManager.isValidSubscriptionId(ddSubId)
+                        ? configManager.getConfigForSubId(ddSubId) : null;
+                if (b != null) {
+                    isKeepLppProfile =
+                            b.getBoolean(CarrierConfigManager.Gps.KEY_PERSIST_LPP_MODE_BOOL);
                 }
-                if (isKeepLppProfile) {
-                    // load current properties for the carrier
-                    mGnssConfiguration.loadPropertiesFromCarrierConfig();
-                    String lpp_profile = mGnssConfiguration.getLppProfile();
-                    // set the persist property LPP_PROFILE for the value
-                    if (lpp_profile != null) {
-                        SystemProperties.set(GnssConfiguration.LPP_PROFILE, lpp_profile);
-                    }
-                } else {
-                    // reset the persist property
-                    SystemProperties.set(GnssConfiguration.LPP_PROFILE, "");
-                }
-                reloadGpsProperties();
-                mNIHandler.setSuplEsEnabled(mSuplEsEnabled);
             }
+            if (isKeepLppProfile) {
+                // load current properties for the carrier
+                mGnssConfiguration.loadPropertiesFromCarrierConfig();
+                String lpp_profile = mGnssConfiguration.getLppProfile();
+                // set the persist property LPP_PROFILE for the value
+                if (lpp_profile != null) {
+                    SystemProperties.set(GnssConfiguration.LPP_PROFILE, lpp_profile);
+                }
+            } else {
+                // reset the persist property
+                SystemProperties.set(GnssConfiguration.LPP_PROFILE, "");
+            }
+            reloadGpsProperties();
         } else {
             if (DEBUG) Log.d(TAG, "SIM MCC/MNC is still not available");
         }
@@ -578,8 +571,9 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mC2KServerPort = mGnssConfiguration.getC2KPort(TCP_MIN_PORT);
         mNIHandler.setEmergencyExtensionSeconds(mGnssConfiguration.getEsExtensionSec());
         mSuplEsEnabled = mGnssConfiguration.getSuplEs(0) == 1;
+        mNIHandler.setSuplEsEnabled(mSuplEsEnabled);
         if (mGnssVisibilityControl != null) {
-            mGnssVisibilityControl.updateProxyApps(mGnssConfiguration.getProxyApps());
+            mGnssVisibilityControl.onConfigurationUpdated(mGnssConfiguration);
         }
     }
 
@@ -594,10 +588,10 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mWakeLock = mPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_KEY);
         mWakeLock.setReferenceCounted(true);
 
-        // Create a separate wake lock for xtra downloader as it may be released due to timeout.
-        mDownloadXtraWakeLock = mPowerManager.newWakeLock(
+        // Create a separate wake lock for psds downloader as it may be released due to timeout.
+        mDownloadPsdsWakeLock = mPowerManager.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK, DOWNLOAD_EXTRA_WAKELOCK_KEY);
-        mDownloadXtraWakeLock.setReferenceCounted(true);
+        mDownloadPsdsWakeLock.setReferenceCounted(true);
 
         mAlarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
         mWakeupIntent = PendingIntent.getBroadcast(mContext, 0, new Intent(ALARM_WAKEUP), 0);
@@ -637,14 +631,14 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
             @Override
             protected boolean isGpsEnabled() {
-                return isEnabled();
+                return GnssLocationProvider.this.isGpsEnabled();
             }
         };
 
         mGnssMeasurementsProvider = new GnssMeasurementsProvider(mContext, mHandler) {
             @Override
             protected boolean isGpsEnabled() {
-                return isEnabled();
+                return GnssLocationProvider.this.isGpsEnabled();
             }
         };
 
@@ -653,7 +647,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mGnssNavigationMessageProvider = new GnssNavigationMessageProvider(mContext, mHandler) {
             @Override
             protected boolean isGpsEnabled() {
-                return isEnabled();
+                return GnssLocationProvider.this.isGpsEnabled();
             }
         };
 
@@ -703,10 +697,10 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
      */
     private void onNetworkAvailable() {
         mNtpTimeHelper.onNetworkAvailable();
-        if (mDownloadXtraDataPending == STATE_PENDING_NETWORK) {
-            if (mSupportsXtra) {
+        if (mDownloadPsdsDataPending == STATE_PENDING_NETWORK) {
+            if (mSupportsPsds) {
                 // Download only if supported, (prevents an unnecessary on-boot download)
-                xtraDownloadRequest();
+                psdsDownloadRequest();
             }
         }
     }
@@ -813,61 +807,63 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         return false;
     }
 
-    private void handleDownloadXtraData() {
-        if (!mSupportsXtra) {
-            // native code reports xtra not supported, don't try
-            Log.d(TAG, "handleDownloadXtraData() called when Xtra not supported");
+    private void handleDownloadPsdsData() {
+        if (!mSupportsPsds) {
+            // native code reports psds not supported, don't try
+            Log.d(TAG, "handleDownloadPsdsData() called when PSDS not supported");
             return;
         }
-        if (mDownloadXtraDataPending == STATE_DOWNLOADING) {
+        if (mDownloadPsdsDataPending == STATE_DOWNLOADING) {
             // already downloading data
             return;
         }
         if (!mNetworkConnectivityHandler.isDataNetworkConnected()) {
             // try again when network is up
-            mDownloadXtraDataPending = STATE_PENDING_NETWORK;
+            mDownloadPsdsDataPending = STATE_PENDING_NETWORK;
             return;
         }
-        mDownloadXtraDataPending = STATE_DOWNLOADING;
+        mDownloadPsdsDataPending = STATE_DOWNLOADING;
 
-        // hold wake lock while task runs
-        mDownloadXtraWakeLock.acquire(DOWNLOAD_XTRA_DATA_TIMEOUT_MS);
-        Log.i(TAG, "WakeLock acquired by handleDownloadXtraData()");
+        synchronized (mLock) {
+            // hold wake lock while task runs
+            mDownloadPsdsWakeLock.acquire(DOWNLOAD_PSDS_DATA_TIMEOUT_MS);
+        }
+        Log.i(TAG, "WakeLock acquired by handleDownloadPsdsData()");
         AsyncTask.THREAD_POOL_EXECUTOR.execute(() -> {
-            GpsXtraDownloader xtraDownloader = new GpsXtraDownloader(
+            GpsPsdsDownloader psdsDownloader = new GpsPsdsDownloader(
                     mGnssConfiguration.getProperties());
-            byte[] data = xtraDownloader.downloadXtraData();
+            byte[] data = psdsDownloader.downloadPsdsData();
             if (data != null) {
-                if (DEBUG) Log.d(TAG, "calling native_inject_xtra_data");
-                native_inject_xtra_data(data, data.length);
-                mXtraBackOff.reset();
+                if (DEBUG) Log.d(TAG, "calling native_inject_psds_data");
+                native_inject_psds_data(data, data.length);
+                mPsdsBackOff.reset();
             }
 
-            sendMessage(DOWNLOAD_XTRA_DATA_FINISHED, 0, null);
+            sendMessage(DOWNLOAD_PSDS_DATA_FINISHED, 0, null);
 
             if (data == null) {
                 // try again later
                 // since this is delayed and not urgent we do not hold a wake lock here
-                mHandler.sendEmptyMessageDelayed(DOWNLOAD_XTRA_DATA,
-                        mXtraBackOff.nextBackoffMillis());
+                mHandler.sendEmptyMessageDelayed(DOWNLOAD_PSDS_DATA,
+                        mPsdsBackOff.nextBackoffMillis());
             }
 
             // Release wake lock held by task, synchronize on mLock in case multiple
             // download tasks overrun.
             synchronized (mLock) {
-                if (mDownloadXtraWakeLock.isHeld()) {
+                if (mDownloadPsdsWakeLock.isHeld()) {
                     // This wakelock may have time-out, if a timeout was specified.
                     // Catch (and ignore) any timeout exceptions.
                     try {
-                        mDownloadXtraWakeLock.release();
-                        if (DEBUG) Log.d(TAG, "WakeLock released by handleDownloadXtraData()");
+                        mDownloadPsdsWakeLock.release();
+                        if (DEBUG) Log.d(TAG, "WakeLock released by handleDownloadPsdsData()");
                     } catch (Exception e) {
                         Log.i(TAG, "Wakelock timeout & release race exception in "
-                                + "handleDownloadXtraData()", e);
+                                + "handleDownloadPsdsData()", e);
                     }
                 } else {
                     Log.e(TAG, "WakeLock expired before release in "
-                            + "handleDownloadXtraData()");
+                            + "handleDownloadPsdsData()");
                 }
             }
         });
@@ -914,15 +910,20 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         return GPS_POSITION_MODE_STANDALONE;
     }
 
-    @GuardedBy("mLock")
-    private void handleEnableLocked() {
-        if (DEBUG) Log.d(TAG, "handleEnableLocked");
+    private void setGpsEnabled(boolean enabled) {
+        synchronized (mLock) {
+            mGpsEnabled = enabled;
+        }
+    }
+
+    private void handleEnable() {
+        if (DEBUG) Log.d(TAG, "handleEnable");
 
         boolean inited = native_init();
 
         if (inited) {
-            mEnabled = true;
-            mSupportsXtra = native_supports_xtra();
+            setGpsEnabled(true);
+            mSupportsPsds = native_supports_psds();
 
             // TODO: remove the following native calls if we can make sure they are redundant.
             if (mSuplServerHost != null) {
@@ -938,26 +939,25 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             mGnssNavigationMessageProvider.onGpsEnabledChanged();
             mGnssBatchingProvider.enable();
             if (mGnssVisibilityControl != null) {
-                mGnssVisibilityControl.onGpsEnabledChanged(mEnabled);
+                mGnssVisibilityControl.onGpsEnabledChanged(/* isEnabled= */true);
             }
         } else {
-            mEnabled = false;
+            setGpsEnabled(false);
             Log.w(TAG, "Failed to enable location provider");
         }
     }
 
-    @GuardedBy("mLock")
-    private void handleDisableLocked() {
-        if (DEBUG) Log.d(TAG, "handleDisableLocked");
+    private void handleDisable() {
+        if (DEBUG) Log.d(TAG, "handleDisable");
 
-        mEnabled = false;
+        setGpsEnabled(false);
         updateClientUids(new WorkSource());
         stopNavigating();
         mAlarmManager.cancel(mWakeupIntent);
         mAlarmManager.cancel(mTimeoutIntent);
 
         if (mGnssVisibilityControl != null) {
-            mGnssVisibilityControl.onGpsEnabledChanged(mEnabled);
+            mGnssVisibilityControl.onGpsEnabledChanged(/* isEnabled= */ false);
         }
         mGnssBatchingProvider.disable();
         // do this before releasing wakelock
@@ -968,35 +968,34 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     }
 
     private void updateEnabled() {
-        synchronized (mLock) {
-            // Generally follow location setting
-            boolean enabled = mContext.getSystemService(LocationManager.class).isLocationEnabled();
+        // Generally follow location setting for current user
+        boolean enabled = mContext.getSystemService(LocationManager.class)
+                .isLocationEnabledForUser(UserHandle.CURRENT);
 
-            // ... but disable if PowerManager overrides
-            enabled &= !mDisableGpsForPowerManager;
+        // ... but disable if PowerManager overrides
+        enabled &= !mDisableGpsForPowerManager;
 
-            // .. but enable anyway, if there's an active settings-ignored request (e.g. ELS)
-            enabled |= (mProviderRequest != null && mProviderRequest.reportLocation
-                            && mProviderRequest.locationSettingsIgnored);
+        // .. but enable anyway, if there's an active settings-ignored request (e.g. ELS)
+        enabled |= (mProviderRequest != null && mProviderRequest.reportLocation
+                        && mProviderRequest.locationSettingsIgnored);
 
-            // ... and, finally, disable anyway, if device is being shut down
-            enabled &= !mShutdown;
+        // ... and, finally, disable anyway, if device is being shut down
+        enabled &= !mShutdown;
 
-            if (enabled == mEnabled) {
-                return;
-            }
+        if (enabled == isGpsEnabled()) {
+            return;
+        }
 
-            if (enabled) {
-                handleEnableLocked();
-            } else {
-                handleDisableLocked();
-            }
+        if (enabled) {
+            handleEnable();
+        } else {
+            handleDisable();
         }
     }
 
-    public boolean isEnabled() {
+    private boolean isGpsEnabled() {
         synchronized (mLock) {
-            return mEnabled;
+            return mGpsEnabled;
         }
     }
 
@@ -1037,7 +1036,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         }
 
         if (DEBUG) Log.d(TAG, "setRequest " + mProviderRequest);
-        if (mProviderRequest.reportLocation && isEnabled()) {
+        if (mProviderRequest.reportLocation && isGpsEnabled()) {
             // update client uids
             updateClientUids(mWorkSource);
 
@@ -1164,9 +1163,9 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 deleteAidingData(extras);
             } else if ("force_time_injection".equals(command)) {
                 requestUtcTime();
-            } else if ("force_xtra_injection".equals(command)) {
-                if (mSupportsXtra) {
-                    xtraDownloadRequest();
+            } else if ("force_psds_injection".equals(command)) {
+                if (mSupportsPsds) {
+                    psdsDownloadRequest();
                 }
             } else {
                 Log.w(TAG, "sendExtraCommand: unknown command " + command);
@@ -1598,12 +1597,10 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private void reportGnssServiceDied() {
         if (DEBUG) Log.d(TAG, "reportGnssServiceDied");
         mHandler.post(() -> {
-            class_init_native();
-            native_init_once();
-            if (isEnabled()) {
-                synchronized (mLock) {
-                    mEnabled = false;
-                }
+            setupNativeGnssService(/* reinitializeGnssServiceHandle = */ true);
+            if (isGpsEnabled()) {
+                setGpsEnabled(false);
+
                 updateEnabled();
 
                 // resend configuration into the restarted HAL service.
@@ -1679,9 +1676,9 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     }
 
     @NativeEntryPoint
-    private void xtraDownloadRequest() {
-        if (DEBUG) Log.d(TAG, "xtraDownloadRequest");
-        sendMessage(DOWNLOAD_XTRA_DATA, 0, null);
+    private void psdsDownloadRequest() {
+        if (DEBUG) Log.d(TAG, "psdsDownloadRequest");
+        sendMessage(DOWNLOAD_PSDS_DATA, 0, null);
     }
 
     /**
@@ -1811,7 +1808,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                     /* requestorIdEncoding= */ 0,
                     /* textEncoding= */ 0,
                     mSuplEsEnabled,
-                    isEnabled(),
+                    isGpsEnabled(),
                     userResponse);
 
             return true;
@@ -1877,7 +1874,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 notification.requestorIdEncoding,
                 notification.textEncoding,
                 mSuplEsEnabled,
-                isEnabled(),
+                isGpsEnabled(),
                 /* userResponse= */ 0);
     }
 
@@ -1890,28 +1887,34 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         TelephonyManager phone = (TelephonyManager)
                 mContext.getSystemService(Context.TELEPHONY_SERVICE);
         int type = AGPS_SETID_TYPE_NONE;
-        String data = "";
+        String setId = null;
 
+        int ddSubId = SubscriptionManager.getDefaultDataSubscriptionId();
         if ((flags & AGPS_RIL_REQUEST_SETID_IMSI) == AGPS_RIL_REQUEST_SETID_IMSI) {
-            String data_temp = phone.getSubscriberId();
-            if (data_temp == null) {
-                // This means the framework does not have the SIM card ready.
-            } else {
+            if (SubscriptionManager.isValidSubscriptionId(ddSubId)) {
+                setId = phone.getSubscriberId(ddSubId);
+            }
+            if (setId == null) {
+                setId = phone.getSubscriberId();
+            }
+            if (setId != null) {
                 // This means the framework has the SIM card.
-                data = data_temp;
                 type = AGPS_SETID_TYPE_IMSI;
             }
         } else if ((flags & AGPS_RIL_REQUEST_SETID_MSISDN) == AGPS_RIL_REQUEST_SETID_MSISDN) {
-            String data_temp = phone.getLine1Number();
-            if (data_temp == null) {
-                // This means the framework does not have the SIM card ready.
-            } else {
+            if (SubscriptionManager.isValidSubscriptionId(ddSubId)) {
+                setId = phone.getLine1Number(ddSubId);
+            }
+            if (setId == null) {
+                setId = phone.getLine1Number();
+            }
+            if (setId != null) {
                 // This means the framework has the SIM card.
-                data = data_temp;
                 type = AGPS_SETID_TYPE_MSISDN;
             }
         }
-        native_agps_set_id(type, data);
+
+        native_agps_set_id(type, (setId == null) ? "" : setId);
     }
 
     @NativeEntryPoint
@@ -2014,17 +2017,14 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 case REQUEST_LOCATION:
                     handleRequestLocation(msg.arg1 == 1, (boolean) msg.obj);
                     break;
-                case DOWNLOAD_XTRA_DATA:
-                    handleDownloadXtraData();
+                case DOWNLOAD_PSDS_DATA:
+                    handleDownloadPsdsData();
                     break;
-                case DOWNLOAD_XTRA_DATA_FINISHED:
-                    mDownloadXtraDataPending = STATE_IDLE;
+                case DOWNLOAD_PSDS_DATA_FINISHED:
+                    mDownloadPsdsDataPending = STATE_IDLE;
                     break;
                 case UPDATE_LOCATION:
                     handleUpdateLocation((Location) msg.obj);
-                    break;
-                case SUBSCRIPTION_OR_CARRIER_CONFIG_CHANGED:
-                    subscriptionOrCarrierConfigChanged(mContext);
                     break;
                 case INITIALIZE_HANDLER:
                     handleInitialize();
@@ -2053,39 +2053,16 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
          * this handler.
          */
         private void handleInitialize() {
-            native_init_once();
-
-            /*
-             * A cycle of native_init() and native_cleanup() is needed so that callbacks are
-             * registered after bootup even when location is disabled.
-             * This will allow Emergency SUPL to work even when location is disabled before device
-             * restart.
-             */
-            boolean isInitialized = native_init();
-            if (!isInitialized) {
-                Log.w(TAG, "Native initialization failed at bootup");
-            } else {
-                native_cleanup();
-            }
+            // class_init_native() already initializes the GNSS service handle during class loading.
+            setupNativeGnssService(/* reinitializeGnssServiceHandle = */ false);
 
             if (native_is_gnss_visibility_control_supported()) {
-                mGnssVisibilityControl = new GnssVisibilityControl(mContext, mLooper);
+                mGnssVisibilityControl = new GnssVisibilityControl(mContext, mLooper, mNIHandler);
             }
 
             // load default GPS configuration
             // (this configuration might change in the future based on SIM changes)
             reloadGpsProperties();
-
-            // TODO: When this object "finishes" we should unregister by invoking
-            // SubscriptionManager.getInstance(mContext).unregister
-            // (mOnSubscriptionsChangedListener);
-            // This is not strictly necessary because it will be unregistered if the
-            // notification fails but it is good form.
-
-            // Register for SubscriptionInfo list changes which is guaranteed
-            // to invoke onSubscriptionsChanged the first time.
-            SubscriptionManager.from(mContext)
-                    .addOnSubscriptionsChangedListener(mOnSubscriptionsChangedListener);
 
             // listen for events
             IntentFilter intentFilter = new IntentFilter();
@@ -2096,6 +2073,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             intentFilter.addAction(Intent.ACTION_SCREEN_OFF);
             intentFilter.addAction(Intent.ACTION_SCREEN_ON);
             intentFilter.addAction(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED);
+            intentFilter.addAction(TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED);
             mContext.registerReceiver(mBroadcastReceiver, intentFilter, null, this);
 
             mNetworkConnectivityHandler.registerNetworkCallbacks();
@@ -2168,14 +2146,12 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 return "INJECT_NTP_TIME";
             case REQUEST_LOCATION:
                 return "REQUEST_LOCATION";
-            case DOWNLOAD_XTRA_DATA:
-                return "DOWNLOAD_XTRA_DATA";
-            case DOWNLOAD_XTRA_DATA_FINISHED:
-                return "DOWNLOAD_XTRA_DATA_FINISHED";
+            case DOWNLOAD_PSDS_DATA:
+                return "DOWNLOAD_PSDS_DATA";
+            case DOWNLOAD_PSDS_DATA_FINISHED:
+                return "DOWNLOAD_PSDS_DATA_FINISHED";
             case UPDATE_LOCATION:
                 return "UPDATE_LOCATION";
-            case SUBSCRIPTION_OR_CARRIER_CONFIG_CHANGED:
-                return "SUBSCRIPTION_OR_CARRIER_CONFIG_CHANGED";
             case INITIALIZE_HANDLER:
                 return "INITIALIZE_HANDLER";
             case REPORT_LOCATION:
@@ -2228,6 +2204,23 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         pw.append(s);
     }
 
+    private void setupNativeGnssService(boolean reinitializeGnssServiceHandle) {
+        native_init_once(reinitializeGnssServiceHandle);
+
+        /*
+         * A cycle of native_init() and native_cleanup() is needed so that callbacks are
+         * registered after bootup even when location is disabled.
+         * This will allow Emergency SUPL to work even when location is disabled before device
+         * restart.
+         */
+        boolean isInitialized = native_init();
+        if (!isInitialized) {
+            Log.w(TAG, "Native initialization failed.");
+        } else {
+            native_cleanup();
+        }
+    }
+
     // preallocated to avoid memory allocation in reportNmea()
     private byte[] mNmeaBuffer = new byte[120];
 
@@ -2241,7 +2234,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
     private static native boolean native_is_gnss_visibility_control_supported();
 
-    private static native void native_init_once();
+    private static native void native_init_once(boolean reinitializeGnssServiceHandle);
 
     private native boolean native_init();
 
@@ -2268,12 +2261,12 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
 
     private native void native_inject_location(double latitude, double longitude, float accuracy);
 
-    // XTRA Support
+    // PSDS Support
     private native void native_inject_time(long time, long timeReference, int uncertainty);
 
-    private native boolean native_supports_xtra();
+    private native boolean native_supports_psds();
 
-    private native void native_inject_xtra_data(byte[] data, int length);
+    private native void native_inject_psds_data(byte[] data, int length);
 
     // DEBUG Support
     private native String native_get_internal_state();

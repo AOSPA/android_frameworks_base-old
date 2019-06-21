@@ -448,6 +448,39 @@ ProtoOutputStream::flush(int fd)
     return true;
 }
 
+bool
+ProtoOutputStream::serializeToString(std::string* out)
+{
+    if (out == nullptr) return false;
+    if (!compact()) return false;
+
+    sp<ProtoReader> reader = mBuffer->read();
+    out->reserve(reader->size());
+    while (reader->hasNext()) {
+        out->append(static_cast<const char*>(static_cast<const void*>(reader->readBuffer())),
+                    reader->currentToRead());
+        reader->move(reader->currentToRead());
+    }
+    return true;
+}
+
+bool
+ProtoOutputStream::serializeToVector(std::vector<uint8_t>* out)
+{
+    if (out == nullptr) return false;
+    if (!compact()) return false;
+
+    sp<ProtoReader> reader = mBuffer->read();
+    out->reserve(reader->size());
+    while (reader->hasNext()) {
+        const uint8_t* buf = reader->readBuffer();
+        size_t size = reader->currentToRead();
+        out->insert(out->end(), buf, buf + size);
+        reader->move(size);
+    }
+    return true;
+}
+
 sp<ProtoReader>
 ProtoOutputStream::data()
 {

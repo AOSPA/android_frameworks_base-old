@@ -156,6 +156,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         PackageManagerInternal packageManagerInternal = LocalServices.getService(
                 PackageManagerInternal.class);
         packageManagerInternal.setDefaultBrowserProvider(new DefaultBrowserProvider());
+        packageManagerInternal.setDefaultDialerProvider(new DefaultDialerProvider());
         packageManagerInternal.setDefaultHomeProvider(new DefaultHomeProvider());
 
         registerUserRemovedReceiver();
@@ -279,7 +280,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
         PackageManagerInternal pm = LocalServices.getService(PackageManagerInternal.class);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
 
-        pm.forEachPackage(FunctionalUtils.uncheckExceptions(pkg -> {
+        pm.forEachInstalledPackage(FunctionalUtils.uncheckExceptions(pkg -> {
             out.write(pkg.packageName.getBytes());
             out.write(BitUtils.toBytes(pkg.getLongVersionCode()));
             out.write(pm.getApplicationEnabledState(pkg.packageName, userId));
@@ -287,6 +288,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             ArraySet<String> enabledComponents =
                     pm.getEnabledComponents(pkg.packageName, userId);
             int numComponents = CollectionUtils.size(enabledComponents);
+            out.write(numComponents);
             for (int i = 0; i < numComponents; i++) {
                 out.write(enabledComponents.valueAt(i).getBytes());
             }
@@ -300,7 +302,7 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
             for (Signature signature : pkg.mSigningDetails.signatures) {
                 out.write(signature.toByteArray());
             }
-        }));
+        }), userId);
 
         return PackageUtils.computeSha256Digest(out.toByteArray());
     }
@@ -769,6 +771,16 @@ public class RoleManagerService extends SystemService implements RoleUserState.C
                 getOrCreateController(userId).onClearRoleHolders(RoleManager.ROLE_BROWSER, 0,
                         callback);
             }
+        }
+    }
+
+    private class DefaultDialerProvider implements PackageManagerInternal.DefaultDialerProvider {
+
+        @Nullable
+        @Override
+        public String getDefaultDialer(@UserIdInt int userId) {
+            return CollectionUtils.firstOrNull(getOrCreateUserState(userId).getRoleHolders(
+                    RoleManager.ROLE_DIALER));
         }
     }
 

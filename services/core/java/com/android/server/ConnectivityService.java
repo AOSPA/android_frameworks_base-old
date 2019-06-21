@@ -25,8 +25,8 @@ import static android.net.ConnectivityManager.TYPE_NONE;
 import static android.net.ConnectivityManager.TYPE_VPN;
 import static android.net.ConnectivityManager.getNetworkTypeName;
 import static android.net.ConnectivityManager.isNetworkTypeValid;
-import static android.net.INetworkMonitor.NETWORK_TEST_RESULT_PARTIAL_CONNECTIVITY;
-import static android.net.INetworkMonitor.NETWORK_TEST_RESULT_VALID;
+import static android.net.INetworkMonitor.NETWORK_VALIDATION_RESULT_PARTIAL;
+import static android.net.INetworkMonitor.NETWORK_VALIDATION_RESULT_VALID;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_EIMS;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_FOREGROUND;
@@ -41,7 +41,7 @@ import static android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED;
 import static android.net.NetworkCapabilities.TRANSPORT_VPN;
 import static android.net.NetworkPolicyManager.RULE_NONE;
 import static android.net.NetworkPolicyManager.uidRulesToString;
-import static android.net.shared.NetworkMonitorUtils.isValidationRequired;
+import static android.net.shared.NetworkMonitorUtils.isPrivateDnsValidationRequired;
 import static android.os.Process.INVALID_UID;
 import static android.system.OsConstants.IPPROTO_TCP;
 import static android.system.OsConstants.IPPROTO_UDP;
@@ -80,6 +80,7 @@ import android.net.INetworkStatsService;
 import android.net.ISocketKeepaliveCallback;
 import android.net.ITetheringEventCallback;
 import android.net.InetAddresses;
+import android.net.IpMemoryStore;
 import android.net.IpPrefix;
 import android.net.LinkProperties;
 import android.net.LinkProperties.CompareResult;
@@ -2648,21 +2649,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     final NetworkAgentInfo nai = getNetworkAgentInfoForNetId(msg.arg2);
                     if (nai == null) break;
 
-                    final boolean partialConnectivity =
-                            (msg.arg1 == NETWORK_TEST_RESULT_PARTIAL_CONNECTIVITY)
-                                    || (nai.networkMisc.acceptPartialConnectivity
-                                            && nai.partialConnectivity);
-                    // Once a network is determined to have partial connectivity, it cannot
-                    // go back to full connectivity without a disconnect. This is because
-                    // NetworkMonitor can only communicate either PARTIAL_CONNECTIVITY or VALID,
-                    // but not both.
-                    // TODO: Provide multi-testResult to improve the communication between
-                    // ConnectivityService and NetworkMonitor, so that ConnectivityService could
-                    // know the real status of network.
+                    final boolean wasPartial = nai.partialConnectivity;
+                    nai.partialConnectivity = ((msg.arg1 & NETWORK_VALIDATION_RESULT_PARTIAL) != 0);
                     final boolean partialConnectivityChanged =
-                            (partialConnectivity && !nai.partialConnectivity);
+                            (wasPartial != nai.partialConnectivity);
 
-                    final boolean valid = (msg.arg1 == NETWORK_TEST_RESULT_VALID);
+                    final boolean valid = ((msg.arg1 & NETWORK_VALIDATION_RESULT_VALID) != 0);
                     final boolean wasValidated = nai.lastValidated;
                     final boolean wasDefault = isDefaultNetwork(nai);
                     if (nai.everCaptivePortalDetected && !nai.captivePortalLoginNotified
@@ -2692,21 +2684,23 @@ public class ConnectivityService extends IConnectivityManager.Stub
                         if (oldScore != nai.getCurrentScore()) sendUpdatedScoreToFactories(nai);
                         if (valid) {
                             handleFreshlyValidatedNetwork(nai);
-                            // Clear NO_INTERNET and LOST_INTERNET notifications if network becomes
-                            // valid.
+                            // Clear NO_INTERNET, PARTIAL_CONNECTIVITY and LOST_INTERNET
+                            // notifications if network becomes valid.
                             mNotifier.clearNotification(nai.network.netId,
                                     NotificationType.NO_INTERNET);
                             mNotifier.clearNotification(nai.network.netId,
                                     NotificationType.LOST_INTERNET);
+                            mNotifier.clearNotification(nai.network.netId,
+                                    NotificationType.PARTIAL_CONNECTIVITY);
                         }
                     } else if (partialConnectivityChanged) {
-                        nai.partialConnectivity = partialConnectivity;
                         updateCapabilities(nai.getCurrentScore(), nai, nai.networkCapabilities);
                     }
                     updateInetCondition(nai);
                     // Let the NetworkAgent know the state of its network
                     Bundle redirectUrlBundle = new Bundle();
                     redirectUrlBundle.putString(NetworkAgent.REDIRECT_URL_KEY, redirectUrl);
+                    // TODO: Evaluate to update partial connectivity to status to NetworkAgent.
                     nai.asyncChannel.sendMessage(
                             NetworkAgent.CMD_REPORT_NETWORK_STATUS,
                             (valid ? NetworkAgent.VALID_NETWORK : NetworkAgent.INVALID_NETWORK),
@@ -2869,8 +2863,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     }
 
-    private boolean networkRequiresValidation(NetworkAgentInfo nai) {
-        return isValidationRequired(nai.networkCapabilities);
+    private boolean networkRequiresPrivateDnsValidation(NetworkAgentInfo nai) {
+        return isPrivateDnsValidationRequired(nai.networkCapabilities);
     }
 
     private void handleFreshlyValidatedNetwork(NetworkAgentInfo nai) {
@@ -2888,7 +2882,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         for (NetworkAgentInfo nai : mNetworkAgentInfos.values()) {
             handlePerNetworkPrivateDnsConfig(nai, cfg);
-            if (networkRequiresValidation(nai)) {
+            if (networkRequiresPrivateDnsValidation(nai)) {
                 handleUpdateLinkProperties(nai, new LinkProperties(nai.linkProperties));
             }
         }
@@ -2897,7 +2891,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private void handlePerNetworkPrivateDnsConfig(NetworkAgentInfo nai, PrivateDnsConfig cfg) {
         // Private DNS only ever applies to networks that might provide
         // Internet access and therefore also require validation.
-        if (!networkRequiresValidation(nai)) return;
+        if (!networkRequiresPrivateDnsValidation(nai)) return;
 
         // Notify the NetworkAgentInfo/NetworkMonitor in case NetworkMonitor needs to cancel or
         // schedule DNS resolutions. If a DNS resolution is required the
@@ -3490,6 +3484,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // Inform NetworkMonitor that partial connectivity is acceptable. This will likely
             // result in a partial connectivity result which will be processed by
             // maybeHandleNetworkMonitorMessage.
+            //
+            // TODO: NetworkMonitor does not refer to the "never ask again" bit. The bit is stored
+            // per network. Therefore, NetworkMonitor may still do https probe.
             try {
                 nai.networkMonitor().setAcceptPartialConnectivity();
             } catch (RemoteException e) {
@@ -3544,7 +3541,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
      */
     @Override
     public void startCaptivePortalAppInternal(Network network, Bundle appExtras) {
-        mContext.checkCallingOrSelfPermission(NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK);
+        mContext.enforceCallingOrSelfPermission(NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK,
+                "ConnectivityService");
 
         final Intent appIntent = new Intent(ConnectivityManager.ACTION_CAPTIVE_PORTAL_SIGN_IN);
         appIntent.putExtras(appExtras);
@@ -4419,7 +4417,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     /**
      * @return VPN information for accounting, or null if we can't retrieve all required
-     *         information, e.g primary underlying iface.
+     *         information, e.g underlying ifaces.
      */
     @Nullable
     private VpnInfo createVpnInfo(Vpn vpn) {
@@ -4431,17 +4429,24 @@ public class ConnectivityService extends IConnectivityManager.Stub
         // see VpnService.setUnderlyingNetworks()'s javadoc about how to interpret
         // the underlyingNetworks list.
         if (underlyingNetworks == null) {
-            NetworkAgentInfo defaultNetwork = getDefaultNetwork();
-            if (defaultNetwork != null && defaultNetwork.linkProperties != null) {
-                info.primaryUnderlyingIface = getDefaultNetwork().linkProperties.getInterfaceName();
-            }
-        } else if (underlyingNetworks.length > 0) {
-            LinkProperties linkProperties = getLinkProperties(underlyingNetworks[0]);
-            if (linkProperties != null) {
-                info.primaryUnderlyingIface = linkProperties.getInterfaceName();
+            NetworkAgentInfo defaultNai = getDefaultNetwork();
+            if (defaultNai != null) {
+                underlyingNetworks = new Network[] { defaultNai.network };
             }
         }
-        return info.primaryUnderlyingIface == null ? null : info;
+        if (underlyingNetworks != null && underlyingNetworks.length > 0) {
+            List<String> interfaces = new ArrayList<>();
+            for (Network network : underlyingNetworks) {
+                LinkProperties lp = getLinkProperties(network);
+                if (lp != null && !TextUtils.isEmpty(lp.getInterfaceName())) {
+                    interfaces.add(lp.getInterfaceName());
+                }
+            }
+            if (!interfaces.isEmpty()) {
+                info.underlyingIfaces = interfaces.toArray(new String[interfaces.size()]);
+            }
+        }
+        return info.underlyingIfaces == null ? null : info;
     }
 
     /**
@@ -6978,6 +6983,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
 
         final int userId = UserHandle.getCallingUserId();
+
+        final IpMemoryStore ipMemoryStore = IpMemoryStore.getMemoryStore(mContext);
+        ipMemoryStore.factoryReset();
 
         // Turn airplane mode off
         setAirplaneMode(false);

@@ -17,10 +17,6 @@ package com.android.systemui.statusbar.phone;
 
 import static android.view.Display.INVALID_DISPLAY;
 
-import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_BOUNCER_SHOWING;
-import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_NAV_BAR_HIDDEN;
-import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED;
-
 import android.content.Context;
 import android.content.pm.ParceledListSlice;
 import android.content.res.Resources;
@@ -125,8 +121,8 @@ public class EdgeBackGestureHandler implements DisplayListener {
     private final int mEdgeWidth;
     // The slop to distinguish between horizontal and vertical motion
     private final float mTouchSlop;
-    // Minimum distance to move so that is can be considerd as a back swipe
-    private final float mSwipeThreshold;
+    // Duration after which we consider the event as longpress.
+    private final int mLongPressTimeout;
     // The threshold where the touch needs to be at most, such that the arrow is displayed above the
     // finger, otherwise it will be below
     private final int mMinArrowPosition;
@@ -168,8 +164,9 @@ public class EdgeBackGestureHandler implements DisplayListener {
         // TODO: Get this for the current user
         mEdgeWidth = res.getDimensionPixelSize(
                 com.android.internal.R.dimen.config_backGestureInset);
+
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        mSwipeThreshold = res.getDimension(R.dimen.navigation_edge_action_drag_threshold);
+        mLongPressTimeout = ViewConfiguration.getLongPressTimeout();
 
         mNavBarHeight = res.getDimensionPixelSize(R.dimen.navigation_bar_frame_height);
         mMinArrowPosition = res.getDimensionPixelSize(
@@ -312,15 +309,23 @@ public class EdgeBackGestureHandler implements DisplayListener {
         return !isInExcludedRegion;
     }
 
+    private void cancelGesture(MotionEvent ev) {
+        // Send action cancel to reset all the touch events
+        mAllowGesture = false;
+        MotionEvent cancelEv = MotionEvent.obtain(ev);
+        cancelEv.setAction(MotionEvent.ACTION_CANCEL);
+        mEdgePanel.handleTouch(cancelEv);
+        cancelEv.recycle();
+    }
+
     private void onMotionEvent(MotionEvent ev) {
-        if (ev.getAction() == MotionEvent.ACTION_DOWN) {
+        int action = ev.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
             // Verify if this is in within the touch region and we aren't in immersive mode, and
             // either the bouncer is showing or the notification panel is hidden
             int stateFlags = mOverviewProxyService.getSystemUiStateFlags();
             mIsOnLeftEdge = ev.getX() <= mEdgeWidth;
-            mAllowGesture = (stateFlags & SYSUI_STATE_NAV_BAR_HIDDEN) == 0
-                    && ((stateFlags & SYSUI_STATE_BOUNCER_SHOWING) == SYSUI_STATE_BOUNCER_SHOWING
-                            || (stateFlags & SYSUI_STATE_NOTIFICATION_PANEL_EXPANDED) == 0)
+            mAllowGesture = !QuickStepContract.isBackGestureDisabled(stateFlags)
                     && isWithinTouchRegion((int) ev.getX(), (int) ev.getY());
             if (mAllowGesture) {
                 mEdgePanelLp.gravity = mIsOnLeftEdge
@@ -336,29 +341,35 @@ public class EdgeBackGestureHandler implements DisplayListener {
                 mThresholdCrossed = false;
             }
         } else if (mAllowGesture) {
-            if (!mThresholdCrossed && ev.getAction() == MotionEvent.ACTION_MOVE) {
-                float dx = Math.abs(ev.getX() - mDownPoint.x);
-                float dy = Math.abs(ev.getY() - mDownPoint.y);
-                if (dy > dx && dy > mTouchSlop) {
-                    // Send action cancel to reset all the touch events
-                    mAllowGesture = false;
-                    MotionEvent cancelEv = MotionEvent.obtain(ev);
-                    cancelEv.setAction(MotionEvent.ACTION_CANCEL);
-                    mEdgePanel.handleTouch(cancelEv);
-                    cancelEv.recycle();
+            if (!mThresholdCrossed) {
+                if (action == MotionEvent.ACTION_POINTER_DOWN) {
+                    // We do not support multi touch for back gesture
+                    cancelGesture(ev);
                     return;
+                } else if (action == MotionEvent.ACTION_MOVE) {
+                    if ((ev.getEventTime() - ev.getDownTime()) > mLongPressTimeout) {
+                        cancelGesture(ev);
+                        return;
+                    }
+                    float dx = Math.abs(ev.getX() - mDownPoint.x);
+                    float dy = Math.abs(ev.getY() - mDownPoint.y);
+                    if (dy > dx && dy > mTouchSlop) {
+                        cancelGesture(ev);
+                        return;
 
-                } else if (dx > dy && dx > mTouchSlop) {
-                    mThresholdCrossed = true;
-                    // Capture inputs
-                    mInputMonitor.pilferPointers();
+                    } else if (dx > dy && dx > mTouchSlop) {
+                        mThresholdCrossed = true;
+                        // Capture inputs
+                        mInputMonitor.pilferPointers();
+                    }
                 }
+
             }
 
             // forward touch
             mEdgePanel.handleTouch(ev);
 
-            boolean isUp = ev.getAction() == MotionEvent.ACTION_UP;
+            boolean isUp = action == MotionEvent.ACTION_UP;
             if (isUp) {
                 boolean performAction = mEdgePanel.shouldTriggerBack();
                 if (performAction) {
@@ -369,7 +380,7 @@ public class EdgeBackGestureHandler implements DisplayListener {
                 mOverviewProxyService.notifyBackAction(performAction, (int) mDownPoint.x,
                         (int) mDownPoint.y, false /* isButton */, !mIsOnLeftEdge);
             }
-            if (isUp || ev.getAction() == MotionEvent.ACTION_CANCEL) {
+            if (isUp || action == MotionEvent.ACTION_CANCEL) {
                 mRegionSamplingHelper.stop();
             } else {
                 updateSamplingRect();

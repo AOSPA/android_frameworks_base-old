@@ -261,7 +261,7 @@
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"Nettverksvarsler"</string>
     <string name="notification_channel_network_available" msgid="4531717914138179517">"Nettverk er tilgjengelig"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"VPN-status"</string>
-    <string name="notification_channel_device_admin" msgid="1568154104368069249">"Enhetsadministrasjon"</string>
+    <string name="notification_channel_device_admin" msgid="8353118887482520565">"Varsler fra IT-administratoren din"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"Varsler"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"Butikkdemo"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"USB-tilkobling"</string>
@@ -296,7 +296,7 @@
     <string name="permgrouplab_microphone" msgid="171539900250043464">"Mikrofon"</string>
     <string name="permgroupdesc_microphone" msgid="4988812113943554584">"ta opp lyd"</string>
     <string name="permgrouprequest_microphone" msgid="9167492350681916038">"Vil du la &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; ta opp lyd?"</string>
-    <string name="permgrouplab_activityRecognition" msgid="1565108047054378642">"Fysisk aktivitet"</string>
+    <string name="permgrouplab_activityRecognition" msgid="1565108047054378642">"Fysisk aktivitet-"</string>
     <string name="permgroupdesc_activityRecognition" msgid="6949472038320473478">"tilgang til den fysiske aktiviteten din"</string>
     <string name="permgrouprequest_activityRecognition" msgid="7626438016904799383">"Vil du gi &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; tilgang til den fysiske aktiviteten din?"</string>
     <string name="permgrouplab_camera" msgid="4820372495894586615">"Kamera"</string>
@@ -342,7 +342,7 @@
     <string name="permlab_receiveMms" msgid="1821317344668257098">"motta tekstmeldinger (MMS)"</string>
     <string name="permdesc_receiveMms" msgid="533019437263212260">"Lar appen motta og behandle multimediemeldinger. Dette betyr at appen kan overvåke eller slette meldinger som er sendt til enheten din uten at du har sett dem."</string>
     <string name="permlab_readCellBroadcasts" msgid="1598328843619646166">"lese kringkastede meldinger"</string>
-    <string name="permdesc_readCellBroadcasts" msgid="6361972776080458979">"Tillater at appen kan lese kringkastede meldinger enheten din mottar. Kringkastede varsler leveres noen steder for å advare deg om nødsituasjoner. Skadelige apper kan forstyrre ytelsen eller funksjonen til enheten din når en kringkastet nødmelding mottas."</string>
+    <string name="permdesc_readCellBroadcasts" msgid="6361972776080458979">"Tillater at appen kan lese kringkastede meldinger enheten din mottar. Kringkastede varsler leveres noen steder for å advare deg om nødssituasjoner. Skadelige apper kan forstyrre ytelsen eller funksjonen til enheten din når en kringkastet nødmelding mottas."</string>
     <string name="permlab_subscribedFeedsRead" msgid="4756609637053353318">"lese abonnement på nyhetskilder"</string>
     <string name="permdesc_subscribedFeedsRead" msgid="5557058907906144505">"Lar appen hente inn detaljer om strømmer som er synkroniserte for øyeblikket."</string>
     <string name="permlab_sendSms" msgid="7544599214260982981">"sende og lese SMS-meldinger"</string>
@@ -565,21 +565,21 @@
     <string name="face_acquired_too_low" msgid="488983581737550912">"Flytt telefonen lavere."</string>
     <string name="face_acquired_too_right" msgid="3667075962661863218">"Flytt telefonen til venstre."</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"Flytt telefonen til høyre."</string>
-    <string name="face_acquired_poor_gaze" msgid="8471716624377228327">"Se på skjermen med åpne øyne."</string>
+    <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"Se mer direkte på enheten din."</string>
     <string name="face_acquired_not_detected" msgid="4885504661626728809">"Kan ikke se ansiktet ditt. Se på telefonen."</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"For mye bevegelse. Hold telefonen stødig."</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"Registrer ansiktet ditt på nytt."</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"Kan ikke gjenkjenne ansiktet lenger. Prøv igjen."</string>
     <string name="face_acquired_too_similar" msgid="1508776858407646460">"For likt – endre posituren din."</string>
-    <string name="face_acquired_pan_too_extreme" msgid="1852495480382773759">"Se mer direkte på skjermen."</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="1290820400317982049">"Se mer direkte på skjermen."</string>
-    <string name="face_acquired_roll_too_extreme" msgid="1444829237745898619">"Rett hodet ditt vertikalt."</string>
-    <string name="face_acquired_obscured" msgid="5747521031647744553">"Tøm området mellom hodet ditt og telefonen."</string>
-    <string name="face_acquired_sensor_dirty" msgid="364493868630891300">"Rengjør kameraet."</string>
+    <string name="face_acquired_pan_too_extreme" msgid="4581629343077288178">"Vri hodet ditt litt mindre."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"Vri hodet ditt litt mindre."</string>
+    <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"Vri hodet ditt litt mindre."</string>
+    <string name="face_acquired_obscured" msgid="5357207702967893283">"Fjern alt som skjuler ansiktet ditt."</string>
+    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"Rengjør sensoren på toppkanten av skjermen."</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"Kan ikke bekrefte ansikt. Utilgjengelig maskinvare."</string>
-    <string name="face_error_timeout" msgid="2605673935810019129">"Tidsavbrudd for ansikt er nådd. Prøv igjen."</string>
+    <string name="face_error_timeout" msgid="3202585609451248103">"Prøv ansiktsautentisering igjen."</string>
     <string name="face_error_no_space" msgid="2712120617457553825">"Kan ikke lagre nye ansiktsdata. Slett gamle data først."</string>
     <string name="face_error_canceled" msgid="2768146728600802422">"Ansiktsoperasjonen ble avbrutt"</string>
     <string name="face_error_user_canceled" msgid="9003022830076496163">"Ansiktsautentiseringen ble avbrutt av brukeren"</string>
@@ -648,6 +648,8 @@
     <string name="permdesc_bindCarrierServices" msgid="1391552602551084192">"Lar innehaveren binde seg til operatørtjenester. Det skal aldri være nødvendig for vanlige apper."</string>
     <string name="permlab_access_notification_policy" msgid="4247510821662059671">"tilgang til Ikke forstyrr"</string>
     <string name="permdesc_access_notification_policy" msgid="3296832375218749580">"Lar appen lese og skrive konfigurasjon av Ikke forstyrr."</string>
+    <string name="permlab_startViewPermissionUsage" msgid="5484728591597709944">"start visning av bruk av tillatelser"</string>
+    <string name="permdesc_startViewPermissionUsage" msgid="4808345878203594428">"Lar innehaveren starte bruk av tillatelser for en app. Dette skal aldri være nødvendig for vanlige apper."</string>
     <string name="policylab_limitPassword" msgid="4497420728857585791">"Angi passordregler"</string>
     <string name="policydesc_limitPassword" msgid="2502021457917874968">"Kontrollerer tillatt lengde og tillatte tegn i passord og PIN-koder for opplåsing av skjermen."</string>
     <string name="policylab_watchLogin" msgid="5091404125971980158">"Overvåk forsøk på å låse opp skjermen"</string>
@@ -1355,7 +1357,8 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Tilbakestill enheten til fabrikkstandard for å slå av Testrammeverk-modus."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"Væske eller rusk i USB-porten"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB-porten deaktiveres automatisk. Trykk for å finne ut mer."</string>
-    <string name="usb_contaminant_not_detected_title" msgid="4202417484434906086">"Trygt å bruke USB-porten"</string>
+    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
+    <skip />
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"Telefonen oppdager ikke væsker eller rusk lenger."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"Kjører feilrapport …"</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"Vil du dele feilrapporten?"</string>
@@ -1898,9 +1901,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Se etter oppdatering"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"Du har nye meldinger"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"Åpne SMS-appen for å se"</string>
-    <string name="user_encrypted_title" msgid="9054897468831672082">"Enkelte funksjoner kan være begrenset"</string>
-    <string name="user_encrypted_message" msgid="4923292604515744267">"Trykk for å låse opp"</string>
-    <string name="user_encrypted_detail" msgid="5708447464349420392">"Brukerdataene er låst"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"Enkelte funksjoner kan begrenses"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"Jobbprofilen er låst"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"Trykk for å låse opp jobbprofilen"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"Koblet til <xliff:g id="PRODUCT_NAME">%1$s</xliff:g>"</string>
@@ -2027,4 +2028,5 @@
       <item quantity="one"><xliff:g id="FILE_NAME_0">%s</xliff:g> + <xliff:g id="COUNT_1">%d</xliff:g> fil</item>
     </plurals>
     <string name="chooser_no_direct_share_targets" msgid="997970693708458895">"Direktedeling er ikke tilgjengelig"</string>
+    <string name="chooser_all_apps_button_label" msgid="3631524352936289457">"Appliste"</string>
 </resources>

@@ -126,7 +126,7 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
     // The height of a window which has not in DIP.
     private final static int DECOR_SHADOW_UNFOCUSED_HEIGHT_IN_DIP = 5;
 
-    private static final int SCRIM_LIGHT = 0x99ffffff; // 60% white
+    private static final int SCRIM_LIGHT = 0xe6ffffff; // 90% white
 
     public static final ColorViewAttributes STATUS_BAR_COLOR_VIEW_ATTRIBUTES =
             new ColorViewAttributes(SYSTEM_UI_FLAG_FULLSCREEN, FLAG_TRANSLUCENT_STATUS,
@@ -630,7 +630,8 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
                 drawingBounds.bottom -= framePadding.bottom - frameOffsets.bottom;
             }
 
-            Drawable bg = getBackground();
+            // Need to call super here as we pretend to be having the original background.
+            Drawable bg = super.getBackground();
             if (bg != null) {
                 bg.setBounds(drawingBounds);
             }
@@ -975,6 +976,18 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
         }
     }
 
+    @Override
+    public void setBackgroundDrawable(Drawable background) {
+
+        // TODO: This should route through setWindowBackground, but late in the release to make this
+        // change.
+        if (mOriginalBackgroundDrawable != background) {
+            mOriginalBackgroundDrawable = background;
+            updateBackgroundDrawable();
+            drawableChanged();
+        }
+    }
+
     public void setWindowFrame(Drawable drawable) {
         if (getForeground() != drawable) {
             setForeground(drawable);
@@ -1161,12 +1174,16 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
 
         // If we didn't request fullscreen layout, but we still got it because of the
         // mForceWindowDrawsBarBackgrounds flag, also consume top inset.
+        // If we should always consume system bars, only consume that if the app wanted to go to
+        // fullscreen, as othrewise we can expect the app to handle it.
+        boolean fullscreen = (sysUiVisibility & SYSTEM_UI_FLAG_FULLSCREEN) != 0
+                || (attrs.flags & FLAG_FULLSCREEN) != 0;
         boolean consumingStatusBar = (sysUiVisibility & SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN) == 0
                 && (attrs.flags & FLAG_LAYOUT_IN_SCREEN) == 0
                 && (attrs.flags & FLAG_LAYOUT_INSET_DECOR) == 0
                 && mForceWindowDrawsBarBackgrounds
                 && mLastTopInset != 0
-                || mLastShouldAlwaysConsumeSystemBars;
+                || (mLastShouldAlwaysConsumeSystemBars && fullscreen);
 
         int consumedTop = consumingStatusBar ? mLastTopInset : 0;
         int consumedRight = consumingNavBar ? mLastRightInset : 0;
@@ -1213,14 +1230,22 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
      * are set.
      */
     private void updateBackgroundDrawable() {
+        // Background insets can be null if super constructor calls setBackgroundDrawable.
+        if (mBackgroundInsets == null) {
+            mBackgroundInsets = Insets.NONE;
+        }
         if (mBackgroundInsets.equals(mLastBackgroundInsets)
                 && mLastOriginalBackgroundDrawable == mOriginalBackgroundDrawable) {
             return;
         }
         if (mOriginalBackgroundDrawable == null || mBackgroundInsets.equals(Insets.NONE)) {
-            setBackground(mOriginalBackgroundDrawable);
+
+            // Call super since we are intercepting setBackground on this class.
+            super.setBackgroundDrawable(mOriginalBackgroundDrawable);
         } else {
-            setBackground(new InsetDrawable(mOriginalBackgroundDrawable,
+
+            // Call super since we are intercepting setBackground on this class.
+            super.setBackgroundDrawable(new InsetDrawable(mOriginalBackgroundDrawable,
                     mBackgroundInsets.left, mBackgroundInsets.top,
                     mBackgroundInsets.right, mBackgroundInsets.bottom) {
 
@@ -1236,6 +1261,11 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
         }
         mLastBackgroundInsets = mBackgroundInsets;
         mLastOriginalBackgroundDrawable = mOriginalBackgroundDrawable;
+    }
+
+    @Override
+    public Drawable getBackground() {
+        return mOriginalBackgroundDrawable;
     }
 
     private int calculateStatusBarColor() {
@@ -1527,10 +1557,14 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
             return;
         }
 
-        setPadding(mFramePadding.left + mBackgroundPadding.left,
-                mFramePadding.top + mBackgroundPadding.top,
-                mFramePadding.right + mBackgroundPadding.right,
-                mFramePadding.bottom + mBackgroundPadding.bottom);
+        // Fields can be null if super constructor calls setBackgroundDrawable.
+        Rect framePadding = mFramePadding != null ? mFramePadding : new Rect();
+        Rect backgroundPadding = mBackgroundPadding != null ? mBackgroundPadding : new Rect();
+
+        setPadding(framePadding.left + backgroundPadding.left,
+                framePadding.top + backgroundPadding.top,
+                framePadding.right + backgroundPadding.right,
+                framePadding.bottom + backgroundPadding.bottom);
         requestLayout();
         invalidate();
 
@@ -1550,8 +1584,8 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
             if (bg != null) {
                 if (fg == null) {
                     opacity = bg.getOpacity();
-                } else if (mFramePadding.left <= 0 && mFramePadding.top <= 0
-                        && mFramePadding.right <= 0 && mFramePadding.bottom <= 0) {
+                } else if (framePadding.left <= 0 && framePadding.top <= 0
+                        && framePadding.right <= 0 && framePadding.bottom <= 0) {
                     // If the frame padding is zero, then we can be opaque
                     // if either the frame -or- the background is opaque.
                     int fop = fg.getOpacity();
@@ -1958,8 +1992,7 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
         final boolean isFullscreen = config.windowConfiguration.getWindowingMode()
                 == WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
         return isFullscreen && (0 != ((getWindowSystemUiVisibility() | getSystemUiVisibility())
-                & (View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_IMMERSIVE | View.SYSTEM_UI_FLAG_LOW_PROFILE)));
+                & View.SYSTEM_UI_FLAG_FULLSCREEN));
     }
 
     private void updateDecorCaptionStatus(Configuration config) {

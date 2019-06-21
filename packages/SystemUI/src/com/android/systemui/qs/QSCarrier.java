@@ -33,7 +33,7 @@ import com.android.systemui.R;
 public class QSCarrier extends LinearLayout {
 
     private View mMobileGroup;
-    private QSCarrierText mCarrierText;
+    private TextView mCarrierText;
     private ImageView mMobileSignal;
     private ImageView mMobileRoaming;
     private DualToneHandler mDualToneHandler;
@@ -75,12 +75,11 @@ public class QSCarrier extends LinearLayout {
         mMobileGroup.setVisibility(state.visible ? View.VISIBLE : View.GONE);
         if (state.visible) {
             mMobileRoaming.setVisibility(state.roaming ? View.VISIBLE : View.GONE);
-            mMobileRoaming.setImageTintList(ColorStateList.valueOf(
-                    mDualToneHandler.getSingleColor(mColorForegroundIntensity)));
-            SignalDrawable d = new SignalDrawable(mContext);
-            d.setColors(mDualToneHandler.getBackgroundColor(mColorForegroundIntensity),
-                    mDualToneHandler.getFillColor(mColorForegroundIntensity));
-            mMobileSignal.setImageDrawable(d);
+            ColorStateList colorStateList = ColorStateList.valueOf(
+                    mDualToneHandler.getSingleColor(mColorForegroundIntensity));
+            mMobileRoaming.setImageTintList(colorStateList);
+            mMobileSignal.setImageDrawable(new SignalDrawable(mContext));
+            mMobileSignal.setImageTintList(colorStateList);
             mMobileSignal.setImageLevel(state.mobileSignalIconId);
 
             StringBuilder contentDescription = new StringBuilder();
@@ -111,44 +110,5 @@ public class QSCarrier extends LinearLayout {
 
     public void setCarrierText(CharSequence text) {
         mCarrierText.setText(text);
-    }
-
-    /**
-     * TextView that changes its ellipsize value with its visibility.
-     */
-    public static class QSCarrierText extends TextView {
-
-        public QSCarrierText(Context context) {
-            super(context);
-        }
-
-        public QSCarrierText(Context context, AttributeSet attrs) {
-            super(context, attrs);
-        }
-
-        public QSCarrierText(Context context, AttributeSet attrs, int defStyleAttr) {
-            super(context, attrs, defStyleAttr);
-        }
-
-        public QSCarrierText(Context context, AttributeSet attrs, int defStyleAttr,
-                int defStyleRes) {
-            super(context, attrs, defStyleAttr, defStyleRes);
-        }
-
-        @Override
-        protected void onFinishInflate() {
-            setSelected(true);
-        }
-
-        @Override
-        protected void onVisibilityChanged(View changedView, int visibility) {
-            super.onVisibilityChanged(changedView, visibility);
-            // Only show marquee when visible
-            if (visibility == VISIBLE) {
-                setEllipsize(TextUtils.TruncateAt.MARQUEE);
-            } else {
-                setEllipsize(TextUtils.TruncateAt.END);
-            }
-        }
     }
 }

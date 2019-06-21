@@ -41,7 +41,7 @@ import "frameworks/base/core/proto/android/server/location/enums.proto";
 import "frameworks/base/core/proto/android/service/procstats_enum.proto";
 import "frameworks/base/core/proto/android/service/usb.proto";
 import "frameworks/base/core/proto/android/stats/connectivity/network_stack.proto";
-import "frameworks/base/core/proto/android/stats/connectivity/resolv_stats.proto";
+import "frameworks/base/core/proto/android/stats/dnsresolver/dns_resolver.proto";
 import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy.proto";
 import "frameworks/base/core/proto/android/stats/devicepolicy/device_policy_enums.proto";
 import "frameworks/base/core/proto/android/stats/docsui/docsui_enums.proto";
@@ -269,7 +269,7 @@ message Atom {
         AssistGestureProgressReported assist_gesture_progress_reported = 176;
         TouchGestureClassified touch_gesture_classified = 177;
         HiddenApiUsed hidden_api_used = 178 [(allow_from_any_uid) = true];
-        StyleUIChanged style_ui_changed = 179;
+        StyleUIChanged style_ui_changed = 179 [(log_from_module) = "style"];
         PrivacyIndicatorsInteracted privacy_indicators_interacted =
             180 [(log_from_module) = "permissioncontroller"];
         AppInstallOnExternalStorageReported app_install_on_external_storage_reported = 181;
@@ -294,6 +294,13 @@ message Atom {
         MediametricsMediadrmReported mediametrics_mediadrm_reported = 198;
         MediametricsNuPlayerReported mediametrics_nuplayer_reported = 199;
         MediametricsRecorderReported mediametrics_recorder_reported = 200;
+        CarPowerStateChanged car_power_state_changed = 203;
+        GarageModeInfo garage_mode_info = 204;
+        TestAtomReported test_atom_reported = 205 [(log_from_module) = "cts"];
+        ContentCaptureCallerMismatchReported content_capture_caller_mismatch_reported = 206;
+        ContentCaptureServiceEvents content_capture_service_events = 207;
+        ContentCaptureSessionEvents content_capture_session_events = 208;
+        ContentCaptureFlushed content_capture_flushed = 209;
     }
 
     // Pulled events will start at field 10000.
@@ -359,6 +366,7 @@ message Atom {
         AppsOnExternalStorageInfo apps_on_external_storage_info = 10057;
         FaceSettings face_settings = 10058;
         CoolingDevice cooling_device = 10059;
+        AppOps app_ops = 10060;
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
@@ -740,6 +748,22 @@ message ScheduledJobStateChanged {
     // This is only applicable when the state is FINISHED.
     // The default value is STOP_REASON_UNKNOWN.
     optional android.app.job.StopReasonEnum stop_reason = 4;
+
+    // The standby bucket of the app that scheduled the job. These match the framework constants
+    // defined in JobSchedulerService.java with the addition of UNKNOWN using -1, as ACTIVE is
+    // already assigned 0.
+    enum Bucket {
+        UNKNOWN = -1;
+        ACTIVE = 0;
+        WORKING_SET = 1;
+        FREQUENT = 2;
+        RARE = 3;
+        NEVER = 4;
+    }
+    optional Bucket standby_bucket = 5 [default = UNKNOWN];
+
+    // The job id (as assigned by the app).
+    optional int32 job_id = 6;
 }
 
 /**
@@ -968,6 +992,19 @@ message WakeupAlarmOccurred {
 
     // Name of source package (for historical reasons, since BatteryStats tracked it).
     optional string package_name = 3;
+
+    // These enum values match the STANDBY_BUCKET_XXX constants defined in UsageStatsManager.java.
+    enum Bucket {
+        UNKNOWN = 0;
+        EXEMPTED = 5;
+        ACTIVE = 10;
+        WORKING_SET = 20;
+        FREQUENT = 30;
+        RARE = 40;
+        NEVER = 50;
+    }
+    // The App Standby bucket of the app that scheduled the alarm at the time the alarm fired.
+    optional Bucket app_standby_bucket = 4;
 }
 
 /**
@@ -2461,6 +2498,8 @@ message StyleUIChanged {
     optional int32 launcher_grid = 6;
     optional int32 wallpaper_category_hash = 7;
     optional int32 wallpaper_id_hash = 8;
+    optional int32 color_preference = 9;
+    optional android.stats.style.LocationPreference location_preference = 10;
 }
 
 /**
@@ -3336,6 +3375,23 @@ message BinaryPushStateChanged {
     optional TrainExperimentIds experiment_ids = 7 [(log_mode) = MODE_BYTES];
     // user id
     optional int32 user_id = 8;
+}
+
+/* Test atom, is not logged anywhere */
+message TestAtomReported {
+    repeated AttributionNode attribution_node = 1;
+    optional int32 int_field = 2;
+    optional int64 long_field = 3;
+    optional float float_field = 4;
+    optional string string_field = 5;
+    optional bool boolean_field = 6;
+    enum State {
+        UNKNOWN = 0;
+        OFF = 1;
+        ON = 2;
+    }
+    optional State state = 7;
+    optional TrainExperimentIds bytes_field = 8 [(android.os.statsd.log_mode) = MODE_BYTES];
 }
 
 /** Represents USB port overheat event. */
@@ -4808,6 +4864,95 @@ message BuildInformation {
 }
 
 /**
+ * Logs information about mismatched caller for content capture.
+ *
+ * Logged from:
+ *   frameworks/base/core/java/android/service/contentcapture/ContentCaptureService.java
+ */
+message ContentCaptureCallerMismatchReported {
+    optional string intended_package = 1;
+    optional string calling_package = 2;
+}
+
+/**
+ * Logs information about content capture service events.
+ *
+ * Logged from:
+ *   frameworks/base/services/contentcapture/java/com/android/server/contentcapture/ContentCaptureMetricsLogger.java
+ */
+message ContentCaptureServiceEvents {
+    // The type of event.
+    enum Event {
+        UNKNOWN = 0;
+        ON_CONNECTED = 1;
+        ON_DISCONNECTED = 2;
+        SET_WHITELIST = 3;
+        SET_DISABLED = 4;
+        ON_USER_DATA_REMOVED = 5;
+    }
+    optional Event event = 1;
+    // component/package of content capture service.
+    optional string service_info = 2;
+    // component/package of target.
+    // it's a concatenated list of component/package for SET_WHITELIST event
+    // separated by " ".
+    optional string target_info = 3;
+}
+
+/**
+ * Logs information about content capture session events.
+ *
+ * Logged from:
+ *   frameworks/base/services/contentcapture/java/com/android/server/contentcapture/ContentCaptureMetricsLogger.java
+ */
+message ContentCaptureSessionEvents {
+    // The type of event.
+    enum Event {
+        UNKNOWN = 0;
+        ON_SESSION_STARTED = 1;
+        ON_SESSION_FINISHED = 2;
+        SESSION_NOT_CREATED = 3;
+    }
+    optional int32 session_id = 1;
+    optional Event event = 2;
+    // (n/a on session finished)
+    optional int32 state_flags = 3;
+    // component/package of content capture service.
+    optional string service_info = 4;
+    // component/package of app.
+    // (n/a on session finished)
+    optional string app_info = 5;
+    optional bool is_child_session = 6;
+}
+
+/**
+ * Logs information about session being flushed.
+ *
+ * Logged from:
+ *   frameworks/base/services/contentcapture/java/com/android/server/contentcapture/ContentCaptureMetricsLogger.java
+ */
+message ContentCaptureFlushed {
+    optional int32 session_id = 1;
+    // component/package of content capture service.
+    optional string service_info = 2;
+    // component/package of app.
+    optional string app_info = 3;
+    // session start/finish events
+    optional int32 child_session_started = 4;
+    optional int32 child_session_finished = 5;
+    // count of view events.
+    optional int32 view_appeared_count = 6;
+    optional int32 view_disappeared_count = 7;
+    optional int32 view_text_changed_count = 8;
+
+    // Flush stats.
+    optional int32 max_events = 9;
+    optional int32 idle_flush_freq = 10;
+    optional int32 text_flush_freq = 11;
+    optional int32 flush_reason = 12;
+}
+
+/**
  * Pulls on-device BatteryStats power use calculations for the overall device.
  */
 message DeviceCalculatedPowerUse {
@@ -5109,35 +5254,35 @@ message AppCompacted {
  * Logs a DNS lookup operation initiated by the system resolver on behalf of an application
  * invoking native APIs such as getaddrinfo() or Java APIs such as Network#getAllByName().
  *
- * The top-level message represents the entire lookup operation, which may result one or more
- * queries to the recursive DNS resolvers. Those are individually logged in DnsQueryEvent to
- * enable computing error rates and network latency and timeouts broken up by query type,
- * transport, network interface, etc.
+ * The NetworkDnsEventReported message represents the entire lookup operation, which may
+ * result one or more queries to the recursive DNS resolvers. Those are individually logged
+ * in DnsQueryEvents to enable computing error rates and network latency and timeouts
+ * broken up by query type, transport, network interface, etc.
  */
 message NetworkDnsEventReported {
+    optional android.stats.dnsresolver.EventType event_type = 1;
 
-    optional android.stats.connectivity.EventType event_type = 1;
-
-    optional android.stats.connectivity.ReturnCode return_code = 2;
+    optional android.stats.dnsresolver.ReturnCode return_code = 2;
 
     // The latency in microseconds of the entire DNS lookup operation.
     optional int32 latency_micros = 3;
 
-    optional android.stats.connectivity.DnsQueryEventRe dns_query_event_re = 4 [(log_mode) = MODE_BYTES];
+    // Only valid for event_type = EVENT_GETADDRINFO.
+    optional int32 hints_ai_flags = 4;
 
-    // ResNSend flags defined in android/multinetwork.h
-    optional int32 flags = 5;
+    // Flags passed to android_res_nsend() defined in multinetwork.h
+    // Only valid for event_type = EVENT_RESNSEND.
+    optional int32 res_nsend_flags = 5;
 
-    optional android.net.NetworkCapabilitiesProto.Transport network_type = 6;
+    optional android.stats.dnsresolver.Transport network_type = 6;
 
     // The DNS over TLS mode on a specific netId.
-    optional android.stats.connectivity.PrivateDnsModes private_dns_modes = 7;
+    optional android.stats.dnsresolver.PrivateDnsModes private_dns_modes = 7;
 
     // Additional pass-through fields opaque to statsd.
     // The DNS resolver Mainline module can add new fields here without requiring an OS update.
-    optional android.stats.connectivity.DnsCallEvent dns_call_event = 8 [(log_mode) = MODE_BYTES];
+    optional android.stats.dnsresolver.DnsQueryEvents dns_query_events = 8 [(log_mode) = MODE_BYTES];
 }
-
 
 /**
  * Logs when a data stall event occurs.
@@ -5994,6 +6139,9 @@ message DangerousPermissionState {
 
     // If the permission is granted to the uid
     optional bool is_granted = 4;
+
+    // Permission flags as per android.content.pm.PermissionFlags
+    optional int32 permission_flags = 5;
 }
 
 /**
@@ -6131,6 +6279,21 @@ message GpuStatsGlobalInfo {
 
     // Total count of the Vulkan driver fails to be loaded.
     optional int64 vk_loading_failure_count = 8;
+
+    // Api version of the system Vulkan driver.
+    optional int32 vulkan_version = 9;
+
+    // Api version of the system CPU Vulkan driver.
+    optional int32 cpu_vulkan_version = 10;
+
+    // Api version of the system GLES driver.
+    optional int32 gles_version = 11;
+
+    // Total count of the angle driver gets loaded.
+    optional int64 angle_loading_count = 12;
+
+    // Total count of the angle driver fails to be loaded.
+    optional int64 angle_loading_failure_count = 13;
 }
 
 /**
@@ -6163,6 +6326,13 @@ message GpuStatsAppInfo {
     // Vulkan driver loading time info.
     optional GpuDriverLoadingTime vk_driver_loading_time = 4
             [(android.os.statsd.log_mode) = MODE_BYTES];
+
+    // Angle driver loading time info.
+    optional GpuDriverLoadingTime angle_driver_loading_time = 5
+            [(android.os.statsd.log_mode) = MODE_BYTES];
+
+    // CPU Vulkan implementation is in use.
+    optional bool cpu_vulkan_in_use = 6;
 }
 
 /*
@@ -6246,4 +6416,72 @@ message CoolingDevice {
 message IntelligenceEventReported {
   optional android.stats.intelligence.EventType event_id = 1;
   optional android.stats.intelligence.Status status = 2;
+}
+
+/**
+ * Logs when Car Power state changed.
+ *
+ * Logged from:
+ *   packages/services/Car/service/src/com/android/car/CarStatsLog.java
+ */
+message CarPowerStateChanged {
+    // States come from CpmsState in CarPowerManagementService.java.
+    enum State {
+       WAIT_FOR_VHAL = 0;
+       ON = 1;
+       SHUTDOWN_PREPARE = 2;
+       WAIT_FOR_FINISH = 3;
+       SUSPEND = 4;
+       SIMULATE_SLEEP = 5;
+    }
+    optional State state = 1;
+}
+
+/**
+ * Logs whether GarageMode is entered.
+ *
+ * Logged from:
+ *   packages/services/Car/service/src/com/android/car/CarStatsLog.java
+ */
+message GarageModeInfo {
+    // Whether GarageMode is entered.
+    optional bool is_garage_mode = 1;
+}
+
+/**
+ * Historical app ops data per package.
+ */
+message AppOps {
+    // Uid of the package requesting the op
+    optional int32 uid = 1 [(is_uid) = true];
+
+    // Nmae of the package performing the op
+    optional string package_name = 2;
+
+    // operation id; maps to the OP_* constants in AppOpsManager.java
+    optional int32 op_id = 3;
+
+    // The number of times the op was granted while the app was in the
+    // foreground (only for trusted requests)
+    optional int64 trusted_foreground_granted_count = 4;
+
+    // The number of times the op was granted while the app was in the
+    // background (only for trusted requests)
+    optional int64 trusted_background_granted_count = 5;
+
+    // The number of times the op was rejected while the app was in the
+    // foreground (only for trusted requests)
+    optional int64 trusted_foreground_rejected_count = 6;
+
+    // The number of times the op was rejected while the app was in the
+    // background (only for trusted requests)
+    optional int64 trusted_background_rejected_count = 7;
+
+    // For long-running operations, total duration of the operation
+    // while the app was in the foreground (only for trusted requests)
+    optional int64 trusted_foreground_duration_millis = 8;
+
+    // For long-running operations, total duration of the operation
+    // while the app was in the background (only for trusted requests)
+    optional int64 trusted_background_duration_millis = 9;
 }

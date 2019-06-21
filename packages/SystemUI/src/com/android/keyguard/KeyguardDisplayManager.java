@@ -19,6 +19,7 @@ import static android.view.Display.DEFAULT_DISPLAY;
 
 import android.app.Presentation;
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.Point;
 import android.hardware.display.DisplayManager;
 import android.media.MediaRouter;
@@ -32,9 +33,12 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.WindowManager;
 
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.systemui.Dependency;
+import com.android.systemui.statusbar.NavigationBarController;
+import com.android.systemui.statusbar.phone.NavigationBarView;
 import com.android.systemui.util.InjectionInflationController;
 
-// TODO(multi-display): Support multiple external displays
 public class KeyguardDisplayManager {
     protected static final String TAG = "KeyguardDisplayManager";
     private static boolean DEBUG = KeyguardConstants.DEBUG;
@@ -49,6 +53,9 @@ public class KeyguardDisplayManager {
 
     private final SparseArray<Presentation> mPresentations = new SparseArray<>();
 
+    private final NavigationBarController mNavBarController =
+            Dependency.get(NavigationBarController.class);
+
     private final DisplayManager.DisplayListener mDisplayListener =
             new DisplayManager.DisplayListener() {
 
@@ -56,6 +63,7 @@ public class KeyguardDisplayManager {
         public void onDisplayAdded(int displayId) {
             final Display display = mDisplayService.getDisplay(displayId);
             if (mShowing) {
+                updateNavigationBarVisibility(displayId, false /* navBarVisible */);
                 showPresentation(display);
             }
         }
@@ -192,11 +200,15 @@ public class KeyguardDisplayManager {
         if (showing) {
             final Display[] displays = mDisplayService.getDisplays();
             for (Display display : displays) {
+                int displayId = display.getDisplayId();
+                updateNavigationBarVisibility(displayId, false /* navBarVisible */);
                 changed |= showPresentation(display);
             }
         } else {
             changed = mPresentations.size() > 0;
             for (int i = mPresentations.size() - 1; i >= 0; i--) {
+                int displayId = mPresentations.keyAt(i);
+                updateNavigationBarVisibility(displayId, true /* navBarVisible */);
                 mPresentations.valueAt(i).dismiss();
             }
             mPresentations.clear();
@@ -204,7 +216,27 @@ public class KeyguardDisplayManager {
         return changed;
     }
 
-    private final static class KeyguardPresentation extends Presentation {
+    // TODO(b/127878649): this logic is from
+    //  {@link StatusBarKeyguardViewManager#updateNavigationBarVisibility}. Try to revisit a long
+    //  term solution in R.
+    private void updateNavigationBarVisibility(int displayId, boolean navBarVisible) {
+        // Leave this task to {@link StatusBarKeyguardViewManager}
+        if (displayId == DEFAULT_DISPLAY) return;
+
+        NavigationBarView navBarView = mNavBarController.getNavigationBarView(displayId);
+        // We may not have nav bar on a display.
+        if (navBarView == null) return;
+
+        if (navBarVisible) {
+            navBarView.getRootView().setVisibility(View.VISIBLE);
+        } else {
+            navBarView.getRootView().setVisibility(View.GONE);
+        }
+
+    }
+
+    @VisibleForTesting
+    static final class KeyguardPresentation extends Presentation {
         private static final int VIDEO_SAFE_REGION = 80; // Percentage of display width & height
         private static final int MOVE_CLOCK_TIMEOUT = 10000; // 10s
         private final InjectionInflationController mInjectableInflater;
@@ -226,7 +258,7 @@ public class KeyguardDisplayManager {
 
         KeyguardPresentation(Context context, Display display,
                 InjectionInflationController injectionInflater) {
-            super(context, display, R.style.keyguard_presentation_theme);
+            super(context, display, R.style.Theme_SystemUI_KeyguardPresentation);
             mInjectableInflater = injectionInflater;
             getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
             setCancelable(false);
@@ -251,6 +283,15 @@ public class KeyguardDisplayManager {
             LayoutInflater inflater = mInjectableInflater.injectable(
                     LayoutInflater.from(getContext()));
             setContentView(inflater.inflate(R.layout.keyguard_presentation, null));
+
+            // Logic to make the lock screen fullscreen
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+            getWindow().setNavigationBarContrastEnforced(false);
+            getWindow().setNavigationBarColor(Color.TRANSPARENT);
+
             mClock = findViewById(R.id.clock);
 
             // Avoid screen burn in

@@ -30,6 +30,7 @@ import android.graphics.drawable.Icon;
 import android.icu.text.DateFormat;
 import android.icu.text.DisplayContext;
 import android.media.MediaMetadata;
+import android.media.session.PlaybackState;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Trace;
@@ -55,8 +56,11 @@ import com.android.systemui.statusbar.policy.NextAlarmController;
 import com.android.systemui.statusbar.policy.NextAlarmControllerImpl;
 import com.android.systemui.statusbar.policy.ZenModeController;
 import com.android.systemui.statusbar.policy.ZenModeControllerImpl;
+import com.android.systemui.util.wakelock.SettableWakeLock;
+import com.android.systemui.util.wakelock.WakeLock;
 
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
@@ -98,6 +102,9 @@ public class KeyguardSliceProvider extends SliceProvider implements
     private final Date mCurrentTime = new Date();
     private final Handler mHandler;
     private final AlarmManager.OnAlarmListener mUpdateNextAlarm = this::updateNextAlarm;
+    private final HashSet<Integer> mMediaInvisibleStates;
+    private final Object mMediaToken = new Object();
+    private SettableWakeLock mMediaWakeLock;
     private ZenModeController mZenModeController;
     private String mDatePattern;
     private DateFormat mDateFormat;
@@ -111,8 +118,10 @@ public class KeyguardSliceProvider extends SliceProvider implements
     private PendingIntent mPendingIntent;
     protected NotificationMediaManager mMediaManager;
     private StatusBarStateController mStatusBarStateController;
-    protected MediaMetadata mMediaMetaData;
+    private CharSequence mMediaTitle;
+    private CharSequence mMediaArtist;
     protected boolean mDozing;
+    private boolean mMediaIsVisible;
 
     /**
      * Receiver responsible for time ticking and updating the date format.
@@ -169,6 +178,11 @@ public class KeyguardSliceProvider extends SliceProvider implements
         mAlarmUri = Uri.parse(KEYGUARD_NEXT_ALARM_URI);
         mDndUri = Uri.parse(KEYGUARD_DND_URI);
         mMediaUri = Uri.parse(KEYGUARD_MEDIA_URI);
+
+        mMediaInvisibleStates = new HashSet<>();
+        mMediaInvisibleStates.add(PlaybackState.STATE_NONE);
+        mMediaInvisibleStates.add(PlaybackState.STATE_STOPPED);
+        mMediaInvisibleStates.add(PlaybackState.STATE_PAUSED);
     }
 
     /**
@@ -209,31 +223,27 @@ public class KeyguardSliceProvider extends SliceProvider implements
     }
 
     protected boolean needsMediaLocked() {
-        return mMediaMetaData != null && mDozing;
+        return !TextUtils.isEmpty(mMediaTitle) && mMediaIsVisible && mDozing;
     }
 
     protected void addMediaLocked(ListBuilder listBuilder) {
-        if (mMediaMetaData != null) {
-            CharSequence title = mMediaMetaData.getText(MediaMetadata.METADATA_KEY_TITLE);
-            if (TextUtils.isEmpty(title)) {
-                title = getContext().getResources().getString(R.string.music_controls_no_title);
+        if (TextUtils.isEmpty(mMediaTitle)) {
+            return;
+        }
+        listBuilder.setHeader(new ListBuilder.HeaderBuilder(mHeaderUri).setTitle(mMediaTitle));
+
+        if (!TextUtils.isEmpty(mMediaArtist)) {
+            RowBuilder albumBuilder = new RowBuilder(mMediaUri);
+            albumBuilder.setTitle(mMediaArtist);
+
+            Icon mediaIcon = mMediaManager == null ? null : mMediaManager.getMediaIcon();
+            IconCompat mediaIconCompat = mediaIcon == null ? null
+                    : IconCompat.createFromIcon(getContext(), mediaIcon);
+            if (mediaIconCompat != null) {
+                albumBuilder.addEndItem(mediaIconCompat, ListBuilder.ICON_IMAGE);
             }
-            listBuilder.setHeader(new ListBuilder.HeaderBuilder(mHeaderUri).setTitle(title));
 
-            CharSequence album = mMediaMetaData.getText(MediaMetadata.METADATA_KEY_ARTIST);
-            if (!TextUtils.isEmpty(album)) {
-                RowBuilder albumBuilder = new RowBuilder(mMediaUri);
-                albumBuilder.setTitle(album);
-
-                Icon mediaIcon = mMediaManager == null ? null : mMediaManager.getMediaIcon();
-                IconCompat mediaIconCompat = mediaIcon == null ? null
-                        : IconCompat.createFromIcon(getContext(), mediaIcon);
-                if (mediaIconCompat != null) {
-                    albumBuilder.addEndItem(mediaIconCompat, ListBuilder.ICON_IMAGE);
-                }
-
-                listBuilder.addRow(albumBuilder);
-            }
+            listBuilder.addRow(albumBuilder);
         }
     }
 
@@ -295,6 +305,8 @@ public class KeyguardSliceProvider extends SliceProvider implements
         mZenModeController.addCallback(this);
         mDatePattern = getContext().getString(R.string.system_ui_aod_date_pattern);
         mPendingIntent = PendingIntent.getActivity(getContext(), 0, new Intent(), 0);
+        mMediaWakeLock = new SettableWakeLock(WakeLock.createPartial(getContext(), "media"),
+                "media");
         KeyguardSliceProvider.sInstance = this;
         registerClockUpdate();
         updateClockLocked();
@@ -411,10 +423,45 @@ public class KeyguardSliceProvider extends SliceProvider implements
      * @param metadata New metadata.
      */
     @Override
-    public void onMetadataChanged(MediaMetadata metadata) {
+    public void onMetadataOrStateChanged(MediaMetadata metadata, @PlaybackState.State int state) {
         synchronized (this) {
-            mMediaMetaData = metadata;
+            boolean nextVisible = !mMediaInvisibleStates.contains(state);
+            mHandler.removeCallbacksAndMessages(mMediaToken);
+            if (mMediaIsVisible && !nextVisible) {
+                // We need to delay this event for a few millis when stopping to avoid jank in the
+                // animation. The media app might not send its update when buffering, and the slice
+                // would end up without a header for 0.5 second.
+                mMediaWakeLock.setAcquired(true);
+                mHandler.postDelayed(() -> {
+                    updateMediaStateLocked(metadata, state);
+                    mMediaWakeLock.setAcquired(false);
+                }, mMediaToken, 2000);
+            } else {
+                mMediaWakeLock.setAcquired(false);
+                updateMediaStateLocked(metadata, state);
+            }
         }
+    }
+
+    private void updateMediaStateLocked(MediaMetadata metadata, @PlaybackState.State int state) {
+        boolean nextVisible = !mMediaInvisibleStates.contains(state);
+        CharSequence title = null;
+        if (metadata != null) {
+            title = metadata.getText(MediaMetadata.METADATA_KEY_TITLE);
+            if (TextUtils.isEmpty(title)) {
+                title = getContext().getResources().getString(R.string.music_controls_no_title);
+            }
+        }
+        CharSequence artist = metadata == null ? null : metadata.getText(
+                MediaMetadata.METADATA_KEY_ARTIST);
+
+        if (nextVisible == mMediaIsVisible && TextUtils.equals(title, mMediaTitle)
+                && TextUtils.equals(artist, mMediaArtist)) {
+            return;
+        }
+        mMediaTitle = title;
+        mMediaArtist = artist;
+        mMediaIsVisible = nextVisible;
         notifyChange();
     }
 

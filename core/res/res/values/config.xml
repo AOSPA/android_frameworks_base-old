@@ -358,6 +358,22 @@
          default value of that setting. -->
     <integer translatable="false" name="config_networkDefaultDailyMultipathQuotaBytes">2500000</integer>
 
+    <!-- Default supported concurrent socket keepalive slots per transport type, used by
+         ConnectivityManager.createSocketKeepalive() for calculating the number of keepalive
+         offload slots that should be reserved for privileged access. This string array should be
+         overridden by the device to present the capability of creating socket keepalives. -->
+    <!-- An Array of "[NetworkCapabilities.TRANSPORT_*],[supported keepalives] -->
+    <string-array translatable="false" name="config_networkSupportedKeepaliveCount">
+        <item>0,3</item>
+        <item>1,3</item>
+    </string-array>
+
+    <!-- Reserved privileged keepalive slots per transport. -->
+    <integer translatable="false" name="config_reservedPrivilegedKeepaliveSlots">2</integer>
+
+    <!-- Allowed unprivileged keepalive slots per uid. -->
+    <integer translatable="false" name="config_allowedUnprivilegedKeepalivePerUid">2</integer>
+
     <!-- List of regexpressions describing the interface (if any) that represent tetherable
          USB interfaces.  If the device doesn't want to support tethering over USB this should
          be empty.  An example would be "usb.*" -->
@@ -1097,6 +1113,11 @@
         -->
     </integer-array>
 
+    <!-- Color mode to use when accessibility transforms are enabled. This color mode must be
+         supported by the device, but not necessarily appear in config_availableColorModes. The
+         regularly selected color mode will be used if this value is negative. -->
+    <integer name="config_accessibilityColorMode">-1</integer>
+
     <!-- Indicate whether to allow the device to suspend when the screen is off
          due to the proximity sensor.  This resource should only be set to true
          if the sensor HAL correctly handles the proximity sensor as a wake-up source.
@@ -1259,6 +1280,8 @@
     <integer name="config_defaultRingVibrationIntensity">2</integer>
 
     <bool name="config_use_strict_phone_number_comparation">false</bool>
+
+    <bool name="config_use_strict_phone_number_comparation_for_russian">true</bool>
 
     <!-- Display low battery warning when battery level dips to this value.
          Also, the battery stats are flushed to disk when we hit this level.  -->
@@ -3277,12 +3300,20 @@
     <!-- Controls whether the navigation bar lets through taps. -->
     <bool name="config_navBarTapThrough">false</bool>
 
+    <!-- Controls whether the side edge gestures can always trigger the transient nav bar to
+         show. -->
+    <bool name="config_navBarAlwaysShowOnSideEdgeGesture">false</bool>
+
     <!-- Controls the size of the back gesture inset. -->
     <dimen name="config_backGestureInset">0dp</dimen>
 
     <!-- Controls whether the navbar needs a scrim with
          {@link Window#setEnsuringNavigationBarContrastWhenTransparent}. -->
     <bool name="config_navBarNeedsScrim">true</bool>
+
+    <!-- Controls whether seamless rotation should be allowed even though the navbar can move
+         (which normally prevents seamless rotation). -->
+    <bool name="config_allowSeamlessRotationDespiteNavBarMoving">false</bool>
 
     <!-- Default insets [LEFT/RIGHTxTOP/BOTTOM] from the screen edge for picture-in-picture windows.
          These values are in DPs and will be converted to pixel sizes internally. -->
@@ -3331,9 +3362,8 @@
     -->
     <integer name="config_dockedStackDividerSnapMode">0</integer>
 
-    <!-- The maximum aspect ratio (longerSide/shorterSide) that is treated as close-to-square. If
-         config_forceDefaultOrientation is set to true, the rotation on a close-to-square display
-         will be fixed. -->
+    <!-- The maximum aspect ratio (longerSide/shorterSide) that is treated as close-to-square. The
+         orientation requests from apps would be ignored if the display is close-to-square. -->
     <item name="config_closeToSquareDisplayMaxAspectRatio" format="float" type="dimen">1.333</item>
 
     <!-- List of comma separated package names for which we the system will not show crash, ANR,
@@ -3436,7 +3466,7 @@
 
     <!-- Flag indicating whether the assist disclosure can be disabled using
          ASSIST_DISCLOSURE_ENABLED. -->
-    <bool name="config_allowDisablingAssistDisclosure">false</bool>
+    <bool name="config_allowDisablingAssistDisclosure">true</bool>
 
     <!-- True if the device supports system navigation keys. -->
     <bool name="config_supportSystemNavigationKeys">false</bool>
@@ -3702,7 +3732,7 @@
     <item name="config_inCallNotificationVolume" format="float" type="dimen">.10</item>
 
     <!-- URI for in call notification sound -->
-    <string translatable="false" name="config_inCallNotificationSound">/system/media/audio/ui/InCallNotification.ogg</string>
+    <string translatable="false" name="config_inCallNotificationSound">/product/media/audio/ui/InCallNotification.ogg</string>
 
     <!-- Default number of notifications from the same app before they are automatically grouped by the OS -->
     <integer translatable="false" name="config_autoGroupAtCount">4</integer>
@@ -4079,4 +4109,43 @@
 
     <!-- Which binder services to include in incident reports containing restricted images. -->
     <string-array name="config_restrictedImagesServices" translatable="false"/>
+
+    <!-- Messages that should not be shown to the user during face auth enrollment. This should be
+         used to hide messages that may be too chatty or messages that the user can't do much about.
+         Entries are defined in android.hardware.biometrics.face@1.0 types.hal -->
+    <integer-array name="config_face_acquire_enroll_ignorelist" translatable="false" >
+    </integer-array>
+    <!-- Same as the above, but are defined by vendorCodes -->
+    <integer-array name="config_face_acquire_vendor_enroll_ignorelist" translatable="false" >
+    </integer-array>
+
+    <!-- Messages that should not be shown to the user during face authentication, on keyguard.
+         This includes both lockscreen and bouncer. This should be used to hide messages that may be
+         too chatty or messages that the user can't do much about. Entries are defined in
+         android.hardware.biometrics.face@1.0 types.hal -->
+    <integer-array name="config_face_acquire_keyguard_ignorelist" translatable="false" >
+    </integer-array>
+    <!-- Same as the above, but are defined by vendorCodes -->
+    <integer-array name="config_face_acquire_vendor_keyguard_ignorelist" translatable="false" >
+    </integer-array>
+
+    <!-- Messages that should not be shown to the user during face authentication, on
+     BiometricPrompt. This should be used to hide messages that may be too chatty or messages that
+     the user can't do much about. Entries are defined in
+     android.hardware.biometrics.face@1.0 types.hal -->
+    <integer-array name="config_face_acquire_biometricprompt_ignorelist" translatable="false" >
+    </integer-array>
+    <!-- Same as the above, but are defined by vendorCodes -->
+    <integer-array name="config_face_acquire_vendor_biometricprompt_ignorelist" translatable="false" >
+    </integer-array>
+
+    <!-- The component name for the default profile supervisor, which can be set as a profile owner
+    even after user setup is complete. The defined component should be used for supervision purposes
+    only. The component must be part of a system app. -->
+    <string name="config_defaultSupervisionProfileOwnerComponent" translatable="false"></string>
+
+    <!-- Whether to artificially interpret all signal strengths as
+         one bar higher than they actually are -->
+    <bool name="config_inflateSignalStrength">false</bool>
+
 </resources>

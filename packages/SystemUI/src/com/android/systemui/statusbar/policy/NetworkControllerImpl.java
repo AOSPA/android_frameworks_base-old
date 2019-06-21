@@ -1019,6 +1019,12 @@ public class NetworkControllerImpl extends BroadcastReceiver
                                     SignalStrength.NUM_SIGNAL_STRENGTH_BINS);
                     controller.getState().connected = controller.getState().level >= 0;
                 }
+                if (args.containsKey("inflate")) {
+                    for (int i = 0; i < mMobileSignalControllers.size(); i++) {
+                        mMobileSignalControllers.valueAt(i).mInflateSignalStrengths =
+                                "true".equals(args.getString("inflate"));
+                    }
+                }
                 String activity = args.getString("activity");
                 if (activity != null) {
                     controller.getState().dataConnected = true;
@@ -1146,7 +1152,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     res.getBoolean(com.android.internal.R.bool.config_alwaysUseCdmaRssi);
             config.hspaDataDistinguishable =
                     res.getBoolean(R.bool.config_hspa_data_distinguishable);
-            config.inflateSignalStrengths = res.getBoolean(R.bool.config_inflateSignalStrength);
+            config.inflateSignalStrengths = res.getBoolean(
+                    com.android.internal.R.bool.config_inflateSignalStrength);
 
             config.alwaysShowNetworkTypeIcon =
                     context.getResources().getBoolean(R.bool.config_alwaysShowTypeIcon);

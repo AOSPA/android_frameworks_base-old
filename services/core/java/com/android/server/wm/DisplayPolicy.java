@@ -26,6 +26,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECOND
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.res.Configuration.UI_MODE_TYPE_CAR;
 import static android.content.res.Configuration.UI_MODE_TYPE_MASK;
+import static android.view.Display.TYPE_BUILT_IN;
 import static android.view.InsetsState.TYPE_TOP_BAR;
 import static android.view.InsetsState.TYPE_TOP_GESTURES;
 import static android.view.InsetsState.TYPE_TOP_TAPPABLE_ELEMENT;
@@ -70,6 +71,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 import static android.view.WindowManager.LayoutParams.TYPE_DREAM;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_CONSUMER;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
+import static android.view.WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_SCREENSHOT;
@@ -125,6 +127,7 @@ import android.content.pm.ApplicationInfo;
 import android.graphics.Insets;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.graphics.Region;
 import android.hardware.input.InputManager;
 import android.hardware.power.V1_0.PowerHint;
 import android.os.Handler;
@@ -160,6 +163,7 @@ import android.view.accessibility.AccessibilityManager;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.policy.ScreenDecorationsUtils;
 import com.android.internal.util.ScreenShapeHelper;
 import com.android.internal.util.ScreenshotHelper;
 import com.android.internal.util.function.TriConsumer;
@@ -242,7 +246,6 @@ public class DisplayPolicy {
     private int mBottomGestureAdditionalInset;
     @Px
     private int mSideGestureInset;
-    private boolean mNavigationBarLetsThroughTaps;
 
     private StatusBarManagerInternal getStatusBarManagerInternal() {
         synchronized (mServiceAcquireLock) {
@@ -264,6 +267,9 @@ public class DisplayPolicy {
     private volatile boolean mHasNavigationBar;
     // Can the navigation bar ever move to the side?
     private volatile boolean mNavigationBarCanMove;
+    private volatile boolean mNavigationBarLetsThroughTaps;
+    private volatile boolean mNavigationBarAlwaysShowOnSideGesture;
+    private volatile boolean mAllowSeamlessRotationDespiteNavBarMoving;
 
     // Written by vr manager thread, only read in this class.
     private volatile boolean mPersistentVrModeEnabled;
@@ -389,6 +395,8 @@ public class DisplayPolicy {
      */
     @NonNull private Insets mForwardedInsets = Insets.NONE;
 
+    private RefreshRatePolicy mRefreshRatePolicy;
+
     // -------- PolicyHandler --------
     private static final int MSG_UPDATE_DREAMING_SLEEP_TOKEN = 1;
     private static final int MSG_REQUEST_TRANSIENT_BARS = 2;
@@ -496,22 +504,31 @@ public class DisplayPolicy {
 
                     @Override
                     public void onSwipeFromBottom() {
-                        if (mNavigationBar != null
-                                && mNavigationBarPosition == NAV_BAR_BOTTOM) {
+                        if (mNavigationBar != null && mNavigationBarPosition == NAV_BAR_BOTTOM) {
                             requestTransientBars(mNavigationBar);
                         }
                     }
 
                     @Override
                     public void onSwipeFromRight() {
-                        if (mNavigationBar != null && mNavigationBarPosition == NAV_BAR_RIGHT) {
+                        final Region excludedRegion =
+                                mDisplayContent.calculateSystemGestureExclusion();
+                        final boolean sideAllowed = mNavigationBarAlwaysShowOnSideGesture
+                                || mNavigationBarPosition == NAV_BAR_RIGHT;
+                        if (mNavigationBar != null && sideAllowed
+                                && !mSystemGestures.currentGestureStartedInRegion(excludedRegion)) {
                             requestTransientBars(mNavigationBar);
                         }
                     }
 
                     @Override
                     public void onSwipeFromLeft() {
-                        if (mNavigationBar != null && mNavigationBarPosition == NAV_BAR_LEFT) {
+                        final Region excludedRegion =
+                                mDisplayContent.calculateSystemGestureExclusion();
+                        final boolean sideAllowed = mNavigationBarAlwaysShowOnSideGesture
+                                || mNavigationBarPosition == NAV_BAR_LEFT;
+                        if (mNavigationBar != null && sideAllowed
+                                && !mSystemGestures.currentGestureStartedInRegion(excludedRegion)) {
                             requestTransientBars(mNavigationBar);
                         }
                     }
@@ -666,6 +683,10 @@ public class DisplayPolicy {
             mHasStatusBar = false;
             mHasNavigationBar = mDisplayContent.supportsSystemDecorations();
         }
+
+        mRefreshRatePolicy = new RefreshRatePolicy(mService,
+                mDisplayContent.getDisplayInfo(),
+                mService.mHighRefreshRateBlacklist);
     }
 
     void systemReady() {
@@ -2084,7 +2105,8 @@ public class DisplayPolicy {
                         pf.set(displayFrames.mOverscan);
                     } else if ((sysUiFl & SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION) != 0
                             && (type >= FIRST_APPLICATION_WINDOW && type <= LAST_SUB_WINDOW
-                            || type == TYPE_VOLUME_OVERLAY)) {
+                            || type == TYPE_VOLUME_OVERLAY
+                            || type == TYPE_KEYGUARD_DIALOG)) {
                         // Asking for layout as if the nav bar is hidden, lets the application
                         // extend into the unrestricted overscan screen area. We only do this for
                         // application windows and certain system windows to ensure no window that
@@ -2784,6 +2806,8 @@ public class DisplayPolicy {
         mNavBarOpacityMode = res.getInteger(R.integer.config_navBarOpacityMode);
         mSideGestureInset = res.getDimensionPixelSize(R.dimen.config_backGestureInset);
         mNavigationBarLetsThroughTaps = res.getBoolean(R.bool.config_navBarTapThrough);
+        mNavigationBarAlwaysShowOnSideGesture =
+                res.getBoolean(R.bool.config_navBarAlwaysShowOnSideEdgeGesture);
 
         // This should calculate how much above the frame we accept gestures.
         mBottomGestureAdditionalInset = Math.max(0,
@@ -2799,6 +2823,8 @@ public class DisplayPolicy {
         mNavigationBarCanMove =
                 mDisplayContent.mBaseDisplayWidth != mDisplayContent.mBaseDisplayHeight
                         && res.getBoolean(R.bool.config_navBarCanMove);
+        mAllowSeamlessRotationDespiteNavBarMoving =
+                res.getBoolean(R.bool.config_allowSeamlessRotationDespiteNavBarMoving);
     }
 
     /**
@@ -2808,11 +2834,18 @@ public class DisplayPolicy {
     private void updateCurrentUserResources() {
         final int userId = mService.mAmInternal.getCurrentUserId();
         final Context uiContext = getSystemUiContext();
+
+        if (userId == UserHandle.USER_SYSTEM) {
+            // Skip the (expensive) recreation of resources for the system user below and just
+            // use the resources from the system ui context
+            mCurrentUserResources = uiContext.getResources();
+            return;
+        }
+
+        // For non-system users, ensure that the resources are loaded from the current
+        // user's package info (see ContextImpl.createDisplayContext)
         final LoadedApk pi = ActivityThread.currentActivityThread().getPackageInfo(
                 uiContext.getPackageName(), null, 0, userId);
-
-        // Create the resources from the current-user package info
-        // (see ContextImpl.createDisplayContext)
         mCurrentUserResources = ResourcesManager.getInstance().getResources(null,
                 pi.getResDir(),
                 null /* splitResDirs */,
@@ -2958,6 +2991,16 @@ public class DisplayPolicy {
         }
         return getNonDecorDisplayHeight(fullWidth, fullHeight, rotation, uiMode, displayCutout)
                 - statusBarHeight;
+    }
+
+    /**
+     * Return corner radius in pixels that should be used on windows in order to cover the display.
+     * The radius is only valid for built-in displays since the one who configures window corner
+     * radius cannot know the corner radius of non-built-in display.
+     */
+    float getWindowCornerRadius() {
+        return mDisplayContent.getDisplay().getType() == TYPE_BUILT_IN
+                ? ScreenDecorationsUtils.getWindowCornerRadius(mContext.getResources()) : 0f;
     }
 
     boolean isShowingDreamLw() {
@@ -3564,8 +3607,9 @@ public class DisplayPolicy {
         }
         // If the navigation bar can't change sides, then it will
         // jump when we change orientations and we don't rotate
-        // seamlessly.
-        if (!navigationBarCanMove()) {
+        // seamlessly - unless that is allowed, eg. with gesture
+        // navigation where the navbar is low-profile enough that this isn't very noticeable.
+        if (!navigationBarCanMove() && !mAllowSeamlessRotationDespiteNavBarMoving) {
             return false;
         }
 
@@ -3646,6 +3690,10 @@ public class DisplayPolicy {
                     mStatusBar != null && mStatusBar.isVisibleLw(),
                     mNavigationBar != null && mNavigationBar.isVisibleLw(), mHandler);
         }
+    }
+
+    RefreshRatePolicy getRefreshRatePolicy() {
+        return mRefreshRatePolicy;
     }
 
     void dump(String prefix, PrintWriter pw) {

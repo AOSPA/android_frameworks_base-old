@@ -23,6 +23,7 @@
     <string name="wifi_fail_to_scan" msgid="1265540342578081461">"நெட்வொர்க்குகளுக்கு ஸ்கேன் செய்யப்படவில்லை"</string>
     <string name="wifi_security_none" msgid="7985461072596594400">"ஏதுமில்லை"</string>
     <string name="wifi_remembered" msgid="4955746899347821096">"சேமிக்கப்பட்டது"</string>
+    <string name="wifi_disconnected" msgid="8085419869003922556">"தொடர்பு துண்டிக்கப்பட்டது"</string>
     <string name="wifi_disabled_generic" msgid="4259794910584943386">"முடக்கப்பட்டது"</string>
     <string name="wifi_disabled_network_failure" msgid="2364951338436007124">"IP உள்ளமைவில் தோல்வி"</string>
     <string name="wifi_disabled_by_recommendation_provider" msgid="5168315140978066096">"தரம் குறைவான நெட்வொர்க்கின் காரணமாக, இணைக்கப்படவில்லை"</string>
@@ -195,7 +196,7 @@
     <string name="category_work" msgid="8699184680584175622">"பணியிடம்"</string>
     <string name="development_settings_title" msgid="215179176067683667">"டெவெலப்பர் விருப்பங்கள்"</string>
     <string name="development_settings_enable" msgid="542530994778109538">"டெவெலப்பர் விருப்பங்களை இயக்கு"</string>
-    <string name="development_settings_summary" msgid="1815795401632854041">"பயன்பாட்டின் மேம்பாட்டிற்காக விருப்பங்களை அமை"</string>
+    <string name="development_settings_summary" msgid="1815795401632854041">"ஆப்ஸின் மேம்பாட்டிற்காக விருப்பங்களை அமை"</string>
     <string name="development_settings_not_available" msgid="4308569041701535607">"இவருக்கு, டெவெலப்பர் விருப்பங்கள் இல்லை"</string>
     <string name="vpn_settings_not_available" msgid="956841430176985598">"இவரால் VPN அமைப்புகளை மாற்ற முடியாது"</string>
     <string name="tethering_settings_not_available" msgid="6765770438438291012">"இவரால் இணைப்புமுறை அமைப்புகளை மாற்ற முடியாது"</string>
@@ -213,9 +214,9 @@
     <string name="oem_unlock_enable_summary" msgid="4720281828891618376">"பூட்லோடரைத் திறக்க அனுமதி"</string>
     <string name="confirm_enable_oem_unlock_title" msgid="4802157344812385674">"OEM திறத்தலை அனுமதிக்கவா?"</string>
     <string name="confirm_enable_oem_unlock_text" msgid="5517144575601647022">"எச்சரிக்கை: இந்த அமைப்பு இயக்கப்பட்டிருக்கும்போது, சாதன பாதுகாப்பு அம்சங்கள் இந்தச் சாதனத்தில் இயங்காது."</string>
-    <string name="mock_location_app" msgid="7966220972812881854">"போலி இருப்பிடப் பயன்பாட்டைத் தேர்ந்தெடு"</string>
-    <string name="mock_location_app_not_set" msgid="809543285495344223">"போலி இருப்பிடப் ஆப்ஸ் அமைக்கப்படவில்லை"</string>
-    <string name="mock_location_app_set" msgid="8966420655295102685">"போலி இருப்பிடப் ஆப்ஸ்: <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
+    <string name="mock_location_app" msgid="7966220972812881854">"போலி இருப்பிட ஆப்ஸைத் தேர்ந்தெடு"</string>
+    <string name="mock_location_app_not_set" msgid="809543285495344223">"போலி இருப்பிட ஆப்ஸ் அமைக்கப்படவில்லை"</string>
+    <string name="mock_location_app_set" msgid="8966420655295102685">"போலி இருப்பிட ஆப்ஸ்: <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="debug_networking_category" msgid="7044075693643009662">"நெட்வொர்க்கிங்"</string>
     <string name="wifi_display_certification" msgid="8611569543791307533">"வயர்லெஸ் காட்சிக்கான சான்றிதழ்"</string>
     <string name="wifi_verbose_logging" msgid="4203729756047242344">"வைஃபை அதிவிவர நுழைவை இயக்கு"</string>
@@ -353,7 +354,7 @@
     <string name="inactive_apps_title" msgid="9042996804461901648">"காத்திருப்பில் உள்ள ஆப்ஸ்"</string>
     <string name="inactive_app_inactive_summary" msgid="5091363706699855725">"செயலில் இல்லை. மாற்ற, தட்டவும்."</string>
     <string name="inactive_app_active_summary" msgid="4174921824958516106">"செயலில் உள்ளது. மாற்ற, தட்டவும்."</string>
-    <string name="standby_bucket_summary" msgid="6567835350910684727">"காத்திருப்பில் உள்ள பயன்பாட்டின் நிலை:<xliff:g id="BUCKET"> %s</xliff:g>"</string>
+    <string name="standby_bucket_summary" msgid="6567835350910684727">"காத்திருப்பில் உள்ள ஆப்ஸின் நிலை:<xliff:g id="BUCKET"> %s</xliff:g>"</string>
     <string name="runningservices_settings_title" msgid="8097287939865165213">"இயங்கும் சேவைகள்"</string>
     <string name="runningservices_settings_summary" msgid="854608995821032748">"தற்போது இயக்கத்தில் இருக்கும் சேவைகளைப் பார்த்து கட்டுப்படுத்து"</string>
     <string name="select_webview_provider_title" msgid="4628592979751918907">"WebView செயல்படுத்தல்"</string>

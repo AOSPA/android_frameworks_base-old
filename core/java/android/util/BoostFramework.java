@@ -80,6 +80,7 @@ public class BoostFramework {
     public static final int VENDOR_HINT_PACKAGE_INSTALL_BOOST = 0x00001088;
     public static final int VENDOR_HINT_ROTATION_LATENCY_BOOST = 0x00001089;
     public static final int VENDOR_HINT_ROTATION_ANIM_BOOST = 0x00001090;
+    public static final int VENDOR_HINT_PERFORMANCE_MODE = 0x00001091;
     //perf events
     public static final int VENDOR_HINT_FIRST_DRAW = 0x00001042;
     public static final int VENDOR_HINT_TAP_EVENT = 0x00001043;
@@ -212,7 +213,7 @@ public class BoostFramework {
                     sPerfGetPropFunc = sPerfClass.getMethod("perfGetProp", argClasses);
 
                     try {
-                        argClasses = new Class[] {int.class, int.class, String.class, int.class};
+                        argClasses = new Class[] {int.class, int.class, String.class, int.class, String.class};
                         sUXEngineEvents =  sPerfClass.getDeclaredMethod("perfUXEngine_events",
                                                                           argClasses);
 
@@ -234,7 +235,7 @@ public class BoostFramework {
                     sUxPerfClass = Class.forName(UXPERFORMANCE_CLASS);
 
                     Class[] argUxClasses = new Class[] {int.class, String.class, String.class};
-                    sUxIOPStart =   sUxPerfClass.getDeclaredMethod("perfIOPrefetchStart", argUxClasses);
+                    sUxIOPStart = sUxPerfClass.getDeclaredMethod("perfIOPrefetchStart", argUxClasses);
 
                     sUxIsLoaded = true;
                 }
@@ -335,11 +336,11 @@ public class BoostFramework {
             Log.e(TAG, "Exception " + e);
         }
         try {
-            Object retVal = sUxIOPStart.invoke(mUxPerf, pid, pkgName, codePath);
-            ret = (int) retVal;
-        } catch (Exception e) {
-            Log.e(TAG, "Ux Perf Exception " + e);
-        }
+             Object retVal = sUxIOPStart.invoke(mUxPerf, pid, pkgName, codePath);
+             ret = (int) retVal;
+         } catch (Exception e) {
+             Log.e(TAG, "Ux Perf Exception " + e);
+         }
 
         return ret;
     }
@@ -358,12 +359,18 @@ public class BoostFramework {
 
 /** @hide */
     public int perfUXEngine_events(int opcode, int pid, String pkgName, int lat) {
+        return perfUXEngine_events(opcode, pid, pkgName, lat, null);
+     }
+
+/** @hide */
+    public int perfUXEngine_events(int opcode, int pid, String pkgName, int lat, String codePath) {
         int ret = -1;
         try {
             if (sUXEngineEvents == null) {
                 return ret;
             }
-            Object retVal = sUXEngineEvents.invoke(mPerf, opcode, pid, pkgName, lat);
+
+            Object retVal = sUXEngineEvents.invoke(mPerf, opcode, pid, pkgName, lat,codePath);
             ret = (int) retVal;
         } catch (Exception e) {
             Log.e(TAG, "Exception " + e);

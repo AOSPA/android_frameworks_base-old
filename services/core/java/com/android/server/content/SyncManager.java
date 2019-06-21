@@ -1170,7 +1170,7 @@ public class SyncManager {
     }
 
     private void removeSyncsForAuthority(EndPoint info, String why) {
-        mLogger.log("removeSyncsForAuthority: ", info);
+        mLogger.log("removeSyncsForAuthority: ", info, why);
         verifyJobScheduler();
         List<SyncOperation> ops = getAllPendingSyncs();
         for (SyncOperation op: ops) {
@@ -3256,14 +3256,17 @@ public class SyncManager {
                 }
             }
 
-            // On account add, check if there are any settings to be restored.
-            for (AccountAndUser aau : mRunningAccounts) {
-                if (!containsAccountAndUser(oldAccounts, aau.account, aau.userId)) {
-                    if (Log.isLoggable(TAG, Log.DEBUG)) {
-                        Log.d(TAG, "Account " + aau.account + " added, checking sync restore data");
+            if (syncTargets != null) {
+                // On account add, check if there are any settings to be restored.
+                for (AccountAndUser aau : mRunningAccounts) {
+                    if (!containsAccountAndUser(oldAccounts, aau.account, aau.userId)) {
+                        if (Log.isLoggable(TAG, Log.DEBUG)) {
+                            Log.d(TAG, "Account " + aau.account
+                                    + " added, checking sync restore data");
+                        }
+                        AccountSyncSettingsBackupHelper.accountAdded(mContext, syncTargets.userId);
+                        break;
                     }
-                    AccountSyncSettingsBackupHelper.accountAdded(mContext, syncTargets.userId);
-                    break;
                 }
             }
 
@@ -3375,7 +3378,8 @@ public class SyncManager {
             }
 
             scheduleSyncOperationH(op);
-            mSyncStorageEngine.reportChange(ContentResolver.SYNC_OBSERVER_TYPE_SETTINGS);
+            mSyncStorageEngine.reportChange(ContentResolver.SYNC_OBSERVER_TYPE_SETTINGS,
+                    target.userId);
         }
 
         /**
@@ -3877,7 +3881,8 @@ public class SyncManager {
             EventLog.writeEvent(2720,
                     syncOperation.toEventLog(SyncStorageEngine.EVENT_STOP));
             mSyncStorageEngine.stopSyncEvent(rowId, elapsedTime,
-                    resultMessage, downstreamActivity, upstreamActivity);
+                    resultMessage, downstreamActivity, upstreamActivity,
+                    syncOperation.target.userId);
         }
     }
 
