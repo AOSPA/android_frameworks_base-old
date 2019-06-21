@@ -98,6 +98,10 @@ public abstract class LoggableMonitor {
     }
 
     protected final void logOnError(Context context, int error, int vendorCode, int targetUserId) {
+
+        final long latency = mFirstAcquireTimeMs != 0
+                ? (System.currentTimeMillis() - mFirstAcquireTimeMs) : -1;
+
         if (DEBUG) {
             Slog.v(TAG, "Error! Modality: " + statsModality()
                     + ", User: " + targetUserId
@@ -105,7 +109,10 @@ public abstract class LoggableMonitor {
                     + ", Action: " + statsAction()
                     + ", Client: " + statsClient()
                     + ", Error: " + error
-                    + ", VendorCode: " + vendorCode);
+                    + ", VendorCode: " + vendorCode
+                    + ", Latency: " + latency);
+        } else {
+            Slog.v(TAG, "Error latency: " + latency);
         }
         StatsLog.write(StatsLog.BIOMETRIC_ERROR_OCCURRED,
                 statsModality(),
@@ -115,7 +122,8 @@ public abstract class LoggableMonitor {
                 statsClient(),
                 error,
                 vendorCode,
-                Utils.isDebugEnabled(context, targetUserId));
+                Utils.isDebugEnabled(context, targetUserId),
+                latency);
     }
 
     protected final void logOnAuthenticated(Context context, boolean authenticated,
