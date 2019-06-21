@@ -303,6 +303,12 @@ message Atom {
         ContentCaptureSessionEvents content_capture_session_events = 208;
         ContentCaptureFlushed content_capture_flushed = 209;
         LocationManagerApiUsageReported location_manager_api_usage_reported = 210;
+        ReviewPermissionsFragmentResultReported review_permissions_fragment_result_reported =
+            211 [(log_from_module) = "permissioncontroller"];
+        RuntimePermissionsUpgradeResult runtime_permissions_upgrade_result =
+            212 [(log_from_module) = "permissioncontroller"];
+        GrantPermissionsActivityButtonActions grant_permissions_activity_button_actions =
+            213 [(log_from_module) = "permissioncontroller"];
     }
 
     // Pulled events will start at field 10000.
@@ -6543,4 +6549,61 @@ message LocationManagerApiUsageReported {
     // Activity Importance of API caller.
     // Categorized to 3 types that are interesting from location's perspective.
     optional android.stats.location.ActivityImportance activiy_importance = 12;
+}
+
+/**
+ * Information about a permission grant or denial made by user inside ReviewPermissionsFragment
+ */
+message ReviewPermissionsFragmentResultReported {
+    // unique value identifying a permission group change. A permission group change might result
+    // in multiple of these atoms
+    optional int64 change_id = 1;
+
+    // UID of package the permission belongs to
+    optional int32 uid = 2 [(is_uid) = true];
+
+    // Name of package the permission belongs to
+    optional string package_name = 3;
+
+    // The permission to be granted
+    optional string permission_name = 4;
+
+    // The result of the permission grant
+    optional bool permission_granted = 5;
+}
+
+/**
+* Information about results of permission upgrade by RuntimePermissionsUpgradeController
+* Logged from: RuntimePermissionUpdgradeController
+*/
+message RuntimePermissionsUpgradeResult {
+    // Permission granted as result of upgrade
+    optional string permission_name = 1;
+
+    // UID of package granted permission
+    optional int32 uid = 2 [(is_uid) = true];
+
+    // Name of package granted permission
+    optional string package_name = 3;
+}
+
+/**
+* Information about a buttons presented in GrantPermissionsActivty and choice made by user
+*/
+message GrantPermissionsActivityButtonActions {
+    // Permission granted as result of upgrade
+    optional string permission_group_name = 1;
+
+    // UID of package granted permission
+    optional int32 uid = 2 [(is_uid) = true];
+
+    // Name of package requesting permission
+    optional string package_name = 3;
+
+    // Buttons presented in the dialog - bit flags, bit numbers are in accordance with
+    // LABEL_ constants in GrantPermissionActivity.java
+    optional int32 buttons_presented = 4;
+
+    // Button clicked by user - same as bit flags in buttons_presented with only single bit set
+    optional int32 button_clicked = 5;
 }
