@@ -1746,7 +1746,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
     private static int getPskType(ScanResult result) {
         boolean wpa = result.capabilities.contains("WPA-PSK");
         boolean wpa2 = result.capabilities.contains("RSN-PSK");
-        boolean wpa3TransitionMode = result.capabilities.contains("PSK+SAE");
+        boolean wpa3TransitionMode = result.capabilities.contains("PSK")
+                                         && result.capabilities.contains("SAE");
         boolean wpa3 = result.capabilities.contains("RSN-SAE");
         if (wpa3TransitionMode) {
             return PSK_SAE;
@@ -1780,13 +1781,10 @@ public class AccessPoint implements Comparable<AccessPoint> {
     private static int getSecurity(ScanResult result) {
         if (result.capabilities.contains("DPP")) {
             return SECURITY_DPP;
-        } else if (result.capabilities.contains("SAE")) {
-            return SECURITY_SAE;
-        } else if (result.capabilities.contains("OWE")) {
-            return SECURITY_OWE;
         } else if (result.capabilities.contains("WEP")) {
             return SECURITY_WEP;
-        } else if (result.capabilities.contains("PSK+SAE")) {
+        } else if (result.capabilities.contains("PSK")
+                   && result.capabilities.contains("SAE")) {
             return SECURITY_PSK_SAE_TRANSITION;
         } else if (result.capabilities.contains("SAE")) {
             return SECURITY_SAE;
