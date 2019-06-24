@@ -5324,7 +5324,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         boolean publicMode = mLockscreenUserManager.isAnyProfilePublicMode();
 
         if (mHeadsUpAppearanceController != null) {
-            mHeadsUpAppearanceController.setPublicMode(publicMode);
+            mHeadsUpAppearanceController.onStateChanged();
         }
 
         SysuiStatusBarStateController state = (SysuiStatusBarStateController)

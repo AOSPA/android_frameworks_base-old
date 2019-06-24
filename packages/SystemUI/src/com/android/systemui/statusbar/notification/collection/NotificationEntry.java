@@ -172,6 +172,8 @@ public final class NotificationEntry {
      * the lock screen/status bar and in the top section in the shade.
      */
     private boolean mHighPriority;
+    private boolean mSensitive = true;
+    private Runnable mOnSensitiveChangedListener;
 
     private boolean mIsTopBucket;
 
@@ -862,6 +864,30 @@ public final class NotificationEntry {
 
     private static boolean isCategory(String category, Notification n) {
         return Objects.equals(n.category, category);
+    }
+
+    /**
+     * Set this notification to be sensitive.
+     *
+     * @param sensitive true if the content of this notification is sensitive right now
+     * @param deviceSensitive true if the device in general is sensitive right now
+     */
+    public void setSensitive(boolean sensitive, boolean deviceSensitive) {
+        getRow().setSensitive(sensitive, deviceSensitive);
+        if (sensitive != mSensitive) {
+            mSensitive = sensitive;
+            if (mOnSensitiveChangedListener != null) {
+                mOnSensitiveChangedListener.run();
+            }
+        }
+    }
+
+    public boolean isSensitive() {
+        return mSensitive;
+    }
+
+    public void setOnSensitiveChangedListener(Runnable listener) {
+        mOnSensitiveChangedListener = listener;
     }
 
     /** Information about a suggestion that is being edited. */
