@@ -317,17 +317,6 @@ public class StatusBar extends SystemUI implements DemoMode,
     /** If true, the lockscreen will show a distinct wallpaper */
     public static final boolean ENABLE_LOCKSCREEN_WALLPAPER = true;
 
-    private static final AudioAttributes AUDIO_ATTRIBUTES =
-            new AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    // Temporary fix for b/123870990. No time in this release to
-                    // introduce a new vibration type, but we need to distinguish these vibrations
-                    // from other haptic feedback vibrations. Fortunately, Alarm vibrations have
-                    // exactly the same behavior as we need
-                    // TODO: refactor within the scope of b/132170758
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .build();
-
     static {
         boolean onlyCoreApps;
         try {
@@ -504,7 +493,7 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     private Runnable mLaunchTransitionEndRunnable;
     private NotificationEntry mDraggedDownEntry;
-    private boolean mLaunchCameraOnScreenTurningOn;
+    private boolean mLaunchCameraWhenFinishedWaking;
     private boolean mLaunchCameraOnFinishedGoingToSleep;
     private int mLastCameraLaunchSource;
     protected PowerManager.WakeLock mGestureWakeLock;
@@ -3606,7 +3595,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         public void onFinishedGoingToSleep() {
             mNotificationPanel.onAffordanceLaunchEnded();
             releaseGestureWakeLock();
-            mLaunchCameraOnScreenTurningOn = false;
+            mLaunchCameraWhenFinishedWaking = false;
             mDeviceInteractive = false;
             mWakeUpComingFromTouch = false;
             mWakeUpTouchLocation = null;
@@ -3651,6 +3640,11 @@ public class StatusBar extends SystemUI implements DemoMode,
         @Override
         public void onFinishedWakingUp() {
             mWakeUpCoordinator.setWakingUp(false);
+            if (mLaunchCameraWhenFinishedWaking) {
+                mNotificationPanel.launchCamera(false /* animate */, mLastCameraLaunchSource);
+                mLaunchCameraWhenFinishedWaking = false;
+            }
+            updateScrimController();
         }
     };
 
@@ -3671,13 +3665,6 @@ public class StatusBar extends SystemUI implements DemoMode,
         public void onScreenTurningOn() {
             mFalsingManager.onScreenTurningOn();
             mNotificationPanel.onScreenTurningOn();
-
-            if (mLaunchCameraOnScreenTurningOn) {
-                mNotificationPanel.launchCamera(false, mLastCameraLaunchSource);
-                mLaunchCameraOnScreenTurningOn = false;
-            }
-
-            updateScrimController();
         }
 
         @Override
@@ -3700,7 +3687,7 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     private void vibrateForCameraGesture() {
         // Make sure to pass -1 for repeat so VibratorService doesn't stop us when going to sleep.
-        mVibrator.vibrate(mCameraLaunchGestureVibePattern, -1 /* repeat */, AUDIO_ATTRIBUTES);
+        mVibrator.vibrate(mCameraLaunchGestureVibePattern, -1 /* repeat */);
     }
 
     /**
@@ -3773,7 +3760,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                 // comes on.
                 mGestureWakeLock.acquire(LAUNCH_TRANSITION_TIMEOUT_MS + 1000L);
             }
-            if (isScreenTurningOnOrOn()) {
+            if (isWakingUpOrAwake()) {
                 if (DEBUG_CAMERA_LIFT) Slog.d(TAG, "Launching camera");
                 if (mStatusBarKeyguardViewManager.isBouncerShowing()) {
                     mStatusBarKeyguardViewManager.reset(true /* hide */);
@@ -3786,7 +3773,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                 // incorrectly get notified because of the screen on event (which resumes and pauses
                 // some activities)
                 if (DEBUG_CAMERA_LIFT) Slog.d(TAG, "Deferring until screen turns on");
-                mLaunchCameraOnScreenTurningOn = true;
+                mLaunchCameraWhenFinishedWaking = true;
             }
         }
     }
@@ -3811,9 +3798,9 @@ public class StatusBar extends SystemUI implements DemoMode,
                 == WakefulnessLifecycle.WAKEFULNESS_GOING_TO_SLEEP;
     }
 
-    private boolean isScreenTurningOnOrOn() {
-        return mScreenLifecycle.getScreenState() == ScreenLifecycle.SCREEN_TURNING_ON
-                || mScreenLifecycle.getScreenState() == ScreenLifecycle.SCREEN_ON;
+    private boolean isWakingUpOrAwake() {
+        return mWakefulnessLifecycle.getWakefulness() == WAKEFULNESS_AWAKE
+                || mWakefulnessLifecycle.getWakefulness() == WAKEFULNESS_WAKING;
     }
 
     public void notifyBiometricAuthModeChanged() {
@@ -3845,7 +3832,7 @@ public class StatusBar extends SystemUI implements DemoMode,
             ScrimState state = mStatusBarKeyguardViewManager.bouncerNeedsScrimming()
                     ? ScrimState.BOUNCER_SCRIMMED : ScrimState.BOUNCER;
             mScrimController.transitionTo(state);
-        } else if (isInLaunchTransition() || mLaunchCameraOnScreenTurningOn
+        } else if (isInLaunchTransition() || mLaunchCameraWhenFinishedWaking
                 || launchingAffordanceWithPreview) {
             mScrimController.transitionTo(ScrimState.UNLOCKED, mUnlockScrimCallback);
         } else if (mBrightnessMirrorVisible) {

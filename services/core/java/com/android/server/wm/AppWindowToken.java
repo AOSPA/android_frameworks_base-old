@@ -79,6 +79,7 @@ import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_PLACE_SURFACES;
 import static com.android.server.wm.WindowManagerService.logWithStack;
 import static com.android.server.wm.WindowState.LEGACY_POLICY_VISIBILITY;
+import static com.android.server.wm.WindowStateAnimator.HAS_DRAWN;
 import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_AFTER_ANIM;
 import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_BEFORE_ANIM;
 
@@ -540,6 +541,14 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 // If the app was already visible, don't reset the waitingToShow state.
                 if (isHidden()) {
                     waitingToShow = true;
+
+                    // Let's reset the draw state in order to prevent the starting window to be
+                    // immediately dismissed when the app still has the surface.
+                    forAllWindows(w -> {
+                            if (w.mWinAnimator.mDrawState == HAS_DRAWN) {
+                                w.mWinAnimator.resetDrawState();
+                            }
+                        },  true /* traverseTopToBottom */);
                 }
             }
 
@@ -1322,7 +1331,9 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         if (prevDc == null || prevDc == mDisplayContent) {
             return;
         }
-        if (prevDc.mChangingApps.contains(this)) {
+
+        prevDc.mOpeningApps.remove(this);
+        if (prevDc.mChangingApps.remove(this)) {
             // This gets called *after* the AppWindowToken has been reparented to the new display.
             // That reparenting resulted in this window changing modes (eg. FREEFORM -> FULLSCREEN),
             // so this token is now "frozen" while waiting for the animation to start on prevDc
@@ -1331,6 +1342,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             // so we need to cancel the change transition here.
             clearChangeLeash(getPendingTransaction(), true /* cancel */);
         }
+        prevDc.mClosingApps.remove(this);
+
         if (prevDc.mFocusedApp == this) {
             prevDc.setFocusedApp(null);
             final TaskStack stack = dc.getTopStack();
@@ -3214,16 +3227,6 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     private boolean hasNonDefaultColorWindow() {
         return forAllWindows(ws -> ws.mAttrs.getColorMode() != COLOR_MODE_DEFAULT,
                 true /* topToBottom */);
-    }
-
-    void removeFromPendingTransition() {
-        if (isWaitingForTransitionStart() && mDisplayContent != null) {
-            mDisplayContent.mOpeningApps.remove(this);
-            if (mDisplayContent.mChangingApps.remove(this)) {
-                clearChangeLeash(getPendingTransaction(), true /* cancel */);
-            }
-            mDisplayContent.mClosingApps.remove(this);
-        }
     }
 
     private void updateColorTransform() {

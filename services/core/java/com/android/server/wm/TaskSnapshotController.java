@@ -95,6 +95,7 @@ class TaskSnapshotController {
     private final ArraySet<Task> mSkipClosingAppSnapshotTasks = new ArraySet<>();
     private final ArraySet<Task> mTmpTasks = new ArraySet<>();
     private final Handler mHandler = new Handler();
+    private final float mFullSnapshotScale;
 
     private final Rect mTmpRect = new Rect();
 
@@ -124,6 +125,8 @@ class TaskSnapshotController {
                 PackageManager.FEATURE_EMBEDDED);
         mIsRunningOnWear = mService.mContext.getPackageManager().hasSystemFeature(
             PackageManager.FEATURE_WATCH);
+        mFullSnapshotScale = mService.mContext.getResources().getFloat(
+                com.android.internal.R.dimen.config_fullTaskSnapshotScale);
     }
 
     void systemReady() {
@@ -287,7 +290,9 @@ class TaskSnapshotController {
         }
 
         final boolean isLowRamDevice = ActivityManager.isLowRamDeviceStatic();
-        final float scaleFraction = isLowRamDevice ? mPersister.getReducedScale() : 1f;
+        final float scaleFraction = isLowRamDevice
+                ? mPersister.getReducedScale()
+                : mFullSnapshotScale;
 
         final WindowState mainWindow = appWindowToken.findMainWindow();
         if (mainWindow == null) {
@@ -306,7 +311,8 @@ class TaskSnapshotController {
         final boolean isWindowTranslucent = mainWindow.getAttrs().format != PixelFormat.OPAQUE;
         return new TaskSnapshot(
                 appWindowToken.mActivityComponent, screenshotBuffer.getGraphicBuffer(),
-                screenshotBuffer.getColorSpace(), appWindowToken.getConfiguration().orientation,
+                screenshotBuffer.getColorSpace(),
+                appWindowToken.getTask().getConfiguration().orientation,
                 getInsets(mainWindow), isLowRamDevice /* reduced */, scaleFraction /* scale */,
                 true /* isRealSnapshot */, task.getWindowingMode(), getSystemUiVisibility(task),
                 !appWindowToken.fillsParent() || isWindowTranslucent);
@@ -378,9 +384,10 @@ class TaskSnapshotController {
                 task.getTaskDescription().getBackgroundColor(), 255);
         final LayoutParams attrs = mainWindow.getAttrs();
         final SystemBarBackgroundPainter decorPainter = new SystemBarBackgroundPainter(attrs.flags,
-                attrs.privateFlags, attrs.systemUiVisibility, task.getTaskDescription());
-        final int width = mainWindow.getFrameLw().width();
-        final int height = mainWindow.getFrameLw().height();
+                attrs.privateFlags, attrs.systemUiVisibility, task.getTaskDescription(),
+                mFullSnapshotScale);
+        final int width = (int) (task.getBounds().width() * mFullSnapshotScale);
+        final int height = (int) (task.getBounds().height() * mFullSnapshotScale);
 
         final RenderNode node = RenderNode.create("TaskSnapshotController", null);
         node.setLeftTopRightBottom(0, 0, width, height);
@@ -394,12 +401,13 @@ class TaskSnapshotController {
         if (hwBitmap == null) {
             return null;
         }
+
         // Note, the app theme snapshot is never translucent because we enforce a non-translucent
         // color above
         return new TaskSnapshot(topChild.mActivityComponent, hwBitmap.createGraphicBufferHandle(),
-                hwBitmap.getColorSpace(), topChild.getConfiguration().orientation,
-                mainWindow.getStableInsets(), ActivityManager.isLowRamDeviceStatic() /* reduced */,
-                1.0f /* scale */, false /* isRealSnapshot */, task.getWindowingMode(),
+                hwBitmap.getColorSpace(), topChild.getTask().getConfiguration().orientation,
+                getInsets(mainWindow), ActivityManager.isLowRamDeviceStatic() /* reduced */,
+                mFullSnapshotScale, false /* isRealSnapshot */, task.getWindowingMode(),
                 getSystemUiVisibility(task), false);
     }
 
@@ -481,6 +489,7 @@ class TaskSnapshotController {
     }
 
     void dump(PrintWriter pw, String prefix) {
+        pw.println(prefix + "mFullSnapshotScale=" + mFullSnapshotScale);
         mCache.dump(pw, prefix);
     }
 }
