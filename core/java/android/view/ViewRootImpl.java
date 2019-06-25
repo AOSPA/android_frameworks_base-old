@@ -4470,6 +4470,7 @@ public final class ViewRootImpl implements ViewParent,
                         final int displayId = args.argi3;
                         MergedConfiguration mergedConfiguration = (MergedConfiguration) args.arg4;
                         final boolean displayChanged = mDisplay.getDisplayId() != displayId;
+                        boolean configChanged = false;
 
                         if (!mLastReportedMergedConfiguration.equals(mergedConfiguration)) {
                             // If configuration changed - notify about that and, maybe,
@@ -4477,6 +4478,7 @@ public final class ViewRootImpl implements ViewParent,
                             performConfigurationChange(mergedConfiguration, false /* force */,
                                     displayChanged
                                             ? displayId : INVALID_DISPLAY /* same display */);
+                            configChanged = true;
                         } else if (displayChanged) {
                             // Moved to display without config change - report last applied one.
                             onMovedToDisplay(displayId, mLastConfigurationFromResources);
@@ -4507,7 +4509,7 @@ public final class ViewRootImpl implements ViewParent,
                             reportNextDraw();
                         }
 
-                        if (mView != null && framesChanged) {
+                        if (mView != null && (framesChanged || configChanged)) {
                             forceLayout(mView);
                         }
                         requestLayout();
