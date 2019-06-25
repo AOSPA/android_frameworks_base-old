@@ -18,6 +18,7 @@ package com.android.server.pm.permission;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.PermissionInfoFlags;
 import android.content.pm.PackageParser;
@@ -65,7 +66,8 @@ public abstract class PermissionManagerServiceInternal extends PermissionManager
 
     public abstract void systemReady();
 
-    public abstract boolean isPermissionsReviewRequired(PackageParser.Package pkg, int userId);
+    public abstract boolean isPermissionsReviewRequired(@NonNull PackageParser.Package pkg,
+            @UserIdInt int userId);
 
     public abstract void grantRuntimePermission(
             @NonNull String permName, @NonNull String packageName, boolean overridePolicy,
@@ -193,4 +195,8 @@ public abstract class PermissionManagerServiceInternal extends PermissionManager
 
     /** HACK HACK methods to allow for partial migration of data to the PermissionManager class */
     public abstract @Nullable BasePermission getPermissionTEMP(@NonNull String permName);
+
+    /** Get all permission that have a certain protection level */
+    public abstract @NonNull ArrayList<PermissionInfo> getAllPermissionWithProtectionLevel(
+            @PermissionInfo.Protection int protectionLevel);
 }

@@ -4873,6 +4873,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         }
         startedWakingUp(ON_BECAUSE_OF_UNKNOWN);
+        finishedWakingUp(ON_BECAUSE_OF_UNKNOWN);
         screenTurningOn(null);
         screenTurnedOn();
     }
@@ -5206,6 +5207,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         if (awakenFromDreams) {
             awakenDreams();
+        }
+
+        if (!isUserSetupComplete()) {
+            Slog.i(TAG, "Not going home because user setup is in progress.");
+            return;
         }
 
         // Start dock.
