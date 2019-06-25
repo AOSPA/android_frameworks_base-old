@@ -2692,6 +2692,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 l.setAlpha(1.0f);
                 l.setLayerType(LAYER_TYPE_NONE, null);
             }
+        } else {
+            setHeadsUpAnimatingAway(false);
         }
     }
 
