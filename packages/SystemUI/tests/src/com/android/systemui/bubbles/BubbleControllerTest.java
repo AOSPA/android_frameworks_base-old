@@ -57,6 +57,7 @@ import androidx.test.filters.SmallTest;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoveInterceptor;
 import com.android.systemui.statusbar.NotificationTestHelper;
@@ -106,6 +107,8 @@ public class BubbleControllerTest extends SysuiTestCase {
     private SysuiStatusBarStateController mStatusBarStateController;
     @Mock
     private KeyguardBypassController mKeyguardBypassController;
+    @Mock
+    private NotificationLockscreenUserManager mLockscreenUserManager;
 
     private FrameLayout mStatusBarView;
     @Captor
@@ -170,7 +173,7 @@ public class BubbleControllerTest extends SysuiTestCase {
         mBubbleData = new BubbleData(mContext);
         mBubbleController = new TestableBubbleController(mContext, mStatusBarWindowController,
                 mBubbleData, mConfigurationController, interruptionStateProvider,
-                mZenModeController);
+                mZenModeController, mLockscreenUserManager);
         mBubbleController.setBubbleStateChangeListener(mBubbleStateChangeListener);
         mBubbleController.setExpandListener(mBubbleExpandListener);
 
@@ -595,9 +598,11 @@ public class BubbleControllerTest extends SysuiTestCase {
                 StatusBarWindowController statusBarWindowController, BubbleData data,
                 ConfigurationController configurationController,
                 NotificationInterruptionStateProvider interruptionStateProvider,
-                ZenModeController zenModeController) {
+                ZenModeController zenModeController,
+                NotificationLockscreenUserManager lockscreenUserManager) {
             super(context, statusBarWindowController, data, Runnable::run,
-                    configurationController, interruptionStateProvider, zenModeController);
+                    configurationController, interruptionStateProvider, zenModeController,
+                    lockscreenUserManager);
         }
     }
 
