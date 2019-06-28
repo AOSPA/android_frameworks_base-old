@@ -361,13 +361,6 @@ public class BubbleStackView extends FrameLayout {
                 Gravity.BOTTOM));
         addView(mDismissContainer);
 
-        mDismissContainer = new BubbleDismissView(mContext);
-        mDismissContainer.setLayoutParams(new FrameLayout.LayoutParams(
-                MATCH_PARENT,
-                getResources().getDimensionPixelSize(R.dimen.pip_dismiss_gradient_height),
-                Gravity.BOTTOM));
-        addView(mDismissContainer);
-
         mExpandedViewXAnim =
                 new SpringAnimation(mExpandedViewContainer, DynamicAnimation.TRANSLATION_X);
         mExpandedViewXAnim.setSpring(
@@ -1005,7 +998,7 @@ public class BubbleStackView extends FrameLayout {
         }
 
         mExpandedAnimationController.snapBubbleBack(bubble, velX, velY);
-        springOutDismissTargetAndHideCircle();
+        hideDismissTarget();
     }
 
     void onDragStart() {
@@ -1047,7 +1040,7 @@ public class BubbleStackView extends FrameLayout {
 
         mStackOnLeftOrWillBe = newStackX <= 0;
         updateBubbleShadowsAndDotPosition(true /* animate */);
-        springOutDismissTargetAndHideCircle();
+        hideDismissTarget();
     }
 
     void onFlyoutDragStart() {
@@ -1181,9 +1174,6 @@ public class BubbleStackView extends FrameLayout {
 
                 animateDesaturateAndDarken(magnetView, true);
             }
-
-            mDismissContainer.animateEncircleCenterWithX(true);
-
         } else {
             mAnimatingMagnet = false;
 
@@ -1194,8 +1184,6 @@ public class BubbleStackView extends FrameLayout {
                 mExpandedAnimationController.demagnetizeBubbleTo(x, y, velX, velY);
                 animateDesaturateAndDarken(magnetView, false);
             }
-
-            mDismissContainer.animateEncircleCenterWithX(false);
         }
 
         mVibrator.vibrate(VibrationEffect.get(toTarget
@@ -1214,7 +1202,7 @@ public class BubbleStackView extends FrameLayout {
             mAfterMagnet = null;
 
             mVibrator.vibrate(VibrationEffect.get(VibrationEffect.EFFECT_CLICK));
-            mDismissContainer.animateEncirclingCircleDisappearance();
+            mDismissContainer.springOut();
 
             // 'Implode' the stack and then hide the dismiss target.
             if (touchedView == this) {
@@ -1252,7 +1240,7 @@ public class BubbleStackView extends FrameLayout {
         }
     }
 
-    /** Animates in the dismiss target, including the gradient behind it. */
+    /** Animates in the dismiss target. */
     private void springInDismissTarget() {
         if (mShowingDismiss) {
             return;
@@ -1270,7 +1258,7 @@ public class BubbleStackView extends FrameLayout {
      * Animates the dismiss target out, as well as the circle that encircles the bubbles, if they
      * were dragged into the target and encircled.
      */
-    private void springOutDismissTargetAndHideCircle() {
+    private void hideDismissTarget() {
         if (!mShowingDismiss) {
             return;
         }
