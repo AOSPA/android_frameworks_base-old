@@ -3806,6 +3806,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             if (mUxPerf != null && !mForceStopKill) {
                 mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, app.processName, 0);
+                mUxPerf.perfHint(BoostFramework.VENDOR_HINT_KILL, app.processName, pid, 0);
             }
 
             EventLog.writeEvent(EventLogTags.AM_PROC_DIED, app.userId, app.pid, app.processName,
@@ -4705,6 +4706,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                         + " user=" + userId + ": " + reason);
             } else {
                 Slog.i(TAG, "Force stopping u" + userId + ": " + reason);
+            }
+            if (mUxPerf != null) {
+                mUxPerf.perfHint(BoostFramework.VENDOR_HINT_KILL, packageName, appId, 0);
             }
 
             mAppErrors.resetProcessCrashTimeLocked(packageName == null, appId, userId);
