@@ -513,8 +513,10 @@ public class DisplayPolicy {
 
                     @Override
                     public void onSwipeFromRight() {
-                        final Region excludedRegion =
-                                mDisplayContent.calculateSystemGestureExclusion();
+                        final Region excludedRegion;
+                        synchronized (mLock) {
+                            excludedRegion = mDisplayContent.calculateSystemGestureExclusion();
+                        }
                         final boolean sideAllowed = mNavigationBarAlwaysShowOnSideGesture
                                 || mNavigationBarPosition == NAV_BAR_RIGHT;
                         if (mNavigationBar != null && sideAllowed
@@ -525,8 +527,10 @@ public class DisplayPolicy {
 
                     @Override
                     public void onSwipeFromLeft() {
-                        final Region excludedRegion =
-                                mDisplayContent.calculateSystemGestureExclusion();
+                        final Region excludedRegion;
+                        synchronized (mLock) {
+                            excludedRegion = mDisplayContent.calculateSystemGestureExclusion();
+                        }
                         final boolean sideAllowed = mNavigationBarAlwaysShowOnSideGesture
                                 || mNavigationBarPosition == NAV_BAR_LEFT;
                         if (mNavigationBar != null && sideAllowed
