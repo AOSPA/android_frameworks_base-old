@@ -801,8 +801,10 @@ class ProcessRecord implements WindowProcessListener {
                 killed = true;
                 killedByAm = true;
             }
-            if (ux_perf != null) {
+            if (ux_perf != null && !mService.mForceStopKill) {
                 ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, this.processName, 0);
+            } else {
+                mService.mForceStopKill = false;
             }
             Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
