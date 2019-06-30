@@ -124,8 +124,7 @@
     <string name="biometric_dialog_face_icon_description_authenticating" msgid="4512727754496228488">"ଆପଣଙ୍କର ମୁହଁକୁ ପ୍ରମାଣ କରୁଛି"</string>
     <string name="biometric_dialog_face_icon_description_authenticated" msgid="595380451325425259">"ମୁହଁ ପ୍ରାମାଣିକତା ହୋଇଛି"</string>
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="2003141400387093967">"ସୁନିଶ୍ଚିତ କରାଯାଇଛି"</string>
-    <!-- no translation found for biometric_dialog_tap_confirm (4540715260292022404) -->
-    <skip />
+    <string name="biometric_dialog_tap_confirm" msgid="4540715260292022404">"ସମ୍ପୂର୍ଣ୍ଣ କରିବାକୁ ସୁନିଶ୍ଚିତ କରନ୍ତୁରେ ଟାପ୍ କରନ୍ତୁ"</string>
     <string name="fingerprint_dialog_touch_sensor" msgid="8511557690663181761">"ଟିପଚିହ୍ନ ସେନସର୍‌କୁ ଛୁଅଁନ୍ତୁ"</string>
     <string name="accessibility_fingerprint_dialog_fingerprint_icon" msgid="3125122495414253226">"ଆଙ୍ଗୁଠି ଚିହ୍ନ ଆଇକନ୍"</string>
     <string name="face_dialog_looking_for_face" msgid="7049276266074494689">"ଆପଣଙ୍କୁ ଚିହ୍ନଟ କରୁଛି…"</string>
