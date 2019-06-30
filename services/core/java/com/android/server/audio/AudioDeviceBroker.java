@@ -251,9 +251,9 @@ import com.android.internal.annotations.GuardedBy;
             @NonNull BluetoothDevice device,
             @AudioService.BtProfileConnectionState int state, int profile,
             boolean suppressNoisyIntent, int a2dpVolume) {
-        final BtDeviceConnectionInfo info = new BtDeviceConnectionInfo(device, state, profile,
-                suppressNoisyIntent, a2dpVolume);
-        sendLMsgNoDelay(MSG_L_A2DP_ACTIVE_DEVICE_CHANGE_EXT, SENDMSG_QUEUE, info);
+         final BtDeviceConnectionInfo info = new BtDeviceConnectionInfo(device, state, profile,
+                 suppressNoisyIntent, a2dpVolume);
+         sendLMsgNoDelay(MSG_L_A2DP_ACTIVE_DEVICE_CHANGE_EXT, SENDMSG_QUEUE, info);
     }
 
     private static final class HearingAidDeviceConnectionInfo {
@@ -605,9 +605,8 @@ import com.android.internal.annotations.GuardedBy;
         return mBrokerHandler.hasMessages(MSG_IL_BTA2DP_DOCK_TIMEOUT);
     }
 
-    //###
     // must be called synchronized on mConnectedDevices
-    /*package*/  boolean hasScheduledA2dpSinkConnectionState(BluetoothDevice btDevice) {
+    /*package*/ boolean hasScheduledA2dpSinkConnectionState(BluetoothDevice btDevice) {
         return mBrokerHandler.hasMessages(MSG_IL_SET_A2DP_SINK_CONNECTION_STATE,
                 new BtHelper.BluetoothA2dpDeviceInfo(btDevice));
     }
@@ -892,13 +891,13 @@ import com.android.internal.annotations.GuardedBy;
                 case MSG_L_A2DP_ACTIVE_DEVICE_CHANGE_EXT: {
                     final BtDeviceConnectionInfo info = (BtDeviceConnectionInfo) msg.obj;
                     AudioService.sDeviceLogger.log((new AudioEventLogger.StringEvent(
-                            "handleBluetoothA2dpActiveDeviceChangeExt "
-                                    + " state=" + info.mState
-                                    // only querying address as this is the only readily available
-                                    // field on the device
-                                    + " addr=" + info.mDevice.getAddress()
-                                    + " prof=" + info.mProfile + " supprNoisy=" + info.mSupprNoisy
-                                    + " vol=" + info.mVolume)).printLog(TAG));
+                    "handleBluetoothA2dpActiveDeviceChangeExt "
+                           + " state=" + info.mState
+                           // only querying address as this is the only readily available
+                           // field on the device
+                           + " addr=" + info.mDevice.getAddress()
+                           + " prof=" + info.mProfile + " supprNoisy=" + info.mSupprNoisy
+                           + " vol=" + info.mVolume)).printLog(TAG));
                     synchronized (mDeviceStateLock) {
                         mDeviceInventory.handleBluetoothA2dpActiveDeviceChangeExt(
                                 info.mDevice, info.mState, info.mProfile,

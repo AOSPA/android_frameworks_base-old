@@ -4315,13 +4315,13 @@ public class AudioManager {
     public void handleBluetoothA2dpActiveDeviceChange(
                 BluetoothDevice device, int state, int profile,
                 boolean suppressNoisyIntent, int a2dpVolume) {
-        final IAudioService service = getService();
-        try {
-            service.handleBluetoothA2dpActiveDeviceChange(device,
-                state, profile, suppressNoisyIntent, a2dpVolume);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+         final IAudioService service = getService();
+         try {
+             service.handleBluetoothA2dpActiveDeviceChange(device,
+                   state, profile, suppressNoisyIntent, a2dpVolume);
+         } catch (RemoteException e) {
+             throw e.rethrowFromSystemServer();
+         }
     }
 
     /** {@hide} */

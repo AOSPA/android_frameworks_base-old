@@ -18,11 +18,13 @@ package com.android.systemui.statusbar.phone;
 
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
 
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_BOUNCER_SHOWING;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING;
+import static com.android.systemui.shared.system.QuickStepContract.SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING_OCCLUDED;
 import static com.android.systemui.statusbar.NotificationRemoteInputManager.ENABLE_REMOTE_INPUT;
 
 import android.app.ActivityManager;
 import android.app.IActivityManager;
-import android.app.WallpaperManager;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Resources;
@@ -45,6 +47,7 @@ import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController.StateListener;
+import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.statusbar.RemoteInputController.Callback;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
@@ -315,6 +318,18 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
             }
             mHasTopUi = mHasTopUiChanged;
         }
+        updateSystemUiStateFlags();
+    }
+
+    public void updateSystemUiStateFlags() {
+        int displayId = mContext.getDisplayId();
+        OverviewProxyService overviewProxyService = Dependency.get(OverviewProxyService.class);
+        overviewProxyService.setSystemUiStateFlag(SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING,
+                mCurrentState.keyguardShowing && !mCurrentState.keyguardOccluded, displayId);
+        overviewProxyService.setSystemUiStateFlag(SYSUI_STATE_STATUS_BAR_KEYGUARD_SHOWING_OCCLUDED,
+                mCurrentState.keyguardShowing && mCurrentState.keyguardOccluded, displayId);
+        overviewProxyService.setSystemUiStateFlag(SYSUI_STATE_BOUNCER_SHOWING,
+                mCurrentState.bouncerShowing, displayId);
     }
 
     private void applyForceStatusBarVisibleFlag(State state) {
@@ -540,17 +555,7 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
             return;
         }
 
-        StatusBarStateController state = Dependency.get(StatusBarStateController.class);
-        int which;
-        if (state.getState() == StatusBarState.KEYGUARD
-                || state.getState() == StatusBarState.SHADE_LOCKED) {
-            which = WallpaperManager.FLAG_LOCK;
-        } else {
-            which = WallpaperManager.FLAG_SYSTEM;
-        }
-        final boolean useDarkText = mColorExtractor.getColors(which,
-                true /* ignoreVisibility */).supportsDarkText();
-
+        final boolean useDarkText = mColorExtractor.getNeutralColors().supportsDarkText();
         // Make sure we have the correct navbar/statusbar colors.
         setKeyguardDark(useDarkText);
     }

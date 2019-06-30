@@ -3571,8 +3571,9 @@ public class WindowManagerService extends IWindowManager.Stub
         return true;
     }
 
-    public TaskSnapshot getTaskSnapshot(int taskId, int userId, boolean reducedResolution) {
-        return mTaskSnapshotController.getSnapshot(taskId, userId, true /* restoreFromDisk */,
+    public TaskSnapshot getTaskSnapshot(int taskId, int userId, boolean reducedResolution,
+            boolean restoreFromDisk) {
+        return mTaskSnapshotController.getSnapshot(taskId, userId, restoreFromDisk,
                 reducedResolution);
     }
 
