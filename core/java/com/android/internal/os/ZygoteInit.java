@@ -87,7 +87,6 @@ public class ZygoteInit {
 
     private static final String PROPERTY_DISABLE_GRAPHICS_DRIVER_PRELOADING =
             "ro.zygote.disable_gl_preload";
-    private static final String PROPERTY_GFX_DRIVER = "ro.gfx.driver.0";
 
     private static final int LOG_BOOT_PROGRESS_PRELOAD_START = 3020;
     private static final int LOG_BOOT_PROGRESS_PRELOAD_END = 3030;
@@ -189,6 +188,11 @@ public class ZygoteInit {
         System.loadLibrary("android");
         System.loadLibrary("compiler_rt");
         System.loadLibrary("jnigraphics");
+        try {
+            System.loadLibrary("qti_performance");
+        } catch (UnsatisfiedLinkError e) {
+            Log.e(TAG, "Couldn't load qti_performance");
+        }
     }
 
     native private static void nativePreloadAppProcessHALs();
@@ -203,9 +207,7 @@ public class ZygoteInit {
     static native void nativePreloadGraphicsDriver();
 
     private static void maybePreloadGraphicsDriver() {
-        String driverPackageName = SystemProperties.get(PROPERTY_GFX_DRIVER);
-        if (!SystemProperties.getBoolean(PROPERTY_DISABLE_GRAPHICS_DRIVER_PRELOADING, false)
-                && (driverPackageName == null || driverPackageName.isEmpty())) {
+        if (!SystemProperties.getBoolean(PROPERTY_DISABLE_GRAPHICS_DRIVER_PRELOADING, false)) {
             nativePreloadGraphicsDriver();
         }
     }

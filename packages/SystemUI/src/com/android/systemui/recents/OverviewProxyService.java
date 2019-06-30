@@ -41,7 +41,6 @@ import android.graphics.Region;
 import android.hardware.input.InputManager;
 import android.os.Binder;
 import android.os.Bundle;
-import android.os.Debug;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -54,7 +53,6 @@ import android.view.MotionEvent;
 import android.view.accessibility.AccessibilityManager;
 
 import com.android.internal.policy.ScreenDecorationsUtils;
-import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.recents.OverviewProxyService.OverviewProxyListener;
@@ -69,6 +67,7 @@ import com.android.systemui.statusbar.phone.NavigationBarFragment;
 import com.android.systemui.statusbar.phone.NavigationBarView;
 import com.android.systemui.statusbar.phone.NavigationModeController;
 import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.phone.StatusBarWindowController;
 import com.android.systemui.statusbar.policy.CallbackController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
@@ -100,6 +99,8 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
 
     private final Context mContext;
     private final Handler mHandler;
+    private final NavigationBarController mNavBarController;
+    private final StatusBarWindowController mStatusBarWinController;
     private final Runnable mConnectionRunnable = this::internalConnectToCurrentUser;
     private final ComponentName mRecentsComponentName;
     private final DeviceProvisionedController mDeviceProvisionedController;
@@ -446,9 +447,13 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             = this::cleanupAfterDeath;
 
     @Inject
-    public OverviewProxyService(Context context, DeviceProvisionedController provisionController) {
+    public OverviewProxyService(Context context, DeviceProvisionedController provisionController,
+            NavigationBarController navBarController, NavigationModeController navModeController,
+            StatusBarWindowController statusBarWinController) {
         mContext = context;
         mHandler = new Handler();
+        mNavBarController = navBarController;
+        mStatusBarWinController = statusBarWinController;
         mDeviceProvisionedController = provisionController;
         mConnectionBackoffAttempts = 0;
         mRecentsComponentName = ComponentName.unflattenFromString(context.getString(
@@ -463,7 +468,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         mBackButtonAlpha = 1.0f;
 
         // Listen for nav bar mode changes
-        mNavBarMode = Dependency.get(NavigationModeController.class).addListener(this);
+        mNavBarMode = navModeController.addListener(this);
 
         // Listen for device provisioned/user setup
         updateEnabledState();
@@ -513,10 +518,10 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     }
 
     private void updateSystemUiStateFlags() {
-        final NavigationBarController navBar = Dependency.get(NavigationBarController.class);
-        final NavigationBarFragment navBarFragment = navBar.getDefaultNavigationBarFragment();
-        final NavigationBarView navBarView = navBar.getNavigationBarView(mContext.getDisplayId());
-        final StatusBar statusBar = SysUiServiceProvider.getComponent(mContext, StatusBar.class);
+        final NavigationBarFragment navBarFragment =
+                mNavBarController.getDefaultNavigationBarFragment();
+        final NavigationBarView navBarView =
+                mNavBarController.getNavigationBarView(mContext.getDisplayId());
 
         mSysUiStateFlags = 0;
         if (navBarFragment != null) {
@@ -525,8 +530,8 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         if (navBarView != null) {
             navBarView.updateSystemUiStateFlags();
         }
-        if (statusBar != null) {
-            statusBar.updateSystemUiStateFlags();
+        if (mStatusBarWinController != null) {
+            mStatusBarWinController.updateSystemUiStateFlags();
         }
         notifySystemUiStateFlags(mSysUiStateFlags);
     }

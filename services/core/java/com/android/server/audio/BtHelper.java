@@ -164,6 +164,21 @@ public class BtHelper {
         return deviceName;
     }
 
+    /*packages*/ @NonNull static boolean isTwsPlusSwitch(@NonNull BluetoothDevice device,
+                                                                 String address) {
+        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+        if (device == null || adapter.getRemoteDevice(address) == null ||
+            device.getTwsPlusPeerAddress() == null) {
+            return false;
+        }
+        if (device.isTwsPlusDevice() &&
+            adapter.getRemoteDevice(address).isTwsPlusDevice() &&
+            device.getTwsPlusPeerAddress().equals(address)) {
+            Log.i(TAG,"isTwsPlusSwitch true");
+            return true;
+         }
+         return false;
+    }
     //----------------------------------------------------------------------
     // Interface for AudioDeviceBroker
 
@@ -205,16 +220,20 @@ public class BtHelper {
 
     /*package*/ synchronized void setAvrcpAbsoluteVolumeSupported(boolean supported) {
         mAvrcpAbsVolSupported = supported;
+        Log.i(TAG, "setAvrcpAbsoluteVolumeSupported supported=" + supported);
     }
 
     /*package*/ synchronized void setAvrcpAbsoluteVolumeIndex(int index) {
         if (mA2dp == null) {
             if (AudioService.DEBUG_VOL) {
-                Log.d(TAG, "setAvrcpAbsoluteVolumeIndex: bailing due to null mA2dp");
+                AudioService.sVolumeLogger.log(new AudioEventLogger.StringEvent(
+                        "setAvrcpAbsoluteVolumeIndex: bailing due to null mA2dp").printLog(TAG));
                 return;
             }
         }
         if (!mAvrcpAbsVolSupported) {
+            AudioService.sVolumeLogger.log(new AudioEventLogger.StringEvent(
+                    "setAvrcpAbsoluteVolumeIndex: abs vol not supported ").printLog(TAG));
             return;
         }
         if (AudioService.DEBUG_VOL) {

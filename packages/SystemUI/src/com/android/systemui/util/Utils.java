@@ -28,6 +28,11 @@ import java.util.function.Consumer;
 public class Utils {
 
     /**
+     * An int extra specifying a slot ID.
+     */
+    public static final String EXTRA_SLOT_ID = "slot_id";
+
+    /**
      * Allows lambda iteration over a list. It is done in reverse order so it is safe
      * to add or remove items during the iteration.  Skips over null items.
      */

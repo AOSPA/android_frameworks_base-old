@@ -2580,9 +2580,7 @@ public class PackageManagerService extends IPackageManager.Stub
             mIsPreNUpgrade = mIsUpgrade && ver.sdkVersion < Build.VERSION_CODES.N;
 
             mIsPreNMR1Upgrade = mIsUpgrade && ver.sdkVersion < Build.VERSION_CODES.N_MR1;
-            mIsPreQUpgrade = mIsUpgrade && ver.sdkVersion < Build.VERSION_CODES.Q
-                    // STOPSHIP: Remove next line when API level for Q is defined.
-                    && Build.VERSION.SDK_INT > Build.VERSION_CODES.P;
+            mIsPreQUpgrade = mIsUpgrade && ver.sdkVersion < Build.VERSION_CODES.Q;
 
             int preUpgradeSdkVersion = ver.sdkVersion;
 
@@ -5676,27 +5674,6 @@ public class PackageManagerService extends IPackageManager.Stub
             for (int i = 0; pkg == null && i < N; i++) {
                 pkg = mPackages.get(packageNames[i]);
             }
-            // Additional logs for b/111075456; ignore system UIDs
-            if (pkg == null && UserHandle.getAppId(uid) >= Process.FIRST_APPLICATION_UID) {
-                if (packageNames == null || packageNames.length < 2) {
-                    // unclear if this is shared user or just a missing application
-                    Log.e(TAG, "Failed to find package"
-                            + "; permName: " + permName
-                            + ", uid: " + uid
-                            + ", caller: " + Binder.getCallingUid(),
-                            new Throwable());
-                } else {
-                    // definitely shared user
-                    Log.e(TAG, "Failed to find package"
-                            + "; permName: " + permName
-                            + ", uid: " + uid
-                            + ", caller: " + Binder.getCallingUid()
-                            + ", packages: " + Arrays.toString(packageNames),
-                            new Throwable());
-                }
-                // run again just to try to get debug output
-                getPackagesForUid_debug(uid, true);
-            }
             return mPermissionManager.checkUidPermission(permName, pkg, uid, getCallingUid());
         }
     }
@@ -6424,25 +6401,15 @@ public class PackageManagerService extends IPackageManager.Stub
      */
     @Override
     public String[] getPackagesForUid(int uid) {
-        return getPackagesForUid_debug(uid, false);
-    }
-    // Debug output for b/111075456
-    private String[] getPackagesForUid_debug(int uid, boolean debug) {
         final int callingUid = Binder.getCallingUid();
         final boolean isCallerInstantApp = getInstantAppPackageName(callingUid) != null;
         final int userId = UserHandle.getUserId(uid);
         final int appId = UserHandle.getAppId(uid);
-        if (debug) Slog.e(TAG, "Finding packages for UID"
-                + "; uid: " + uid
-                + ", userId: " + userId
-                + ", appId: " + appId
-                + ", caller: " + callingUid);
         // reader
         synchronized (mPackages) {
             final Object obj = mSettings.getSettingLPr(appId);
             if (obj instanceof SharedUserSetting) {
                 if (isCallerInstantApp) {
-                    if (debug) Slog.e(TAG, "Caller is instant and package has shared users");
                     return null;
                 }
                 final SharedUserSetting sus = (SharedUserSetting) obj;
@@ -6450,13 +6417,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 String[] res = new String[N];
                 final Iterator<PackageSetting> it = sus.packages.iterator();
                 int i = 0;
-                if (debug && !it.hasNext()) Slog.e(TAG, "Shared user, but, no packages");
                 while (it.hasNext()) {
                     PackageSetting ps = it.next();
-                    if (debug) Slog.e(TAG, "Check shared package"
-                            + "; installed? " + ps.getInstalled(userId)
-                            + ", shared setting: " + ps
-                            + ", package setting: " + mSettings.mPackages.get(ps.name));
                     if (ps.getInstalled(userId)) {
                         res[i++] = ps.name;
                     } else {
@@ -6469,12 +6431,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 if (ps.getInstalled(userId) && !filterAppAccessLPr(ps, callingUid, userId)) {
                     return new String[]{ps.name};
                 }
-                if (debug) Slog.e(TAG, "Removing normal package"
-                        + "; installed? " + ps.getInstalled(userId)
-                        + ", filtered? " + filterAppAccessLPr(ps, callingUid, userId));
-            } else if (debug) {
-                if (debug) Slog.e(TAG, "No setting found"
-                        + "; obj: " + (obj == null ? "<<NULL>>" : obj.toString()));
             }
         }
         return null;
@@ -14788,7 +14744,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
             if (ps != null) {
                 try {
-                    rm.restoreUserData(packageName, installedUsers, appId, ceDataInode,
+                    rm.snapshotAndRestoreUserData(packageName, installedUsers, appId, ceDataInode,
                             seInfo, token);
                 } catch (RemoteException re) {
                     // Cannot happen, the RollbackManager is hosted in the same process.
@@ -15045,7 +15001,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 params.handleStartCopy();
                 if (params.mRet != INSTALL_SUCCEEDED) {
                     mRet = params.mRet;
-                    break;
                 }
             }
         }
@@ -15056,31 +15011,32 @@ public class PackageManagerService extends IPackageManager.Stub
                 params.handleReturnCode();
                 if (params.mRet != INSTALL_SUCCEEDED) {
                     mRet = params.mRet;
-                    break;
                 }
             }
         }
 
         void tryProcessInstallRequest(InstallArgs args, int currentStatus) {
             mCurrentState.put(args, currentStatus);
-            boolean success = true;
             if (mCurrentState.size() != mChildParams.size()) {
                 return;
             }
+            int completeStatus = PackageManager.INSTALL_SUCCEEDED;
             for (Integer status : mCurrentState.values()) {
                 if (status == PackageManager.INSTALL_UNKNOWN) {
                     return;
                 } else if (status != PackageManager.INSTALL_SUCCEEDED) {
-                    success = false;
+                    completeStatus = status;
                     break;
                 }
             }
             final List<InstallRequest> installRequests = new ArrayList<>(mCurrentState.size());
             for (Map.Entry<InstallArgs, Integer> entry : mCurrentState.entrySet()) {
                 installRequests.add(new InstallRequest(entry.getKey(),
-                        createPackageInstalledInfo(entry.getValue())));
+                        createPackageInstalledInfo(completeStatus)));
             }
-            processInstallRequestsAsync(success, installRequests);
+            processInstallRequestsAsync(
+                    completeStatus == PackageManager.INSTALL_SUCCEEDED,
+                    installRequests);
         }
     }
 
@@ -15628,6 +15584,22 @@ public class PackageManagerService extends IPackageManager.Stub
         @Override
         void handleReturnCode() {
             if (mVerificationCompleted && mEnableRollbackCompleted) {
+                if ((installFlags & PackageManager.INSTALL_DRY_RUN) != 0) {
+                    String packageName = "";
+                    try {
+                        PackageLite packageInfo =
+                                new PackageParser().parsePackageLite(origin.file, 0);
+                        packageName = packageInfo.packageName;
+                    } catch (PackageParserException e) {
+                        Slog.e(TAG, "Can't parse package at " + origin.file.getAbsolutePath(), e);
+                    }
+                    try {
+                        observer.onPackageInstalled(packageName, mRet, "Dry run", new Bundle());
+                    } catch (RemoteException e) {
+                        Slog.i(TAG, "Observer no longer exists.");
+                    }
+                    return;
+                }
                 if (mRet == PackageManager.INSTALL_SUCCEEDED) {
                     mRet = mArgs.copyApk();
                 }
@@ -18102,9 +18074,15 @@ public class PackageManagerService extends IPackageManager.Stub
                 if (Build.IS_DEBUGGABLE) Slog.i(TAG, "Enabling verity to " + filePath);
                 final FileDescriptor fd = result.getUnownedFileDescriptor();
                 try {
-                    mInstaller.installApkVerity(filePath, fd, result.getContentSize());
                     final byte[] rootHash = VerityUtils.generateApkVerityRootHash(filePath);
-                    mInstaller.assertFsverityRootHashMatches(filePath, rootHash);
+                    try {
+                        // A file may already have fs-verity, e.g. when reused during a split
+                        // install. If the measurement succeeds, no need to attempt to set up.
+                        mInstaller.assertFsverityRootHashMatches(filePath, rootHash);
+                    } catch (InstallerException e) {
+                        mInstaller.installApkVerity(filePath, fd, result.getContentSize());
+                        mInstaller.assertFsverityRootHashMatches(filePath, rootHash);
+                    }
                 } finally {
                     IoUtils.closeQuietly(fd);
                 }
