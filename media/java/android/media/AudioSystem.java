@@ -24,7 +24,6 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.media.audiofx.AudioEffect;
 import android.media.audiopolicy.AudioMix;
-import android.os.Build;
 import android.util.Log;
 
 import java.util.ArrayList;
@@ -989,6 +988,8 @@ public class AudioSystem
     public static native boolean getMasterMono();
     /** @hide enables or disables the master mono mode. */
     public static native int setMasterMono(boolean mono);
+    /** @hide enables or disables the RTT mode. */
+    public static native int setRttEnabled(boolean enabled);
 
     /** @hide returns master balance value in range -1.f -> 1.f, where 0.f is dead center. */
     @TestApi
@@ -998,9 +999,9 @@ public class AudioSystem
     public static native int setMasterBalance(float balance);
 
     // helpers for android.media.AudioManager.getProperty(), see description there for meaning
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 112561552)
+    @UnsupportedAppUsage(trackingBug = 134049522)
     public static native int getPrimaryOutputSamplingRate();
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 112561552)
+    @UnsupportedAppUsage(trackingBug = 134049522)
     public static native int getPrimaryOutputFrameCount();
     @UnsupportedAppUsage
     public static native int getOutputLatency(int stream);

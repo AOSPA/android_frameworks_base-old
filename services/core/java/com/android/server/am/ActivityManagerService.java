@@ -553,6 +553,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     private static final int MAX_BUGREPORT_TITLE_SIZE = 50;
 
     private static final int NATIVE_DUMP_TIMEOUT_MS = 2000; // 2 seconds;
+    private static final int JAVA_DUMP_MINIMUM_SIZE = 100; // 100 bytes.
 
     /* Freq Aggr boost objects */
     public static BoostFramework mPerfServiceStartHint = null;
@@ -3871,9 +3872,28 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     private static long dumpJavaTracesTombstoned(int pid, String fileName, long timeoutMs) {
         final long timeStart = SystemClock.elapsedRealtime();
-        if (!Debug.dumpJavaBacktraceToFileTimeout(pid, fileName, (int) (timeoutMs / 1000))) {
-            Debug.dumpNativeBacktraceToFileTimeout(pid, fileName,
-                    (NATIVE_DUMP_TIMEOUT_MS / 1000));
+        boolean javaSuccess = Debug.dumpJavaBacktraceToFileTimeout(pid, fileName,
+                (int) (timeoutMs / 1000));
+        if (javaSuccess) {
+            // Check that something is in the file, actually. Try-catch should not be necessary,
+            // but better safe than sorry.
+            try {
+                long size = new File(fileName).length();
+                if (size < JAVA_DUMP_MINIMUM_SIZE) {
+                    Slog.w(TAG, "Successfully created Java ANR file is empty!");
+                    javaSuccess = false;
+                }
+            } catch (Exception e) {
+                Slog.w(TAG, "Unable to get ANR file size", e);
+                javaSuccess = false;
+            }
+        }
+        if (!javaSuccess) {
+            Slog.w(TAG, "Dumping Java threads failed, initiating native stack dump.");
+            if (!Debug.dumpNativeBacktraceToFileTimeout(pid, fileName,
+                    (NATIVE_DUMP_TIMEOUT_MS / 1000))) {
+                Slog.w(TAG, "Native stack dump failed!");
+            }
         }
 
         return SystemClock.elapsedRealtime() - timeStart;
@@ -5445,34 +5465,13 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void registerIntentSenderCancelListener(IIntentSender sender, IResultReceiver receiver) {
-        if (!(sender instanceof PendingIntentRecord)) {
-            return;
-        }
-        boolean isCancelled;
-        synchronized(this) {
-            PendingIntentRecord pendingIntent = (PendingIntentRecord) sender;
-            isCancelled = pendingIntent.canceled;
-            if (!isCancelled) {
-                pendingIntent.registerCancelListenerLocked(receiver);
-            }
-        }
-        if (isCancelled) {
-            try {
-                receiver.send(Activity.RESULT_CANCELED, null);
-            } catch (RemoteException e) {
-            }
-        }
+        mPendingIntentController.registerIntentSenderCancelListener(sender, receiver);
     }
 
     @Override
     public void unregisterIntentSenderCancelListener(IIntentSender sender,
             IResultReceiver receiver) {
-        if (!(sender instanceof PendingIntentRecord)) {
-            return;
-        }
-        synchronized(this) {
-            ((PendingIntentRecord)sender).unregisterCancelListenerLocked(receiver);
-        }
+        mPendingIntentController.unregisterIntentSenderCancelListener(sender, receiver);
     }
 
     @Override
@@ -7370,6 +7369,13 @@ public class ActivityManagerService extends IActivityManager.Stub
                     if (wasInLaunchingProviders) {
                         mHandler.removeMessages(CONTENT_PROVIDER_PUBLISH_TIMEOUT_MSG, r);
                     }
+                    // Make sure the package is associated with the process.
+                    // XXX We shouldn't need to do this, since we have added the package
+                    // when we generated the providers in generateApplicationProvidersLocked().
+                    // But for some reason in some cases we get here with the package no longer
+                    // added...  for now just patch it in to make things happy.
+                    r.addPackage(dst.info.applicationInfo.packageName,
+                            dst.info.applicationInfo.longVersionCode, mProcessStats);
                     synchronized (dst) {
                         dst.provider = src.provider;
                         dst.setProcess(r);
@@ -17754,13 +17760,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         @Override
         public void setPendingIntentWhitelistDuration(IIntentSender target, IBinder whitelistToken,
                 long duration) {
-            if (!(target instanceof PendingIntentRecord)) {
-                Slog.w(TAG, "markAsSentFromNotification(): not a PendingIntentRecord: " + target);
-                return;
-            }
-            synchronized (ActivityManagerService.this) {
-                ((PendingIntentRecord) target).setWhitelistDurationLocked(whitelistToken, duration);
-            }
+            mPendingIntentController.setPendingIntentWhitelistDuration(target, whitelistToken,
+                    duration);
         }
 
         @Override
@@ -18231,13 +18232,20 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
 
+        // The arguments here are untyped because the base ActivityManagerInternal class
+        // doesn't have compile-time visiblity into ActivityServiceConnectionHolder or
+        // ConnectionRecord.
         @Override
-        public void disconnectActivityFromServices(Object connectionHolder) {
+        public void disconnectActivityFromServices(Object connectionHolder, Object conns) {
+            // 'connectionHolder' is an untyped ActivityServiceConnectionsHolder
+            // 'conns' is an untyped HashSet<ConnectionRecord>
+            final ActivityServiceConnectionsHolder holder =
+                    (ActivityServiceConnectionsHolder) connectionHolder;
+            final HashSet<ConnectionRecord> toDisconnect = (HashSet<ConnectionRecord>) conns;
             synchronized(ActivityManagerService.this) {
-                final ActivityServiceConnectionsHolder c =
-                        (ActivityServiceConnectionsHolder) connectionHolder;
-                c.forEachConnection(cr -> mServices.removeConnectionLocked(
-                        (ConnectionRecord) cr, null, c));
+                for (ConnectionRecord cr : toDisconnect) {
+                    mServices.removeConnectionLocked(cr, null, holder);
+                }
             }
         }
 
@@ -18267,10 +18275,6 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         public boolean isActivityStartsLoggingEnabled() {
             return mConstants.mFlagActivityStartsLoggingEnabled;
-        }
-
-        public boolean isPackageNameWhitelistedForBgActivityStarts(String packageName) {
-            return mConstants.mPackageNamesWhitelistedForBgActivityStarts.contains(packageName);
         }
 
         public boolean isBackgroundActivityStartsEnabled() {

@@ -735,8 +735,13 @@ public final class SystemServer {
                     (int) SystemClock.elapsedRealtime());
         }
         traceBeginAndSlog("StartPackageManagerService");
-        mPackageManagerService = PackageManagerService.main(mSystemContext, installer,
-                mFactoryTestMode != FactoryTest.FACTORY_TEST_OFF, mOnlyCore);
+        try {
+            Watchdog.getInstance().pauseWatchingCurrentThread("packagemanagermain");
+            mPackageManagerService = PackageManagerService.main(mSystemContext, installer,
+                    mFactoryTestMode != FactoryTest.FACTORY_TEST_OFF, mOnlyCore);
+        } finally {
+            Watchdog.getInstance().resumeWatchingCurrentThread("packagemanagermain");
+        }
         mFirstBoot = mPackageManagerService.isFirstBoot();
         mPackageManager = mSystemContext.getPackageManager();
         traceEnd();
@@ -753,10 +758,12 @@ public final class SystemServer {
             if (!disableOtaDexopt) {
                 traceBeginAndSlog("StartOtaDexOptService");
                 try {
+                    Watchdog.getInstance().pauseWatchingCurrentThread("moveab");
                     OtaDexoptService.main(mSystemContext, mPackageManagerService);
                 } catch (Throwable e) {
                     reportWtf("starting OtaDexOptService", e);
                 } finally {
+                    Watchdog.getInstance().resumeWatchingCurrentThread("moveab");
                     traceEnd();
                 }
             }

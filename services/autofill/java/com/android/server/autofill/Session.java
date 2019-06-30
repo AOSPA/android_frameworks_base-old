@@ -569,12 +569,13 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
     @GuardedBy("mLock")
     private void requestNewFillResponseLocked(@NonNull ViewState viewState, int newState,
             int flags) {
-        if (mForAugmentedAutofillOnly) {
+        if (mForAugmentedAutofillOnly || mRemoteFillService == null) {
             if (sVerbose) {
                 Slog.v(TAG, "requestNewFillResponse(): triggering augmented autofill instead "
                         + "(mForAugmentedAutofillOnly=" + mForAugmentedAutofillOnly
                         + ", flags=" + flags + ")");
             }
+            mForAugmentedAutofillOnly = true;
             triggerAugmentedAutofillLocked();
             return;
         }
@@ -2178,6 +2179,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
     private void requestNewFillResponseOnViewEnteredIfNecessaryLocked(@NonNull AutofillId id,
             @NonNull ViewState viewState, int flags) {
         if ((flags & FLAG_MANUAL_REQUEST) != 0) {
+            mForAugmentedAutofillOnly = false;
             if (sDebug) Slog.d(TAG, "Re-starting session on view " + id + " and flags " + flags);
             requestNewFillResponseLocked(viewState, ViewState.STATE_RESTARTED_SESSION, flags);
             return;

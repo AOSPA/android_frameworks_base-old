@@ -111,9 +111,6 @@ import static com.android.server.pm.PackageManagerServiceUtils.getCompressedFile
 import static com.android.server.pm.PackageManagerServiceUtils.getLastModifiedTime;
 import static com.android.server.pm.PackageManagerServiceUtils.logCriticalInfo;
 import static com.android.server.pm.PackageManagerServiceUtils.verifySignatures;
-import static com.android.server.pm.permission.PermissionsState.PERMISSION_OPERATION_FAILURE;
-import static com.android.server.pm.permission.PermissionsState.PERMISSION_OPERATION_SUCCESS;
-import static com.android.server.pm.permission.PermissionsState.PERMISSION_OPERATION_SUCCESS_GIDS_CHANGED;
 
 import android.Manifest;
 import android.annotation.IntDef;
@@ -295,6 +292,7 @@ import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.IndentingPrintWriter;
+import com.android.internal.util.IntPair;
 import com.android.internal.util.Preconditions;
 import com.android.server.AttributeCache;
 import com.android.server.DeviceIdleController;
@@ -1509,7 +1507,8 @@ public class PackageManagerService extends IPackageManager.Stub
                         final List<String> whitelistedRestrictedPermissions = ((args.installFlags
                                 & PackageManager.INSTALL_ALL_WHITELIST_RESTRICTED_PERMISSIONS) != 0
                                     && parentRes.pkg != null)
-                                ? parentRes.pkg.requestedPermissions : null;
+                                ? parentRes.pkg.requestedPermissions
+                                : args.whitelistedRestrictedPermissions;
 
                         // Handle the parent package
                         handlePackagePostInstall(parentRes, grantPermissions,
@@ -2580,9 +2579,7 @@ public class PackageManagerService extends IPackageManager.Stub
             mIsPreNUpgrade = mIsUpgrade && ver.sdkVersion < Build.VERSION_CODES.N;
 
             mIsPreNMR1Upgrade = mIsUpgrade && ver.sdkVersion < Build.VERSION_CODES.N_MR1;
-            mIsPreQUpgrade = mIsUpgrade && ver.sdkVersion < Build.VERSION_CODES.Q
-                    // STOPSHIP: Remove next line when API level for Q is defined.
-                    && Build.VERSION.SDK_INT > Build.VERSION_CODES.P;
+            mIsPreQUpgrade = mIsUpgrade && ver.sdkVersion < Build.VERSION_CODES.Q;
 
             int preUpgradeSdkVersion = ver.sdkVersion;
 
@@ -5676,27 +5673,6 @@ public class PackageManagerService extends IPackageManager.Stub
             for (int i = 0; pkg == null && i < N; i++) {
                 pkg = mPackages.get(packageNames[i]);
             }
-            // Additional logs for b/111075456; ignore system UIDs
-            if (pkg == null && UserHandle.getAppId(uid) >= Process.FIRST_APPLICATION_UID) {
-                if (packageNames == null || packageNames.length < 2) {
-                    // unclear if this is shared user or just a missing application
-                    Log.e(TAG, "Failed to find package"
-                            + "; permName: " + permName
-                            + ", uid: " + uid
-                            + ", caller: " + Binder.getCallingUid(),
-                            new Throwable());
-                } else {
-                    // definitely shared user
-                    Log.e(TAG, "Failed to find package"
-                            + "; permName: " + permName
-                            + ", uid: " + uid
-                            + ", caller: " + Binder.getCallingUid()
-                            + ", packages: " + Arrays.toString(packageNames),
-                            new Throwable());
-                }
-                // run again just to try to get debug output
-                getPackagesForUid_debug(uid, true);
-            }
             return mPermissionManager.checkUidPermission(permName, pkg, uid, getCallingUid());
         }
     }
@@ -6424,25 +6400,15 @@ public class PackageManagerService extends IPackageManager.Stub
      */
     @Override
     public String[] getPackagesForUid(int uid) {
-        return getPackagesForUid_debug(uid, false);
-    }
-    // Debug output for b/111075456
-    private String[] getPackagesForUid_debug(int uid, boolean debug) {
         final int callingUid = Binder.getCallingUid();
         final boolean isCallerInstantApp = getInstantAppPackageName(callingUid) != null;
         final int userId = UserHandle.getUserId(uid);
         final int appId = UserHandle.getAppId(uid);
-        if (debug) Slog.e(TAG, "Finding packages for UID"
-                + "; uid: " + uid
-                + ", userId: " + userId
-                + ", appId: " + appId
-                + ", caller: " + callingUid);
         // reader
         synchronized (mPackages) {
             final Object obj = mSettings.getSettingLPr(appId);
             if (obj instanceof SharedUserSetting) {
                 if (isCallerInstantApp) {
-                    if (debug) Slog.e(TAG, "Caller is instant and package has shared users");
                     return null;
                 }
                 final SharedUserSetting sus = (SharedUserSetting) obj;
@@ -6450,13 +6416,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 String[] res = new String[N];
                 final Iterator<PackageSetting> it = sus.packages.iterator();
                 int i = 0;
-                if (debug && !it.hasNext()) Slog.e(TAG, "Shared user, but, no packages");
                 while (it.hasNext()) {
                     PackageSetting ps = it.next();
-                    if (debug) Slog.e(TAG, "Check shared package"
-                            + "; installed? " + ps.getInstalled(userId)
-                            + ", shared setting: " + ps
-                            + ", package setting: " + mSettings.mPackages.get(ps.name));
                     if (ps.getInstalled(userId)) {
                         res[i++] = ps.name;
                     } else {
@@ -6469,12 +6430,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 if (ps.getInstalled(userId) && !filterAppAccessLPr(ps, callingUid, userId)) {
                     return new String[]{ps.name};
                 }
-                if (debug) Slog.e(TAG, "Removing normal package"
-                        + "; installed? " + ps.getInstalled(userId)
-                        + ", filtered? " + filterAppAccessLPr(ps, callingUid, userId));
-            } else if (debug) {
-                if (debug) Slog.e(TAG, "No setting found"
-                        + "; obj: " + (obj == null ? "<<NULL>>" : obj.toString()));
             }
         }
         return null;
@@ -14788,7 +14743,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
             if (ps != null) {
                 try {
-                    rm.restoreUserData(packageName, installedUsers, appId, ceDataInode,
+                    rm.snapshotAndRestoreUserData(packageName, installedUsers, appId, ceDataInode,
                             seInfo, token);
                 } catch (RemoteException re) {
                     // Cannot happen, the RollbackManager is hosted in the same process.
@@ -15045,7 +15000,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 params.handleStartCopy();
                 if (params.mRet != INSTALL_SUCCEEDED) {
                     mRet = params.mRet;
-                    break;
                 }
             }
         }
@@ -15056,31 +15010,32 @@ public class PackageManagerService extends IPackageManager.Stub
                 params.handleReturnCode();
                 if (params.mRet != INSTALL_SUCCEEDED) {
                     mRet = params.mRet;
-                    break;
                 }
             }
         }
 
         void tryProcessInstallRequest(InstallArgs args, int currentStatus) {
             mCurrentState.put(args, currentStatus);
-            boolean success = true;
             if (mCurrentState.size() != mChildParams.size()) {
                 return;
             }
+            int completeStatus = PackageManager.INSTALL_SUCCEEDED;
             for (Integer status : mCurrentState.values()) {
                 if (status == PackageManager.INSTALL_UNKNOWN) {
                     return;
                 } else if (status != PackageManager.INSTALL_SUCCEEDED) {
-                    success = false;
+                    completeStatus = status;
                     break;
                 }
             }
             final List<InstallRequest> installRequests = new ArrayList<>(mCurrentState.size());
             for (Map.Entry<InstallArgs, Integer> entry : mCurrentState.entrySet()) {
                 installRequests.add(new InstallRequest(entry.getKey(),
-                        createPackageInstalledInfo(entry.getValue())));
+                        createPackageInstalledInfo(completeStatus)));
             }
-            processInstallRequestsAsync(success, installRequests);
+            processInstallRequestsAsync(
+                    completeStatus == PackageManager.INSTALL_SUCCEEDED,
+                    installRequests);
         }
     }
 
@@ -15628,6 +15583,22 @@ public class PackageManagerService extends IPackageManager.Stub
         @Override
         void handleReturnCode() {
             if (mVerificationCompleted && mEnableRollbackCompleted) {
+                if ((installFlags & PackageManager.INSTALL_DRY_RUN) != 0) {
+                    String packageName = "";
+                    try {
+                        PackageLite packageInfo =
+                                new PackageParser().parsePackageLite(origin.file, 0);
+                        packageName = packageInfo.packageName;
+                    } catch (PackageParserException e) {
+                        Slog.e(TAG, "Can't parse package at " + origin.file.getAbsolutePath(), e);
+                    }
+                    try {
+                        observer.onPackageInstalled(packageName, mRet, "Dry run", new Bundle());
+                    } catch (RemoteException e) {
+                        Slog.i(TAG, "Observer no longer exists.");
+                    }
+                    return;
+                }
                 if (mRet == PackageManager.INSTALL_SUCCEEDED) {
                     mRet = mArgs.copyApk();
                 }
@@ -18102,9 +18073,15 @@ public class PackageManagerService extends IPackageManager.Stub
                 if (Build.IS_DEBUGGABLE) Slog.i(TAG, "Enabling verity to " + filePath);
                 final FileDescriptor fd = result.getUnownedFileDescriptor();
                 try {
-                    mInstaller.installApkVerity(filePath, fd, result.getContentSize());
                     final byte[] rootHash = VerityUtils.generateApkVerityRootHash(filePath);
-                    mInstaller.assertFsverityRootHashMatches(filePath, rootHash);
+                    try {
+                        // A file may already have fs-verity, e.g. when reused during a split
+                        // install. If the measurement succeeds, no need to attempt to set up.
+                        mInstaller.assertFsverityRootHashMatches(filePath, rootHash);
+                    } catch (InstallerException e) {
+                        mInstaller.installApkVerity(filePath, fd, result.getContentSize());
+                        mInstaller.assertFsverityRootHashMatches(filePath, rootHash);
+                    }
                 } finally {
                     IoUtils.closeQuietly(fd);
                 }
@@ -19901,6 +19878,8 @@ public class PackageManagerService extends IPackageManager.Stub
             return;
         }
 
+        final String packageName = ps.pkg.packageName;
+
         // These are flags that can change base on user actions.
         final int userSettableMask = FLAG_PERMISSION_USER_SET
                 | FLAG_PERMISSION_USER_FIXED
@@ -19910,8 +19889,59 @@ public class PackageManagerService extends IPackageManager.Stub
         final int policyOrSystemFlags = FLAG_PERMISSION_SYSTEM_FIXED
                 | FLAG_PERMISSION_POLICY_FIXED;
 
-        boolean writeInstallPermissions = false;
-        boolean writeRuntimePermissions = false;
+        // Delay and combine non-async permission callbacks
+        final boolean[] permissionRemoved = new boolean[1];
+        final ArraySet<Long> revokedPermissions = new ArraySet<>();
+        final SparseBooleanArray updatedUsers = new SparseBooleanArray();
+
+        PermissionCallback delayingPermCallback = new PermissionCallback() {
+            public void onGidsChanged(int appId, int userId) {
+                mPermissionCallback.onGidsChanged(appId, userId);
+            }
+
+            public void onPermissionChanged() {
+                mPermissionCallback.onPermissionChanged();
+            }
+
+            public void onPermissionGranted(int uid, int userId) {
+                mPermissionCallback.onPermissionGranted(uid, userId);
+            }
+
+            public void onInstallPermissionGranted() {
+                mPermissionCallback.onInstallPermissionGranted();
+            }
+
+            public void onPermissionRevoked(int uid, int userId) {
+                revokedPermissions.add(IntPair.of(uid, userId));
+
+                updatedUsers.put(userId, true);
+            }
+
+            public void onInstallPermissionRevoked() {
+                mPermissionCallback.onInstallPermissionRevoked();
+            }
+
+            public void onPermissionUpdated(int[] updatedUserIds, boolean sync) {
+                for (int userId : updatedUserIds) {
+                    if (sync) {
+                        updatedUsers.put(userId, true);
+                    } else {
+                        // Don't override sync=true by sync=false
+                        if (!updatedUsers.get(userId)) {
+                            updatedUsers.put(userId, false);
+                        }
+                    }
+                }
+            }
+
+            public void onPermissionRemoved() {
+                permissionRemoved[0] = true;
+            }
+
+            public void onInstallPermissionUpdated() {
+                mPermissionCallback.onInstallPermissionUpdated();
+            }
+        };
 
         final int permissionCount = ps.pkg.requestedPermissions.size();
         for (int i = 0; i < permissionCount; i++) {
@@ -19943,26 +19973,20 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
 
-            final PermissionsState permissionsState = ps.getPermissionsState();
-
-            final int oldFlags = permissionsState.getPermissionFlags(permName, userId);
+            final int oldFlags = mPermissionManager.getPermissionFlags(permName, packageName,
+                    Process.SYSTEM_UID, userId);
 
             // Always clear the user settable flags.
-            final boolean hasInstallState =
-                    permissionsState.getInstallPermissionState(permName) != null;
             // If permission review is enabled and this is a legacy app, mark the
             // permission as requiring a review as this is the initial state.
             int flags = 0;
             if (ps.pkg.applicationInfo.targetSdkVersion < Build.VERSION_CODES.M && bp.isRuntime()) {
                 flags |= FLAG_PERMISSION_REVIEW_REQUIRED | FLAG_PERMISSION_REVOKE_ON_UPGRADE;
             }
-            if (permissionsState.updatePermissionFlags(bp, userId, userSettableMask, flags)) {
-                if (hasInstallState) {
-                    writeInstallPermissions = true;
-                } else {
-                    writeRuntimePermissions = true;
-                }
-            }
+
+            mPermissionManager.updatePermissionFlags(permName, packageName,
+                    userSettableMask, flags, Process.SYSTEM_UID, userId, false,
+                    delayingPermCallback);
 
             // Below is only runtime permission handling.
             if (!bp.isRuntime()) {
@@ -19976,35 +20000,42 @@ public class PackageManagerService extends IPackageManager.Stub
 
             // If this permission was granted by default, make sure it is.
             if ((oldFlags & FLAG_PERMISSION_GRANTED_BY_DEFAULT) != 0) {
-                if (permissionsState.grantRuntimePermission(bp, userId)
-                        != PERMISSION_OPERATION_FAILURE) {
-                    writeRuntimePermissions = true;
-                }
+                mPermissionManager.grantRuntimePermission(permName, packageName, false,
+                        Process.SYSTEM_UID, userId, delayingPermCallback);
             // If permission review is enabled the permissions for a legacy apps
             // are represented as constantly granted runtime ones, so don't revoke.
             } else if ((flags & FLAG_PERMISSION_REVIEW_REQUIRED) == 0) {
                 // Otherwise, reset the permission.
-                final int revokeResult = permissionsState.revokeRuntimePermission(bp, userId);
-                switch (revokeResult) {
-                    case PERMISSION_OPERATION_SUCCESS:
-                    case PERMISSION_OPERATION_SUCCESS_GIDS_CHANGED: {
-                        writeRuntimePermissions = true;
-                        final int appId = ps.appId;
-                        mHandler.post(
-                                () -> killUid(appId, userId, KILL_APP_REASON_PERMISSIONS_REVOKED));
-                    } break;
-                }
+                mPermissionManager.revokeRuntimePermission(permName, packageName, false, userId,
+                        delayingPermCallback);
             }
         }
 
-        // Synchronously write as we are taking permissions away.
-        if (writeRuntimePermissions) {
-            mSettings.writeRuntimePermissionsForUserLPr(userId, true);
+        // Execute delayed callbacks
+        if (permissionRemoved[0]) {
+            mPermissionCallback.onPermissionRemoved();
         }
 
-        // Synchronously write as we are taking permissions away.
-        if (writeInstallPermissions) {
-            mSettings.writeLPr();
+        // Slight variation on the code in mPermissionCallback.onPermissionRevoked() as we cannot
+        // kill uid while holding mPackages-lock
+        if (!revokedPermissions.isEmpty()) {
+            int numRevokedPermissions = revokedPermissions.size();
+            for (int i = 0; i < numRevokedPermissions; i++) {
+                int revocationUID = IntPair.first(revokedPermissions.valueAt(i));
+                int revocationUserId = IntPair.second(revokedPermissions.valueAt(i));
+
+                mOnPermissionChangeListeners.onPermissionsChanged(revocationUID);
+
+                // Kill app later as we are holding mPackages
+                mHandler.post(() -> killUid(UserHandle.getAppId(revocationUID), revocationUserId,
+                        KILL_APP_REASON_PERMISSIONS_REVOKED));
+            }
+        }
+
+        int numUpdatedUsers = updatedUsers.size();
+        for (int i = 0; i < numUpdatedUsers; i++) {
+            mSettings.writeRuntimePermissionsForUserLPr(updatedUsers.keyAt(i),
+                    updatedUsers.valueAt(i));
         }
     }
 
@@ -24434,8 +24465,12 @@ public class PackageManagerService extends IPackageManager.Stub
         @Override
         public boolean isPermissionsReviewRequired(String packageName, int userId) {
             synchronized (mPackages) {
-                return mPermissionManager.isPermissionsReviewRequired(
-                        mPackages.get(packageName), userId);
+                final PackageParser.Package pkg = mPackages.get(packageName);
+                if (pkg == null) {
+                    return false;
+                }
+
+                return mPermissionManager.isPermissionsReviewRequired(pkg, userId);
             }
         }
 
@@ -25019,6 +25054,15 @@ public class PackageManagerService extends IPackageManager.Stub
                 @UserIdInt int userId) {
             synchronized (mPackages) {
                 mSettings.setRuntimePermissionsFingerPrintLPr(fingerPrint, userId);
+            }
+        }
+
+        @Override
+        public void migrateLegacyObbData() {
+            try {
+                mInstaller.migrateLegacyObbData();
+            } catch (Exception e) {
+                Slog.wtf(TAG, e);
             }
         }
     }

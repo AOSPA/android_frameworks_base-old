@@ -2081,7 +2081,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         @Override
         public final boolean queueIdle() {
             doGcIfNeeded();
-            nPurgePendingResources();
+            purgePendingResources();
             return false;
         }
     }
@@ -2089,9 +2089,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     final class PurgeIdler implements MessageQueue.IdleHandler {
         @Override
         public boolean queueIdle() {
-            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "purgePendingResources");
-            nPurgePendingResources();
-            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+            purgePendingResources();
             return false;
         }
     }
@@ -2461,13 +2459,17 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     void doGcIfNeeded() {
+        doGcIfNeeded("bg");
+    }
+
+    void doGcIfNeeded(String reason) {
         mGcIdlerScheduled = false;
         final long now = SystemClock.uptimeMillis();
         //Slog.i(TAG, "**** WE MIGHT WANT TO GC: then=" + Binder.getLastGcTime()
         //        + "m now=" + now);
         if ((BinderInternal.getLastGcTime()+MIN_TIME_BETWEEN_GCS) < now) {
             //Slog.i(TAG, "**** WE DO, WE DO WANT TO GC!");
-            BinderInternal.forceGc("bg");
+            BinderInternal.forceGc(reason);
         }
     }
 
@@ -5565,15 +5567,9 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     private void handleConfigurationChanged(Configuration config, CompatibilityInfo compat) {
 
-        int configDiff = 0;
+        int configDiff;
+        boolean equivalent;
 
-        // This flag tracks whether the new configuration is fundamentally equivalent to the
-        // existing configuration. This is necessary to determine whether non-activity
-        // callbacks should receive notice when the only changes are related to non-public fields.
-        // We do not gate calling {@link #performActivityConfigurationChanged} based on this flag
-        // as that method uses the same check on the activity config override as well.
-        final boolean equivalent = config != null && mConfiguration != null
-                && (0 == mConfiguration.diffPublicOnly(config));
         final Theme systemTheme = getSystemContext().getTheme();
         final Theme systemUiTheme = getSystemUiContext().getTheme();
 
@@ -5590,6 +5586,13 @@ public final class ActivityThread extends ClientTransactionHandler {
             if (config == null) {
                 return;
             }
+
+            // This flag tracks whether the new configuration is fundamentally equivalent to the
+            // existing configuration. This is necessary to determine whether non-activity callbacks
+            // should receive notice when the only changes are related to non-public fields.
+            // We do not gate calling {@link #performActivityConfigurationChanged} based on this
+            // flag as that method uses the same check on the activity config override as well.
+            equivalent = mConfiguration != null && (0 == mConfiguration.diffPublicOnly(config));
 
             if (DEBUG_CONFIGURATION) Slog.v(TAG, "Handle configuration changed: "
                     + config);
@@ -6006,6 +6009,16 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         WindowManagerGlobal.getInstance().trimMemory(level);
         Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+
+        if (SystemProperties.getInt("debug.am.run_gc_trim_level", Integer.MAX_VALUE) <= level) {
+            unscheduleGcIdler();
+            doGcIfNeeded("tm");
+        }
+        if (SystemProperties.getInt("debug.am.run_mallopt_trim_level", Integer.MAX_VALUE)
+                <= level) {
+            unschedulePurgeIdler();
+            purgePendingResources();
+        }
     }
 
     private void setupGraphicsSupport(Context context) {
@@ -7384,6 +7397,12 @@ public final class ActivityThread extends ClientTransactionHandler {
         Looper.loop();
 
         throw new RuntimeException("Main thread loop unexpectedly exited");
+    }
+
+    private void purgePendingResources() {
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "purgePendingResources");
+        nPurgePendingResources();
+        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
     }
 
     // ------------------ Regular JNI ------------------------
