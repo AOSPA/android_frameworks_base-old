@@ -1169,10 +1169,10 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     public boolean isBluetoothAvailableForBinding() {
         try {
             mBluetoothLock.writeLock().lock();
-            if (!mEnable || mBluetooth == null ||
-                (mBluetooth != null && (mBluetooth.getState() != BluetoothAdapter.STATE_ON) &&
-                (mBluetooth.getState() != BluetoothAdapter.STATE_TURNING_ON))) {
-                Slog.w(TAG, "Trying to bind to while Bluetooth is disabled");
+            if (mBluetooth != null && ((mBluetooth.getState() == BluetoothAdapter.STATE_ON) ||
+                (mBluetooth.getState() == BluetoothAdapter.STATE_TURNING_ON))) {
+                return true;
+            } else {
                 return false;
             }
         } catch (RemoteException e) {
@@ -1180,7 +1180,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         } finally {
             mBluetoothLock.writeLock().unlock();
         }
-        return true;
+        return false;
     }
 
     @Override
@@ -1377,6 +1377,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 if (isBluetoothAvailableForBinding() == false) {
                     Slog.w(TAG, "addProxy: Trying to bind to profile: " + mClassName +
                            ", while Bluetooth is disabled");
+                    mProxies.unregister(proxy);
                     return;
                 }
 

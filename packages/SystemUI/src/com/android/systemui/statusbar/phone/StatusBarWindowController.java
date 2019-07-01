@@ -22,7 +22,6 @@ import static com.android.systemui.statusbar.NotificationRemoteInputManager.ENAB
 
 import android.app.ActivityManager;
 import android.app.IActivityManager;
-import android.app.WallpaperManager;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Resources;
@@ -51,10 +50,13 @@ import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.ConfigurationController.ConfigurationListener;
 
+import com.google.android.collect.Lists;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 
+import java.util.ArrayList;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
@@ -80,6 +82,8 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
     private float mScreenBrightnessDoze;
     private final State mCurrentState = new State();
     private OtherwisedCollapsedListener mListener;
+    private final ArrayList<WeakReference<StatusBarWindowCallback>>
+            mCallbacks = Lists.newArrayList();
 
     private final SysuiColorExtractor mColorExtractor = Dependency.get(SysuiColorExtractor.class);
 
@@ -103,6 +107,19 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
                 .addCallback(mStateListener,
                         SysuiStatusBarStateController.RANK_STATUS_BAR_WINDOW_CONTROLLER);
         Dependency.get(ConfigurationController.class).addCallback(this);
+    }
+
+    /**
+     * Register to receive notifications about status bar window state changes.
+     */
+    public void registerCallback(StatusBarWindowCallback callback) {
+        // Prevent adding duplicate callbacks
+        for (int i = 0; i < mCallbacks.size(); i++) {
+            if (mCallbacks.get(i).get() == callback) {
+                return;
+            }
+        }
+        mCallbacks.add(new WeakReference<StatusBarWindowCallback>(callback));
     }
 
     private boolean shouldEnableKeyguardScreenRotation() {
@@ -314,6 +331,18 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
                 Log.e(TAG, "Failed to call setHasTopUi", e);
             }
             mHasTopUi = mHasTopUiChanged;
+        }
+        notifyStateChangedCallbacks();
+    }
+
+    public void notifyStateChangedCallbacks() {
+        for (int i = 0; i < mCallbacks.size(); i++) {
+            StatusBarWindowCallback cb = mCallbacks.get(i).get();
+            if (cb != null) {
+                cb.onStateChanged(mCurrentState.keyguardShowing,
+                        mCurrentState.keyguardOccluded,
+                        mCurrentState.bouncerShowing);
+            }
         }
     }
 
@@ -540,17 +569,7 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
             return;
         }
 
-        StatusBarStateController state = Dependency.get(StatusBarStateController.class);
-        int which;
-        if (state.getState() == StatusBarState.KEYGUARD
-                || state.getState() == StatusBarState.SHADE_LOCKED) {
-            which = WallpaperManager.FLAG_LOCK;
-        } else {
-            which = WallpaperManager.FLAG_SYSTEM;
-        }
-        final boolean useDarkText = mColorExtractor.getColors(which,
-                true /* ignoreVisibility */).supportsDarkText();
-
+        final boolean useDarkText = mColorExtractor.getNeutralColors().supportsDarkText();
         // Make sure we have the correct navbar/statusbar colors.
         setKeyguardDark(useDarkText);
     }

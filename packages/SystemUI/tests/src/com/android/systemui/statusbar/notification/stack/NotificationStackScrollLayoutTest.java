@@ -70,10 +70,12 @@ import com.android.systemui.statusbar.notification.row.FooterView;
 import com.android.systemui.statusbar.notification.row.NotificationBlockingHelperManager;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
+import com.android.systemui.statusbar.phone.NotificationIconAreaController;
 import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarTest.TestableNotificationEntryManager;
+import com.android.systemui.statusbar.policy.ConfigurationController;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -110,6 +112,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
     @Mock private NotificationData mNotificationData;
     @Mock private NotificationRemoteInputManager mRemoteInputManager;
     @Mock private RemoteInputController mRemoteInputController;
+    @Mock private NotificationIconAreaController mNotificationIconAreaController;
     @Mock private MetricsLogger mMetricsLogger;
     @Mock private NotificationRoundnessManager mNotificationRoundnessManager;
     private TestableNotificationEntryManager mEntryManager;
@@ -153,6 +156,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
                 true /* allowLongPress */, mNotificationRoundnessManager,
                 new AmbientPulseManager(mContext),
                 mock(DynamicPrivacyController.class),
+                mock(ConfigurationController.class),
                 mock(ActivityStarterDelegate.class),
                 mock(StatusBarStateController.class));
         mStackScroller = spy(mStackScrollerInternal);
@@ -162,6 +166,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         mStackScroller.setHeadsUpManager(mHeadsUpManager);
         mStackScroller.setGroupManager(mGroupManager);
         mStackScroller.setEmptyShadeView(mEmptyShadeView);
+        mStackScroller.setIconAreaController(mNotificationIconAreaController);
 
         // Stub out functionality that isn't necessary to test.
         doNothing().when(mBar)

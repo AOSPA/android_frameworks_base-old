@@ -131,6 +131,7 @@
     <!-- no translation found for wfcSpnFormat_spn (4998685024207291232) -->
     <skip />
     <string name="wfcSpnFormat_spn_wifi_calling" msgid="136001023263502280">"Appels Wi-Fi <xliff:g id="SPN">%s</xliff:g>"</string>
+    <string name="wfcSpnFormat_spn_wifi_calling_vo_hyphen" msgid="1730997175789582756">"Appels Wi-Fi : <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_wlan_call" msgid="2533371081782489793">"Appel WLAN"</string>
     <string name="wfcSpnFormat_spn_wlan_call" msgid="2315240198303197168">"Appel WLAN <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"Wi-Fi <xliff:g id="SPN">%s</xliff:g>"</string>
@@ -307,7 +308,7 @@
     <string name="permgrouprequest_calllog" msgid="8487355309583773267">"Autoriser &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; à accéder à vos journaux d\'appels?"</string>
     <string name="permgrouplab_phone" msgid="5229115638567440675">"Téléphone"</string>
     <string name="permgroupdesc_phone" msgid="6234224354060641055">"faire et gérer des appels téléphoniques"</string>
-    <string name="permgrouprequest_phone" msgid="9166979577750581037">"Autoriser &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; à faire et à gérer les appels téléphoniques?"</string>
+    <string name="permgrouprequest_phone" msgid="9166979577750581037">"Autoriser &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; à faire et à gérer des appels téléphoniques?"</string>
     <string name="permgrouplab_sensors" msgid="4838614103153567532">"Capteurs corporels"</string>
     <string name="permgroupdesc_sensors" msgid="7147968539346634043">"accéder aux données des capteurs sur vos signes vitaux"</string>
     <string name="permgrouprequest_sensors" msgid="6349806962814556786">"Autoriser « <xliff:g id="APP_NAME">%1$s</xliff:g> » à accéder aux données des capteurs pour vos signes vitaux?"</string>
@@ -1357,8 +1358,7 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Effectuez une réinitialisation pour désactiver le mode Logiciel de test."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"Liquide ou débris dans le port USB"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"Le port USB est désactivé automatiquement. Touchez ici pour en savoir plus."</string>
-    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
-    <skip />
+    <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"Autorisation d\'utiliser le port USB"</string>
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"Le téléphone ne détecte plus les liquides ni les débris."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"Création d\'un rapport de bogue en cours..."</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"Partager le rapport de bogue?"</string>
@@ -1612,8 +1612,6 @@
     <string name="display_manager_overlay_display_name" msgid="5142365982271620716">"Superposition n° <xliff:g id="ID">%1$d</xliff:g>"</string>
     <string name="display_manager_overlay_display_title" msgid="652124517672257172">"<xliff:g id="NAME">%1$s</xliff:g> : <xliff:g id="WIDTH">%2$d</xliff:g> x <xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> ppp"</string>
     <string name="display_manager_overlay_display_secure_suffix" msgid="6022119702628572080">", sécurisé"</string>
-    <string name="activity_starter_block_bg_activity_starts_permissive" msgid="6995473033438879646">"Ce lancement d\'activité en arrière-plan par <xliff:g id="PACKAGENAME">%1$s</xliff:g> sera bloqué dans les versions futures de Q. Consultez la page g.co/dev/bgblock."</string>
-    <string name="activity_starter_block_bg_activity_starts_enforcing" msgid="3317816771072146229">"Le lancement d\'une activité en arrière-plan par <xliff:g id="PACKAGENAME">%1$s</xliff:g> a été bloqué. Consultez la page g.co/dev/bgblock."</string>
     <string name="kg_forgot_pattern_button_text" msgid="8852021467868220608">"J\'ai oublié le schéma"</string>
     <string name="kg_wrong_pattern" msgid="1850806070801358830">"Schéma incorrect."</string>
     <string name="kg_wrong_password" msgid="2333281762128113157">"Mot de passe incorrect."</string>
@@ -1667,8 +1665,12 @@
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"Le raccourci d\'accessibilité a activé la fonction <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"Le raccourci d\'accessibilité a désactivé la fonction <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"Maintenez enfoncées les deux touches de volume pendant trois secondes pour utiliser <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
-    <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"Choisissez une fonctionnalité à utiliser lorsque vous touchez le bouton d\'accessibilité :"</string>
-    <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"Pour changer des fonctionnalités, maintenez le doigt sur le bouton d\'accessibilité."</string>
+    <string name="accessibility_button_prompt_text" msgid="1176658502969738564">"Choisissez un service à utiliser lorsque vous touchez le bouton d\'accessibilité :"</string>
+    <string name="accessibility_gesture_prompt_text" msgid="8259145549733019401">"Choisissez un service à utiliser lorsque vous utilisez le geste d\'accessibilité (balayer deux doigts du bas de l\'écran vers le haut) :"</string>
+    <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"Choisissez un service à utiliser lorsque vous utilisez le geste d\'accessibilité (balayer trois doigts du bas de l\'écran vers le haut) :"</string>
+    <string name="accessibility_button_instructional_text" msgid="7003212763213614833">"Pour basculer entre les services, maintenez le doigt sur le bouton d\'accessibilité."</string>
+    <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"Pour basculer entre les services, balayez deux doigts vers le haut et maintenez-les sur l\'écran."</string>
+    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"Pour basculer entre les services, balayez trois doigts vers le haut et maintenez-les sur l\'écran."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"Zoom"</string>
     <string name="user_switched" msgid="3768006783166984410">"Utilisateur actuel : <xliff:g id="NAME">%1$s</xliff:g>"</string>
     <string name="user_switching_message" msgid="2871009331809089783">"Changement d\'utilisateur (<xliff:g id="NAME">%1$s</xliff:g>) en cours…"</string>

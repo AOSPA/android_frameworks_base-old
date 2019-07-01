@@ -1532,6 +1532,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     void setWindowStopped(boolean stopped) {
+        checkThread();
         if (mStopped != stopped) {
             mStopped = stopped;
             final ThreadedRenderer renderer = mAttachInfo.mThreadedRenderer;
@@ -1553,7 +1554,7 @@ public final class ViewRootImpl implements ViewParent,
             }
 
             if (mStopped) {
-                if (mSurfaceHolder != null) {
+                if (mSurfaceHolder != null && mSurface.isValid()) {
                     notifySurfaceDestroyed();
                 }
                 destroySurface();

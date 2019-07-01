@@ -6443,7 +6443,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     .setAdmin(admin)
                     .setStrings(vpnPackage)
                     .setBoolean(lockdown)
-                    .setInt(/* number of vpn packages */ 0)
+                    .setInt(lockdownWhitelist != null ? lockdownWhitelist.size() : 0)
                     .write();
         } finally {
             mInjector.binderRestoreCallingIdentity(token);
@@ -6654,7 +6654,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
      */
     @Override
     public void setActivePasswordState(PasswordMetrics metrics, int userHandle) {
-        if (!mHasFeature || !mLockPatternUtils.hasSecureLockScreen()) {
+        if (!mLockPatternUtils.hasSecureLockScreen()) {
             return;
         }
         enforceFullCrossUsersPermission(userHandle);
