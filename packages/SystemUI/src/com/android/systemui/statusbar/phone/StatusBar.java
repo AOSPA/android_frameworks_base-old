@@ -2403,6 +2403,10 @@ public class StatusBar extends SystemUI implements DemoMode,
             pw.println("  mGroupManager: null");
         }
 
+        if (mBubbleController != null) {
+            mBubbleController.dump(fd, pw, args);
+        }
+
         if (mLightBarController != null) {
             mLightBarController.dump(fd, pw, args);
         }
