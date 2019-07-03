@@ -1919,6 +1919,10 @@ public final class SystemServer {
         mSystemServiceManager.startService(IncidentCompanionService.class);
         traceEnd();
 
+        if (safeMode) {
+            mActivityManagerService.enterSafeMode();
+        }
+
         // MMS service broker
         traceBeginAndSlog("StartMmsService");
         mmsService = mSystemServiceManager.startService(MmsServiceBroker.class);
