@@ -35,7 +35,6 @@ import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.classifier.FalsingManagerFactory;
 import com.android.systemui.dock.DockManager;
-import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.power.EnhancedEstimates;
@@ -62,8 +61,6 @@ import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.phone.UnlockMethodCache;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
-import com.android.systemui.util.InjectionInflationController;
-import com.android.systemui.util.leak.GarbageMonitor;
 import com.android.systemui.volume.VolumeDialogComponent;
 
 import java.util.function.Consumer;
@@ -71,7 +68,6 @@ import java.util.function.Consumer;
 import javax.inject.Named;
 import javax.inject.Singleton;
 
-import dagger.Component;
 import dagger.Module;
 import dagger.Provides;
 
@@ -109,7 +105,7 @@ public class SystemUIFactory {
     public SystemUIFactory() {}
 
     protected void init(Context context) {
-        mRootComponent = DaggerSystemUIFactory_SystemUIRootComponent.builder()
+        mRootComponent = DaggerSystemUIRootComponent.builder()
                 .systemUIFactory(this)
                 .dependencyProvider(new com.android.systemui.DependencyProvider())
                 .contextHolder(new ContextHolder(context))
@@ -244,30 +240,5 @@ public class SystemUIFactory {
         public Context provideContext() {
             return mContext;
         }
-    }
-
-    @Singleton
-    @Component(modules = {SystemUIFactory.class, DependencyProvider.class, DependencyBinder.class,
-            ContextHolder.class})
-    public interface SystemUIRootComponent {
-        @Singleton
-        Dependency.DependencyInjector createDependency();
-
-        @Singleton
-        StatusBar.StatusBarInjector getStatusBarInjector();
-
-        /**
-         * FragmentCreator generates all Fragments that need injection.
-         */
-        @Singleton
-        FragmentService.FragmentCreator createFragmentCreator();
-
-        /**
-         * ViewCreator generates all Views that need injection.
-         */
-        InjectionInflationController.ViewCreator createViewCreator();
-
-        @Singleton
-        GarbageMonitor createGarbageMonitor();
     }
 }
