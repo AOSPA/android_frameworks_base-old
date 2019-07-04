@@ -301,6 +301,8 @@ public final class AudioDeviceInventory {
             if (event == BtHelper.EVENT_ACTIVE_DEVICE_CHANGE) {
                 // Device is connected
                 if (a2dpVolume != -1) {
+                    Log.e(TAG, "Unmuting the stream before setting device Volume.");
+                    mDeviceBroker.postAccessoryPlugMediaUnmute(AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP);
                     mDeviceBroker.postSetVolumeIndexOnDevice(AudioSystem.STREAM_MUSIC,
                             // convert index to internal representation in VolumeStreamState
                             a2dpVolume * 10,
