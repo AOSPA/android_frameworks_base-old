@@ -4245,4 +4245,8 @@
     <string name="user_authentication_failed"></string>
     <string name="service_not_subscribed"></string>
     <string name="multi_conn_to_same_pdn_not_allowed"></string>
+
+    <!-- The list of packages to automatically opt out of refresh rates higher than 60hz because
+         of known compatibility issues. -->
+    <string-array name="config_highRefreshRateBlacklist"></string-array>
 </resources>
