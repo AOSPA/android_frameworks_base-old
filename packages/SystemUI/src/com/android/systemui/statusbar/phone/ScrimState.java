@@ -156,7 +156,9 @@ public enum ScrimState {
         public void prepare(ScrimState previousState) {
             mCurrentBehindAlpha = 0;
             mCurrentInFrontAlpha = 0;
-            mAnimationDuration = StatusBar.FADE_KEYGUARD_DURATION;
+            mAnimationDuration = mUnlockIsFading
+                    ? KeyguardBypassController.BYPASS_PANEL_FADE_DURATION
+                    : StatusBar.FADE_KEYGUARD_DURATION;
             mAnimateChange = !mLaunchingAffordanceWithPreview;
 
             if (previousState == ScrimState.AOD) {
@@ -207,6 +209,7 @@ public enum ScrimState {
     boolean mHasBackdrop;
     boolean mLaunchingAffordanceWithPreview;
     boolean mWakeLockScreenSensorActive;
+    boolean mUnlockIsFading;
 
     ScrimState(int index) {
         mIndex = index;
@@ -293,5 +296,9 @@ public enum ScrimState {
 
     public void setWakeLockScreenSensorActive(boolean active) {
         mWakeLockScreenSensorActive = active;
+    }
+
+    public void setUnlockIsFading(boolean unlockIsFading) {
+        mUnlockIsFading = unlockIsFading;
     }
 }

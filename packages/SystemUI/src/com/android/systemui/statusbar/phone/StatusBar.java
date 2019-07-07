@@ -3856,6 +3856,7 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     public void notifyBiometricAuthModeChanged() {
         updateDozing();
+        mScrimController.setUnlockIsFading(mBiometricUnlockController.isUnlockFading());
         updateScrimController();
         mStatusBarWindow.onBiometricAuthModeChanged(mBiometricUnlockController.isWakeAndUnlock(),
                 mBiometricUnlockController.isBiometricUnlock());
@@ -3867,7 +3868,8 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         // We don't want to end up in KEYGUARD state when we're unlocking with
         // fingerprint from doze. We should cross fade directly from black.
-        boolean wakeAndUnlocking = mBiometricUnlockController.isWakeAndUnlock();
+        boolean unlocking = mBiometricUnlockController.isWakeAndUnlock()
+                || mKeyguardMonitor.isKeyguardFadingAway();
 
         // Do not animate the scrim expansion when triggered by the fingerprint sensor.
         mScrimController.setExpansionAffectsAlpha(
@@ -3892,9 +3894,9 @@ public class StatusBar extends SystemUI implements DemoMode,
         } else if (isPulsing()) {
             mScrimController.transitionTo(ScrimState.PULSING,
                     mDozeScrimController.getScrimCallback());
-        } else if (mDozing && !wakeAndUnlocking) {
+        } else if (mDozing && !unlocking) {
             mScrimController.transitionTo(ScrimState.AOD);
-        } else if (mIsKeyguard && !wakeAndUnlocking) {
+        } else if (mIsKeyguard && !unlocking) {
             mScrimController.transitionTo(ScrimState.KEYGUARD);
         } else if (mBubbleController.isStackExpanded()) {
             mScrimController.transitionTo(ScrimState.BUBBLE_EXPANDED);
