@@ -357,7 +357,7 @@ public class MobileSignalController extends SignalController<
         int voiceNetTye = getVoiceNetworkType();
         if ( (mCurrentState.voiceCapable || mCurrentState.videoCapable)
                 &&  mCurrentState.imsRegistered ) {
-            resId = R.drawable.ic_volte;
+            resId = R.drawable.ims_state;
         }else if ( mDataNetType == TelephonyManager.NETWORK_TYPE_LTE
                     || mDataNetType == TelephonyManager.NETWORK_TYPE_LTE_CA
                     || voiceNetTye  == TelephonyManager.NETWORK_TYPE_LTE
