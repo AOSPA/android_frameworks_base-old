@@ -63,6 +63,7 @@ import com.android.server.SystemServerInitThreadPool;
 import com.android.server.biometrics.AuthenticationClient;
 import com.android.server.biometrics.BiometricServiceBase;
 import com.android.server.biometrics.BiometricUtils;
+import com.android.server.biometrics.ClientMonitor;
 import com.android.server.biometrics.Constants;
 import com.android.server.biometrics.EnumerateClient;
 import com.android.server.biometrics.RemovalClient;
@@ -344,7 +345,16 @@ public class FaceService extends BiometricServiceBase {
         @Override // Binder call
         public int revokeChallenge(IBinder token) {
             checkPermission(MANAGE_BIOMETRIC);
-            return startRevokeChallenge(token);
+            // TODO(b/137106905): Schedule binder calls in FaceService to avoid deadlocks.
+            if (getCurrentClient() == null) {
+                // if we aren't handling any other HIDL calls (mCurrentClient == null), revoke the
+                // challenge right away.
+                return startRevokeChallenge(token);
+            } else {
+                // postpone revoking the challenge until we finish processing the current HIDL call.
+                mRevokeChallengePending = true;
+                return Status.OK;
+            }
         }
 
         @Override // Binder call
@@ -815,6 +825,7 @@ public class FaceService extends BiometricServiceBase {
     @GuardedBy("this")
     private IBiometricsFace mDaemon;
     private UsageStats mUsageStats;
+    private boolean mRevokeChallengePending = false;
     // One of the AuthenticationClient constants
     private int mCurrentUserLockoutMode;
 
@@ -1044,6 +1055,15 @@ public class FaceService extends BiometricServiceBase {
     }
 
     @Override
+    protected void removeClient(ClientMonitor client) {
+        super.removeClient(client);
+        if (mRevokeChallengePending) {
+            startRevokeChallenge(null);
+            mRevokeChallengePending = false;
+        }
+    }
+
+    @Override
     public void onStart() {
         super.onStart();
         publishBinderService(Context.FACE_SERVICE, new FaceServiceWrapper());
@@ -1254,7 +1274,11 @@ public class FaceService extends BiometricServiceBase {
             return 0;
         }
         try {
-            return daemon.revokeChallenge();
+            final int res = daemon.revokeChallenge();
+            if (res != Status.OK) {
+                Slog.e(TAG, "revokeChallenge returned " + res);
+            }
+            return res;
         } catch (RemoteException e) {
             Slog.e(TAG, "startRevokeChallenge failed", e);
         }
