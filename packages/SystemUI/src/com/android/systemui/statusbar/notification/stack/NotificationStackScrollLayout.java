@@ -32,7 +32,6 @@ import android.animation.ValueAnimator;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.app.WallpaperManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
@@ -143,6 +142,7 @@ import com.android.systemui.statusbar.policy.ConfigurationController.Configurati
 import com.android.systemui.statusbar.policy.HeadsUpUtil;
 import com.android.systemui.statusbar.policy.ScrollAdapter;
 import com.android.systemui.tuner.TunerService;
+import com.android.systemui.util.Assert;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -515,6 +515,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             NotificationRoundnessManager notificationRoundnessManager,
             AmbientPulseManager ambientPulseManager,
             DynamicPrivacyController dynamicPrivacyController,
+            ConfigurationController configurationController,
             ActivityStarter activityStarter,
             StatusBarStateController statusBarStateController) {
         super(context, attrs, 0, 0);
@@ -533,8 +534,9 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
                         this,
                         activityStarter,
                         statusBarStateController,
+                        configurationController,
                         NotificationUtils.useNewInterruptionModel(context));
-        mSectionsManager.inflateViews(context);
+        mSectionsManager.initialize(LayoutInflater.from(context));
         mSectionsManager.setOnClearGentleNotifsClickListener(v -> {
             // Leave the shade open if there will be other notifs left over to clear
             final boolean closeShade = !hasActiveClearableNotifications(ROWS_HIGH_PRIORITY);
@@ -648,7 +650,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         inflateFooterView();
         inflateEmptyShadeView();
         updateFooter();
-        mSectionsManager.inflateViews(mContext);
+        mSectionsManager.reinflateViews(LayoutInflater.from(mContext));
     }
 
     @Override
@@ -2849,6 +2851,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
 
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
     public void setChildTransferInProgress(boolean childTransferInProgress) {
+        Assert.isMainThread();
         mChildTransferInProgress = childTransferInProgress;
     }
 
@@ -3292,6 +3295,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     @Override
     @ShadeViewRefactor(RefactorComponent.STATE_RESOLVER)
     public void changeViewPosition(ExpandableView child, int newIndex) {
+        Assert.isMainThread();
+        if (mChangePositionInProgress) {
+            throw new IllegalStateException("Reentrant call to changeViewPosition");
+        }
+
         int currentIndex = indexOfChild(child);
 
         if (currentIndex == -1) {
@@ -5052,12 +5060,14 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     @Override
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
     public void removeContainerView(View v) {
+        Assert.isMainThread();
         removeView(v);
     }
 
     @Override
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
     public void addContainerView(View v) {
+        Assert.isMainThread();
         addView(v);
     }
 

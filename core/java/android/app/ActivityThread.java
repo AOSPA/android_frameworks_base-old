@@ -2081,7 +2081,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         @Override
         public final boolean queueIdle() {
             doGcIfNeeded();
-            nPurgePendingResources();
+            purgePendingResources();
             return false;
         }
     }
@@ -2089,9 +2089,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     final class PurgeIdler implements MessageQueue.IdleHandler {
         @Override
         public boolean queueIdle() {
-            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "purgePendingResources");
-            nPurgePendingResources();
-            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+            purgePendingResources();
             return false;
         }
     }
@@ -2461,13 +2459,17 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     void doGcIfNeeded() {
+        doGcIfNeeded("bg");
+    }
+
+    void doGcIfNeeded(String reason) {
         mGcIdlerScheduled = false;
         final long now = SystemClock.uptimeMillis();
         //Slog.i(TAG, "**** WE MIGHT WANT TO GC: then=" + Binder.getLastGcTime()
         //        + "m now=" + now);
         if ((BinderInternal.getLastGcTime()+MIN_TIME_BETWEEN_GCS) < now) {
             //Slog.i(TAG, "**** WE DO, WE DO WANT TO GC!");
-            BinderInternal.forceGc("bg");
+            BinderInternal.forceGc(reason);
         }
     }
 
@@ -6007,6 +6009,16 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         WindowManagerGlobal.getInstance().trimMemory(level);
         Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+
+        if (SystemProperties.getInt("debug.am.run_gc_trim_level", Integer.MAX_VALUE) <= level) {
+            unscheduleGcIdler();
+            doGcIfNeeded("tm");
+        }
+        if (SystemProperties.getInt("debug.am.run_mallopt_trim_level", Integer.MAX_VALUE)
+                <= level) {
+            unschedulePurgeIdler();
+            purgePendingResources();
+        }
     }
 
     private void setupGraphicsSupport(Context context) {
@@ -7385,6 +7397,12 @@ public final class ActivityThread extends ClientTransactionHandler {
         Looper.loop();
 
         throw new RuntimeException("Main thread loop unexpectedly exited");
+    }
+
+    private void purgePendingResources() {
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "purgePendingResources");
+        nPurgePendingResources();
+        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
     }
 
     // ------------------ Regular JNI ------------------------

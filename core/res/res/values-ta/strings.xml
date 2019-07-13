@@ -131,8 +131,7 @@
     <!-- no translation found for wfcSpnFormat_spn (4998685024207291232) -->
     <skip />
     <string name="wfcSpnFormat_spn_wifi_calling" msgid="136001023263502280">"<xliff:g id="SPN">%s</xliff:g> வைஃபை அழைப்பு"</string>
-    <!-- no translation found for wfcSpnFormat_spn_wifi_calling_vo_hyphen (1730997175789582756) -->
-    <skip />
+    <string name="wfcSpnFormat_spn_wifi_calling_vo_hyphen" msgid="1730997175789582756">"<xliff:g id="SPN">%s</xliff:g> வைஃபை அழைப்பு"</string>
     <string name="wfcSpnFormat_wlan_call" msgid="2533371081782489793">"WLAN அழைப்பு"</string>
     <string name="wfcSpnFormat_spn_wlan_call" msgid="2315240198303197168">"<xliff:g id="SPN">%s</xliff:g> WLAN அழைப்பு"</string>
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> வைஃபை"</string>
@@ -268,7 +267,7 @@
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"விற்பனையாளர் டெமோ"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"USB இணைப்பு"</string>
     <string name="notification_channel_heavy_weight_app" msgid="6218742927792852607">"ஆப்ஸ் இயங்குகிறது"</string>
-    <string name="notification_channel_foreground_service" msgid="3931987440602669158">"பேட்டரியைப் பயன்படுத்தும் பயன்பாடுகள்"</string>
+    <string name="notification_channel_foreground_service" msgid="3931987440602669158">"பேட்டரியைப் பயன்படுத்தும் ஆப்ஸ்"</string>
     <string name="foreground_service_app_in_background" msgid="1060198778219731292">"<xliff:g id="APP_NAME">%1$s</xliff:g> ஆப்ஸ் பேட்டரியைப் பயன்படுத்துகிறது"</string>
     <string name="foreground_service_apps_in_background" msgid="7175032677643332242">"<xliff:g id="NUMBER">%1$d</xliff:g> பயன்பாடுகள் பேட்டரியைப் பயன்படுத்துகின்றன"</string>
     <string name="foreground_service_tap_for_details" msgid="372046743534354644">"பேட்டரி மற்றும் டேட்டா உபயோக விவரங்களைக் காண, தட்டவும்"</string>
@@ -888,7 +887,7 @@
     <string name="keyguard_accessibility_expand_lock_area" msgid="519859720934178024">"திறப்பதற்கான பகுதியை விவரிக்கவும்."</string>
     <string name="keyguard_accessibility_slide_unlock" msgid="2959928478764697254">"ஸ்லைடு மூலம் திறத்தல்."</string>
     <string name="keyguard_accessibility_pattern_unlock" msgid="1490840706075246612">"வடிவம் மூலம் திறத்தல்."</string>
-    <string name="keyguard_accessibility_face_unlock" msgid="4817282543351718535">"முகத்தால் திறத்தல்."</string>
+    <string name="keyguard_accessibility_face_unlock" msgid="4817282543351718535">"முகம் காட்டித் திறத்தல்."</string>
     <string name="keyguard_accessibility_pin_unlock" msgid="2469687111784035046">"Pin மூலம் திறத்தல்."</string>
     <string name="keyguard_accessibility_sim_pin_unlock" msgid="9149698847116962307">"சிம்மைத் திறக்கும் பின்."</string>
     <string name="keyguard_accessibility_sim_puk_unlock" msgid="9106899279724723341">"சிம்மைத் திறக்கும் Puk."</string>
@@ -1131,8 +1130,14 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"இதன்மூலம் திற"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"%1$s மூலம் திற"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"திற"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"மூலம் <xliff:g id="HOST">%1$s</xliff:g> இணைப்புகளைத் திறப்பதற்கான அணுகலை வழங்குதல்"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"<xliff:g id="APPLICATION">%2$s</xliff:g> மூலம் <xliff:g id="HOST">%1$s</xliff:g> இணைப்புகளைத் திறப்பதற்கான அணுகலை வழங்குதல்"</string>
+    <!-- no translation found for whichOpenHostLinksWith (3788174881117226583) -->
+    <skip />
+    <!-- no translation found for whichOpenLinksWith (6392123355599572804) -->
+    <skip />
+    <!-- no translation found for whichOpenLinksWithApp (8225991685366651614) -->
+    <skip />
+    <!-- no translation found for whichOpenHostLinksWithApp (3464470639011045589) -->
+    <skip />
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"அணுகலை வழங்கு"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"இதன் மூலம் திருத்து"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"%1$s மூலம் திருத்து"</string>
@@ -1585,6 +1590,8 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"உலாவியைத் துவக்கவா?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"அழைப்பை ஏற்கவா?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"எப்போதும்"</string>
+    <!-- no translation found for activity_resolver_set_always (1422574191056490585) -->
+    <skip />
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"இப்போது மட்டும்"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"அமைப்புகள்"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s பணிக் கணக்கை ஆதரிக்காது"</string>

@@ -254,7 +254,7 @@
     <string name="notification_channel_virtual_keyboard" msgid="6969925135507955575">"가상 키보드"</string>
     <string name="notification_channel_physical_keyboard" msgid="7297661826966861459">"물리적 키보드"</string>
     <string name="notification_channel_security" msgid="7345516133431326347">"보안"</string>
-    <string name="notification_channel_car_mode" msgid="3553380307619874564">"운전모드"</string>
+    <string name="notification_channel_car_mode" msgid="3553380307619874564">"운전 모드"</string>
     <string name="notification_channel_account" msgid="7577959168463122027">"계정 상태"</string>
     <string name="notification_channel_developer" msgid="7579606426860206060">"개발자 메시지"</string>
     <string name="notification_channel_updates" msgid="4794517569035110397">"업데이트"</string>
@@ -360,8 +360,8 @@
     <string name="permdesc_manageProfileAndDeviceOwners" msgid="106894851498657169">"앱이 프로필 소유자와 기기 소유자를 설정하도록 허용합니다."</string>
     <string name="permlab_reorderTasks" msgid="2018575526934422779">"실행 중인 앱 순서 재지정"</string>
     <string name="permdesc_reorderTasks" msgid="7734217754877439351">"앱이 사용자의 입력 없이 작업을 포그라운드나 백그라운드로 이동할 수 있도록 허용합니다."</string>
-    <string name="permlab_enableCarMode" msgid="5684504058192921098">"운전모드 사용"</string>
-    <string name="permdesc_enableCarMode" msgid="4853187425751419467">"앱이 운전모드를 사용할 수 있도록 허용합니다."</string>
+    <string name="permlab_enableCarMode" msgid="5684504058192921098">"운전 모드 사용"</string>
+    <string name="permdesc_enableCarMode" msgid="4853187425751419467">"앱이 운전 모드를 사용할 수 있도록 허용합니다."</string>
     <string name="permlab_killBackgroundProcesses" msgid="3914026687420177202">"다른 앱 종료"</string>
     <string name="permdesc_killBackgroundProcesses" msgid="4593353235959733119">"앱이 다른 앱의 백그라운드 프로세스를 종료할 수 있도록 허용합니다. 이 경우 다른 앱이 실행 중지될 수 있습니다."</string>
     <string name="permlab_systemAlertWindow" msgid="7238805243128138690">"이 앱은 다른 앱 위에 표시될 수 있음"</string>
@@ -902,7 +902,7 @@
     <string name="granularity_label_link" msgid="5815508880782488267">"링크"</string>
     <string name="granularity_label_line" msgid="5764267235026120888">"행"</string>
     <string name="factorytest_failed" msgid="5410270329114212041">"출고 테스트 불합격"</string>
-    <string name="factorytest_not_system" msgid="4435201656767276723">"FACTORY_TEST 작업은 /system/app 디렉토리에 설치된 패키지에 대해서만 지원됩니다."</string>
+    <string name="factorytest_not_system" msgid="4435201656767276723">"FACTORY_TEST 작업은 /system/app 디렉터리에 설치된 패키지에 대해서만 지원됩니다."</string>
     <string name="factorytest_no_action" msgid="872991874799998561">"FACTORY_TEST 작업을 제공하는 패키지가 없습니다."</string>
     <string name="factorytest_reboot" msgid="6320168203050791643">"다시 부팅"</string>
     <string name="js_dialog_title" msgid="1987483977834603872">"\'<xliff:g id="TITLE">%s</xliff:g>\' 페이지 내용:"</string>
@@ -1130,8 +1130,14 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"연결 프로그램"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"%1$s(으)로 열기"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"열기"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"다음으로 <xliff:g id="HOST">%1$s</xliff:g> 링크를 열려면 액세스 권한 부여"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"<xliff:g id="APPLICATION">%2$s</xliff:g>(으)로 <xliff:g id="HOST">%1$s</xliff:g> 링크를 열려면 액세스 권한 부여"</string>
+    <!-- no translation found for whichOpenHostLinksWith (3788174881117226583) -->
+    <skip />
+    <!-- no translation found for whichOpenLinksWith (6392123355599572804) -->
+    <skip />
+    <!-- no translation found for whichOpenLinksWithApp (8225991685366651614) -->
+    <skip />
+    <!-- no translation found for whichOpenHostLinksWithApp (3464470639011045589) -->
+    <skip />
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"권한 부여"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"편집 프로그램:"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"%1$s(으)로 수정"</string>
@@ -1583,6 +1589,8 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"브라우저를 실행하시겠습니까?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"통화를 수락하시겠습니까?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"항상"</string>
+    <!-- no translation found for activity_resolver_set_always (1422574191056490585) -->
+    <skip />
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"한 번만"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"설정"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s에서 직장 프로필을 지원하지 않습니다."</string>

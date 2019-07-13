@@ -84,6 +84,7 @@ import android.view.ThreadedRenderer;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.view.ViewRootImpl;
 import android.view.ViewStub;
 import android.view.ViewTreeObserver;
 import android.view.Window;
@@ -1080,10 +1081,13 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
     }
 
     public static void getNavigationBarRect(int canvasWidth, int canvasHeight, Rect stableInsets,
-            Rect contentInsets, Rect outRect) {
-        final int bottomInset = getColorViewBottomInset(stableInsets.bottom, contentInsets.bottom);
-        final int leftInset = getColorViewLeftInset(stableInsets.left, contentInsets.left);
-        final int rightInset = getColorViewLeftInset(stableInsets.right, contentInsets.right);
+            Rect contentInsets, Rect outRect, float scale) {
+        final int bottomInset =
+                (int) (getColorViewBottomInset(stableInsets.bottom, contentInsets.bottom) * scale);
+        final int leftInset =
+                (int) (getColorViewLeftInset(stableInsets.left, contentInsets.left) * scale);
+        final int rightInset =
+                (int) (getColorViewLeftInset(stableInsets.right, contentInsets.right) * scale);
         final int size = getNavBarSize(bottomInset, rightInset, leftInset);
         if (isNavBarToRightEdge(bottomInset, rightInset)) {
             outRect.set(canvasWidth - size, 0, canvasWidth, canvasHeight);
@@ -1147,8 +1151,15 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
                     navBarToRightEdge || navBarToLeftEdge, navBarToLeftEdge,
                     0 /* sideInset */, animate && !disallowAnimate,
                     mForceWindowDrawsBarBackgrounds);
+            boolean oldDrawLegacy = mDrawLegacyNavigationBarBackground;
             mDrawLegacyNavigationBarBackground = mNavigationColorViewState.visible
                     && (mWindow.getAttributes().flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) == 0;
+            if (oldDrawLegacy != mDrawLegacyNavigationBarBackground) {
+                ViewRootImpl vri = getViewRootImpl();
+                if (vri != null) {
+                    vri.requestInvalidateRootRenderNode();
+                }
+            }
 
             boolean statusBarNeedsRightInset = navBarToRightEdge
                     && mNavigationColorViewState.present;
@@ -1300,7 +1311,7 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
             return semiTransparentBarColor;
         } else if ((flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) == 0) {
             return Color.BLACK;
-        } else if (scrimTransparent && barColor == Color.TRANSPARENT) {
+        } else if (scrimTransparent && Color.alpha(barColor) == 0) {
             boolean light = (sysuiVis & lightSysuiFlag) != 0;
             return light ? SCRIM_LIGHT : semiTransparentBarColor;
         } else {

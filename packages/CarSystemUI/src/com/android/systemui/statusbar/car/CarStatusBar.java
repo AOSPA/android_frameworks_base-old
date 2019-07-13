@@ -165,6 +165,8 @@ public class CarStatusBar extends StatusBar implements
     private boolean mIsNotificationCardSwiping;
     // If notification shade is being swiped vertically to close.
     private boolean mIsSwipingVerticallyToClose;
+    // Whether heads-up notifications should be shown when shade is open.
+    private boolean mEnableHeadsUpNotificationWhenNotificationShadeOpen;
 
     private final CarPowerStateListener mCarPowerStateListener =
             (int state) -> {
@@ -344,7 +346,7 @@ public class CarStatusBar extends StatusBar implements
 
         CarSystemUIFactory factory = SystemUIFactory.getInstance();
         mCarFacetButtonController = factory.getCarDependencyComponent()
-            .getCarFacetButtonController();
+                .getCarFacetButtonController();
         mNotificationPanelBackground = getDefaultWallpaper();
         mScrimController.setScrimBehindDrawable(mNotificationPanelBackground);
 
@@ -459,6 +461,8 @@ public class CarStatusBar extends StatusBar implements
                     }
                 });
 
+        mEnableHeadsUpNotificationWhenNotificationShadeOpen = mContext.getResources().getBoolean(
+                R.bool.config_enableHeadsUpNotificationWhenNotificationShadeOpen);
         CarHeadsUpNotificationManager carHeadsUpNotificationManager =
                 new CarSystemUIHeadsUpNotificationManager(mContext,
                         mNotificationClickHandlerFactory, mNotificationDataManager);
@@ -921,6 +925,16 @@ public class CarStatusBar extends StatusBar implements
                 Log.e(TAG, "Getting StackInfo from activity manager failed", e);
             }
         }
+
+        @Override
+        public void onTaskDisplayChanged(int taskId, int newDisplayId) {
+            try {
+                mCarFacetButtonController.taskChanged(
+                        ActivityTaskManager.getService().getAllStackInfos());
+            } catch (Exception e) {
+                Log.e(TAG, "Getting StackInfo from activity manager failed", e);
+            }
+        }
     }
 
     private void onDrivingStateChanged(CarDrivingStateEvent notUsed) {
@@ -1273,11 +1287,18 @@ public class CarStatusBar extends StatusBar implements
         }
 
         @Override
+        protected void setInternalInsetsInfo(ViewTreeObserver.InternalInsetsInfo info,
+                HeadsUpEntry currentNotification, boolean panelExpanded) {
+            super.setInternalInsetsInfo(info, currentNotification, mPanelExpanded);
+        }
+
+        @Override
         protected void setHeadsUpVisible() {
             // if the Notifications panel is showing don't show the Heads up
-            if (mPanelExpanded) {
+            if (!mEnableHeadsUpNotificationWhenNotificationShadeOpen && mPanelExpanded) {
                 return;
             }
+
             super.setHeadsUpVisible();
             if (mHeadsUpPanel.getVisibility() == View.VISIBLE) {
                 mStatusBarWindowController.setHeadsUpShowing(true);

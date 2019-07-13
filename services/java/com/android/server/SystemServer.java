@@ -735,8 +735,13 @@ public final class SystemServer {
                     (int) SystemClock.elapsedRealtime());
         }
         traceBeginAndSlog("StartPackageManagerService");
-        mPackageManagerService = PackageManagerService.main(mSystemContext, installer,
-                mFactoryTestMode != FactoryTest.FACTORY_TEST_OFF, mOnlyCore);
+        try {
+            Watchdog.getInstance().pauseWatchingCurrentThread("packagemanagermain");
+            mPackageManagerService = PackageManagerService.main(mSystemContext, installer,
+                    mFactoryTestMode != FactoryTest.FACTORY_TEST_OFF, mOnlyCore);
+        } finally {
+            Watchdog.getInstance().resumeWatchingCurrentThread("packagemanagermain");
+        }
         mFirstBoot = mPackageManagerService.isFirstBoot();
         mPackageManager = mSystemContext.getPackageManager();
         traceEnd();
@@ -1913,6 +1918,10 @@ public final class SystemServer {
         traceBeginAndSlog("StartIncidentCompanionService");
         mSystemServiceManager.startService(IncidentCompanionService.class);
         traceEnd();
+
+        if (safeMode) {
+            mActivityManagerService.enterSafeMode();
+        }
 
         // MMS service broker
         traceBeginAndSlog("StartMmsService");

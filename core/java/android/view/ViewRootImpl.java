@@ -1117,7 +1117,13 @@ public final class ViewRootImpl implements ViewParent,
      */
     public void registerRtFrameCallback(FrameDrawingCallback callback) {
         if (mAttachInfo.mThreadedRenderer != null) {
-            mAttachInfo.mThreadedRenderer.registerRtFrameCallback(callback);
+            mAttachInfo.mThreadedRenderer.registerRtFrameCallback(frame -> {
+                try {
+                    callback.onFrameDraw(frame);
+                } catch (Exception e) {
+                    Log.e(TAG, "Exception while executing onFrameDraw", e);
+                }
+            });
         }
     }
 
@@ -2012,18 +2018,9 @@ public final class ViewRootImpl implements ViewParent,
                 mDisplay.getRealSize(size);
                 desiredWindowWidth = size.x;
                 desiredWindowHeight = size.y;
-            } else if (lp.width == ViewGroup.LayoutParams.WRAP_CONTENT
-                    || lp.height == ViewGroup.LayoutParams.WRAP_CONTENT) {
-                // For wrap content, we have to remeasure later on anyways. Use size consistent with
-                // below so we get best use of the measure cache.
-                desiredWindowWidth = dipToPx(config.screenWidthDp);
-                desiredWindowHeight = dipToPx(config.screenHeightDp);
             } else {
-                // After addToDisplay, the frame contains the frameHint from window manager, which
-                // for most windows is going to be the same size as the result of relayoutWindow.
-                // Using this here allows us to avoid remeasuring after relayoutWindow
-                desiredWindowWidth = frame.width();
-                desiredWindowHeight = frame.height();
+                desiredWindowWidth = mWinFrame.width();
+                desiredWindowHeight = mWinFrame.height();
             }
 
             // We used to use the following condition to choose 32 bits drawing caches:
@@ -4479,6 +4476,7 @@ public final class ViewRootImpl implements ViewParent,
                         final int displayId = args.argi3;
                         MergedConfiguration mergedConfiguration = (MergedConfiguration) args.arg4;
                         final boolean displayChanged = mDisplay.getDisplayId() != displayId;
+                        boolean configChanged = false;
 
                         if (!mLastReportedMergedConfiguration.equals(mergedConfiguration)) {
                             // If configuration changed - notify about that and, maybe,
@@ -4486,6 +4484,7 @@ public final class ViewRootImpl implements ViewParent,
                             performConfigurationChange(mergedConfiguration, false /* force */,
                                     displayChanged
                                             ? displayId : INVALID_DISPLAY /* same display */);
+                            configChanged = true;
                         } else if (displayChanged) {
                             // Moved to display without config change - report last applied one.
                             onMovedToDisplay(displayId, mLastConfigurationFromResources);
@@ -4516,7 +4515,7 @@ public final class ViewRootImpl implements ViewParent,
                             reportNextDraw();
                         }
 
-                        if (mView != null && framesChanged) {
+                        if (mView != null && (framesChanged || configChanged)) {
                             forceLayout(mView);
                         }
                         requestLayout();

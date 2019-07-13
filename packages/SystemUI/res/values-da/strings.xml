@@ -375,8 +375,8 @@
     <string name="quick_settings_night_secondary_label_until_sunrise" msgid="4453017157391574402">"Indtil solopgang"</string>
     <string name="quick_settings_night_secondary_label_on_at" msgid="6256314040368487637">"Tænd kl. <xliff:g id="TIME">%s</xliff:g>"</string>
     <string name="quick_settings_secondary_label_until" msgid="2749196569462600150">"Indtil <xliff:g id="TIME">%s</xliff:g>"</string>
-    <string name="quick_settings_ui_mode_night_label" msgid="512534812963862137">"Mørkt tema"</string>
-    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="3496696903886673256">"Mørkt tema\nBatterisparefunktion"</string>
+    <string name="quick_settings_ui_mode_night_label" msgid="3419947801072692538">"Mørkt tema"</string>
+    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="7438725724589758362">"Mørkt tema\nBatterisparefunktion"</string>
     <string name="quick_settings_nfc_label" msgid="9012153754816969325">"NFC"</string>
     <string name="quick_settings_nfc_off" msgid="6883274004315134333">"NFC er deaktiveret"</string>
     <string name="quick_settings_nfc_on" msgid="6680317193676884311">"NFC er aktiveret"</string>
@@ -832,7 +832,7 @@
     <string name="pip_phone_minimize" msgid="1079119422589131792">"Minimer"</string>
     <string name="pip_phone_close" msgid="8416647892889710330">"Luk"</string>
     <string name="pip_phone_settings" msgid="8080777499521528521">"Indstillinger"</string>
-    <string name="pip_phone_dismiss_hint" msgid="6351678169095923899">"Træk ned for at afvise"</string>
+    <string name="pip_phone_dismiss_hint" msgid="6351678169095923899">"Træk ned for at fjerne"</string>
     <string name="pip_menu_title" msgid="4707292089961887657">"Menu"</string>
     <string name="pip_notification_title" msgid="3204024940158161322">"<xliff:g id="NAME">%s</xliff:g> vises som integreret billede"</string>
     <string name="pip_notification_message" msgid="5619512781514343311">"Hvis du ikke ønsker, at <xliff:g id="NAME">%s</xliff:g> skal benytte denne funktion, kan du åbne indstillingerne og deaktivere den."</string>

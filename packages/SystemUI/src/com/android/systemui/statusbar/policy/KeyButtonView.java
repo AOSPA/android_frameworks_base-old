@@ -79,6 +79,7 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
     private final MetricsLogger mMetricsLogger = Dependency.get(MetricsLogger.class);
     private final InputManager mInputManager;
     private final Paint mOvalBgPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private float mDarkIntensity;
     private boolean mHasOvalBg = false;
 
     private final Runnable mCheckLongPress = new Runnable() {
@@ -248,13 +249,8 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
                 x = (int)ev.getRawX();
                 y = (int)ev.getRawY();
 
-                boolean exceededTouchSlopX = Math.abs(x - mTouchDownX) > (mIsVertical
-                        ? QuickStepContract.getQuickScrubTouchSlopPx()
-                        : QuickStepContract.getQuickStepTouchSlopPx());
-                boolean exceededTouchSlopY = Math.abs(y - mTouchDownY) > (mIsVertical
-                        ? QuickStepContract.getQuickStepTouchSlopPx()
-                        : QuickStepContract.getQuickScrubTouchSlopPx());
-                if (exceededTouchSlopX || exceededTouchSlopY) {
+                float slop = QuickStepContract.getQuickStepTouchSlopPx(getContext());
+                if (Math.abs(x - mTouchDownX) > slop || Math.abs(y - mTouchDownY) > slop) {
                     // When quick step is enabled, prevent animating the ripple triggered by
                     // setPressed and decide to run it on touch up
                     setPressed(false);
@@ -302,6 +298,23 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
         }
 
         return true;
+    }
+
+    @Override
+    public void setImageDrawable(Drawable drawable) {
+        super.setImageDrawable(drawable);
+
+        if (drawable == null) {
+            return;
+        }
+        KeyButtonDrawable keyButtonDrawable = (KeyButtonDrawable) drawable;
+        keyButtonDrawable.setDarkIntensity(mDarkIntensity);
+        mHasOvalBg = keyButtonDrawable.hasOvalBg();
+        if (mHasOvalBg) {
+            mOvalBgPaint.setColor(keyButtonDrawable.getDrawableBackgroundColor());
+        }
+        mRipple.setType(keyButtonDrawable.hasOvalBg() ? KeyButtonRipple.Type.OVAL
+                : KeyButtonRipple.Type.ROUNDED_RECT);
     }
 
     public void playSoundEffect(int soundConstant) {
@@ -360,17 +373,11 @@ public class KeyButtonView extends ImageView implements ButtonInterface {
 
     @Override
     public void setDarkIntensity(float darkIntensity) {
+        mDarkIntensity = darkIntensity;
+
         Drawable drawable = getDrawable();
         if (drawable != null) {
-            KeyButtonDrawable keyButtonDrawable = (KeyButtonDrawable) drawable;
-            keyButtonDrawable.setDarkIntensity(darkIntensity);
-            mHasOvalBg = keyButtonDrawable.hasOvalBg();
-            if (mHasOvalBg) {
-                mOvalBgPaint.setColor(keyButtonDrawable.getDarkColor());
-            }
-            mRipple.setType(keyButtonDrawable.hasOvalBg() ? KeyButtonRipple.Type.OVAL
-                    : KeyButtonRipple.Type.ROUNDED_RECT);
-
+            ((KeyButtonDrawable) drawable).setDarkIntensity(darkIntensity);
             // Since we reuse the same drawable for multiple views, we need to invalidate the view
             // manually.
             invalidate();

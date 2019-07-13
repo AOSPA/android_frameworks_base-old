@@ -20,6 +20,7 @@ import static android.Manifest.permission.RECEIVE_DATA_ACTIVITY_CHANGE;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.net.ConnectivityManager.CONNECTIVITY_ACTION;
 import static android.net.ConnectivityManager.NETID_UNSET;
+import static android.net.ConnectivityManager.PRIVATE_DNS_MODE_OPPORTUNISTIC;
 import static android.net.ConnectivityManager.TYPE_ETHERNET;
 import static android.net.ConnectivityManager.TYPE_NONE;
 import static android.net.ConnectivityManager.TYPE_VPN;
@@ -2658,9 +2659,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     final boolean valid = ((msg.arg1 & NETWORK_VALIDATION_RESULT_VALID) != 0);
                     final boolean wasValidated = nai.lastValidated;
                     final boolean wasDefault = isDefaultNetwork(nai);
-                    if (nai.everCaptivePortalDetected && !nai.captivePortalLoginNotified
-                            && valid) {
-                        nai.captivePortalLoginNotified = true;
+                    // Only show a connected notification if the network is pending validation
+                    // after the captive portal app was open, and it has now validated.
+                    if (nai.captivePortalValidationPending && valid) {
+                        // User is now logged in, network validated.
+                        nai.captivePortalValidationPending = false;
                         showNetworkNotification(nai, NotificationType.LOGGED_IN);
                     }
 
@@ -2731,9 +2734,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
                         final int oldScore = nai.getCurrentScore();
                         nai.lastCaptivePortalDetected = visible;
                         nai.everCaptivePortalDetected |= visible;
-                        if (visible) {
-                            nai.captivePortalLoginNotified = false;
-                        }
                         if (nai.lastCaptivePortalDetected &&
                             Settings.Global.CAPTIVE_PORTAL_MODE_AVOID == getCaptivePortalMode()) {
                             if (DBG) log("Avoiding captive portal network: " + nai.name());
@@ -3546,6 +3546,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 new CaptivePortal(new CaptivePortalImpl(network).asBinder()));
         appIntent.setFlags(Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT | Intent.FLAG_ACTIVITY_NEW_TASK);
 
+        // This runs on a random binder thread, but getNetworkAgentInfoForNetwork is thread-safe,
+        // and captivePortalValidationPending is volatile.
+        final NetworkAgentInfo nai = getNetworkAgentInfoForNetwork(network);
+        if (nai != null) {
+            nai.captivePortalValidationPending = true;
+        }
         Binder.withCleanCallingIdentity(() ->
                 mContext.startActivityAsUser(appIntent, UserHandle.CURRENT));
     }
@@ -6373,6 +6379,15 @@ public class ConnectivityService extends IConnectivityManager.Stub
             }
         }
         if (isNewDefault) {
+            // restore permission to actual value if it becomes the default network again..
+            if (!newNetwork.isVPN()) {
+                try {
+                    mNMS.setNetworkPermission(newNetwork.network.netId,
+                                           getNetworkPermission(newNetwork.networkCapabilities));
+                } catch (RemoteException e) {
+                    loge("Exception in setNetworkPermission: " + e);
+                }
+            }
             updateDataActivityTracking(newNetwork, oldDefaultNetwork);
             // Notify system services that this network is up.
             makeDefault(newNetwork);
@@ -6989,8 +7004,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         final int userId = UserHandle.getCallingUserId();
 
-        final IpMemoryStore ipMemoryStore = IpMemoryStore.getMemoryStore(mContext);
-        ipMemoryStore.factoryReset();
+        Binder.withCleanCallingIdentity(() -> {
+            final IpMemoryStore ipMemoryStore = IpMemoryStore.getMemoryStore(mContext);
+            ipMemoryStore.factoryReset();
+        });
 
         // Turn airplane mode off
         setAirplaneMode(false);
@@ -7038,6 +7055,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     }
                 }
             }
+        }
+
+        // restore private DNS settings to default mode (opportunistic)
+        if (!mUserManager.hasUserRestriction(UserManager.DISALLOW_CONFIG_PRIVATE_DNS)) {
+            Settings.Global.putString(mContext.getContentResolver(),
+                    Settings.Global.PRIVATE_DNS_MODE, PRIVATE_DNS_MODE_OPPORTUNISTIC);
         }
 
         Settings.Global.putString(mContext.getContentResolver(),

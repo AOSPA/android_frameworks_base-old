@@ -266,7 +266,7 @@
     <string name="notification_channel_alerts" msgid="4496839309318519037">"Alertes"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"Demostració per a botigues"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"Connexió USB"</string>
-    <string name="notification_channel_heavy_weight_app" msgid="6218742927792852607">"S\'està executant una aplicació"</string>
+    <string name="notification_channel_heavy_weight_app" msgid="6218742927792852607">"Aplicació en execució"</string>
     <string name="notification_channel_foreground_service" msgid="3931987440602669158">"Aplicacions que consumeixen bateria"</string>
     <string name="foreground_service_app_in_background" msgid="1060198778219731292">"<xliff:g id="APP_NAME">%1$s</xliff:g> està consumint bateria"</string>
     <string name="foreground_service_apps_in_background" msgid="7175032677643332242">"<xliff:g id="NUMBER">%1$d</xliff:g> aplicacions estan consumint bateria"</string>
@@ -1130,8 +1130,14 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"Obre amb"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"Obre amb %1$s"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"Obre"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"Dona accés per obrir enllaços de <xliff:g id="HOST">%1$s</xliff:g> amb"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"Dona accés per obrir enllaços de <xliff:g id="HOST">%1$s</xliff:g> amb <xliff:g id="APPLICATION">%2$s</xliff:g>"</string>
+    <!-- no translation found for whichOpenHostLinksWith (3788174881117226583) -->
+    <skip />
+    <!-- no translation found for whichOpenLinksWith (6392123355599572804) -->
+    <skip />
+    <!-- no translation found for whichOpenLinksWithApp (8225991685366651614) -->
+    <skip />
+    <!-- no translation found for whichOpenHostLinksWithApp (3464470639011045589) -->
+    <skip />
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"Dona accés"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"Edita amb"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"Edita amb %1$s"</string>
@@ -1583,6 +1589,8 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"Vols iniciar el navegador?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"Vols acceptar la trucada?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"Sempre"</string>
+    <!-- no translation found for activity_resolver_set_always (1422574191056490585) -->
+    <skip />
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"Només una vegada"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"Configuració"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s no admet perfils professionals."</string>
@@ -1903,7 +1911,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Cerca actualitzacions"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"Tens missatges nous"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"Obre l\'aplicació d\'SMS per veure\'ls"</string>
-    <string name="profile_encrypted_title" msgid="4260432497586829134">"Algunes funcions poden limitar-se"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"Algunes funcions poden ser limitades"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"Perfil professional bloquejat"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"Toca per desbloquejar el perfil"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"S\'ha connectat a <xliff:g id="PRODUCT_NAME">%1$s</xliff:g>"</string>

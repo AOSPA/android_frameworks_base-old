@@ -747,6 +747,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     };
 
+    private UEventObserver mExtEventObserver = new UEventObserver() {
+        @Override
+        public void onUEvent(UEventObserver.UEvent event) {
+           if (event.get("status") != null) {
+                mDefaultDisplayPolicy.setHdmiPlugged("connected".equals(event.get("status")));
+           }
+        }
+    };
+
     class SettingsObserver extends ContentObserver {
         SettingsObserver(Handler handler) {
             super(handler);
@@ -3607,6 +3616,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     void initializeHdmiStateInternal() {
         boolean plugged = false;
+        mExtEventObserver.startObserving("mdss_mdp/drm/card");
         // watch for HDMI plug messages if the hdmi switch exists
         if (new File("/sys/devices/virtual/switch/hdmi/state").exists()) {
             mHDMIObserver.startObserving("DEVPATH=/devices/virtual/switch/hdmi");
@@ -4863,6 +4873,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         }
         startedWakingUp(ON_BECAUSE_OF_UNKNOWN);
+        finishedWakingUp(ON_BECAUSE_OF_UNKNOWN);
         screenTurningOn(null);
         screenTurnedOn();
     }
@@ -5196,6 +5207,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         if (awakenFromDreams) {
             awakenDreams();
+        }
+
+        if (!isUserSetupComplete()) {
+            Slog.i(TAG, "Not going home because user setup is in progress.");
+            return;
         }
 
         // Start dock.
