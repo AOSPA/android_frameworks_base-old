@@ -2176,7 +2176,8 @@ public abstract class ConnectionService extends Service {
                     connection.getDisconnectCause(),
                     emptyList,
                     connection.getExtras(),
-                    conferenceId);
+                    conferenceId,
+                    connection.getCallDirection());
             mAdapter.addExistingConnection(id, parcelableConnection);
         }
     }

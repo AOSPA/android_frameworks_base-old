@@ -581,6 +581,7 @@ class StorageManagerService extends IStorageManager.Stub
     private static final int H_RUN_IDLE_MAINT = 11;
     private static final int H_ABORT_IDLE_MAINT = 12;
     private static final int H_BOOT_COMPLETED = 13;
+    private static final int H_COMPLETE_UNLOCK_USER = 14;
 
     class StorageManagerServiceHandler extends Handler {
         public StorageManagerServiceHandler(Looper looper) {
@@ -699,7 +700,10 @@ class StorageManagerService extends IStorageManager.Stub
                     abortIdleMaint((Runnable)msg.obj);
                     break;
                 }
-
+                case H_COMPLETE_UNLOCK_USER: {
+                    completeUnlockUser((int) msg.obj);
+                    break;
+                }
             }
         }
     }
@@ -977,6 +981,17 @@ class StorageManagerService extends IStorageManager.Stub
             mStoraged.onUserStarted(userId);
         } catch (Exception e) {
             Slog.wtf(TAG, e);
+        }
+
+        mHandler.obtainMessage(H_COMPLETE_UNLOCK_USER, userId).sendToTarget();
+    }
+
+    private void completeUnlockUser(int userId) {
+        // If user 0 has completed unlock, perform a one-time migration of legacy obb data
+        // to its new location. This may take time depending on the size of the data to be copied
+        // so it's done on the StorageManager handler thread.
+        if (userId == 0) {
+            mPmInternal.migrateLegacyObbData();
         }
 
         // Record user as started so newly mounted volumes kick off events
@@ -2853,6 +2868,12 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    private boolean isSystemUnlocked(int userId) {
+        synchronized (mLock) {
+            return ArrayUtils.contains(mSystemUnlockedUsers, userId);
+        }
+    }
+
     @Override
     public void prepareUserStorage(String volumeUuid, int userId, int serialNumber, int flags) {
         enforcePermission(android.Manifest.permission.STORAGE_INTERNAL);
@@ -3029,6 +3050,11 @@ class StorageManagerService extends IStorageManager.Stub
         final boolean realState = (flags & StorageManager.FLAG_REAL_STATE) != 0;
         final boolean includeInvisible = (flags & StorageManager.FLAG_INCLUDE_INVISIBLE) != 0;
 
+        // Report all volumes as unmounted until we've recorded that user 0 has unlocked. There
+        // are no guarantees that callers will see a consistent view of the volume before that
+        // point
+        final boolean systemUserUnlocked = isSystemUnlocked(UserHandle.USER_SYSTEM);
+
         final boolean userKeyUnlocked;
         final boolean storagePermission;
         final long token = Binder.clearCallingIdentity();
@@ -3064,7 +3090,9 @@ class StorageManagerService extends IStorageManager.Stub
                 if (!match) continue;
 
                 boolean reportUnmounted = false;
-                if ((vol.getType() == VolumeInfo.TYPE_EMULATED) && !userKeyUnlocked) {
+                if (!systemUserUnlocked) {
+                    reportUnmounted = true;
+                } else if ((vol.getType() == VolumeInfo.TYPE_EMULATED) && !userKeyUnlocked) {
                     reportUnmounted = true;
                 } else if (!storagePermission && !realState) {
                     reportUnmounted = true;

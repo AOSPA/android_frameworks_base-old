@@ -458,7 +458,7 @@ final class PooledLambdaImpl<R> extends OmniFunction<Object,
     }
 
     private String getFuncTypeAsString() {
-        if (isRecycled()) throw new IllegalStateException();
+        if (isRecycled()) return "<recycled>";
         if (isConstSupplier()) return "supplier";
         String name = LambdaType.toString(getFlags(MASK_EXPOSED_AS));
         if (name.endsWith("Consumer")) return "consumer";
@@ -466,7 +466,7 @@ final class PooledLambdaImpl<R> extends OmniFunction<Object,
         if (name.endsWith("Predicate")) return "predicate";
         if (name.endsWith("Supplier")) return "supplier";
         if (name.endsWith("Runnable")) return "runnable";
-        throw new IllegalStateException("Don't know the string representation of " + name);
+        return name;
     }
 
     /**
@@ -637,6 +637,7 @@ final class PooledLambdaImpl<R> extends OmniFunction<Object,
         private static String argCountPrefix(int argCount) {
             switch (argCount) {
                 case MASK_ARG_COUNT: return "";
+                case 0: return "";
                 case 1: return "";
                 case 2: return "Bi";
                 case 3: return "Tri";
@@ -646,7 +647,7 @@ final class PooledLambdaImpl<R> extends OmniFunction<Object,
                 case 7: return "Hept";
                 case 8: return "Oct";
                 case 9: return "Nona";
-                default: throw new IllegalArgumentException("" + argCount);
+                default: return "" + argCount + "arg";
             }
         }
 

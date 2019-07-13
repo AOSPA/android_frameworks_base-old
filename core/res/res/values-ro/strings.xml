@@ -1150,8 +1150,14 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"Deschideți cu"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"Deschideți cu %1$s"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"Deschideți"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"Permiteți accesul pentru a deschide linkurile <xliff:g id="HOST">%1$s</xliff:g> cu"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"Permiteți accesul pentru a deschide linkurile <xliff:g id="HOST">%1$s</xliff:g> cu <xliff:g id="APPLICATION">%2$s</xliff:g>"</string>
+    <!-- no translation found for whichOpenHostLinksWith (3788174881117226583) -->
+    <skip />
+    <!-- no translation found for whichOpenLinksWith (6392123355599572804) -->
+    <skip />
+    <!-- no translation found for whichOpenLinksWithApp (8225991685366651614) -->
+    <skip />
+    <!-- no translation found for whichOpenHostLinksWithApp (3464470639011045589) -->
+    <skip />
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"Permiteți accesul"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"Editați cu"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"Editați cu %1$s"</string>
@@ -1606,6 +1612,8 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"Lansați browserul?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"Acceptați apelul?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"Întotdeauna"</string>
+    <!-- no translation found for activity_resolver_set_always (1422574191056490585) -->
+    <skip />
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"Numai o dată"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"Setări"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s nu acceptă profilul de serviciu"</string>
@@ -1693,8 +1701,8 @@
     <string name="accessibility_gesture_prompt_text" msgid="8259145549733019401">"Alegeți un serviciu pe care să îl folosiți cu gestul de accesibilitate (glisați în sus cu două degete din partea de jos a ecranului):"</string>
     <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"Alegeți un serviciu pe care să îl folosiți cu gestul de accesibilitate (glisați în sus cu trei degete din partea de jos a ecranului):"</string>
     <string name="accessibility_button_instructional_text" msgid="7003212763213614833">"Pentru a comuta între servicii, atingeți lung butonul de accesibilitate."</string>
-    <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"Pentru a comuta între servicii, glisați în sus cu două degete și țineți lung."</string>
-    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"Pentru a comuta între servicii, glisați în sus cu trei degete și țineți lung."</string>
+    <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"Pentru a schimba între servicii, glisați în sus cu două degete și țineți lung."</string>
+    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"Pentru a schimba între servicii, glisați în sus cu trei degete și țineți lung."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"Mărire"</string>
     <string name="user_switched" msgid="3768006783166984410">"Utilizator curent: <xliff:g id="NAME">%1$s</xliff:g>."</string>
     <string name="user_switching_message" msgid="2871009331809089783">"Se comută la <xliff:g id="NAME">%1$s</xliff:g>…"</string>

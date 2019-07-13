@@ -356,6 +356,7 @@
   <java-symbol type="bool" name="config_enableMultiUserUI"/>
   <java-symbol type="bool" name="config_enableNewAutoSelectNetworkUI"/>
   <java-symbol type="bool" name="config_disableUsbPermissionDialogs"/>
+  <java-symbol type="dimen" name="config_fullTaskSnapshotScale" />
   <java-symbol type="bool" name="config_lowRamTaskSnapshotsAndRecents" />
   <java-symbol type="bool" name="config_hasRecents" />
   <java-symbol type="string" name="config_recentsComponentName" />
@@ -2255,7 +2256,6 @@
   <java-symbol type="id" name="resolver_list" />
   <java-symbol type="id" name="button_once" />
   <java-symbol type="id" name="button_always" />
-  <java-symbol type="id" name="button_app_settings" />
   <java-symbol type="integer" name="config_globalActionsKeyTimeout" />
   <java-symbol type="integer" name="config_screenshotChordKeyTimeout" />
   <java-symbol type="integer" name="config_maxResolverActivityColumns" />
@@ -2640,14 +2640,17 @@
   <java-symbol type="bool" name="config_use_voip_mode_for_ims" />
   <java-symbol type="attr" name="touchscreenBlocksFocus" />
   <java-symbol type="layout" name="resolver_list_with_default" />
-  <java-symbol type="string" name="activity_resolver_app_settings" />
+  <java-symbol type="string" name="activity_resolver_set_always" />
+  <java-symbol type="string" name="activity_resolver_use_always" />
   <java-symbol type="string" name="whichApplicationNamed" />
   <java-symbol type="string" name="whichApplicationLabel" />
   <java-symbol type="string" name="whichViewApplication" />
   <java-symbol type="string" name="whichViewApplicationNamed" />
   <java-symbol type="string" name="whichViewApplicationLabel" />
-  <java-symbol type="string" name="whichGiveAccessToApplication" />
-  <java-symbol type="string" name="whichGiveAccessToApplicationNamed" />
+  <java-symbol type="string" name="whichOpenHostLinksWith" />
+  <java-symbol type="string" name="whichOpenHostLinksWithApp" />
+  <java-symbol type="string" name="whichOpenLinksWith" />
+  <java-symbol type="string" name="whichOpenLinksWithApp" />
   <java-symbol type="string" name="whichGiveAccessToApplicationLabel" />
   <java-symbol type="string" name="whichEditApplication" />
   <java-symbol type="string" name="whichEditApplicationNamed" />
@@ -2829,6 +2832,7 @@
   <java-symbol type="layout" name="chooser_grid_preview_file" />
   <java-symbol type="id" name="chooser_row_text_option" />
   <java-symbol type="dimen" name="chooser_row_text_option_translate" />
+  <java-symbol type="integer" name="config_maxShortcutTargetsPerApp" />
   <java-symbol type="layout" name="resolve_grid_item" />
   <java-symbol type="id" name="day_picker_view_pager" />
   <java-symbol type="layout" name="day_picker_content_material" />
@@ -3835,4 +3839,13 @@
 
   <java-symbol type="string" name="config_defaultSupervisionProfileOwnerComponent" />
   <java-symbol type="bool" name="config_inflateSignalStrength" />
+
+  <!-- For Pdn throttle feature -->
+  <java-symbol type="bool" name="config_pdp_retry_for_29_33_55_enabled" />
+  <java-symbol type="integer" name="data_retry_delay" />
+  <java-symbol type="integer" name="data_retry_idle_delay" />
+  <java-symbol type="string" name="data_conn_status_title" />
+  <java-symbol type="string" name="user_authentication_failed" />
+  <java-symbol type="string" name="service_not_subscribed" />
+  <java-symbol type="string" name="multi_conn_to_same_pdn_not_allowed" />
 </resources>

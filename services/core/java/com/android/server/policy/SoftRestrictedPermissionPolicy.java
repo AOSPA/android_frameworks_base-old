@@ -29,10 +29,12 @@ import static android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_SYST
 import static android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.os.Build;
+import android.os.UserHandle;
 
 /**
  * The behavior of soft restricted permissions is different for each permission. This class collects
@@ -74,26 +76,42 @@ public abstract class SoftRestrictedPermissionPolicy {
      * Get the policy for a soft restricted permission.
      *
      * @param context A context to use
-     * @param appInfo The application the permission belongs to
+     * @param appInfo The application the permission belongs to. Can be {@code null}, but then
+     *                only {@link #resolveAppOp} will work.
+     * @param user The user the app belongs to. Can be {@code null}, but then only
+     *             {@link #resolveAppOp} will work.
      * @param permission The name of the permission
      *
      * @return The policy for this permission
      */
     public static @NonNull SoftRestrictedPermissionPolicy forPermission(@NonNull Context context,
-            @NonNull ApplicationInfo appInfo, @NonNull String permission) {
+            @Nullable ApplicationInfo appInfo, @Nullable UserHandle user,
+            @NonNull String permission) {
         switch (permission) {
             // Storage uses a special app op to decide the mount state and supports soft restriction
             // where the restricted state allows the permission but only for accessing the medial
             // collections.
-            case READ_EXTERNAL_STORAGE:
-            case WRITE_EXTERNAL_STORAGE: {
-                int flags = context.getPackageManager().getPermissionFlags(
-                        permission, appInfo.packageName, context.getUser());
-                boolean applyRestriction = (flags & FLAG_PERMISSION_APPLY_RESTRICTION) != 0;
-                boolean isWhiteListed = (flags & FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT) != 0;
-                boolean hasRequestedLegacyExternalStorage =
-                        appInfo.hasRequestedLegacyExternalStorage();
-                int targetSDK = appInfo.targetSdkVersion;
+            case READ_EXTERNAL_STORAGE: {
+                final int flags;
+                final boolean applyRestriction;
+                final boolean isWhiteListed;
+                final boolean hasRequestedLegacyExternalStorage;
+                final int targetSDK;
+
+                if (appInfo != null) {
+                    flags = context.getPackageManager().getPermissionFlags(permission,
+                            appInfo.packageName, user);
+                    applyRestriction = (flags & FLAG_PERMISSION_APPLY_RESTRICTION) != 0;
+                    isWhiteListed = (flags & FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT) != 0;
+                    hasRequestedLegacyExternalStorage = appInfo.hasRequestedLegacyExternalStorage();
+                    targetSDK = appInfo.targetSdkVersion;
+                } else {
+                    flags = 0;
+                    applyRestriction = false;
+                    isWhiteListed = false;
+                    hasRequestedLegacyExternalStorage = false;
+                    targetSDK = 0;
+                }
 
                 return new SoftRestrictedPermissionPolicy() {
                     @Override
@@ -126,6 +144,42 @@ public abstract class SoftRestrictedPermissionPolicy {
                         } else {
                             return false;
                         }
+                    }
+                };
+            }
+            case WRITE_EXTERNAL_STORAGE: {
+                final boolean isWhiteListed;
+                final int targetSDK;
+
+                if (appInfo != null) {
+                    final int flags = context.getPackageManager().getPermissionFlags(permission,
+                            appInfo.packageName, user);
+                    isWhiteListed = (flags & FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT) != 0;
+                    targetSDK = appInfo.targetSdkVersion;
+                } else {
+                    isWhiteListed = false;
+                    targetSDK = 0;
+                }
+
+                return new SoftRestrictedPermissionPolicy() {
+                    @Override
+                    public int resolveAppOp() {
+                        return OP_NONE;
+                    }
+
+                    @Override
+                    public int getDesiredOpMode() {
+                        return MODE_DEFAULT;
+                    }
+
+                    @Override
+                    public boolean shouldSetAppOpIfNotDefault() {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean canBeGranted() {
+                        return isWhiteListed || targetSDK >= Build.VERSION_CODES.Q;
                     }
                 };
             }

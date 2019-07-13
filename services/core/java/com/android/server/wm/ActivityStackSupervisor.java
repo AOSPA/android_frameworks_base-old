@@ -131,6 +131,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.BoostFramework;
+import com.android.internal.app.procstats.ProcessStats;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -427,7 +428,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
         void sendErrorResult(String message) {
             try {
-                if (callerApp.hasThread()) {
+                if (callerApp != null && callerApp.hasThread()) {
                     callerApp.getThread().scheduleCrash(message);
                 }
             } catch (RemoteException e) {
@@ -2924,7 +2925,14 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         protected Void doInBackground(Void... params) {
             String res = null;
             final Intent intent = new Intent(Intent.ACTION_MAIN);
-            if (mUxPerf != null) {
+            int trimLevel = 0;
+            try {
+                trimLevel = ActivityManager.getService().getMemoryTrimLevel();
+            } catch (RemoteException e) {
+                return null;
+            }
+            if (mUxPerf != null
+                   && trimLevel < ProcessStats.ADJ_MEM_FACTOR_CRITICAL) {
                 res = mUxPerf.perfUXEngine_trigger(BoostFramework.UXE_TRIGGER);
                 if (res == null)
                     return null;

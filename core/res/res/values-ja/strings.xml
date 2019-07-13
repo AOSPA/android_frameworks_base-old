@@ -266,14 +266,14 @@
     <string name="notification_channel_alerts" msgid="4496839309318519037">"通知"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"販売店デモ"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"USB 接続"</string>
-    <string name="notification_channel_heavy_weight_app" msgid="6218742927792852607">"アプリを実行しています"</string>
-    <string name="notification_channel_foreground_service" msgid="3931987440602669158">"アプリが電池を消費しています"</string>
+    <string name="notification_channel_heavy_weight_app" msgid="6218742927792852607">"実行中のアプリ"</string>
+    <string name="notification_channel_foreground_service" msgid="3931987440602669158">"電池を消費しているアプリ"</string>
     <string name="foreground_service_app_in_background" msgid="1060198778219731292">"「<xliff:g id="APP_NAME">%1$s</xliff:g>」が電池を使用しています"</string>
     <string name="foreground_service_apps_in_background" msgid="7175032677643332242">"<xliff:g id="NUMBER">%1$d</xliff:g> 個のアプリが電池を使用しています"</string>
     <string name="foreground_service_tap_for_details" msgid="372046743534354644">"タップして電池やデータの使用量を確認"</string>
     <string name="foreground_service_multiple_separator" msgid="4021901567939866542">"<xliff:g id="LEFT_SIDE">%1$s</xliff:g>、<xliff:g id="RIGHT_SIDE">%2$s</xliff:g>"</string>
     <string name="safeMode" msgid="2788228061547930246">"セーフモード"</string>
-    <string name="android_system_label" msgid="6577375335728551336">"Androidシステム"</string>
+    <string name="android_system_label" msgid="6577375335728551336">"Android システム"</string>
     <string name="user_owner_label" msgid="8836124313744349203">"個人用プロファイルに切り替える"</string>
     <string name="managed_profile_label" msgid="8947929265267690522">"仕事用プロファイルに切り替える"</string>
     <string name="permgrouplab_contacts" msgid="3657758145679177612">"連絡先"</string>
@@ -1130,8 +1130,14 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"アプリで開く"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"%1$sで開く"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"開く"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"<xliff:g id="HOST">%1$s</xliff:g> のリンクを開くには、アクセス権を付与してください"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"<xliff:g id="APPLICATION">%2$s</xliff:g> で <xliff:g id="HOST">%1$s</xliff:g> のリンクを開くには、アクセス権を付与してください"</string>
+    <!-- no translation found for whichOpenHostLinksWith (3788174881117226583) -->
+    <skip />
+    <!-- no translation found for whichOpenLinksWith (6392123355599572804) -->
+    <skip />
+    <!-- no translation found for whichOpenLinksWithApp (8225991685366651614) -->
+    <skip />
+    <!-- no translation found for whichOpenHostLinksWithApp (3464470639011045589) -->
+    <skip />
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"アクセス権を付与"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"編集に使用"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"%1$sで編集"</string>
@@ -1583,6 +1589,8 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"ブラウザを起動しますか？"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"通話を受けますか？"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"常時"</string>
+    <!-- no translation found for activity_resolver_set_always (1422574191056490585) -->
+    <skip />
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"1回のみ"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"設定"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$sは仕事用プロファイルをサポートしていません"</string>

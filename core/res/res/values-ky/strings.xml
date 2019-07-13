@@ -255,7 +255,7 @@
     <string name="notification_channel_physical_keyboard" msgid="7297661826966861459">"Аппараттык баскычтоп"</string>
     <string name="notification_channel_security" msgid="7345516133431326347">"Коопсуздук"</string>
     <string name="notification_channel_car_mode" msgid="3553380307619874564">"Унаа режими"</string>
-    <string name="notification_channel_account" msgid="7577959168463122027">"Каттоо эсебинин абалы"</string>
+    <string name="notification_channel_account" msgid="7577959168463122027">"Аккаунттун абалы"</string>
     <string name="notification_channel_developer" msgid="7579606426860206060">"Иштеп чыгуучунун билдирүүлөрү"</string>
     <string name="notification_channel_updates" msgid="4794517569035110397">"Жаңыртуулар"</string>
     <string name="notification_channel_network_status" msgid="5025648583129035447">"Тармактын абалы"</string>
@@ -1130,8 +1130,14 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"Төмөнкү менен ачуу"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"%1$s менен ачуу"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"Ачуу"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"Төмөнкү колдонмо менен <xliff:g id="HOST">%1$s</xliff:g> шилтемелерин  ачууга уруксат берүү"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"<xliff:g id="APPLICATION">%2$s</xliff:g> колдонмосу менен <xliff:g id="HOST">%1$s</xliff:g> шилтемелерин  ачууга уруксат берүү"</string>
+    <!-- no translation found for whichOpenHostLinksWith (3788174881117226583) -->
+    <skip />
+    <!-- no translation found for whichOpenLinksWith (6392123355599572804) -->
+    <skip />
+    <!-- no translation found for whichOpenLinksWithApp (8225991685366651614) -->
+    <skip />
+    <!-- no translation found for whichOpenHostLinksWithApp (3464470639011045589) -->
+    <skip />
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"Мүмкүнчүлүк берүү"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"Төмөнкү менен түзөтүү"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"%1$s менен түзөтүү"</string>
@@ -1585,6 +1591,8 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"Серепчи иштетилсинби?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"Чалуу кабыл алынсынбы?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"Дайыма"</string>
+    <!-- no translation found for activity_resolver_set_always (1422574191056490585) -->
+    <skip />
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"Бир жолу гана"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"Жөндөөлөр"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s жумуш профилин колдоого албайт"</string>
@@ -1669,10 +1677,10 @@
     <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g> кызматын колдонуу үчүн үнүн чоңойтуп/кичирейтүү баскычтарын үч секунд коё бербей басып туруңуз"</string>
     <string name="accessibility_button_prompt_text" msgid="1176658502969738564">"Атайын мүмкүнчүлүктөр баскычын таптаганыңызда иштей турган кызматты тандаңыз:"</string>
     <string name="accessibility_gesture_prompt_text" msgid="8259145549733019401">"Атайын мүмкүнчүлүктөр жаңсоосу үчүн кызматты тандаңыз (эки манжаңыз менен экрандын ылдый жагынан өйдө карай сүрүңүз):"</string>
-    <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"Атайын мүмкүнчүлүктөр жаңсоосу үчүн кызматты тандаңыз (үч манжаңыз менен экрандын ылдый жагынан өйдө карай сүрүңүз):"</string>
+    <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"Атайын мүмкүнчүлүктөр жаңсоосу аркылуу иштетиле турган кызматты тандаңыз (үч манжаңыз менен экрандын ылдый жагынан өйдө карай сүрүңүз):"</string>
     <string name="accessibility_button_instructional_text" msgid="7003212763213614833">"Кызматтарды которуштуруу үчүн Атайын мүмкүнчүлүктөр баскычын басып, кармап туруңуз."</string>
     <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"Кызматтарды которуштуруу үчүн эки манжаңыз менен өйдө сүрүп, кармап туруңуз."</string>
-    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"Кызматтарды которуштуруу үчүн үч манжаңыз менен өйдө сүрүп, кармап туруңуз."</string>
+    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"Башка кызматка которулуу үчүн үч манжаңыз менен экранды өйдө сүрүп, кармап туруңуз."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"Чоңойтуу"</string>
     <string name="user_switched" msgid="3768006783166984410">"Учурдагы колдонуучу <xliff:g id="NAME">%1$s</xliff:g>."</string>
     <string name="user_switching_message" msgid="2871009331809089783">"<xliff:g id="NAME">%1$s</xliff:g> дегенге которулууда…"</string>
@@ -1905,7 +1913,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Жаңыртууну издөө"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"Сизге жаңы билдирүүлөр келди"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"Көрүү үчүн SMS колдонмосун ачыңыз"</string>
-    <string name="profile_encrypted_title" msgid="4260432497586829134">"Айрым функциялар чектелиши мүмкүн"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"Айрым функциялар иштебеши мүмкүн"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"Жумуш профили кулпуланган"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"Таптап жумуш профилин ачыңыз"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"<xliff:g id="PRODUCT_NAME">%1$s</xliff:g> менен туташты"</string>

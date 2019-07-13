@@ -57,6 +57,7 @@ import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.shared.system.WindowManagerWrapper;
 
+import java.io.PrintWriter;
 import java.util.concurrent.Executor;
 
 /**
@@ -65,6 +66,7 @@ import java.util.concurrent.Executor;
 public class EdgeBackGestureHandler implements DisplayListener {
 
     private static final String TAG = "EdgeBackGestureHandler";
+    private static final int MAX_LONG_PRESS_TIMEOUT = 250;
 
     private final IPinnedStackListener.Stub mImeChangedListener = new IPinnedStackListener.Stub() {
         @Override
@@ -118,7 +120,7 @@ public class EdgeBackGestureHandler implements DisplayListener {
 
     private final Region mExcludeRegion = new Region();
     // The edge width where touch down is allowed
-    private final int mEdgeWidth;
+    private int mEdgeWidth;
     // The slop to distinguish between horizontal and vertical motion
     private final float mTouchSlop;
     // Duration after which we consider the event as longpress.
@@ -163,19 +165,22 @@ public class EdgeBackGestureHandler implements DisplayListener {
         mWm = context.getSystemService(WindowManager.class);
         mOverviewProxyService = overviewProxyService;
 
-        // TODO: Get this for the current user
-        mEdgeWidth = res.getDimensionPixelSize(
-                com.android.internal.R.dimen.config_backGestureInset);
-
         // Reduce the default touch slop to ensure that we can intercept the gesture
         // before the app starts to react to it.
         // TODO(b/130352502) Tune this value and extract into a constant
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop() * 0.75f;
-        mLongPressTimeout = ViewConfiguration.getLongPressTimeout();
+        mLongPressTimeout = Math.min(MAX_LONG_PRESS_TIMEOUT,
+                ViewConfiguration.getLongPressTimeout());
 
         mNavBarHeight = res.getDimensionPixelSize(R.dimen.navigation_bar_frame_height);
         mMinArrowPosition = res.getDimensionPixelSize(R.dimen.navigation_edge_arrow_min_y);
         mFingerOffset = res.getDimensionPixelSize(R.dimen.navigation_edge_finger_offset);
+        updateCurrentUserResources(res);
+    }
+
+    public void updateCurrentUserResources(Resources res) {
+        mEdgeWidth = res.getDimensionPixelSize(
+                com.android.internal.R.dimen.config_backGestureInset);
     }
 
     /**
@@ -194,9 +199,10 @@ public class EdgeBackGestureHandler implements DisplayListener {
         updateIsEnabled();
     }
 
-    public void onNavigationModeChanged(int mode) {
+    public void onNavigationModeChanged(int mode, Context currentUserContext) {
         mIsGesturalModeEnabled = QuickStepContract.isGesturalMode(mode);
         updateIsEnabled();
+        updateCurrentUserResources(currentUserContext.getResources());
     }
 
     private void disposeInputChannel() {
@@ -270,6 +276,8 @@ public class EdgeBackGestureHandler implements DisplayListener {
                             | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH
                             | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                     PixelFormat.TRANSLUCENT);
+            mEdgePanelLp.privateFlags |=
+                    WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
             mEdgePanelLp.setTitle(TAG + mDisplayId);
             mEdgePanelLp.accessibilityTitle = mContext.getString(R.string.nav_bar_edge_panel);
             mEdgePanelLp.windowAnimations = 0;
@@ -447,6 +455,16 @@ public class EdgeBackGestureHandler implements DisplayListener {
     public void setInsets(int leftInset, int rightInset) {
         mLeftInset = leftInset;
         mRightInset = rightInset;
+    }
+
+    public void dump(PrintWriter pw) {
+        pw.println("EdgeBackGestureHandler:");
+        pw.println("  mIsEnabled=" + mIsEnabled);
+        pw.println("  mAllowGesture=" + mAllowGesture);
+        pw.println("  mExcludeRegion=" + mExcludeRegion);
+        pw.println("  mImeHeight=" + mImeHeight);
+        pw.println("  mIsAttached=" + mIsAttached);
+        pw.println("  mEdgeWidth=" + mEdgeWidth);
     }
 
     class SysUiInputEventReceiver extends InputEventReceiver {

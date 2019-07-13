@@ -1169,6 +1169,7 @@ static jlong CalculateCapabilities(JNIEnv* env, jint uid, jint gid, jintArray gi
   /*
    *  Grant the following capabilities to the Bluetooth user:
    *    - CAP_WAKE_ALARM
+   *    - CAP_NET_ADMIN
    *    - CAP_NET_RAW
    *    - CAP_NET_BIND_SERVICE (for DHCP client functionality)
    *    - CAP_SYS_NICE (for setting RT priority for audio-related threads)
@@ -1176,9 +1177,11 @@ static jlong CalculateCapabilities(JNIEnv* env, jint uid, jint gid, jintArray gi
 
   if (multiuser_get_app_id(uid) == AID_BLUETOOTH) {
     capabilities |= (1LL << CAP_WAKE_ALARM);
+    capabilities |= (1LL << CAP_NET_ADMIN);
     capabilities |= (1LL << CAP_NET_RAW);
     capabilities |= (1LL << CAP_NET_BIND_SERVICE);
     capabilities |= (1LL << CAP_SYS_NICE);
+    capabilities |= (1LL << CAP_NET_ADMIN);
   }
 
   if (multiuser_get_app_id(uid) == AID_NETWORK_STACK) {

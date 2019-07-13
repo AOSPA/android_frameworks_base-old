@@ -533,6 +533,11 @@ public class NavigationBarView extends FrameLayout implements
         return KeyButtonDrawable.create(mContext, icon, hasShadow);
     }
 
+    public void setWindowVisible(boolean visible) {
+        mTintController.setWindowVisible(visible);
+        mRotationButtonController.onNavigationBarWindowVisibilityChange(visible);
+    }
+
     @Override
     public void setLayoutDirection(int layoutDirection) {
         reloadNavIcons();
@@ -772,9 +777,10 @@ public class NavigationBarView extends FrameLayout implements
 
     @Override
     public void onNavigationModeChanged(int mode) {
+        Context curUserCtx = Dependency.get(NavigationModeController.class).getCurrentUserContext();
         mNavBarMode = mode;
         mBarTransitions.onNavigationModeChanged(mNavBarMode);
-        mEdgeBackGestureHandler.onNavigationModeChanged(mNavBarMode);
+        mEdgeBackGestureHandler.onNavigationModeChanged(mNavBarMode, curUserCtx);
         mRecentsOnboarding.onNavigationModeChanged(mNavBarMode);
         getRotateSuggestionButton().onNavigationModeChanged(mNavBarMode);
 
@@ -1039,6 +1045,9 @@ public class NavigationBarView extends FrameLayout implements
         reorient();
         onNavigationModeChanged(mNavBarMode);
         setUpSwipeUpOnboarding(isQuickStepSwipeUpEnabled());
+        if (mRotationButtonController != null) {
+            mRotationButtonController.registerListeners();
+        }
 
         mEdgeBackGestureHandler.onNavBarAttached();
         getViewTreeObserver().addOnComputeInternalInsetsListener(mOnComputeInternalInsetsListener);
@@ -1052,6 +1061,10 @@ public class NavigationBarView extends FrameLayout implements
         for (int i = 0; i < mButtonDispatchers.size(); ++i) {
             mButtonDispatchers.valueAt(i).onDestroy();
         }
+        if (mRotationButtonController != null) {
+            mRotationButtonController.unregisterListeners();
+        }
+
         mEdgeBackGestureHandler.onNavBarDetached();
         getViewTreeObserver().removeOnComputeInternalInsetsListener(
                 mOnComputeInternalInsetsListener);
@@ -1103,6 +1116,7 @@ public class NavigationBarView extends FrameLayout implements
         mContextualButtonGroup.dump(pw);
         mRecentsOnboarding.dump(pw);
         mTintController.dump(pw);
+        mEdgeBackGestureHandler.dump(pw);
     }
 
     @Override

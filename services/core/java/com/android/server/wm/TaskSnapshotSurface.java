@@ -248,7 +248,7 @@ class TaskSnapshotSurface implements StartingSurface {
         mBackgroundPaint.setColor(backgroundColor != 0 ? backgroundColor : WHITE);
         mTaskBounds = taskBounds;
         mSystemBarBackgroundPainter = new SystemBarBackgroundPainter(windowFlags,
-                windowPrivateFlags, sysUiVis, taskDescription);
+                windowPrivateFlags, sysUiVis, taskDescription, 1f);
         mStatusBarColor = taskDescription.getStatusBarColor();
         mOrientationOnCreation = currentOrientation;
     }
@@ -317,6 +317,11 @@ class TaskSnapshotSurface implements StartingSurface {
             throw new IllegalStateException("mSurface does not hold a valid surface.");
         }
         final SurfaceSession session = new SurfaceSession();
+        // We consider nearly matched dimensions as there can be rounding errors and the user won't
+        // notice very minute differences from scaling one dimension more than the other
+        final boolean aspectRatioMismatch = Math.abs(
+                ((float) buffer.getWidth() / buffer.getHeight())
+                - ((float) mFrame.width() / mFrame.height())) > 0.01f;
 
         // Keep a reference to it such that it doesn't get destroyed when finalized.
         mChildSurfaceControl = new SurfaceControl.Builder(session)
@@ -328,16 +333,21 @@ class TaskSnapshotSurface implements StartingSurface {
         Surface surface = new Surface();
         surface.copyFrom(mChildSurfaceControl);
 
-        // Clip off ugly navigation bar.
-        final Rect crop = calculateSnapshotCrop();
-        final Rect frame = calculateSnapshotFrame(crop);
+        final Rect frame;
         SurfaceControl.openTransaction();
         try {
             // We can just show the surface here as it will still be hidden as the parent is
             // still hidden.
             mChildSurfaceControl.show();
-            mChildSurfaceControl.setWindowCrop(crop);
-            mChildSurfaceControl.setPosition(frame.left, frame.top);
+            if (aspectRatioMismatch) {
+                // Clip off ugly navigation bar.
+                final Rect crop = calculateSnapshotCrop();
+                frame = calculateSnapshotFrame(crop);
+                mChildSurfaceControl.setWindowCrop(crop);
+                mChildSurfaceControl.setPosition(frame.left, frame.top);
+            } else {
+                frame = null;
+            }
 
             // Scale the mismatch dimensions to fill the task bounds
             final float scale = 1 / mSnapshot.getScale();
@@ -348,10 +358,12 @@ class TaskSnapshotSurface implements StartingSurface {
         surface.attachAndQueueBuffer(buffer);
         surface.release();
 
-        final Canvas c = mSurface.lockCanvas(null);
-        drawBackgroundAndBars(c, frame);
-        mSurface.unlockCanvasAndPost(c);
-        mSurface.release();
+        if (aspectRatioMismatch) {
+            final Canvas c = mSurface.lockCanvas(null);
+            drawBackgroundAndBars(c, frame);
+            mSurface.unlockCanvasAndPost(c);
+            mSurface.release();
+        }
     }
 
     /**
@@ -488,12 +500,14 @@ class TaskSnapshotSurface implements StartingSurface {
         private final int mWindowFlags;
         private final int mWindowPrivateFlags;
         private final int mSysUiVis;
+        private final float mScale;
 
-        SystemBarBackgroundPainter( int windowFlags, int windowPrivateFlags, int sysUiVis,
-                TaskDescription taskDescription) {
+        SystemBarBackgroundPainter(int windowFlags, int windowPrivateFlags, int sysUiVis,
+                TaskDescription taskDescription, float scale) {
             mWindowFlags = windowFlags;
             mWindowPrivateFlags = windowPrivateFlags;
             mSysUiVis = sysUiVis;
+            mScale = scale;
             final Context context = ActivityThread.currentActivityThread().getSystemUiContext();
             final int semiTransparent = context.getColor(
                     R.color.system_bar_background_semi_transparent);
@@ -521,7 +535,7 @@ class TaskSnapshotSurface implements StartingSurface {
                     (mWindowPrivateFlags & PRIVATE_FLAG_FORCE_DRAW_BAR_BACKGROUNDS) != 0;
             if (STATUS_BAR_COLOR_VIEW_ATTRIBUTES.isVisible(
                     mSysUiVis, mStatusBarColor, mWindowFlags, forceBarBackground)) {
-                return getColorViewTopInset(mStableInsets.top, mContentInsets.top);
+                return (int) (getColorViewTopInset(mStableInsets.top, mContentInsets.top) * mScale);
             } else {
                 return 0;
             }
@@ -544,8 +558,8 @@ class TaskSnapshotSurface implements StartingSurface {
                 int statusBarHeight) {
             if (statusBarHeight > 0 && Color.alpha(mStatusBarColor) != 0
                     && (alreadyDrawnFrame == null || c.getWidth() > alreadyDrawnFrame.right)) {
-                final int rightInset = DecorView.getColorViewRightInset(mStableInsets.right,
-                        mContentInsets.right);
+                final int rightInset = (int) (DecorView.getColorViewRightInset(mStableInsets.right,
+                        mContentInsets.right) * mScale);
                 final int left = alreadyDrawnFrame != null ? alreadyDrawnFrame.right : 0;
                 c.drawRect(left, 0, c.getWidth() - rightInset, statusBarHeight, mStatusBarPaint);
             }
@@ -555,7 +569,7 @@ class TaskSnapshotSurface implements StartingSurface {
         void drawNavigationBarBackground(Canvas c) {
             final Rect navigationBarRect = new Rect();
             getNavigationBarRect(c.getWidth(), c.getHeight(), mStableInsets, mContentInsets,
-                    navigationBarRect);
+                    navigationBarRect, mScale);
             final boolean visible = isNavigationBarColorViewVisible();
             if (visible && Color.alpha(mNavigationBarColor) != 0 && !navigationBarRect.isEmpty()) {
                 c.drawRect(navigationBarRect, mNavigationBarPaint);
