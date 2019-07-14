@@ -233,6 +233,7 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback {
         boolean unlockAllowed = mKeyguardBypassController.onBiometricAuthenticated(
                 biometricSourceType);
         if (unlockAllowed) {
+            mKeyguardViewMediator.userActivity();
             startWakeAndUnlock(biometricSourceType);
         }
     }
