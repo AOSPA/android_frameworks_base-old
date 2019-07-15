@@ -927,8 +927,9 @@ public final class ActivityRecord extends ConfigurationContainer {
         return ResolverActivity.class.getName().equals(className);
     }
 
-    boolean isResolverActivity() {
-        return isResolverActivity(mActivityComponent.getClassName());
+    boolean isResolverOrDelegateActivity() {
+        return isResolverActivity(mActivityComponent.getClassName()) || Objects.equals(
+                mActivityComponent, mAtmService.mStackSupervisor.getSystemChooserActivity());
     }
 
     boolean isResolverOrChildActivity() {
@@ -1260,7 +1261,8 @@ public final class ActivityRecord extends ConfigurationContainer {
                 && intent.getType() == null;
     }
 
-    private boolean canLaunchHomeActivity(int uid, ActivityRecord sourceRecord) {
+    @VisibleForTesting
+    boolean canLaunchHomeActivity(int uid, ActivityRecord sourceRecord) {
         if (uid == Process.myUid() || uid == 0) {
             // System process can launch home activity.
             return true;
@@ -1270,8 +1272,8 @@ public final class ActivityRecord extends ConfigurationContainer {
         if (recentTasks != null && recentTasks.isCallerRecents(uid)) {
             return true;
         }
-        // Resolver activity can launch home activity.
-        return sourceRecord != null && sourceRecord.isResolverActivity();
+        // Resolver or system chooser activity can launch home activity.
+        return sourceRecord != null && sourceRecord.isResolverOrDelegateActivity();
     }
 
     /**
@@ -1290,7 +1292,7 @@ public final class ActivityRecord extends ConfigurationContainer {
             ActivityOptions options, ActivityRecord sourceRecord) {
         int activityType = ACTIVITY_TYPE_UNDEFINED;
         if ((!componentSpecified || canLaunchHomeActivity(launchedFromUid, sourceRecord))
-                && isHomeIntent(intent) && !isResolverActivity()) {
+                && isHomeIntent(intent) && !isResolverOrDelegateActivity()) {
             // This sure looks like a home activity!
             activityType = ACTIVITY_TYPE_HOME;
 
