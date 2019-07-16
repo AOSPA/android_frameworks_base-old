@@ -830,6 +830,12 @@ public class WifiConfiguration implements Parcelable {
 
     /**
      * @hide
+     * Iface name for OWE transition mode
+     */
+    public String oweTransIfaceName;
+
+    /**
+     * @hide
      * The WiFi configuration is considered to have no internet access for purpose of autojoining
      * if there has been a report of it having no internet access, and, it never have had
      * internet access in the past.
@@ -1866,6 +1872,7 @@ public class WifiConfiguration implements Parcelable {
         dppNetAccessKey = null;
         dppNetAccessKeyExpiry = -1;
         dppCsign = null;
+        oweTransIfaceName = null;
     }
 
     /**
@@ -1921,6 +1928,7 @@ public class WifiConfiguration implements Parcelable {
                 .append(" PRIO: ").append(this.priority)
                 .append(" HIDDEN: ").append(this.hiddenSSID)
                 .append(" PMF: ").append(this.requirePMF)
+                .append(" OWE Transition mode Iface: ").append(this.oweTransIfaceName)
                 .append('\n');
 
 
@@ -2528,6 +2536,7 @@ public class WifiConfiguration implements Parcelable {
             macRandomizationSetting = source.macRandomizationSetting;
             requirePMF = source.requirePMF;
             updateIdentifier = source.updateIdentifier;
+            oweTransIfaceName = source.oweTransIfaceName;
         }
     }
 
@@ -2604,6 +2613,7 @@ public class WifiConfiguration implements Parcelable {
         dest.writeString(dppCsign);
         dest.writeInt(macRandomizationSetting);
         dest.writeInt(osu ? 1 : 0);
+        dest.writeString(oweTransIfaceName);
     }
 
     /** Implement the Parcelable interface {@hide} */
@@ -2682,6 +2692,7 @@ public class WifiConfiguration implements Parcelable {
                 config.dppCsign = in.readString();
                 config.macRandomizationSetting = in.readInt();
                 config.osu = in.readInt() != 0;
+                config.oweTransIfaceName = in.readString();
                 return config;
             }
 
