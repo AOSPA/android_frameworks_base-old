@@ -247,6 +247,7 @@ public class MobileSignalController extends SignalController<
         mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EHRPD, TelephonyIcons.THREE_G);
         mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_UMTS, TelephonyIcons.THREE_G);
         mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_TD_SCDMA, TelephonyIcons.THREE_G);
+        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_NR, TelephonyIcons.FIVE_G_SA);
 
         if (!mConfig.showAtLeast3G) {
             mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_UNKNOWN,
@@ -758,7 +759,7 @@ public class MobileSignalController extends SignalController<
     }
 
     private boolean isDataDisabled() {
-        return !mPhone.getDataEnabled(mSubscriptionInfo.getSubscriptionId());
+        return !mPhone.isDataCapable();
     }
 
     private boolean isDataNetworkTypeAvailable() {
@@ -837,7 +838,7 @@ public class MobileSignalController extends SignalController<
     }
 
     public void unregisterFiveGStateListener(FiveGServiceClient client) {
-        int phoneId = SubscriptionManager.getPhoneId(mSubscriptionInfo.getSubscriptionId());
+        int phoneId = mSubscriptionInfo.getSimSlotIndex();
         client.unregisterListener(phoneId);
     }
 
@@ -865,6 +866,7 @@ public class MobileSignalController extends SignalController<
         pw.println("  mDataState=" + mDataState + ",");
         pw.println("  mDataNetType=" + mDataNetType + ",");
         pw.println("  mInflateSignalStrengths=" + mInflateSignalStrengths + ",");
+        pw.println("  isDataDisabled=" + isDataDisabled() + ",");
         pw.println("  mFiveGState=" + mFiveGState + ",");
     }
 

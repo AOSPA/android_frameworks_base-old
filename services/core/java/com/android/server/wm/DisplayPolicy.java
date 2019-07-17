@@ -201,6 +201,8 @@ public class DisplayPolicy {
     private static final int NAV_BAR_OPAQUE_WHEN_FREEFORM_OR_DOCKED = 0;
     // Nav bar is always translucent when the freeform stack is visible, otherwise always opaque.
     private static final int NAV_BAR_TRANSLUCENT_WHEN_FREEFORM_OPAQUE_OTHERWISE = 1;
+    // Nav bar is never forced opaque.
+    private static final int NAV_BAR_FORCE_TRANSPARENT = 2;
 
     /**
      * These are the system UI flags that, when changing, can cause the layout
@@ -511,8 +513,10 @@ public class DisplayPolicy {
 
                     @Override
                     public void onSwipeFromRight() {
-                        final Region excludedRegion =
-                                mDisplayContent.calculateSystemGestureExclusion();
+                        final Region excludedRegion;
+                        synchronized (mLock) {
+                            excludedRegion = mDisplayContent.calculateSystemGestureExclusion();
+                        }
                         final boolean sideAllowed = mNavigationBarAlwaysShowOnSideGesture
                                 || mNavigationBarPosition == NAV_BAR_RIGHT;
                         if (mNavigationBar != null && sideAllowed
@@ -523,8 +527,10 @@ public class DisplayPolicy {
 
                     @Override
                     public void onSwipeFromLeft() {
-                        final Region excludedRegion =
-                                mDisplayContent.calculateSystemGestureExclusion();
+                        final Region excludedRegion;
+                        synchronized (mLock) {
+                            excludedRegion = mDisplayContent.calculateSystemGestureExclusion();
+                        }
                         final boolean sideAllowed = mNavigationBarAlwaysShowOnSideGesture
                                 || mNavigationBarPosition == NAV_BAR_LEFT;
                         if (mNavigationBar != null && sideAllowed
@@ -1582,8 +1588,6 @@ public class DisplayPolicy {
         }
 
         sTmpRect.setEmpty();
-        sTmpDockedFrame.set(displayFrames.mDock);
-
         final int displayId = displayFrames.mDisplayId;
         final Rect dockFrame = displayFrames.mDock;
         final int displayHeight = displayFrames.mDisplayHeight;
@@ -1596,11 +1600,13 @@ public class DisplayPolicy {
                 continue;
             }
 
-            w.getWindowFrames().setFrames(sTmpDockedFrame /* parentFrame */,
-                    sTmpDockedFrame /* displayFrame */, sTmpDockedFrame /* overscanFrame */,
-                    sTmpDockedFrame /* contentFrame */, sTmpDockedFrame /* visibleFrame */,
-                    sTmpRect /* decorFrame */, sTmpDockedFrame /* stableFrame */,
-                    sTmpDockedFrame /* outsetFrame */);
+            w.getWindowFrames().setFrames(displayFrames.mUnrestricted /* parentFrame */,
+                    displayFrames.mUnrestricted /* displayFrame */,
+                    displayFrames.mUnrestricted /* overscanFrame */,
+                    displayFrames.mUnrestricted /* contentFrame */,
+                    displayFrames.mUnrestricted /* visibleFrame */, sTmpRect /* decorFrame */,
+                    displayFrames.mUnrestricted /* stableFrame */,
+                    displayFrames.mUnrestricted /* outsetFrame */);
             w.getWindowFrames().setDisplayCutout(displayFrames.mDisplayCutout);
             w.computeFrameLw();
             final Rect frame = w.getFrameLw();
@@ -2810,9 +2816,9 @@ public class DisplayPolicy {
                 res.getBoolean(R.bool.config_navBarAlwaysShowOnSideEdgeGesture);
 
         // This should calculate how much above the frame we accept gestures.
-        mBottomGestureAdditionalInset = Math.max(0,
+        mBottomGestureAdditionalInset =
                 res.getDimensionPixelSize(R.dimen.navigation_bar_gesture_height)
-                        - getNavigationBarFrameHeight(portraitRotation, uiMode));
+                        - getNavigationBarFrameHeight(portraitRotation, uiMode);
 
         updateConfigurationAndScreenSizeDependentBehaviors();
         mWindowOutsetBottom = ScreenShapeHelper.getWindowOutsetBottomPx(mContext.getResources());
@@ -3378,8 +3384,10 @@ public class DisplayPolicy {
                 : mTopFullscreenOpaqueWindowState;
         vis = mStatusBarController.applyTranslucentFlagLw(fullscreenTransWin, vis, oldVis);
         vis = mNavigationBarController.applyTranslucentFlagLw(fullscreenTransWin, vis, oldVis);
-        final int dockedVis = mStatusBarController.applyTranslucentFlagLw(
+        int dockedVis = mStatusBarController.applyTranslucentFlagLw(
                 mTopDockedOpaqueWindowState, 0, 0);
+        dockedVis = mNavigationBarController.applyTranslucentFlagLw(
+                mTopDockedOpaqueWindowState, dockedVis, 0);
 
         final boolean fullscreenDrawsStatusBarBackground =
                 drawsStatusBarBackground(vis, mTopFullscreenOpaqueWindowState);
@@ -3387,6 +3395,8 @@ public class DisplayPolicy {
                 drawsStatusBarBackground(dockedVis, mTopDockedOpaqueWindowState);
         final boolean fullscreenDrawsNavBarBackground =
                 drawsNavigationBarBackground(vis, mTopFullscreenOpaqueWindowState);
+        final boolean dockedDrawsNavigationBarBackground =
+                drawsNavigationBarBackground(dockedVis, mTopDockedOpaqueWindowState);
 
         // prevent status bar interaction from clearing certain flags
         int type = win.getAttrs().type;
@@ -3411,7 +3421,7 @@ public class DisplayPolicy {
         }
 
         vis = configureNavBarOpacity(vis, dockedStackVisible, freeformStackVisible, resizing,
-                fullscreenDrawsNavBarBackground);
+                fullscreenDrawsNavBarBackground, dockedDrawsNavigationBarBackground);
 
         // update status bar
         boolean immersiveSticky =
@@ -3529,8 +3539,14 @@ public class DisplayPolicy {
      */
     private int configureNavBarOpacity(int visibility, boolean dockedStackVisible,
             boolean freeformStackVisible, boolean isDockedDividerResizing,
-            boolean fullscreenDrawsBackground) {
-        if (mNavBarOpacityMode == NAV_BAR_OPAQUE_WHEN_FREEFORM_OR_DOCKED) {
+            boolean fullscreenDrawsBackground, boolean dockedDrawsNavigationBarBackground) {
+        if (mNavBarOpacityMode == NAV_BAR_FORCE_TRANSPARENT) {
+            if (fullscreenDrawsBackground && dockedDrawsNavigationBarBackground) {
+                visibility = setNavBarTransparentFlag(visibility);
+            } else if (dockedStackVisible) {
+                visibility = setNavBarOpaqueFlag(visibility);
+            }
+        } else if (mNavBarOpacityMode == NAV_BAR_OPAQUE_WHEN_FREEFORM_OR_DOCKED) {
             if (dockedStackVisible || freeformStackVisible || isDockedDividerResizing) {
                 visibility = setNavBarOpaqueFlag(visibility);
             } else if (fullscreenDrawsBackground) {

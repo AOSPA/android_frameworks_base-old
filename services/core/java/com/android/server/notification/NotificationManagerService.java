@@ -42,10 +42,10 @@ import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_PEEK;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_SCREEN_OFF;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_SCREEN_ON;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_STATUS_BAR;
-import static android.content.Context.BIND_ADJUST_BELOW_PERCEPTIBLE;
 import static android.content.Context.BIND_ALLOW_WHITELIST_MANAGEMENT;
 import static android.content.Context.BIND_AUTO_CREATE;
 import static android.content.Context.BIND_FOREGROUND_SERVICE;
+import static android.content.Context.BIND_NOT_PERCEPTIBLE;
 import static android.content.pm.ActivityInfo.DOCUMENT_LAUNCH_ALWAYS;
 import static android.content.pm.PackageManager.FEATURE_LEANBACK;
 import static android.content.pm.PackageManager.FEATURE_TELEVISION;
@@ -283,7 +283,7 @@ public class NotificationManagerService extends SystemService {
     static final boolean DEBUG_INTERRUPTIVENESS = SystemProperties.getBoolean(
             "debug.notification.interruptiveness", false);
 
-    static final int MAX_PACKAGE_NOTIFICATIONS = 50;
+    static final int MAX_PACKAGE_NOTIFICATIONS = 25;
     static final float DEFAULT_MAX_NOTIFICATION_ENQUEUE_RATE = 5f;
 
     // message codes
@@ -7151,6 +7151,10 @@ public class NotificationManagerService extends SystemService {
             return false;
         }
 
+        if (userId == UserHandle.USER_ALL) {
+            userId = USER_SYSTEM;
+        }
+
         try {
             final String[] pkgs = mPackageManager.getPackagesForUid(callingUid);
             if (pkgs == null) {
@@ -7234,72 +7238,42 @@ public class NotificationManagerService extends SystemService {
     @GuardedBy("mNotificationLock")
     private NotificationRankingUpdate makeRankingUpdateLocked(ManagedServiceInfo info) {
         final int N = mNotificationList.size();
-        ArrayList<String> keys = new ArrayList<String>(N);
-        ArrayList<String> interceptedKeys = new ArrayList<String>(N);
-        ArrayList<Integer> importance = new ArrayList<>(N);
-        Bundle overrideGroupKeys = new Bundle();
-        Bundle visibilityOverrides = new Bundle();
-        Bundle suppressedVisualEffects = new Bundle();
-        Bundle explanation = new Bundle();
-        Bundle channels = new Bundle();
-        Bundle overridePeople = new Bundle();
-        Bundle snoozeCriteria = new Bundle();
-        Bundle showBadge = new Bundle();
-        Bundle userSentiment = new Bundle();
-        Bundle hidden = new Bundle();
-        Bundle systemGeneratedSmartActions = new Bundle();
-        Bundle smartReplies = new Bundle();
-        Bundle lastAudiblyAlerted = new Bundle();
-        Bundle noisy = new Bundle();
-        ArrayList<Boolean> canBubble = new ArrayList<>(N);
+        final ArrayList<NotificationListenerService.Ranking> rankings = new ArrayList<>();
+
         for (int i = 0; i < N; i++) {
             NotificationRecord record = mNotificationList.get(i);
             if (!isVisibleToListener(record.sbn, info)) {
                 continue;
             }
             final String key = record.sbn.getKey();
-            keys.add(key);
-            importance.add(record.getImportance());
-            if (record.getImportanceExplanation() != null) {
-                explanation.putCharSequence(key, record.getImportanceExplanation());
-            }
-            if (record.isIntercepted()) {
-                interceptedKeys.add(key);
+            final NotificationListenerService.Ranking ranking =
+                    new NotificationListenerService.Ranking();
+            ranking.populate(
+                    key,
+                    rankings.size(),
+                    !record.isIntercepted(),
+                    record.getPackageVisibilityOverride(),
+                    record.getSuppressedVisualEffects(),
+                    record.getImportance(),
+                    record.getImportanceExplanation(),
+                    record.sbn.getOverrideGroupKey(),
+                    record.getChannel(),
+                    record.getPeopleOverride(),
+                    record.getSnoozeCriteria(),
+                    record.canShowBadge(),
+                    record.getUserSentiment(),
+                    record.isHidden(),
+                    record.getLastAudiblyAlertedMs(),
+                    record.getSound() != null || record.getVibration() != null,
+                    record.getSystemGeneratedSmartActions(),
+                    record.getSmartReplies(),
+                    record.canBubble()
+            );
+            rankings.add(ranking);
+        }
 
-            }
-            suppressedVisualEffects.putInt(key, record.getSuppressedVisualEffects());
-            if (record.getPackageVisibilityOverride()
-                    != NotificationListenerService.Ranking.VISIBILITY_NO_OVERRIDE) {
-                visibilityOverrides.putInt(key, record.getPackageVisibilityOverride());
-            }
-            overrideGroupKeys.putString(key, record.sbn.getOverrideGroupKey());
-            channels.putParcelable(key, record.getChannel());
-            overridePeople.putStringArrayList(key, record.getPeopleOverride());
-            snoozeCriteria.putParcelableArrayList(key, record.getSnoozeCriteria());
-            showBadge.putBoolean(key, record.canShowBadge());
-            userSentiment.putInt(key, record.getUserSentiment());
-            hidden.putBoolean(key, record.isHidden());
-            systemGeneratedSmartActions.putParcelableArrayList(key,
-                    record.getSystemGeneratedSmartActions());
-            smartReplies.putCharSequenceArrayList(key, record.getSmartReplies());
-            lastAudiblyAlerted.putLong(key, record.getLastAudiblyAlertedMs());
-            noisy.putBoolean(key, record.getSound() != null || record.getVibration() != null);
-            canBubble.add(record.canBubble());
-        }
-        final int M = keys.size();
-        String[] keysAr = keys.toArray(new String[M]);
-        String[] interceptedKeysAr = interceptedKeys.toArray(new String[interceptedKeys.size()]);
-        int[] importanceAr = new int[M];
-        boolean[] canBubbleAr = new boolean[M];
-        for (int i = 0; i < M; i++) {
-            importanceAr[i] = importance.get(i);
-            canBubbleAr[i] = canBubble.get(i);
-        }
-        return new NotificationRankingUpdate(keysAr, interceptedKeysAr, visibilityOverrides,
-                suppressedVisualEffects, importanceAr, explanation, overrideGroupKeys,
-                channels, overridePeople, snoozeCriteria, showBadge, userSentiment, hidden,
-                systemGeneratedSmartActions, smartReplies, lastAudiblyAlerted, noisy,
-                canBubbleAr);
+        return new NotificationRankingUpdate(
+                rankings.toArray(new NotificationListenerService.Ranking[0]));
     }
 
     boolean hasCompanionDevice(ManagedServiceInfo info) {
@@ -7816,12 +7790,12 @@ public class NotificationManagerService extends SystemService {
 
         @Override
         protected int getBindFlags() {
-            // Most of the same flags as the base, but also add BIND_ADJUST_BELOW_PERCEPTIBLE
+            // Most of the same flags as the base, but also add BIND_NOT_PERCEPTIBLE
             // because too many 3P apps could be kept in memory as notification listeners and
             // cause extreme memory pressure.
             // TODO: Change the binding lifecycle of NotificationListeners to avoid this situation.
             return BIND_AUTO_CREATE | BIND_FOREGROUND_SERVICE
-                    | BIND_ADJUST_BELOW_PERCEPTIBLE | BIND_ALLOW_WHITELIST_MANAGEMENT;
+                    | BIND_NOT_PERCEPTIBLE | BIND_ALLOW_WHITELIST_MANAGEMENT;
         }
 
         @Override

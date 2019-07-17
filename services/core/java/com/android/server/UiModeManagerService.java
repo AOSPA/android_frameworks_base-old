@@ -46,7 +46,9 @@ import android.os.ResultReceiver;
 import android.os.ServiceManager;
 import android.os.ShellCallback;
 import android.os.ShellCommand;
+import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.provider.Settings.Secure;
 import android.service.dreams.Sandman;
 import android.service.vr.IVrManager;
@@ -71,6 +73,7 @@ final class UiModeManagerService extends SystemService {
 
     // Enable launching of applications when entering the dock.
     private static final boolean ENABLE_LAUNCH_DESK_DOCK_APP = true;
+    private static final String SYSTEM_PROPERTY_DEVICE_THEME = "persist.sys.theme";
 
     final Object mLock = new Object();
     private int mDockState = Intent.EXTRA_DOCK_STATE_UNDOCKED;
@@ -330,8 +333,7 @@ final class UiModeManagerService extends SystemService {
             mNightMode = defaultNightMode;
         }
 
-        // false if night mode stayed the same, true otherwise.
-        return !(oldNightMode == mNightMode);
+        return oldNightMode != mNightMode;
     }
 
     private final IUiModeManager.Stub mService = new IUiModeManager.Stub() {
@@ -411,6 +413,11 @@ final class UiModeManagerService extends SystemService {
             try {
                 synchronized (mLock) {
                     if (mNightMode != mode) {
+                        if (UserManager.get(getContext()).isPrimaryUser()) {
+                            SystemProperties.set(SYSTEM_PROPERTY_DEVICE_THEME,
+                                    Integer.toString(mode));
+                        }
+
                         // Only persist setting if not in car mode
                         if (!mCarModeEnabled) {
                             Secure.putIntForUser(getContext().getContentResolver(),

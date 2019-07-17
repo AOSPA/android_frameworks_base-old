@@ -62,12 +62,10 @@
     <string name="usb_debugging_secondary_user_title" msgid="6353808721761220421">"USBରେ ଡିବଗ୍‍ କରାଯାଇପାରିବ ନାହିଁ"</string>
     <string name="usb_debugging_secondary_user_message" msgid="6067122453571699801">"ସମ୍ପ୍ରତି ସାଇନ୍‍-ଇନ୍‍ କରିଥିବା ୟୁଜର୍‍ ଜଣକ ଏହି ଡିଭାଇସରେ USB ଡିବଗିଙ୍ଗ ଅନ୍‍ କରିପାରିବେ ନାହିଁ। ଏହି ବୈଶିଷ୍ଟ୍ୟ ବ୍ୟବହାର କରିବାକୁ, ପ୍ରାଥମିକ ୟୁଜର୍‍ରେ ସାଇନ୍‍-ଇନ୍‍ କରନ୍ତୁ।"</string>
     <string name="usb_contaminant_title" msgid="206854874263058490">"USB ପୋର୍ଟକୁ ଅକ୍ଷମ କରାଯାଇଛି"</string>
-    <!-- no translation found for usb_contaminant_message (7379089091591609111) -->
-    <skip />
+    <string name="usb_contaminant_message" msgid="7379089091591609111">"ଆପଣଙ୍କ ଡିଭାଇସ୍‌କୁ ତରଳ ପଦାର୍ଥ ଏବଂ ଧୂଳିରୁ ସୁରକ୍ଷିତ ରଖିବା ପାଇଁ, USB ପୋର୍ଟକୁ ଅକ୍ଷମ କରାଯାଇଛି ଏବଂ ଏହା କୌଣସି ଉପକରଣ ଚିହ୍ନଟ କରିବ ନାହିଁ। \n\n ଯେତେବେଳେ USB ପୋର୍ଟ ପୁଣିି ବ୍ୟବହାର କରିବାକୁ ସୁରକ୍ଷିତ ହେବ, ସେତେବେଳେ ଆପଣଙ୍କୁ ସୂଚିତ କରାଯିବ।"</string>
     <string name="usb_port_enabled" msgid="7906141351687694867">"ଚାର୍ଜର୍‍ ଏବଂ ଆକ୍ସେସରିଗୁଡ଼ିକୁ ଚିହ୍ନଟ କରିବାକୁ USB ପୋର୍ଟ ସକ୍ଷମ କରାଯାଇଛି"</string>
     <string name="usb_disable_contaminant_detection" msgid="2103905315747120033">"USB ସକ୍ଷମ କରନ୍ତୁ"</string>
-    <!-- no translation found for learn_more (5000517160980853569) -->
-    <skip />
+    <string name="learn_more" msgid="5000517160980853569">"ଅଧିକ ଜାଣନ୍ତୁ"</string>
     <string name="compat_mode_on" msgid="6623839244840638213">"ସ୍କ୍ରୀନ ଭରିବା ପାଇଁ ଜୁମ୍ କରନ୍ତୁ"</string>
     <string name="compat_mode_off" msgid="4434467572461327898">"ସ୍କ୍ରୀନ୍‌କୁ ଭରିବା ପାଇଁ ଟାଣନ୍ତୁ"</string>
     <string name="global_action_screenshot" msgid="8329831278085426283">"ସ୍କ୍ରୀନଶଟ୍‌"</string>
@@ -199,6 +197,7 @@
     <string name="carrier_network_change_mode" msgid="8149202439957837762">"କେରିଅର୍‍ ନେଟ୍‌ୱର୍କ ବଦଳୁଛି"</string>
     <string name="accessibility_battery_details" msgid="7645516654955025422">"ବ୍ୟାଟେରୀ ବିବରଣୀ ଖୋଲନ୍ତୁ"</string>
     <string name="accessibility_battery_level" msgid="7451474187113371965">"ବ୍ୟାଟେରୀ <xliff:g id="NUMBER">%d</xliff:g> ଶତକଡ଼ା ଅଛି।"</string>
+    <string name="accessibility_battery_level_with_estimate" msgid="9033100930684311630">"ବ୍ୟାଟେରୀ <xliff:g id="PERCENTAGE">%1$s</xliff:g> ଶତକଡା, ଆପଣଙ୍କର ବ୍ୟବହାରକୁ ଆଧାର କରି ପାଖାପାଖି <xliff:g id="TIME">%2$s</xliff:g> ବାକି ଅଛି"</string>
     <string name="accessibility_battery_level_charging" msgid="1147587904439319646">"ବ୍ୟାଟେରୀ ଚାର୍ଜ ହେଉଛି, <xliff:g id="BATTERY_PERCENTAGE">%d</xliff:g> ଶତକଡ଼ା।"</string>
     <string name="accessibility_settings_button" msgid="799583911231893380">"ସିଷ୍ଟମ୍‍ ସେଟିଙ୍ଗ।"</string>
     <string name="accessibility_notifications_button" msgid="4498000369779421892">"ବିଜ୍ଞପ୍ତି"</string>
@@ -376,8 +375,8 @@
     <string name="quick_settings_night_secondary_label_until_sunrise" msgid="4453017157391574402">"ସୂର୍ଯ୍ୟୋଦୟ ପର୍ଯ୍ୟନ୍ତ"</string>
     <string name="quick_settings_night_secondary_label_on_at" msgid="6256314040368487637">"<xliff:g id="TIME">%s</xliff:g>ରେ ଅନ୍ ହେବ"</string>
     <string name="quick_settings_secondary_label_until" msgid="2749196569462600150">"<xliff:g id="TIME">%s</xliff:g> ପର୍ଯ୍ୟନ୍ତ"</string>
-    <string name="quick_settings_ui_mode_night_label" msgid="512534812963862137">"ଗାଢ଼ା ଥିମ୍"</string>
-    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="3496696903886673256">"ଗାଢ଼ା ଥିମ୍‍\nବ୍ୟାଟେରୀ ସେଭର୍"</string>
+    <string name="quick_settings_ui_mode_night_label" msgid="3419947801072692538">"ଗାଢ଼ ଥିମ୍"</string>
+    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="7438725724589758362">"ଗାଢ଼ ଥିମ୍\nବ୍ୟାଟେରୀ ସେଭର୍"</string>
     <string name="quick_settings_nfc_label" msgid="9012153754816969325">"NFC"</string>
     <string name="quick_settings_nfc_off" msgid="6883274004315134333">"NFC ଅକ୍ଷମ କରାଯାଇଛି"</string>
     <string name="quick_settings_nfc_on" msgid="6680317193676884311">"NFC ସକ୍ଷମ କରାଯାଇଛି"</string>
@@ -453,15 +452,13 @@
     <string name="battery_saver_notification_text" msgid="820318788126672692">"କାର୍ଯ୍ୟ ସମ୍ପାଦନ ଓ ବ୍ୟାକ୍‌ଗ୍ରାଉଣ୍ଡ ଡାଟା କମ୍ କରନ୍ତୁ"</string>
     <string name="battery_saver_notification_action_text" msgid="132118784269455533">"ବ୍ୟାଟେରୀ ସେଭର୍‌ ଅଫ୍‍ କରନ୍ତୁ"</string>
     <string name="media_projection_dialog_text" msgid="8585357687598538511">"ରେକର୍ଡିଂ କିମ୍ବା କାଷ୍ଟିଂ ସମୟରେ <xliff:g id="APP_SEEKING_PERMISSION">%s</xliff:g> ଯେ କୌଣସି ସମ୍ବେଦନଶୀଳ ସୂଚନା କ୍ୟାପଚର୍ କରିପାରିବ ଯାହା ଅଡ଼ିଓ, ପାସ୍‌ୱାର୍ଡ, ପେମେଣ୍ଟ ସୂଚନା, ଫଟୋ ଏବଂ ମେସେଜ୍‌ଗୁଡ଼ିକ ପରି ସମ୍ବେଦନଶୀଳ ସୂଚନା ଆପଣଙ୍କର ଡିଭାଇସ୍‌ରେ ଚାଲିବ ବା ଆପଣଙ୍କ ସ୍କ୍ରିନ୍‌ରେ ଦେଖାଯିବ।"</string>
-    <string name="media_projection_dialog_service_text" msgid="3075544489835858258">"ରେକର୍ଡିଂ କିମ୍ବା କାଷ୍ଟିଂ ସମୟରେ ସେବା ପ୍ରଦାନ କରୁଥିବା ଏହି ଫଙ୍କ୍‌ସନ୍ ଯେ କୌଣସି ସମ୍ବେଦନଶୀଳ ସୂଚନା କ୍ୟାପଚର୍ କରିପାରିବ ଯାହା ଅଡ଼ିଓ, ପାସ୍‌ୱାର୍ଡ, ପେମେଣ୍ଟ ସୂଚନା, ଫଟୋ ଏବଂ ମେସେଜ୍‌ଗୁଡ଼ିକ ପରି ସମ୍ବେଦନଶୀଳ ସୂଚନା ଆପଣଙ୍କର ଡିଭାଇସ୍‌ରେ ଚାଲିବ ବା ଆପଣଙ୍କ ସ୍କ୍ରିନ୍‌ରେ ଦେଖାଯିବ।"</string>
+    <string name="media_projection_dialog_service_text" msgid="3075544489835858258">"ରେକର୍ଡିଂ କିମ୍ବା କାଷ୍ଟିଂ ସମୟରେ ଏହି ପ୍ରକାର୍ଯ୍ୟ ପ୍ରଦାନ କରୁଥିବା ସେବା ଅଡ଼ିଓ, ପାସ୍‌ୱାର୍ଡ, ପେମେଣ୍ଟ ସୂଚନା, ଫଟୋ ଏବଂ ମେସେଜ୍‌ଗୁଡ଼ିକ ପରି ସମ୍ବେଦନଶୀଳ ସୂଚନା କ୍ୟାପଚର୍ କରିପାରିବ ଯାହା ଆପଣଙ୍କର ଡିଭାଇସ୍‌ରେ ଚାଲିବ ବା ଆପଣଙ୍କ ସ୍କ୍ରିନ୍‌ରେ ଦେଖାଯିବ।"</string>
     <string name="media_projection_dialog_title" msgid="8124184308671641248">"କାଷ୍ଟିଂ/ରେକର୍ଡିଂ ସମୟରେ ସମ୍ବେଦନଶୀଳ ସୂଚନା ଦେଖାନ୍ତୁ"</string>
     <string name="media_projection_remember_text" msgid="3103510882172746752">"ପୁଣି ଦେଖାନ୍ତୁ ନାହିଁ"</string>
     <string name="clear_all_notifications_text" msgid="814192889771462828">"ସମସ୍ତ ଖାଲି କରନ୍ତୁ"</string>
     <string name="manage_notifications_text" msgid="2386728145475108753">"ପରିଚାଳନା କରନ୍ତୁ"</string>
-    <!-- no translation found for notification_section_header_gentle (4372438504154095677) -->
-    <skip />
-    <!-- no translation found for accessibility_notification_section_header_gentle_clear_all (4286716295850400959) -->
-    <skip />
+    <string name="notification_section_header_gentle" msgid="4372438504154095677">"ନୀରବ ବିଜ୍ଞପ୍ତିଗୁଡ଼ିକ"</string>
+    <string name="accessibility_notification_section_header_gentle_clear_all" msgid="4286716295850400959">"ସମସ୍ତ ନୀରବ ବିଜ୍ଞପ୍ତିଗୁଡ଼ିକ ଖାଲି କରନ୍ତୁ"</string>
     <string name="dnd_suppressing_shade_text" msgid="1904574852846769301">"\"ବିରକ୍ତ କରନ୍ତୁ ନାହିଁ\" ବିକଳ୍ପ ଦ୍ୱାରା ବିଜ୍ଞପ୍ତି ପଜ୍‍ ହୋଇଛି"</string>
     <string name="media_projection_action_text" msgid="8470872969457985954">"ବର୍ତ୍ତମାନ ଆରମ୍ଭ କରନ୍ତୁ"</string>
     <string name="empty_shade_text" msgid="708135716272867002">"କୌଣସି ବିଜ୍ଞପ୍ତି ନାହିଁ"</string>
@@ -645,21 +642,16 @@
     <string name="inline_block_button" msgid="8735843688021655065">"ବ୍ଲକ୍ କରନ୍ତୁ"</string>
     <string name="inline_keep_button" msgid="6665940297019018232">"ଦେଖାଇବା ଜାରି ରଖନ୍ତୁ"</string>
     <string name="inline_minimize_button" msgid="966233327974702195">"ଛୋଟ କରନ୍ତୁ"</string>
-    <!-- no translation found for inline_silent_button_silent (5315879183296940969) -->
-    <skip />
+    <string name="inline_silent_button_silent" msgid="5315879183296940969">"ନୀରବ"</string>
     <string name="inline_silent_button_stay_silent" msgid="6308371431217601009">"ନୀରବ ରହନ୍ତୁ"</string>
-    <!-- no translation found for inline_silent_button_alert (6008435419895088034) -->
-    <skip />
+    <string name="inline_silent_button_alert" msgid="6008435419895088034">"ଆଲର୍ଟ କରିବା"</string>
     <string name="inline_silent_button_keep_alerting" msgid="327696842264359693">"ଆଲର୍ଟ କରିବା ଜାରି ରଖନ୍ତୁ"</string>
     <string name="inline_turn_off_notifications" msgid="8635596135532202355">"ବିଜ୍ଞପ୍ତି ବନ୍ଦ କରନ୍ତୁ"</string>
     <string name="inline_keep_showing_app" msgid="1723113469580031041">"ଏହି ଆପ୍‌ରୁ ବିଜ୍ଞପ୍ତିଗୁଡ଼ିକୁ ଦେଖାଇବା ଜାରି ରଖିବେ?"</string>
-    <string name="notification_silence_title" msgid="7352089096356977930">"ଧିରେ"</string>
-    <string name="notification_alert_title" msgid="3966526305405016221">"ପ୍ରାଥମିକତା ଭିତ୍ତିକ"</string>
-    <string name="notification_channel_summary_low" msgid="1065819618107531284">"କେବଳ ପୁଲ୍-ଡାଉନ୍ ସେଡ୍‌ରେ ବିଜ୍ଞପ୍ତିଗୁଡ଼ିକ ଉପରେ ଫୋକସ୍ ରହିବା ପାଇଁ ଆପଣଙ୍କୁ ସାହାଯ୍ୟ କରିଥାଏ। ସର୍ବଦା ନୀରବ।"</string>
-    <string name="notification_channel_summary_low_status" msgid="2702170424808743755">"ପ୍ରାଥମିକତା ବିଜ୍ଞପ୍ତିଗୁଡ଼ିକର ତଳେ ଡିସ୍‌ପ୍ଲେ ହୁଏ। ସର୍ବଦା ନିରବ।"</string>
-    <string name="notification_channel_summary_low_lock" msgid="7966605244472624458">"ପ୍ରାଥମିକତା ବିଜ୍ଞପ୍ତିଗୁଡ଼ିକର ତଳେ ଡିସ୍‌ପ୍ଲେ ହୁଏ। ସର୍ବଦା ନିରବ।"</string>
-    <string name="notification_channel_summary_low_status_lock" msgid="7012562768950012739">"ପ୍ରାଥମିକତା ବିଜ୍ଞପ୍ତିଗୁଡ଼ିକର ତଳେ ଡିସ୍‌ପ୍ଲେ ହୁଏ। ସର୍ବଦା ନିରବ।"</string>
-    <string name="notification_channel_summary_default" msgid="3847289783382316019">"ସାଉଣ୍ଡ୍ ଏବଂ ଏକ ଷ୍ଟାଟସ୍ ବାର୍ ଆଇକନ୍ ମାଧ୍ୟମରେ ଆପଣଙ୍କର ଧ୍ୟାନ ଆକର୍ଷିତ କରିଥାଏ। ଲକ୍ ସ୍କ୍ରିନ୍‌ରେ ଦେଖାଯାଇଥାଏ।"</string>
+    <string name="notification_silence_title" msgid="5763240612242137433">"ନୀରବ"</string>
+    <string name="notification_alert_title" msgid="8031196611815490340">"ଆଲର୍ଟ କରିବା"</string>
+    <string name="notification_channel_summary_low" msgid="3387466082089715555">"ବିନା ସାଉଣ୍ଡ କିମ୍ବା ଭାଇବ୍ରେସନ୍‌ରେ ଆପଣଙ୍କୁ ଫୋକସ୍ କରିବାରେ ସାହାଯ୍ୟ କରେ।"</string>
+    <string name="notification_channel_summary_default" msgid="5994062840431965586">"ସାଉଣ୍ଡ କିମ୍ବା ଭାଇବ୍ରେସନ୍ ମାଧ୍ୟମରେ ଆପଣଙ୍କର ଧ୍ୟାନ ଆକର୍ଷିତ କରିଥାଏ।"</string>
     <string name="notification_unblockable_desc" msgid="4556908766584964102">"ଏହି ବିଜ୍ଞପ୍ତିଗୁଡ଼ିକ ପରିବର୍ତ୍ତନ କରିହେବ ନାହିଁ।"</string>
     <string name="notification_multichannel_desc" msgid="4695920306092240550">"ଏଠାରେ ଏହି ବିଜ୍ଞପ୍ତିଗୁଡ଼ିକର ଗ୍ରୁପ୍ କନଫ୍ୟୁଗର୍ କରାଯାଇପାରିବ ନାହିଁ"</string>
     <string name="notification_delegate_header" msgid="2857691673814814270">"ବିଜ୍ଞପ୍ତି ପ୍ରକ୍ସୀ ହୋଇଛି"</string>
@@ -755,7 +747,7 @@
     <string name="accessibility_data_saver_on" msgid="8454111686783887148">"ଡାଟା ସେଭର୍‌ ଅନ୍‌ ଅଛି"</string>
     <string name="accessibility_data_saver_off" msgid="8841582529453005337">"ଡାଟା ସେଭର୍‍ ଅଫ୍ ଅଛି"</string>
     <string name="switch_bar_on" msgid="1142437840752794229">"ଅନ୍"</string>
-    <string name="switch_bar_off" msgid="8803270596930432874">"ଅଫ୍"</string>
+    <string name="switch_bar_off" msgid="8803270596930432874">"ବନ୍ଦ"</string>
     <string name="nav_bar" msgid="1993221402773877607">"ନାଭିଗେଶନ୍ ବାର୍‍"</string>
     <string name="nav_bar_layout" msgid="3664072994198772020">"ଲେଆଉଟ୍"</string>
     <string name="left_nav_bar_button_type" msgid="8555981238887546528">"ସମ୍ପୂର୍ଣ୍ଣ ବାମ ବଟନ୍‍ ପ୍ରକାର"</string>
@@ -786,7 +778,7 @@
     <string name="drag_to_add_tiles" msgid="230586591689084925">"ଟାଇଲ୍ ଯୋଡ଼ିବା ପାଇଁ ଦାବିଧରି ଟାଣନ୍ତୁ"</string>
     <string name="drag_to_rearrange_tiles" msgid="4566074720193667473">"ଟାଇଲ୍‍ ପୁଣି ସଜାଇବାକୁ ଦାବିଧରି ଟାଣନ୍ତୁ"</string>
     <string name="drag_to_remove_tiles" msgid="3361212377437088062">"ବାହାର କରିବାକୁ ଏଠାକୁ ଡ୍ରାଗ୍‍ କରନ୍ତୁ"</string>
-    <string name="drag_to_remove_disabled" msgid="2390968976638993382">"ଆପଣଙ୍କର ଅତିକମରେ 6ଟି ଟାଇଲ୍ ଆବଶ୍ୟକ"</string>
+    <string name="drag_to_remove_disabled" msgid="4785920129548299268">"ଆପଣଙ୍କର ଅତିକମ୍‌ରେ <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g>ଟି ଟାଇଲ୍ ଆବଶ୍ୟକ"</string>
     <string name="qs_edit" msgid="2232596095725105230">"ଏଡିଟ୍‌ କରନ୍ତୁ"</string>
     <string name="tuner_time" msgid="6572217313285536011">"ସମୟ"</string>
   <string-array name="clock_options">
@@ -908,8 +900,7 @@
     <string name="slice_permission_allow" msgid="2340244901366722709">"ଅନୁମତି ଦିଅନ୍ତୁ"</string>
     <string name="slice_permission_deny" msgid="7683681514008048807">"ଅସ୍ଵୀକାର କରନ୍ତୁ"</string>
     <string name="auto_saver_title" msgid="1217959994732964228">"ବ୍ୟାଟେରୀ ସେଭର୍‌ ଅନ୍‌ ହେବାର ସମୟ ସେଟ୍‌ କରିବାକୁ ଟାପ୍‌ କରନ୍ତୁ"</string>
-    <!-- no translation found for auto_saver_text (2563289953551438248) -->
-    <skip />
+    <string name="auto_saver_text" msgid="2563289953551438248">"ବ୍ୟାଟେରୀ ସରିବାକୁ ଥିବା ସମୟରେ ଚାଲୁ କରନ୍ତୁ"</string>
     <string name="no_auto_saver_action" msgid="8086002101711328500">"ନାହିଁ, ଥାଉ"</string>
     <string name="auto_saver_enabled_title" msgid="6726474226058316862">"ଆଗରୁ ସେଟ୍‌ କରିଥିବା ସମୟ ଅନୁସାରେ ବ୍ୟାଟେରୀ ସେଭର୍‌ ଅନ୍‌ ହୋଇଛି"</string>
     <string name="auto_saver_enabled_text" msgid="874711029884777579">"ଚାର୍ଜ <xliff:g id="PERCENTAGE">%d</xliff:g>%%ରୁ କମ୍‌ ହେଲେ ବ୍ୟାଟେରୀ ସେଭର୍‌ ଆପେ ଅନ୍‌ ହୋଇଯିବ।"</string>
@@ -942,4 +933,6 @@
     <string name="bubble_accessibility_action_move_bottom_left" msgid="206369104473183217">"ତଳ ବାମକୁ ନିଅନ୍ତୁ"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"ତଳ ଡାହାଣକୁ ନିଅନ୍ତୁ"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"ଖାରଜ କରନ୍ତୁ"</string>
+    <string name="notification_content_system_nav_changed" msgid="7218093915747788444">"ସିଷ୍ଟମ୍ ନାଭିଗେସନ୍ ଅପ୍‌ଡେଟ୍ ହୋଇଛି। ପରିବର୍ତ୍ତନ କରିବା ପାଇଁ, ସେଟିଂସ୍‌କୁ ଯାଆନ୍ତୁ।"</string>
+    <string name="notification_content_gesture_nav_available" msgid="8111130443656460792">"ସିଷ୍ଟମ୍ ନାଭିଗେସନ୍ ଅପ୍‌ଡେଟ୍ କରିବା ପାଇଁ ସେଟିଂସ୍‍କୁ ଯାଆନ୍ତୁ"</string>
 </resources>

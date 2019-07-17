@@ -32,6 +32,8 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Process.myPid;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
+import static android.provider.DeviceConfig.WindowManager.KEY_SYSTEM_GESTURES_EXCLUDED_BY_PRE_Q_STICKY_IMMERSIVE;
+import static android.provider.DeviceConfig.WindowManager.KEY_SYSTEM_GESTURE_EXCLUSION_LIMIT_DP;
 import static android.provider.Settings.Global.DEVELOPMENT_FORCE_DESKTOP_MODE_ON_EXTERNAL_DISPLAYS;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
@@ -154,6 +156,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.IRemoteCallback;
 import android.os.Looper;
@@ -175,6 +178,7 @@ import android.os.SystemService;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.WorkSource;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.service.vr.IVrManager;
 import android.service.vr.IVrStateCallbacks;
@@ -381,6 +385,8 @@ public class WindowManagerService extends IWindowManager.Stub
     private static final int ANIMATION_DURATION_SCALE = 2;
 
     private static final int ANIMATION_COMPLETED_TIMEOUT_MS = 5000;
+
+    private static final int MIN_GESTURE_EXCLUSION_LIMIT_DP = 200;
 
     final WindowTracing mWindowTracing;
 
@@ -842,6 +848,9 @@ public class WindowManagerService extends IWindowManager.Stub
     final ArrayList<WindowChangeListener> mWindowChangeListeners = new ArrayList<>();
     boolean mWindowsChanged = false;
 
+    int mSystemGestureExclusionLimitDp;
+    boolean mSystemGestureExcludedByPreQStickyImmersive;
+
     public interface WindowChangeListener {
         public void windowsChanged();
         public void focusChanged();
@@ -1135,6 +1144,29 @@ public class WindowManagerService extends IWindowManager.Stub
         mTaskPositioningController = new TaskPositioningController(
                 this, mInputManager, mActivityTaskManager, mH.getLooper());
         mDragDropController = new DragDropController(this, mH.getLooper());
+
+        mSystemGestureExclusionLimitDp = Math.max(MIN_GESTURE_EXCLUSION_LIMIT_DP,
+                DeviceConfig.getInt(DeviceConfig.NAMESPACE_WINDOW_MANAGER,
+                        KEY_SYSTEM_GESTURE_EXCLUSION_LIMIT_DP, 0));
+        mSystemGestureExcludedByPreQStickyImmersive =
+                DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_WINDOW_MANAGER,
+                        KEY_SYSTEM_GESTURES_EXCLUDED_BY_PRE_Q_STICKY_IMMERSIVE, false);
+        DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_WINDOW_MANAGER,
+                new HandlerExecutor(mH), properties -> {
+                    synchronized (mGlobalLock) {
+                        final int exclusionLimitDp = Math.max(MIN_GESTURE_EXCLUSION_LIMIT_DP,
+                                properties.getInt(KEY_SYSTEM_GESTURE_EXCLUSION_LIMIT_DP, 0));
+                        final boolean excludedByPreQSticky = DeviceConfig.getBoolean(
+                                DeviceConfig.NAMESPACE_WINDOW_MANAGER,
+                                KEY_SYSTEM_GESTURES_EXCLUDED_BY_PRE_Q_STICKY_IMMERSIVE, false);
+                        if (mSystemGestureExcludedByPreQStickyImmersive != excludedByPreQSticky
+                                || mSystemGestureExclusionLimitDp != exclusionLimitDp) {
+                            mSystemGestureExclusionLimitDp = exclusionLimitDp;
+                            mSystemGestureExcludedByPreQStickyImmersive = excludedByPreQSticky;
+                            mRoot.forAllDisplays(DisplayContent::updateSystemGestureExclusionLimit);
+                        }
+                    }
+                });
 
         LocalServices.addService(WindowManagerInternal.class, new LocalService());
     }
@@ -3571,8 +3603,9 @@ public class WindowManagerService extends IWindowManager.Stub
         return true;
     }
 
-    public TaskSnapshot getTaskSnapshot(int taskId, int userId, boolean reducedResolution) {
-        return mTaskSnapshotController.getSnapshot(taskId, userId, true /* restoreFromDisk */,
+    public TaskSnapshot getTaskSnapshot(int taskId, int userId, boolean reducedResolution,
+            boolean restoreFromDisk) {
+        return mTaskSnapshotController.getSnapshot(taskId, userId, restoreFromDisk,
                 reducedResolution);
     }
 
@@ -7654,22 +7687,30 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public boolean injectInputAfterTransactionsApplied(InputEvent ev, int mode) {
-        boolean shouldWaitForAnimToComplete = false;
+        boolean isDown;
+        boolean isUp;
+
         if (ev instanceof KeyEvent) {
             KeyEvent keyEvent = (KeyEvent) ev;
-            shouldWaitForAnimToComplete = keyEvent.getSource() == InputDevice.SOURCE_MOUSE
-                    || keyEvent.getAction() == KeyEvent.ACTION_DOWN;
-        } else if (ev instanceof MotionEvent) {
+            isDown = keyEvent.getAction() == KeyEvent.ACTION_DOWN;
+            isUp = keyEvent.getAction() == KeyEvent.ACTION_UP;
+        } else {
             MotionEvent motionEvent = (MotionEvent) ev;
-            shouldWaitForAnimToComplete = motionEvent.getSource() == InputDevice.SOURCE_MOUSE
-                    || motionEvent.getAction() == MotionEvent.ACTION_DOWN;
+            isDown = motionEvent.getAction() == MotionEvent.ACTION_DOWN;
+            isUp = motionEvent.getAction() == MotionEvent.ACTION_UP;
         }
 
-        if (shouldWaitForAnimToComplete) {
+        // For ACTION_DOWN, syncInputTransactions before injecting input.
+        // For ACTION_UP, sync after injecting.
+        if (isDown) {
             syncInputTransactions();
         }
-
-        return LocalServices.getService(InputManagerInternal.class).injectInputEvent(ev, mode);
+        final boolean result =
+                LocalServices.getService(InputManagerInternal.class).injectInputEvent(ev, mode);
+        if (isUp) {
+            syncInputTransactions();
+        }
+        return result;
     }
 
     @Override
@@ -7710,7 +7751,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     private void onPointerDownOutsideFocusLocked(IBinder touchedToken) {
         final WindowState touchedWindow = windowForClientLocked(null, touchedToken, false);
-        if (touchedWindow == null) {
+        if (touchedWindow == null || !touchedWindow.canReceiveKeys()) {
             return;
         }
 

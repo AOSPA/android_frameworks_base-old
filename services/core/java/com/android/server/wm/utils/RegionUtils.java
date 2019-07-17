@@ -18,8 +18,12 @@ package com.android.server.wm.utils;
 
 import android.graphics.Rect;
 import android.graphics.Region;
+import android.graphics.RegionIterator;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Utility methods to handle Regions.
@@ -41,5 +45,26 @@ public class RegionUtils {
         for (int i = 0; i < n; i++) {
             outRegion.union(rects.get(i));
         }
+    }
+
+    /**
+     * Applies actions on each rect contained within a {@code Region}.
+     *
+     * Order is bottom to top, then right to left.
+     *
+     * @param region the given region.
+     * @param rectConsumer the action holder.
+     */
+    public static void forEachRectReverse(Region region, Consumer<Rect> rectConsumer) {
+        final RegionIterator it = new RegionIterator(region);
+        final ArrayList<Rect> rects = new ArrayList<>();
+        final Rect rect = new Rect();
+        while (it.next(rect)) {
+            rects.add(new Rect(rect));
+        }
+        // TODO: instead of creating an array and reversing it, expose the reverse iterator through
+        //       JNI.
+        Collections.reverse(rects);
+        rects.forEach(rectConsumer);
     }
 }

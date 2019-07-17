@@ -131,6 +131,7 @@
     <!-- no translation found for wfcSpnFormat_spn (4998685024207291232) -->
     <skip />
     <string name="wfcSpnFormat_spn_wifi_calling" msgid="136001023263502280">"<xliff:g id="SPN">%s</xliff:g> வைஃபை அழைப்பு"</string>
+    <string name="wfcSpnFormat_spn_wifi_calling_vo_hyphen" msgid="1730997175789582756">"<xliff:g id="SPN">%s</xliff:g> வைஃபை அழைப்பு"</string>
     <string name="wfcSpnFormat_wlan_call" msgid="2533371081782489793">"WLAN அழைப்பு"</string>
     <string name="wfcSpnFormat_spn_wlan_call" msgid="2315240198303197168">"<xliff:g id="SPN">%s</xliff:g> WLAN அழைப்பு"</string>
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> வைஃபை"</string>
@@ -266,7 +267,7 @@
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"விற்பனையாளர் டெமோ"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"USB இணைப்பு"</string>
     <string name="notification_channel_heavy_weight_app" msgid="6218742927792852607">"ஆப்ஸ் இயங்குகிறது"</string>
-    <string name="notification_channel_foreground_service" msgid="3931987440602669158">"பேட்டரியைப் பயன்படுத்தும் பயன்பாடுகள்"</string>
+    <string name="notification_channel_foreground_service" msgid="3931987440602669158">"பேட்டரியைப் பயன்படுத்தும் ஆப்ஸ்"</string>
     <string name="foreground_service_app_in_background" msgid="1060198778219731292">"<xliff:g id="APP_NAME">%1$s</xliff:g> ஆப்ஸ் பேட்டரியைப் பயன்படுத்துகிறது"</string>
     <string name="foreground_service_apps_in_background" msgid="7175032677643332242">"<xliff:g id="NUMBER">%1$d</xliff:g> பயன்பாடுகள் பேட்டரியைப் பயன்படுத்துகின்றன"</string>
     <string name="foreground_service_tap_for_details" msgid="372046743534354644">"பேட்டரி மற்றும் டேட்டா உபயோக விவரங்களைக் காண, தட்டவும்"</string>
@@ -886,7 +887,7 @@
     <string name="keyguard_accessibility_expand_lock_area" msgid="519859720934178024">"திறப்பதற்கான பகுதியை விவரிக்கவும்."</string>
     <string name="keyguard_accessibility_slide_unlock" msgid="2959928478764697254">"ஸ்லைடு மூலம் திறத்தல்."</string>
     <string name="keyguard_accessibility_pattern_unlock" msgid="1490840706075246612">"வடிவம் மூலம் திறத்தல்."</string>
-    <string name="keyguard_accessibility_face_unlock" msgid="4817282543351718535">"முகத்தால் திறத்தல்."</string>
+    <string name="keyguard_accessibility_face_unlock" msgid="4817282543351718535">"முகம் காட்டித் திறத்தல்."</string>
     <string name="keyguard_accessibility_pin_unlock" msgid="2469687111784035046">"Pin மூலம் திறத்தல்."</string>
     <string name="keyguard_accessibility_sim_pin_unlock" msgid="9149698847116962307">"சிம்மைத் திறக்கும் பின்."</string>
     <string name="keyguard_accessibility_sim_puk_unlock" msgid="9106899279724723341">"சிம்மைத் திறக்கும் Puk."</string>
@@ -1129,8 +1130,10 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"இதன்மூலம் திற"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"%1$s மூலம் திற"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"திற"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"மூலம் <xliff:g id="HOST">%1$s</xliff:g> இணைப்புகளைத் திறப்பதற்கான அணுகலை வழங்குதல்"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"<xliff:g id="APPLICATION">%2$s</xliff:g> மூலம் <xliff:g id="HOST">%1$s</xliff:g> இணைப்புகளைத் திறப்பதற்கான அணுகலை வழங்குதல்"</string>
+    <string name="whichOpenHostLinksWith" msgid="3788174881117226583">"<xliff:g id="HOST">%1$s</xliff:g> இணைப்புகளை இதன் மூலம் திற:"</string>
+    <string name="whichOpenLinksWith" msgid="6392123355599572804">"இணைப்புகளை இதன் மூலம் திற:"</string>
+    <string name="whichOpenLinksWithApp" msgid="8225991685366651614">"இணைப்புகளை <xliff:g id="APPLICATION">%1$s</xliff:g> ஆப்ஸில் திறத்தல்"</string>
+    <string name="whichOpenHostLinksWithApp" msgid="3464470639011045589">"<xliff:g id="HOST">%1$s</xliff:g> இணைப்புகளை <xliff:g id="APPLICATION">%2$s</xliff:g> ஆப்ஸில் திறத்தல்"</string>
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"அணுகலை வழங்கு"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"இதன் மூலம் திருத்து"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"%1$s மூலம் திருத்து"</string>
@@ -1358,8 +1361,7 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"’தன்னியக்க சோதனைப்\' பயன்முறையை முடக்க ஆரம்பநிலைக்கு மீட்டமைக்கவும்."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"USB போர்ட்டில் சேதம் உள்ளது"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB போர்ட் தானாகவே முடக்கப்பட்டது மேலும் அறிய, தட்டவும்."</string>
-    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
-    <skip />
+    <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"USB போர்ட்டைப் பயன்படுத்தலாம்"</string>
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"மொபைலில் எந்தச் சேதாரமும் கண்டறியப்படவில்லை."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"பிழை அறிக்கையை எடுக்கிறது…"</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"பிழை அறிக்கையைப் பகிரவா?"</string>
@@ -1584,6 +1586,7 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"உலாவியைத் துவக்கவா?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"அழைப்பை ஏற்கவா?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"எப்போதும்"</string>
+    <string name="activity_resolver_set_always" msgid="1422574191056490585">"எப்போதும் திறக்குமாறு அமைத்தல்"</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"இப்போது மட்டும்"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"அமைப்புகள்"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s பணிக் கணக்கை ஆதரிக்காது"</string>
@@ -1613,8 +1616,6 @@
     <string name="display_manager_overlay_display_name" msgid="5142365982271620716">"மேலோட்ட #<xliff:g id="ID">%1$d</xliff:g>"</string>
     <string name="display_manager_overlay_display_title" msgid="652124517672257172">"<xliff:g id="NAME">%1$s</xliff:g>: <xliff:g id="WIDTH">%2$d</xliff:g>x<xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> dpi"</string>
     <string name="display_manager_overlay_display_secure_suffix" msgid="6022119702628572080">", பாதுகாப்பானது"</string>
-    <string name="activity_starter_block_bg_activity_starts_permissive" msgid="6995473033438879646">"<xliff:g id="PACKAGENAME">%1$s</xliff:g>மின் \'பின்னணிச் செயல்பாடுத் தொடக்கம்\' இனிவரும் Q பதிப்புகளில் தடுக்கப்படும். g.co/dev/bgblock என்ற இணைப்பைப் பார்க்கவும்."</string>
-    <string name="activity_starter_block_bg_activity_starts_enforcing" msgid="3317816771072146229">"<xliff:g id="PACKAGENAME">%1$s</xliff:g>மில் \'பின்னணிச் செயல்பாட்டுத் தொடக்கம்\' தடுக்கப்பட்டுள்ளது. g.co/dev/bgblock என்ற இணைப்பைப் பார்க்கவும்."</string>
     <string name="kg_forgot_pattern_button_text" msgid="8852021467868220608">"வடிவத்தை மறந்துவிட்டீர்களா"</string>
     <string name="kg_wrong_pattern" msgid="1850806070801358830">"தவறான வடிவம்"</string>
     <string name="kg_wrong_password" msgid="2333281762128113157">"தவறான கடவுச்சொல்"</string>
@@ -1668,8 +1669,12 @@
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"அணுகல்தன்மை ஷார்ட்கட்டானது <xliff:g id="SERVICE_NAME">%1$s</xliff:g>ஐ இயக்கியது"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"அணுகல்தன்மை ஷார்ட்கட்டானது <xliff:g id="SERVICE_NAME">%1$s</xliff:g>ஐ முடக்கியது"</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g>ஐப் பயன்படுத்த 3 விநாடிகளுக்கு இரண்டு ஒலியளவு பட்டன்களையும் அழுத்திப் பிடிக்கவும்"</string>
-    <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"அணுகல்தன்மை பட்டனைத் தட்டி, பயன்படுத்துவதற்கான அம்சத்தைத் தேர்ந்தெடுக்கவும்:"</string>
-    <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"அம்சங்களை மாற்ற, அணுகல்தன்மை பட்டனைத் தொட்டுப் பிடித்திருக்கவும்."</string>
+    <string name="accessibility_button_prompt_text" msgid="1176658502969738564">"அணுகல்தன்மை பட்டனுக்கான சேவையைத் தேர்வுசெய்யவும்:"</string>
+    <string name="accessibility_gesture_prompt_text" msgid="8259145549733019401">"அணுகல்தன்மை சைகைக்கான சேவையைத் தேர்வுசெய்யவும் (இரண்டு விரல்களால் திரையின் கீழிருந்து மேல் நோக்கி ஸ்வைப் செய்யவும்):"</string>
+    <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"அணுகல்தன்மை சைகைக்கான சேவையைத் தேர்வுசெய்யவும் (மூன்று விரல்களால் திரையின் கீழிருந்து மேல் நோக்கி ஸ்வைப் செய்யவும்):"</string>
+    <string name="accessibility_button_instructional_text" msgid="7003212763213614833">"சேவைகளுக்கு இடையே மாற அணுகல்தன்மை பட்டனைத் தொட்டுப் பிடிக்கவும்."</string>
+    <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"சேவைகளுக்கு இடையே மாற இரண்டு விரல்களால் மேல்நோக்கி ஸ்வைப் செய்து பிடிக்கவும்."</string>
+    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"சேவைகளுக்கு இடையே மாற மூன்று விரல்களால் மேல்நோக்கி ஸ்வைப் செய்து பிடிக்கவும்."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"பெரிதாக்கல்"</string>
     <string name="user_switched" msgid="3768006783166984410">"நடப்பு பயனர் <xliff:g id="NAME">%1$s</xliff:g>."</string>
     <string name="user_switching_message" msgid="2871009331809089783">"<xliff:g id="NAME">%1$s</xliff:g>க்கு மாறுகிறது…"</string>

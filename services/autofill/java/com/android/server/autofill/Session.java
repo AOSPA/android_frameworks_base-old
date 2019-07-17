@@ -546,21 +546,26 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     + "mForAugmentedAutofillOnly: %s", mForAugmentedAutofillOnly);
             return;
         }
-        final int canceledRequest = mRemoteFillService.cancelCurrentRequest();
+        mRemoteFillService.cancelCurrentRequest().whenComplete((canceledRequest, err) -> {
+            if (err != null) {
+                Slog.e(TAG, "cancelCurrentRequest(): unexpected exception", err);
+                return;
+            }
 
-        // Remove the FillContext as there will never be a response for the service
-        if (canceledRequest != INVALID_REQUEST_ID && mContexts != null) {
-            final int numContexts = mContexts.size();
+            // Remove the FillContext as there will never be a response for the service
+            if (canceledRequest != INVALID_REQUEST_ID && mContexts != null) {
+                final int numContexts = mContexts.size();
 
-            // It is most likely the last context, hence search backwards
-            for (int i = numContexts - 1; i >= 0; i--) {
-                if (mContexts.get(i).getRequestId() == canceledRequest) {
-                    if (sDebug) Slog.d(TAG, "cancelCurrentRequest(): id = " + canceledRequest);
-                    mContexts.remove(i);
-                    break;
+                // It is most likely the last context, hence search backwards
+                for (int i = numContexts - 1; i >= 0; i--) {
+                    if (mContexts.get(i).getRequestId() == canceledRequest) {
+                        if (sDebug) Slog.d(TAG, "cancelCurrentRequest(): id = " + canceledRequest);
+                        mContexts.remove(i);
+                        break;
+                    }
                 }
             }
-        }
+        });
     }
 
     /**
@@ -569,12 +574,13 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
     @GuardedBy("mLock")
     private void requestNewFillResponseLocked(@NonNull ViewState viewState, int newState,
             int flags) {
-        if (mForAugmentedAutofillOnly) {
+        if (mForAugmentedAutofillOnly || mRemoteFillService == null) {
             if (sVerbose) {
                 Slog.v(TAG, "requestNewFillResponse(): triggering augmented autofill instead "
                         + "(mForAugmentedAutofillOnly=" + mForAugmentedAutofillOnly
                         + ", flags=" + flags + ")");
             }
+            mForAugmentedAutofillOnly = true;
             triggerAugmentedAutofillLocked();
             return;
         }
@@ -2089,8 +2095,8 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         updateValuesForSaveLocked();
 
         // Remove pending fill requests as the session is finished.
-        cancelCurrentRequestLocked();
 
+        cancelCurrentRequestLocked();
         final ArrayList<FillContext> contexts = mergePreviousSessionLocked( /* forSave= */ true);
 
         final SaveRequest saveRequest =
@@ -2178,6 +2184,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
     private void requestNewFillResponseOnViewEnteredIfNecessaryLocked(@NonNull AutofillId id,
             @NonNull ViewState viewState, int flags) {
         if ((flags & FLAG_MANUAL_REQUEST) != 0) {
+            mForAugmentedAutofillOnly = false;
             if (sDebug) Slog.d(TAG, "Re-starting session on view " + id + " and flags " + flags);
             requestNewFillResponseLocked(viewState, ViewState.STATE_RESTARTED_SESSION, flags);
             return;
@@ -2922,6 +2929,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             if (sVerbose) {
                 Slog.v(TAG, "Adding autofillable view with id " + id + " and state " + state);
             }
+            viewState.setCurrentValue(findValueLocked(id));
             mViewStates.put(id, viewState);
         }
         if ((state & ViewState.STATE_AUTOFILLED) != 0) {

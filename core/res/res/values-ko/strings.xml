@@ -131,6 +131,7 @@
     <!-- no translation found for wfcSpnFormat_spn (4998685024207291232) -->
     <skip />
     <string name="wfcSpnFormat_spn_wifi_calling" msgid="136001023263502280">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi 통화"</string>
+    <string name="wfcSpnFormat_spn_wifi_calling_vo_hyphen" msgid="1730997175789582756">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi 통화"</string>
     <string name="wfcSpnFormat_wlan_call" msgid="2533371081782489793">"WLAN 통화"</string>
     <string name="wfcSpnFormat_spn_wlan_call" msgid="2315240198303197168">"<xliff:g id="SPN">%s</xliff:g> WLAN 통화"</string>
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi"</string>
@@ -253,7 +254,7 @@
     <string name="notification_channel_virtual_keyboard" msgid="6969925135507955575">"가상 키보드"</string>
     <string name="notification_channel_physical_keyboard" msgid="7297661826966861459">"물리적 키보드"</string>
     <string name="notification_channel_security" msgid="7345516133431326347">"보안"</string>
-    <string name="notification_channel_car_mode" msgid="3553380307619874564">"운전모드"</string>
+    <string name="notification_channel_car_mode" msgid="3553380307619874564">"운전 모드"</string>
     <string name="notification_channel_account" msgid="7577959168463122027">"계정 상태"</string>
     <string name="notification_channel_developer" msgid="7579606426860206060">"개발자 메시지"</string>
     <string name="notification_channel_updates" msgid="4794517569035110397">"업데이트"</string>
@@ -359,8 +360,8 @@
     <string name="permdesc_manageProfileAndDeviceOwners" msgid="106894851498657169">"앱이 프로필 소유자와 기기 소유자를 설정하도록 허용합니다."</string>
     <string name="permlab_reorderTasks" msgid="2018575526934422779">"실행 중인 앱 순서 재지정"</string>
     <string name="permdesc_reorderTasks" msgid="7734217754877439351">"앱이 사용자의 입력 없이 작업을 포그라운드나 백그라운드로 이동할 수 있도록 허용합니다."</string>
-    <string name="permlab_enableCarMode" msgid="5684504058192921098">"운전모드 사용"</string>
-    <string name="permdesc_enableCarMode" msgid="4853187425751419467">"앱이 운전모드를 사용할 수 있도록 허용합니다."</string>
+    <string name="permlab_enableCarMode" msgid="5684504058192921098">"운전 모드 사용"</string>
+    <string name="permdesc_enableCarMode" msgid="4853187425751419467">"앱이 운전 모드를 사용할 수 있도록 허용합니다."</string>
     <string name="permlab_killBackgroundProcesses" msgid="3914026687420177202">"다른 앱 종료"</string>
     <string name="permdesc_killBackgroundProcesses" msgid="4593353235959733119">"앱이 다른 앱의 백그라운드 프로세스를 종료할 수 있도록 허용합니다. 이 경우 다른 앱이 실행 중지될 수 있습니다."</string>
     <string name="permlab_systemAlertWindow" msgid="7238805243128138690">"이 앱은 다른 앱 위에 표시될 수 있음"</string>
@@ -901,7 +902,7 @@
     <string name="granularity_label_link" msgid="5815508880782488267">"링크"</string>
     <string name="granularity_label_line" msgid="5764267235026120888">"행"</string>
     <string name="factorytest_failed" msgid="5410270329114212041">"출고 테스트 불합격"</string>
-    <string name="factorytest_not_system" msgid="4435201656767276723">"FACTORY_TEST 작업은 /system/app 디렉토리에 설치된 패키지에 대해서만 지원됩니다."</string>
+    <string name="factorytest_not_system" msgid="4435201656767276723">"FACTORY_TEST 작업은 /system/app 디렉터리에 설치된 패키지에 대해서만 지원됩니다."</string>
     <string name="factorytest_no_action" msgid="872991874799998561">"FACTORY_TEST 작업을 제공하는 패키지가 없습니다."</string>
     <string name="factorytest_reboot" msgid="6320168203050791643">"다시 부팅"</string>
     <string name="js_dialog_title" msgid="1987483977834603872">"\'<xliff:g id="TITLE">%s</xliff:g>\' 페이지 내용:"</string>
@@ -1129,8 +1130,10 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"연결 프로그램"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"%1$s(으)로 열기"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"열기"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"다음으로 <xliff:g id="HOST">%1$s</xliff:g> 링크를 열려면 액세스 권한 부여"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"<xliff:g id="APPLICATION">%2$s</xliff:g>(으)로 <xliff:g id="HOST">%1$s</xliff:g> 링크를 열려면 액세스 권한 부여"</string>
+    <string name="whichOpenHostLinksWith" msgid="3788174881117226583">"<xliff:g id="HOST">%1$s</xliff:g> 링크를 열 때 사용할 앱"</string>
+    <string name="whichOpenLinksWith" msgid="6392123355599572804">"링크를 열 때 사용할 앱"</string>
+    <string name="whichOpenLinksWithApp" msgid="8225991685366651614">"<xliff:g id="APPLICATION">%1$s</xliff:g> 앱으로 링크 열기"</string>
+    <string name="whichOpenHostLinksWithApp" msgid="3464470639011045589">"<xliff:g id="APPLICATION">%2$s</xliff:g> 앱으로 <xliff:g id="HOST">%1$s</xliff:g> 링크 열기"</string>
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"권한 부여"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"편집 프로그램:"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"%1$s(으)로 수정"</string>
@@ -1357,8 +1360,7 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"테스트 하네스 모드를 사용 중지하려면 초기화하세요."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"USB 포트에서 액체 또는 이물질 감지됨"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB 포트가 자동으로 사용 중지되었습니다. 자세한 내용을 보려면 탭하세요."</string>
-    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
-    <skip />
+    <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"USB 포트를 사용해도 좋음"</string>
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"휴대전화에서 액체나 이물질이 더 이상 감지되지 않습니다."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"버그 보고서 가져오는 중..."</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"버그 보고서를 공유하시겠습니까?"</string>
@@ -1583,6 +1585,7 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"브라우저를 실행하시겠습니까?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"통화를 수락하시겠습니까?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"항상"</string>
+    <string name="activity_resolver_set_always" msgid="1422574191056490585">"항상 열도록 설정"</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"한 번만"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"설정"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s에서 직장 프로필을 지원하지 않습니다."</string>
@@ -1612,8 +1615,6 @@
     <string name="display_manager_overlay_display_name" msgid="5142365982271620716">"<xliff:g id="ID">%1$d</xliff:g>번째 오버레이"</string>
     <string name="display_manager_overlay_display_title" msgid="652124517672257172">"<xliff:g id="NAME">%1$s</xliff:g>: <xliff:g id="WIDTH">%2$d</xliff:g>x<xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> dpi"</string>
     <string name="display_manager_overlay_display_secure_suffix" msgid="6022119702628572080">", 보안"</string>
-    <string name="activity_starter_block_bg_activity_starts_permissive" msgid="6995473033438879646">"<xliff:g id="PACKAGENAME">%1$s</xliff:g>의 백그라운드 활동 시작은 향후 Q 빌드에서 차단됩니다. g.co/dev/bgblock을 참조하세요."</string>
-    <string name="activity_starter_block_bg_activity_starts_enforcing" msgid="3317816771072146229">"<xliff:g id="PACKAGENAME">%1$s</xliff:g>의 백그라운드 활동 시작이 차단되었습니다. g.co/dev/bgblock을 참조하세요."</string>
     <string name="kg_forgot_pattern_button_text" msgid="8852021467868220608">"패턴을 잊음"</string>
     <string name="kg_wrong_pattern" msgid="1850806070801358830">"잘못된 패턴"</string>
     <string name="kg_wrong_password" msgid="2333281762128113157">"잘못된 비밀번호"</string>
@@ -1667,8 +1668,12 @@
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"접근성 단축키로 인해 <xliff:g id="SERVICE_NAME">%1$s</xliff:g>이(가) 사용 설정되었습니다."</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"접근성 단축키로 인해 <xliff:g id="SERVICE_NAME">%1$s</xliff:g>이(가) 사용 중지되었습니다."</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g> 서비스를 사용하려면 두 볼륨 키를 3초 동안 길게 누르세요"</string>
-    <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"접근성 버튼을 탭할 때 사용할 기능을 선택하세요."</string>
-    <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"기능을 변경하려면 접근성 버튼을 길게 터치하세요."</string>
+    <string name="accessibility_button_prompt_text" msgid="1176658502969738564">"접근성 버튼을 탭했을 때 실행할 서비스를 선택하세요."</string>
+    <string name="accessibility_gesture_prompt_text" msgid="8259145549733019401">"접근성 동작(두 손가락을 사용하여 화면 하단에서 위로 스와이프)으로 실행할 서비스를 선택하세요."</string>
+    <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"접근성 동작(세 손가락을 사용하여 화면 하단에서 위로 스와이프)으로 실행할 서비스를 선택하세요."</string>
+    <string name="accessibility_button_instructional_text" msgid="7003212763213614833">"서비스 간에 전환하려면 접근성 버튼을 길게 터치합니다."</string>
+    <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"서비스 간에 전환하려면 두 손가락을 사용하여 위로 스와이프한 다음 잠시 기다립니다."</string>
+    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"서비스 간에 전환하려면 세 손가락을 사용하여 위로 스와이프한 다음 잠시 기다립니다."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"확대"</string>
     <string name="user_switched" msgid="3768006783166984410">"현재 사용자는 <xliff:g id="NAME">%1$s</xliff:g>님입니다."</string>
     <string name="user_switching_message" msgid="2871009331809089783">"<xliff:g id="NAME">%1$s</xliff:g>(으)로 전환하는 중…"</string>

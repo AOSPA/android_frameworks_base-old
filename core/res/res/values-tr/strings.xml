@@ -131,6 +131,7 @@
     <!-- no translation found for wfcSpnFormat_spn (4998685024207291232) -->
     <skip />
     <string name="wfcSpnFormat_spn_wifi_calling" msgid="136001023263502280">"<xliff:g id="SPN">%s</xliff:g> Kablosuz Çağrı"</string>
+    <string name="wfcSpnFormat_spn_wifi_calling_vo_hyphen" msgid="1730997175789582756">"<xliff:g id="SPN">%s</xliff:g> Kablosuz Arama"</string>
     <string name="wfcSpnFormat_wlan_call" msgid="2533371081782489793">"WLAN Üzerinden Çağrı"</string>
     <string name="wfcSpnFormat_spn_wlan_call" msgid="2315240198303197168">"<xliff:g id="SPN">%s</xliff:g> WLAN Üzerinden Çağrı"</string>
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> Kablosuz"</string>
@@ -1129,8 +1130,10 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"Şununla aç:"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"%1$s ile aç"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"Aç"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"Şununla <xliff:g id="HOST">%1$s</xliff:g> bağlantılarını açma izni verin"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"<xliff:g id="APPLICATION">%2$s</xliff:g> uygulamasıyla <xliff:g id="HOST">%1$s</xliff:g> bağlantılarını açma izni verin"</string>
+    <string name="whichOpenHostLinksWith" msgid="3788174881117226583">"<xliff:g id="HOST">%1$s</xliff:g> bağlantılarını şununla aç:"</string>
+    <string name="whichOpenLinksWith" msgid="6392123355599572804">"Bağlantıları şununla aç:"</string>
+    <string name="whichOpenLinksWithApp" msgid="8225991685366651614">"Bağlantıları <xliff:g id="APPLICATION">%1$s</xliff:g> ile aç"</string>
+    <string name="whichOpenHostLinksWithApp" msgid="3464470639011045589">"<xliff:g id="HOST">%1$s</xliff:g> bağlantılarını <xliff:g id="APPLICATION">%2$s</xliff:g> ile aç"</string>
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"Erişim ver"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"Şununla düzenle:"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"%1$s ile düzenle"</string>
@@ -1357,8 +1360,7 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Test Bandı Modu\'nu devre dışı bırakmak için cihazı fabrika ayarlarına sıfırlayın."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"USB bağlantı noktasında sıvı veya toz var"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB bağlantı noktası otomatik olarak devre dışı bırakıldı. Daha fazla bilgi için dokunun."</string>
-    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
-    <skip />
+    <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"USB bağlantı noktasını kullanabilirsiniz"</string>
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"Telefon artık sıvıları veya tozları algılamıyor."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"Hata raporu alınıyor…"</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"Hata raporu paylaşılsın mı?"</string>
@@ -1583,6 +1585,7 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"Tarayıcı Başlatılsın mı?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"Çağrı kabul edilsin mi?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"Her zaman"</string>
+    <string name="activity_resolver_set_always" msgid="1422574191056490585">"Her zaman açılmak üzere ayarla"</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"Yalnızca bir defa"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"Ayarlar"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s, iş profilini desteklemiyor"</string>
@@ -1612,8 +1615,6 @@
     <string name="display_manager_overlay_display_name" msgid="5142365982271620716">"Yer Paylaşımı No. <xliff:g id="ID">%1$d</xliff:g>"</string>
     <string name="display_manager_overlay_display_title" msgid="652124517672257172">"<xliff:g id="NAME">%1$s</xliff:g>: <xliff:g id="WIDTH">%2$d</xliff:g>x<xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> dpi"</string>
     <string name="display_manager_overlay_display_secure_suffix" msgid="6022119702628572080">", güvenli"</string>
-    <string name="activity_starter_block_bg_activity_starts_permissive" msgid="6995473033438879646">"<xliff:g id="PACKAGENAME">%1$s</xliff:g> paketinden bu arka plan etkinliği başlangıcı, ilerideki Q derlemelerinde engellenecek. g.co/dev/bgblock adresini ziyaret edin."</string>
-    <string name="activity_starter_block_bg_activity_starts_enforcing" msgid="3317816771072146229">"<xliff:g id="PACKAGENAME">%1$s</xliff:g> paketinden arka plan etkinliği başlangıcı engellendi. g.co/dev/bgblock adresini ziyaret edin."</string>
     <string name="kg_forgot_pattern_button_text" msgid="8852021467868220608">"Deseni Unuttunuz mu?"</string>
     <string name="kg_wrong_pattern" msgid="1850806070801358830">"Yanlış Desen"</string>
     <string name="kg_wrong_password" msgid="2333281762128113157">"Yanlış Şifre"</string>
@@ -1667,8 +1668,12 @@
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"Erişilebilirlik Kısayolu <xliff:g id="SERVICE_NAME">%1$s</xliff:g> hizmetini açtı"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"Erişilebilirlik Kısayolu <xliff:g id="SERVICE_NAME">%1$s</xliff:g> hizmetini kapattı"</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g> hizmetini kullanmak için her iki ses tuşunu basılı tutun"</string>
-    <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"Erişilebilirlik düğmesine dokunduğunuzda kullanmak üzere bir özellik seçin:"</string>
-    <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"Özellikleri değiştirmek için Erişilebilirlik düğmesine dokunup basılı tutun."</string>
+    <string name="accessibility_button_prompt_text" msgid="1176658502969738564">"Erişilebilirlik düğmesine dokunduğunuzda kullanmak üzere bir hizmet seçin:"</string>
+    <string name="accessibility_gesture_prompt_text" msgid="8259145549733019401">"Erişilebilirlik hareketiyle (iki parmakla ekranın altından yukarı kaydırma) kullanılacak bir hizmet seçin:"</string>
+    <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"Erişilebilirlik hareketiyle (üç parmakla ekranın altından yukarı kaydırma) kullanılacak bir hizmet seçin:"</string>
+    <string name="accessibility_button_instructional_text" msgid="7003212763213614833">"Hizmetler arasında geçiş yapmak erişilebilirlik düğmesine dokunup basılı tutun."</string>
+    <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"Hizmetler arasında geçiş yapmak için iki parmakla yukarı kaydırıp basılı tutun."</string>
+    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"Hizmetler arasında geçiş yapmak için üç parmakla yukarı kaydırıp basılı tutun."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"Büyütme"</string>
     <string name="user_switched" msgid="3768006783166984410">"Geçerli kullanıcı: <xliff:g id="NAME">%1$s</xliff:g>."</string>
     <string name="user_switching_message" msgid="2871009331809089783">"<xliff:g id="NAME">%1$s</xliff:g> adlı kullanıcıya geçiliyor…"</string>
@@ -1901,7 +1906,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Güncellemeleri denetle"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"Yeni mesajlarınız var"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"Görüntülemek için SMS uygulamasını açın"</string>
-    <string name="profile_encrypted_title" msgid="4260432497586829134">"Bazı işlevler sınırlı olabilir"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"Bazı işlevler sınırlanabilir"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"İş profili kilitlendi"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"İş profilinin kilidini açmak için dokunun"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"<xliff:g id="PRODUCT_NAME">%1$s</xliff:g> cihazına bağlandı"</string>

@@ -131,6 +131,7 @@
     <!-- no translation found for wfcSpnFormat_spn (4998685024207291232) -->
     <skip />
     <string name="wfcSpnFormat_spn_wifi_calling" msgid="136001023263502280">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi-anrop"</string>
+    <string name="wfcSpnFormat_spn_wifi_calling_vo_hyphen" msgid="1730997175789582756">"<xliff:g id="SPN">%s</xliff:g>-Wi-Fi-anrop"</string>
     <string name="wfcSpnFormat_wlan_call" msgid="2533371081782489793">"WLAN-anrop"</string>
     <string name="wfcSpnFormat_spn_wlan_call" msgid="2315240198303197168">"<xliff:g id="SPN">%s</xliff:g> WLAN-anrop"</string>
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi"</string>
@@ -886,7 +887,7 @@
     <string name="keyguard_accessibility_expand_lock_area" msgid="519859720934178024">"Vis opplåsingsfeltet."</string>
     <string name="keyguard_accessibility_slide_unlock" msgid="2959928478764697254">"Opplåsning ved å dra med fingeren."</string>
     <string name="keyguard_accessibility_pattern_unlock" msgid="1490840706075246612">"Mønsteropplåsning."</string>
-    <string name="keyguard_accessibility_face_unlock" msgid="4817282543351718535">"Ansiktsopplåsning."</string>
+    <string name="keyguard_accessibility_face_unlock" msgid="4817282543351718535">"Ansiktslås"</string>
     <string name="keyguard_accessibility_pin_unlock" msgid="2469687111784035046">"PIN-opplåsning."</string>
     <string name="keyguard_accessibility_sim_pin_unlock" msgid="9149698847116962307">"PIN-opplåsing for SIM-kort."</string>
     <string name="keyguard_accessibility_sim_puk_unlock" msgid="9106899279724723341">"PUK-opplåsing for SIM-kort."</string>
@@ -1129,8 +1130,10 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"Åpne med"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"Åpne med %1$s"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"Åpne"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"Gi tilgang til å åpne <xliff:g id="HOST">%1$s</xliff:g>-linker med"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"Gi tilgang til å åpne <xliff:g id="HOST">%1$s</xliff:g>-linker med <xliff:g id="APPLICATION">%2$s</xliff:g>"</string>
+    <string name="whichOpenHostLinksWith" msgid="3788174881117226583">"Åpne <xliff:g id="HOST">%1$s</xliff:g>-linker med"</string>
+    <string name="whichOpenLinksWith" msgid="6392123355599572804">"Åpne linker med"</string>
+    <string name="whichOpenLinksWithApp" msgid="8225991685366651614">"Åpne linker med <xliff:g id="APPLICATION">%1$s</xliff:g>"</string>
+    <string name="whichOpenHostLinksWithApp" msgid="3464470639011045589">"Åpne <xliff:g id="HOST">%1$s</xliff:g>-linker med <xliff:g id="APPLICATION">%2$s</xliff:g>"</string>
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"Gi tilgang"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"Rediger med"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"Rediger med %1$s"</string>
@@ -1357,8 +1360,7 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Tilbakestill enheten til fabrikkstandard for å slå av Testrammeverk-modus."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"Væske eller rusk i USB-porten"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB-porten deaktiveres automatisk. Trykk for å finne ut mer."</string>
-    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
-    <skip />
+    <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"Trygt å bruke USB-porten"</string>
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"Telefonen oppdager ikke væsker eller rusk lenger."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"Kjører feilrapport …"</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"Vil du dele feilrapporten?"</string>
@@ -1583,6 +1585,7 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"Vil du starte nettleseren?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"Vil du besvare anropet?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"Alltid"</string>
+    <string name="activity_resolver_set_always" msgid="1422574191056490585">"Angi som alltid åpen"</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"Bare én gang"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"Innstillinger"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s støtter ikke arbeidsprofiler"</string>
@@ -1612,8 +1615,6 @@
     <string name="display_manager_overlay_display_name" msgid="5142365982271620716">"Overlegg #<xliff:g id="ID">%1$d</xliff:g>"</string>
     <string name="display_manager_overlay_display_title" msgid="652124517672257172">"<xliff:g id="NAME">%1$s</xliff:g>: <xliff:g id="WIDTH">%2$d</xliff:g> x <xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> dpi"</string>
     <string name="display_manager_overlay_display_secure_suffix" msgid="6022119702628572080">", sikker"</string>
-    <string name="activity_starter_block_bg_activity_starts_permissive" msgid="6995473033438879646">"Denne bakgrunnsaktiviteten som starter fra <xliff:g id="PACKAGENAME">%1$s</xliff:g>, blir blokkert i fremtidige Q-delversjoner. Se g.co/dev/bgblock."</string>
-    <string name="activity_starter_block_bg_activity_starts_enforcing" msgid="3317816771072146229">"Bakgrunnsaktivitet som starter fra <xliff:g id="PACKAGENAME">%1$s</xliff:g>, er blokkert. Se g.co/dev/bgblock."</string>
     <string name="kg_forgot_pattern_button_text" msgid="8852021467868220608">"Har du glemt mønsteret?"</string>
     <string name="kg_wrong_pattern" msgid="1850806070801358830">"Feil mønster"</string>
     <string name="kg_wrong_password" msgid="2333281762128113157">"Feil passord"</string>
@@ -1667,8 +1668,12 @@
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"Snarveien for tilgjengelighet slo på <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"Snarveien for tilgjengelighet slo av <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"Trykk og hold inne begge volumtastene i tre sekunder for å bruke <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
-    <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"Velg en funksjon du vil bruke når du trykker på Tilgjengelighet-knappen:"</string>
-    <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"For å endre funksjoner, trykk på og hold inne Tilgjengelighet-knappen."</string>
+    <string name="accessibility_button_prompt_text" msgid="1176658502969738564">"Velg en tjeneste du vil bruke når du trykker på Tilgjengelighet-knappen:"</string>
+    <string name="accessibility_gesture_prompt_text" msgid="8259145549733019401">"Velg en tjeneste du vil bruke med tilgjengelighetsbevegelsen (sveip opp fra bunnen av skjermen med to fingre):"</string>
+    <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"Velg en tjeneste du vil bruke med tilgjengelighetsbevegelsen (sveip opp fra bunnen av skjermen med tre fingre):"</string>
+    <string name="accessibility_button_instructional_text" msgid="7003212763213614833">"For å bytte mellom tjenester, trykk og hold på Tilgjengelighet-knappen."</string>
+    <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"For å bytte mellom tjenester, sveip opp med to fingre og hold."</string>
+    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"For å bytte mellom tjenester, sveip opp med tre fingre og hold."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"Forstørring"</string>
     <string name="user_switched" msgid="3768006783166984410">"Gjeldende bruker: <xliff:g id="NAME">%1$s</xliff:g>."</string>
     <string name="user_switching_message" msgid="2871009331809089783">"Bytter til <xliff:g id="NAME">%1$s</xliff:g> …"</string>
@@ -1898,7 +1903,7 @@
     <string name="work_mode_off_message" msgid="5130856710614337649">"Jobbappene dine samt varsler, data og andre funksjoner i jobbprofilen din blir slått på"</string>
     <string name="work_mode_turn_on" msgid="2062544985670564875">"Slå på"</string>
     <string name="deprecated_target_sdk_message" msgid="1449696506742572767">"Denne appen er utviklet for en eldre versjon av Android og fungerer kanskje ikke som den skal. Prøv å se etter oppdateringer, eller kontakt utvikleren."</string>
-    <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Se etter oppdatering"</string>
+    <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Se etter oppdateringer"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"Du har nye meldinger"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"Åpne SMS-appen for å se"</string>
     <string name="profile_encrypted_title" msgid="4260432497586829134">"Enkelte funksjoner kan begrenses"</string>

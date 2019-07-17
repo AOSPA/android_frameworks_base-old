@@ -1395,13 +1395,12 @@ public class ActivityStack extends ConfigurationContainer {
             }
 
             if (DEBUG_TASKS) Slog.d(TAG_TASKS, "Comparing existing cls="
-                    + taskIntent.getComponent().flattenToShortString()
+                    + (task.realActivity != null ? task.realActivity.flattenToShortString() : "")
                     + "/aff=" + r.getTaskRecord().rootAffinity + " to new cls="
                     + intent.getComponent().flattenToShortString() + "/aff=" + info.taskAffinity);
             // TODO Refactor to remove duplications. Check if logic can be simplified.
-            if (taskIntent != null && taskIntent.getComponent() != null &&
-                    taskIntent.getComponent().compareTo(cls) == 0 &&
-                    Objects.equals(documentData, taskDocumentData)) {
+            if (task.realActivity != null && task.realActivity.compareTo(cls) == 0
+                    && Objects.equals(documentData, taskDocumentData)) {
                 if (DEBUG_TASKS) Slog.d(TAG_TASKS, "Found matching class!");
                 //dump();
                 if (DEBUG_TASKS) Slog.d(TAG_TASKS,
@@ -2399,7 +2398,11 @@ public class ActivityStack extends ConfigurationContainer {
                 r.setVisible(true);
             }
             if (r != starting) {
-                mStackSupervisor.startSpecificActivityLocked(r, andResume, true /* checkConfig */);
+                // We should not resume activities that being launched behind because these
+                // activities are actually behind other fullscreen activities, but still required
+                // to be visible (such as performing Recents animation).
+                mStackSupervisor.startSpecificActivityLocked(r, andResume && !r.mLaunchTaskBehind,
+                        true /* checkConfig */);
                 return true;
             }
         }
@@ -2652,7 +2655,7 @@ public class ActivityStack extends ConfigurationContainer {
 
         if (!hasRunningActivity) {
             // There are no activities left in the stack, let's look somewhere else.
-            return resumeTopActivityInNextFocusableStack(prev, options, "noMoreActivities");
+            return resumeNextFocusableActivityWhenStackIsEmpty(prev, options);
         }
 
         next.delayedResume = false;
@@ -3006,7 +3009,8 @@ public class ActivityStack extends ConfigurationContainer {
                 }
 
                 if (next.newIntents != null) {
-                    transaction.addCallback(NewIntentItem.obtain(next.newIntents));
+                    transaction.addCallback(
+                            NewIntentItem.obtain(next.newIntents, true /* resume */));
                 }
 
                 // Well the app will no longer be stopped.
@@ -3081,21 +3085,33 @@ public class ActivityStack extends ConfigurationContainer {
         return true;
     }
 
-    private boolean resumeTopActivityInNextFocusableStack(ActivityRecord prev,
-            ActivityOptions options, String reason) {
-        final ActivityStack nextFocusedStack = adjustFocusToNextFocusableStack(reason);
-        if (nextFocusedStack != null) {
-            // Try to move focus to the next visible stack with a running activity if this
-            // stack is not covering the entire screen or is on a secondary display (with no home
-            // stack).
-            return mRootActivityContainer.resumeFocusedStacksTopActivities(nextFocusedStack, prev,
-                    null /* targetOptions */);
+    /**
+     * Resume the next eligible activity in a focusable stack when this one does not have any
+     * running activities left. The focus will be adjusted to the next focusable stack and
+     * top running activities will be resumed in all focusable stacks. However, if the current stack
+     * is a home stack - we have to keep it focused, start and resume a home activity on the current
+     * display instead to make sure that the display is not empty.
+     */
+    private boolean resumeNextFocusableActivityWhenStackIsEmpty(ActivityRecord prev,
+            ActivityOptions options) {
+        final String reason = "noMoreActivities";
+
+        if (!isActivityTypeHome()) {
+            final ActivityStack nextFocusedStack = adjustFocusToNextFocusableStack(reason);
+            if (nextFocusedStack != null) {
+                // Try to move focus to the next visible stack with a running activity if this
+                // stack is not covering the entire screen or is on a secondary display with no home
+                // stack.
+                return mRootActivityContainer.resumeFocusedStacksTopActivities(nextFocusedStack,
+                        prev, null /* targetOptions */);
+            }
         }
 
-        // Let's just start up the Launcher...
+        // If the current stack is a home stack, or if focus didn't switch to a different stack -
+        // just start up the Launcher...
         ActivityOptions.abort(options);
         if (DEBUG_STATES) Slog.d(TAG_STATES,
-                "resumeTopActivityInNextFocusableStack: " + reason + ", go home");
+                "resumeNextFocusableActivityWhenStackIsEmpty: " + reason + ", go home");
         return mRootActivityContainer.resumeHomeActivity(prev, reason, mDisplayId);
     }
 
@@ -5048,6 +5064,17 @@ public class ActivityStack extends ConfigurationContainer {
         if (inPinnedWindowingMode()) {
             mStackSupervisor.removeStack(this);
             return true;
+        }
+
+        ActivityRecord topActivity = getDisplay().topRunningActivity();
+        ActivityStack topStack = topActivity.getActivityStack();
+        if (topStack != null && topStack != this && topActivity.isState(RESUMED)) {
+            // The new top activity is already resumed, so there's a good chance that nothing will
+            // get resumed below. So, update visibility now in case the transition is closed
+            // prematurely.
+            mRootActivityContainer.ensureVisibilityAndConfig(null /* starting */,
+                    getDisplay().mDisplayId, false /* markFrozenIfConfigChanged */,
+                    false /* deferResume */);
         }
 
         mRootActivityContainer.resumeFocusedStacksTopActivities();

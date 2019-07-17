@@ -36,13 +36,13 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Represents an ongoing {@link MediaSession2} or a {@link MediaSession2Service}.
- * If it's representing a session service, it may not be ongoing.
- * <p>
  * This API is not generally intended for third party application developers.
  * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
- * <a href="{@docRoot}reference/androidx/media2/package-summary.html">Media2 Library</a>
- * for consistent behavior across all devices.
+ * <a href="{@docRoot}reference/androidx/media2/session/package-summary.html">Media2 session
+ * Library</a> for consistent behavior across all devices.
+ * <p>
+ * Represents an ongoing {@link MediaSession2} or a {@link MediaSession2Service}.
+ * If it's representing a session service, it may not be ongoing.
  * <p>
  * This may be passed to apps by the session owner to allow them to create a
  * {@link MediaController2} to communicate with the session.
@@ -118,11 +118,11 @@ public final class Session2Token implements Parcelable {
         mUid = uid;
         mType = TYPE_SESSION_SERVICE;
         mSessionLink = null;
-        mExtras = null;
+        mExtras = Bundle.EMPTY;
     }
 
     Session2Token(int uid, int type, String packageName, Session2Link sessionLink,
-            Bundle tokenExtras) {
+            @NonNull Bundle tokenExtras) {
         mUid = uid;
         mType = type;
         mPackageName = packageName;
@@ -139,7 +139,16 @@ public final class Session2Token implements Parcelable {
         mServiceName = in.readString();
         mSessionLink = in.readParcelable(null);
         mComponentName = ComponentName.unflattenFromString(in.readString());
-        mExtras = in.readBundle();
+
+        Bundle extras = in.readBundle();
+        if (extras == null) {
+            Log.w(TAG, "extras shouldn't be null.");
+            extras = Bundle.EMPTY;
+        } else if (MediaSession2.hasCustomParcelable(extras)) {
+            Log.w(TAG, "extras contain custom parcelable. Ignoring.");
+            extras = Bundle.EMPTY;
+        }
+        mExtras = extras;
     }
 
     @Override
@@ -220,7 +229,7 @@ public final class Session2Token implements Parcelable {
      */
     @NonNull
     public Bundle getExtras() {
-        return mExtras == null ? Bundle.EMPTY : mExtras;
+        return new Bundle(mExtras);
     }
 
     Session2Link getSessionLink() {
