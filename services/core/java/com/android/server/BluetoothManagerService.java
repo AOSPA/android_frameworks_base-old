@@ -1236,12 +1236,14 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             Slog.w(TAG, "unbindBluetoothProfileService: calling psc.removeProxy");
             psc.removeProxy(proxy);
             if (psc.isEmpty()) {
-                // All prxoies are disconnected, unbind with the service.
+                // All proxies are disconnected, unbind with the service.
                 try {
                     mContext.unbindService(psc);
                 } catch (IllegalArgumentException e) {
                     Slog.e(TAG, "Unable to unbind service with intent: " + psc.mIntent, e);
                 }
+                Slog.w(TAG, "psc.isEmpty is true, removing psc entry for profile "
+                             + profile);
                 mProfileServices.remove(profile);
             }
         }
@@ -1401,15 +1403,6 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
                 Slog.w(TAG, "removing the proxy, count is "
                                + mProxies.getRegisteredCallbackCount());
-                if (mProxies != null && mProxies.getRegisteredCallbackCount() == 0) {
-                    Slog.w(TAG, "all proxies are removed, unbinding service for "
-                                 + "profile " );
-                    try {
-                       mContext.unbindService(this);
-                    } catch (IllegalArgumentException e) {
-                       Slog.e(TAG, "Unable to unbind service ");
-                    }
-                }
             } else {
                 Slog.w(TAG, "Trying to remove a null proxy");
             }
@@ -1420,17 +1413,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             mProxies.kill();
         }
 
-        public int getProxyCount() {
-            int retval = 0;
-            if (mProxies != null) {
-                retval = mProxies.getRegisteredCallbackCount();
-            }
-            Slog.w(TAG, "getProxyCount(): returning retval " + retval);
-            return retval;
-        }
-
         private boolean isEmpty() {
-            return mProxies.getRegisteredCallbackCount() == 0;
+            return (mProxies != null && mProxies.getRegisteredCallbackCount() == 0);
         }
 
         @Override
