@@ -22676,7 +22676,7 @@ public class PackageManagerService extends IPackageManager.Stub
         final UserManager um = mContext.getSystemService(UserManager.class);
         UserManagerInternal umInternal = getUserManagerInternal();
         for (UserInfo user : um.getUsers()) {
-            int flags = 0;
+            final int flags;
             if (umInternal.isUserUnlockingOrUnlocked(user.id)) {
                 flags = StorageManager.FLAG_STORAGE_DE | StorageManager.FLAG_STORAGE_CE;
             } else if (umInternal.isUserRunning(user.id)) {
@@ -22684,12 +22684,9 @@ public class PackageManagerService extends IPackageManager.Stub
             } else {
                 continue;
             }
-            if ((vol.disk.flags & DiskInfo.FLAG_UFS_CARD) == DiskInfo.FLAG_UFS_CARD) {
-                flags = flags | DiskInfo.FLAG_UFS_CARD;
-            }
-            final int pflags = flags;
+
             try {
-                sm.prepareUserStorage(volumeUuid, user.id, user.serialNumber, pflags);
+                sm.prepareUserStorage(volumeUuid, user.id, user.serialNumber, flags);
                 synchronized (mInstallLock) {
                     reconcileAppsDataLI(volumeUuid, user.id, flags, true /* migrateAppData */);
                 }

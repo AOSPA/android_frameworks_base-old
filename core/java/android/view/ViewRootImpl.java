@@ -86,6 +86,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.TimeUtils;
 import android.util.TypedValue;
+import android.util.BoostFramework;
 import android.view.Surface.OutOfResourcesException;
 import android.view.SurfaceControl.Transaction;
 import android.view.View.AttachInfo;
@@ -213,6 +214,8 @@ public final class ViewRootImpl implements ViewParent,
     // properties used by emulator to determine display shape
     public static final String PROPERTY_EMULATOR_WIN_OUTSET_BOTTOM_PX =
             "ro.emu.win_outset_bottom_px";
+
+    private boolean SCROLL_BOOST_SS_ENABLE = false;
 
     /**
      * Maximum time we allow the user to roll the trackball enough to generate
@@ -587,6 +590,8 @@ public final class ViewRootImpl implements ViewParent,
 
     private String mTag = TAG;
     boolean mHaveMoveEvent = false;
+    boolean mIsPerfLockAcquired = false;
+    BoostFramework mPerf = null;
 
     public ViewRootImpl(Context context, Display display) {
         mContext = context;
@@ -650,6 +655,10 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         loadSystemProperties();
+        mPerf = new BoostFramework(context);
+
+        if (mPerf != null)
+                SCROLL_BOOST_SS_ENABLE = Boolean.parseBoolean(mPerf.perfGetProp("vendor.perf.gestureflingboost.enable", "false"));
     }
 
     public static void addFirstDrawHandler(Runnable callback) {
@@ -3494,6 +3503,13 @@ public final class ViewRootImpl implements ViewParent,
         scrollToRectOrFocus(null, false);
 
         if (mAttachInfo.mViewScrollChanged) {
+            if (!SCROLL_BOOST_SS_ENABLE && mHaveMoveEvent && !mIsPerfLockAcquired) {
+                mIsPerfLockAcquired = true;
+                if (mPerf != null) {
+                    String currentPackage = mContext.getPackageName();
+                    mPerf.perfHint(BoostFramework.VENDOR_HINT_SCROLL_BOOST, currentPackage, -1, BoostFramework.Scroll.PREFILING);
+                }
+            }
             mAttachInfo.mViewScrollChanged = false;
             mAttachInfo.mTreeObserver.dispatchOnScrollChanged();
         }
@@ -5482,10 +5498,13 @@ public final class ViewRootImpl implements ViewParent,
             mAttachInfo.mHandlingPointerEvent = true;
             boolean handled = mView.dispatchPointerEvent(event);
             int action = event.getActionMasked();
-            if (action == MotionEvent.ACTION_MOVE) {
-                mHaveMoveEvent = true;
-            } else if (action == MotionEvent.ACTION_UP) {
-                mHaveMoveEvent = false;
+            if (!SCROLL_BOOST_SS_ENABLE) {
+                if (action == MotionEvent.ACTION_MOVE) {
+                    mHaveMoveEvent = true;
+                } else if (action == MotionEvent.ACTION_UP) {
+                    mHaveMoveEvent = false;
+                    mIsPerfLockAcquired = false;
+                }
             }
             maybeUpdatePointerIcon(event);
             maybeUpdateTooltip(event);

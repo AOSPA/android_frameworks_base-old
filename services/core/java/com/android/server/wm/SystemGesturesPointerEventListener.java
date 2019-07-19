@@ -315,9 +315,6 @@ class SystemGesturesPointerEventListener implements PointerEventListener {
             }
             if(Math.abs(velocityY) >= Math.abs(velocityX))
                 mCallbacks.onVerticalFling(duration);
-            else
-                mCallbacks.onHorizontalFling(duration);
-
             mLastFlingTime = now;
             mCallbacks.onFling(duration);
             return true;
@@ -341,7 +338,6 @@ class SystemGesturesPointerEventListener implements PointerEventListener {
         void onSwipeFromLeft();
         void onFling(int durationMs);
         void onVerticalFling(int durationMs);
-        void onHorizontalFling(int durationMs);
         void onScroll(boolean started);
         void onDown();
         void onUpOrCancel();
