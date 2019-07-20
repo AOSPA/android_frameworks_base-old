@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.Rect;
-import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -34,7 +33,6 @@ import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
-import com.android.systemui.tuner.TunerService;
 
 import java.util.ArrayList;
 import java.util.Objects;
@@ -60,7 +58,6 @@ public class NotificationIconAreaController implements DarkReceiver,
     private final KeyguardBypassController mBypassController;
     private final DozeParameters mDozeParameters;
 
-    private boolean mShowSilentOnLockscreen = true;
     private int mIconSize;
     private int mIconHPadding;
     private int mIconTint = Color.WHITE;
@@ -104,11 +101,6 @@ public class NotificationIconAreaController implements DarkReceiver,
 
         initializeNotificationAreaViews(context);
         reloadAodColor();
-
-        TunerService tunerService = Dependency.get(TunerService.class);
-        tunerService.addTunable((key, newValue) -> {
-            mShowSilentOnLockscreen = "1".equals(newValue);
-        }, Settings.Secure.LOCK_SCREEN_SHOW_SILENT_NOTIFICATIONS);
     }
 
     protected View inflateIconArea(LayoutInflater inflater) {
@@ -241,7 +233,7 @@ public class NotificationIconAreaController implements DarkReceiver,
     }
 
     protected boolean shouldShowNotificationIcon(NotificationEntry entry,
-            boolean showAmbient, boolean showLowPriority, boolean hideDismissed,
+            boolean showAmbient, boolean hideDismissed,
             boolean hideRepliedMessages, boolean hideCurrentMedia, boolean hideCenteredIcon,
             boolean hidePulsing, boolean onlyShowCenteredIcon) {
 
@@ -258,9 +250,6 @@ public class NotificationIconAreaController implements DarkReceiver,
             return false;
         }
         if (hideCurrentMedia && entry.key.equals(mMediaManager.getMediaNotificationKey())) {
-            return false;
-        }
-        if (!showLowPriority && !entry.isHighPriority()) {
             return false;
         }
         if (!entry.isTopLevelChild()) {
@@ -302,7 +291,6 @@ public class NotificationIconAreaController implements DarkReceiver,
     private void updateShelfIcons() {
         updateIconsForLayout(entry -> entry.expandedIcon, mShelfIcons,
                 true /* showAmbient */,
-                true /* showLowPriority */,
                 false /* hideDismissed */,
                 false /* hideRepliedMessages */,
                 false /* hideCurrentMedia */,
@@ -314,7 +302,6 @@ public class NotificationIconAreaController implements DarkReceiver,
     public void updateStatusBarIcons() {
         updateIconsForLayout(entry -> entry.icon, mNotificationIcons,
                 false /* showAmbient */,
-                true /* showLowPriority */,
                 true /* hideDismissed */,
                 true /* hideRepliedMessages */,
                 false /* hideCurrentMedia */,
@@ -326,7 +313,6 @@ public class NotificationIconAreaController implements DarkReceiver,
     private void updateCenterIcon() {
         updateIconsForLayout(entry -> entry.centeredIcon, mCenteredIcon,
                 false /* showAmbient */,
-                true /* showLowPriority */,
                 false /* hideDismissed */,
                 false /* hideRepliedMessages */,
                 false /* hideCurrentMedia */,
@@ -338,7 +324,6 @@ public class NotificationIconAreaController implements DarkReceiver,
     public void updateAodNotificationIcons() {
         updateIconsForLayout(entry -> entry.aodIcon, mAodIcons,
                 false /* showAmbient */,
-                mShowSilentOnLockscreen /* showLowPriority */,
                 true /* hideDismissed */,
                 true /* hideRepliedMessages */,
                 true /* hideCurrentMedia */,
@@ -358,7 +343,7 @@ public class NotificationIconAreaController implements DarkReceiver,
      * @param hidePulsing should pulsing notifications be hidden
      */
     private void updateIconsForLayout(Function<NotificationEntry, StatusBarIconView> function,
-            NotificationIconContainer hostLayout, boolean showAmbient, boolean showLowPriority,
+            NotificationIconContainer hostLayout, boolean showAmbient,
             boolean hideDismissed, boolean hideRepliedMessages, boolean hideCurrentMedia,
             boolean hideCenteredIcon, boolean hidePulsing, boolean onlyShowCenteredIcon) {
         ArrayList<StatusBarIconView> toShow = new ArrayList<>(
@@ -369,7 +354,7 @@ public class NotificationIconAreaController implements DarkReceiver,
             View view = mNotificationScrollLayout.getChildAt(i);
             if (view instanceof ExpandableNotificationRow) {
                 NotificationEntry ent = ((ExpandableNotificationRow) view).getEntry();
-                if (shouldShowNotificationIcon(ent, showAmbient, showLowPriority, hideDismissed,
+                if (shouldShowNotificationIcon(ent, showAmbient, hideDismissed,
                         hideRepliedMessages, hideCurrentMedia, hideCenteredIcon, hidePulsing,
                         onlyShowCenteredIcon)) {
                     StatusBarIconView iconView = function.apply(ent);
