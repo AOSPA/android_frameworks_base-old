@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "5c46edc3_7478f43f",
+        "filename": "packages/SystemUI/src/com/android/systemui/aospa/TriStateUiControllerImpl.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 466,
+      "author": {
+        "id": 1000055
+      },
+      "writtenOn": "2019-07-21T18:34:58Z",
+      "side": 1,
+      "message": "This whole method needs to be redone.",
+      "revId": "6c8a4dcef192ea485eaad1d2c9ba3c58e7a4bbed",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
