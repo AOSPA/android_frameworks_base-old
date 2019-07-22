@@ -41,13 +41,14 @@
             <ImageView
                 android:layout_gravity="center"
                 android:id="@+id/tri_state_icon"
+                android:tint="?android:attr/colorAccent"
                 android:layout_width="63.0px"
                 android:layout_height="63.0px" />
         </FrameLayout>
 
         <TextView
             android:textSize="34.125px"
-            android:textColor="#ffffffff"
+            android:textColor="?android:attr/textColorPrimary"
             android:gravity="center_vertical"
             android:id="@+id/tri_state_text"
             android:layout_width="wrap_content"
