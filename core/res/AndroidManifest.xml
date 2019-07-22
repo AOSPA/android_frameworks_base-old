@@ -763,7 +763,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.SEND_SMS"
@@ -777,7 +777,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.RECEIVE_SMS"
@@ -791,7 +791,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.READ_SMS"
@@ -805,7 +805,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.RECEIVE_WAP_PUSH"
@@ -819,7 +819,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.RECEIVE_MMS"
@@ -842,7 +842,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
 
          @hide Pending API council approval -->
@@ -888,7 +888,7 @@
       targetSdkVersion}</a> is 4 or higher.
 
       <p> This is a soft restricted permission which cannot be held by an app it its
-      full form until the installer on record did not whitelist the permission.
+      full form until the installer on record whitelists the permission.
       Specifically, if the permission is whitelisted the holder app can access
       external storage and the visual and aural media collections while if the
       permission is not whitelisted the holder app can only access to the visual
@@ -987,7 +987,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"
@@ -1033,7 +1033,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.READ_CALL_LOG"
@@ -1057,7 +1057,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.WRITE_CALL_LOG"
@@ -1073,7 +1073,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
 
          @deprecated Applications should use {@link android.telecom.CallRedirectionService} instead
