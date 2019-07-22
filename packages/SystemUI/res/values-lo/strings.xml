@@ -375,8 +375,8 @@
     <string name="quick_settings_night_secondary_label_until_sunrise" msgid="4453017157391574402">"ຈົນກວ່າຕາເວັນຂຶ້ນ"</string>
     <string name="quick_settings_night_secondary_label_on_at" msgid="6256314040368487637">"ເປີດຕອນ <xliff:g id="TIME">%s</xliff:g>"</string>
     <string name="quick_settings_secondary_label_until" msgid="2749196569462600150">"ຈົນກວ່າຈະຮອດ <xliff:g id="TIME">%s</xliff:g>"</string>
-    <string name="quick_settings_ui_mode_night_label" msgid="512534812963862137">"ຮູບແບບສີສັນມືດ"</string>
-    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="3496696903886673256">"ຮູບແບບສີສັນມືດ\nຕົວປະຢັດແບັດເຕີຣີ"</string>
+    <string name="quick_settings_ui_mode_night_label" msgid="3419947801072692538">"ຮູບແບບສີສັນມືດ"</string>
+    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="7438725724589758362">"ຮູບແບບສີສັນມືດ\nຕົວປະຢັດແບັດເຕີຣີ"</string>
     <string name="quick_settings_nfc_label" msgid="9012153754816969325">"NFC"</string>
     <string name="quick_settings_nfc_off" msgid="6883274004315134333">"NFC is disabled"</string>
     <string name="quick_settings_nfc_on" msgid="6680317193676884311">"NFC is enabled"</string>
@@ -778,7 +778,7 @@
     <string name="drag_to_add_tiles" msgid="230586591689084925">"ກົດຄ້າງໄວ້ແລ້ວລາກເພື່ອເພີ່ມຊ່ອງ"</string>
     <string name="drag_to_rearrange_tiles" msgid="4566074720193667473">"ກົດຄ້າງໄວ້ແລ້ວລາກເພື່ອຈັດຮຽງໃໝ່"</string>
     <string name="drag_to_remove_tiles" msgid="3361212377437088062">"ລາກມາບ່ອນນີ້ເພື່ອລຶບອອກ"</string>
-    <string name="drag_to_remove_disabled" msgid="2390968976638993382">"ທ່ານຍຕ້ອງໃຊ້ຢ່າງໜ້ອຍ 6 ຊ່ອງ"</string>
+    <string name="drag_to_remove_disabled" msgid="4785920129548299268">"ທ່ານຍຕ້ອງໃຊ້ຢ່າງໜ້ອຍ <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g> ຊ່ອງ"</string>
     <string name="qs_edit" msgid="2232596095725105230">"ແກ້ໄຂ"</string>
     <string name="tuner_time" msgid="6572217313285536011">"ເວລາ"</string>
   <string-array name="clock_options">

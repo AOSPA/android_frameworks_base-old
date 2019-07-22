@@ -375,8 +375,8 @@
     <string name="quick_settings_night_secondary_label_until_sunrise" msgid="4453017157391574402">"រហូត​ដល់​ពេល​ថ្ងៃរះ"</string>
     <string name="quick_settings_night_secondary_label_on_at" msgid="6256314040368487637">"បើក​នៅម៉ោង <xliff:g id="TIME">%s</xliff:g>"</string>
     <string name="quick_settings_secondary_label_until" msgid="2749196569462600150">"រហូតដល់​ម៉ោង <xliff:g id="TIME">%s</xliff:g>"</string>
-    <string name="quick_settings_ui_mode_night_label" msgid="512534812963862137">"រចនាប័ទ្ម​​​ងងឹត"</string>
-    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="3496696903886673256">"រចនាប័ទ្មងងឹត\nកម្មវិធីសន្សំថ្ម"</string>
+    <string name="quick_settings_ui_mode_night_label" msgid="3419947801072692538">"រចនាប័ទ្ម​ងងឹត"</string>
+    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="7438725724589758362">"រចនាប័ទ្មងងឹត\nកម្មវិធីសន្សំថ្ម"</string>
     <string name="quick_settings_nfc_label" msgid="9012153754816969325">"NFC"</string>
     <string name="quick_settings_nfc_off" msgid="6883274004315134333">"បាន​បិទ NFC"</string>
     <string name="quick_settings_nfc_on" msgid="6680317193676884311">"បាន​បើក NFC"</string>
@@ -778,7 +778,7 @@
     <string name="drag_to_add_tiles" msgid="230586591689084925">"ចុច​ឱ្យ​ជាប់ រួចអូសដើម្បី​បញ្ចូល​ប្រអប់"</string>
     <string name="drag_to_rearrange_tiles" msgid="4566074720193667473">"ចុច​ឱ្យ​ជាប់ រួចអូស​ដើម្បី​រៀបចំ​ប្រអប់​ឡើងវិញ"</string>
     <string name="drag_to_remove_tiles" msgid="3361212377437088062">"អូសទីនេះដើម្បីយកចេញ"</string>
-    <string name="drag_to_remove_disabled" msgid="2390968976638993382">"អ្នកត្រូវការប្រអប់​យ៉ាងតិច 6"</string>
+    <string name="drag_to_remove_disabled" msgid="4785920129548299268">"អ្នក​ត្រូវការ​ប្រអប់​យ៉ាងតិច <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g>"</string>
     <string name="qs_edit" msgid="2232596095725105230">"កែសម្រួល"</string>
     <string name="tuner_time" msgid="6572217313285536011">"ម៉ោង"</string>
   <string-array name="clock_options">

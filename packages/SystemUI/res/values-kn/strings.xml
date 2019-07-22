@@ -375,8 +375,8 @@
     <string name="quick_settings_night_secondary_label_until_sunrise" msgid="4453017157391574402">"ಸೂರ್ಯೋದಯದ ತನಕ"</string>
     <string name="quick_settings_night_secondary_label_on_at" msgid="6256314040368487637">"<xliff:g id="TIME">%s</xliff:g> ಸಮಯದಲ್ಲಿ"</string>
     <string name="quick_settings_secondary_label_until" msgid="2749196569462600150">"<xliff:g id="TIME">%s</xliff:g> ವರೆಗೂ"</string>
-    <string name="quick_settings_ui_mode_night_label" msgid="512534812963862137">"ಡಾರ್ಕ್ ಥೀಮ್"</string>
-    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="3496696903886673256">"ಡಾರ್ಕ್ ಥೀಮ್\nಬ್ಯಾಟರಿ ಸೇವರ್‌"</string>
+    <string name="quick_settings_ui_mode_night_label" msgid="3419947801072692538">"ಡಾರ್ಕ್ ಥೀಮ್"</string>
+    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="7438725724589758362">"ಡಾರ್ಕ್ ಥೀಮ್\nಬ್ಯಾಟರಿ ಸೇವರ್"</string>
     <string name="quick_settings_nfc_label" msgid="9012153754816969325">"NFC"</string>
     <string name="quick_settings_nfc_off" msgid="6883274004315134333">"NFC ನಿಷ್ಕ್ರಿಯಗೊಂಡಿದೆ"</string>
     <string name="quick_settings_nfc_on" msgid="6680317193676884311">"NFC ಸಕ್ರಿಯಗೊಂಡಿದೆ"</string>
@@ -778,7 +778,7 @@
     <string name="drag_to_add_tiles" msgid="230586591689084925">"ಟೈಲ್‌ಗಳನ್ನು ಸೇರಿಸಲು ಹೋಲ್ಡ್‌ ಮಾಡಿ ಮತ್ತು ಡ್ರ್ಯಾಗ್‌ ಮಾಡಿ"</string>
     <string name="drag_to_rearrange_tiles" msgid="4566074720193667473">"ಟೈಲ್‌ಗಳನ್ನು ಮರುಹೊಂದಿಸಲು ಹೋಲ್ಡ್‌ ಮಾಡಿ ಮತ್ತು ಡ್ರ್ಯಾಗ್‌ ಮಾಡಿ"</string>
     <string name="drag_to_remove_tiles" msgid="3361212377437088062">"ತೆಗೆದುಹಾಕಲು ಇಲ್ಲಿ ಡ್ರ್ಯಾಗ್‌ ಮಾಡಿ"</string>
-    <string name="drag_to_remove_disabled" msgid="2390968976638993382">"ನಿಮಗೆ ಕನಿಷ್ಠ 6 ಟೈಲ್‌ಗಳ ಅಗತ್ಯವಿದೆ"</string>
+    <string name="drag_to_remove_disabled" msgid="4785920129548299268">"ನಿಮಗೆ ಕನಿಷ್ಠ <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g> ಟೈಲ್‌ಗಳ ಅಗತ್ಯವಿದೆ"</string>
     <string name="qs_edit" msgid="2232596095725105230">"ಎಡಿಟ್"</string>
     <string name="tuner_time" msgid="6572217313285536011">"ಸಮಯ"</string>
   <string-array name="clock_options">
