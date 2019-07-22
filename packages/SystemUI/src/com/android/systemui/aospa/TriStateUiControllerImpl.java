@@ -105,7 +105,6 @@ public class TriStateUiControllerImpl implements ConfigurationListener, TriState
 
         @Override
         public void onConfigurationChanged() {
-            updateTheme(false);
             updateTriStateLayout();
         }
     };
@@ -119,10 +118,6 @@ public class TriStateUiControllerImpl implements ConfigurationListener, TriState
     OrientationEventListener mOrientationListener;
     private int mOrientationType = 0;
     private boolean mShowing = false;
-    private int mBackgroundColor = 0;
-    private int mThemeMode = 0;
-    private int mIconColor = 0;
-    private int mTextColor = 0;
     private ImageView mTriStateIcon;
     private TextView mTriStateText;
     private int mTriStateMode = -1;
@@ -231,7 +226,6 @@ public class TriStateUiControllerImpl implements ConfigurationListener, TriState
         mDialogView = (ViewGroup) mDialog.findViewById(R.id.tri_state_layout);
         mTriStateIcon = (ImageView) mDialog.findViewById(R.id.tri_state_icon);
         mTriStateText = (TextView) mDialog.findViewById(R.id.tri_state_text);
-        updateTheme(true);
     }
 
     public void show() {
@@ -404,7 +398,6 @@ public class TriStateUiControllerImpl implements ConfigurationListener, TriState
         mHandler.removeMessages(MSG_DIALOG_DISMISS);
         handleResetTimeout();
         if (!mShowing) {
-            updateTheme(false);
             registerOrientationListener(true);
             checkOrientationType();
             mShowing = true;
@@ -452,29 +445,4 @@ public class TriStateUiControllerImpl implements ConfigurationListener, TriState
         updateTriStateLayout();
     }
 
-    public void applyTheme() {
-        boolean isDarkTheme = mThemeMode == 2 || mThemeMode == 3;
-        mIconColor = getAttrColor(android.R.attr.textColorPrimary);
-        mTextColor = mIconColor;
-        mBackgroundColor = getAttrColor(android.R.attr.colorPrimary);
-        mDialogView.setBackgroundTintList(ColorStateList.valueOf(mBackgroundColor));
-        mTriStateText.setTextColor(mTextColor);
-        mTriStateIcon.setColorFilter(mIconColor);
-    }
-
-    private void updateTheme(boolean force) {
-        int theme = Settings.Secure.getInt(mContext.getContentResolver(), Settings.Secure.SYSTEM_THEME, 0);
-        boolean change = mThemeMode == theme ? false : true;
-        if (change || force) {
-            mThemeMode = theme;
-            applyTheme();
-        }
-    }
-
-    public int getAttrColor(int attr) {
-        TypedArray ta = mContext.obtainStyledAttributes(new int[]{attr});
-        int colorAccent = ta.getColor(0, 0);
-        ta.recycle();
-        return colorAccent;
-    }
 }
