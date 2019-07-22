@@ -55,7 +55,7 @@ LOCAL_STATIC_ANDROID_LIBRARIES := \
 LOCAL_STATIC_JAVA_LIBRARIES := \
     SystemUI-tags \
     SystemUI-proto \
-    vendor.lineage.biometrics.fingerprint.inscreen-V1.0-java
+    vendor.pa.biometrics.fingerprint.inscreen-V1.0-java
 
 LOCAL_JAVA_LIBRARIES := telephony-ext \
     telephony-common \

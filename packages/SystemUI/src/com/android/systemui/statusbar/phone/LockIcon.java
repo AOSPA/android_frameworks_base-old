@@ -32,8 +32,6 @@ import com.android.systemui.statusbar.KeyguardAffordanceView;
 import com.android.systemui.statusbar.policy.AccessibilityController;
 import com.android.systemui.statusbar.policy.UserInfoController.OnUserInfoChangedListener;
 
-import lineageos.app.LineageContextConstants;
-
 /**
  * Manages the different states and animations of the unlock icon.
  */
@@ -46,6 +44,8 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
     private static final int STATE_FACE_UNLOCK = 2;
     private static final int STATE_FINGERPRINT = 3;
     private static final int STATE_FINGERPRINT_ERROR = 4;
+
+    private static final String FOD = "vendor.pa.biometrics.fingerprint.inscreen";
 
     private int mLastState = 0;
     private boolean mLastDeviceInteractive;
@@ -71,7 +71,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
         mUnlockMethodCache = UnlockMethodCache.getInstance(context);
 
         PackageManager packageManager = context.getPackageManager();
-        mHasFod = packageManager.hasSystemFeature(LineageContextConstants.Features.FOD);
+        mHasFod = packageManager.hasSystemFeature(FOD);
     }
 
     @Override

@@ -29,9 +29,7 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.statusbar.IStatusBarService;
 
-import lineageos.app.LineageContextConstants;
-
-import vendor.lineage.biometrics.fingerprint.inscreen.V1_0.IFingerprintInscreen;
+import vendor.pa.biometrics.fingerprint.inscreen.V1_0.IFingerprintInscreen;
 
 import java.util.Arrays;
 
@@ -41,6 +39,7 @@ import java.util.Arrays;
 public abstract class EnrollClient extends ClientMonitor {
     private static final long MS_PER_SEC = 1000;
     private static final int ENROLLMENT_TIMEOUT_MS = 60 * 1000; // 1 minute
+    private static final String FOD = "vendor.pa.biometrics.fingerprint.inscreen";
     private byte[] mCryptoToken;
     private final boolean mHasFod;
     private IStatusBarService mStatusBarService;
@@ -53,7 +52,7 @@ public abstract class EnrollClient extends ClientMonitor {
         mStatusBarService = statusBarService;
 
         PackageManager packageManager = context.getPackageManager();
-        mHasFod = packageManager.hasSystemFeature(LineageContextConstants.Features.FOD);
+        mHasFod = packageManager.hasSystemFeature(FOD);
     }
 
     @Override

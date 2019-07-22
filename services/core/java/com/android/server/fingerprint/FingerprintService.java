@@ -77,13 +77,11 @@ import com.android.internal.util.DumpUtils;
 import com.android.server.SystemServerInitThreadPool;
 import com.android.server.SystemService;
 
-import lineageos.app.LineageContextConstants;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import vendor.lineage.biometrics.fingerprint.inscreen.V1_0.IFingerprintInscreen;
+import vendor.pa.biometrics.fingerprint.inscreen.V1_0.IFingerprintInscreen;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -112,6 +110,7 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
     private static final String ACTION_LOCKOUT_RESET =
             "com.android.server.fingerprint.ACTION_LOCKOUT_RESET";
     private static final String KEY_LOCKOUT_RESET_USER = "lockout_reset_user";
+    private static final String FOD = "vendor.pa.biometrics.fingerprint.inscreen";
 
     private class PerformanceStats {
         int accept; // number of accepted fingerprints
@@ -269,7 +268,7 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
         mActivityManager = ((ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE))
                 .getService();
         PackageManager packageManager = context.getPackageManager();
-        mHasFod = packageManager.hasSystemFeature(LineageContextConstants.Features.FOD);
+        mHasFod = packageManager.hasSystemFeature(FOD);
     }
 
     @Override
