@@ -41,6 +41,7 @@
             <ImageView
                 android:layout_gravity="center"
                 android:id="@+id/tri_state_icon"
+                android:tint="?android:attr/colorAccent"
                 android:layout_width="63.0px"
                 android:layout_height="63.0px" />
         </FrameLayout>
@@ -53,6 +54,7 @@
             android:layout_width="wrap_content"
             android:layout_height="fill_parent"
             android:text="slience"
+            android:textColor="?android:attr/textColorPrimary"
             style="@style/TriStateUiText" />
 
         <FrameLayout
