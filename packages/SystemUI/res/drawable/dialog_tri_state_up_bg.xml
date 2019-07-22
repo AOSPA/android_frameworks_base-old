@@ -18,7 +18,7 @@
   xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape>
-            <solid android:color="#ff1d1d1d" />
+            <solid android:color="?android:attr/colorBackgroundFloating" />
             <corners
                 android:topLeftRadius="@dimen/tri_state_up_top_left_radius"
                 android:topRightRadius="@dimen/tri_state_up_top_right_radius"
