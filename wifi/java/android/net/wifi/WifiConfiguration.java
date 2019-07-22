@@ -380,10 +380,6 @@ public class WifiConfiguration implements Parcelable {
     public static final int SECURITY_TYPE_EAP_SUITE_B = 5;
     /** @hide */
     public static final int SECURITY_TYPE_OWE = 6;
-    /** @hide */
-    public static final int SECURITY_TYPE_FILS_SHA256 = 7;
-    /** @hide */
-    public static final int SECURITY_TYPE_FILS_SHA384 = 8;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -394,9 +390,7 @@ public class WifiConfiguration implements Parcelable {
             SECURITY_TYPE_EAP,
             SECURITY_TYPE_SAE,
             SECURITY_TYPE_EAP_SUITE_B,
-            SECURITY_TYPE_OWE,
-            SECURITY_TYPE_FILS_SHA256,
-            SECURITY_TYPE_FILS_SHA384
+            SECURITY_TYPE_OWE
     })
     public @interface SecurityType {}
 
@@ -447,12 +441,6 @@ public class WifiConfiguration implements Parcelable {
             case SECURITY_TYPE_OWE:
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.OWE);
                 requirePMF = true;
-                break;
-            case SECURITY_TYPE_FILS_SHA256:
-                allowedKeyManagement.set(WifiConfiguration.KeyMgmt.FILS_SHA256);
-                break;
-            case SECURITY_TYPE_FILS_SHA384:
-                allowedKeyManagement.set(WifiConfiguration.KeyMgmt.FILS_SHA384);
                 break;
             default:
                 throw new IllegalArgumentException("unknown security type " + securityType);
