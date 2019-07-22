@@ -28,7 +28,7 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.util.Slog;
 
-import vendor.lineage.biometrics.fingerprint.inscreen.V1_0.IFingerprintInscreen;
+import vendor.pa.biometrics.fingerprint.inscreen.V1_0.IFingerprintInscreen;
 
 import java.util.NoSuchElementException;
 

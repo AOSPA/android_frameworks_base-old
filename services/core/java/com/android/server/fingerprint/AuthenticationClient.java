@@ -34,9 +34,7 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.statusbar.IStatusBarService;
 
-import lineageos.app.LineageContextConstants;
-
-import vendor.lineage.biometrics.fingerprint.inscreen.V1_0.IFingerprintInscreen;
+import vendor.pa.biometrics.fingerprint.inscreen.V1_0.IFingerprintInscreen;
 
 /**
  * A class to keep track of the authentication state for a given client.
@@ -50,6 +48,8 @@ public abstract class AuthenticationClient extends ClientMonitor {
     public static final int LOCKOUT_NONE = 0;
     public static final int LOCKOUT_TIMED = 1;
     public static final int LOCKOUT_PERMANENT = 2;
+
+    private static final String FOD = "vendor.pa.biometrics.fingerprint.inscreen";
 
     // Callback mechanism received from the client
     // (BiometricPrompt -> FingerprintManager -> FingerprintService -> AuthenticationClient)
@@ -109,7 +109,7 @@ public abstract class AuthenticationClient extends ClientMonitor {
                 com.android.internal.R.string.config_keyguardComponent)).getPackageName();
 
         PackageManager packageManager = context.getPackageManager();
-        mHasFod = packageManager.hasSystemFeature(LineageContextConstants.Features.FOD);
+        mHasFod = packageManager.hasSystemFeature(FOD);
     }
 
     @Override
