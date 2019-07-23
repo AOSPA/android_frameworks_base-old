@@ -58,6 +58,7 @@ import android.util.BoostFramework;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 
 public abstract class PanelView extends FrameLayout {
     public static final boolean DEBUG = PanelBar.DEBUG;
@@ -72,7 +73,7 @@ public abstract class PanelView extends FrameLayout {
     private boolean mVibrateOnOpening;
     protected boolean mLaunchingNotification;
     private int mFixedDuration = NO_FIXED_DURATION;
-    protected PanelExpansionListener mExpansionListener;
+    protected ArrayList<PanelExpansionListener> mExpansionListeners = new ArrayList<>();
 
     private final void logf(String fmt, Object... args) {
         Log.v(TAG, (mViewName != null ? (mViewName + ": ") : "") + String.format(fmt, args));
@@ -1213,13 +1214,13 @@ public abstract class PanelView extends FrameLayout {
                     || mPeekAnimator != null || mInstantExpanding
                     || isPanelVisibleBecauseOfHeadsUp() || mTracking || mHeightAnimator != null);
         }
-        if (mExpansionListener != null) {
-            mExpansionListener.onPanelExpansionChanged(mExpandedFraction, mTracking);
+        for (int i = 0; i < mExpansionListeners.size(); i++) {
+            mExpansionListeners.get(i).onPanelExpansionChanged(mExpandedFraction, mTracking);
         }
     }
 
-    public void setExpansionListener(PanelExpansionListener panelExpansionListener) {
-        mExpansionListener = panelExpansionListener;
+    public void addExpansionListener(PanelExpansionListener panelExpansionListener) {
+        mExpansionListeners.add(panelExpansionListener);
     }
 
     protected abstract boolean isPanelVisibleBecauseOfHeadsUp();
