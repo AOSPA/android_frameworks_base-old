@@ -1293,6 +1293,7 @@ public class NotificationPanelView extends PanelView implements
         }
         mExpectingOpenPanelGesture = true;
         onTrackingStarted();
+        updatePanelExpanded();
     }
 
     /**
@@ -2043,7 +2044,7 @@ public class NotificationPanelView extends PanelView implements
     }
 
     private void updatePanelExpanded() {
-        boolean isExpanded = !isFullyCollapsed();
+        boolean isExpanded = !isFullyCollapsed() || mExpectingSynthesizedDown;
         if (mPanelExpanded != isExpanded) {
             mHeadsUpManager.setIsPanelExpanded(isExpanded);
             mStatusBar.setPanelExpanded(isExpanded);
