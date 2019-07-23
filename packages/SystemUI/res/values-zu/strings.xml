@@ -375,8 +375,8 @@
     <string name="quick_settings_night_secondary_label_until_sunrise" msgid="4453017157391574402">"Kuze kube sekuphumeni kwelanga"</string>
     <string name="quick_settings_night_secondary_label_on_at" msgid="6256314040368487637">"Kuvulwe ngo-<xliff:g id="TIME">%s</xliff:g>"</string>
     <string name="quick_settings_secondary_label_until" msgid="2749196569462600150">"Kuze kube ngu-<xliff:g id="TIME">%s</xliff:g>"</string>
-    <string name="quick_settings_ui_mode_night_label" msgid="512534812963862137">"Itimu emnyama"</string>
-    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="3496696903886673256">"Itimu emnyama\nIsilondolozi sebethri"</string>
+    <string name="quick_settings_ui_mode_night_label" msgid="3419947801072692538">"Itimu emnyama"</string>
+    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="7438725724589758362">"Itimu emnyama\nIsilondolozi sebethri"</string>
     <string name="quick_settings_nfc_label" msgid="9012153754816969325">"I-NFC"</string>
     <string name="quick_settings_nfc_off" msgid="6883274004315134333">"I-NFC ikhutshaziwe"</string>
     <string name="quick_settings_nfc_on" msgid="6680317193676884311">"I-NFC inikwe amandla"</string>
@@ -778,7 +778,7 @@
     <string name="drag_to_add_tiles" msgid="230586591689084925">"Bamba uphinde uhudule ukuze ungeze amathayela"</string>
     <string name="drag_to_rearrange_tiles" msgid="4566074720193667473">"Bamba uphinde uhudule ukuze uphinde ulungise amathayela"</string>
     <string name="drag_to_remove_tiles" msgid="3361212377437088062">"Hudulela lapha ukuze ususe"</string>
-    <string name="drag_to_remove_disabled" msgid="2390968976638993382">"Udinga okungenani amathayela angu-6"</string>
+    <string name="drag_to_remove_disabled" msgid="4785920129548299268">"Udinga okungenani amathayela angu-<xliff:g id="MIN_NUM_TILES">%1$d</xliff:g>"</string>
     <string name="qs_edit" msgid="2232596095725105230">"Hlela"</string>
     <string name="tuner_time" msgid="6572217313285536011">"Isikhathi"</string>
   <string-array name="clock_options">

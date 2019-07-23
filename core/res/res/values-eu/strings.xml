@@ -1130,8 +1130,10 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"Ireki honekin:"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"Irekin %1$s aplikazioarekin"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"Ireki"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"Eman <xliff:g id="HOST">%1$s</xliff:g> estekak irekitzeko baimena aplikazio honi:"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"Eman <xliff:g id="APPLICATION">%2$s</xliff:g> aplikazioari <xliff:g id="HOST">%1$s</xliff:g> irekitzeko baimena"</string>
+    <string name="whichOpenHostLinksWith" msgid="3788174881117226583">"Ireki <xliff:g id="HOST">%1$s</xliff:g> ostalariko estekak honekin:"</string>
+    <string name="whichOpenLinksWith" msgid="6392123355599572804">"Ireki estekak honekin:"</string>
+    <string name="whichOpenLinksWithApp" msgid="8225991685366651614">"Ireki estekak <xliff:g id="APPLICATION">%1$s</xliff:g> aplikazioarekin"</string>
+    <string name="whichOpenHostLinksWithApp" msgid="3464470639011045589">"Ireki <xliff:g id="HOST">%1$s</xliff:g> ostalariko estekak <xliff:g id="APPLICATION">%2$s</xliff:g> aplikazioarekin"</string>
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"Eman sarbidea"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"Editatu honekin:"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"Editatu %1$s aplikazioarekin"</string>
@@ -1548,7 +1550,7 @@
     <string name="storage_sd_card_label" msgid="6347111320774379257">"<xliff:g id="MANUFACTURER">%s</xliff:g> SD txartela"</string>
     <string name="storage_usb_drive" msgid="6261899683292244209">"USB bidezko unitatea"</string>
     <string name="storage_usb_drive_label" msgid="4501418548927759953">"<xliff:g id="MANUFACTURER">%s</xliff:g> enpresaren USB bidezko unitatea"</string>
-    <string name="storage_usb" msgid="3017954059538517278">"USB memoria"</string>
+    <string name="storage_usb" msgid="3017954059538517278">"USB bidezko memoria"</string>
     <string name="extract_edit_menu_button" msgid="8940478730496610137">"Editatu"</string>
     <string name="data_usage_warning_title" msgid="6499834033204801605">"Datuen erabileraren abisua"</string>
     <string name="data_usage_warning_body" msgid="7340198905103751676">"<xliff:g id="APP">%s</xliff:g> erabili dituzu"</string>
@@ -1584,6 +1586,7 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"Arakatzailea abiarazi nahi duzu?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"Deia onartu nahi duzu?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"Beti"</string>
+    <string name="activity_resolver_set_always" msgid="1422574191056490585">"Ezarri beti irekitzeko"</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"Behin soilik"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"Ezarpenak"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s abiarazleak ez du laneko profil hau onartzen"</string>

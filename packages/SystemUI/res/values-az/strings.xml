@@ -375,8 +375,8 @@
     <string name="quick_settings_night_secondary_label_until_sunrise" msgid="4453017157391574402">"Şəfəq vaxtına qədər"</string>
     <string name="quick_settings_night_secondary_label_on_at" msgid="6256314040368487637">"<xliff:g id="TIME">%s</xliff:g> olduqda aktiv ediləcək"</string>
     <string name="quick_settings_secondary_label_until" msgid="2749196569462600150">"<xliff:g id="TIME">%s</xliff:g> vaxtına qədər"</string>
-    <string name="quick_settings_ui_mode_night_label" msgid="512534812963862137">"Tünd Tema"</string>
-    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="3496696903886673256">"Tünd Tema\nEnerjiyə Qənaət"</string>
+    <string name="quick_settings_ui_mode_night_label" msgid="3419947801072692538">"Tünd tema"</string>
+    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="7438725724589758362">"Tünd tema\nEnerjiyə Qənaət"</string>
     <string name="quick_settings_nfc_label" msgid="9012153754816969325">"NFC"</string>
     <string name="quick_settings_nfc_off" msgid="6883274004315134333">"NFC deaktiv edilib"</string>
     <string name="quick_settings_nfc_on" msgid="6680317193676884311">"NFC aktiv edilib"</string>
@@ -558,7 +558,7 @@
     <string name="stream_notification" msgid="2563720670905665031">"Bildiriş"</string>
     <string name="stream_bluetooth_sco" msgid="2055645746402746292">"Bluetooth"</string>
     <string name="stream_dtmf" msgid="2447177903892477915">"Çoxsaylı ton olan ikili tezlik"</string>
-    <string name="stream_accessibility" msgid="301136219144385106">"Münasiblik"</string>
+    <string name="stream_accessibility" msgid="301136219144385106">"Əlçatımlılıq"</string>
     <string name="ring_toggle_title" msgid="3281244519428819576">"Zənglər"</string>
     <string name="volume_ringer_status_normal" msgid="4273142424125855384">"Zəng"</string>
     <string name="volume_ringer_status_vibrate" msgid="1825615171021346557">"Vibrasiya"</string>
@@ -778,7 +778,7 @@
     <string name="drag_to_add_tiles" msgid="230586591689084925">"Mozaika əlavə etmək üçün basıb saxlayaraq çəkin"</string>
     <string name="drag_to_rearrange_tiles" msgid="4566074720193667473">"Mozaikaları yenidən təşkil etmək üçün basıb saxlayın və çəkin"</string>
     <string name="drag_to_remove_tiles" msgid="3361212377437088062">"Silmək üçün bura sürüşdürün"</string>
-    <string name="drag_to_remove_disabled" msgid="2390968976638993382">"Minimum 6 mozaikaya ehtiyacınız var"</string>
+    <string name="drag_to_remove_disabled" msgid="4785920129548299268">"Minimum <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g> mozaika lazımdır"</string>
     <string name="qs_edit" msgid="2232596095725105230">"Redaktə edin"</string>
     <string name="tuner_time" msgid="6572217313285536011">"Vaxt"</string>
   <string-array name="clock_options">

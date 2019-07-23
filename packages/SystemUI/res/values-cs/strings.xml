@@ -379,8 +379,8 @@
     <string name="quick_settings_night_secondary_label_until_sunrise" msgid="4453017157391574402">"Do svítání"</string>
     <string name="quick_settings_night_secondary_label_on_at" msgid="6256314040368487637">"Zapnout v <xliff:g id="TIME">%s</xliff:g>"</string>
     <string name="quick_settings_secondary_label_until" msgid="2749196569462600150">"Do <xliff:g id="TIME">%s</xliff:g>"</string>
-    <string name="quick_settings_ui_mode_night_label" msgid="512534812963862137">"Tmavé téma"</string>
-    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="3496696903886673256">"Tmavý motiv\nSpořič baterie"</string>
+    <string name="quick_settings_ui_mode_night_label" msgid="3419947801072692538">"Tmavý motiv"</string>
+    <string name="quick_settings_ui_mode_night_label_battery_saver" msgid="7438725724589758362">"Tmavý motiv\nSpořič baterie"</string>
     <string name="quick_settings_nfc_label" msgid="9012153754816969325">"NFC"</string>
     <string name="quick_settings_nfc_off" msgid="6883274004315134333">"NFC je vypnuto"</string>
     <string name="quick_settings_nfc_on" msgid="6680317193676884311">"NFC je zapnuto"</string>
@@ -788,7 +788,7 @@
     <string name="drag_to_add_tiles" msgid="230586591689084925">"Dlaždice přidáte podržením a přetažením"</string>
     <string name="drag_to_rearrange_tiles" msgid="4566074720193667473">"Dlaždice můžete uspořádat podržením a přetažením"</string>
     <string name="drag_to_remove_tiles" msgid="3361212377437088062">"Přetažením sem dlaždice odstraníte"</string>
-    <string name="drag_to_remove_disabled" msgid="2390968976638993382">"Potřebujete minimálně šest dlaždic"</string>
+    <string name="drag_to_remove_disabled" msgid="4785920129548299268">"Potřebujete alespoň tento počet dlaždic: <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g>"</string>
     <string name="qs_edit" msgid="2232596095725105230">"Upravit"</string>
     <string name="tuner_time" msgid="6572217313285536011">"Čas"</string>
   <string-array name="clock_options">
