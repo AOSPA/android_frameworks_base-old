@@ -51,9 +51,7 @@ import java.lang.Exception;
 import java.util.ArrayList;
 import java.lang.ref.WeakReference;
 
-import org.codeaurora.internal.BearerAllocationStatus;
 import org.codeaurora.internal.Client;
-import org.codeaurora.internal.DcParam;
 import org.codeaurora.internal.IExtTelephony;
 import org.codeaurora.internal.INetworkCallback;
 import org.codeaurora.internal.NetworkCallbackBase;
@@ -63,7 +61,6 @@ import org.codeaurora.internal.ServiceUtil;
 import org.codeaurora.internal.SignalStrength;
 import org.codeaurora.internal.Status;
 import org.codeaurora.internal.Token;
-import org.codeaurora.internal.UpperLayerIndInfo;
 import org.codeaurora.internal.NetworkCallbackBase;
 
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
@@ -99,42 +96,20 @@ public class FiveGServiceClient {
     private int mInitRetryTimes = 0;
 
     public static class FiveGServiceState{
-        private int mBearerAllocationStatus;
-        private int mPlmn;
-        private int mUpperLayerInd;
-        private int mDcnr;
         private int mLevel;
         private int mNrConfigType;
         private int mNrIconType;
         private MobileIconGroup mIconGroup;
 
         public FiveGServiceState(){
-            mBearerAllocationStatus = BearerAllocationStatus.NOT_ALLOCATED;
-            mPlmn = UpperLayerIndInfo.PLMN_INFO_LIST_UNAVAILABLE;
-            mUpperLayerInd = UpperLayerIndInfo.UPPER_LAYER_IND_INFO_UNAVAILABLE;
-            mDcnr = DcParam.DCNR_RESTRICTED;
             mLevel = 0;
             mNrConfigType = NrConfigType.NSA_CONFIGURATION;
             mNrIconType = NrIconType.INVALID;
             mIconGroup = TelephonyIcons.UNKNOWN;
         }
 
-        public boolean isConnectedOnSaMode() {
-            boolean connected = false;
-            if ( mNrConfigType == NrConfigType.SA_CONFIGURATION
-                    &&  mIconGroup != TelephonyIcons.UNKNOWN) {
-                connected = true;
-            }
-            return connected;
-        }
-
-        public boolean isConnectedOnNsaMode() {
-            boolean connected = false;
-            if ( mNrConfigType == NrConfigType.NSA_CONFIGURATION
-                    && mIconGroup != TelephonyIcons.UNKNOWN) {
-                connected = true;
-            }
-            return connected;
+        public boolean isNrIconTypeValid() {
+            return mNrIconType != NrIconType.INVALID && mNrIconType != NrIconType.TYPE_NONE;
         }
 
         @VisibleForTesting
@@ -148,28 +123,8 @@ public class FiveGServiceClient {
         }
 
         @VisibleForTesting
-        public int getAllocated() {
-            return mBearerAllocationStatus;
-        }
-
-        @VisibleForTesting
         int getNrConfigType() {
             return mNrConfigType;
-        }
-
-        @VisibleForTesting
-        int getDcnr() {
-            return mDcnr;
-        }
-
-        @VisibleForTesting
-        int getPlmn() {
-            return mPlmn;
-        }
-
-        @VisibleForTesting
-        int getUpperLayerInd() {
-            return mUpperLayerInd;
         }
 
         @VisibleForTesting
@@ -178,10 +133,6 @@ public class FiveGServiceClient {
         }
 
         public void copyFrom(FiveGServiceState state) {
-            this.mBearerAllocationStatus = state.mBearerAllocationStatus;
-            this.mPlmn = state.mPlmn;
-            this.mUpperLayerInd = state.mUpperLayerInd;
-            this.mDcnr = state.mDcnr;
             this.mLevel = state.mLevel;
             this.mNrConfigType = state.mNrConfigType;
             this.mIconGroup = state.mIconGroup;
@@ -189,11 +140,7 @@ public class FiveGServiceClient {
         }
 
         public boolean equals(FiveGServiceState state) {
-            return this.mBearerAllocationStatus == state.mBearerAllocationStatus
-                    && this.mPlmn == state.mPlmn
-                    && this.mUpperLayerInd == state.mUpperLayerInd
-                    && this.mDcnr == state.mDcnr
-                    && this.mLevel == state.mLevel
+            return this.mLevel == state.mLevel
                     && this.mNrConfigType == state.mNrConfigType
                     && this.mIconGroup == state.mIconGroup
                     && this.mNrIconType == state.mNrIconType;
@@ -201,15 +148,10 @@ public class FiveGServiceClient {
         @Override
         public String toString() {
             StringBuilder builder = new StringBuilder();
-            builder.append("mBearerAllocationStatus=").
-                    append(mBearerAllocationStatus).append(", ").
-                    append("mPlmn=").append(mPlmn).append(", ").
-                    append("mUpperLayerInd=").append(mUpperLayerInd).append(", ").
-                    append("mDcnr=" + mDcnr).append(", ").
-                    append("mLevel=").append(mLevel).append(", ").
+            builder.append("mLevel=").append(mLevel).append(", ").
                     append("mNrConfigType=").append(mNrConfigType).append(", ").
-                    append("mIconGroup=").append(mIconGroup).
-                    append("mNrIconType=").append(mNrIconType);
+                    append("mNrIconType=").append(mNrIconType).append(", ").
+                    append("mIconGroup=").append(mIconGroup);
 
             return builder.toString();
         }
@@ -355,17 +297,8 @@ public class FiveGServiceClient {
         if ( mNetworkService != null && mClient != null) {
             Log.d(TAG, "query 5G service state for phoneId " + phoneId);
             try {
-                Token token = mNetworkService.queryNrDcParam(phoneId, mClient);
-                Log.d(TAG, "queryNrDcParam result:" + token);
-
-                token = mNetworkService.queryNrBearerAllocation(phoneId, mClient);
-                Log.d(TAG, "queryNrBearerAllocation result:" + token);
-
-                token = mNetworkService.queryNrSignalStrength(phoneId, mClient);
+                Token token = mNetworkService.queryNrSignalStrength(phoneId, mClient);
                 Log.d(TAG, "queryNrSignalStrength result:" + token);
-
-                token = mNetworkService.queryUpperLayerIndInfo(phoneId, mClient);
-                Log.d(TAG, "queryUpperLayerIndInfo result:" + token);
 
                 token = mNetworkService.query5gConfigInfo(phoneId, mClient);
                 Log.d(TAG, "query5gConfigInfo result:" + token);
@@ -391,23 +324,23 @@ public class FiveGServiceClient {
         }
     }
 
-    @VisibleForTesting
-    void update5GIcon(FiveGServiceState state,int phoneId) {
-        if ( state.mNrConfigType == NrConfigType.SA_CONFIGURATION ) {
-            state.mIconGroup = getSaIcon(state);
-        }else if ( state.mNrConfigType == NrConfigType.NSA_CONFIGURATION){
-            state.mIconGroup = getNrIconGroup(state.mNrIconType, phoneId);
+    public void queryNrSignalStrength(int phoneId) {
+        if ( mNetworkService != null && mClient != null) {
+            Log.d(TAG, "query queryNrSignalStrength for phoneId " + phoneId);
+            try {
+                Token token = mNetworkService.queryNrSignalStrength(phoneId, mClient);
+                Log.d(TAG, "queryNrSignalStrength result:" + token);
+            }catch (Exception e) {
+                Log.e(TAG, "queryNrSignalStrength", e);
+            }
         }else {
-            state.mIconGroup = TelephonyIcons.UNKNOWN;
+            Log.e(TAG, "query queryNrSignalStrength for phoneId " + phoneId);
         }
     }
 
-    private MobileIconGroup getSaIcon(FiveGServiceState state) {
-        if ( state.mBearerAllocationStatus > BearerAllocationStatus.NOT_ALLOCATED ) {
-            return TelephonyIcons.FIVE_G_SA;
-        }else {
-            return TelephonyIcons.UNKNOWN;
-        }
+    @VisibleForTesting
+    void update5GIcon(FiveGServiceState state,int phoneId) {
+        state.mIconGroup = getNrIconGroup(state.mNrIconType, phoneId);
     }
 
     private MobileIconGroup getNrIconGroup(int nrIconType , int phoneId) {
@@ -497,31 +430,6 @@ public class FiveGServiceClient {
     @VisibleForTesting
     protected INetworkCallback mCallback = new NetworkCallbackBase() {
         @Override
-        public void on5gStatus(int slotId, Token token, Status status, boolean enableStatus) throws
-                RemoteException {
-            if ( DEBUG ) {
-                Log.d(TAG, "on5gStatus: slotId= " + slotId + " token=" + token + " status=" +
-                        status + " enableStatus=" + enableStatus);
-            }
-        }
-
-        @Override
-        public void onNrDcParam(int slotId, Token token, Status status, DcParam dcParam) throws
-                RemoteException {
-
-            if ( DEBUG ) {
-                Log.d(TAG, "onNrDcParam: slotId=" + slotId + " token=" + token + " status=" +
-                        status + " dcParam=" + dcParam);
-            }
-
-            if (status.get() == Status.SUCCESS) {
-                FiveGServiceState state = getCurrentServiceState(slotId);
-                state.mDcnr = dcParam.getDcnr();
-                notifyListenersIfNecessary(slotId);
-            }
-        }
-
-        @Override
         public void onSignalStrength(int slotId, Token token, Status status,
                                      org.codeaurora.internal.SignalStrength
                                              signalStrength) throws RemoteException {
@@ -538,38 +446,6 @@ public class FiveGServiceClient {
         }
 
         @Override
-        public void onAnyNrBearerAllocation(int slotId, Token token, Status status,
-                                            BearerAllocationStatus bearerStatus) throws RemoteException {
-            if ( DEBUG ) {
-                Log.d(TAG, "onAnyNrBearerAllocation bearerStatus=" + bearerStatus.get());
-            }
-
-            if (status.get() == Status.SUCCESS) {
-                FiveGServiceState state = getCurrentServiceState(slotId);
-                state.mBearerAllocationStatus = bearerStatus.get();
-                update5GIcon(state, slotId);
-                notifyListenersIfNecessary(slotId);
-            }
-
-        }
-
-        @Override
-        public void onUpperLayerIndInfo(int slotId, Token token, Status status,
-                                        UpperLayerIndInfo uilInfo) throws RemoteException {
-            if ( DEBUG ) {
-                Log.d(TAG, "onUpperLayerIndInfo plmn=" + uilInfo.getPlmnInfoListAvailable()
-                        + " upperLayerIndInfo=" + uilInfo.getUpperLayerIndInfoAvailable());
-            }
-
-            if (status.get() == Status.SUCCESS) {
-                FiveGServiceState state = getCurrentServiceState(slotId);
-                state.mPlmn = uilInfo.getPlmnInfoListAvailable();
-                state.mUpperLayerInd = uilInfo.getUpperLayerIndInfoAvailable();
-                notifyListenersIfNecessary(slotId);
-            }
-        }
-
-        @Override
         public void on5gConfigInfo(int slotId, Token token, Status status, NrConfigType
                 nrConfigType) throws RemoteException {
             Log.d(TAG,
@@ -578,7 +454,6 @@ public class FiveGServiceClient {
             if (status.get() == Status.SUCCESS) {
                 FiveGServiceState state = getCurrentServiceState(slotId);
                 state.mNrConfigType = nrConfigType.get();
-                update5GIcon(state, slotId);
                 notifyListenersIfNecessary(slotId);
             }
         }
