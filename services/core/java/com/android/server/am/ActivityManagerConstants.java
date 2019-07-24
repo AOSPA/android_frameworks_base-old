@@ -32,8 +32,6 @@ import android.provider.DeviceConfig.OnPropertiesChangedListener;
 import android.provider.DeviceConfig.Properties;
 import android.provider.Settings;
 import android.text.TextUtils;
-import android.text.TextUtils.SimpleStringSplitter;
-import android.util.ArraySet;
 import android.util.BoostFramework;
 import android.util.KeyValueListParser;
 import android.util.Slog;
@@ -127,13 +125,6 @@ final class ActivityManagerConstants extends ContentObserver {
      */
     private static final String KEY_DEFAULT_BACKGROUND_ACTIVITY_STARTS_ENABLED =
             "default_background_activity_starts_enabled";
-
-    /**
-     * The packages temporarily whitelisted to be able to start activities from background.
-     * The list of packages is {@code ":"} colon delimited.
-     */
-    private static final String KEY_BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST =
-            "background_activity_starts_package_names_whitelist";
 
 
     // Maximum number of cached processes we will allow.
@@ -266,8 +257,6 @@ final class ActivityManagerConstants extends ContentObserver {
     // If not set explicitly the default is controlled by DeviceConfig.
     volatile boolean mFlagBackgroundActivityStartsEnabled;
 
-    volatile ArraySet<String> mPackageNamesWhitelistedForBgActivityStarts = new ArraySet<>();
-
     private final ActivityManagerService mService;
     private ContentResolver mResolver;
     private final KeyValueListParser mParser = new KeyValueListParser(',');
@@ -321,10 +310,6 @@ final class ActivityManagerConstants extends ContentObserver {
     private static final Uri ACTIVITY_STARTS_LOGGING_ENABLED_URI = Settings.Global.getUriFor(
                 Settings.Global.ACTIVITY_STARTS_LOGGING_ENABLED);
 
-    private static final Uri BACKGROUND_ACTIVITY_STARTS_ENABLED_URI =
-                Settings.Global.getUriFor(
-                        Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED);
-
     private static final Uri ENABLE_AUTOMATIC_SYSTEM_SERVER_HEAP_DUMPS_URI =
             Settings.Global.getUriFor(Settings.Global.ENABLE_AUTOMATIC_SYSTEM_SERVER_HEAP_DUMPS);
 
@@ -341,7 +326,6 @@ final class ActivityManagerConstants extends ContentObserver {
                                 updateMaxCachedProcesses();
                                 break;
                             case KEY_DEFAULT_BACKGROUND_ACTIVITY_STARTS_ENABLED:
-                            case KEY_BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST:
                                 updateBackgroundActivityStarts();
                                 break;
                             default:
@@ -381,7 +365,6 @@ final class ActivityManagerConstants extends ContentObserver {
         mResolver = resolver;
         mResolver.registerContentObserver(ACTIVITY_MANAGER_CONSTANTS_URI, false, this);
         mResolver.registerContentObserver(ACTIVITY_STARTS_LOGGING_ENABLED_URI, false, this);
-        mResolver.registerContentObserver(BACKGROUND_ACTIVITY_STARTS_ENABLED_URI, false, this);
         if (mSystemServerAutomaticHeapDumpEnabled) {
             mResolver.registerContentObserver(ENABLE_AUTOMATIC_SYSTEM_SERVER_HEAP_DUMPS_URI,
                     false, this);
@@ -438,8 +421,6 @@ final class ActivityManagerConstants extends ContentObserver {
             updateConstants();
         } else if (ACTIVITY_STARTS_LOGGING_ENABLED_URI.equals(uri)) {
             updateActivityStartsLoggingEnabled();
-        } else if (BACKGROUND_ACTIVITY_STARTS_ENABLED_URI.equals(uri)) {
-            updateBackgroundActivityStarts();
         } else if (ENABLE_AUTOMATIC_SYSTEM_SERVER_HEAP_DUMPS_URI.equals(uri)) {
             updateEnableAutomaticSystemServerHeapDumps();
         }
@@ -530,39 +511,10 @@ final class ActivityManagerConstants extends ContentObserver {
     }
 
     private void updateBackgroundActivityStarts() {
-        String whitelistedPackageNames = null;
-        int settingsValue = Settings.Global.getInt(mResolver,
-                Settings.Global.BACKGROUND_ACTIVITY_STARTS_ENABLED, -1);
-
-        // If the user has explicitly enabled or disabled, that affects all apps.
-        // Otherwise we take the default state and whitelist from DeviceConfig.
-        if (settingsValue >= 0) {
-            mFlagBackgroundActivityStartsEnabled = settingsValue != 0;
-        } else {
-            boolean enabledInDeviceConfig = DeviceConfig.getBoolean(
-                    DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
-                    KEY_DEFAULT_BACKGROUND_ACTIVITY_STARTS_ENABLED,
-                    /*defaultValue*/ false);
-            mFlagBackgroundActivityStartsEnabled = enabledInDeviceConfig;
-            if (!enabledInDeviceConfig) {
-                whitelistedPackageNames = DeviceConfig.getProperty(
-                        DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
-                        KEY_BACKGROUND_ACTIVITY_STARTS_PACKAGE_NAMES_WHITELIST);
-            }
-        }
-        if (TextUtils.isEmpty(whitelistedPackageNames)) {
-            if (!mPackageNamesWhitelistedForBgActivityStarts.isEmpty()) {
-                mPackageNamesWhitelistedForBgActivityStarts = new ArraySet<>();
-            }
-        } else {
-            ArraySet<String> newSet = new ArraySet<>();
-            SimpleStringSplitter splitter = new SimpleStringSplitter(':');
-            splitter.setString(whitelistedPackageNames);
-            while (splitter.hasNext()) {
-                newSet.add(splitter.next());
-            }
-            mPackageNamesWhitelistedForBgActivityStarts = newSet;
-        }
+        mFlagBackgroundActivityStartsEnabled = DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_DEFAULT_BACKGROUND_ACTIVITY_STARTS_ENABLED,
+                /*defaultValue*/ false);
     }
 
     private void updateEnableAutomaticSystemServerHeapDumps() {

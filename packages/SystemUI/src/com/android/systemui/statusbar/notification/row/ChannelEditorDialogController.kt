@@ -29,6 +29,7 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.ColorDrawable
 import android.util.Log
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.view.Window
@@ -43,6 +44,18 @@ import javax.inject.Singleton
 
 const val TAG = "ChannelDialogController"
 
+/**
+ * ChannelEditorDialogController is the controller for the dialog half-shelf
+ * that allows users to quickly turn off channels. It is launched from the NotificationInfo
+ * guts view and displays controls for toggling app notifications as well as up to 4 channels
+ * from that app like so:
+ *
+ *   APP TOGGLE                                                 <on/off>
+ *   - Channel from which we launched                           <on/off>
+ *   -                                                          <on/off>
+ *   - the next 3 channels sorted alphabetically for that app   <on/off>
+ *   -                                                          <on/off>
+ */
 @Singleton
 class ChannelEditorDialogController @Inject constructor(
     c: Context,
@@ -58,6 +71,9 @@ class ChannelEditorDialogController @Inject constructor(
     private var appName: String? = null
     private var onSettingsClickListener: NotificationInfo.OnSettingsClickListener? = null
 
+    // Caller should set this if they care about when we dismiss
+    var onFinishListener: OnChannelEditorDialogFinishedListener? = null
+
     // Channels handed to us from NotificationInfo
     @VisibleForTesting
     internal val providedChannels = mutableListOf<NotificationChannel>()
@@ -71,13 +87,17 @@ class ChannelEditorDialogController @Inject constructor(
     internal val groupNameLookup = hashMapOf<String, CharSequence>()
     private val channelGroupList = mutableListOf<NotificationChannelGroup>()
 
+    /**
+     * Give the controller all of the information it needs to present the dialog
+     * for a given app. Does a bunch of querying of NoMan, but won't present anything yet
+     */
     fun prepareDialogForApp(
         appName: String,
         packageName: String,
         uid: Int,
         channels: Set<NotificationChannel>,
         appIcon: Drawable,
-        onSettingsClickListener: NotificationInfo.OnSettingsClickListener
+        onSettingsClickListener: NotificationInfo.OnSettingsClickListener?
     ) {
         this.appName = appName
         this.packageName = packageName
@@ -141,9 +161,17 @@ class ChannelEditorDialogController @Inject constructor(
         dialog.show()
     }
 
+    /**
+     * Close the dialog without saving. For external callers
+     */
+    fun close() {
+        done()
+    }
+
     private fun done() {
         resetState()
         dialog.dismiss()
+        onFinishListener?.onChannelEditorDialogFinished()
     }
 
     private fun resetState() {
@@ -219,10 +247,17 @@ class ChannelEditorDialogController @Inject constructor(
         }
     }
 
+    @VisibleForTesting
+    fun launchSettings(sender: View) {
+        onSettingsClickListener?.onClick(sender, null, appUid!!)
+    }
+
     private fun initDialog() {
         dialog = Dialog(context)
 
         dialog.window?.requestFeature(Window.FEATURE_NO_TITLE)
+        // Prevent a11y readers from reading the first element in the dialog twice
+        dialog.setTitle("\u00A0")
         dialog.apply {
             setContentView(R.layout.notif_half_shelf)
             setCanceledOnTouchOutside(true)
@@ -239,8 +274,8 @@ class ChannelEditorDialogController @Inject constructor(
             }
 
             findViewById<TextView>(R.id.see_more_button)?.setOnClickListener {
-                onSettingsClickListener?.onClick(it, null, appUid!!)
-                dismiss()
+                launchSettings(it)
+                done()
             }
 
             window?.apply {
@@ -264,4 +299,8 @@ class ChannelEditorDialogController @Inject constructor(
             or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
             or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
             or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED)
+}
+
+interface OnChannelEditorDialogFinishedListener {
+    fun onChannelEditorDialogFinished()
 }

@@ -133,6 +133,7 @@
     <!-- no translation found for wfcSpnFormat_spn (4998685024207291232) -->
     <skip />
     <string name="wfcSpnFormat_spn_wifi_calling" msgid="136001023263502280">"<xliff:g id="SPN">%s</xliff:g>, połączenia przez Wi-Fi"</string>
+    <string name="wfcSpnFormat_spn_wifi_calling_vo_hyphen" msgid="1730997175789582756">"<xliff:g id="SPN">%s</xliff:g>, połączenia przez Wi-Fi"</string>
     <string name="wfcSpnFormat_wlan_call" msgid="2533371081782489793">"Połączenie przez WLAN"</string>
     <string name="wfcSpnFormat_spn_wlan_call" msgid="2315240198303197168">"<xliff:g id="SPN">%s</xliff:g>, połączenie przez WLAN"</string>
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g>, Wi-Fi"</string>
@@ -1169,8 +1170,10 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"Otwórz w aplikacji"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"Otwórz w aplikacji %1$s"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"Otwórz"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"Przyznaj uprawnienia do otwierania linków z <xliff:g id="HOST">%1$s</xliff:g> w:"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"Przyznaj uprawnienia do otwierania linków z <xliff:g id="HOST">%1$s</xliff:g> w aplikacji <xliff:g id="APPLICATION">%2$s</xliff:g>"</string>
+    <string name="whichOpenHostLinksWith" msgid="3788174881117226583">"Otwieraj linki z: <xliff:g id="HOST">%1$s</xliff:g> w"</string>
+    <string name="whichOpenLinksWith" msgid="6392123355599572804">"Otwieraj linki w"</string>
+    <string name="whichOpenLinksWithApp" msgid="8225991685366651614">"Otwieraj linki w aplikacji <xliff:g id="APPLICATION">%1$s</xliff:g>"</string>
+    <string name="whichOpenHostLinksWithApp" msgid="3464470639011045589">"Otwieraj linki z: <xliff:g id="HOST">%1$s</xliff:g> w aplikacji <xliff:g id="APPLICATION">%2$s</xliff:g>"</string>
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"Udziel uprawnień"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"Edytuj w aplikacji"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"Edytuj w aplikacji %1$s"</string>
@@ -1401,8 +1404,7 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Przywróć ustawienia fabryczne, by wyłączyć tryb jarzma testowego."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"Wilgoć lub brud w porcie USB"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"Port USB został automatycznie wyłączony. Kliknij, by dowiedzieć się więcej."</string>
-    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
-    <skip />
+    <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"Możesz używać portu USB"</string>
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"Telefon nie wykrywa już wilgoci ani zanieczyszczeń."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"Zgłaszam błąd…"</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"Udostępnić raport o błędzie?"</string>
@@ -1629,6 +1631,7 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"Uruchomić przeglądarkę?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"Odebrać połączenie?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"Zawsze"</string>
+    <string name="activity_resolver_set_always" msgid="1422574191056490585">"Zawsze otwieraj"</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"Tylko raz"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"Ustawienia"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s nie obsługuje profilu do pracy"</string>
@@ -1658,8 +1661,6 @@
     <string name="display_manager_overlay_display_name" msgid="5142365982271620716">"Nakładka nr <xliff:g id="ID">%1$d</xliff:g>"</string>
     <string name="display_manager_overlay_display_title" msgid="652124517672257172">"<xliff:g id="NAME">%1$s</xliff:g>: <xliff:g id="WIDTH">%2$d</xliff:g> x <xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> dpi"</string>
     <string name="display_manager_overlay_display_secure_suffix" msgid="6022119702628572080">", bezpieczny"</string>
-    <string name="activity_starter_block_bg_activity_starts_permissive" msgid="6995473033438879646">"Rozpoczęcie tej aktywności w tle przez pakiet <xliff:g id="PACKAGENAME">%1$s</xliff:g> zostanie zablokowane w przyszłych kompilacjach Q. Patrz g.co/dev/bgblock."</string>
-    <string name="activity_starter_block_bg_activity_starts_enforcing" msgid="3317816771072146229">"Rozpoczęcie aktywności w tle przez pakiet <xliff:g id="PACKAGENAME">%1$s</xliff:g> zostało zablokowane. Patrz g.co/dev/bgblock."</string>
     <string name="kg_forgot_pattern_button_text" msgid="8852021467868220608">"Nie pamiętam wzoru"</string>
     <string name="kg_wrong_pattern" msgid="1850806070801358830">"Nieprawidłowy wzór"</string>
     <string name="kg_wrong_password" msgid="2333281762128113157">"Nieprawidłowe hasło"</string>
@@ -1715,8 +1716,12 @@
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"Skrót ułatwień dostępu wyłączył usługę <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"Skrót ułatwień dostępu wyłączył usługę <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"Naciśnij i przytrzymaj oba przyciski głośności przez trzy sekundy, by użyć usługi <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
-    <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"Wybierz funkcję używaną po kliknięciu przycisku ułatwień dostępu."</string>
-    <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"Aby zmienić funkcje, kliknij i przytrzymaj przycisk ułatwień dostępu."</string>
+    <string name="accessibility_button_prompt_text" msgid="1176658502969738564">"Wybierz usługę używaną po kliknięciu przycisku ułatwień dostępu:"</string>
+    <string name="accessibility_gesture_prompt_text" msgid="8259145549733019401">"Wybierz usługę używaną w przypadku gestu ułatwień dostępu (przesunięcie dwoma palcami z dołu ekranu w górę):"</string>
+    <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"Wybierz usługę, której chcesz używać w połączeniu z gestami ułatwień dostępu (przesuń trzema palcami z dołu ekranu w górę):"</string>
+    <string name="accessibility_button_instructional_text" msgid="7003212763213614833">"Aby przełączać usługi, naciśnij i przytrzymaj przycisk ułatwień dostępu."</string>
+    <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"Aby przełączać usługi, przesuń dwoma palcami w górę i przytrzymaj."</string>
+    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"Aby przełączyć usługi, przesuń trzema palcami w górę i przytrzymaj."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"Powiększenie"</string>
     <string name="user_switched" msgid="3768006783166984410">"Bieżący użytkownik: <xliff:g id="NAME">%1$s</xliff:g>."</string>
     <string name="user_switching_message" msgid="2871009331809089783">"Przełączam na użytkownika <xliff:g id="NAME">%1$s</xliff:g>…"</string>

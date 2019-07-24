@@ -380,6 +380,10 @@ public class WifiConfiguration implements Parcelable {
     public static final int SECURITY_TYPE_EAP_SUITE_B = 5;
     /** @hide */
     public static final int SECURITY_TYPE_OWE = 6;
+    /** @hide */
+    public static final int SECURITY_TYPE_FILS_SHA256 = 7;
+    /** @hide */
+    public static final int SECURITY_TYPE_FILS_SHA384 = 8;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -390,7 +394,9 @@ public class WifiConfiguration implements Parcelable {
             SECURITY_TYPE_EAP,
             SECURITY_TYPE_SAE,
             SECURITY_TYPE_EAP_SUITE_B,
-            SECURITY_TYPE_OWE
+            SECURITY_TYPE_OWE,
+            SECURITY_TYPE_FILS_SHA256,
+            SECURITY_TYPE_FILS_SHA384
     })
     public @interface SecurityType {}
 
@@ -441,6 +447,12 @@ public class WifiConfiguration implements Parcelable {
             case SECURITY_TYPE_OWE:
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.OWE);
                 requirePMF = true;
+                break;
+            case SECURITY_TYPE_FILS_SHA256:
+                allowedKeyManagement.set(WifiConfiguration.KeyMgmt.FILS_SHA256);
+                break;
+            case SECURITY_TYPE_FILS_SHA384:
+                allowedKeyManagement.set(WifiConfiguration.KeyMgmt.FILS_SHA384);
                 break;
             default:
                 throw new IllegalArgumentException("unknown security type " + securityType);
@@ -815,6 +827,12 @@ public class WifiConfiguration implements Parcelable {
      * For debug: date at which the config was last updated
      */
     public String creationTime;
+
+    /**
+     * @hide
+     * Iface name for OWE transition mode
+     */
+    public String oweTransIfaceName;
 
     /**
      * @hide
@@ -1854,6 +1872,7 @@ public class WifiConfiguration implements Parcelable {
         dppNetAccessKey = null;
         dppNetAccessKeyExpiry = -1;
         dppCsign = null;
+        oweTransIfaceName = null;
     }
 
     /**
@@ -1909,6 +1928,7 @@ public class WifiConfiguration implements Parcelable {
                 .append(" PRIO: ").append(this.priority)
                 .append(" HIDDEN: ").append(this.hiddenSSID)
                 .append(" PMF: ").append(this.requirePMF)
+                .append(" OWE Transition mode Iface: ").append(this.oweTransIfaceName)
                 .append('\n');
 
 
@@ -2516,6 +2536,7 @@ public class WifiConfiguration implements Parcelable {
             macRandomizationSetting = source.macRandomizationSetting;
             requirePMF = source.requirePMF;
             updateIdentifier = source.updateIdentifier;
+            oweTransIfaceName = source.oweTransIfaceName;
         }
     }
 
@@ -2592,6 +2613,7 @@ public class WifiConfiguration implements Parcelable {
         dest.writeString(dppCsign);
         dest.writeInt(macRandomizationSetting);
         dest.writeInt(osu ? 1 : 0);
+        dest.writeString(oweTransIfaceName);
     }
 
     /** Implement the Parcelable interface {@hide} */
@@ -2670,6 +2692,7 @@ public class WifiConfiguration implements Parcelable {
                 config.dppCsign = in.readString();
                 config.macRandomizationSetting = in.readInt();
                 config.osu = in.readInt() != 0;
+                config.oweTransIfaceName = in.readString();
                 return config;
             }
 

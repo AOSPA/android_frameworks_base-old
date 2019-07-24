@@ -1625,8 +1625,11 @@ public final class ActivityRecord extends ConfigurationContainer {
             try {
                 ArrayList<ReferrerIntent> ar = new ArrayList<>(1);
                 ar.add(rintent);
+                // Making sure the client state is RESUMED after transaction completed and doing
+                // so only if activity is currently RESUMED. Otherwise, client may have extra
+                // life-cycle calls to RESUMED (and PAUSED later).
                 mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), appToken,
-                        NewIntentItem.obtain(ar));
+                        NewIntentItem.obtain(ar, mState == RESUMED));
                 unsent = false;
             } catch (RemoteException e) {
                 Slog.w(TAG, "Exception thrown sending new intent to " + this, e);
@@ -2048,6 +2051,13 @@ public final class ActivityRecord extends ConfigurationContainer {
             mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), appToken,
                     WindowVisibilityItem.obtain(true /* showWindow */));
             makeActiveIfNeeded(null /* activeActivity*/);
+            if (isState(STOPPING, STOPPED) && isFocusable()) {
+                // #shouldMakeActive() only evaluates the topmost activities in task, so
+                // activities that are not the topmost in task are not being resumed or paused.
+                // For activities that are still in STOPPING or STOPPED state, updates the state
+                // to PAUSE at least when making it visible.
+                setState(PAUSED, "makeClientVisible");
+            }
         } catch (Exception e) {
             Slog.w(TAG, "Exception thrown sending visibility update: " + intent.getComponent(), e);
         }

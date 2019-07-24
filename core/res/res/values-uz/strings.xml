@@ -131,6 +131,7 @@
     <!-- no translation found for wfcSpnFormat_spn (4998685024207291232) -->
     <skip />
     <string name="wfcSpnFormat_spn_wifi_calling" msgid="136001023263502280">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi chaqiruv"</string>
+    <string name="wfcSpnFormat_spn_wifi_calling_vo_hyphen" msgid="1730997175789582756">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi chaqiruv"</string>
     <string name="wfcSpnFormat_wlan_call" msgid="2533371081782489793">"WLAN chaqiruv"</string>
     <string name="wfcSpnFormat_spn_wlan_call" msgid="2315240198303197168">"<xliff:g id="SPN">%s</xliff:g> WLAN chaqiruv"</string>
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi"</string>
@@ -255,17 +256,17 @@
     <string name="notification_channel_security" msgid="7345516133431326347">"Xavfsizlik"</string>
     <string name="notification_channel_car_mode" msgid="3553380307619874564">"Avtomobil rejimi"</string>
     <string name="notification_channel_account" msgid="7577959168463122027">"Hisob holati"</string>
-    <string name="notification_channel_developer" msgid="7579606426860206060">"Dasturchi xabarlari"</string>
+    <string name="notification_channel_developer" msgid="7579606426860206060">"Dasturchilar uchun xabarlar"</string>
     <string name="notification_channel_updates" msgid="4794517569035110397">"Yangilanishlar"</string>
     <string name="notification_channel_network_status" msgid="5025648583129035447">"Tarmoq holati"</string>
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"Tarmoqqa oid bildirgilar"</string>
     <string name="notification_channel_network_available" msgid="4531717914138179517">"Tarmoq mavjud"</string>
     <string name="notification_channel_vpn" msgid="8330103431055860618">"VPN holati"</string>
-    <string name="notification_channel_device_admin" msgid="8353118887482520565">"IT administrator xabarlari"</string>
+    <string name="notification_channel_device_admin" msgid="8353118887482520565">"Administratordan xabarlar"</string>
     <string name="notification_channel_alerts" msgid="4496839309318519037">"Ogohlantirishlar"</string>
     <string name="notification_channel_retail_mode" msgid="6088920674914038779">"Demo rejim"</string>
     <string name="notification_channel_usb" msgid="9006850475328924681">"USB orqali ulanish"</string>
-    <string name="notification_channel_heavy_weight_app" msgid="6218742927792852607">"Ilova ishlamoqda"</string>
+    <string name="notification_channel_heavy_weight_app" msgid="6218742927792852607">"Ilova faol"</string>
     <string name="notification_channel_foreground_service" msgid="3931987440602669158">"Batareya quvvatini sarflayotgan ilovalar"</string>
     <string name="foreground_service_app_in_background" msgid="1060198778219731292">"<xliff:g id="APP_NAME">%1$s</xliff:g> ilovasi batareya quvvatini sarflamoqda"</string>
     <string name="foreground_service_apps_in_background" msgid="7175032677643332242">"<xliff:g id="NUMBER">%1$d</xliff:g> ta ilova batareya quvvatini sarflamoqda"</string>
@@ -1129,8 +1130,10 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"Ochish…"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"%1$s bilan ochish"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"Ochish"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"<xliff:g id="HOST">%1$s</xliff:g> havolalarini ushbu ilova bilan ochishga ruxsat bering:"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"<xliff:g id="HOST">%1$s</xliff:g> havolalarini <xliff:g id="APPLICATION">%2$s</xliff:g> bilan ochishga ruxsat bering"</string>
+    <string name="whichOpenHostLinksWith" msgid="3788174881117226583">"<xliff:g id="HOST">%1$s</xliff:g> havolalarini quyidagi orqali ochish"</string>
+    <string name="whichOpenLinksWith" msgid="6392123355599572804">"Havolalarni quyidagi orqali ochish"</string>
+    <string name="whichOpenLinksWithApp" msgid="8225991685366651614">"Havolalarni <xliff:g id="APPLICATION">%1$s</xliff:g> orqali ochish"</string>
+    <string name="whichOpenHostLinksWithApp" msgid="3464470639011045589">"<xliff:g id="HOST">%1$s</xliff:g> havolalarini <xliff:g id="APPLICATION">%2$s</xliff:g> orqali ochish"</string>
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"Ruxsat berish"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"Tahrirlash…"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"“%1$s” yordamida tahrirlash"</string>
@@ -1358,8 +1361,7 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Xavfsizlik sinovi rejimini faolsizlantirish uchun zavod sozlamalariga qaytaring."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"USB portda suyuqlik yoki parcha bor"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB port avtomatik tarzda faolsizlashtirildi. Batafsil axborot olish uchun bosing."</string>
-    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
-    <skip />
+    <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"USB portdan foydalanish mumkin"</string>
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"Telefon endi suyuqlik yoki turli parchalarni aniqlay olmaydi."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"Xatoliklar hisoboti olinmoqda…"</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"Xatoliklar hisoboti yuborilsinmi?"</string>
@@ -1495,7 +1497,7 @@
     <string name="find_next" msgid="5742124618942193978">"Keyingisini topish"</string>
     <string name="find_previous" msgid="2196723669388360506">"Oldingisini topish"</string>
     <string name="gpsNotifTicker" msgid="5622683912616496172">"<xliff:g id="NAME">%s</xliff:g>dan manzil haqida so‘rov"</string>
-    <string name="gpsNotifTitle" msgid="5446858717157416839">"Manzil so‘rovi"</string>
+    <string name="gpsNotifTitle" msgid="5446858717157416839">"Joylashuv axboroti talabi"</string>
     <string name="gpsNotifMessage" msgid="1374718023224000702">"<xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>) tomonidan so‘raldi"</string>
     <string name="gpsVerifYes" msgid="2346566072867213563">"Ha"</string>
     <string name="gpsVerifNo" msgid="1146564937346454865">"Yo‘q"</string>
@@ -1584,6 +1586,7 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"Brauzer ishga tushirilsinmi?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"Qo‘ng‘iroqni qabul qilasizmi?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"Har doim"</string>
+    <string name="activity_resolver_set_always" msgid="1422574191056490585">"Doim ochish"</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"Faqat hozir"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"Sozlamalar"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"“%1$s” ishchi profilni qo‘llab-quvvatlamaydi"</string>
@@ -1613,8 +1616,6 @@
     <string name="display_manager_overlay_display_name" msgid="5142365982271620716">"Tasvir uzatish #<xliff:g id="ID">%1$d</xliff:g>"</string>
     <string name="display_manager_overlay_display_title" msgid="652124517672257172">"<xliff:g id="NAME">%1$s</xliff:g>: <xliff:g id="WIDTH">%2$d</xliff:g>x<xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> dpi"</string>
     <string name="display_manager_overlay_display_secure_suffix" msgid="6022119702628572080">", xavfsiz"</string>
-    <string name="activity_starter_block_bg_activity_starts_permissive" msgid="6995473033438879646">"Keyingi Android Q nashrlarida fondagi ushbu <xliff:g id="PACKAGENAME">%1$s</xliff:g> jarayoni bloklanadi. g.co/dev/bgblock bilan tanishing."</string>
-    <string name="activity_starter_block_bg_activity_starts_enforcing" msgid="3317816771072146229">"Fondagi <xliff:g id="PACKAGENAME">%1$s</xliff:g> jarayoni bloklandi. g.co/dev/bgblock bilan tanishing."</string>
     <string name="kg_forgot_pattern_button_text" msgid="8852021467868220608">"Grafik kalit esimdan chiqdi"</string>
     <string name="kg_wrong_pattern" msgid="1850806070801358830">"Grafik kalit xato"</string>
     <string name="kg_wrong_password" msgid="2333281762128113157">"Parol noto‘g‘ri"</string>
@@ -1668,8 +1669,12 @@
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g> xizmati yoqildi"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g> xizmati o‘chirib qo‘yildi"</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g> xizmatidan foydalanish uchun ikkala ovoz balandligi tugmalarini uzoq bosib turing"</string>
-    <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"Maxsus imkoniyatlar tugmasi bosilganda ishga tushadigan funksiyani tanlang:"</string>
-    <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"Funksiyalarni o‘zgartirish uchun Maxsus imkoniyatlar tugmasini bosib turing."</string>
+    <string name="accessibility_button_prompt_text" msgid="1176658502969738564">"Maxsus imkoniyatlar tugmasi bosilganda ishga tushadigan xizmatni tanlang:"</string>
+    <string name="accessibility_gesture_prompt_text" msgid="8259145549733019401">"Maxsus imkoniyatlar ishorasi bilan ishga tushadigan xizmatni tanlang (2 barmoq bilan ekranning pastidan tepaga surib tortilganda):"</string>
+    <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"Maxsus imkoniyatlar ishorasi bilan ishga tushadigan xizmatni tanlang (3 barmoq bilan ekranning pastidan tepaga surib tortilganda):"</string>
+    <string name="accessibility_button_instructional_text" msgid="7003212763213614833">"Xizmatlar orasida almashish uchun maxsus imkoniyatlar tugmasini bosib turing."</string>
+    <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"Xizmatlarni almashtirish uchun 2 barmoq bilan tepaga suring va bosib turing."</string>
+    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"Xizmatlarni almashtirish uchun 3 barmoq bilan tepaga suring va bosib turing."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"Kattalashtirish"</string>
     <string name="user_switched" msgid="3768006783166984410">"Joriy foydalanuvchi <xliff:g id="NAME">%1$s</xliff:g>."</string>
     <string name="user_switching_message" msgid="2871009331809089783">"Quyidagi foydalanuvchiga o‘tilmoqda: <xliff:g id="NAME">%1$s</xliff:g>…"</string>
@@ -1902,7 +1907,7 @@
     <string name="deprecated_target_sdk_app_store" msgid="5032340500368495077">"Yangilanish borligini tekshirish"</string>
     <string name="new_sms_notification_title" msgid="8442817549127555977">"Sizga yangi SMS keldi"</string>
     <string name="new_sms_notification_content" msgid="7002938807812083463">"Ko‘rish uchun SMS ilovasini oching"</string>
-    <string name="profile_encrypted_title" msgid="4260432497586829134">"Ayrim funksiyalar cheklanishi mumkin"</string>
+    <string name="profile_encrypted_title" msgid="4260432497586829134">"Ayrim funksiyalar ishlamasligi mumkin"</string>
     <string name="profile_encrypted_detail" msgid="3700965619978314974">"Ishchi profil yopiq"</string>
     <string name="profile_encrypted_message" msgid="6964994232310195874">"Qulfini ochish uchun bosing"</string>
     <string name="usb_mtp_launch_notification_title" msgid="8359219638312208932">"<xliff:g id="PRODUCT_NAME">%1$s</xliff:g> qurilmasiga ulandi"</string>

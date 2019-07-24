@@ -131,6 +131,7 @@
     <!-- no translation found for wfcSpnFormat_spn (4998685024207291232) -->
     <skip />
     <string name="wfcSpnFormat_spn_wifi_calling" msgid="136001023263502280">"<xliff:g id="SPN">%s</xliff:g> WLAN-Telefonie"</string>
+    <string name="wfcSpnFormat_spn_wifi_calling_vo_hyphen" msgid="1730997175789582756">"<xliff:g id="SPN">%s</xliff:g> WLAN-Telefonie"</string>
     <string name="wfcSpnFormat_wlan_call" msgid="2533371081782489793">"WLAN-Anruf"</string>
     <string name="wfcSpnFormat_spn_wlan_call" msgid="2315240198303197168">"<xliff:g id="SPN">%s</xliff:g> WLAN-Anruf"</string>
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> WLAN"</string>
@@ -314,15 +315,15 @@
     <string name="capability_title_canRetrieveWindowContent" msgid="3901717936930170320">"Fensterinhalte abrufen"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="3772225008605310672">"Die Inhalte eines Fensters, mit dem du interagierst, werden abgerufen."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="3108723364676667320">"\"Tippen &amp; Entdecken\" aktivieren"</string>
-    <string name="capability_desc_canRequestTouchExploration" msgid="7543249041581408313">"Berührte Elemente werden laut vorgelesen und der Bildschirm kann über Gesten erkundet werden."</string>
+    <string name="capability_desc_canRequestTouchExploration" msgid="7543249041581408313">"Berührte Elemente werden laut vorgelesen und der Bildschirm kann über Touch-Gesten erkundet werden."</string>
     <string name="capability_title_canRequestFilterKeyEvents" msgid="2103440391902412174">"Text bei der Eingabe beobachten"</string>
     <string name="capability_desc_canRequestFilterKeyEvents" msgid="7463135292204152818">"Einschließlich personenbezogener Daten wie Kreditkartennummern und Passwörter."</string>
     <string name="capability_title_canControlMagnification" msgid="3593493281059424855">"Displayvergrößerung festlegen"</string>
     <string name="capability_desc_canControlMagnification" msgid="4791858203568383773">"Legt die Zoom-Stufe und -Position auf dem Display fest."</string>
-    <string name="capability_title_canPerformGestures" msgid="7418984730362576862">"Bewegungen möglich"</string>
-    <string name="capability_desc_canPerformGestures" msgid="8296373021636981249">"Tippen, Wischen, Zusammenziehen und andere Bewegungen möglich."</string>
-    <string name="capability_title_canCaptureFingerprintGestures" msgid="6309568287512278670">"Bewegungen auf dem Fingerabdrucksensor"</string>
-    <string name="capability_desc_canCaptureFingerprintGestures" msgid="4386487962402228670">"Erfasst Bewegungen auf dem Fingerabdrucksensor des Geräts."</string>
+    <string name="capability_title_canPerformGestures" msgid="7418984730362576862">"Touch-Gesten möglich"</string>
+    <string name="capability_desc_canPerformGestures" msgid="8296373021636981249">"Tippen, Wischen, Zusammenziehen und andere Touch-Gesten möglich."</string>
+    <string name="capability_title_canCaptureFingerprintGestures" msgid="6309568287512278670">"Fingerabdrucksensor-Gesten"</string>
+    <string name="capability_desc_canCaptureFingerprintGestures" msgid="4386487962402228670">"Erfasst Touch-Gesten auf dem Fingerabdrucksensor des Geräts."</string>
     <string name="permlab_statusBar" msgid="7417192629601890791">"Statusleiste deaktivieren oder ändern"</string>
     <string name="permdesc_statusBar" msgid="8434669549504290975">"Ermöglicht der App, die Statusleiste zu deaktivieren oder Systemsymbole hinzuzufügen oder zu entfernen"</string>
     <string name="permlab_statusBarService" msgid="4826835508226139688">"Statusleiste darstellen"</string>
@@ -398,9 +399,9 @@
     <string name="permlab_readCallLog" msgid="3478133184624102739">"Anrufliste lesen"</string>
     <string name="permdesc_readCallLog" msgid="3204122446463552146">"Diese App kann deine Anrufliste lesen."</string>
     <string name="permlab_writeCallLog" msgid="8552045664743499354">"Anrufliste bearbeiten"</string>
-    <string name="permdesc_writeCallLog" product="tablet" msgid="6661806062274119245">"Ermöglicht der App, die Anrufliste deines Tablets zu ändern, einschließlich der Daten über ein- und ausgehende Anrufe. Schädliche Apps können so deine Anrufliste löschen oder ändern."</string>
-    <string name="permdesc_writeCallLog" product="tv" msgid="4225034892248398019">"Ermöglicht der App, die Anrufliste deines Fernsehers zu ändern, einschließlich der Daten über ein- und ausgehende Anrufe. Schädliche Apps können so deine Anrufliste löschen oder ändern."</string>
-    <string name="permdesc_writeCallLog" product="default" msgid="683941736352787842">"Ermöglicht der App, die Anrufliste deines Telefons zu ändern, einschließlich der Daten über ein- und ausgehende Anrufe. Schädliche Apps können so deine Anrufliste löschen oder ändern."</string>
+    <string name="permdesc_writeCallLog" product="tablet" msgid="6661806062274119245">"Ermöglicht der App, die Anrufliste deines Tablets zu ändern, einschließlich der Daten über ein- und ausgehende Anrufe. Schädliche Apps können so die Einträge in der Anrufliste löschen oder sie ändern."</string>
+    <string name="permdesc_writeCallLog" product="tv" msgid="4225034892248398019">"Ermöglicht der App, die Anrufliste deines Fernsehers zu ändern, einschließlich der Daten über ein- und ausgehende Anrufe. Schädliche Apps können so die Einträge in der Anrufliste löschen oder sie ändern."</string>
+    <string name="permdesc_writeCallLog" product="default" msgid="683941736352787842">"Ermöglicht der App, die Anrufliste deines Telefons zu ändern, einschließlich der Daten über ein- und ausgehende Anrufe. Schädliche Apps können so die Einträge in der Anrufliste löschen oder sie ändern."</string>
     <string name="permlab_bodySensors" msgid="4683341291818520277">"Auf Körpersensoren wie z. B. Pulsmesser zugreifen"</string>
     <string name="permdesc_bodySensors" product="default" msgid="4380015021754180431">"Ermöglicht der App, auf Daten von Sensoren zuzugreifen, die deine körperliche Verfassung überwachen, beispielsweise deinen Puls"</string>
     <string name="permlab_readCalendar" msgid="6716116972752441641">"Kalendertermine und Details lesen"</string>
@@ -566,7 +567,7 @@
     <string name="face_acquired_too_right" msgid="3667075962661863218">"Beweg das Smartphone nach links."</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"Beweg das Smartphone nach rechts."</string>
     <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"Bitte sieh direkt auf dein Gerät."</string>
-    <string name="face_acquired_not_detected" msgid="4885504661626728809">"Gesicht wurde nicht erkannt. Blicke aufs Telefon."</string>
+    <string name="face_acquired_not_detected" msgid="4885504661626728809">"Gesicht wurde nicht gefunden. Blicke aufs Telefon."</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"Zu viel Unruhe. Halte das Smartphone ruhig."</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"Bitte registriere dein Gesicht noch einmal."</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"Gesicht wird nicht mehr erkannt. Erneut versuchen."</string>
@@ -938,7 +939,7 @@
     <string name="permdesc_writeHistoryBookmarks" product="tv" msgid="7007393823197766548">"Ermöglicht der App, den Browserverlauf und die Lesezeichen auf deinem Fernseher zu bearbeiten. Damit kann die App Browserdaten löschen und ändern. Hinweis: Diese Berechtigung kann nicht von Browsern von Drittanbietern oder anderen Apps mit Internetfunktionen erzwungen werden."</string>
     <string name="permdesc_writeHistoryBookmarks" product="default" msgid="8497389531014185509">"Ermöglicht der App, den Browserverlauf und die Lesezeichen auf deinem Telefon zu ändern. Damit kann die App Browserdaten löschen und ändern. Hinweis: Diese Berechtigung kann nicht von Browsern von Drittanbietern oder anderen Apps mit Internetfunktionen erzwungen werden."</string>
     <string name="permlab_setAlarm" msgid="1379294556362091814">"Wecker stellen"</string>
-    <string name="permdesc_setAlarm" msgid="316392039157473848">"Ermöglicht der App, einen Alarm in einer installierten Wecker-App einzurichten. Einige Wecker-Apps implementieren diese Funktion möglicherweise nicht."</string>
+    <string name="permdesc_setAlarm" msgid="316392039157473848">"Ermöglicht der App, einen Weckruf in einer installierten Wecker-App einzurichten. Einige Wecker-Apps implementieren diese Funktion möglicherweise nicht."</string>
     <string name="permlab_addVoicemail" msgid="5525660026090959044">"Mailboxnachrichten hinzufügen"</string>
     <string name="permdesc_addVoicemail" msgid="6604508651428252437">"Ermöglicht der App, Nachrichten zu deinem Mailbox-Posteingang hinzuzufügen"</string>
     <string name="permlab_writeGeolocationPermissions" msgid="5962224158955273932">"Geolokalisierungsberechtigungen des Browsers ändern"</string>
@@ -969,8 +970,8 @@
     <string name="searchview_description_submit" msgid="2688450133297983542">"Anfrage senden"</string>
     <string name="searchview_description_voice" msgid="2453203695674994440">"Sprachsuche"</string>
     <string name="enable_explore_by_touch_warning_title" msgid="7460694070309730149">"\"Tippen &amp; Entdecken\" aktivieren?"</string>
-    <string name="enable_explore_by_touch_warning_message" product="tablet" msgid="8655887539089910577">"<xliff:g id="ACCESSIBILITY_SERVICE_NAME">%1$s</xliff:g> fordert die Aktivierung von \"Tippen &amp; Entdecken\" an. Wenn \"Tippen &amp; Entdecken\" aktiviert ist, kannst du Beschreibungen dessen hören oder sehen, was sich unter deinen Fingern befindet, oder Gesten ausführen, um mit dem Tablet zu kommunizieren."</string>
-    <string name="enable_explore_by_touch_warning_message" product="default" msgid="2708199672852373195">"<xliff:g id="ACCESSIBILITY_SERVICE_NAME">%1$s</xliff:g> fordert die Aktivierung von \"Tippen &amp; Entdecken\" an. Wenn \"Tippen &amp; Entdecken\" aktiviert ist, kannst du Beschreibungen dessen hören oder sehen, was sich unter deinen Fingern befindet, oder Gesten ausführen, um mit dem Telefon zu kommunizieren."</string>
+    <string name="enable_explore_by_touch_warning_message" product="tablet" msgid="8655887539089910577">"<xliff:g id="ACCESSIBILITY_SERVICE_NAME">%1$s</xliff:g> fordert die Aktivierung von \"Tippen &amp; Entdecken\" an. Wenn \"Tippen &amp; Entdecken\" aktiviert ist, kannst du Beschreibungen dessen hören oder sehen, was sich unter deinen Fingern befindet, oder über Touch-Gesten mit dem Tablet kommunizieren."</string>
+    <string name="enable_explore_by_touch_warning_message" product="default" msgid="2708199672852373195">"<xliff:g id="ACCESSIBILITY_SERVICE_NAME">%1$s</xliff:g> fordert die Aktivierung von \"Tippen &amp; Entdecken\" an. Wenn \"Tippen &amp; Entdecken\" aktiviert ist, kannst du Beschreibungen dessen hören oder sehen, was sich unter deinen Fingern befindet, oder über Touch-Gesten mit dem Telefon kommunizieren."</string>
     <string name="oneMonthDurationPast" msgid="7396384508953779925">"Vor 1 Monat"</string>
     <string name="beforeOneMonthDurationPast" msgid="909134546836499826">"Vor mehr als 1 Monat"</string>
     <plurals name="last_num_days" formatted="false" msgid="5104533550723932025">
@@ -1129,8 +1130,10 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"Öffnen mit"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"Mit %1$s öffnen"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"Öffnen"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"Zugriff zum Öffnen von <xliff:g id="HOST">%1$s</xliff:g>-Links erlauben"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"Zugriff zum Öffnen von <xliff:g id="HOST">%1$s</xliff:g>-Links mit <xliff:g id="APPLICATION">%2$s</xliff:g> erlauben"</string>
+    <string name="whichOpenHostLinksWith" msgid="3788174881117226583">"Links von <xliff:g id="HOST">%1$s</xliff:g> öffnen mit"</string>
+    <string name="whichOpenLinksWith" msgid="6392123355599572804">"Links öffnen mit"</string>
+    <string name="whichOpenLinksWithApp" msgid="8225991685366651614">"Links mit <xliff:g id="APPLICATION">%1$s</xliff:g> öffnen"</string>
+    <string name="whichOpenHostLinksWithApp" msgid="3464470639011045589">"Links von <xliff:g id="HOST">%1$s</xliff:g> mit <xliff:g id="APPLICATION">%2$s</xliff:g> öffnen"</string>
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"Zugriff erlauben"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"Bearbeiten mit"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"Mit %1$s bearbeiten"</string>
@@ -1357,8 +1360,7 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Setz das Gerät auf die Werkseinstellungen zurück, um den Test-Harnischmodus zu deaktivieren."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"Flüssigkeiten oder Fremdkörper im USB-Port"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"Der USB-Port wird automatisch deaktiviert. Für weitere Informationen tippen."</string>
-    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
-    <skip />
+    <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"USB-Port kann wieder verwendet werden"</string>
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"Das Smartphone erkennt keine Flüssigkeiten oder Fremdkörper mehr."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"Fehlerbericht wird abgerufen…"</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"Fehlerbericht teilen?"</string>
@@ -1583,6 +1585,7 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"Browser starten?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"Anruf annehmen?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"Immer"</string>
+    <string name="activity_resolver_set_always" msgid="1422574191056490585">"Auf \"Immer geöffnet\" festlegen"</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"Nur diesmal"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"Einstellungen"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"Das Arbeitsprofil wird von %1$s nicht unterstützt."</string>
@@ -1612,8 +1615,6 @@
     <string name="display_manager_overlay_display_name" msgid="5142365982271620716">"Overlay-Nr. <xliff:g id="ID">%1$d</xliff:g>"</string>
     <string name="display_manager_overlay_display_title" msgid="652124517672257172">"<xliff:g id="NAME">%1$s</xliff:g>: <xliff:g id="WIDTH">%2$d</xliff:g> x <xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> dpi"</string>
     <string name="display_manager_overlay_display_secure_suffix" msgid="6022119702628572080">", sicher"</string>
-    <string name="activity_starter_block_bg_activity_starts_permissive" msgid="6995473033438879646">"Der Start dieser Hintergrundaktivität aus <xliff:g id="PACKAGENAME">%1$s</xliff:g> wird in künftigen Q-Builds blockiert. Weitere Informationen findest du unter g.co/dev/bgblock."</string>
-    <string name="activity_starter_block_bg_activity_starts_enforcing" msgid="3317816771072146229">"Der Start der Hintergrundaktivität aus <xliff:g id="PACKAGENAME">%1$s</xliff:g> wurde blockiert. Weitere Informationen findest du unter g.co/dev/bgblock."</string>
     <string name="kg_forgot_pattern_button_text" msgid="8852021467868220608">"Muster vergessen"</string>
     <string name="kg_wrong_pattern" msgid="1850806070801358830">"Falsches Muster"</string>
     <string name="kg_wrong_password" msgid="2333281762128113157">"Falsches Passwort"</string>
@@ -1667,8 +1668,12 @@
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g> wurde durch die Bedienungshilfenverknüpfung aktiviert"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g> wurde durch die Bedienungshilfenverknüpfung deaktiviert"</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"Halten Sie beide Lautstärketasten drei Sekunden lang gedrückt, um <xliff:g id="SERVICE_NAME">%1$s</xliff:g> zu verwenden"</string>
-    <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"Wähle eine Funktion aus, die verwendet wird, wenn du auf die Schaltfläche für die Bedienungshilfen tippst:"</string>
-    <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"Um die Funktionen zu ändern, halte die Schaltfläche für die Bedienungshilfen gedrückt."</string>
+    <string name="accessibility_button_prompt_text" msgid="1176658502969738564">"Wähle den Dienst aus, der verwendet werden soll, wenn du auf die Schaltfläche für die Bedienungshilfen tippst:"</string>
+    <string name="accessibility_gesture_prompt_text" msgid="8259145549733019401">"Wähle den Dienst aus, der mit der Touch-Geste für die Bedienungshilfen verwendet werden soll (mit zwei Fingern vom unteren Bildschirmrand nach oben wischen):"</string>
+    <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"Wähle den Dienst aus, der mit der Touch-Geste für die Bedienungshilfen verwendet werden soll (mit drei Fingern vom unteren Bildschirmrand nach oben wischen):"</string>
+    <string name="accessibility_button_instructional_text" msgid="7003212763213614833">"Wenn du zwischen den Diensten wechseln möchtest, halte die Schaltfläche für die Bedienungshilfen gedrückt."</string>
+    <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"Wenn du zwischen den Diensten wechseln möchtest, wische mit zwei Fingern nach oben und halte sie gedrückt."</string>
+    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"Wenn du zwischen den Diensten wechseln möchtest, wische mit drei Fingern nach oben und halte sie gedrückt."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"Vergrößerung"</string>
     <string name="user_switched" msgid="3768006783166984410">"Aktueller Nutzer <xliff:g id="NAME">%1$s</xliff:g>"</string>
     <string name="user_switching_message" msgid="2871009331809089783">"Wechseln zu <xliff:g id="NAME">%1$s</xliff:g>…"</string>

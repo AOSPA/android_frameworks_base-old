@@ -131,6 +131,7 @@
     <!-- no translation found for wfcSpnFormat_spn (4998685024207291232) -->
     <skip />
     <string name="wfcSpnFormat_spn_wifi_calling" msgid="136001023263502280">"Chamada no Wi-Fi de <xliff:g id="SPN">%s</xliff:g>"</string>
+    <string name="wfcSpnFormat_spn_wifi_calling_vo_hyphen" msgid="1730997175789582756">"Chamada no Wi-Fi de <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_wlan_call" msgid="2533371081782489793">"Chamada por WLAN"</string>
     <string name="wfcSpnFormat_spn_wlan_call" msgid="2315240198303197168">"Chamada por WLAN de <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"Wi-Fi de <xliff:g id="SPN">%s</xliff:g>"</string>
@@ -1129,8 +1130,10 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"Abrir com"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"Abrir com %1$s"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"Abrir"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"Conceder acesso para abrir links de <xliff:g id="HOST">%1$s</xliff:g> com"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"Conceder acesso para abrir links de <xliff:g id="HOST">%1$s</xliff:g> com o app <xliff:g id="APPLICATION">%2$s</xliff:g>"</string>
+    <string name="whichOpenHostLinksWith" msgid="3788174881117226583">"Abrir links do domínio <xliff:g id="HOST">%1$s</xliff:g> com"</string>
+    <string name="whichOpenLinksWith" msgid="6392123355599572804">"Abrir links com"</string>
+    <string name="whichOpenLinksWithApp" msgid="8225991685366651614">"Abrir links com <xliff:g id="APPLICATION">%1$s</xliff:g>"</string>
+    <string name="whichOpenHostLinksWithApp" msgid="3464470639011045589">"Abrir links do domínio <xliff:g id="HOST">%1$s</xliff:g> com <xliff:g id="APPLICATION">%2$s</xliff:g>"</string>
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"Conceder acesso"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"Editar com"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"Editar com %1$s"</string>
@@ -1357,8 +1360,7 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Realize uma redefinição para configuração original para desativar o modo Arcabouço de testes."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"Líquido ou detrito na porta USB"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"A porta USB é desativada automaticamente. Toque para saber mais."</string>
-    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
-    <skip />
+    <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"É seguro usar a porta USB"</string>
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"Não há mais líquidos ou detritos detectados no smartphone."</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"Gerando relatório do bug..."</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"Compartilhar relatório do bug?"</string>
@@ -1494,7 +1496,7 @@
     <string name="find_next" msgid="5742124618942193978">"Localizar próximo"</string>
     <string name="find_previous" msgid="2196723669388360506">"Localizar anterior"</string>
     <string name="gpsNotifTicker" msgid="5622683912616496172">"Solicitação de local de <xliff:g id="NAME">%s</xliff:g>"</string>
-    <string name="gpsNotifTitle" msgid="5446858717157416839">"Solicitação de local"</string>
+    <string name="gpsNotifTitle" msgid="5446858717157416839">"Pedido de localização"</string>
     <string name="gpsNotifMessage" msgid="1374718023224000702">"Solicitado por <xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>)"</string>
     <string name="gpsVerifYes" msgid="2346566072867213563">"Sim"</string>
     <string name="gpsVerifNo" msgid="1146564937346454865">"Não"</string>
@@ -1583,13 +1585,14 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"Abrir Navegador?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"Aceitar chamada?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"Sempre"</string>
+    <string name="activity_resolver_set_always" msgid="1422574191056490585">"Definir como \"Sempre abrir\""</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"Só uma vez"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"Configurações"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s não aceita perfis de trabalho"</string>
     <string name="default_audio_route_name" product="tablet" msgid="4617053898167127471">"Tablet"</string>
     <string name="default_audio_route_name" product="tv" msgid="9158088547603019321">"TV"</string>
     <string name="default_audio_route_name" product="default" msgid="4239291273420140123">"Telefone"</string>
-    <string name="default_audio_route_name_dock_speakers" msgid="6240602982276591864">"Alto-falantes da dock"</string>
+    <string name="default_audio_route_name_dock_speakers" msgid="6240602982276591864">"Alto-falantes na base"</string>
     <string name="default_audio_route_name_hdmi" msgid="1486254205617081251">"HDMI"</string>
     <string name="default_audio_route_name_headphones" msgid="8119971843803439110">"Fones de ouvido"</string>
     <string name="default_audio_route_name_usb" msgid="1234984851352637769">"USB"</string>
@@ -1612,8 +1615,6 @@
     <string name="display_manager_overlay_display_name" msgid="5142365982271620716">"Sobreposição nº <xliff:g id="ID">%1$d</xliff:g>"</string>
     <string name="display_manager_overlay_display_title" msgid="652124517672257172">"<xliff:g id="NAME">%1$s</xliff:g>: <xliff:g id="WIDTH">%2$d</xliff:g>x<xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> dpi"</string>
     <string name="display_manager_overlay_display_secure_suffix" msgid="6022119702628572080">", seguro"</string>
-    <string name="activity_starter_block_bg_activity_starts_permissive" msgid="6995473033438879646">"Esse início de atividade em segundo plano a partir de <xliff:g id="PACKAGENAME">%1$s</xliff:g> será bloqueado nas versões futuras do Android Q. Acesse g.co/dev/bgblock."</string>
-    <string name="activity_starter_block_bg_activity_starts_enforcing" msgid="3317816771072146229">"O início da atividade em segundo plano a partir de <xliff:g id="PACKAGENAME">%1$s</xliff:g> foi bloqueado. Acesse g.co/dev/bgblock."</string>
     <string name="kg_forgot_pattern_button_text" msgid="8852021467868220608">"Esqueci o padrão"</string>
     <string name="kg_wrong_pattern" msgid="1850806070801358830">"Padrão incorreto"</string>
     <string name="kg_wrong_password" msgid="2333281762128113157">"Senha incorreta"</string>
@@ -1667,8 +1668,12 @@
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"O atalho de acessibilidade ativou o <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"O atalho de acessibilidade desativou o <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"Toque nos dois botões de volume e os mantenha pressionados por três segundo para usar o <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
-    <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"Escolha um recurso a ser usado quando você toca no botão Acessibilidade:"</string>
-    <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"Para alterar os recursos, mantenha o botão Acessibilidade pressionado."</string>
+    <string name="accessibility_button_prompt_text" msgid="1176658502969738564">"Escolha um serviço a ser usado quando você toca no botão Acessibilidade:"</string>
+    <string name="accessibility_gesture_prompt_text" msgid="8259145549733019401">"Escolha um serviço a ser usado com o gesto de acessibilidade (deslizar de baixo para cima na tela com dois dedos):"</string>
+    <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"Escolha um serviço a ser usado com o gesto de acessibilidade (deslizar de baixo para cima na tela com três dedos):"</string>
+    <string name="accessibility_button_instructional_text" msgid="7003212763213614833">"Para alternar entre serviços, toque no botão de acessibilidade e mantenha-o pressionado."</string>
+    <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"Para alternar entre serviços, deslize de baixo para cima na tela com dois dedos sem soltar."</string>
+    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"Para alternar entre serviços, deslize de baixo para cima na tela com três dedos sem soltar."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"Ampliação"</string>
     <string name="user_switched" msgid="3768006783166984410">"Usuário atual <xliff:g id="NAME">%1$s</xliff:g>."</string>
     <string name="user_switching_message" msgid="2871009331809089783">"Alternando para <xliff:g id="NAME">%1$s</xliff:g>…"</string>

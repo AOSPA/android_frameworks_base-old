@@ -34,8 +34,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.media.session.MediaSessionManager;
 import android.media.session.MediaSessionManager.RemoteUserInfo;
+import android.os.BadParcelableException;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Parcel;
 import android.os.Process;
 import android.os.ResultReceiver;
 import android.util.ArrayMap;
@@ -50,13 +52,13 @@ import java.util.Objects;
 import java.util.concurrent.Executor;
 
 /**
- * Allows a media app to expose its transport controls and playback information in a process to
- * other processes including the Android framework and other apps.
- * <p>
  * This API is not generally intended for third party application developers.
  * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
- * <a href="{@docRoot}reference/androidx/media2/package-summary.html">Media2 Library</a>
- * for consistent behavior across all devices.
+ * <a href="{@docRoot}reference/androidx/media2/session/package-summary.html">Media2 session
+ * Library</a> for consistent behavior across all devices.
+ * <p>
+ * Allows a media app to expose its transport controls and playback information in a process to
+ * other processes including the Android framework and other apps.
  */
 public class MediaSession2 implements AutoCloseable {
     static final String TAG = "MediaSession2";
@@ -97,7 +99,7 @@ public class MediaSession2 implements AutoCloseable {
 
     MediaSession2(@NonNull Context context, @NonNull String id, PendingIntent sessionActivity,
             @NonNull Executor callbackExecutor, @NonNull SessionCallback callback,
-            Bundle tokenExtras) {
+            @NonNull Bundle tokenExtras) {
         synchronized (MediaSession2.class) {
             if (SESSION_ID_LIST.contains(id)) {
                 throw new IllegalStateException("Session ID must be unique. ID=" + id);
@@ -276,6 +278,35 @@ public class MediaSession2 implements AutoCloseable {
         return controllers;
     }
 
+    /**
+     * Returns whether the given bundle includes non-framework Parcelables.
+     */
+    static boolean hasCustomParcelable(@Nullable Bundle bundle) {
+        if (bundle == null) {
+            return false;
+        }
+
+        // Try writing the bundle to parcel, and read it with framework classloader.
+        Parcel parcel = null;
+        try {
+            parcel = Parcel.obtain();
+            parcel.writeBundle(bundle);
+            parcel.setDataPosition(0);
+            Bundle out = parcel.readBundle(null);
+
+            // Calling Bundle#size() will trigger Bundle#unparcel().
+            out.size();
+        } catch (BadParcelableException e) {
+            Log.d(TAG, "Custom parcelable in bundle.", e);
+            return true;
+        } finally {
+            if (parcel != null) {
+                parcel.recycle();
+            }
+        }
+        return false;
+    }
+
     boolean isClosed() {
         synchronized (mLock) {
             return mClosed;
@@ -309,11 +340,21 @@ public class MediaSession2 implements AutoCloseable {
         String callingPkg = connectionRequest.getString(KEY_PACKAGE_NAME);
 
         RemoteUserInfo remoteUserInfo = new RemoteUserInfo(callingPkg, callingPid, callingUid);
+
+        Bundle connectionHints = connectionRequest.getBundle(KEY_CONNECTION_HINTS);
+        if (connectionHints == null) {
+            Log.w(TAG, "connectionHints shouldn't be null.");
+            connectionHints = Bundle.EMPTY;
+        } else if (hasCustomParcelable(connectionHints)) {
+            Log.w(TAG, "connectionHints contain custom parcelable. Ignoring.");
+            connectionHints = Bundle.EMPTY;
+        }
+
         final ControllerInfo controllerInfo = new ControllerInfo(
                 remoteUserInfo,
                 mSessionManager.isTrustedForMediaControl(remoteUserInfo),
                 controller,
-                connectionRequest.getBundle(KEY_CONNECTION_HINTS));
+                connectionHints);
         mCallbackExecutor.execute(() -> {
             boolean connected = false;
             try {
@@ -440,6 +481,11 @@ public class MediaSession2 implements AutoCloseable {
     }
 
     /**
+     * This API is not generally intended for third party application developers.
+     * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
+     * <a href="{@docRoot}reference/androidx/media2/session/package-summary.html">Media2 session
+     * Library</a> for consistent behavior across all devices.
+     * <p>
      * Builder for {@link MediaSession2}.
      * <p>
      * Any incoming event from the {@link MediaController2} will be handled on the callback
@@ -516,7 +562,8 @@ public class MediaSession2 implements AutoCloseable {
 
         /**
          * Set extras for the session token. If null or not set, {@link Session2Token#getExtras()}
-         * will return {@link Bundle#EMPTY}.
+         * will return an empty {@link Bundle}. An {@link IllegalArgumentException} will be thrown
+         * if the bundle contains any non-framework Parcelable objects.
          *
          * @return The Builder to allow chaining
          * @see Session2Token#getExtras()
@@ -526,7 +573,11 @@ public class MediaSession2 implements AutoCloseable {
             if (extras == null) {
                 throw new NullPointerException("extras shouldn't be null");
             }
-            mExtras = extras;
+            if (hasCustomParcelable(extras)) {
+                throw new IllegalArgumentException(
+                        "extras shouldn't contain any custom parcelables");
+            }
+            mExtras = new Bundle(extras);
             return this;
         }
 
@@ -548,6 +599,9 @@ public class MediaSession2 implements AutoCloseable {
             if (mId == null) {
                 mId = "";
             }
+            if (mExtras == null) {
+                mExtras = Bundle.EMPTY;
+            }
             MediaSession2 session2 = new MediaSession2(mContext, mId, mSessionActivity,
                     mCallbackExecutor, mCallback, mExtras);
 
@@ -567,9 +621,12 @@ public class MediaSession2 implements AutoCloseable {
     }
 
     /**
-     * Information of a controller.
-     * <p>
      * This API is not generally intended for third party application developers.
+     * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
+     * <a href="{@docRoot}reference/androidx/media2/session/package-summary.html">Media2 session
+     * Library</a> for consistent behavior across all devices.
+     * <p>
+     * Information of a controller.
      */
     public static final class ControllerInfo {
         private final RemoteUserInfo mRemoteUserInfo;
@@ -596,7 +653,7 @@ public class MediaSession2 implements AutoCloseable {
          *                        connection result.
          */
         ControllerInfo(@NonNull RemoteUserInfo remoteUserInfo, boolean trusted,
-                @Nullable Controller2Link controllerBinder, @Nullable Bundle connectionHints) {
+                @Nullable Controller2Link controllerBinder, @NonNull Bundle connectionHints) {
             mRemoteUserInfo = remoteUserInfo;
             mIsTrusted = trusted;
             mControllerBinder = controllerBinder;
@@ -629,11 +686,11 @@ public class MediaSession2 implements AutoCloseable {
         }
 
         /**
-         * @return connection hints sent from controller, or {@link Bundle#EMPTY} if none.
+         * @return connection hints sent from controller.
          */
         @NonNull
         public Bundle getConnectionHints() {
-            return mConnectionHints == null ? Bundle.EMPTY : new Bundle(mConnectionHints);
+            return new Bundle(mConnectionHints);
         }
 
         /**
@@ -758,9 +815,12 @@ public class MediaSession2 implements AutoCloseable {
     }
 
     /**
-     * Callback to be called for all incoming commands from {@link MediaController2}s.
-     * <p>
      * This API is not generally intended for third party application developers.
+     * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
+     * <a href="{@docRoot}reference/androidx/media2/session/package-summary.html">Media2 session
+     * Library</a> for consistent behavior across all devices.
+     * <p>
+     * Callback to be called for all incoming commands from {@link MediaController2}s.
      */
     public abstract static class SessionCallback {
         /**

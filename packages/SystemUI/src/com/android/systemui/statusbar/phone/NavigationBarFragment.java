@@ -136,6 +136,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     protected final AssistManager mAssistManager;
     private final MetricsLogger mMetricsLogger;
     private final DeviceProvisionedController mDeviceProvisionedController;
+    private final StatusBarStateController mStatusBarStateController;
 
     protected NavigationBarView mNavigationBarView = null;
 
@@ -202,17 +203,16 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         }
 
         @Override
-        public void onBackButtonAlphaChanged(float alpha, boolean animate) {
-            final ButtonDispatcher backButton = mNavigationBarView.getBackButton();
-            final boolean useAltBack =
-                    (mNavigationIconHints & StatusBarManager.NAVIGATION_HINT_BACK_ALT) != 0;
-            if (QuickStepContract.isGesturalMode(mNavBarMode) && !useAltBack) {
-                // If property was changed to hide/show back button, going home will trigger
-                // launcher to to change the back button alpha to reflect property change
-                backButton.setVisibility(View.GONE);
-            } else {
-                backButton.setVisibility(alpha > 0 ? View.VISIBLE : View.INVISIBLE);
-                backButton.setAlpha(alpha, animate);
+        public void onNavBarButtonAlphaChanged(float alpha, boolean animate) {
+            ButtonDispatcher buttonDispatcher = null;
+            if (QuickStepContract.isSwipeUpMode(mNavBarMode)) {
+                buttonDispatcher = mNavigationBarView.getBackButton();
+            } else if (QuickStepContract.isGesturalMode(mNavBarMode)) {
+                buttonDispatcher = mNavigationBarView.getHomeHandle();
+            }
+            if (buttonDispatcher != null) {
+                buttonDispatcher.setVisibility(alpha > 0 ? View.VISIBLE : View.INVISIBLE);
+                buttonDispatcher.setAlpha(alpha, animate);
             }
         }
     };
@@ -244,9 +244,11 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     public NavigationBarFragment(AccessibilityManagerWrapper accessibilityManagerWrapper,
             DeviceProvisionedController deviceProvisionedController, MetricsLogger metricsLogger,
             AssistManager assistManager, OverviewProxyService overviewProxyService,
-            NavigationModeController navigationModeController) {
+            NavigationModeController navigationModeController,
+            StatusBarStateController statusBarStateController) {
         mAccessibilityManagerWrapper = accessibilityManagerWrapper;
         mDeviceProvisionedController = deviceProvisionedController;
+        mStatusBarStateController = statusBarStateController;
         mMetricsLogger = metricsLogger;
         mAssistManager = assistManager;
         mAssistantAvailable = mAssistManager.getAssistInfoForUser(UserHandle.USER_CURRENT) != null;
@@ -320,6 +322,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             mNavigationBarView.getLightTransitionsController().restoreState(savedInstanceState);
         }
         mNavigationBarView.setNavigationIconHints(mNavigationIconHints);
+        mNavigationBarView.setWindowVisible(isNavBarWindowVisible());
 
         prepareNavigationBarView();
         checkNavBarModes();
@@ -465,8 +468,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             if (DEBUG_WINDOW_STATE) Log.d(TAG, "Navigation bar " + windowStateToString(state));
 
             updateSystemUiStateFlags(-1);
-            mNavigationBarView.getRotationButtonController().onNavigationBarWindowVisibilityChange(
-                    isNavBarWindowVisible());
+            mNavigationBarView.setWindowVisible(isNavBarWindowVisible());
         }
     }
 
@@ -869,9 +871,6 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         boolean[] feedbackEnabled = new boolean[1];
         int a11yFlags = getA11yButtonState(feedbackEnabled);
 
-        mNavigationBarView.getRotationButtonController().setAccessibilityFeedbackEnabled(
-                feedbackEnabled[0]);
-
         boolean clickable = (a11yFlags & SYSUI_STATE_A11Y_BUTTON_CLICKABLE) != 0;
         boolean longClickable = (a11yFlags & SYSUI_STATE_A11Y_BUTTON_LONG_CLICKABLE) != 0;
         mNavigationBarView.setAccessibilityButtonState(clickable, longClickable);
@@ -951,7 +950,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     public void touchAutoDim() {
         getBarTransitions().setAutoDim(false);
         mHandler.removeCallbacks(mAutoDim);
-        int state = Dependency.get(StatusBarStateController.class).getState();
+        int state = mStatusBarStateController.getState();
         if (state != StatusBarState.KEYGUARD && state != StatusBarState.SHADE_LOCKED) {
             mHandler.postDelayed(mAutoDim, AUTODIM_TIMEOUT_MS);
         }

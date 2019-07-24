@@ -38,11 +38,12 @@ import static org.mockito.Mockito.when;
 
 import android.metrics.LogMaker;
 import android.provider.Settings;
+import android.testing.AndroidTestingRunner;
+import android.testing.TestableLooper;
 import android.view.View;
 
 import androidx.test.annotation.UiThreadTest;
 import androidx.test.filters.SmallTest;
-import androidx.test.runner.AndroidJUnit4;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto;
@@ -70,10 +71,12 @@ import com.android.systemui.statusbar.notification.row.FooterView;
 import com.android.systemui.statusbar.notification.row.NotificationBlockingHelperManager;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
+import com.android.systemui.statusbar.phone.NotificationIconAreaController;
 import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarTest.TestableNotificationEntryManager;
+import com.android.systemui.statusbar.policy.ConfigurationController;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -93,7 +96,8 @@ import java.util.ArrayList;
  * Tests for {@link NotificationStackScrollLayout}.
  */
 @SmallTest
-@RunWith(AndroidJUnit4.class)
+@RunWith(AndroidTestingRunner.class)
+@TestableLooper.RunWithLooper
 public class NotificationStackScrollLayoutTest extends SysuiTestCase {
 
     private NotificationStackScrollLayout mStackScroller;  // Normally test this
@@ -110,6 +114,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
     @Mock private NotificationData mNotificationData;
     @Mock private NotificationRemoteInputManager mRemoteInputManager;
     @Mock private RemoteInputController mRemoteInputController;
+    @Mock private NotificationIconAreaController mNotificationIconAreaController;
     @Mock private MetricsLogger mMetricsLogger;
     @Mock private NotificationRoundnessManager mNotificationRoundnessManager;
     private TestableNotificationEntryManager mEntryManager;
@@ -119,6 +124,8 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
     @Before
     @UiThreadTest
     public void setUp() throws Exception {
+        com.android.systemui.util.Assert.sMainLooper = TestableLooper.get(this).getLooper();
+
         mOriginalInterruptionModelSetting = Settings.Secure.getInt(mContext.getContentResolver(),
                 NOTIFICATION_NEW_INTERRUPTION_MODEL, 0);
         Settings.Secure.putInt(mContext.getContentResolver(),
@@ -153,6 +160,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
                 true /* allowLongPress */, mNotificationRoundnessManager,
                 new AmbientPulseManager(mContext),
                 mock(DynamicPrivacyController.class),
+                mock(ConfigurationController.class),
                 mock(ActivityStarterDelegate.class),
                 mock(StatusBarStateController.class));
         mStackScroller = spy(mStackScrollerInternal);
@@ -162,6 +170,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         mStackScroller.setHeadsUpManager(mHeadsUpManager);
         mStackScroller.setGroupManager(mGroupManager);
         mStackScroller.setEmptyShadeView(mEmptyShadeView);
+        mStackScroller.setIconAreaController(mNotificationIconAreaController);
 
         // Stub out functionality that isn't necessary to test.
         doNothing().when(mBar)

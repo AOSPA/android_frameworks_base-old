@@ -131,6 +131,7 @@
     <!-- no translation found for wfcSpnFormat_spn (4998685024207291232) -->
     <skip />
     <string name="wfcSpnFormat_spn_wifi_calling" msgid="136001023263502280">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi símtöl"</string>
+    <string name="wfcSpnFormat_spn_wifi_calling_vo_hyphen" msgid="1730997175789582756">"Wi-Fi símtöl með <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_wlan_call" msgid="2533371081782489793">"WLAN-símtal"</string>
     <string name="wfcSpnFormat_spn_wlan_call" msgid="2315240198303197168">"<xliff:g id="SPN">%s</xliff:g> WLAN-símtal"</string>
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi"</string>
@@ -1129,8 +1130,10 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"Opna með"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"Opna með %1$s"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"Opna"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"Veita aðgang til að opna <xliff:g id="HOST">%1$s</xliff:g> tengla með"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"Veita aðgang til að opna <xliff:g id="HOST">%1$s</xliff:g> tengla með <xliff:g id="APPLICATION">%2$s</xliff:g>"</string>
+    <string name="whichOpenHostLinksWith" msgid="3788174881117226583">"Opna <xliff:g id="HOST">%1$s</xliff:g> tengla með"</string>
+    <string name="whichOpenLinksWith" msgid="6392123355599572804">"Opna tengla með"</string>
+    <string name="whichOpenLinksWithApp" msgid="8225991685366651614">"Opna tengla með <xliff:g id="APPLICATION">%1$s</xliff:g>"</string>
+    <string name="whichOpenHostLinksWithApp" msgid="3464470639011045589">"Opna <xliff:g id="HOST">%1$s</xliff:g> tengla með <xliff:g id="APPLICATION">%2$s</xliff:g>"</string>
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"Veita aðgang"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"Breyta með"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"Breyta með %1$s"</string>
@@ -1358,8 +1361,7 @@
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Núllstilltu til að slökkva á stillingu prófunarvangs."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"Vökvi eða óhreinindi í USB-tengi"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB-tengi er gert óvirkt sjálfkrafa. Ýttu til að fá frekari upplýsingar."</string>
-    <!-- no translation found for usb_contaminant_not_detected_title (7708281124088684821) -->
-    <skip />
+    <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"Óhætt að nota USB-tengi"</string>
     <string name="usb_contaminant_not_detected_message" msgid="2415791798244545292">"Síminn greinir ekki lengur vökva eða óhreinindi"</string>
     <string name="taking_remote_bugreport_notification_title" msgid="6742483073875060934">"Tekur við villutilkynningu…"</string>
     <string name="share_remote_bugreport_notification_title" msgid="4987095013583691873">"Deila villutilkynningu?"</string>
@@ -1584,6 +1586,7 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"Opna vafra?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"Samþykkja símtal?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"Alltaf"</string>
+    <string name="activity_resolver_set_always" msgid="1422574191056490585">"Stilla á „Alltaf opið“"</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"Bara einu sinni"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"Stillingar"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s styður ekki vinnusnið"</string>
@@ -1613,8 +1616,6 @@
     <string name="display_manager_overlay_display_name" msgid="5142365982271620716">"Yfirlögn #<xliff:g id="ID">%1$d</xliff:g>"</string>
     <string name="display_manager_overlay_display_title" msgid="652124517672257172">"<xliff:g id="NAME">%1$s</xliff:g>: <xliff:g id="WIDTH">%2$d</xliff:g>x<xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> dpi"</string>
     <string name="display_manager_overlay_display_secure_suffix" msgid="6022119702628572080">", öruggur"</string>
-    <string name="activity_starter_block_bg_activity_starts_permissive" msgid="6995473033438879646">"Framvegis verður lokað á þessa bakgrunnsvirkni frá <xliff:g id="PACKAGENAME">%1$s</xliff:g> í Q-smíði. Sjá g.co/dev/bgblock."</string>
-    <string name="activity_starter_block_bg_activity_starts_enforcing" msgid="3317816771072146229">"Lokað á bakgrunnsvirkni frá <xliff:g id="PACKAGENAME">%1$s</xliff:g>. Sjá g.co/dev/bgblock."</string>
     <string name="kg_forgot_pattern_button_text" msgid="8852021467868220608">"Man ekki mynstrið"</string>
     <string name="kg_wrong_pattern" msgid="1850806070801358830">"Rangt mynstur"</string>
     <string name="kg_wrong_password" msgid="2333281762128113157">"Rangt aðgangsorð"</string>
@@ -1668,8 +1669,12 @@
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"Flýtileið aðgengisstillingar kveikti á <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"Flýtileið aðgengisstillingar slökkti á <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"Haltu báðum hljóðstyrkstökkunum inni í þrjár sekúndur til að nota <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
-    <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"Veldu eiginleika sem á að nota þegar ýtt er á aðgengishnappinn:"</string>
-    <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"Haltu fingri á aðgengishnappinum til að breyta eiginleikum."</string>
+    <string name="accessibility_button_prompt_text" msgid="1176658502969738564">"Veldu þjónustu sem á að nota þegar ýtt er á aðgengishnappinn:"</string>
+    <string name="accessibility_gesture_prompt_text" msgid="8259145549733019401">"Veldu þjónustu sem á að nota með aðgengisbendingunni (strjúka upp frá neðri hluta skjásins með tveimur fingrum):"</string>
+    <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"Veldu þjónustu sem á að nota með aðgengisbendingunni (strjúka upp frá neðri hluta skjásins með þremur fingrum):"</string>
+    <string name="accessibility_button_instructional_text" msgid="7003212763213614833">"Til að skipta á milli þjónusta skaltu halda aðgengishnappinum inni."</string>
+    <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"Til að skipta á milli þjónusta skaltu strjúka upp með tveimur fingrum og halda inni."</string>
+    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"Til að skipta á milli þjónusta skaltu strjúka upp með þremur fingrum og halda inni."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"Stækkun"</string>
     <string name="user_switched" msgid="3768006783166984410">"Núverandi notandi <xliff:g id="NAME">%1$s</xliff:g>."</string>
     <string name="user_switching_message" msgid="2871009331809089783">"Skiptir yfir á <xliff:g id="NAME">%1$s</xliff:g>…"</string>
