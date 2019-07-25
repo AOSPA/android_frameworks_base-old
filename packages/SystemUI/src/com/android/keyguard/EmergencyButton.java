@@ -93,6 +93,8 @@ public class EmergencyButton extends Button {
     private final boolean mIsVoiceCapable;
     private final boolean mEnableEmergencyCallWhileSimLocked;
 
+    private static final String FOD = "vendor.pa.biometrics.fingerprint.inscreen";
+
     public EmergencyButton(Context context) {
         this(context, null);
     }
@@ -213,8 +215,8 @@ public class EmergencyButton extends Button {
                     visible = mEnableEmergencyCallWhileSimLocked;
                 } else {
                     // Show if there is a secure screen (pin/pattern/SIM pin/SIM puk) or config set
-                    visible = mLockPatternUtils.isSecure(KeyguardUpdateMonitor.getCurrentUser()) ||
-                            mContext.getResources().getBoolean(R.bool.config_showEmergencyButton);
+                    visible = (mLockPatternUtils.isSecure(KeyguardUpdateMonitor.getCurrentUser()) ||
+                            mContext.getResources().getBoolean(R.bool.config_showEmergencyButton)) && !mContext.getPackageManager().hasSystemFeature(FOD);
                 }
 
                 if (mContext.getResources().getBoolean(R.bool.kg_hide_emgcy_btn_when_oos)) {
