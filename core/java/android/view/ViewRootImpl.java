@@ -1117,7 +1117,13 @@ public final class ViewRootImpl implements ViewParent,
      */
     public void registerRtFrameCallback(FrameDrawingCallback callback) {
         if (mAttachInfo.mThreadedRenderer != null) {
-            mAttachInfo.mThreadedRenderer.registerRtFrameCallback(callback);
+            mAttachInfo.mThreadedRenderer.registerRtFrameCallback(frame -> {
+                try {
+                    callback.onFrameDraw(frame);
+                } catch (Exception e) {
+                    Log.e(TAG, "Exception while executing onFrameDraw", e);
+                }
+            });
         }
     }
 
@@ -1532,6 +1538,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     void setWindowStopped(boolean stopped) {
+        checkThread();
         if (mStopped != stopped) {
             mStopped = stopped;
             final ThreadedRenderer renderer = mAttachInfo.mThreadedRenderer;
@@ -1553,7 +1560,7 @@ public final class ViewRootImpl implements ViewParent,
             }
 
             if (mStopped) {
-                if (mSurfaceHolder != null) {
+                if (mSurfaceHolder != null && mSurface.isValid()) {
                     notifySurfaceDestroyed();
                 }
                 destroySurface();
@@ -2219,6 +2226,8 @@ public final class ViewRootImpl implements ViewParent,
 
         final boolean isViewVisible = viewVisibility == View.VISIBLE;
         final boolean windowRelayoutWasForced = mForceNextWindowRelayout;
+        boolean surfaceSizeChanged = false;
+
         if (mFirst || windowShouldResize || insetsChanged ||
                 viewVisibilityChanged || params != null || mForceNextWindowRelayout) {
             mForceNextWindowRelayout = false;
@@ -2297,7 +2306,7 @@ public final class ViewRootImpl implements ViewParent,
                 final boolean cutoutChanged = !mPendingDisplayCutout.equals(
                         mAttachInfo.mDisplayCutout);
                 final boolean outsetsChanged = !mPendingOutsets.equals(mAttachInfo.mOutsets);
-                final boolean surfaceSizeChanged = (relayoutResult
+                surfaceSizeChanged = (relayoutResult
                         & WindowManagerGlobal.RELAYOUT_RES_SURFACE_RESIZED) != 0;
                 surfaceChanged |= surfaceSizeChanged;
                 final boolean alwaysConsumeSystemBarsChanged =
@@ -2580,7 +2589,7 @@ public final class ViewRootImpl implements ViewParent,
             maybeHandleWindowMove(frame);
         }
 
-        if (surfaceChanged) {
+        if (surfaceSizeChanged) {
             updateBoundsSurface();
         }
 
@@ -4467,6 +4476,7 @@ public final class ViewRootImpl implements ViewParent,
                         final int displayId = args.argi3;
                         MergedConfiguration mergedConfiguration = (MergedConfiguration) args.arg4;
                         final boolean displayChanged = mDisplay.getDisplayId() != displayId;
+                        boolean configChanged = false;
 
                         if (!mLastReportedMergedConfiguration.equals(mergedConfiguration)) {
                             // If configuration changed - notify about that and, maybe,
@@ -4474,6 +4484,7 @@ public final class ViewRootImpl implements ViewParent,
                             performConfigurationChange(mergedConfiguration, false /* force */,
                                     displayChanged
                                             ? displayId : INVALID_DISPLAY /* same display */);
+                            configChanged = true;
                         } else if (displayChanged) {
                             // Moved to display without config change - report last applied one.
                             onMovedToDisplay(displayId, mLastConfigurationFromResources);
@@ -4504,7 +4515,7 @@ public final class ViewRootImpl implements ViewParent,
                             reportNextDraw();
                         }
 
-                        if (mView != null && framesChanged) {
+                        if (mView != null && (framesChanged || configChanged)) {
                             forceLayout(mView);
                         }
                         requestLayout();

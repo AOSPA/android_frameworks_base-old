@@ -19,6 +19,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.UserHandle;
@@ -48,6 +49,7 @@ import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerService.Tunable;
+import com.android.systemui.util.leak.GarbageMonitor;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -259,12 +261,19 @@ public class QSTileHost implements QSHost, Tunable, PluginListener<QSFactory>, D
             }
         }
         mCurrentUser = currentUser;
+        List<String> currentSpecs = new ArrayList(mTileSpecs);
         mTileSpecs.clear();
         mTileSpecs.addAll(tileSpecs);
         mTiles.clear();
         mTiles.putAll(newTiles);
-        for (int i = 0; i < mCallbacks.size(); i++) {
-            mCallbacks.get(i).onTilesChanged();
+        if (newTiles.isEmpty() && !tileSpecs.isEmpty()) {
+            // If we didn't manage to create any tiles, set it to empty (default)
+            if (DEBUG) Log.d(TAG, "No valid tiles on tuning changed. Setting to default.");
+            changeTiles(currentSpecs, loadTileSpecs(mContext, ""));
+        } else {
+            for (int i = 0; i < mCallbacks.size(); i++) {
+                mCallbacks.get(i).onTilesChanged();
+            }
         }
     }
 
@@ -364,6 +373,10 @@ public class QSTileHost implements QSHost, Tunable, PluginListener<QSFactory>, D
             if (tile.equals("default")) {
                 if (!addedDefault) {
                     tiles.addAll(Arrays.asList(defaultTileList.split(",")));
+                    if (Build.IS_DEBUGGABLE
+                            && GarbageMonitor.MemoryTile.ADD_TO_DEFAULT_ON_DEBUGGABLE_BUILDS) {
+                        tiles.add(GarbageMonitor.MemoryTile.TILE_SPEC);
+                    }
                     addedDefault = true;
                 }
             } else {

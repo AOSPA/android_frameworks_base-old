@@ -131,6 +131,7 @@
     <!-- no translation found for wfcSpnFormat_spn (4998685024207291232) -->
     <skip />
     <string name="wfcSpnFormat_spn_wifi_calling" msgid="136001023263502280">"<xliff:g id="SPN">%s</xliff:g> ವೈ-ಫೈ ಕರೆ ಮಾಡುವಿಕೆ"</string>
+    <string name="wfcSpnFormat_spn_wifi_calling_vo_hyphen" msgid="1730997175789582756">"<xliff:g id="SPN">%s</xliff:g> ವೈ-ಫೈ ಕರೆ ಮಾಡುವಿಕೆ"</string>
     <string name="wfcSpnFormat_wlan_call" msgid="2533371081782489793">"WLAN ಕರೆ"</string>
     <string name="wfcSpnFormat_spn_wlan_call" msgid="2315240198303197168">"<xliff:g id="SPN">%s</xliff:g> WLAN ಕರೆ"</string>
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> ವೈ-ಫೈ"</string>
@@ -886,7 +887,7 @@
     <string name="keyguard_accessibility_expand_lock_area" msgid="519859720934178024">"ಅನ್‌ಲಾಕ್ ಪ್ರದೇಶವನ್ನು ವಿಸ್ತರಿಸು."</string>
     <string name="keyguard_accessibility_slide_unlock" msgid="2959928478764697254">"ಸ್ಲೈಡ್ ಅನ್‌ಲಾಕ್."</string>
     <string name="keyguard_accessibility_pattern_unlock" msgid="1490840706075246612">"ಪ್ಯಾಟರ್ನ್ ಅನ್‌ಲಾಕ್."</string>
-    <string name="keyguard_accessibility_face_unlock" msgid="4817282543351718535">"ಮುಖದ ಅನ್‌ಲಾಕ್."</string>
+    <string name="keyguard_accessibility_face_unlock" msgid="4817282543351718535">"ಫೇಸ್ ಅನ್‌ಲಾಕ್."</string>
     <string name="keyguard_accessibility_pin_unlock" msgid="2469687111784035046">"ಪಿನ್ ಅನ್‌ಲಾಕ್."</string>
     <string name="keyguard_accessibility_sim_pin_unlock" msgid="9149698847116962307">"ಸಿಮ್‌ ಪಿನ್‌ ಅನ್‌ಲಾಕ್ ಮಾಡಿ."</string>
     <string name="keyguard_accessibility_sim_puk_unlock" msgid="9106899279724723341">"ಸಿಮ್‌ PUK ಅನ್‌ಲಾಕ್ ಮಾಡಿ."</string>
@@ -1129,8 +1130,10 @@
     <string name="whichViewApplication" msgid="3272778576700572102">"ಇದರ ಮೂಲಕ ತೆರೆಯಿರಿ"</string>
     <string name="whichViewApplicationNamed" msgid="2286418824011249620">"%1$s ಜೊತೆಗೆ ತೆರೆಯಿರಿ"</string>
     <string name="whichViewApplicationLabel" msgid="2666774233008808473">"ತೆರೆ"</string>
-    <string name="whichGiveAccessToApplication" msgid="8279395245414707442">"ಮೂಲಕ <xliff:g id="HOST">%1$s</xliff:g> ಲಿಂಕ್‌ಗಳನ್ನು ತೆರೆಯಲು ಪ್ರವೇಶವನ್ನು ನೀಡಿ"</string>
-    <string name="whichGiveAccessToApplicationNamed" msgid="7992388824107710849">"<xliff:g id="APPLICATION">%2$s</xliff:g> ಮೂಲಕ <xliff:g id="HOST">%1$s</xliff:g> ಲಿಂಕ್‌ಗಳನ್ನು ತೆರೆಯಲು ಪ್ರವೇಶವನ್ನು ನೀಡಿ"</string>
+    <string name="whichOpenHostLinksWith" msgid="3788174881117226583">"ಇವುಗಳ ಮೂಲಕ <xliff:g id="HOST">%1$s</xliff:g> ಲಿಂಕ್‌ಗಳನ್ನು ತೆರೆಯಿರಿ"</string>
+    <string name="whichOpenLinksWith" msgid="6392123355599572804">"ಇವುಗಳ ಮೂಲಕ ಲಿಂಕ್‌ಗಳನ್ನು ತೆರೆಯಿರಿ"</string>
+    <string name="whichOpenLinksWithApp" msgid="8225991685366651614">"<xliff:g id="APPLICATION">%1$s</xliff:g> ಮೂಲಕ ಲಿಂಕ್‌ಗಳನ್ನು ತೆರೆಯಿರಿ"</string>
+    <string name="whichOpenHostLinksWithApp" msgid="3464470639011045589">"<xliff:g id="APPLICATION">%2$s</xliff:g> ಮೂಲಕ <xliff:g id="HOST">%1$s</xliff:g> ಲಿಂಕ್‌ಗಳನ್ನು ತೆರೆಯಿರಿ"</string>
     <string name="whichGiveAccessToApplicationLabel" msgid="6142688895536868827">"ಪ್ರವೇಶ ಅನುಮತಿಸಿ"</string>
     <string name="whichEditApplication" msgid="144727838241402655">"ಇವರ ಜೊತೆಗೆ ಎಡಿಟ್ ಮಾಡಿ"</string>
     <string name="whichEditApplicationNamed" msgid="1775815530156447790">"%1$s ಜೊತೆಗೆ ಎಡಿಟ್ ಮಾಡಿ"</string>
@@ -1583,6 +1586,7 @@
     <string name="launchBrowserDefault" msgid="2057951947297614725">"ಬ್ರೌಸರ್ ಪ್ರಾರಂಭಿಸುವುದೇ?"</string>
     <string name="SetupCallDefault" msgid="5834948469253758575">"ಕರೆ ಸ್ವೀಕರಿಸುವುದೇ?"</string>
     <string name="activity_resolver_use_always" msgid="8017770747801494933">"ಯಾವಾಗಲೂ"</string>
+    <string name="activity_resolver_set_always" msgid="1422574191056490585">"ಯಾವಾಗಲೂ ತೆರೆಯುವುದಕ್ಕೆ ಹೊಂದಿಸಿ"</string>
     <string name="activity_resolver_use_once" msgid="2404644797149173758">"ಒಮ್ಮೆ ಮಾತ್ರ"</string>
     <string name="activity_resolver_app_settings" msgid="8965806928986509855">"ಸೆಟ್ಟಿಂಗ್‌ಗಳು"</string>
     <string name="activity_resolver_work_profiles_support" msgid="185598180676883455">"%1$s ಕೆಲಸದ ಪ್ರೊಫೈಲ್ ಅನ್ನು ಬೆಂಬಲಿಸುವುದಿಲ್ಲ"</string>
@@ -1612,8 +1616,6 @@
     <string name="display_manager_overlay_display_name" msgid="5142365982271620716">"ಓವರ್‌ಲೇ #<xliff:g id="ID">%1$d</xliff:g>"</string>
     <string name="display_manager_overlay_display_title" msgid="652124517672257172">"<xliff:g id="NAME">%1$s</xliff:g>: <xliff:g id="WIDTH">%2$d</xliff:g>x<xliff:g id="HEIGHT">%3$d</xliff:g>, <xliff:g id="DPI">%4$d</xliff:g> dpi"</string>
     <string name="display_manager_overlay_display_secure_suffix" msgid="6022119702628572080">", ಸುರಕ್ಷಿತ"</string>
-    <string name="activity_starter_block_bg_activity_starts_permissive" msgid="6995473033438879646">"ಭವಿಷ್ಯದ Q ಬಿಲ್ಡ್‌ಗಳಲ್ಲಿ <xliff:g id="PACKAGENAME">%1$s</xliff:g> ನಿಂದ ಪ್ರಾರಂಭವಾಗುವ ಈ ಹಿನ್ನೆಲೆ ಚಟುವಟಿಕೆಯನ್ನು ನಿರ್ಬಂಧಿಸಲಾಗುತ್ತದೆ. g.co/dev/bgblock ಅನ್ನು ನೋಡಿ."</string>
-    <string name="activity_starter_block_bg_activity_starts_enforcing" msgid="3317816771072146229">"<xliff:g id="PACKAGENAME">%1$s</xliff:g> ನಿಂದ ಪ್ರಾರಂಭವಾಗುವ ಹಿನ್ನೆಲೆ ಚಟುವಟಿಕೆಯನ್ನು ನಿರ್ಬಂಧಿಸಲಾಗಿದೆ. g.co/dev/bgblock ಅನ್ನು ನೋಡಿ."</string>
     <string name="kg_forgot_pattern_button_text" msgid="8852021467868220608">"ಪ್ಯಾಟರ್ನ್ ಅನ್ನು ಮರೆತಿರುವಿರಿ"</string>
     <string name="kg_wrong_pattern" msgid="1850806070801358830">"ತಪ್ಪು ಪ್ಯಾಟರ್ನ್"</string>
     <string name="kg_wrong_password" msgid="2333281762128113157">"ತಪ್ಪು ಪಾಸ್‌ವರ್ಡ್"</string>
@@ -1667,8 +1669,12 @@
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"ಪ್ರವೇಶಿಸುವಿಕೆ ಶಾರ್ಟ್‌ಕಟ್‌, <xliff:g id="SERVICE_NAME">%1$s</xliff:g> ಅನ್ನು ಆನ್ ಮಾಡಿದೆ"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"ಪ್ರವೇಶಿಸುವಿಕೆ ಶಾರ್ಟ್‌ಕಟ್‌, <xliff:g id="SERVICE_NAME">%1$s</xliff:g> ಅನ್ನು ಆಫ್ ಮಾಡಿದೆ"</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="8376923232350078434">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g> ಅನ್ನು ಬಳಸಲು ಎರಡೂ ಧ್ವನಿ ಕೀಗಳನ್ನು ಮೂರು ಸೆಕೆಂಡ್‌ಗಳ ಕಾಲ ಒತ್ತಿ ಹಿಡಿದುಕೊಳ್ಳಿ"</string>
-    <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"ನೀವು ಪ್ರವೇಶಿಸುವಿಕೆ ಬಟನ್ ಟ್ಯಾಪ್ ಮಾಡಿದಾಗ ಬಳಸುವುದಕ್ಕಾಗಿ ವೈಶಿಷ್ಟ್ಯವನ್ನು ಆರಿಸಿ:"</string>
-    <string name="accessibility_button_instructional_text" msgid="6942300463612999993">"ವೈಶಿಷ್ಟ್ಯಗಳನ್ನು ಬದಲಾಯಿಸಲು, ಪ್ರವೇಶಿಸುವಿಕೆ ಬಟನ್ ಒತ್ತಿಹಿಡಿದುಕೊಳ್ಳಿ."</string>
+    <string name="accessibility_button_prompt_text" msgid="1176658502969738564">"ನೀವು ಪ್ರವೇಶಿಸುವಿಕೆ ಬಟನ್ ಟ್ಯಾಪ್ ಮಾಡಿದಾಗ ಬಳಸುವುದಕ್ಕಾಗಿ ಸೇವೆಯೊಂದನ್ನು ಆರಿಸಿ:"</string>
+    <string name="accessibility_gesture_prompt_text" msgid="8259145549733019401">"ಪ್ರವೇಶಿಸುವಿಕೆ ಗೆಸ್ಚರ್‌ನೊಂದಿಗೆ ಬಳಸಲು ಸೇವೆಯೊಂದನ್ನು ಆಯ್ಕೆಮಾಡಿ (ಎರಡು ಬೆರಳುಗಳನ್ನು ಬಳಸಿ ಪರದೆಯ ಕೆಳಭಾಗದಿಂದ ಮೇಲಕ್ಕೆ ಸ್ವೈಪ್ ಮಾಡಿ):"</string>
+    <string name="accessibility_gesture_3finger_prompt_text" msgid="1041435574275047665">"ಪ್ರವೇಶಿಸುವಿಕೆ ಗೆಸ್ಚರ್‌ನೊಂದಿಗೆ ಬಳಸಲು ಸೇವೆಯೊಂದನ್ನು ಆಯ್ಕೆಮಾಡಿ (ಮೂರು ಬೆರಳುಗಳನ್ನು ಬಳಸಿ ಪರದೆಯ ಕೆಳಭಾಗದಿಂದ ಮೇಲಕ್ಕೆ ಸ್ವೈಪ್ ಮಾಡಿ):"</string>
+    <string name="accessibility_button_instructional_text" msgid="7003212763213614833">"ಸೇವೆಗಳ ನಡುವೆ ಬದಲಿಸಲು, ಸ್ಪರ್ಶಿಸಿ ಮತ್ತು ಪ್ರವೇಶಿಸುವಿಕೆ ಬಟನ್ ಅನ್ನು ಒತ್ತಿ ಹಿಡಿಯಿರಿ."</string>
+    <string name="accessibility_gesture_instructional_text" msgid="5261788874937410950">"ಸೇವೆಗಳ ನಡುವೆ ಬದಲಿಸಲು, ಎರಡು ಬೆರಳುಗಳನ್ನು ಬಳಸಿ ಮೇಲಕ್ಕೆ ಸ್ವೈಪ್ ಮಾಡಿ ಮತ್ತು ಒತ್ತಿ ಹಿಡಿಯಿರಿ."</string>
+    <string name="accessibility_gesture_3finger_instructional_text" msgid="4969448938984394550">"ಸೇವೆಗಳ ನಡುವೆ ಬದಲಿಸಲು, ಮೂರು ಬೆರಳುಗಳನ್ನು ಬಳಸಿ ಮೇಲಕ್ಕೆ ಸ್ವೈಪ್ ಮಾಡಿ ಮತ್ತು ಒತ್ತಿ ಹಿಡಿಯಿರಿ."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1227146738764986237">"ಹಿಗ್ಗಿಸುವಿಕೆ"</string>
     <string name="user_switched" msgid="3768006783166984410">"ಪ್ರಸ್ತುತ ಬಳಕೆದಾರರು <xliff:g id="NAME">%1$s</xliff:g>."</string>
     <string name="user_switching_message" msgid="2871009331809089783">"<xliff:g id="NAME">%1$s</xliff:g> ಗೆ ಬದಲಾಯಿಸಲಾಗುತ್ತಿದೆ…"</string>

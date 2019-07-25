@@ -297,6 +297,13 @@ public final class BluetoothDevice implements Parcelable {
     public static final String EXTRA_NAME = "android.bluetooth.device.extra.NAME";
 
     /**
+     * Used as a Parcelable {@link BluetoothQualityReport} extra field in
+     * {@link #ACTION_REMOTE_ISSUE_OCCURRED} intent. It contains the {@link BluetoothQualityReport}.
+     * @hide
+     */
+    public static final String EXTRA_BQR = "android.bluetooth.qti.extra.EXTRA_BQR";
+
+    /**
      * Used as a String extra field in {@link #ACTION_REMOTE_ISSUE_OCCURRED}
      * intents. It contains the type of IOT issue that occurred.
      * @hide
@@ -1387,6 +1394,22 @@ public final class BluetoothDevice implements Parcelable {
             Log.e(TAG, "", e);
         }
         return false;
+    }
+
+    /** @hide */
+    @UnsupportedAppUsage
+    public void setBondingInitiatedLocally(boolean localInitiated) {
+        final IBluetooth service = sService;
+        if (service == null) {
+            Log.w(TAG, "BT not enabled, setBondingInitiatedLocally failed");
+            return;
+        }
+        try {
+            service.setBondingInitiatedLocally(this, localInitiated);
+        } catch (RemoteException e) {
+            Log.e(TAG, "", e);
+        }
+        return;
     }
 
     /**

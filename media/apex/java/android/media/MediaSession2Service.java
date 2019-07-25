@@ -44,12 +44,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Service containing {@link MediaSession2}.
- * <p>
  * This API is not generally intended for third party application developers.
  * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
- * <a href="{@docRoot}reference/androidx/media2/package-summary.html">Media2 Library</a>
- * for consistent behavior across all devices.
+ * <a href="{@docRoot}reference/androidx/media2/session/package-summary.html">Media2 session
+ * Library</a> for consistent behavior across all devices.
+ * <p>
+ * Service containing {@link MediaSession2}.
  */
 public abstract class MediaSession2Service extends Service {
     /**
@@ -287,6 +287,11 @@ public abstract class MediaSession2Service extends Service {
     }
 
     /**
+     * This API is not generally intended for third party application developers.
+     * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
+     * <a href="{@docRoot}reference/androidx/media2/session/package-summary.html">Media2 session
+     * Library</a> for consistent behavior across all devices.
+     * <p>
      * Returned by {@link #onUpdateNotification(MediaSession2)} for making session service
      * foreground service to keep playback running in the background. It's highly recommended to
      * show media style notification here.
@@ -378,12 +383,22 @@ public abstract class MediaSession2Service extends Service {
                                 callingPkg,
                                 pid == 0 ? connectionRequest.getInt(KEY_PID) : pid,
                                 uid);
+
+                        Bundle connectionHints = connectionRequest.getBundle(KEY_CONNECTION_HINTS);
+                        if (connectionHints == null) {
+                            Log.w(TAG, "connectionHints shouldn't be null.");
+                            connectionHints = Bundle.EMPTY;
+                        } else if (MediaSession2.hasCustomParcelable(connectionHints)) {
+                            Log.w(TAG, "connectionHints contain custom parcelable. Ignoring.");
+                            connectionHints = Bundle.EMPTY;
+                        }
+
                         final ControllerInfo controllerInfo = new ControllerInfo(
                                 remoteUserInfo,
                                 service.getMediaSessionManager()
                                         .isTrustedForMediaControl(remoteUserInfo),
                                 caller,
-                                connectionRequest.getBundle(KEY_CONNECTION_HINTS));
+                                connectionHints);
 
                         if (DEBUG) {
                             Log.d(TAG, "Handling incoming connection request from the"

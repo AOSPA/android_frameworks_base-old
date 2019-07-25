@@ -41,13 +41,16 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
+import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.NotificationLifetimeExtender;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.StatusBarState;
+import com.android.systemui.statusbar.StatusBarStateControllerImpl;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
+import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.NotificationInfo.CheckSaveListener;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
@@ -73,6 +76,7 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
 
     private final MetricsLogger mMetricsLogger = Dependency.get(MetricsLogger.class);
     private final Context mContext;
+    private final VisualStabilityManager mVisualStabilityManager;
     private final AccessibilityManager mAccessibilityManager;
 
     // Dependencies:
@@ -95,9 +99,14 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
     @VisibleForTesting
     protected String mKeyToRemoveOnGutsClosed;
 
+    private StatusBar mStatusBar;
+
     @Inject
-    public NotificationGutsManager(Context context) {
+    public NotificationGutsManager(
+            Context context,
+            VisualStabilityManager visualStabilityManager) {
         mContext = context;
+        mVisualStabilityManager = visualStabilityManager;
         mAccessibilityManager = (AccessibilityManager)
                 mContext.getSystemService(Context.ACCESSIBILITY_SERVICE);
     }
@@ -109,6 +118,7 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
         mListContainer = listContainer;
         mCheckSaveListener = checkSave;
         mOnSettingsClickListener = onSettingsClick;
+        mStatusBar = SysUiServiceProvider.getComponent(mContext, StatusBar.class);
     }
 
     public void setNotificationActivityStarter(
@@ -304,6 +314,7 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
         notificationInfoView.bindNotification(
                 pmUser,
                 iNotificationManager,
+                mVisualStabilityManager,
                 packageName,
                 row.getEntry().channel,
                 row.getUniqueChannels(),
@@ -370,6 +381,34 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
             int x,
             int y,
             NotificationMenuRowPlugin.MenuItem menuItem) {
+        if (menuItem.getGutsView() instanceof NotificationInfo) {
+            if (mStatusBarStateController instanceof StatusBarStateControllerImpl) {
+                ((StatusBarStateControllerImpl) mStatusBarStateController)
+                        .setLeaveOpenOnKeyguardHide(true);
+            }
+
+            Runnable r = () -> Dependency.get(Dependency.MAIN_HANDLER).post(
+                    () -> openGutsInternal(view, x, y, menuItem));
+
+            mStatusBar.executeRunnableDismissingKeyguard(
+                    r,
+                    null /* cancelAction */,
+                    false /* dismissShade */,
+                    true /* afterKeyguardGone */,
+                    true /* deferred */);
+
+            return true;
+        }
+        return openGutsInternal(view, x, y, menuItem);
+    }
+
+    @VisibleForTesting
+    boolean openGutsInternal(
+            View view,
+            int x,
+            int y,
+            NotificationMenuRowPlugin.MenuItem menuItem) {
+
         if (!(view instanceof ExpandableNotificationRow)) {
             return false;
         }

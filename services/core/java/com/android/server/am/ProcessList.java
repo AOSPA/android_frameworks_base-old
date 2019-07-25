@@ -63,7 +63,6 @@ import android.os.AppZygote;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.GraphicsEnvironment;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -185,8 +184,8 @@ public final class ProcessList {
     // is not entirely fatal but is generally a bad idea.
     static final int BACKUP_APP_ADJ = 300;
 
-    // This is a process bound by the system that's more important than services but not so
-    // perceptible that it affects the user immediately if killed.
+    // This is a process bound by the system (or other app) that's more important than services but
+    // not so perceptible that it affects the user immediately if killed.
     static final int PERCEPTIBLE_LOW_APP_ADJ = 250;
 
     // This is a process only hosting components that are perceptible to the
@@ -280,7 +279,7 @@ public final class ProcessList {
     // can't give it a different value for every possible kind of process.
     private final int[] mOomAdj = new int[] {
             FOREGROUND_APP_ADJ, VISIBLE_APP_ADJ, PERCEPTIBLE_APP_ADJ,
-            BACKUP_APP_ADJ, CACHED_APP_MIN_ADJ, CACHED_APP_LMK_FIRST_ADJ
+            PERCEPTIBLE_LOW_APP_ADJ, CACHED_APP_MIN_ADJ, CACHED_APP_LMK_FIRST_ADJ
     };
     // These are the low-end OOM level limits.  This is appropriate for an
     // HVGA or smaller phone with less than 512MB.  Values are in KB.
@@ -703,16 +702,6 @@ public final class ProcessList {
             return prefix + (compact ? "+" : "+ ") + Integer.toString(diff);
         }
         return prefix + "+" + Integer.toString(diff);
-    }
-
-    private static boolean shouldUseSystemGraphicsDriver(Context context, Bundle coreSettings,
-            ApplicationInfo applicationInfo) {
-        final boolean shouldUseGameDriver =
-                GraphicsEnvironment.shouldUseGameDriver(context, coreSettings, applicationInfo);
-        final boolean shouldUseAngle =
-                GraphicsEnvironment.shouldUseAngle(context, coreSettings,
-                    applicationInfo.packageName);
-        return !shouldUseGameDriver && !shouldUseAngle;
     }
 
     public static String makeOomAdjString(int setAdj, boolean compact) {
@@ -1811,8 +1800,6 @@ public final class ProcessList {
             String seInfo, String requiredAbi, String instructionSet, String invokeWith,
             long startTime) {
         try {
-            final boolean useSystemGraphicsDriver = shouldUseSystemGraphicsDriver(mService.mContext,
-                    mService.mCoreSettingsObserver.getCoreSettingsLocked(), app.info);
             Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "Start proc: " +
                     app.processName);
             checkSlow(startTime, "startProcess: asking zygote to start proc");
@@ -1822,7 +1809,6 @@ public final class ProcessList {
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, null, app.info.packageName,
-                        useSystemGraphicsDriver,
                         new String[] {PROC_START_SEQ_IDENT + app.startSeq});
             } else if (hostingRecord.usesAppZygote()) {
                 final AppZygote appZygote = createAppZygoteForProcessIfNeeded(app);
@@ -1831,14 +1817,13 @@ public final class ProcessList {
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, null, app.info.packageName,
-                        /*useUsapPool=*/ false, useSystemGraphicsDriver,
+                        /*useUsapPool=*/ false,
                         new String[] {PROC_START_SEQ_IDENT + app.startSeq});
             } else {
                 startResult = Process.start(entryPoint,
                         app.processName, uid, uid, gids, runtimeFlags, mountExternal,
                         app.info.targetSdkVersion, seInfo, requiredAbi, instructionSet,
                         app.info.dataDir, invokeWith, app.info.packageName,
-                        useSystemGraphicsDriver,
                         new String[] {PROC_START_SEQ_IDENT + app.startSeq});
             }
             checkSlow(startTime, "startProcess: returned from zygote!");

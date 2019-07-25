@@ -708,15 +708,9 @@ public class CarrierTextController {
         int networkType = getNetworkType(sub.getSubscriptionId());
         String networkClass = networkClassToString(TelephonyManager.getNetworkClass(networkType));
 
-        if ( mFiveGServiceClient == null ) {
-            mFiveGServiceClient = FiveGServiceClient.getInstance(mContext);
-            mFiveGServiceClient.registerCallback(mCallback);
-        }
-        FiveGServiceState fiveGServiceState =
-                mFiveGServiceClient.getCurrentServiceState(sub.getSimSlotIndex());
-        if ( fiveGServiceState.isConnectedOnNsaMode() ) {
-            networkClass =
-                    mContext.getResources().getString(R.string.data_connection_5g);
+        String fiveGNetworkClass = get5GNetworkClass(sub);
+        if ( fiveGNetworkClass != null ) {
+            networkClass = fiveGNetworkClass;
         }
 
         if (!TextUtils.isEmpty(originCarrierName)) {
@@ -787,5 +781,34 @@ public class CarrierTextController {
             }
         }
         return originalString;
+    }
+
+    private String get5GNetworkClass(SubscriptionInfo sub) {
+        int slotIndex = sub.getSimSlotIndex();
+        int subId = sub.getSubscriptionId();
+
+        if ( mFiveGServiceClient == null ) {
+            mFiveGServiceClient = FiveGServiceClient.getInstance(mContext);
+            mFiveGServiceClient.registerCallback(mCallback);
+        }
+        FiveGServiceState fiveGServiceState =
+                mFiveGServiceClient.getCurrentServiceState(slotIndex);
+        if ( fiveGServiceState.isConnectedOnNsaMode() && isDataRegisteredOnLte(subId)) {
+            return mContext.getResources().getString(R.string.data_connection_5g);
+        }
+
+        return null;
+    }
+
+    private boolean isDataRegisteredOnLte(int subId) {
+        TelephonyManager telephonyManager = (TelephonyManager)
+                mContext.getSystemService(Context.TELEPHONY_SERVICE);
+        int dataType = telephonyManager.getDataNetworkType(subId);
+        if (  dataType == TelephonyManager.NETWORK_TYPE_LTE ||
+                dataType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
+            return true;
+        }else{
+            return false;
+        }
     }
 }

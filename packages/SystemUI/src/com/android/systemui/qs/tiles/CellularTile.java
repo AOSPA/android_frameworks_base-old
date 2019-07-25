@@ -27,6 +27,7 @@ import android.provider.Settings;
 import android.service.quicksettings.Tile;
 import android.telephony.SubscriptionManager;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -47,11 +48,13 @@ import com.android.systemui.statusbar.phone.SystemUIDialog;
 import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.NetworkController.IconState;
 import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
+import com.android.systemui.util.Utils;
 
 import javax.inject.Inject;
 
 /** Quick settings tile: Cellular **/
 public class CellularTile extends QSTileImpl<SignalState> {
+    private static final String LOG_TAG = "CellularTile";
     private static final String ENABLE_SETTINGS_DATA_PLAN = "enable.settings.data.plan";
 
     private final NetworkController mController;
@@ -279,12 +282,20 @@ public class CellularTile extends QSTileImpl<SignalState> {
         }
     }
 
-    static Intent getCellularSettingIntent() {
-        Intent intent = new Intent(Settings.ACTION_NETWORK_OPERATOR_SETTINGS);
+    private Intent getCellularSettingIntent() {
+        Intent intent = new Intent("codeaurora.intent.action.MOBILE_NETWORK_SETTINGS");
         int dataSub = SubscriptionManager.getDefaultDataSubscriptionId();
-        if (dataSub != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
-            intent.putExtra(Settings.EXTRA_SUB_ID,
-                    SubscriptionManager.getDefaultDataSubscriptionId());
+
+        if (mContext != null && intent.resolveActivity(mContext.getPackageManager()) != null) {
+            intent.putExtra(Utils.EXTRA_SLOT_ID, SubscriptionManager.getSlotIndex(dataSub));
+            Log.d(LOG_TAG, "Using vendor network settings for sub: " + dataSub);
+        } else {
+            intent = new Intent(Settings.ACTION_NETWORK_OPERATOR_SETTINGS);
+            if (dataSub != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+                intent.putExtra(Settings.EXTRA_SUB_ID,
+                        SubscriptionManager.getDefaultDataSubscriptionId());
+            }
+            Log.d(LOG_TAG, "Using default network settings for sub: " + dataSub);
         }
         return intent;
     }

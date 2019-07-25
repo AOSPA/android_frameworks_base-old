@@ -46,14 +46,14 @@ import android.util.Log;
 import java.util.concurrent.Executor;
 
 /**
+ * This API is not generally intended for third party application developers.
+ * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
+ * <a href="{@docRoot}reference/androidx/media2/session/package-summary.html">Media2 session
+ * Library</a> for consistent behavior across all devices.
+ *
  * Allows an app to interact with an active {@link MediaSession2} or a
  * {@link MediaSession2Service} which would provide {@link MediaSession2}. Media buttons and other
  * commands can be sent to the session.
- * <p>
- * This API is not generally intended for third party application developers.
- * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
- * <a href="{@docRoot}reference/androidx/media2/package-summary.html">Media2 Library</a>
- * for consistent behavior across all devices.
  */
 public class MediaController2 implements AutoCloseable {
     static final String TAG = "MediaController2";
@@ -100,7 +100,7 @@ public class MediaController2 implements AutoCloseable {
      * @param callback controller callback to receive changes in.
      */
     MediaController2(@NonNull Context context, @NonNull Session2Token token,
-            @Nullable Bundle connectionHints, @NonNull Executor executor,
+            @NonNull Bundle connectionHints, @NonNull Executor executor,
             @NonNull ControllerCallback callback) {
         if (context == null) {
             throw new IllegalArgumentException("context shouldn't be null");
@@ -259,7 +259,16 @@ public class MediaController2 implements AutoCloseable {
         Session2CommandGroup allowedCommands =
                 connectionResult.getParcelable(KEY_ALLOWED_COMMANDS);
         boolean playbackActive = connectionResult.getBoolean(KEY_PLAYBACK_ACTIVE);
+
         Bundle tokenExtras = connectionResult.getBundle(KEY_TOKEN_EXTRAS);
+        if (tokenExtras == null) {
+            Log.w(TAG, "extras shouldn't be null.");
+            tokenExtras = Bundle.EMPTY;
+        } else if (MediaSession2.hasCustomParcelable(tokenExtras)) {
+            Log.w(TAG, "extras contain custom parcelable. Ignoring.");
+            tokenExtras = Bundle.EMPTY;
+        }
+
         if (DEBUG) {
             Log.d(TAG, "notifyConnected sessionBinder=" + sessionBinder
                     + ", allowedCommands=" + allowedCommands);
@@ -343,7 +352,7 @@ public class MediaController2 implements AutoCloseable {
         }
     }
 
-    private Bundle createConnectionRequest(@Nullable Bundle connectionHints) {
+    private Bundle createConnectionRequest(@NonNull Bundle connectionHints) {
         Bundle connectionRequest = new Bundle();
         connectionRequest.putString(KEY_PACKAGE_NAME, mContext.getPackageName());
         connectionRequest.putInt(KEY_PID, Process.myPid());
@@ -351,7 +360,7 @@ public class MediaController2 implements AutoCloseable {
         return connectionRequest;
     }
 
-    private boolean requestConnectToSession(@Nullable Bundle connectionHints) {
+    private boolean requestConnectToSession(@NonNull Bundle connectionHints) {
         Session2Link sessionBinder = mSessionToken.getSessionLink();
         Bundle connectionRequest = createConnectionRequest(connectionHints);
         try {
@@ -396,6 +405,11 @@ public class MediaController2 implements AutoCloseable {
     }
 
     /**
+     * This API is not generally intended for third party application developers.
+     * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
+     * <a href="{@docRoot}reference/androidx/media2/session/package-summary.html">Media2 session
+     * Library</a> for consistent behavior across all devices.
+     * <p>
      * Builder for {@link MediaController2}.
      * <p>
      * Any incoming event from the {@link MediaSession2} will be handled on the callback
@@ -430,6 +444,9 @@ public class MediaController2 implements AutoCloseable {
          * <p>
          * {@code connectionHints} is a session-specific argument to send to the session when
          * connecting. The contents of this bundle may affect the connection result.
+         * <p>
+         * An {@link IllegalArgumentException} will be thrown if the bundle contains any
+         * non-framework Parcelable objects.
          *
          * @param connectionHints a bundle which contains the connection hints
          * @return The Builder to allow chaining
@@ -438,6 +455,10 @@ public class MediaController2 implements AutoCloseable {
         public Builder setConnectionHints(@NonNull Bundle connectionHints) {
             if (connectionHints == null) {
                 throw new IllegalArgumentException("connectionHints shouldn't be null");
+            }
+            if (MediaSession2.hasCustomParcelable(connectionHints)) {
+                throw new IllegalArgumentException("connectionHints shouldn't contain any custom "
+                        + "parcelables");
             }
             mConnectionHints = new Bundle(connectionHints);
             return this;
@@ -477,15 +498,21 @@ public class MediaController2 implements AutoCloseable {
             if (mCallback == null) {
                 mCallback = new ControllerCallback() {};
             }
+            if (mConnectionHints == null) {
+                mConnectionHints = Bundle.EMPTY;
+            }
             return new MediaController2(
                     mContext, mToken, mConnectionHints, mCallbackExecutor, mCallback);
         }
     }
 
     /**
-     * Interface for listening to change in activeness of the {@link MediaSession2}.
-     * <p>
      * This API is not generally intended for third party application developers.
+     * Use the <a href="{@docRoot}jetpack/androidx.html">AndroidX</a>
+     * <a href="{@docRoot}reference/androidx/media2/session/package-summary.html">Media2 session
+     * Library</a> for consistent behavior across all devices.
+     * <p>
+     * Interface for listening to change in activeness of the {@link MediaSession2}.
      */
     public abstract static class ControllerCallback {
         /**

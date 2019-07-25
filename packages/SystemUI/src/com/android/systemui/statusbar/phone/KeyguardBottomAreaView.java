@@ -767,6 +767,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         mLeftAffordanceView.setAlpha(alpha);
         mRightAffordanceView.setAlpha(alpha);
         mIndicationArea.setAlpha(alpha);
+        mEmergencyCarrierArea.setAlpha(alpha);
     }
 
     private class DefaultLeftButton implements IntentButton {

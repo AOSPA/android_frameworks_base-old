@@ -1036,6 +1036,15 @@ public class CarrierConfigManager {
             "support_manage_ims_conference_call_bool";
 
     /**
+     * Determines whether the IMS conference merge process supports and returns its participants
+     * data. When {@code true}, on merge complete, conference call would have a list of its
+     * participants returned in XML format, {@code false otherwise}.
+     * @hide
+     */
+    public static final String KEY_SUPPORT_IMS_CONFERENCE_EVENT_PACKAGE_BOOL =
+            "support_ims_conference_event_package_bool";
+
+    /**
      * Determines whether High Definition audio property is displayed in the dialer UI.
      * If {@code false}, remove the HD audio property from the connection so that HD audio related
      * UI is not displayed. If {@code true}, keep HD audio property as it is configured.
@@ -1147,6 +1156,7 @@ public class CarrierConfigManager {
      * <li>  8: Wi-Fi</li>
      * <li>  9: WiFi Calling</li>
      * <li> 10: VoWifi</li>
+     * <li> 11: %s WiFi Calling</li>
      * @hide
      */
     public static final String KEY_WFC_SPN_FORMAT_IDX_INT = "wfc_spn_format_idx_int";
@@ -2001,26 +2011,6 @@ public class CarrierConfigManager {
     public static final String KEY_CARRIER_WIFI_STRING_ARRAY = "carrier_wifi_string_array";
 
     /**
-     * Base64 Encoding method the carrier will use for encoding encrypted IMSI and SSID.
-     * The value set as below:
-     * 2045 - RFC2045 (default value)
-     * 4648 - RFC4648
-     *
-     * @hide
-     */
-    public static final String KEY_IMSI_ENCODING_METHOD_INT = "imsi_encoding_method_int";
-
-    /**
-     * Defines the sequence of sending an encrypted IMSI identity for EAP-SIM/AKA authentication.
-     * The value set as below:
-     * 1 - encrypted IMSI as EAP-RESPONSE/IDENTITY (default one).
-     * 2 - anonymous as EAP-RESPONSE/IDENTITY -> encrypted IMSI as EAP-RESPONSE/AKA|SIM-IDENTITY.
-     *
-     * @hide
-     */
-    public static final String KEY_EAP_IDENTITY_SEQUENCE_INT = "imsi_eap_identity_sequence_int";
-
-    /**
      * Time delay (in ms) after which we show the notification to switch the preferred
      * network.
      * @hide
@@ -2738,6 +2728,30 @@ public class CarrierConfigManager {
         public static final String KEY_PREFIX = "gps.";
 
         /**
+         * Location information during (and after) an emergency call is only provided over control
+         * plane signaling from the network.
+         * @hide
+         */
+        public static final int SUPL_EMERGENCY_MODE_TYPE_CP_ONLY = 0;
+
+        /**
+         * Location information during (and after) an emergency call is provided over the data
+         * plane and serviced by the framework GNSS service, but if it fails, the carrier also
+         * supports control plane backup signaling.
+         * @hide
+         */
+        public static final int SUPL_EMERGENCY_MODE_TYPE_CP_FALLBACK = 1;
+
+        /**
+         * Location information during (and after) an emergency call is provided over the data plane
+         * and serviced by the framework GNSS service only. There is no backup signalling over the
+         * control plane if it fails.
+         * @hide
+         */
+        public static final int SUPL_EMERGENCY_MODE_TYPE_DP_ONLY = 2;
+
+
+        /**
          * Determine whether current lpp_mode used for E-911 needs to be kept persistently.
          * {@code false} - not keeping the lpp_mode means using default configuration of gps.conf
          *                 when sim is not presented.
@@ -2828,6 +2842,23 @@ public class CarrierConfigManager {
          */
         public static final String KEY_NFW_PROXY_APPS_STRING = KEY_PREFIX + "nfw_proxy_apps";
 
+        /**
+         * Determines whether or not SUPL ES mode supports a control-plane mechanism to get a user's
+         * location in the event that data plane SUPL fails or is otherwise unavailable.
+         * <p>
+         * An integer value determines the support type of this carrier. If this carrier only
+         * supports data plane SUPL ES, then the value will be
+         * {@link #SUPL_EMERGENCY_MODE_TYPE_DP_ONLY}. If the carrier supports control plane fallback
+         * for emergency SUPL, the value will be {@link #SUPL_EMERGENCY_MODE_TYPE_CP_FALLBACK}.
+         * If the carrier does not support data plane SUPL using the framework, the value will be
+         * {@link #SUPL_EMERGENCY_MODE_TYPE_CP_ONLY}.
+         * <p>
+         * The default value for this configuration is {@link #SUPL_EMERGENCY_MODE_TYPE_CP_ONLY}.
+         * @hide
+         */
+        public static final String KEY_ES_SUPL_CONTROL_PLANE_SUPPORT_INT = KEY_PREFIX
+                + "es_supl_control_plane_support_int";
+
         private static PersistableBundle getDefaults() {
             PersistableBundle defaults = new PersistableBundle();
             defaults.putBoolean(KEY_PERSIST_LPP_MODE_BOOL, true);
@@ -2842,6 +2873,8 @@ public class CarrierConfigManager {
             defaults.putString(KEY_GPS_LOCK_STRING, "3");
             defaults.putString(KEY_ES_EXTENSION_SEC_STRING, "0");
             defaults.putString(KEY_NFW_PROXY_APPS_STRING, "");
+            defaults.putInt(KEY_ES_SUPL_CONTROL_PLANE_SUPPORT_INT,
+                    SUPL_EMERGENCY_MODE_TYPE_CP_ONLY);
             return defaults;
         }
     }
@@ -3160,6 +3193,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_SUPPORT_CONFERENCE_CALL_BOOL, true);
         sDefaults.putBoolean(KEY_SUPPORT_IMS_CONFERENCE_CALL_BOOL, true);
         sDefaults.putBoolean(KEY_SUPPORT_MANAGE_IMS_CONFERENCE_CALL_BOOL, true);
+        sDefaults.putBoolean(KEY_SUPPORT_IMS_CONFERENCE_EVENT_PACKAGE_BOOL, true);
         sDefaults.putBoolean(KEY_SUPPORT_VIDEO_CONFERENCE_CALL_BOOL, false);
         sDefaults.putBoolean(KEY_IS_IMS_CONFERENCE_SIZE_ENFORCED_BOOL, false);
         sDefaults.putInt(KEY_IMS_CONFERENCE_SIZE_LIMIT_INT, 5);
@@ -3302,8 +3336,6 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_STK_DISABLE_LAUNCH_BROWSER_BOOL, false);
         sDefaults.putBoolean(KEY_ALLOW_METERED_NETWORK_FOR_CERT_DOWNLOAD_BOOL, false);
         sDefaults.putStringArray(KEY_CARRIER_WIFI_STRING_ARRAY, null);
-        sDefaults.putInt(KEY_IMSI_ENCODING_METHOD_INT, 2045);
-        sDefaults.putInt(KEY_EAP_IDENTITY_SEQUENCE_INT, 1);
         sDefaults.putInt(KEY_PREF_NETWORK_NOTIFICATION_DELAY_INT, -1);
         sDefaults.putInt(KEY_EMERGENCY_NOTIFICATION_DELAY_INT, -1);
         sDefaults.putBoolean(KEY_ALLOW_USSD_REQUESTS_VIA_TELEPHONY_MANAGER_BOOL, true);

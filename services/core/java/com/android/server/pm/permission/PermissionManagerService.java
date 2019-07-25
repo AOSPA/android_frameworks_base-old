@@ -97,6 +97,7 @@ import com.android.server.pm.SharedUserSetting;
 import com.android.server.pm.UserManagerService;
 import com.android.server.pm.permission.PermissionManagerServiceInternal.PermissionCallback;
 import com.android.server.pm.permission.PermissionsState.PermissionState;
+import com.android.server.policy.SoftRestrictedPermissionPolicy;
 
 import libcore.util.EmptyArray;
 
@@ -1896,14 +1897,15 @@ public class PermissionManagerService {
         return Boolean.TRUE == granted;
     }
 
-    private boolean isPermissionsReviewRequired(PackageParser.Package pkg, int userId) {
+    private boolean isPermissionsReviewRequired(@NonNull PackageParser.Package pkg,
+            @UserIdInt int userId) {
         // Permission review applies only to apps not supporting the new permission model.
         if (pkg.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.M) {
             return false;
         }
 
         // Legacy apps have the permission and get user consent on launch.
-        if (pkg == null || pkg.mExtras == null) {
+        if (pkg.mExtras == null) {
             return false;
         }
         final PackageSetting ps = (PackageSetting) pkg.mExtras;
@@ -2121,8 +2123,15 @@ public class PermissionManagerService {
 
         if (bp.isHardRestricted()
                 && (flags & PackageManager.FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT) == 0) {
-            Log.e(TAG, "Cannot grant restricted non-exempt permission "
+            Log.e(TAG, "Cannot grant hard restricted non-exempt permission "
                     + permName + " for package " + packageName);
+            return;
+        }
+
+        if (bp.isSoftRestricted() && !SoftRestrictedPermissionPolicy.forPermission(mContext,
+                pkg.applicationInfo, UserHandle.of(userId), permName).canBeGranted()) {
+            Log.e(TAG, "Cannot grant soft restricted permission " + permName + " for package "
+                    + packageName);
             return;
         }
 
@@ -2257,6 +2266,11 @@ public class PermissionManagerService {
                     callback.onInstallPermissionRevoked();
                 }
             }
+            return;
+        }
+
+        // Permission is already revoked, no need to do anything.
+        if (!permissionsState.hasRuntimePermission(permName, userId)) {
             return;
         }
 
@@ -2944,7 +2958,7 @@ public class PermissionManagerService {
             PermissionManagerService.this.systemReady();
         }
         @Override
-        public boolean isPermissionsReviewRequired(Package pkg, int userId) {
+        public boolean isPermissionsReviewRequired(@NonNull Package pkg, @UserIdInt int userId) {
             return PermissionManagerService.this.isPermissionsReviewRequired(pkg, userId);
         }
         @Override
@@ -3115,6 +3129,27 @@ public class PermissionManagerService {
             synchronized (PermissionManagerService.this.mLock) {
                 return mSettings.getPermissionLocked(permName);
             }
+        }
+
+        @Override
+        public @NonNull ArrayList<PermissionInfo> getAllPermissionWithProtectionLevel(
+                @PermissionInfo.Protection int protectionLevel) {
+            ArrayList<PermissionInfo> matchingPermissions = new ArrayList<>();
+
+            synchronized (PermissionManagerService.this.mLock) {
+                int numTotalPermissions = mSettings.mPermissions.size();
+
+                for (int i = 0; i < numTotalPermissions; i++) {
+                    BasePermission bp = mSettings.mPermissions.valueAt(i);
+
+                    if (bp.perm != null && bp.perm.info != null
+                            && bp.protectionLevel == protectionLevel) {
+                        matchingPermissions.add(bp.perm.info);
+                    }
+                }
+            }
+
+            return matchingPermissions;
         }
 
         @Override

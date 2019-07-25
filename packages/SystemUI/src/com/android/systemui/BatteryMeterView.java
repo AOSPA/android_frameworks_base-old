@@ -356,8 +356,8 @@ public class BatteryMeterView extends LinearLayout implements
                     if (estimate != null) {
                         mBatteryPercentView.setText(estimate);
                         setContentDescription(getContext().getString(
-                                R.string.battery_low_percent_format_hybrid, mLevel, estimate));
-
+                                R.string.accessibility_battery_level_with_estimate,
+                                mLevel, estimate));
                     } else {
                         setPercentTextAtCurrentLevel();
                     }
@@ -365,6 +365,10 @@ public class BatteryMeterView extends LinearLayout implements
             } else {
                 setPercentTextAtCurrentLevel();
             }
+        } else {
+            setContentDescription(
+                    getContext().getString(mCharging ? R.string.accessibility_battery_level_charging
+                            : R.string.accessibility_battery_level, mLevel));
         }
     }
 

@@ -17,7 +17,6 @@
 package com.android.systemui.glwallpaper;
 
 import android.util.Size;
-import android.view.SurfaceHolder;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -52,6 +51,13 @@ public interface GLWallpaperRenderer {
     void updateAmbientMode(boolean inAmbientMode, long duration);
 
     /**
+     * Notify the wallpaper offsets changed.
+     * @param xOffset offset along x axis.
+     * @param yOffset offset along y axis.
+     */
+    void updateOffsets(float xOffset, float yOffset);
+
+    /**
      * Ask renderer to report the surface size it needs.
      */
     Size reportSurfaceSize();
@@ -74,12 +80,6 @@ public interface GLWallpaperRenderer {
      * A proxy which owns surface holder.
      */
     interface SurfaceProxy {
-
-        /**
-         * Get surface holder.
-         * @return surface holder.
-         */
-        SurfaceHolder getHolder();
 
         /**
          * Ask proxy to start rendering frame to surface.

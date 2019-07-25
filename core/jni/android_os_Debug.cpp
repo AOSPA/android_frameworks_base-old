@@ -258,7 +258,7 @@ static void load_maps(int pid, stats_t* stats, bool* foundSwapPss)
         } else if (base::StartsWith(name, "[anon:libc_malloc]")) {
             which_heap = HEAP_NATIVE;
         } else if (base::StartsWith(name, "[stack")) {
-            which_heap = HEAP_NATIVE;
+            which_heap = HEAP_STACK;
         } else if (base::EndsWith(name, ".so")) {
             which_heap = HEAP_SO;
             is_swappable = true;
@@ -289,14 +289,14 @@ static void load_maps(int pid, stats_t* stats, bool* foundSwapPss)
         } else if (base::EndsWith(name, ".oat")) {
             which_heap = HEAP_OAT;
             is_swappable = true;
-        } else if (base::EndsWith(name, ".art")) {
+        } else if (base::EndsWith(name, ".art") || base::EndsWith(name, ".art]")) {
             which_heap = HEAP_ART;
             // Handle system@framework@boot* and system/framework/boot*
             if ((strstr(name.c_str(), "@boot") != nullptr) ||
                     (strstr(name.c_str(), "/boot"))) {
-                sub_heap = HEAP_DEX_BOOT_VDEX;
+                sub_heap = HEAP_ART_BOOT;
             } else {
-                sub_heap = HEAP_DEX_APP_VDEX;
+                sub_heap = HEAP_ART_APP;
             }
             is_swappable = true;
         } else if (base::StartsWith(name, "/dev/")) {
@@ -713,16 +713,20 @@ static bool dumpTraces(JNIEnv* env, jint pid, jstring fileName, jint timeoutSecs
                                      O_CREAT | O_WRONLY | O_NOFOLLOW | O_CLOEXEC | O_APPEND,
                                      0666));
     if (fd < 0) {
-        fprintf(stderr, "Can't open %s: %s\n", fileNameChars.c_str(), strerror(errno));
+        PLOG(ERROR) << "Can't open " << fileNameChars.c_str();
         return false;
     }
 
-    return (dump_backtrace_to_file_timeout(pid, dumpType, timeoutSecs, fd) == 0);
+    int res = dump_backtrace_to_file_timeout(pid, dumpType, timeoutSecs, fd);
+    if (fdatasync(fd.get()) != 0) {
+        PLOG(ERROR) << "Failed flushing trace.";
+    }
+    return res == 0;
 }
 
 static jboolean android_os_Debug_dumpJavaBacktraceToFileTimeout(JNIEnv* env, jobject clazz,
         jint pid, jstring fileName, jint timeoutSecs) {
-    const bool ret =  dumpTraces(env, pid, fileName, timeoutSecs, kDebuggerdJavaBacktrace);
+    const bool ret = dumpTraces(env, pid, fileName, timeoutSecs, kDebuggerdJavaBacktrace);
     return ret ? JNI_TRUE : JNI_FALSE;
 }
 

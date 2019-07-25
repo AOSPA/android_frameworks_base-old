@@ -3043,15 +3043,16 @@ public class SettingsProvider extends ContentProvider {
             // Increment the generation first, so observers always see the new value
             mGenerationRegistry.incrementGeneration(key);
 
-            if (isGlobalSettingsKey(key)) {
+            if (isGlobalSettingsKey(key) || isConfigSettingsKey(key)) {
                 final long token = Binder.clearCallingIdentity();
                 try {
-                    if (Global.LOCATION_GLOBAL_KILL_SWITCH.equals(name)) {
+                    if (Global.LOCATION_GLOBAL_KILL_SWITCH.equals(name)
+                            && isGlobalSettingsKey(key)) {
                         // When the global kill switch is updated, send the
                         // change notification for the location setting.
                         notifyLocationChangeForRunningUsers();
                     }
-                    notifyGlobalSettingChangeForRunningUsers(key, name);
+                    notifySettingChangeForRunningUsers(key, name);
                 } finally {
                     Binder.restoreCallingIdentity(token);
                 }
@@ -3091,7 +3092,7 @@ public class SettingsProvider extends ContentProvider {
             }
         }
 
-        private void notifyGlobalSettingChangeForRunningUsers(int key, String name) {
+        private void notifySettingChangeForRunningUsers(int key, String name) {
             // Important: No need to update generation for each user as there
             // is a singleton generation entry for the global settings which
             // is already incremented be the caller.
@@ -3237,7 +3238,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 181;
+            private static final int SETTINGS_VERSION = 182;
 
             private final int mUserId;
 
@@ -4428,6 +4429,37 @@ public class SettingsProvider extends ContentProvider {
                     }
 
                     currentVersion = 181;
+                }
+
+                if (currentVersion == 181) {
+                    // Version cd : by default, add STREAM_BLUETOOTH_SCO to list of streams that can
+                    // be muted.
+                    final SettingsState systemSettings = getSystemSettingsLocked(userId);
+                    final Setting currentSetting = systemSettings.getSettingLocked(
+                              Settings.System.MUTE_STREAMS_AFFECTED);
+                    if (!currentSetting.isNull()) {
+                        try {
+                            int currentSettingIntegerValue = Integer.parseInt(
+                                    currentSetting.getValue());
+                            if ((currentSettingIntegerValue
+                                    & (1 << AudioManager.STREAM_BLUETOOTH_SCO)) == 0) {
+                                systemSettings.insertSettingLocked(
+                                        Settings.System.MUTE_STREAMS_AFFECTED,
+                                        Integer.toString(
+                                        currentSettingIntegerValue
+                                        | (1 << AudioManager.STREAM_BLUETOOTH_SCO)),
+                                        null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                            }
+                        } catch (NumberFormatException e) {
+                            // remove the setting in case it is not a valid integer
+                            Slog.w("Failed to parse integer value of MUTE_STREAMS_AFFECTED"
+                                    + "setting, removing setting", e);
+                            systemSettings.deleteSettingLocked(
+                                    Settings.System.MUTE_STREAMS_AFFECTED);
+                        }
+
+                    }
+                    currentVersion = 182;
                 }
 
                 // vXXX: Add new settings above this point.

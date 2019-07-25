@@ -153,7 +153,7 @@
     <string name="launch_defaults_some" msgid="313159469856372621">"Einige Standardeinstellungen festgelegt"</string>
     <string name="launch_defaults_none" msgid="4241129108140034876">"Keine Standardeinstellungen festgelegt"</string>
     <string name="tts_settings" msgid="8186971894801348327">"Sprachausgabe"</string>
-    <string name="tts_settings_title" msgid="1237820681016639683">"Sprachausgabe-Einstellungen"</string>
+    <string name="tts_settings_title" msgid="1237820681016639683">"Sprachausgabe"</string>
     <string name="tts_default_rate_title" msgid="6030550998379310088">"Sprechgeschwindigkeit"</string>
     <string name="tts_default_rate_summary" msgid="4061815292287182801">"Geschwindigkeit, mit der der Text gesprochen wird"</string>
     <string name="tts_default_pitch_title" msgid="6135942113172488671">"Tonlage"</string>
@@ -220,6 +220,7 @@
     <string name="debug_networking_category" msgid="7044075693643009662">"Netzwerke"</string>
     <string name="wifi_display_certification" msgid="8611569543791307533">"Zertifizierung für kabellose Übertragung"</string>
     <string name="wifi_verbose_logging" msgid="4203729756047242344">"Ausführliche WLAN-Protokollierung aktivieren"</string>
+    <string name="wifi_scan_throttling" msgid="160014287416479843">"Drosselung der WLAN-Suche"</string>
     <string name="mobile_data_always_on" msgid="8774857027458200434">"Mobile Datennutzung immer aktiviert"</string>
     <string name="tethering_hardware_offload" msgid="7470077827090325814">"Hardwarebeschleunigung für Tethering"</string>
     <string name="bluetooth_show_devices_without_names" msgid="4708446092962060176">"Bluetooth-Geräte ohne Namen anzeigen"</string>
@@ -245,7 +246,8 @@
     <string name="private_dns_mode_provider_hostname_hint" msgid="2487492386970928143">"Hostname des DNS-Anbieters eingeben"</string>
     <string name="private_dns_mode_provider_failure" msgid="231837290365031223">"Verbindung nicht möglich"</string>
     <string name="wifi_display_certification_summary" msgid="1155182309166746973">"Optionen zur Zertifizierung für kabellose Übertragung anzeigen"</string>
-    <string name="wifi_verbose_logging_summary" msgid="6615071616111731958">"WLAN-Protokollierungsebene erhöhen, in WiFi Picker pro SSID RSSI anzeigen"</string>
+    <string name="wifi_verbose_logging_summary" msgid="6615071616111731958">"WLAN-Protokollierungsebene erhöhen, pro SSID RSSI in WiFi Picker anzeigen"</string>
+    <string name="wifi_scan_throttling_summary" msgid="4461922728822495763">"Verringert den Akkuverbrauch und verbessert die Netzwerkleistung"</string>
     <string name="wifi_metered_label" msgid="4514924227256839725">"Kostenpflichtig"</string>
     <string name="wifi_unmetered_label" msgid="6124098729457992931">"Kostenlos"</string>
     <string name="select_logd_size_title" msgid="7433137108348553508">"Logger-Puffergrößen"</string>
@@ -326,7 +328,7 @@
     <string name="app_process_limit_title" msgid="4280600650253107163">"Limit für Hintergrundprozesse"</string>
     <string name="show_all_anrs" msgid="4924885492787069007">"Absturzmeldungen für Hintergrund-Apps anzeigen"</string>
     <string name="show_all_anrs_summary" msgid="6636514318275139826">"Bei Abstürzen von Hintergrund-Apps \"App reagiert nicht\"-Dialog anzeigen"</string>
-    <string name="show_notification_channel_warnings" msgid="1399948193466922683">"Benachrichtigungskanal-Warnungen anzeigen"</string>
+    <string name="show_notification_channel_warnings" msgid="1399948193466922683">"Benachrichtigungskanal- Warnungen anzeigen"</string>
     <string name="show_notification_channel_warnings_summary" msgid="5536803251863694895">"Bei Benachrichtigungen ohne gültigen Kanal wird eine Warnung angezeigt"</string>
     <string name="force_allow_on_external" msgid="3215759785081916381">"Sperrung des externen Speichers für alle Apps aufheben"</string>
     <string name="force_allow_on_external_summary" msgid="3640752408258034689">"Jede App kann, ungeachtet der Manifestwerte, in den externen Speicher geschrieben werden"</string>
@@ -379,12 +381,12 @@
     <string name="power_remaining_settings_home_page" msgid="4845022416859002011">"<xliff:g id="PERCENTAGE">%1$s</xliff:g> – <xliff:g id="TIME_STRING">%2$s</xliff:g>"</string>
     <string name="power_remaining_duration_only" msgid="6123167166221295462">"Noch etwa <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
     <string name="power_discharging_duration" msgid="8848256785736335185">"Noch etwa <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_duration_only_enhanced" msgid="4189311599812296592">"Noch etwa <xliff:g id="TIME_REMAINING">%1$s</xliff:g>, basierend auf deiner Nutzung"</string>
-    <string name="power_discharging_duration_enhanced" msgid="1992003260664804080">"Noch etwa <xliff:g id="TIME_REMAINING">%1$s</xliff:g>, basierend auf deiner Nutzung (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_duration_only_enhanced" msgid="4189311599812296592">"Bei deinem Nutzungsmuster hast du noch ca. <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
+    <string name="power_discharging_duration_enhanced" msgid="1992003260664804080">"Bei deinem Nutzungsmuster hast du noch ca. <xliff:g id="TIME_REMAINING">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <!-- no translation found for power_remaining_duration_only_short (9183070574408359726) -->
     <skip />
-    <string name="power_discharge_by_enhanced" msgid="2095821536747992464">"Sollte basierend auf deiner Nutzung etwa bis <xliff:g id="TIME">%1$s</xliff:g> reichen (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_discharge_by_only_enhanced" msgid="2175151772952365149">"Sollte basierend auf deiner Nutzung etwa bis <xliff:g id="TIME">%1$s</xliff:g> reichen"</string>
+    <string name="power_discharge_by_enhanced" msgid="2095821536747992464">"Bei deinem Nutzungsmuster dürfte der Akku bis ca. <xliff:g id="TIME">%1$s</xliff:g> reichen (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_discharge_by_only_enhanced" msgid="2175151772952365149">"Bei deinem Nutzungsmuster dürfte der Akku bis ca. <xliff:g id="TIME">%1$s</xliff:g> reichen"</string>
     <string name="power_discharge_by" msgid="6453537733650125582">"Sollte etwa bis <xliff:g id="TIME">%1$s</xliff:g> reichen (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_discharge_by_only" msgid="107616694963545745">"Sollte etwa bis <xliff:g id="TIME">%1$s</xliff:g> reichen"</string>
     <string name="power_discharge_by_only_short" msgid="1372817269546888804">"Bis <xliff:g id="TIME">%1$s</xliff:g>"</string>
