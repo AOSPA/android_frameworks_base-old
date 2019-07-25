@@ -281,6 +281,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         mLockIcon.setAccessibilityController(mAccessibilityController);
         updateLeftAffordance();
         updateIndicationAreaPadding();
+        showEmergencyButton(true);
     }
 
     @Override
@@ -849,6 +850,18 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         updateLeftAffordance();
     }
 
+    private void showEmergencyButton(boolean show) {
+        if (show) {
+            mEmergencyCarrierArea.setVisibility(VISIBLE);
+        } else {
+            mEmergencyCarrierArea.setVisibility(INVISIBLE);
+        }
+
+        if (mContext.getPackageManager().hasSystemFeature(FOD)) {
+            mEmergencyCarrierArea.setVisibility(INVISIBLE);
+        }
+    }
+
     public void setDozing(boolean dozing, boolean animate) {
         mDozing = dozing;
 
@@ -858,11 +871,11 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         if (dozing) {
             mLockIcon.setVisibility(INVISIBLE);
             mOverlayContainer.setVisibility(INVISIBLE);
-            mEmergencyCarrierArea.setVisibility(INVISIBLE);
+            showEmergencyButton(false);
         } else {
             mLockIcon.setVisibility(VISIBLE);
             mOverlayContainer.setVisibility(VISIBLE);
-            mEmergencyCarrierArea.setVisibility(VISIBLE);
+            showEmergencyButton(true);
             if (animate) {
                 startFinishDozeAnimation();
             }
