@@ -1587,7 +1587,8 @@ public class StatusBar extends SystemUI implements DemoMode,
     public void onHeadsUpStateChanged(NotificationEntry entry, boolean isHeadsUp) {
         mEntryManager.updateNotifications();
         if (isDozing() && isHeadsUp) {
-            mDozeServiceHost.fireNotificationPulse();
+            entry.setPulseSuppressed(false);
+            mDozeServiceHost.fireNotificationPulse(entry);
             if (mPulsing) {
                 mDozeScrimController.cancelPendingPulseTimeout();
             }
@@ -3936,9 +3937,13 @@ public class StatusBar extends SystemUI implements DemoMode,
             }
         }
 
-        public void fireNotificationPulse() {
+        public void fireNotificationPulse(NotificationEntry entry) {
+            Runnable pulseSupressedListener = () -> {
+                entry.setPulseSuppressed(true);
+                mNotificationIconAreaController.updateAodNotificationIcons();
+            };
             for (Callback callback : mCallbacks) {
-                callback.onNotificationAlerted();
+                callback.onNotificationAlerted(pulseSupressedListener);
             }
         }
 
