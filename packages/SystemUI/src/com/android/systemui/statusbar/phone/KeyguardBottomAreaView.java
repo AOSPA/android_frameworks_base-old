@@ -259,6 +259,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         mLockIcon.setScreenOn(updateMonitor.isScreenOn());
         mLockIcon.setDeviceInteractive(updateMonitor.isDeviceInteractive());
         mLockIcon.update();
+        mEmergencyCarrierArea.setVisibility(INVISIBLE);
         setClipChildren(false);
         setClipToPadding(false);
         mPreviewInflater = new PreviewInflater(mContext, new LockPatternUtils(mContext));
@@ -836,7 +837,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         } else {
             mLockIcon.setVisibility(VISIBLE);
             mOverlayContainer.setVisibility(VISIBLE);
-            mEmergencyCarrierArea.setVisibility(VISIBLE);
+            mEmergencyCarrierArea.setVisibility(INVISIBLE);
             if (animate) {
                 startFinishDozeAnimation();
             }
