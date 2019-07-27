@@ -264,7 +264,9 @@ public class NetworkControllerImpl extends BroadcastReceiver
         for (int i = 0; i < mMobileSignalControllers.size(); i++) {
             MobileSignalController mobileSignalController = mMobileSignalControllers.valueAt(i);
             mobileSignalController.registerListener();
-            mobileSignalController.registerFiveGStateListener(mFiveGServiceClient);
+            if(isDevice5GConnected()){
+                mobileSignalController.registerFiveGStateListener(mFiveGServiceClient);
+            }
         }
         if (mSubscriptionListener == null) {
             mSubscriptionListener = new SubListener();
@@ -292,12 +294,84 @@ public class NetworkControllerImpl extends BroadcastReceiver
         updateMobileControllers();
     }
 
+    /**
+     * Check if the device is connected to a 5G network. Non-5G devices will not be able to register 5G services.
+     * @return True if the device is connected to a 5G network. Otherwise, @return False if it isn't
+     */
+
+    private boolean isDevice5GConnected() {
+        boolean mDeviceIsConnectedTo5G = true;
+        int networkType = mPhone != null ? mPhone.getNetworkType() : 0;
+        switch (networkType){
+            case TelephonyManager.NETWORK_TYPE_UNKNOWN:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_GSM:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_CDMA:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_1xRTT:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_IDEN:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_GPRS:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_EDGE:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_UMTS:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_EVDO_0:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_EVDO_A:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_EVDO_B:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_HSPA:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_HSDPA:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_HSUPA:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_EHRPD:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_HSPAP:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_TD_SCDMA:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_LTE:
+                mDeviceIsConnectedTo5G = false;
+                break;
+            case TelephonyManager.NETWORK_TYPE_IWLAN:
+                mDeviceIsConnectedTo5G = false;
+                break;
+        }
+        return mDeviceIsConnectedTo5G;
+    }
+
     private void unregisterListeners() {
         mListening = false;
         for (int i = 0; i < mMobileSignalControllers.size(); i++) {
             MobileSignalController mobileSignalController = mMobileSignalControllers.valueAt(i);
             mobileSignalController.unregisterListener();
-            mobileSignalController.unregisterFiveGStateListener(mFiveGServiceClient);
+            if(isDevice5GConnected()){
+                mobileSignalController.unregisterFiveGStateListener(mFiveGServiceClient);
+            }
         }
         mSubscriptionManager.removeOnSubscriptionsChangedListener(mSubscriptionListener);
         mContext.unregisterReceiver(this);
@@ -607,7 +681,9 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 }
                 if (mListening) {
                     controller.registerListener();
-                    controller.registerFiveGStateListener(mFiveGServiceClient);
+                    if(isDevice5GConnected()){
+                        controller.registerFiveGStateListener(mFiveGServiceClient);
+                    }
                 }
             }
         }
@@ -618,7 +694,9 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     mDefaultSignalController = null;
                 }
                 cachedControllers.get(key).unregisterListener();
-                cachedControllers.get(key).unregisterFiveGStateListener(mFiveGServiceClient);
+                if(isDevice5GConnected()){
+                    cachedControllers.get(key).unregisterFiveGStateListener(mFiveGServiceClient);
+                }
             }
         }
         mCallbackHandler.setSubs(subscriptions);
