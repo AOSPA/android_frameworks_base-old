@@ -251,8 +251,14 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         mBurnInYOffset = getResources().getDimensionPixelSize(
                 R.dimen.default_burn_in_prevention_offset);
         updateCameraVisibility();
+<<<<<<< HEAD   (ef6c72 Merge tag 'LA.QSSI.11.0.r1-06300-qssi.0' of https://source.c)
         mKeyguardStateController = Dependency.get(KeyguardStateController.class);
         mKeyguardStateController.addCallback(this);
+=======
+        mUnlockMethodCache = UnlockMethodCache.getInstance(getContext());
+        mUnlockMethodCache.addListener(this);
+        mEmergencyCarrierArea.setVisibility(INVISIBLE);
+>>>>>>> CHANGE (f8be0b SystemUI: hide Emergency button on bottom lockscreen for eve)
         setClipChildren(false);
         setClipToPadding(false);
         inflateCameraPreview();
@@ -753,7 +759,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
             mEmergencyCarrierArea.setVisibility(INVISIBLE);
         } else {
             mOverlayContainer.setVisibility(VISIBLE);
-            mEmergencyCarrierArea.setVisibility(VISIBLE);
+            mEmergencyCarrierArea.setVisibility(INVISIBLE);
             if (animate) {
                 startFinishDozeAnimation();
             }
