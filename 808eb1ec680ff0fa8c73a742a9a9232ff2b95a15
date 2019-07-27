@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "9a9c504c_5cd3bdd4",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImpl.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 305,
+      "author": {
+        "id": 1000126
+      },
+      "writtenOn": "2019-07-27T12:49:59Z",
+      "side": 1,
+      "message": "Not present on API 28, 29+",
+      "range": {
+        "startLine": 305,
+        "startChar": 47,
+        "endLine": 305,
+        "endChar": 62
+      },
+      "revId": "808eb1ec680ff0fa8c73a742a9a9232ff2b95a15",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
