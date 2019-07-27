@@ -253,6 +253,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         updateCameraVisibility();
         mKeyguardStateController = Dependency.get(KeyguardStateController.class);
         mKeyguardStateController.addCallback(this);
+        mEmergencyCarrierArea.setVisibility(GONE);
         setClipChildren(false);
         setClipToPadding(false);
         inflateCameraPreview();
@@ -753,7 +754,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
             mEmergencyCarrierArea.setVisibility(INVISIBLE);
         } else {
             mOverlayContainer.setVisibility(VISIBLE);
-            mEmergencyCarrierArea.setVisibility(VISIBLE);
+            mEmergencyCarrierArea.setVisibility(GONE);
             if (animate) {
                 startFinishDozeAnimation();
             }
