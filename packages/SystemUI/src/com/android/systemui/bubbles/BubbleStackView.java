@@ -751,6 +751,8 @@ public class BubbleStackView extends FrameLayout {
             Bubble bubble = bubbles.get(i);
             mBubbleContainer.reorderView(bubble.getIconView(), i);
         }
+
+        updateBubbleZOrdersAndDotPosition(false /* animate */);
     }
 
     /**
@@ -1071,7 +1073,7 @@ public class BubbleStackView extends FrameLayout {
                 StatsLog.BUBBLE_UICHANGED__ACTION__STACK_MOVED);
 
         mStackOnLeftOrWillBe = newStackX <= 0;
-        updateBubbleShadowsAndDotPosition(true /* animate */);
+        updateBubbleZOrdersAndDotPosition(true /* animate */);
         hideDismissTarget();
     }
 
@@ -1548,11 +1550,11 @@ public class BubbleStackView extends FrameLayout {
         }
 
         mStackOnLeftOrWillBe = mStackAnimationController.isStackOnLeftSide();
-        updateBubbleShadowsAndDotPosition(false);
+        updateBubbleZOrdersAndDotPosition(false);
     }
 
     /** Sets the appropriate Z-order and dot position for each bubble in the stack. */
-    private void updateBubbleShadowsAndDotPosition(boolean animate) {
+    private void updateBubbleZOrdersAndDotPosition(boolean animate) {
         int bubbleCount = mBubbleContainer.getChildCount();
         for (int i = 0; i < bubbleCount; i++) {
             BubbleView bv = (BubbleView) mBubbleContainer.getChildAt(i);
