@@ -61,6 +61,7 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoveInterceptor;
 import com.android.systemui.statusbar.NotificationTestHelper;
+import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationFilter;
@@ -69,6 +70,7 @@ import com.android.systemui.statusbar.notification.collection.NotificationData;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.phone.DozeParameters;
+import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
@@ -107,6 +109,10 @@ public class BubbleControllerTest extends SysuiTestCase {
     private ZenModeController mZenModeController;
     @Mock
     private ZenModeConfig mZenModeConfig;
+    @Mock
+    private SysuiStatusBarStateController mStatusBarStateController;
+    @Mock
+    private KeyguardBypassController mKeyguardBypassController;
 
     private FrameLayout mStatusBarView;
     @Captor
@@ -145,7 +151,8 @@ public class BubbleControllerTest extends SysuiTestCase {
 
         // Bubbles get added to status bar window view
         mStatusBarWindowController = new StatusBarWindowController(mContext, mWindowManager,
-                mActivityManager, mDozeParameters);
+                mActivityManager, mDozeParameters, mStatusBarStateController,
+                mConfigurationController, mKeyguardBypassController);
         mStatusBarWindowController.add(mStatusBarView, 120 /* height */);
 
         // Need notifications for bubbles
