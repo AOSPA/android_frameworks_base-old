@@ -540,7 +540,8 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             navBarFragment.updateSystemUiStateFlags(-1);
         }
         if (navBarView != null) {
-            navBarView.updateSystemUiStateFlags();
+            navBarView.updatePanelSystemUiStateFlags();
+            navBarView.updateDisabledSystemUiStateFlags();
         }
         if (mStatusBarWinController != null) {
             mStatusBarWinController.notifyStateChangedCallbacks();
