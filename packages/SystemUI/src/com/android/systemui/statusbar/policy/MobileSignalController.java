@@ -25,6 +25,7 @@ import android.net.NetworkCapabilities;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings.Global;
+import android.telephony.CellSignalStrengthNr;
 import android.telephony.ims.ImsMmTelManager;
 import android.telephony.ims.ImsReasonInfo;
 import android.telephony.ims.feature.MmTelFeature;
@@ -60,6 +61,7 @@ import com.android.systemui.statusbar.policy.NetworkControllerImpl.SubscriptionD
 
 import java.io.PrintWriter;
 import java.util.BitSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -102,6 +104,8 @@ public class MobileSignalController extends SignalController<
     FiveGStateListener mFiveGStateListener;
     @VisibleForTesting
     FiveGServiceState mFiveGState;
+    private FiveGServiceClient mClient;
+    private CellSignalStrengthNr mCellSignalStrengthNr;
     private final int NUM_LEVELS_ON_5G;
     /**********************************************************/
 
@@ -247,6 +251,7 @@ public class MobileSignalController extends SignalController<
         mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EHRPD, TelephonyIcons.THREE_G);
         mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_UMTS, TelephonyIcons.THREE_G);
         mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_TD_SCDMA, TelephonyIcons.THREE_G);
+        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_NR, TelephonyIcons.FIVE_G_SA);
 
         if (!mConfig.showAtLeast3G) {
             mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_UNKNOWN,
@@ -341,7 +346,7 @@ public class MobileSignalController extends SignalController<
         }
     }
 
-    public int getCurrent5GIconId() {
+    public int getAlertSignalStrengthIconId() {
         int level = mFiveGState.getSignalLevel();
         if (mConfig.inflateSignalStrengths) {
             level++;
@@ -434,13 +439,6 @@ public class MobileSignalController extends SignalController<
                 || mCurrentState.iconGroup == TelephonyIcons.NOT_DEFAULT_DATA)
                 && mCurrentState.userSetup;
 
-        if ( is5GConnected() ) {
-            if ( mFiveGState.isConnectedOnSaMode()
-                    || mFiveGState.isConnectedOnNsaMode() && !dataDisabled ) {
-                icons = mFiveGState.getIconGroup();
-            }
-        }
-
         String contentDescription = getStringIfExists(getContentDescription());
         String dataContentDescription = getStringIfExists(icons.mDataContentDescription);
         if (mCurrentState.inetCondition == 0) {
@@ -449,8 +447,11 @@ public class MobileSignalController extends SignalController<
 
         // Show icon in QS when we are connected or data is disabled.
         boolean showDataIcon = mCurrentState.dataConnected || dataDisabled;
+        boolean showAlertSignalStrength =
+                mDataNetType == TelephonyManager.NETWORK_TYPE_NR && !isCellSignalStrengthNrValid();
         IconState statusIcon = new IconState(mCurrentState.enabled && !mCurrentState.airplaneMode,
-                is5GConnected() ? getCurrent5GIconId() : getCurrentIconId(), contentDescription);
+                showAlertSignalStrength ? getAlertSignalStrengthIconId() : getCurrentIconId(),
+                contentDescription);
 
         int qsTypeIcon = 0;
         IconState qsIcon = null;
@@ -470,8 +471,7 @@ public class MobileSignalController extends SignalController<
                 && mCurrentState.activityOut;
         showDataIcon &= mCurrentState.isDefault || dataDisabled;
         int typeIcon = (showDataIcon || mConfig.alwaysShowDataRatIcon
-                || mConfig.alwaysShowNetworkTypeIcon
-                || mFiveGState.isConnectedOnSaMode() ) ? icons.mDataType : 0;
+                || mConfig.alwaysShowNetworkTypeIcon) ? icons.mDataType : 0;
         int volteIcon = mConfig.showVolteIcon && isVolteSwitchOn() ? getVolteResId() : 0;
         if (DEBUG) {
             Log.d(mTag, "notifyListeners mConfig.alwaysShowNetworkTypeIcon="
@@ -676,6 +676,20 @@ public class MobileSignalController extends SignalController<
         } else {
             mCurrentState.iconGroup = mDefaultIcons;
         }
+
+        if ( mDataNetType == TelephonyManager.NETWORK_TYPE_NR ) {
+            if (mFiveGState.isNrIconTypeValid()) {
+                mCurrentState.iconGroup = mFiveGState.getIconGroup();
+            }
+
+            if ( isCellSignalStrengthNrValid() ) {
+                mCurrentState.level = mCellSignalStrengthNr.getLevel();
+            }
+
+        }else if ( isAlertNsaValid() ) {
+            mCurrentState.iconGroup = mFiveGState.getIconGroup();
+        }
+
         mCurrentState.dataConnected = mCurrentState.connected
                 && (mDataState == TelephonyManager.DATA_CONNECTED
                     || mMMSDataState == DataState.CONNECTED);
@@ -834,6 +848,7 @@ public class MobileSignalController extends SignalController<
     public void registerFiveGStateListener(FiveGServiceClient client) {
         int phoneId = mSubscriptionInfo.getSimSlotIndex();
         client.registerListener(phoneId, mFiveGStateListener);
+        mClient = client;
     }
 
     public void unregisterFiveGStateListener(FiveGServiceClient client) {
@@ -851,9 +866,12 @@ public class MobileSignalController extends SignalController<
         return registered;
     }
 
-    private boolean is5GConnected() {
-        return mFiveGState.isConnectedOnSaMode()
-                || mFiveGState.isConnectedOnNsaMode() && isDataRegisteredOnLte();
+    private boolean isAlertNsaValid() {
+        return  mFiveGState.isNrIconTypeValid() && isDataRegisteredOnLte();
+    }
+
+    private boolean isCellSignalStrengthNrValid() {
+        return ( mCellSignalStrengthNr != null && mCellSignalStrengthNr.isValid());
     }
 
     @Override
@@ -881,7 +899,28 @@ public class MobileSignalController extends SignalController<
                         ((signalStrength == null) ? "" : (" level=" + signalStrength.getLevel())));
             }
             mSignalStrength = signalStrength;
+            updateCellSignalStrengthNr(signalStrength);
             updateTelephony();
+        }
+
+        private void updateCellSignalStrengthNr(SignalStrength signalStrength) {
+            if ( signalStrength != null ) {
+                List<CellSignalStrengthNr> ssNrList =
+                        mSignalStrength.getCellSignalStrengths(CellSignalStrengthNr.class);
+                if (ssNrList != null && ssNrList.size() > 0) {
+                    mCellSignalStrengthNr = ssNrList.get(0);
+                }else {
+                    mCellSignalStrengthNr = null;
+                }
+            }else {
+                mCellSignalStrengthNr = null;
+            }
+
+            if ( mDataNetType == TelephonyManager.NETWORK_TYPE_NR
+                    && !isCellSignalStrengthNrValid()
+                    && mClient != null){
+                mClient.queryNrSignalStrength(mSubscriptionInfo.getSimSlotIndex());
+            }
         }
 
         @Override
@@ -954,6 +993,7 @@ public class MobileSignalController extends SignalController<
                 Log.d(mTag, "onStateChanged: state=" + state);
             }
             mFiveGState = state;
+            updateTelephony();
             notifyListeners();
         }
     }
