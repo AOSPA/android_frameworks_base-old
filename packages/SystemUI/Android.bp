@@ -199,6 +199,8 @@ android_app {
     ],
     libs: [
         "telephony-common",
+        "telephony-ext",
+        "ims-common",
     ],
 
     srcs: [
