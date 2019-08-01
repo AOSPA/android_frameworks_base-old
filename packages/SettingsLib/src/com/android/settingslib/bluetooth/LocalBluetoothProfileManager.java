@@ -221,7 +221,7 @@ public class LocalBluetoothProfileManager {
             mSapProfile = new SapProfile(mContext, mDeviceManager, this);
             addProfile(mSapProfile, SapProfile.NAME, BluetoothSap.ACTION_CONNECTION_STATE_CHANGED);
         }
-        if (mDunProfile == null && supportedList.contains(BluetoothProfile.DUN)) {
+        if (mDunProfile == null) {
             if(DEBUG) Log.d(TAG, "Adding local DUN profile");
             mDunProfile = new DunServerProfile(mContext);
             addProfile(mDunProfile, DunServerProfile.NAME,
