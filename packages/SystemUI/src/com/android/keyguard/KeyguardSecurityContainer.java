@@ -597,6 +597,11 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
             }
         }
 
+        @Override
+        public void onUserInput() {
+            mUpdateMonitor.cancelFaceAuth();
+        }
+
         public void dismiss(boolean authenticated, int targetId) {
             mSecurityCallback.dismiss(authenticated, targetId);
         }
@@ -640,6 +645,8 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         public boolean isVerifyUnlockOnly() { return false; }
         @Override
         public void dismiss(boolean securityVerified, int targetUserId) { }
+        @Override
+        public void onUserInput() { }
         @Override
         public void reset() {}
     };

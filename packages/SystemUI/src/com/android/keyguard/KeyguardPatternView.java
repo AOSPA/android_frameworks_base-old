@@ -275,6 +275,7 @@ public class KeyguardPatternView extends LinearLayout implements KeyguardSecurit
         @Override
         public void onPatternCellAdded(List<LockPatternView.Cell> pattern) {
             mCallback.userActivity();
+            mCallback.onUserInput();
         }
 
         @Override
@@ -337,6 +338,7 @@ public class KeyguardPatternView extends LinearLayout implements KeyguardSecurit
                     });
             if (pattern.size() > MIN_PATTERN_BEFORE_POKE_WAKELOCK) {
                 mCallback.userActivity();
+                mCallback.onUserInput();
             }
         }
 
