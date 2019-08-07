@@ -541,6 +541,7 @@ public final class PowerManagerService extends SystemService
     // Gestures
     private boolean mGesturesEnabled;
 
+    private boolean mSupportsSingleTapConfig;
     private boolean mSupportsDoubleTapWakeConfig;
     private boolean mSupportsDrawVConfig;
     private boolean mSupportsDrawInverseVConfig;
@@ -556,7 +557,8 @@ public final class PowerManagerService extends SystemService
     private boolean mSupportsOneFingerSwipeLeftConfig;
     private boolean mSupportsTwoFingerSwipeConfig;
 
-    // True if double tap to wake is enabled
+    // True if gesture is enabled
+    private boolean mSingleTapWakeEnabled;
     private boolean mDoubleTapWakeEnabled;
     private boolean mDrawVEnabled;
     private boolean mDrawInverseVEnabled;
@@ -588,6 +590,7 @@ public final class PowerManagerService extends SystemService
     private static final int POWER_FEATURE_ONE_FINGER_SWIPE_LEFT = 13;
     private static final int POWER_FEATURE_TWO_FINGER_SWIPE = 14;
     private static final int POWER_FEATURE_DRAW_S = 15;
+    private static final int POWER_FEATURE_SINGLE_TAP_TO_WAKE = 16;
 
     // True if we are currently in VR Mode.
     private boolean mIsVrModeEnabled;
@@ -740,6 +743,7 @@ public final class PowerManagerService extends SystemService
             nativeSetAutoSuspend(false);
             nativeSetInteractive(true);
             nativeSetFeature(POWER_FEATURE_GESTURES, 0);
+            nativeSetFeature(POWER_FEATURE_SINGLE_TAP_TO_WAKE, 0);
             nativeSetFeature(POWER_FEATURE_DOUBLE_TAP_TO_WAKE, 0);
             nativeSetFeature(POWER_FEATURE_DRAW_V, 0);
             nativeSetFeature(POWER_FEATURE_DRAW_INVERSE_V, 0);
@@ -907,6 +911,9 @@ public final class PowerManagerService extends SystemService
                     Settings.System.GESTURES_ENABLED),
                     false, mSettingsObserver, UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.GESTURE_SINGLE_TAP),
+                    false, mSettingsObserver, UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.GESTURE_DOUBLE_TAP),
                     false, mSettingsObserver, UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
@@ -1032,6 +1039,8 @@ public final class PowerManagerService extends SystemService
                 com.android.internal.R.integer.config_maximumScreenDimDuration);
         mMaximumScreenDimRatioConfig = resources.getFraction(
                 com.android.internal.R.fraction.config_maximumScreenDimRatio, 1, 1);
+        mSupportsSingleTapWakeConfig = resources.getInteger(
+                com.android.internal.R.integer.config_singleTapKeyCode) > 0;
         mSupportsDoubleTapWakeConfig = resources.getInteger(
                 com.android.internal.R.integer.config_doubleTapKeyCode) > 0;
         mSupportsDrawVConfig = resources.getInteger(
@@ -1095,6 +1104,18 @@ public final class PowerManagerService extends SystemService
         if (gesturesEnabled != mGesturesEnabled) {
             mGesturesEnabled = gesturesEnabled;
             nativeSetFeature(POWER_FEATURE_GESTURES, mGesturesEnabled ? 1 : 0);
+        }
+
+        if (mSupportsSingleTapWakeConfig) {
+            boolean singleTapWakeEnabled = Settings.System.getIntForUser(resolver,
+                    Settings.System.GESTURE_SINGLE_TAP, mContext.getResources()
+                    .getInteger(com.android.internal.R.integer.config_singleTapDefault),
+                    UserHandle.USER_CURRENT) > 0;
+            if (singleTapWakeEnabled != mSingleTapWakeEnabled) {
+                mSingleTapWakeEnabled = singleTapWakeEnabled;
+                nativeSetFeature(POWER_FEATURE_SINGLE_TAP_TO_WAKE,
+                        mSingleTapWakeEnabled && mGesturesEnabled ? 1 : 0);
+            }
         }
 
         if (mSupportsDoubleTapWakeConfig) {
@@ -3722,6 +3743,7 @@ public final class PowerManagerService extends SystemService
             pw.println("  mIsVrModeEnabled=" + mIsVrModeEnabled);
             pw.println("  mForegroundProfile=" + mForegroundProfile);
             pw.println("  mGesturesEnabled=" + mGesturesEnabled);
+            pw.println("  mSingleTapWakeEnabled=" + mSingleTapWakeEnabled);
             pw.println("  mDoubleTapWakeEnabled=" + mDoubleTapWakeEnabled);
             pw.println("  mDrawVEnabled=" + mDrawVEnabled);
             pw.println("  mDrawInverseVEnabled=" + mDrawInverseVEnabled);

@@ -121,6 +121,7 @@ public class KeyHandler {
     private boolean mTorchEnabled;
     private boolean mSystemReady = false;
 
+    private int mSingleTapKeyCode;
     private int mDoubleTapKeyCode;
     private int mDrawOKeyCode;
     private int mTwoFingerSwipeKeyCode;
@@ -136,6 +137,7 @@ public class KeyHandler {
     private int mDrawWKeyCode;
     private int mDrawSKeyCode;
 
+    private int mSingleTapGesture;
     private int mDoubleTapGesture;
     private int mDrawOGesture;
     private int mTwoFingerSwipeGesture;
@@ -224,6 +226,7 @@ public class KeyHandler {
         final Resources resources = mContext.getResources();
 
         // Gestures device key codes.
+        mSingleTapKeyCode = resources.getInteger(R.integer.config_singleTapKeyCode);
         mDoubleTapKeyCode = resources.getInteger(R.integer.config_doubleTapKeyCode);
         mDrawOKeyCode = resources.getInteger(R.integer.config_drawOKeyCode);
         mTwoFingerSwipeKeyCode = resources.getInteger(R.integer.config_twoFingerSwipeKeyCode);
@@ -240,6 +243,7 @@ public class KeyHandler {
         mDrawSKeyCode = resources.getInteger(R.integer.config_drawSKeyCode);
 
         mGestures.clear();
+        mGestures.put(mSingleTapKeyCode, mSingleTapGesture);
         mGestures.put(mDoubleTapKeyCode, mDoubleTapGesture);
         mGestures.put(mDrawOKeyCode, mDrawOGesture);
         mGestures.put(mTwoFingerSwipeKeyCode, mTwoFingerSwipeGesture);
@@ -264,6 +268,13 @@ public class KeyHandler {
                 Settings.System.GESTURES_ENABLED, GESTURES_DEFAULT) != 0;
         if (gesturesEnabled != mGesturesEnabled) {
             mGesturesEnabled = gesturesEnabled;
+        }
+
+        int singleTapGesture = Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.GESTURE_SINGLE_TAP, mContext.getResources()                                                                                                                                                    .getInteger(com.android.internal.R.integer.config_doubleTapDefault));
+        if (singleTapGesture != mSingleTapGesture) {
+            mSingleTapGesture = singleTapGesture;
+            mGestures.put(mSingleTapKeyCode, mSingleTapGesture);
         }
 
         int doubleTapGesture = Settings.System.getInt(mContext.getContentResolver(),
@@ -472,6 +483,9 @@ public class KeyHandler {
         final ContentResolver resolver = mContext.getContentResolver();
         resolver.registerContentObserver(Settings.System.getUriFor(
                 Settings.System.GESTURES_ENABLED),
+                false, mObserver, UserHandle.USER_ALL);
+        resolver.registerContentObserver(Settings.System.getUriFor(
+                Settings.System.GESTURE_SINGLE_TAP),
                 false, mObserver, UserHandle.USER_ALL);
         resolver.registerContentObserver(Settings.System.getUriFor(
                 Settings.System.GESTURE_DOUBLE_TAP),

@@ -4276,6 +4276,12 @@ public final class Settings {
         public static final String GESTURES_ENABLED = "gestures_enabled";
 
         /**
+         * Controls whether single tap to wake is enabled.
+         * @hide
+         */
+        public static final String GESTURE_SINGLE_TAP = "gesture_single_tap";
+
+        /**
          * Controls whether double tap to wake is enabled.
          * @hide
          */
