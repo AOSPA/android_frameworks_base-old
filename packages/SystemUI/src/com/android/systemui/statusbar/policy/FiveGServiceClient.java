@@ -29,6 +29,12 @@
 
 package com.android.systemui.statusbar.policy;
 
+import static android.telephony.CellSignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
+import static android.telephony.CellSignalStrength.SIGNAL_STRENGTH_POOR;
+import static android.telephony.CellSignalStrength.SIGNAL_STRENGTH_MODERATE;
+import static android.telephony.CellSignalStrength.SIGNAL_STRENGTH_GOOD;
+import static android.telephony.CellSignalStrength.SIGNAL_STRENGTH_GREAT;
+
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.ServiceConnection;
@@ -39,6 +45,7 @@ import android.os.Message;
 import android.os.DeadObjectException;
 import android.os.RemoteException;
 import android.provider.Settings;
+import android.telephony.CellInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.util.Log;
@@ -76,8 +83,13 @@ public class FiveGServiceClient {
     private static final int MAX_RETRY = 4;
     private static final int DELAY_MILLISECOND = 3000;
     private static final int DELAY_INCREMENT = 2000;
-    private final int mRsrpThresholds[];
-    private final int mSnrThresholds[];
+
+    /**
+     * These threshold values are copied from CellSignalStrengthNr.
+     */
+    private static final int SIGNAL_GREAT_THRESHOLD = -95;
+    private static final int SIGNAL_GOOD_THRESHOLD = -105;
+    private static final int SIGNAL_MODERATE_THRESHOLD = -115;
 
     private static FiveGServiceClient sInstance;
     private final ArrayList<WeakReference<KeyguardUpdateMonitorCallback>>
@@ -160,11 +172,6 @@ public class FiveGServiceClient {
     public FiveGServiceClient(Context context) {
         mContext = context;
         mPackageName = mContext.getPackageName();
-
-        mRsrpThresholds =
-                mContext.getResources().getIntArray(R.array.config_5g_signal_rsrp_thresholds);
-        mSnrThresholds =
-                mContext.getResources().getIntArray(R.array.config_5g_signal_snr_thresholds);
     }
 
     public static FiveGServiceClient getInstance(Context context) {
@@ -208,10 +215,6 @@ public class FiveGServiceClient {
         }
     }
 
-    public static int getNumLevels(Context context) {
-        return context.getResources().getInteger(R.integer.config_5g_num_signal_strength_bins);
-    }
-
     public boolean isServiceConnected() {
         return mServiceConnected;
     }
@@ -233,33 +236,6 @@ public class FiveGServiceClient {
             array.put(key, state);
         }
         return state;
-    }
-
-    private int getSnrLevel(int snr) {
-        return getLevel(snr, mSnrThresholds);
-    }
-
-    private int getRsrpLevel(int rsrp) {
-        return getLevel(rsrp, mRsrpThresholds);
-    }
-
-    private static int getLevel(int value, int[]thresholds) {
-        int level = 0;
-        if ( thresholds[thresholds.length-1] < value || value < thresholds[0] ) {
-            level = 0;
-        } else{
-            level = 1;
-            for( int i=0; i < thresholds.length-1; ++i ) {
-                if (thresholds[i] < value && value <= thresholds[i+1]) {
-                    level = i+1;
-                    break;
-                }
-            }
-        }
-        if ( DEBUG ) {
-            Log.d(TAG, "value=" + value + " level=" + level);
-        }
-        return level;
     }
 
     private void notifyListenersIfNecessary(int phoneId) {
@@ -297,10 +273,9 @@ public class FiveGServiceClient {
         if ( mNetworkService != null && mClient != null) {
             Log.d(TAG, "query 5G service state for phoneId " + phoneId);
             try {
-                Token token = mNetworkService.queryNrSignalStrength(phoneId, mClient);
-                Log.d(TAG, "queryNrSignalStrength result:" + token);
+                queryNrSignalStrength(phoneId);
 
-                token = mNetworkService.query5gConfigInfo(phoneId, mClient);
+                Token token = mNetworkService.query5gConfigInfo(phoneId, mClient);
                 Log.d(TAG, "query5gConfigInfo result:" + token);
 
                 token = mNetworkService.queryNrIconType(phoneId, mClient);
@@ -341,6 +316,20 @@ public class FiveGServiceClient {
     @VisibleForTesting
     void update5GIcon(FiveGServiceState state,int phoneId) {
         state.mIconGroup = getNrIconGroup(state.mNrIconType, phoneId);
+    }
+
+    private void updateLevel(int ssRsrp, FiveGServiceState state) {
+        if (ssRsrp == CellInfo.UNAVAILABLE) {
+            state.mLevel = SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
+        } else if (ssRsrp >= SIGNAL_GREAT_THRESHOLD) {
+            state.mLevel = SIGNAL_STRENGTH_GREAT;
+        } else if (ssRsrp >= SIGNAL_GOOD_THRESHOLD) {
+            state.mLevel = SIGNAL_STRENGTH_GOOD;
+        } else if (ssRsrp >= SIGNAL_MODERATE_THRESHOLD) {
+            state.mLevel = SIGNAL_STRENGTH_MODERATE;
+        } else {
+            state.mLevel = SIGNAL_STRENGTH_POOR;
+        }
     }
 
     private MobileIconGroup getNrIconGroup(int nrIconType , int phoneId) {
@@ -440,7 +429,7 @@ public class FiveGServiceClient {
 
             if (status.get() == Status.SUCCESS && signalStrength != null) {
                 FiveGServiceState state = getCurrentServiceState(slotId);
-                state.mLevel = getRsrpLevel(signalStrength.getRsrp());
+                updateLevel(signalStrength.getRsrp(), state);
                 notifyListenersIfNecessary(slotId);
             }
         }
