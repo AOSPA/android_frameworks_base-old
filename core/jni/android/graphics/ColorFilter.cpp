@@ -38,7 +38,7 @@ public:
 
     static jlong CreateBlendModeFilter(JNIEnv* env, jobject, jint srcColor, jint modeHandle) {
         SkBlendMode mode = static_cast<SkBlendMode>(modeHandle);
-        return reinterpret_cast<jlong>(SkColorFilter::MakeModeFilter(srcColor, mode).release());
+        return reinterpret_cast<jlong>(SkColorFilters::Blend(srcColor, mode).release());
     }
 
     static jlong CreateLightingFilter(JNIEnv* env, jobject, jint mul, jint add) {
@@ -46,14 +46,14 @@ public:
     }
 
     static jlong CreateColorMatrixFilter(JNIEnv* env, jobject, jfloatArray jarray) {
-        AutoJavaFloatArray autoArray(env, jarray, 20);
-        const float* src = autoArray.ptr();
-
-#ifdef SK_SCALAR_IS_FLOAT
-        return reinterpret_cast<jlong>(SkColorFilter::MakeMatrixFilterRowMajor255(src).release());
-#else
-        SkASSERT(false);
-#endif
+        float matrix[20];
+        env->GetFloatArrayRegion(jarray, 0, 20, matrix);
+        // java biases the translates by 255, so undo that before calling skia
+        matrix[ 4] *= (1.0f/255);
+        matrix[ 9] *= (1.0f/255);
+        matrix[14] *= (1.0f/255);
+        matrix[19] *= (1.0f/255);
+        return reinterpret_cast<jlong>(SkColorFilters::Matrix(matrix).release());
     }
 };
 

@@ -2416,12 +2416,15 @@ public class TelephonyManager {
     }
 
     /**
-     * Returns the ISO country code equivalent of the MCC (Mobile Country Code) of the current
+     * Returns the ISO-3166 country code equivalent of the MCC (Mobile Country Code) of the current
      * registered operator or the cell nearby, if available.
-     * .
+     * <p>
+     * The ISO-3166 country code is provided in lowercase 2 character format.
      * <p>
      * Note: Result may be unreliable on CDMA networks (use {@link #getPhoneType()} to determine
      * if on a CDMA network).
+     * <p>
+     * @return the lowercase 2 character ISO-3166 country code, or empty string if not available.
      */
     public String getNetworkCountryIso() {
         return getNetworkCountryIsoForPhone(getPhoneId());
@@ -2545,8 +2548,13 @@ public class TelephonyManager {
     public @interface NetworkType{}
 
     /**
+     * Return the current data network type.
+     *
+     * @deprecated use {@link #getDataNetworkType()}
      * @return the NETWORK_TYPE_xxxx for current data connection.
      */
+    @Deprecated
+    @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     public @NetworkType int getNetworkType() {
         return getNetworkType(getSubId(SubscriptionManager.getDefaultDataSubscriptionId()));
     }
@@ -3266,7 +3274,10 @@ public class TelephonyManager {
     }
 
     /**
-     * Returns the ISO country code equivalent for the SIM provider's country code.
+     * Returns the ISO-3166 country code equivalent for the SIM provider's country code.
+     * <p>
+     * The ISO-3166 country code is provided in lowercase 2 character format.
+     * @return the lowercase 2 character ISO-3166 country code, or empty string is not available.
      */
     public String getSimCountryIso() {
         return getSimCountryIsoForPhone(getPhoneId());
@@ -5445,6 +5456,18 @@ public class TelephonyManager {
      * Use this method when no subscriptions are available on the SIM and the operation must be
      * performed using the physical slot index.
      *
+     * This operation wraps two APDU instructions:
+     * <ul>
+     *     <li>MANAGE CHANNEL to open a logical channel</li>
+     *     <li>SELECT the given {@code AID} using the given {@code p2}</li>
+     * </ul>
+     *
+     * Per Open Mobile API Specification v3.2 section 6.2.7.h, only p2 values of 0x00, 0x04, 0x08,
+     * and 0x0C are guaranteed to be supported.
+     *
+     * If the SELECT command's status word is not '9000', '62xx', or '63xx', the status word will be
+     * considered an error and the channel shall not be opened.
+     *
      * Input parameters equivalent to TS 27.007 AT+CCHO command.
      *
      * <p>Requires Permission:
@@ -5476,6 +5499,18 @@ public class TelephonyManager {
     /**
      * Opens a logical channel to the ICC card.
      *
+     * This operation wraps two APDU instructions:
+     * <ul>
+     *     <li>MANAGE CHANNEL to open a logical channel</li>
+     *     <li>SELECT the given {@code AID} using the given {@code p2}</li>
+     * </ul>
+     *
+     * Per Open Mobile API Specification v3.2 section 6.2.7.h, only p2 values of 0x00, 0x04, 0x08,
+     * and 0x0C are guaranteed to be supported.
+     *
+     * If the SELECT command's status word is not '9000', '62xx', or '63xx', the status word will be
+     * considered an error and the channel shall not be opened.
+     *
      * Input parameters equivalent to TS 27.007 AT+CCHO command.
      *
      * <p>Requires Permission:
@@ -5492,6 +5527,18 @@ public class TelephonyManager {
 
     /**
      * Opens a logical channel to the ICC card.
+     *
+     * This operation wraps two APDU instructions:
+     * <ul>
+     *     <li>MANAGE CHANNEL to open a logical channel</li>
+     *     <li>SELECT the given {@code AID} using the given {@code p2}</li>
+     * </ul>
+     *
+     * Per Open Mobile API Specification v3.2 section 6.2.7.h, only p2 values of 0x00, 0x04, 0x08,
+     * and 0x0C are guaranteed to be supported.
+     *
+     * If the SELECT command's status word is not '9000', '62xx', or '63xx', the status word will be
+     * considered an error and the channel shall not be opened.
      *
      * Input parameters equivalent to TS 27.007 AT+CCHO command.
      *
@@ -8402,9 +8449,8 @@ public class TelephonyManager {
             ITelephony telephony = getITelephony();
             if (telephony != null)
                 retVal = telephony.isUserDataEnabled(subId);
-        } catch (RemoteException e) {
+        } catch (RemoteException | NullPointerException e) {
             Log.e(TAG, "Error calling ITelephony#isUserDataEnabled", e);
-        } catch (NullPointerException e) {
         }
         return retVal;
     }

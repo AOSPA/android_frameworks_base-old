@@ -44,9 +44,11 @@ import static com.android.server.pm.permission.PermissionsState.PERMISSION_OPERA
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import android.Manifest;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
+import android.app.ApplicationPackageManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.PermissionWhitelistFlags;
@@ -74,6 +76,7 @@ import android.permission.PermissionManagerInternal.OnRuntimePermissionStateChan
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.DebugUtils;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
@@ -101,6 +104,8 @@ import com.android.server.policy.SoftRestrictedPermissionPolicy;
 
 import libcore.util.EmptyArray;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -1320,11 +1325,13 @@ public class PermissionManagerService {
                         permissionsState.updatePermissionFlags(bp, UserHandle.USER_ALL,
                                 MASK_PERMISSION_FLAGS_ALL, 0);
                         changedInstallPermission = true;
-                        Slog.i(TAG, "Un-granting permission " + perm
-                                + " from package " + pkg.packageName
-                                + " (protectionLevel=" + bp.getProtectionLevel()
-                                + " flags=0x" + Integer.toHexString(pkg.applicationInfo.flags)
-                                + ")");
+                        if (DEBUG_PERMISSIONS) {
+                            Slog.i(TAG, "Un-granting permission " + perm
+                                    + " from package " + pkg.packageName
+                                    + " (protectionLevel=" + bp.getProtectionLevel()
+                                    + " flags=0x" + Integer.toHexString(pkg.applicationInfo.flags)
+                                    + ")");
+                        }
                     } else if (bp.isAppOp()) {
                         // Don't print warning for app op permissions, since it is fine for them
                         // not to be granted, there is a UI for the user to decide.
@@ -2063,6 +2070,13 @@ public class PermissionManagerService {
 
     private void grantRuntimePermission(String permName, String packageName, boolean overridePolicy,
             int callingUid, final int userId, PermissionCallback callback) {
+        if (ApplicationPackageManager.DEBUG_TRACE_GRANTS
+                && ApplicationPackageManager.shouldTraceGrant(packageName, permName, userId)) {
+            Log.i(TAG, "System is granting "
+                    + permName + " for user " + userId + " on behalf of uid " + callingUid
+                    + " " + mPackageManagerInt.getNameForUid(callingUid),
+                    new RuntimeException());
+        }
         if (!mUserManagerInt.exists(userId)) {
             Log.e(TAG, "No such user:" + userId);
             return;
@@ -2204,6 +2218,14 @@ public class PermissionManagerService {
 
     private void revokeRuntimePermission(String permName, String packageName,
             boolean overridePolicy, int userId, PermissionCallback callback) {
+        int callingUid = Binder.getCallingUid();
+        if (ApplicationPackageManager.DEBUG_TRACE_GRANTS
+                && ApplicationPackageManager.shouldTraceGrant(packageName, permName, userId)) {
+            Log.i(TAG, "System is revoking "
+                            + permName + " for user " + userId + " on behalf of uid " + callingUid
+                            + " " + mPackageManagerInt.getNameForUid(callingUid),
+                    new RuntimeException());
+        }
         if (!mUserManagerInt.exists(userId)) {
             Log.e(TAG, "No such user:" + userId);
             return;
@@ -2213,7 +2235,7 @@ public class PermissionManagerService {
                 android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS,
                 "revokeRuntimePermission");
 
-        enforceCrossUserPermission(Binder.getCallingUid(), userId,
+        enforceCrossUserPermission(callingUid, userId,
                 true,  // requireFullPermission
                 true,  // checkShell
                 false, // requirePermissionWhenSameUser
@@ -2223,7 +2245,7 @@ public class PermissionManagerService {
         if (pkg == null || pkg.mExtras == null) {
             throw new IllegalArgumentException("Unknown package: " + packageName);
         }
-        if (mPackageManagerInt.filterAppAccess(pkg, Binder.getCallingUid(), userId)) {
+        if (mPackageManagerInt.filterAppAccess(pkg, callingUid, userId)) {
             throw new IllegalArgumentException("Unknown package: " + packageName);
         }
         final BasePermission bp = mSettings.getPermissionLocked(permName);
@@ -2524,15 +2546,24 @@ public class PermissionManagerService {
         return permissionsState.getPermissionFlags(permName, userId);
     }
 
-    private static final int UPDATE_PERMISSIONS_ALL = 1<<0;
-    private static final int UPDATE_PERMISSIONS_REPLACE_PKG = 1<<1;
-    private static final int UPDATE_PERMISSIONS_REPLACE_ALL = 1<<2;
-
-    private void updatePermissions(String packageName, PackageParser.Package pkg,
-            boolean replaceGrant, Collection<PackageParser.Package> allPackages,
-            PermissionCallback callback) {
-        final int flags = (pkg != null ? UPDATE_PERMISSIONS_ALL : 0) |
-                (replaceGrant ? UPDATE_PERMISSIONS_REPLACE_PKG : 0);
+    /**
+     * Update permissions when a package changed.
+     *
+     * <p><ol>
+     *     <li>Reconsider the ownership of permission</li>
+     *     <li>Update the state (grant, flags) of the permissions</li>
+     * </ol>
+     *
+     * @param packageName The package that is updated
+     * @param pkg The package that is updated, or {@code null} if package is deleted
+     * @param allPackages All currently known packages
+     * @param callback Callback to call after permission changes
+     */
+    private void updatePermissions(@NonNull String packageName, @Nullable PackageParser.Package pkg,
+            @NonNull Collection<PackageParser.Package> allPackages,
+            @NonNull PermissionCallback callback) {
+        final int flags =
+                (pkg != null ? UPDATE_PERMISSIONS_ALL | UPDATE_PERMISSIONS_REPLACE_PKG : 0);
         updatePermissions(
                 packageName, pkg, getVolumeUuidForPackage(pkg), flags, allPackages, callback);
         if (pkg != null && pkg.childPackages != null) {
@@ -2543,8 +2574,21 @@ public class PermissionManagerService {
         }
     }
 
-    private void updateAllPermissions(String volumeUuid, boolean sdkUpdated,
-            Collection<PackageParser.Package> allPackages, PermissionCallback callback) {
+    /**
+     * Update all permissions for all apps.
+     *
+     * <p><ol>
+     *     <li>Reconsider the ownership of permission</li>
+     *     <li>Update the state (grant, flags) of the permissions</li>
+     * </ol>
+     *
+     * @param volumeUuid The volume of the packages to be updated, {@code null} for all volumes
+     * @param allPackages All currently known packages
+     * @param callback Callback to call after permission changes
+     */
+    private void updateAllPermissions(@Nullable String volumeUuid, boolean sdkUpdated,
+            @NonNull Collection<PackageParser.Package> allPackages,
+            @NonNull PermissionCallback callback) {
         final int flags = UPDATE_PERMISSIONS_ALL |
                 (sdkUpdated
                         ? UPDATE_PERMISSIONS_REPLACE_PKG | UPDATE_PERMISSIONS_REPLACE_ALL
@@ -2552,25 +2596,12 @@ public class PermissionManagerService {
         updatePermissions(null, null, volumeUuid, flags, allPackages, callback);
     }
 
-    private void updatePermissions(String changingPkgName, PackageParser.Package changingPkg,
-            String replaceVolumeUuid, int flags, Collection<PackageParser.Package> allPackages,
-            PermissionCallback callback) {
-        // TODO: Most of the methods exposing BasePermission internals [source package name,
-        // etc..] shouldn't be needed. Instead, when we've parsed a permission that doesn't
-        // have package settings, we should make note of it elsewhere [map between
-        // source package name and BasePermission] and cycle through that here. Then we
-        // define a single method on BasePermission that takes a PackageSetting, changing
-        // package name and a package.
-        // NOTE: With this approach, we also don't need to tree trees differently than
-        // normal permissions. Today, we need two separate loops because these BasePermission
-        // objects are stored separately.
-        // Make sure there are no dangling permission trees.
-        flags = updatePermissionTrees(changingPkgName, changingPkg, flags);
-
-        // Make sure all dynamic permissions have been assigned to a package,
-        // and make sure there are no dangling permissions.
-        flags = updatePermissions(changingPkgName, changingPkg, flags);
-
+    /**
+     * Cache background->foreground permission mapping.
+     *
+     * <p>This is only run once.
+     */
+    private void cacheBackgroundToForegoundPermissionMapping() {
         synchronized (mLock) {
             if (mBackgroundPermissions == null) {
                 // Cache background -> foreground permission mapping.
@@ -2593,10 +2624,85 @@ public class PermissionManagerService {
                 }
             }
         }
+    }
+
+    /**
+     * Update all packages on the volume, <u>beside</u> the changing package. If the changing
+     * package is set too, all packages are updated.
+     */
+    private static final int UPDATE_PERMISSIONS_ALL = 1 << 0;
+    /** The changing package is replaced. Requires the changing package to be set */
+    private static final int UPDATE_PERMISSIONS_REPLACE_PKG = 1 << 1;
+    /**
+     * Schedule all packages <u>beside</u> the changing package for replacement. Requires
+     * UPDATE_PERMISSIONS_ALL to be set
+     */
+    private static final int UPDATE_PERMISSIONS_REPLACE_ALL = 1 << 2;
+
+    @IntDef(flag = true, prefix = { "UPDATE_PERMISSIONS_" }, value = {
+            UPDATE_PERMISSIONS_ALL, UPDATE_PERMISSIONS_REPLACE_PKG,
+            UPDATE_PERMISSIONS_REPLACE_ALL })
+    @Retention(RetentionPolicy.SOURCE)
+    private @interface UpdatePermissionFlags {}
+
+    /**
+     * Update permissions when packages changed.
+     *
+     * <p><ol>
+     *     <li>Reconsider the ownership of permission</li>
+     *     <li>Update the state (grant, flags) of the permissions</li>
+     * </ol>
+     *
+     * <p>Meaning of combination of package parameters:
+     * <table>
+     *     <tr><th></th><th>changingPkgName != null</th><th>changingPkgName == null</th></tr>
+     *     <tr><th>changingPkg != null</th><td>package is updated</td><td>invalid</td></tr>
+     *     <tr><th>changingPkg == null</th><td>package is deleted</td><td>all packages are
+     *                                                                    updated</td></tr>
+     * </table>
+     *
+     * @param changingPkgName The package that is updated, or {@code null} if all packages should be
+     *                    updated
+     * @param changingPkg The package that is updated, or {@code null} if all packages should be
+     *                    updated or package is deleted
+     * @param replaceVolumeUuid The volume of the packages to be updated are on, {@code null} for
+     *                          all volumes
+     * @param flags Control permission for which apps should be updated
+     * @param allPackages All currently known packages
+     * @param callback Callback to call after permission changes
+     */
+    private void updatePermissions(@Nullable String changingPkgName,
+            @Nullable PackageParser.Package changingPkg, @Nullable String replaceVolumeUuid,
+            @UpdatePermissionFlags int flags,
+            @NonNull Collection<PackageParser.Package> allPackages,
+            @Nullable PermissionCallback callback) {
+        // TODO: Most of the methods exposing BasePermission internals [source package name,
+        // etc..] shouldn't be needed. Instead, when we've parsed a permission that doesn't
+        // have package settings, we should make note of it elsewhere [map between
+        // source package name and BasePermission] and cycle through that here. Then we
+        // define a single method on BasePermission that takes a PackageSetting, changing
+        // package name and a package.
+        // NOTE: With this approach, we also don't need to tree trees differently than
+        // normal permissions. Today, we need two separate loops because these BasePermission
+        // objects are stored separately.
+        // Make sure there are no dangling permission trees.
+        boolean permissionTreesSourcePackageChanged = updatePermissionTreeSourcePackage(
+                changingPkgName, changingPkg);
+        // Make sure all dynamic permissions have been assigned to a package,
+        // and make sure there are no dangling permissions.
+        boolean permissionSourcePackageChanged = updatePermissionSourcePackage(changingPkgName,
+                changingPkg);
+
+        if (permissionTreesSourcePackageChanged | permissionSourcePackageChanged) {
+            // Permission ownership has changed. This e.g. changes which packages can get signature
+            // permissions
+            flags |= UPDATE_PERMISSIONS_ALL;
+        }
+
+        cacheBackgroundToForegoundPermissionMapping();
 
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "restorePermissionState");
-        // Now update the permissions for all packages, in particular
-        // replace the granted permissions of the system packages.
+        // Now update the permissions for all packages.
         if ((flags & UPDATE_PERMISSIONS_ALL) != 0) {
             for (PackageParser.Package pkg : allPackages) {
                 if (pkg != changingPkg) {
@@ -2619,7 +2725,27 @@ public class PermissionManagerService {
         Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
     }
 
-    private int updatePermissions(String packageName, PackageParser.Package pkg, int flags) {
+    /**
+     * Update which app declares a permission.
+     *
+     * <p>Possible parameter combinations
+     * <table>
+     *     <tr><th></th><th>packageName != null</th><th>packageName == null</th></tr>
+     *     <tr><th>pkg != null</th><td>package is updated</td><td>invalid</td></tr>
+     *     <tr><th>pkg == null</th><td>package is deleted</td><td>all packages are updated</td></tr>
+     * </table>
+     *
+     * @param packageName The package that is updated, or {@code null} if all packages should be
+     *                    updated
+     * @param pkg The package that is updated, or {@code null} if all packages should be updated or
+     *            package is deleted
+     *
+     * @return {@code true} if a permission source package might have changed
+     */
+    private boolean updatePermissionSourcePackage(@Nullable String packageName,
+            @Nullable PackageParser.Package pkg) {
+        boolean changed = false;
+
         Set<BasePermission> needsUpdate = null;
         synchronized (mLock) {
             final Iterator<BasePermission> it = mSettings.mPermissions.values().iterator();
@@ -2631,9 +2757,9 @@ public class PermissionManagerService {
                 if (bp.getSourcePackageSetting() != null) {
                     if (packageName != null && packageName.equals(bp.getSourcePackageName())
                         && (pkg == null || !hasPermission(pkg, bp.getName()))) {
-                        Slog.i(TAG, "Removing old permission tree: " + bp.getName()
-                                + " from package " + bp.getSourcePackageName());
-                        flags |= UPDATE_PERMISSIONS_ALL;
+                        Slog.i(TAG, "Removing permission " + bp.getName()
+                                + " that used to be declared by " + bp.getSourcePackageName());
+                        changed = true;
                         it.remove();
                     }
                     continue;
@@ -2662,11 +2788,30 @@ public class PermissionManagerService {
                 }
             }
         }
-        return flags;
+        return changed;
     }
 
-    private int updatePermissionTrees(String packageName, PackageParser.Package pkg,
-            int flags) {
+    /**
+     * Update which app owns a permission trees.
+     *
+     * <p>Possible parameter combinations
+     * <table>
+     *     <tr><th></th><th>packageName != null</th><th>packageName == null</th></tr>
+     *     <tr><th>pkg != null</th><td>package is updated</td><td>invalid</td></tr>
+     *     <tr><th>pkg == null</th><td>package is deleted</td><td>all packages are updated</td></tr>
+     * </table>
+     *
+     * @param packageName The package that is updated, or {@code null} if all packages should be
+     *                    updated
+     * @param pkg The package that is updated, or {@code null} if all packages should be updated or
+     *            package is deleted
+     *
+     * @return {@code true} if a permission tree ownership might have changed
+     */
+    private boolean updatePermissionTreeSourcePackage(@Nullable String packageName,
+            @Nullable PackageParser.Package pkg) {
+        boolean changed = false;
+
         Set<BasePermission> needsUpdate = null;
         synchronized (mLock) {
             final Iterator<BasePermission> it = mSettings.mPermissionTrees.values().iterator();
@@ -2675,9 +2820,9 @@ public class PermissionManagerService {
                 if (bp.getSourcePackageSetting() != null) {
                     if (packageName != null && packageName.equals(bp.getSourcePackageName())
                         && (pkg == null || !hasPermission(pkg, bp.getName()))) {
-                        Slog.i(TAG, "Removing old permission tree: " + bp.getName()
-                                + " from package " + bp.getSourcePackageName());
-                        flags |= UPDATE_PERMISSIONS_ALL;
+                        Slog.i(TAG, "Removing permission tree " + bp.getName()
+                                + " that used to be declared by " + bp.getSourcePackageName());
+                        changed = true;
                         it.remove();
                     }
                     continue;
@@ -2706,12 +2851,26 @@ public class PermissionManagerService {
                 }
             }
         }
-        return flags;
+        return changed;
     }
 
     private void updatePermissionFlags(String permName, String packageName, int flagMask,
             int flagValues, int callingUid, int userId, boolean overridePolicy,
             PermissionCallback callback) {
+        if (ApplicationPackageManager.DEBUG_TRACE_GRANTS
+                && ApplicationPackageManager.shouldTraceGrant(packageName, permName, userId)) {
+            Log.i(TAG, "System is updating flags for "
+                            + permName + " for user " + userId  + " "
+                            + DebugUtils.flagsToString(
+                                    PackageManager.class, "FLAG_PERMISSION_", flagMask)
+                            + " := "
+                            + DebugUtils.flagsToString(
+                                    PackageManager.class, "FLAG_PERMISSION_", flagValues)
+                            + " on behalf of uid " + callingUid
+                            + " " + mPackageManagerInt.getNameForUid(callingUid),
+                    new RuntimeException());
+        }
+
         if (!mUserManagerInt.exists(userId)) {
             return;
         }
@@ -3032,14 +3191,16 @@ public class PermissionManagerService {
                     overridePolicy, userId, callback);
         }
         @Override
-        public void updatePermissions(String packageName, Package pkg, boolean replaceGrant,
-                Collection<PackageParser.Package> allPackages, PermissionCallback callback) {
+        public void updatePermissions(@NonNull String packageName, @Nullable Package pkg,
+                @NonNull Collection<PackageParser.Package> allPackages,
+                @NonNull PermissionCallback callback) {
             PermissionManagerService.this.updatePermissions(
-                    packageName, pkg, replaceGrant, allPackages, callback);
+                    packageName, pkg, allPackages, callback);
         }
         @Override
-        public void updateAllPermissions(String volumeUuid, boolean sdkUpdated,
-                Collection<PackageParser.Package> allPackages, PermissionCallback callback) {
+        public void updateAllPermissions(@Nullable String volumeUuid, boolean sdkUpdated,
+                @NonNull Collection<PackageParser.Package> allPackages,
+                @NonNull PermissionCallback callback) {
             PermissionManagerService.this.updateAllPermissions(
                     volumeUuid, sdkUpdated, allPackages, callback);
         }

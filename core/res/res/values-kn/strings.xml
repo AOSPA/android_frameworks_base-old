@@ -550,11 +550,11 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="2340202869968465936">"ಬೆರಳಚ್ಚು ಐಕಾನ್"</string>
-    <string name="permlab_manageFace" msgid="2137540986007309781">"ಮುಖ ದೃಢೀಕರಣ ಹಾರ್ಡ್‌ವೇರ್‌ ಅನ್ನು ನಿರ್ವಹಿಸಿ"</string>
+    <string name="permlab_manageFace" msgid="7262837876352591553">"ಫೇಸ್ ಅನ್‌ಲಾಕ್ ಹಾರ್ಡ್‌ವೇರ್ ಅನ್ನು ನಿರ್ವಹಿಸಿ"</string>
     <string name="permdesc_manageFace" msgid="8919637120670185330">"ಬಳಕೆಗೆ ಮುಖದ ಟೆಂಪ್ಲೇಟ್‌ಗಳನ್ನು ಸೇರಿಸಲು ಮತ್ತು ಅಳಿಸಲು ವಿಧಾನಗಳನ್ನು ಮನವಿ ಮಾಡಲು ಅಪ್ಲಿಕೇಶನ್‌ಗೆ ಅನುಮತಿಸುತ್ತದೆ."</string>
-    <string name="permlab_useFaceAuthentication" msgid="8996134460546804535">"ಮುಖ ದೃಢೀಕರಣ ಹಾರ್ಡ್‌ವೇರ್‌ ಅನ್ನು ಬಳಸಿ"</string>
-    <string name="permdesc_useFaceAuthentication" msgid="5011118722951833089">"ಧೃಡೀಕರಣಕ್ಕಾಗಿ ಮುಖದ ಹಾರ್ಡ್‌ವೇರ್ ಬಳಸಲು ಅಪ್ಲಿಕೇಶನ್‌ಗೆ ಅನುಮತಿಸುತ್ತದೆ"</string>
-    <string name="face_recalibrate_notification_name" msgid="3976629945250435054">"ಮುಖ ಗುರುತಿಸುವಿಕೆ"</string>
+    <string name="permlab_useFaceAuthentication" msgid="2565716575739037572">"ಫೇಸ್ ಅನ್‌ಲಾಕ್ ಹಾರ್ಡ್‌ವೇರ್ ಬಳಸಿ"</string>
+    <string name="permdesc_useFaceAuthentication" msgid="4712947955047607722">"ಪ್ರಮಾಣೀಕರಣಕ್ಕಾಗಿ ಫೇಸ್ ಅನ್‌ಲಾಕ್ ಹಾರ್ಡ್‌ವೇರ್ ಬಳಸಲು ಅಪ್ಲಿಕೇಶನ್‌ಗೆ ಅನುಮತಿಸುತ್ತದೆ"</string>
+    <string name="face_recalibrate_notification_name" msgid="1913676850645544352">"ಫೇಸ್ ಅನ್‌ಲಾಕ್"</string>
     <string name="face_recalibrate_notification_title" msgid="4087620069451499365">"ನಿಮ್ಮ ಮುಖವನ್ನು ಮರುನೋಂದಣಿ ಮಾಡಿ"</string>
     <string name="face_recalibrate_notification_content" msgid="5530308842361499835">"ಗುರುತಿಸುವಿಕೆಯನ್ನು ಹೆಚ್ಚಿಸಲು ನಿಮ್ಮ ಮುಖವನ್ನು ಮರುನೋಂದಣಿ ಮಾಡಿ"</string>
     <string name="face_acquired_insufficient" msgid="2767330364802375742">"ಸರಿಯಾಗಿ ಮುಖ ಕ್ಯಾಪ್ಚರ್ ಮಾಡಲಾಗಲಿಲ್ಲ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ."</string>
@@ -580,15 +580,15 @@
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"ಮುಖ ದೃಢೀಕರಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ಹಾರ್ಡ್‌ವೇರ್ ಲಭ್ಯವಿಲ್ಲ."</string>
-    <string name="face_error_timeout" msgid="3202585609451248103">"ಮುಖ ದೃಢೀಕರಣ ಹಾರ್ಡ್‌ವೇರ್‌ ಅನ್ನು ಬಳಸಿ ನೋಡಿ."</string>
+    <string name="face_error_timeout" msgid="981512090365729465">"ಫೇಸ್ ಅನ್‌ಲಾಕ್ ಅನ್ನು ಪುನಃ ಪ್ರಯತ್ನಿಸಿ."</string>
     <string name="face_error_no_space" msgid="2712120617457553825">"ಹೊಸ ಮುಖ ಡೇಟಾ ಸಂಗ್ರಹಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ಮೊದಲು ಹಳೆಯದನ್ನು ಅಳಿಸಿ"</string>
-    <string name="face_error_canceled" msgid="2768146728600802422">"ಮುಖದ ಕಾರ್ಯಚರಣೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ"</string>
-    <string name="face_error_user_canceled" msgid="9003022830076496163">"ಮುಖ ಗುರುತಿಸುವಿಕೆಯನ್ನು ಬಳಕೆದಾರರು ರದ್ದುಗೊಳಿಸಿದ್ದಾರೆ"</string>
+    <string name="face_error_canceled" msgid="283945501061931023">"ಮುಖದ ಕಾರ್ಯಚರಣೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ."</string>
+    <string name="face_error_user_canceled" msgid="5317030072349668946">"ಫೇಸ್ ಅನ್‌ಲಾಕ್ ಅನ್ನು ಬಳಕೆದಾರರು ರದ್ದುಗೊಳಿಸಿದ್ದಾರೆ."</string>
     <string name="face_error_lockout" msgid="3407426963155388504">"ಹಲವು ಬಾರಿ ಪ್ರಯತ್ನಿಸಿದ್ದೀರಿ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."</string>
-    <string name="face_error_lockout_permanent" msgid="3485837851962070925">"ಹಲವಾರು ಪ್ರಯತ್ನಗಳು. ಮುಖ ಗುರುತಿಸುವಿಕೆ ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ."</string>
+    <string name="face_error_lockout_permanent" msgid="4723594314443097159">"ಹಲವು ಬಾರಿ ಪ್ರಯತ್ನಿಸಿದ್ದೀರಿ. ಫೇಸ್ ಅನ್‌ಲಾಕ್ ಅನ್ನು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ."</string>
     <string name="face_error_unable_to_process" msgid="4940944939691171539">"ಮುಖವನ್ನು ದೃಢೀಕರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ."</string>
-    <string name="face_error_not_enrolled" msgid="2600952202843125796">"ಮುಖ ಗುರುತಿಸುವಿಕೆಯನ್ನು ನೀವು ಸೆಟಪ್ ಮಾಡಿಲ್ಲ"</string>
-    <string name="face_error_hw_not_present" msgid="1317845121210260372">"ಈ ಸಾಧನದಲ್ಲಿ ಮುಖ ಗುರುತಿಸುವಿಕೆ ವೈಶಿಷ್ಟ್ಯವು ಬೆಂಬಲಿತವಾಗಿಲ್ಲ"</string>
+    <string name="face_error_not_enrolled" msgid="4016937174832839540">"ನೀವು ಫೇಸ್ ಅನ್‌ಲಾಕ್ ಅನ್ನು ಸೆಟಪ್ ಮಾಡಿಲ್ಲ."</string>
+    <string name="face_error_hw_not_present" msgid="8302690289757559738">"ಈ ಸಾಧನದಲ್ಲಿ ಫೇಸ್ ಅನ್‌ಲಾಕ್ ವೈಶಿಷ್ಟ್ಯವು ಬೆಂಬಲಿತವಾಗಿಲ್ಲ."</string>
     <string name="face_name_template" msgid="7004562145809595384">"ಮುಖದ <xliff:g id="FACEID">%d</xliff:g>"</string>
   <string-array name="face_error_vendor">
   </string-array>

@@ -333,100 +333,107 @@ public final class DisconnectCause {
      */
     public static final int OTASP_PROVISIONING_IN_PROCESS = 76;
 
+    /**
+     * Indicates that the call is dropped due to RTCP inactivity, primarily due to media path
+     * disruption.
+     * @hide
+     */
+    public static final int MEDIA_TIMEOUT = 77;
+
     /** @hide */
-    public static final int QOS_UNAVAILABLE = 77;
+    public static final int QOS_UNAVAILABLE = 78;
     /** @hide */
-    public static final int REQUESTED_FACILITY_NOT_SUBSCRIBED = 78;
+    public static final int REQUESTED_FACILITY_NOT_SUBSCRIBED = 79;
     /** @hide */
-    public static final int INCOMING_CALLS_BARRED_WITHIN_CUG = 79;
+    public static final int INCOMING_CALLS_BARRED_WITHIN_CUG = 80;
     /** @hide */
-    public static final int BEARER_CAPABILITY_UNAVAILABLE = 80;
+    public static final int BEARER_CAPABILITY_UNAVAILABLE = 81;
     /** @hide */
-    public static final int SERVICE_OPTION_NOT_AVAILABLE = 81;
+    public static final int SERVICE_OPTION_NOT_AVAILABLE = 82;
     /** @hide */
-    public static final int BEARER_SERVICE_NOT_IMPLEMENTED = 82;
+    public static final int BEARER_SERVICE_NOT_IMPLEMENTED = 83;
     /** @hide */
-    public static final int REQUESTED_FACILITY_NOT_IMPLEMENTED = 83;
+    public static final int REQUESTED_FACILITY_NOT_IMPLEMENTED = 84;
     /** @hide */
-    public static final int ONLY_DIGITAL_INFORMATION_BEARER_AVAILABLE = 84;
+    public static final int ONLY_DIGITAL_INFORMATION_BEARER_AVAILABLE = 85;
     /** @hide */
-    public static final int SERVICE_OR_OPTION_NOT_IMPLEMENTED = 85;
+    public static final int SERVICE_OR_OPTION_NOT_IMPLEMENTED = 86;
     /** @hide */
-    public static final int INVALID_TRANSACTION_IDENTIFIER = 86;
+    public static final int INVALID_TRANSACTION_IDENTIFIER = 87;
     /** @hide */
-    public static final int USER_NOT_MEMBER_OF_CUG = 87;
+    public static final int USER_NOT_MEMBER_OF_CUG = 88;
     /** @hide */
-    public static final int INCOMPATIBLE_DESTINATION = 88;
+    public static final int INCOMPATIBLE_DESTINATION = 89;
     /** @hide */
-    public static final int INVALID_TRANSIT_NW_SELECTION = 89;
+    public static final int INVALID_TRANSIT_NW_SELECTION = 90;
     /** @hide */
-    public static final int SEMANTICALLY_INCORRECT_MESSAGE = 90;
+    public static final int SEMANTICALLY_INCORRECT_MESSAGE = 91;
     /** @hide */
-    public static final int INVALID_MANDATORY_INFORMATION = 91;
+    public static final int INVALID_MANDATORY_INFORMATION = 92;
     /** @hide */
-    public static final int MESSAGE_TYPE_NON_IMPLEMENTED = 92;
+    public static final int MESSAGE_TYPE_NON_IMPLEMENTED = 93;
     /** @hide */
-    public static final int MESSAGE_TYPE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE = 93;
+    public static final int MESSAGE_TYPE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE = 94;
     /** @hide */
-    public static final int INFORMATION_ELEMENT_NON_EXISTENT = 94;
+    public static final int INFORMATION_ELEMENT_NON_EXISTENT = 95;
     /** @hide */
-    public static final int CONDITIONAL_IE_ERROR = 95;
+    public static final int CONDITIONAL_IE_ERROR = 96;
     /** @hide */
-    public static final int MESSAGE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE = 96;
+    public static final int MESSAGE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE = 97;
     /** @hide */
-    public static final int RECOVERY_ON_TIMER_EXPIRED = 97;
+    public static final int RECOVERY_ON_TIMER_EXPIRED = 98;
     /** @hide */
-    public static final int PROTOCOL_ERROR_UNSPECIFIED = 98;
+    public static final int PROTOCOL_ERROR_UNSPECIFIED = 99;
     /** @hide */
-    public static final int INTERWORKING_UNSPECIFIED = 99;
+    public static final int INTERWORKING_UNSPECIFIED = 100;
     /** @hide */
-    public static final int LOCAL_LOW_BATTERY = 100;
+    public static final int LOCAL_LOW_BATTERY = 101;
     /** @hide */
-    public static final int NO_CIRCUIT_AVAIL = 101;
+    public static final int NO_CIRCUIT_AVAIL = 102;
     /** @hide */
-    public static final int NO_ROUTE_TO_DESTINATION = 102;
+    public static final int NO_ROUTE_TO_DESTINATION = 103;
     /** @hide */
-    public static final int OPERATOR_DETERMINED_BARRING = 103;
+    public static final int OPERATOR_DETERMINED_BARRING = 104;
     /** @hide */
-    public static final int CALL_FAIL_NO_USER_RESPONDING = 104;
+    public static final int CALL_FAIL_NO_USER_RESPONDING = 105;
     /** @hide */
-    public static final int CALL_FAIL_NO_ANSWER_FROM_USER = 105;
+    public static final int CALL_FAIL_NO_ANSWER_FROM_USER = 106;
     /** @hide */
-    public static final int CALL_FAIL_DESTINATION_OUT_OF_ORDER = 106;
+    public static final int CALL_FAIL_DESTINATION_OUT_OF_ORDER = 107;
     /** @hide */
-    public static final int BEARER_CAPABILITY_NOT_AUTHORIZED = 107;
+    public static final int BEARER_CAPABILITY_NOT_AUTHORIZED = 108;
     /** @hide */
-    public static final int CHANNEL_UNACCEPTABLE = 108;
+    public static final int CHANNEL_UNACCEPTABLE = 109;
     /** @hide */
-    public static final int CALL_REJECTED = 109;
+    public static final int CALL_REJECTED = 110;
     /** @hide */
-    public static final int NUMBER_CHANGED = 110;
+    public static final int NUMBER_CHANGED = 111;
     /** @hide */
-    public static final int PREEMPTION = 111;
+    public static final int PREEMPTION = 112;
     /** @hide */
-    public static final int FACILITY_REJECTED = 112;
+    public static final int FACILITY_REJECTED = 113;
     /** @hide */
-    public static final int RESP_TO_STATUS_ENQUIRY = 113;
+    public static final int RESP_TO_STATUS_ENQUIRY = 114;
     /** @hide */
-    public static final int NETWORK_OUT_OF_ORDER = 114;
+    public static final int NETWORK_OUT_OF_ORDER = 115;
     /** @hide */
-    public static final int TEMPORARY_FAILURE = 115;
+    public static final int TEMPORARY_FAILURE = 116;
     /** @hide */
-    public static final int SWITCHING_EQUIPMENT_CONGESTION = 116;
+    public static final int SWITCHING_EQUIPMENT_CONGESTION = 117;
     /** @hide */
-    public static final int ACCESS_INFORMATION_DISCARDED = 117;
+    public static final int ACCESS_INFORMATION_DISCARDED = 118;
     /** @hide */
-    public static final int REQUESTED_CIRCUIT_OR_CHANNEL_NOT_AVAILABLE = 118;
+    public static final int REQUESTED_CIRCUIT_OR_CHANNEL_NOT_AVAILABLE = 119;
     /** @hide */
-    public static final int RESOURCES_UNAVAILABLE_OR_UNSPECIFIED = 119;
+    public static final int RESOURCES_UNAVAILABLE_OR_UNSPECIFIED = 120;
 
     /**
      * call failed due to LTE to 3G/2G handover not feasible
      * @hide
      */
-    public static final int HO_NOT_FEASIBLE = 120;
+    public static final int HO_NOT_FEASIBLE = 121;
     /** @hide */
-    public static final int NON_SELECTED_USER_CLEARING = 121;
+    public static final int NON_SELECTED_USER_CLEARING = 122;
 
     //*********************************************************************************************
     // When adding a disconnect type:
@@ -436,7 +443,7 @@ public final class DisconnectCause {
     // 4) Update toString() with the newly added disconnect type.
     // 5) Update android.telecom.DisconnectCauseUtil with any mappings to a telecom.DisconnectCause.
     //
-    // NextId: 122
+    // NextId: 123
     //*********************************************************************************************
 
     /**
@@ -639,6 +646,8 @@ public final class DisconnectCause {
             return "TOO_MANY_ONGOING_CALLS";
         case OTASP_PROVISIONING_IN_PROCESS:
             return "OTASP_PROVISIONING_IN_PROCESS";
+        case MEDIA_TIMEOUT:
+            return "MEDIA_TIMEOUT";
         case NETWORK_OUT_OF_ORDER:
             return "NETWORK_OUT_OF_ORDER";
         case TEMPORARY_FAILURE:

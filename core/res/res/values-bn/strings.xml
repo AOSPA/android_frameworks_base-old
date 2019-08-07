@@ -550,11 +550,15 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="2340202869968465936">"আঙ্গুলের ছাপ আইকন"</string>
-    <string name="permlab_manageFace" msgid="2137540986007309781">"ফেস যাচাইকরণ হার্ডওয়্যার পরিচালনা করুন"</string>
+    <!-- no translation found for permlab_manageFace (7262837876352591553) -->
+    <skip />
     <string name="permdesc_manageFace" msgid="8919637120670185330">"ব্যবহার করার জন্য ফেস টেম্পলেট যোগ করা এবং মোছার পদ্ধতি গ্রহণ করতে অ্যাপটিকে অনুমতি দেয়৷"</string>
-    <string name="permlab_useFaceAuthentication" msgid="8996134460546804535">"ফেস যাচাইকরণ হার্ডওয়্যার ব্যবহার করুন"</string>
-    <string name="permdesc_useFaceAuthentication" msgid="5011118722951833089">"প্রমাণীকরণের জন্য ফেস যাচাইকরণ হার্ডওয়্যার ব্যবহার করার অনুমতি অ্যাপটিকে দেয়"</string>
-    <string name="face_recalibrate_notification_name" msgid="3976629945250435054">"ফেস যাচাইকরণ"</string>
+    <!-- no translation found for permlab_useFaceAuthentication (2565716575739037572) -->
+    <skip />
+    <!-- no translation found for permdesc_useFaceAuthentication (4712947955047607722) -->
+    <skip />
+    <!-- no translation found for face_recalibrate_notification_name (1913676850645544352) -->
+    <skip />
     <string name="face_recalibrate_notification_title" msgid="4087620069451499365">"আপনার ফেস আবার এনরোল করুন"</string>
     <string name="face_recalibrate_notification_content" msgid="5530308842361499835">"শনাক্তকরণের উন্নতি করতে আপনার ফেস আবার এনরোল করুন"</string>
     <string name="face_acquired_insufficient" msgid="2767330364802375742">"মুখের সঠিক ডেটা পাওয়া যায়নি। আবার চেষ্টা করুন।"</string>
@@ -580,15 +584,20 @@
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"ফেস যাচাই করা যায়নি। হার্ডওয়্যার উপলভ্য নেই।"</string>
-    <string name="face_error_timeout" msgid="3202585609451248103">"ফেস যাচাইকরণের ফিচার আবার ব্যবহার করুন।"</string>
+    <!-- no translation found for face_error_timeout (981512090365729465) -->
+    <skip />
     <string name="face_error_no_space" msgid="2712120617457553825">"নতুন ফেস ডেটা স্টোর করা যায়নি। প্রথমে পুরনোটি মুছে ফেলুন।"</string>
-    <string name="face_error_canceled" msgid="2768146728600802422">"ফেস যাচাই করার প্রসেস বাতিল করা হয়েছে"</string>
-    <string name="face_error_user_canceled" msgid="9003022830076496163">"ব্যবহারকারী মুখ শনাক্তকরণ প্রক্রিয়া বাতিল করেছেন"</string>
+    <string name="face_error_canceled" msgid="283945501061931023">"ফেস অপারেশন বাতিল করা হয়েছে৷"</string>
+    <!-- no translation found for face_error_user_canceled (5317030072349668946) -->
+    <skip />
     <string name="face_error_lockout" msgid="3407426963155388504">"অনেকবার চেষ্টা করা হয়েছে। পরে আবার চেষ্টা করুন।"</string>
-    <string name="face_error_lockout_permanent" msgid="3485837851962070925">"অনেকবার চেষ্টা করেছেন। ফেস যাচাই করার ফিচারটি বন্ধ করা আছে।"</string>
+    <!-- no translation found for face_error_lockout_permanent (4723594314443097159) -->
+    <skip />
     <string name="face_error_unable_to_process" msgid="4940944939691171539">"আপনার মুখ যাচাই করা যাচ্ছে না। আবার চেষ্টা করুন।"</string>
-    <string name="face_error_not_enrolled" msgid="2600952202843125796">"ফেস যাচাই করার প্রক্রিয়াটি সেট-আপ করেননি"</string>
-    <string name="face_error_hw_not_present" msgid="1317845121210260372">"এই ডিভাইসে ফেস যাচাই করা যাবে না"</string>
+    <!-- no translation found for face_error_not_enrolled (4016937174832839540) -->
+    <skip />
+    <!-- no translation found for face_error_hw_not_present (8302690289757559738) -->
+    <skip />
     <string name="face_name_template" msgid="7004562145809595384">"<xliff:g id="FACEID">%d</xliff:g> ফেস"</string>
   <string-array name="face_error_vendor">
   </string-array>

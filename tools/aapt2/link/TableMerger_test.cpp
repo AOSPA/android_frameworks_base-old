@@ -352,62 +352,6 @@ TEST_F(TableMergerTest, MergeAddResourceFromOverlayWithAutoAddOverlay) {
   ASSERT_TRUE(merger.Merge({}, table_b.get(), false /*overlay*/));
 }
 
-TEST_F(TableMergerTest, OverrideAttributeSameFormatsWithOverlay) {
-  std::unique_ptr<ResourceTable> base =
-      test::ResourceTableBuilder()
-          .SetPackageId("", 0x7f)
-          .AddValue("attr/foo", test::AttributeBuilder()
-              .SetTypeMask(android::ResTable_map::TYPE_STRING)
-              .SetWeak(false)
-              .Build())
-          .Build();
-
-  std::unique_ptr<ResourceTable> overlay =
-      test::ResourceTableBuilder()
-          .SetPackageId("", 0x7f)
-          .AddValue("attr/foo", test::AttributeBuilder()
-              .SetTypeMask(android::ResTable_map::TYPE_STRING)
-              .SetWeak(false)
-              .Build())
-          .Build();
-
-  ResourceTable final_table;
-  TableMergerOptions options;
-  options.auto_add_overlay = false;
-  TableMerger merger(context_.get(), &final_table, options);
-
-  ASSERT_TRUE(merger.Merge({}, base.get(), false /*overlay*/));
-  ASSERT_TRUE(merger.Merge({}, overlay.get(), true /*overlay*/));
-}
-
-TEST_F(TableMergerTest, FailToOverrideConflictingAttributeFormatsWithOverlay) {
-  std::unique_ptr<ResourceTable> base =
-      test::ResourceTableBuilder()
-          .SetPackageId("", 0x7f)
-          .AddValue("attr/foo", test::AttributeBuilder()
-              .SetTypeMask(android::ResTable_map::TYPE_ANY)
-              .SetWeak(false)
-              .Build())
-          .Build();
-
-  std::unique_ptr<ResourceTable> overlay =
-      test::ResourceTableBuilder()
-          .SetPackageId("", 0x7f)
-          .AddValue("attr/foo", test::AttributeBuilder()
-              .SetTypeMask(android::ResTable_map::TYPE_STRING)
-              .SetWeak(false)
-              .Build())
-          .Build();
-
-  ResourceTable final_table;
-  TableMergerOptions options;
-  options.auto_add_overlay = false;
-  TableMerger merger(context_.get(), &final_table, options);
-
-  ASSERT_TRUE(merger.Merge({}, base.get(), false /*overlay*/));
-  ASSERT_FALSE(merger.Merge({}, overlay.get(), true /*overlay*/));
-}
-
 TEST_F(TableMergerTest, FailToMergeNewResourceWithoutAutoAddOverlay) {
   std::unique_ptr<ResourceTable> table_a =
       test::ResourceTableBuilder().SetPackageId("", 0x7f).Build();

@@ -16,14 +16,19 @@
 
 package com.android.internal.telephony;
 
+import android.telephony.Rlog;
+import android.os.Build;
+import android.util.SparseIntArray;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
-import android.os.Build;
-import android.telephony.Rlog;
-import android.util.SparseIntArray;
+import android.telephony.SmsManager;
+import android.telephony.TelephonyManager;
 
-import com.android.internal.telephony.cdma.sms.UserData;
 import com.android.internal.util.XmlUtils;
+import com.android.internal.telephony.cdma.sms.UserData;
+
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserException;
 
 public class Sms7BitEncodingTranslator {
     private static final String TAG = "Sms7BitEncodingTranslator";

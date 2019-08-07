@@ -79,8 +79,8 @@ class ZygoteArguments {
     /**
      * from --target-sdk-version.
      */
+    private boolean mTargetSdkVersionSpecified;
     int mTargetSdkVersion;
-    boolean mTargetSdkVersionSpecified;
 
     /**
      * from --nice-name
@@ -90,14 +90,14 @@ class ZygoteArguments {
     /**
      * from --capabilities
      */
-    boolean mCapabilitiesSpecified;
+    private boolean mCapabilitiesSpecified;
     long mPermittedCapabilities;
     long mEffectiveCapabilities;
 
     /**
      * from --seinfo
      */
-    boolean mSeInfoSpecified;
+    private boolean mSeInfoSpecified;
     String mSeInfo;
 
     /**
@@ -248,43 +248,39 @@ class ZygoteArguments {
                         "Duplicate arg specified");
                 }
                 mUidSpecified = true;
-                mUid = Integer.parseInt(
-                    arg.substring(arg.indexOf('=') + 1));
+                mUid = Integer.parseInt(getAssignmentValue(arg));
             } else if (arg.startsWith("--setgid=")) {
                 if (mGidSpecified) {
                     throw new IllegalArgumentException(
                         "Duplicate arg specified");
                 }
                 mGidSpecified = true;
-                mGid = Integer.parseInt(
-                    arg.substring(arg.indexOf('=') + 1));
+                mGid = Integer.parseInt(getAssignmentValue(arg));
             } else if (arg.startsWith("--target-sdk-version=")) {
                 if (mTargetSdkVersionSpecified) {
                     throw new IllegalArgumentException(
                         "Duplicate target-sdk-version specified");
                 }
                 mTargetSdkVersionSpecified = true;
-                mTargetSdkVersion = Integer.parseInt(
-                    arg.substring(arg.indexOf('=') + 1));
+                mTargetSdkVersion = Integer.parseInt(getAssignmentValue(arg));
             } else if (arg.equals("--runtime-args")) {
                 seenRuntimeArgs = true;
             } else if (arg.startsWith("--runtime-flags=")) {
-                mRuntimeFlags = Integer.parseInt(
-                    arg.substring(arg.indexOf('=') + 1));
+                mRuntimeFlags = Integer.parseInt(getAssignmentValue(arg));
             } else if (arg.startsWith("--seinfo=")) {
                 if (mSeInfoSpecified) {
                     throw new IllegalArgumentException(
                         "Duplicate arg specified");
                 }
                 mSeInfoSpecified = true;
-                mSeInfo = arg.substring(arg.indexOf('=') + 1);
+                mSeInfo = getAssignmentValue(arg);
             } else if (arg.startsWith("--capabilities=")) {
                 if (mCapabilitiesSpecified) {
                     throw new IllegalArgumentException(
                         "Duplicate arg specified");
                 }
                 mCapabilitiesSpecified = true;
-                String capString = arg.substring(arg.indexOf('=') + 1);
+                String capString = getAssignmentValue(arg);
 
                 String[] capStrings = capString.split(",", 2);
 
@@ -297,7 +293,7 @@ class ZygoteArguments {
                 }
             } else if (arg.startsWith("--rlimit=")) {
                 // Duplicate --rlimit arguments are specifically allowed.
-                String[] limitStrings = arg.substring(arg.indexOf('=') + 1).split(",");
+                String[] limitStrings = getAssignmentList(arg);
 
                 if (limitStrings.length != 3) {
                     throw new IllegalArgumentException(
@@ -310,7 +306,7 @@ class ZygoteArguments {
                 }
 
                 if (mRLimits == null) {
-                    mRLimits = new ArrayList();
+                    mRLimits = new ArrayList<>();
                 }
 
                 mRLimits.add(rlimitTuple);
@@ -320,7 +316,7 @@ class ZygoteArguments {
                         "Duplicate arg specified");
                 }
 
-                String[] params = arg.substring(arg.indexOf('=') + 1).split(",");
+                String[] params = getAssignmentList(arg);
 
                 mGids = new int[params.length];
 
@@ -343,7 +339,7 @@ class ZygoteArguments {
                     throw new IllegalArgumentException(
                         "Duplicate arg specified");
                 }
-                mNiceName = arg.substring(arg.indexOf('=') + 1);
+                mNiceName = getAssignmentValue(arg);
             } else if (arg.equals("--mount-external-default")) {
                 mMountExternal = Zygote.MOUNT_EXTERNAL_DEFAULT;
             } else if (arg.equals("--mount-external-read")) {
@@ -361,9 +357,9 @@ class ZygoteArguments {
             } else if (arg.equals("--get-pid")) {
                 mPidQuery = true;
             } else if (arg.startsWith("--instruction-set=")) {
-                mInstructionSet = arg.substring(arg.indexOf('=') + 1);
+                mInstructionSet = getAssignmentValue(arg);
             } else if (arg.startsWith("--app-data-dir=")) {
-                mAppDataDir = arg.substring(arg.indexOf('=') + 1);
+                mAppDataDir = getAssignmentValue(arg);
             } else if (arg.equals("--preload-app")) {
                 mPreloadApp = args[++curArg];
             } else if (arg.equals("--preload-package")) {
@@ -383,7 +379,7 @@ class ZygoteArguments {
                 curArg = args.length;
                 expectRuntimeArgs = false;
             } else if (arg.startsWith("--hidden-api-log-sampling-rate=")) {
-                String rateStr = arg.substring(arg.indexOf('=') + 1);
+                String rateStr = getAssignmentValue(arg);
                 try {
                     mHiddenApiAccessLogSampleRate = Integer.parseInt(rateStr);
                 } catch (NumberFormatException nfe) {
@@ -392,7 +388,7 @@ class ZygoteArguments {
                 }
                 expectRuntimeArgs = false;
             } else if (arg.startsWith("--hidden-api-statslog-sampling-rate=")) {
-                String rateStr = arg.substring(arg.indexOf('=') + 1);
+                String rateStr = getAssignmentValue(arg);
                 try {
                     mHiddenApiAccessStatslogSampleRate = Integer.parseInt(rateStr);
                 } catch (NumberFormatException nfe) {
@@ -404,10 +400,10 @@ class ZygoteArguments {
                 if (mPackageName != null) {
                     throw new IllegalArgumentException("Duplicate arg specified");
                 }
-                mPackageName = arg.substring(arg.indexOf('=') + 1);
+                mPackageName = getAssignmentValue(arg);
             } else if (arg.startsWith("--usap-pool-enabled=")) {
                 mUsapPoolStatusSpecified = true;
-                mUsapPoolEnabled = Boolean.parseBoolean(arg.substring(arg.indexOf('=') + 1));
+                mUsapPoolEnabled = Boolean.parseBoolean(getAssignmentValue(arg));
                 expectRuntimeArgs = false;
             } else {
                 break;
@@ -450,5 +446,13 @@ class ZygoteArguments {
                         + "without " + Zygote.CHILD_ZYGOTE_SOCKET_NAME_ARG);
             }
         }
+    }
+
+    private static String getAssignmentValue(String arg) {
+        return arg.substring(arg.indexOf('=') + 1);
+    }
+
+    private static String[] getAssignmentList(String arg) {
+        return getAssignmentValue(arg).split(",");
     }
 }
