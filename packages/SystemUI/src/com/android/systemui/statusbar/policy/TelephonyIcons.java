@@ -773,6 +773,7 @@ class TelephonyIcons {
         ICON_NAME_TO_ICON.put("lte+", LTE_PLUS);
         ICON_NAME_TO_ICON.put("5g", NR_5G);
         ICON_NAME_TO_ICON.put("5g_plus", NR_5G_PLUS);
+        ICON_NAME_TO_ICON.put("5guwb", FIVE_G_UWB);
         ICON_NAME_TO_ICON.put("datadisable", DATA_DISABLED);
         ICON_NAME_TO_ICON.put("notdefaultdata", NOT_DEFAULT_DATA);
     }
