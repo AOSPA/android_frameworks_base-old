@@ -2159,6 +2159,17 @@ public class StatusBar extends SystemUI implements DemoMode,
                 setDarkThemeState(finalUseDarkTheme);
                 setBlackThemeState(finalUseBlackTheme);
                 setCommonThemeState(finalUseDarkTheme || finalUseBlackTheme);
+                // Set current active theme settings provider
+                if (finalUseBlackTheme) {
+                    Settings.Secure.putInt(mContext.getContentResolver(),
+                            Settings.Secure.CURRENT_SYSTEM_THEME, 2);
+                } else if (finalUseDarkTheme) {
+                    Settings.Secure.putInt(mContext.getContentResolver(),
+                            Settings.Secure.CURRENT_SYSTEM_THEME, 1);
+                } else {
+                    Settings.Secure.putInt(mContext.getContentResolver(),
+                            Settings.Secure.CURRENT_SYSTEM_THEME, 0);
+                }
             });
         }
     }

@@ -8303,6 +8303,37 @@ public final class Settings {
                 new SettingsValidators.InclusiveIntegerRangeValidator(0, 3);
 
         /**
+         * Currently applied system theme
+         * 0: Light UI
+         * 1. Dark UI
+         * 2. Black UI
+         * @hide
+         */
+        public static final String CURRENT_SYSTEM_THEME = "current_system_theme";
+
+        /** @hide **/
+        private static final Validator CURRENT_SYSTEM_THEME_VALIDATOR =
+                new SettingsValidators.InclusiveIntegerRangeValidator(0, 2);
+
+        /**
+         * CURRENT_SYSTEM_THEME value for light mode.
+         * @hide
+         */
+        public static final int CURRENT_SYSTEM_THEME_LIGHT = 0;
+
+        /**
+         * CURRENT_SYSTEM_THEME value for dark mode.
+         * @hide
+         */
+        public static final int CURRENT_SYSTEM_THEME_DARK = 1;
+
+        /**
+         * CURRENT_SYSTEM_THEME value for black mode.
+         * @hide
+         */
+        public static final int CURRENT_SYSTEM_THEME_BLACK = 2;
+
+        /**
          * Paranoid Android SecureSettings additions ends
          */
 
@@ -8409,6 +8440,7 @@ public final class Settings {
             WIFI_DISCONNECT_DELAY_DURATION,
             // Paranoid Android additions starts
             STATUS_BAR_BATTERY_STYLE,
+            CURRENT_SYSTEM_THEME
         };
 
         /**
@@ -8559,6 +8591,7 @@ public final class Settings {
             VALIDATORS.put(LOCK_SCREEN_SHOW_NOTIFICATIONS, BOOLEAN_VALIDATOR);
             // Paranoid Android additions starts
             VALIDATORS.put(STATUS_BAR_BATTERY_STYLE , STATUS_BAR_BATTERY_STYLE_VALIDATOR);
+            VALIDATORS.put(CURRENT_SYSTEM_THEME, CURRENT_SYSTEM_THEME_VALIDATOR);
         }
 
         /**
