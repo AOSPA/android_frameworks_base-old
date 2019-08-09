@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ddc447ec_bb4a2adf",
+        "filename": "services/core/java/com/android/server/om/OverlayManagerService.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 678,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2019-08-09T11:48:07Z",
+      "side": 1,
+      "message": "from a quick look, this method seems redundant. You should be able to achieve the same by passing \"android\" as packageName argument in the reloadAssets method",
+      "revId": "41e2c3dacb63a0f2cecfac56088e39673bb67605",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
