@@ -170,6 +170,9 @@ import java.util.Timer;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 
+// Long screenshot
+import com.android.internal.custom.longshot.LongScreenshotManagerService;
+
 public final class SystemServer {
 
     private static final String TAG = "SystemServer";
@@ -1095,6 +1098,9 @@ public final class SystemServer {
 
             traceBeginAndSlog("SignedConfigService");
             SignedConfigService.registerUpdateReceiver(mSystemContext);
+
+            traceBeginAndSlog("LongScreenShot Manager");
+            ServiceManager.addService(Context.LONGSCREENSHOT_SERVICE, LongScreenshotManagerService.getInstance(context));
             traceEnd();
         } catch (RuntimeException e) {
             Slog.e("System", "******************************************");
