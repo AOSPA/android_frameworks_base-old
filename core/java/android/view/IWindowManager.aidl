@@ -440,4 +440,11 @@ interface IWindowManager
      * @param displayId The id of the display.
      */
     void dontOverrideDisplayInfo(int displayId);
+
+    /**
+     * Long screenshot
+     * @hide
+     */
+    void takeOPScreenshot(int type, int reason);
+    void stopLongshotConnection();
 }
