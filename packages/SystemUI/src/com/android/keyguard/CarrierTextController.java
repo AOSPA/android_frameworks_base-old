@@ -793,7 +793,7 @@ public class CarrierTextController {
         }
         FiveGServiceState fiveGServiceState =
                 mFiveGServiceClient.getCurrentServiceState(slotIndex);
-        if ( fiveGServiceState.isNrIconTypeValid() && isDataRegisteredOnLte(subId)) {
+        if ( fiveGServiceState.isConnectedOnNsaMode() && isDataRegisteredOnLte(subId)) {
             return mContext.getResources().getString(R.string.data_connection_5g);
         }
 
