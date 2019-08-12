@@ -406,7 +406,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
     private boolean doBind() {
         synchronized (mConnection) {
             if (mService == null) {
-                if (VDBG) Log.d(TAG, "Binding service...");
+                if (DBG) Log.d(TAG, "Binding service...");
                 try {
                     return mAdapter.getBluetoothManager().bindBluetoothProfileService(
                             BluetoothProfile.HEADSET, mConnection);
@@ -420,15 +420,17 @@ public final class BluetoothHeadset implements BluetoothProfile {
 
     private void doUnbind() {
         synchronized (mConnection) {
+            if (DBG) Log.d(TAG, "Unbinding service...");
             if (mService != null) {
-                if (VDBG) Log.d(TAG, "Unbinding service...");
                 try {
                     mAdapter.getBluetoothManager().unbindBluetoothProfileService(
                             BluetoothProfile.HEADSET, mConnection);
                 } catch (RemoteException e) {
                     Log.e(TAG, "Unable to unbind HeadsetService", e);
                 } finally {
+                    mServiceLock.writeLock().lock();
                     mService = null;
+                    mServiceLock.writeLock().unlock();
                 }
             }
         }
@@ -1227,7 +1229,6 @@ public final class BluetoothHeadset implements BluetoothProfile {
             if (DBG) Log.d(TAG, "Proxy object disconnected");
             try {
                 mServiceLock.writeLock().lock();
-                doUnbind();
                 mHandler.sendMessage(mHandler.obtainMessage(
                         MESSAGE_HEADSET_SERVICE_DISCONNECTED));
             } finally {
