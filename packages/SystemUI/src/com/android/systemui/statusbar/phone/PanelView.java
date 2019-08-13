@@ -52,7 +52,7 @@ import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
-import com.android.systemui.statusbar.phone.NotificationPanelView.PanelExpansionListener;
+import com.android.systemui.statusbar.phone.PanelExpansionListener;
 import com.android.systemui.statusbar.policy.KeyguardMonitor;
 import android.util.BoostFramework;
 

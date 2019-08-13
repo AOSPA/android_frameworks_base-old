@@ -49,9 +49,13 @@ import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
 /**
  * Class to manage everything related to assist in SystemUI.
  */
+@Singleton
 public class AssistManager implements ConfigurationChangedReceiver {
 
     /**
@@ -150,6 +154,7 @@ public class AssistManager implements ConfigurationChangedReceiver {
         }
     };
 
+    @Inject
     public AssistManager(DeviceProvisionedController controller, Context context) {
         mContext = context;
         mDeviceProvisionedController = controller;
