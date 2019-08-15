@@ -165,6 +165,8 @@ public class ChooserActivity extends ResolverActivity {
     public static final String LAUNCH_LOCATON_DIRECT_SHARE = "direct_share";
     private static final int APP_PREDICTION_SHARE_TARGET_QUERY_PACKAGE_LIMIT = 20;
     public static final String APP_PREDICTION_INTENT_FILTER_KEY = "intent_filter";
+
+    private boolean mIsAppPredictorComponentAvailable;
     private AppPredictor mAppPredictor;
     private AppPredictor.Callback mAppPredictorCallback;
     private Map<ChooserTarget, AppTarget> mDirectShareAppTargetCache;
@@ -635,6 +637,9 @@ public class ChooserActivity extends ResolverActivity {
                 .addTaggedData(MetricsEvent.FIELD_SHARESHEET_MIMETYPE, target.getType())
                 .addTaggedData(MetricsEvent.FIELD_TIME_TO_APP_TARGETS, systemCost));
 
+        // This is the only place this value is being set. Effectively final.
+        mIsAppPredictorComponentAvailable = isAppPredictionServiceAvailable();
+
         AppPredictor appPredictor = getAppPredictorForDirectShareIfEnabled();
         if (appPredictor != null) {
             mDirectShareAppTargetCache = new HashMap<>();
@@ -722,6 +727,32 @@ public class ChooserActivity extends ResolverActivity {
         if (DEBUG) {
             Log.d(TAG, "System Time Cost is " + systemCost);
         }
+    }
+
+    /**
+     * Returns true if app prediction service is defined and the component exists on device.
+     */
+    private boolean isAppPredictionServiceAvailable() {
+        final String appPredictionServiceName =
+                getString(R.string.config_defaultAppPredictionService);
+        if (appPredictionServiceName == null) {
+            return false;
+        }
+        final ComponentName appPredictionComponentName =
+                ComponentName.unflattenFromString(appPredictionServiceName);
+        if (appPredictionComponentName == null) {
+            return false;
+        }
+
+        // Check if the app prediction component actually exists on the device.
+        Intent intent = new Intent();
+        intent.setComponent(appPredictionComponentName);
+        if (getPackageManager().resolveService(intent, PackageManager.MATCH_ALL) == null) {
+            Log.e(TAG, "App prediction service is defined, but does not exist: "
+                    + appPredictionServiceName);
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -1712,6 +1743,9 @@ public class ChooserActivity extends ResolverActivity {
 
     @Nullable
     private AppPredictor getAppPredictor() {
+        if (!mIsAppPredictorComponentAvailable) {
+            return null;
+        }
         if (mAppPredictor == null
                     && getPackageManager().getAppPredictionServicePackageName() != null) {
             final IntentFilter filter = getTargetIntentFilter();
