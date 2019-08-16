@@ -49,7 +49,6 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Process;
 import android.os.RemoteCallback;
-import android.provider.Settings;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
@@ -87,7 +86,6 @@ public class AppOpsServiceTest {
 
     private File mAppOpsFile;
     private Handler mHandler;
-    private AppOpsManager mAppOpsManager;
     private AppOpsService mAppOpsService;
     private int mMyUid;
     private long mTestStartMillis;
@@ -117,8 +115,6 @@ public class AppOpsServiceTest {
         doNothing().when(mAppOpsService.mContext).enforcePermission(anyString(), anyInt(),
                 anyInt(), nullable(String.class));
     }
-
-    private static String sDefaultAppopHistoryParameters;
 
     @Before
     public void setUp() {
