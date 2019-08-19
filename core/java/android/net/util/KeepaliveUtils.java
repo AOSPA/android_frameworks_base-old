@@ -34,6 +34,10 @@ public final class KeepaliveUtils {
 
     public static final String TAG = "KeepaliveUtils";
 
+    // TODO(b/139670428): Remove MIN_SUPPORTED_KEEPALIVE_COUNT
+    // Minimum supported keepalive count per transport if the network supports keepalive.
+    public static final int MIN_SUPPORTED_KEEPALIVE_COUNT = 3;
+
     public static class KeepaliveDeviceConfigurationException extends AndroidRuntimeException {
         public KeepaliveDeviceConfigurationException(final String msg) {
             super(msg);
