@@ -135,27 +135,6 @@
     <integer name="quick_settings_brightness_dialog_short_timeout">2000</integer>
     <integer name="quick_settings_brightness_dialog_long_timeout">4000</integer>
 
-    <!-- Show indicator for Wifi on but not connected. -->
-    <bool name="config_showWifiIndicatorWhenEnabled">false</bool>
-
-    <!-- Whether to show wifi activity indicators in the status bar -->
-    <bool name="config_showWifiActivity">true</bool>
-
-    <!-- Whether or not we also show rsrp level for LTE. -->
-    <bool name="config_showRsrpSignalLevelforLTE">false</bool>
-
-    <!-- Whether or not we always show type icon -->
-    <bool name="config_alwaysShowTypeIcon">false</bool>
-
-    <!-- Whether or not we show 2G for CDMA/1xRTT -->
-    <bool name="config_show2GforCDMA_1X">false</bool>
-
-    <!-- When true, hide no internet statue on signal strength icon -->
-    <bool name="config_hideNoInternetState">false</bool>
-
-    <!-- Control whether status bar should fetch mobile signal icons from xml file dynamically -->
-    <bool name="config_read_icons_from_xml">false</bool>
-
     <!-- Should "LTE"/"4G" be shown instead of "LTE+"/"4G+" when on NETWORK_TYPE_LTE_CA? -->
     <bool name="config_hideLtePlus">false</bool>
 
