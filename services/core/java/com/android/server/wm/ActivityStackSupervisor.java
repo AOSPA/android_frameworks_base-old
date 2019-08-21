@@ -188,7 +188,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     public static boolean mPerfSendTapHint = false;
     public static boolean mIsPerfBoostAcquired = false;
     public static int mPerfHandle = -1;
-    public BoostFramework mPerfBoost = null;
+    public BoostFramework mPerfBoost = new BoostFramework();
     public BoostFramework mUxPerf = new BoostFramework();
 
     static final int LAUNCH_TASK_BEHIND_COMPLETE = FIRST_SUPERVISOR_STACK_MSG + 12;
@@ -620,6 +620,13 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     void reportActivityLaunchedLocked(boolean timeout, ActivityRecord r, long totalTime,
             @WaitResult.LaunchState int launchState) {
         boolean changed = false;
+        if (totalTime > 0) {
+            if (mPerfBoost != null) {
+                if (r.app != null) {
+                    mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW, r.packageName, r.app.getPid(), BoostFramework.Draw.EVENT_TYPE_V1);
+                }
+            }
+        }
         for (int i = mWaitingActivityLaunched.size() - 1; i >= 0; i--) {
             WaitResult w = mWaitingActivityLaunched.remove(i);
             if (w.who == null) {
@@ -974,6 +981,10 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         boolean knownToBeDead = false;
         if (wpc != null && wpc.hasThread()) {
             try {
+                if (mPerfBoost != null) {
+                    Slog.i(TAG, "The Process " + r.processName + " Already Exists in BG. So sending its PID: " + wpc.getPid());
+                    mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.processName, wpc.getPid(), BoostFramework.Launch.TYPE_START_PROC);
+                }
                 realStartActivityLocked(r, wpc, andResume, checkConfig);
                 return;
             } catch (RemoteException e) {
@@ -2054,9 +2065,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
     void acquireAppLaunchPerfLock(ActivityRecord r) {
         /* Acquire perf lock during new app launch */
-        if (mPerfBoost == null) {
-            mPerfBoost = new BoostFramework();
-        }
         if (mPerfBoost != null) {
             mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V1);
             mPerfSendTapHint = true;
