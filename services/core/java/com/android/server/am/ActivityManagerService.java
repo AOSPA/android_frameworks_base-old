@@ -5237,6 +5237,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 app.hostingRecord.getType(),
                 (app.hostingRecord.getName() != null ? app.hostingRecord.getName() : ""));
 
+        //send start notification to AT with the starting app's info.
+        mActivityTrigger.activityStartTrigger(app.info, app.pid);
         return true;
     }
 
