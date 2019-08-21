@@ -98,10 +98,12 @@ public class BrightLineFalsingManager implements FalsingManager {
     }
 
     private void sessionStart() {
-        logDebug("Starting Session");
-        mSessionStarted = true;
-        registerSensors();
-        mClassifiers.forEach(FalsingClassifier::onSessionStarted);
+        if (!mSessionStarted) {
+            logDebug("Starting Session");
+            mSessionStarted = true;
+            registerSensors();
+            mClassifiers.forEach(FalsingClassifier::onSessionStarted);
+        }
     }
 
     private void sessionEnd() {
@@ -307,6 +309,11 @@ public class BrightLineFalsingManager implements FalsingManager {
 
     @Override
     public void dump(PrintWriter printWriter) {
+    }
+
+    @Override
+    public void cleanup() {
+        unregisterSensors();
     }
 
     static void logDebug(String msg) {
