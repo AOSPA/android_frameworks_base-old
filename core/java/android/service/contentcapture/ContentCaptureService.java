@@ -161,16 +161,14 @@ public abstract class ContentCaptureService extends Service {
 
         @Override
         public void onDataRemovalRequest(DataRemovalRequest request) {
-            mHandler.sendMessage(
-                    obtainMessage(ContentCaptureService::handleOnDataRemovalRequest,
-                            ContentCaptureService.this, request));
+            mHandler.sendMessage(obtainMessage(ContentCaptureService::handleOnDataRemovalRequest,
+                    ContentCaptureService.this, request));
         }
 
         @Override
         public void onActivityEvent(ActivityEvent event) {
             mHandler.sendMessage(obtainMessage(ContentCaptureService::handleOnActivityEvent,
                     ContentCaptureService.this, event));
-
         }
     };
 

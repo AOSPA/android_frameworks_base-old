@@ -41,7 +41,8 @@ import java.util.ArrayList;
 import java.util.Random;
 
 /**
- * Session used when notifying the Android system about events associated with views.
+ * Session used when the Android a system-provided content capture service
+ * about events associated with views.
  */
 public abstract class ContentCaptureSession implements AutoCloseable {
 
@@ -305,7 +306,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     }
 
     /**
-     * Destroys this session, flushing out all pending notifications.
+     * Destroys this session, flushing out all pending notifications to the service.
      *
      * <p>Once destroyed, any new notification will be dropped.
      */
@@ -353,7 +354,11 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     }
 
     /**
-     * Notifies the Android system that a node has been added to the view structure.
+     * Notifies the Content Capture Service that a node has been added to the view structure.
+     *
+     * <p>Typically called "manually" by views that handle their own virtual view hierarchy, or
+     * automatically by the Android System for views that return {@code true} on
+     * {@link View#onProvideContentCaptureStructure(ViewStructure, int)}.
      *
      * @param node node that has been added.
      */
@@ -371,7 +376,10 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     abstract void internalNotifyViewAppeared(@NonNull ViewNode.ViewStructureImpl node);
 
     /**
-     * Notifies the Android system that a node has been removed from the view structure.
+     * Notifies the Content Capture Service that a node has been removed from the view structure.
+     *
+     * <p>Typically called "manually" by views that handle their own virtual view hierarchy, or
+     * automatically by the Android System for standard views.
      *
      * @param id id of the node that has been removed.
      */
@@ -385,7 +393,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     abstract void internalNotifyViewDisappeared(@NonNull AutofillId id);
 
     /**
-     * Notifies the Android system that many nodes has been removed from a virtual view
+     * Notifies the Content Capture Service that many nodes has been removed from a virtual view
      * structure.
      *
      * <p>Should only be called by views that handle their own virtual view hierarchy.
@@ -411,7 +419,7 @@ public abstract class ContentCaptureSession implements AutoCloseable {
     }
 
     /**
-     * Notifies the Android system that the value of a text node has been changed.
+     * Notifies the Intelligence Service that the value of a text node has been changed.
      *
      * @param id of the node.
      * @param text new text.

@@ -16,17 +16,19 @@
 
 package com.android.internal.telephony;
 
-import android.annotation.UnsupportedAppUsage;
 import android.content.res.Resources;
-import android.os.Build;
-import android.telephony.Rlog;
 import android.text.TextUtils;
 import android.util.SparseIntArray;
 
-import com.android.internal.R;
+import android.annotation.UnsupportedAppUsage;
+import android.os.Build;
+import android.telephony.Rlog;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import com.android.internal.telephony.SmsConstants;
+import com.android.internal.R;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -1513,7 +1515,7 @@ public class GsmAlphabet {
             }
         }
 
-        sCharsToShiftTables = new SparseIntArray[numTables];
+        sCharsToShiftTables = new SparseIntArray[numShiftTables];
         for (int i = 0; i < numShiftTables; i++) {
             String shiftTable = sLanguageShiftTables[i];
 

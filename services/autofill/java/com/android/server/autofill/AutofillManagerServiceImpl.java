@@ -1131,7 +1131,7 @@ final class AutofillManagerServiceImpl
                             final RemoteAugmentedAutofillService remoteService =
                                     mRemoteAugmentedAutofillService;
                             if (remoteService != null) {
-                                remoteService.destroy();
+                                remoteService.unbind();
                             }
                             mRemoteAugmentedAutofillService = null;
                         }
@@ -1155,7 +1155,7 @@ final class AutofillManagerServiceImpl
                             + "destroying old remote service");
                 }
                 destroySessionsForAugmentedAutofillOnlyLocked();
-                mRemoteAugmentedAutofillService.destroy();
+                mRemoteAugmentedAutofillService.unbind();
                 mRemoteAugmentedAutofillService = null;
                 mRemoteAugmentedAutofillServiceInfo = null;
                 resetAugmentedAutofillWhitelistLocked();

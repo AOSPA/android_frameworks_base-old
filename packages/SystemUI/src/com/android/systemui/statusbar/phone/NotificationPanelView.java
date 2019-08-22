@@ -734,8 +734,7 @@ public class NotificationPanelView extends PanelView implements
             if (suppressedSummary) {
                 continue;
             }
-            if (!mLockscreenUserManager.shouldShowOnKeyguard(
-                    row.getStatusBarNotification())) {
+            if (!mLockscreenUserManager.shouldShowOnKeyguard(row.getEntry())) {
                 continue;
             }
             if (row.isRemoved()) {
@@ -3132,6 +3131,11 @@ public class NotificationPanelView extends PanelView implements
 
     @Override
     public void onDynamicPrivacyChanged() {
+        // Do not request animation when pulsing or waking up, otherwise the clock wiill be out
+        // of sync with the notification panel.
+        if (mLinearDarkAmount != 0) {
+            return;
+        }
         mAnimateNextPositionUpdate = true;
     }
 

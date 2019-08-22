@@ -3462,8 +3462,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     } catch (PackageManagerException e) {
                         Slog.e(TAG, "updateAllSharedLibrariesLPw failed: ", e);
                     }
-                    mPermissionManager.updatePermissions(
-                            pkg.packageName, pkg, true, mPackages.values(),
+                    mPermissionManager.updatePermissions(pkg.packageName, pkg, mPackages.values(),
                             mPermissionCallback);
                     mSettings.writeLPr();
                 }
@@ -9462,11 +9461,17 @@ public class PackageManagerService extends IPackageManager.Stub
                     + " better than this " + pkg.getLongVersionCode());
         }
 
-        // Verify certificates against what was last scanned. If there was an upgrade and this is an
-        // app in a system partition, or if this is an updated priv app, we will force re-collecting
-        // certificate.
-        final boolean forceCollect = (mIsUpgrade && scanSystemPartition)
-                || PackageManagerServiceUtils.isApkVerificationForced(disabledPkgSetting);
+        // Verify certificates against what was last scanned. Force re-collecting certificate in two
+        // special cases:
+        // 1) when scanning system, force re-collect only if system is upgrading.
+        // 2) when scannning /data, force re-collect only if the app is privileged (updated from
+        // preinstall, or treated as privileged, e.g. due to shared user ID).
+        final boolean forceCollect = scanSystemPartition ? mIsUpgrade
+                : PackageManagerServiceUtils.isApkVerificationForced(pkgSetting);
+        if (DEBUG_VERIFY && forceCollect) {
+            Slog.d(TAG, "Force collect certificate of " + pkg.packageName);
+        }
+
         // Full APK verification can be skipped during certificate collection, only if the file is
         // in verified partition, or can be verified on access (when apk verity is enabled). In both
         // cases, only data in Signing Block is verified instead of the whole file.
@@ -11373,7 +11378,7 @@ public class PackageManagerService extends IPackageManager.Stub
             sharedUserSetting.isPrivileged() | pkg.isPrivileged() : pkg.isPrivileged();
 
         pkg.applicationInfo.seInfo = SELinuxMMAC.getSeInfo(pkg, isPrivileged,
-                pkg.applicationInfo.targetSandboxVersion, targetSdkVersion);
+                targetSdkVersion);
         pkg.applicationInfo.seInfoUser = SELinuxUtil.assignSeinfoUser(pkgSetting.readUserState(
                 userId == UserHandle.USER_ALL ? UserHandle.USER_SYSTEM : userId));
 
@@ -16279,7 +16284,7 @@ public class PackageManagerService extends IPackageManager.Stub
             acquireUxPerfLock(BoostFramework.UXE_EVENT_PKG_INSTALL, pkgName, 0);
         synchronized (mPackages) {
 // NOTE: This changes slightly to include UPDATE_PERMISSIONS_ALL regardless of the size of pkg.permissions
-            mPermissionManager.updatePermissions(pkg.packageName, pkg, true, mPackages.values(),
+            mPermissionManager.updatePermissions(pkg.packageName, pkg, mPackages.values(),
                     mPermissionCallback);
             // For system-bundled packages, we assume that installing an upgraded version
             // of the package implies that the user actually wants to run that new code,
@@ -16657,13 +16662,13 @@ public class PackageManagerService extends IPackageManager.Stub
                                 && compareSignatures(sharedUserSignatures,
                                         pkg.mSigningDetails.signatures)
                                         != PackageManager.SIGNATURE_MATCH) {
-                            if (SystemProperties.getInt("ro.product.first_api_level", 0) <= 28) {
+                            if (SystemProperties.getInt("ro.product.first_api_level", 0) <= 29) {
                                 // Mismatched signatures is an error and silently skipping system
                                 // packages will likely break the device in unforeseen ways.
-                                // However,
-                                // we allow the device to boot anyway because, prior to P,
-                                // vendors were
-                                // not expecting the platform to crash in this situation.
+                                // However, we allow the device to boot anyway because, prior to Q,
+                                // vendors were not expecting the platform to crash in this
+                                // situation.
+                                // This WILL be a hard failure on any new API levels after Q.
                                 throw new ReconcileFailure(
                                         INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES,
                                         "Signature mismatch for shared user: "
@@ -17474,6 +17479,10 @@ public class PackageManagerService extends IPackageManager.Stub
                     replace = true;
                     if (DEBUG_INSTALL) Slog.d(TAG, "Replace existing pacakge: " + pkgName);
                     acquireUxPerfLock(BoostFramework.UXE_EVENT_PKG_INSTALL, pkgName, 1);
+                    BoostFramework mPerf = new BoostFramework();
+                    if (mPerf != null) {
+                        mPerf.perfHint(BoostFramework.VENDOR_HINT_APP_UPDATE, pkgName, -1, 0);
+                    }
                 }
 
                 // Child packages are installed through the parent package
@@ -18961,7 +18970,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         outInfo.removedAppId = removedAppId;
                     }
                     mPermissionManager.updatePermissions(
-                            deletedPs.name, null, false, mPackages.values(), mPermissionCallback);
+                            deletedPs.name, null, mPackages.values(), mPermissionCallback);
                     if (deletedPs.sharedUser != null) {
                         // Remove permissions associated with package. Since runtime
                         // permissions are per user we have to kill the removed package
@@ -19239,7 +19248,7 @@ public class PackageManagerService extends IPackageManager.Stub
             if (origPermissionState != null) {
                 ps.getPermissionsState().copyFrom(origPermissionState);
             }
-            mPermissionManager.updatePermissions(pkg.packageName, pkg, true, mPackages.values(),
+            mPermissionManager.updatePermissions(pkg.packageName, pkg, mPackages.values(),
                     mPermissionCallback);
 
             final boolean applyUserRestrictions

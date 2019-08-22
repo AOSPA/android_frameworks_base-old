@@ -148,7 +148,6 @@ import android.annotation.CallSuper;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.content.pm.PackageManager;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -2559,6 +2558,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     void removeImmediately() {
         mRemovingDisplay = true;
         try {
+            if (mParentWindow != null) {
+                mParentWindow.removeEmbeddedDisplayContent(this);
+            }
             // Clear all transitions & screen frozen states when removing display.
             mOpeningApps.clear();
             mClosingApps.clear();
@@ -4451,17 +4453,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             }
 
             final int orientation = super.getOrientation();
-            boolean isCar = mWmService.mContext.getPackageManager().hasSystemFeature(
-                    PackageManager.FEATURE_AUTOMOTIVE);
-            if (isCar) {
-                // In a car, you cannot physically rotate the screen, so it doesn't make sense to
-                // allow anything but the default orientation.
-                if (DEBUG_ORIENTATION) Slog.v(TAG_WM,
-                        "Forcing UNSPECIFIED orientation in car for display id=" + mDisplayId
-                                + ". Ignoring " + orientation);
-                return SCREEN_ORIENTATION_UNSPECIFIED;
-            }
-
             if (orientation != SCREEN_ORIENTATION_UNSET
                     && orientation != SCREEN_ORIENTATION_BEHIND) {
                 if (DEBUG_ORIENTATION) Slog.v(TAG_WM,
@@ -5046,6 +5037,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      */
     void reparentDisplayContent(WindowState win, SurfaceControl sc) {
         mParentWindow = win;
+        mParentWindow.addEmbeddedDisplayContent(this);
         mParentSurfaceControl = sc;
         if (mPortalWindowHandle == null) {
             mPortalWindowHandle = createPortalWindowHandle(sc.toString());
@@ -5076,17 +5068,41 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             throw new IllegalArgumentException(
                     "The given window is not the parent window of this display.");
         }
-        if (mLocationInParentWindow.x != x || mLocationInParentWindow.y != y) {
-            mLocationInParentWindow.x = x;
-            mLocationInParentWindow.y = y;
+        if (!mLocationInParentWindow.equals(x, y)) {
+            mLocationInParentWindow.set(x, y);
             if (mWmService.mAccessibilityController != null) {
                 mWmService.mAccessibilityController.onSomeWindowResizedOrMovedLocked();
             }
+            notifyLocationInParentDisplayChanged();
         }
     }
 
     Point getLocationInParentWindow() {
         return mLocationInParentWindow;
+    }
+
+    Point getLocationInParentDisplay() {
+        final Point location = new Point();
+        if (mParentWindow != null) {
+            // LocationInParentWindow indicates the offset to (0,0) of window, but what we need is
+            // the offset to (0,0) of display.
+            DisplayContent dc = this;
+            do {
+                final WindowState displayParent = dc.getParentWindow();
+                location.x += displayParent.getFrameLw().left
+                        + (dc.getLocationInParentWindow().x * displayParent.mGlobalScale + 0.5f);
+                location.y += displayParent.getFrameLw().top
+                        + (dc.getLocationInParentWindow().y * displayParent.mGlobalScale + 0.5f);
+                dc = displayParent.getDisplayContent();
+            } while (dc != null && dc.getParentWindow() != null);
+        }
+        return location;
+    }
+
+    void notifyLocationInParentDisplayChanged() {
+        forAllWindows(w -> {
+            w.updateLocationInParentDisplayIfNeeded();
+        }, false /* traverseTopToBottom */);
     }
 
     @VisibleForTesting

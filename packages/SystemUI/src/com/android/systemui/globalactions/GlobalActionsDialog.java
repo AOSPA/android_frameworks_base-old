@@ -1827,6 +1827,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         return isPanelDebugModeEnabled(context);
     }
 
+
     /**
      * Determines whether the Global Actions menu should use a separated view for emergency actions.
      */

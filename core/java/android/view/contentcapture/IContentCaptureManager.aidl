@@ -59,7 +59,7 @@ oneway interface IContentCaptureManager {
     void getServiceComponentName(in IResultReceiver result);
 
     /**
-     * Requests the removal of content capture data for the calling user.
+     * Requests the removal of content catpure data for the calling user.
      */
     void removeData(in DataRemovalRequest request);
 

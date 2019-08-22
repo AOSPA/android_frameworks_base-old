@@ -2304,38 +2304,24 @@ public class ActivityManagerService extends IActivityManager.Stub
                 "hidden_api_access_statslog_sampling_rate";
 
         public void onPropertiesChanged(DeviceConfig.Properties properties) {
-            int logSampleRate = properties.getInt(HIDDEN_API_ACCESS_LOG_SAMPLING_RATE,
-                    mLogSampleRate);
-            int statslogSampleRate = properties.getInt(HIDDEN_API_ACCESS_STATSLOG_SAMPLING_RATE,
-                    mStatslogSampleRate);
-            setSampleRates(logSampleRate, statslogSampleRate);
-        }
-
-        private void setSampleRates(int logSampleRate, int statslogSampleRate) {
-            if (logSampleRate >= 0 && logSampleRate <= 0x10000
-                    && logSampleRate != mLogSampleRate) {
+            int logSampleRate = properties.getInt(HIDDEN_API_ACCESS_LOG_SAMPLING_RATE, 0x0);
+            if (logSampleRate < 0 || logSampleRate > 0x10000) {
+                logSampleRate = -1;
+            }
+            if (logSampleRate != -1 && logSampleRate != mLogSampleRate) {
                 mLogSampleRate = logSampleRate;
                 ZYGOTE_PROCESS.setHiddenApiAccessLogSampleRate(mLogSampleRate);
             }
 
-            if (statslogSampleRate >= 0 && statslogSampleRate <= 0x10000
-                    && statslogSampleRate != mStatslogSampleRate) {
+            int statslogSampleRate =
+                    properties.getInt(HIDDEN_API_ACCESS_STATSLOG_SAMPLING_RATE, 0);
+            if (statslogSampleRate < 0 || statslogSampleRate > 0x10000) {
+                statslogSampleRate = -1;
+            }
+            if (statslogSampleRate != -1 && statslogSampleRate != mStatslogSampleRate) {
                 mStatslogSampleRate = statslogSampleRate;
                 ZYGOTE_PROCESS.setHiddenApiAccessStatslogSampleRate(mStatslogSampleRate);
             }
-
-        }
-
-        /**
-         * Set initial sampling rates from DeviceConfig. This is required after each restart,
-         * if they never get updated.
-         */
-        private void initializeSampleRates() {
-            int logSampleRate = DeviceConfig.getInt(DeviceConfig.NAMESPACE_APP_COMPAT,
-                    HIDDEN_API_ACCESS_LOG_SAMPLING_RATE, 0);
-            int statslogSampleRate = DeviceConfig.getInt(DeviceConfig.NAMESPACE_APP_COMPAT,
-                    HIDDEN_API_ACCESS_STATSLOG_SAMPLING_RATE, 0);
-            setSampleRates(logSampleRate, statslogSampleRate);
         }
 
         public HiddenApiSettings(Handler handler, Context context) {
@@ -2352,7 +2338,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                     Settings.Global.getUriFor(Settings.Global.HIDDEN_API_POLICY),
                     false,
                     this);
-            initializeSampleRates();
             DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_APP_COMPAT,
                     mContext.getMainExecutor(), this);
             update();
@@ -3806,6 +3791,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             if (mUxPerf != null && !mForceStopKill) {
                 mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, app.processName, 0);
+                mUxPerf.perfHint(BoostFramework.VENDOR_HINT_KILL, app.processName, pid, 0);
             }
 
             EventLog.writeEvent(EventLogTags.AM_PROC_DIED, app.userId, app.pid, app.processName,
@@ -4706,6 +4692,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             } else {
                 Slog.i(TAG, "Force stopping u" + userId + ": " + reason);
             }
+            if (mUxPerf != null) {
+                mUxPerf.perfHint(BoostFramework.VENDOR_HINT_KILL, packageName, appId, 0);
+            }
 
             mAppErrors.resetProcessCrashTimeLocked(packageName == null, appId, userId);
         }
@@ -5238,7 +5227,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 (app.hostingRecord.getName() != null ? app.hostingRecord.getName() : ""));
 
         //send start notification to AT with the starting app's info.
-        mActivityTrigger.activityStartTrigger(app.info, app.pid);
+        String hRecordType = app.hostingRecord.getType();
+        if(hRecordType != null && hRecordType.equals("activity")){
+            mActivityTrigger.activityStartTrigger(app.info, app.pid);
+        }
         return true;
     }
 

@@ -137,7 +137,7 @@ final class RemoteContentCaptureService
     }
 
     /**
-     * Called by {@link ContentCaptureServerSession} to request removal of content capture data.
+     * Called by {@link ContentCaptureServerSession} to request removal of user data.
      */
     public void onDataRemovalRequest(@NonNull DataRemovalRequest request) {
         scheduleAsyncRequest((s) -> s.onDataRemovalRequest(request));

@@ -30,8 +30,11 @@ import android.media.AudioRoutesInfo;
 import android.media.AudioSystem;
 import android.media.IAudioRoutesObserver;
 import android.media.IAudioService;
+import android.media.IMediaRouter2Client;
+import android.media.IMediaRouter2Manager;
 import android.media.IMediaRouterClient;
 import android.media.IMediaRouterService;
+import android.media.MediaRoute2Info;
 import android.media.MediaRouter;
 import android.media.MediaRouterClientState;
 import android.media.RemoteDisplayState;
@@ -108,7 +111,12 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     int mAudioRouteMainType = AudioRoutesInfo.MAIN_SPEAKER;
     boolean mGlobalBluetoothA2dpOn = false;
 
+    //TODO: remove this when it's finished
+    private final MediaRouter2ServiceImpl mService2;
+
     public MediaRouterService(Context context) {
+        mService2 = new MediaRouter2ServiceImpl(context);
+
         mContext = context;
         Watchdog.getInstance().addMonitor(this);
 
@@ -425,6 +433,59 @@ public final class MediaRouterService extends IMediaRouterService.Stub
         }
     }
 
+    // Binder call
+    @Override
+    public void registerClient2AsUser(IMediaRouter2Client client, String packageName, int userId) {
+        final int uid = Binder.getCallingUid();
+        if (!validatePackageName(uid, packageName)) {
+            throw new SecurityException("packageName must match the calling uid");
+        }
+        mService2.registerClientAsUser(client, packageName, userId);
+    }
+
+    // Binder call
+    @Override
+    public void unregisterClient2(IMediaRouter2Client client) {
+        mService2.unregisterClient(client);
+    }
+
+    // Binder call
+    @Override
+    public void sendControlRequest(IMediaRouter2Client client, MediaRoute2Info route,
+            Intent request) {
+        mService2.sendControlRequest(client, route, request);
+    }
+
+    // Binder call
+    @Override
+    public void registerManagerAsUser(IMediaRouter2Manager manager,
+            String packageName, int userId) {
+        final int uid = Binder.getCallingUid();
+        if (!validatePackageName(uid, packageName)) {
+            throw new SecurityException("packageName must match the calling uid");
+        }
+        mService2.registerManagerAsUser(manager, packageName, userId);
+    }
+
+    // Binder call
+    @Override
+    public void unregisterManager(IMediaRouter2Manager manager) {
+        mService2.unregisterManager(manager);
+    }
+
+    // Binder call
+    @Override
+    public void setRemoteRoute(IMediaRouter2Manager manager,
+            int uid, String routeId, boolean explicit) {
+        mService2.setRemoteRoute(manager, uid, routeId, explicit);
+    }
+
+    // Binder call
+    @Override
+    public void setControlCategories(IMediaRouter2Client client, List<String> categories) {
+        mService2.setControlCategories(client, categories);
+    }
+
     void restoreBluetoothA2dp() {
         try {
             boolean a2dpOn;
@@ -488,6 +549,7 @@ public final class MediaRouterService extends IMediaRouterService.Stub
                 }
             }
         }
+        mService2.switchUser();
     }
 
     void clientDied(ClientRecord clientRecord) {
@@ -735,6 +797,7 @@ public final class MediaRouterService extends IMediaRouterService.Stub
         public final int mPid;
         public final String mPackageName;
         public final boolean mTrusted;
+        public List<String> mControlCategories;
 
         public int mRouteTypes;
         public boolean mActiveScan;
@@ -791,7 +854,7 @@ public final class MediaRouterService extends IMediaRouterService.Stub
      */
     final class UserRecord {
         public final int mUserId;
-        public final ArrayList<ClientRecord> mClientRecords = new ArrayList<ClientRecord>();
+        public final ArrayList<ClientRecord> mClientRecords = new ArrayList<>();
         public final UserHandler mHandler;
         public MediaRouterClientState mRouterState;
         private final ArrayMap<String, ClientGroup> mClientGroupMap = new ArrayMap<>();
@@ -1253,7 +1316,6 @@ public final class MediaRouterService extends IMediaRouterService.Stub
             for (int i = 0; i < providerCount; i++) {
                 mProviderRecords.get(i).appendClientState(routerState);
             }
-
             try {
                 synchronized (mService.mLock) {
                     // Update the UserRecord.

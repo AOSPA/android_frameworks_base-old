@@ -267,8 +267,7 @@ bool ResourceEntry::HasDefaultValue() const {
 // A DECL will override a USE without error. Two DECLs must match in their format for there to be
 // no error.
 ResourceTable::CollisionResult ResourceTable::ResolveValueCollision(Value* existing,
-                                                                    Value* incoming,
-                                                                    bool overlay) {
+                                                                    Value* incoming) {
   Attribute* existing_attr = ValueCast<Attribute>(existing);
   Attribute* incoming_attr = ValueCast<Attribute>(incoming);
   if (!incoming_attr) {
@@ -282,7 +281,7 @@ ResourceTable::CollisionResult ResourceTable::ResolveValueCollision(Value* exist
     }
     // The existing and incoming values are strong, this is an error
     // if the values are not both attributes.
-    return overlay ? CollisionResult::kTakeNew : CollisionResult::kConflict;
+    return CollisionResult::kConflict;
   }
 
   if (!existing_attr) {
@@ -293,7 +292,7 @@ ResourceTable::CollisionResult ResourceTable::ResolveValueCollision(Value* exist
     }
     // The existing value is not an attribute and it is strong,
     // so the incoming attribute value is an error.
-    return overlay ? CollisionResult::kTakeNew : CollisionResult::kConflict;
+    return CollisionResult::kConflict;
   }
 
   CHECK(incoming_attr != nullptr && existing_attr != nullptr);
@@ -324,9 +323,8 @@ ResourceTable::CollisionResult ResourceTable::ResolveValueCollision(Value* exist
   return CollisionResult::kConflict;
 }
 
-ResourceTable::CollisionResult ResourceTable::IgnoreCollision(Value* /* existing */,
-                                                              Value* /* incoming */,
-                                                              bool /* overlay */) {
+ResourceTable::CollisionResult ResourceTable::IgnoreCollision(Value* /** existing **/,
+                                                              Value* /** incoming **/) {
   return CollisionResult::kKeepBoth;
 }
 
@@ -442,7 +440,7 @@ bool ResourceTable::AddResourceImpl(const ResourceNameRef& name, const ResourceI
     // Resource does not exist, add it now.
     config_value->value = std::move(value);
   } else {
-    switch (conflict_resolver(config_value->value.get(), value.get(), false /* overlay */)) {
+    switch (conflict_resolver(config_value->value.get(), value.get())) {
       case CollisionResult::kKeepBoth:
         // Insert the value ignoring for duplicate configurations
         entry->values.push_back(util::make_unique<ResourceConfigValue>(config, product));
