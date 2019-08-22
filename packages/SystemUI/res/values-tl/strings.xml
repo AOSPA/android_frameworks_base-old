@@ -778,7 +778,8 @@
     <string name="drag_to_add_tiles" msgid="230586591689084925">"Pindutin nang matagal at i-drag para magdagdag ng mga tile"</string>
     <string name="drag_to_rearrange_tiles" msgid="4566074720193667473">"Pindutin nang matagal at i-drag para ayusin ulit ang tile"</string>
     <string name="drag_to_remove_tiles" msgid="3361212377437088062">"I-drag dito upang alisin"</string>
-    <string name="drag_to_remove_disabled" msgid="4785920129548299268">"Kailangan mo ng kahit <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g> (na) tile"</string>
+    <!-- no translation found for drag_to_remove_disabled (4785920129548299268) -->
+    <skip />
     <string name="qs_edit" msgid="2232596095725105230">"I-edit"</string>
     <string name="tuner_time" msgid="6572217313285536011">"Oras"</string>
   <string-array name="clock_options">

@@ -188,7 +188,7 @@ static ResourceTable::CollisionResult ResolveMergeCollision(Value* existing, Val
     }
   }
   // Delegate to the default handler.
-  return ResourceTable::ResolveValueCollision(existing, incoming, true /* overlay */);
+  return ResourceTable::ResolveValueCollision(existing, incoming);
 }
 
 static ResourceTable::CollisionResult MergeConfigValue(IAaptContext* context,
@@ -206,11 +206,15 @@ static ResourceTable::CollisionResult MergeConfigValue(IAaptContext* context,
   if (overlay) {
     collision_result = ResolveMergeCollision(dst_value, src_value, pool);
   } else {
-    collision_result = ResourceTable::ResolveValueCollision(dst_value, src_value,
-                                                            false /* overlay */);
+    collision_result = ResourceTable::ResolveValueCollision(dst_value, src_value);
   }
 
   if (collision_result == CollisionResult::kConflict) {
+    if (overlay) {
+      return CollisionResult::kTakeNew;
+    }
+
+    // Error!
     context->GetDiagnostics()->Error(DiagMessage(src_value->GetSource())
                                      << "resource '" << res_name << "' has a conflicting value for "
                                      << "configuration (" << src_config_value->config << ")");

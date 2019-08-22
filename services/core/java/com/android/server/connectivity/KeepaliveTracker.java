@@ -474,8 +474,6 @@ public class KeepaliveTracker {
                 cleanupStoppedKeepalive(nai, ki.mSlot);
             }
         }
-        // Clean up keepalives will be done as a result of calling ki.stop() after the slots are
-        // freed.
     }
 
     public void handleStopKeepalive(NetworkAgentInfo nai, int slot, int reason) {

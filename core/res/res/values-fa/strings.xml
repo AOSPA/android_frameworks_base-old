@@ -550,11 +550,15 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="2340202869968465936">"نماد اثر انگشت"</string>
-    <string name="permlab_manageFace" msgid="2137540986007309781">"مدیریت سخت‌افزار احراز هویت با چهره"</string>
+    <!-- no translation found for permlab_manageFace (7262837876352591553) -->
+    <skip />
     <string name="permdesc_manageFace" msgid="8919637120670185330">"به برنامه امکان می‌دهد روش‌هایی را برای افزودن و حذف الگوهای چهره جهت استفاده فرابخواند."</string>
-    <string name="permlab_useFaceAuthentication" msgid="8996134460546804535">"استفاده از سخت‌افزار احراز هویت با چهره"</string>
-    <string name="permdesc_useFaceAuthentication" msgid="5011118722951833089">"به برنامه امکان می‌دهد از سخت‌افزار احراز هویت با چهره برای احراز هویت استفاده کند"</string>
-    <string name="face_recalibrate_notification_name" msgid="3976629945250435054">"احراز هویت با چهره"</string>
+    <!-- no translation found for permlab_useFaceAuthentication (2565716575739037572) -->
+    <skip />
+    <!-- no translation found for permdesc_useFaceAuthentication (4712947955047607722) -->
+    <skip />
+    <!-- no translation found for face_recalibrate_notification_name (1913676850645544352) -->
+    <skip />
     <string name="face_recalibrate_notification_title" msgid="4087620069451499365">"ثبت مجدد چهره"</string>
     <string name="face_recalibrate_notification_content" msgid="5530308842361499835">"برای بهبود تشخیص، لطفاً چهره‌تان را دوباره ثبت کنید"</string>
     <string name="face_acquired_insufficient" msgid="2767330364802375742">"داده‌های دقیق چهره ضبط نشد. دوباره امتحان کنید."</string>
@@ -580,15 +584,20 @@
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"چهره تأیید نشد. سخت‌افزار در دسترس نیست."</string>
-    <string name="face_error_timeout" msgid="3202585609451248103">"احراز هویت با چهره با دوباره امتحان کنید."</string>
+    <!-- no translation found for face_error_timeout (981512090365729465) -->
+    <skip />
     <string name="face_error_no_space" msgid="2712120617457553825">"داده‌ چهره جدید ذخیره نشد. اول داده‌ چهره قدیمی را حذف کنید."</string>
-    <string name="face_error_canceled" msgid="2768146728600802422">"عملیات شناسایی چهره لغو شد"</string>
-    <string name="face_error_user_canceled" msgid="9003022830076496163">"احراز هویت چهره توسط کاربر لغو شد"</string>
+    <string name="face_error_canceled" msgid="283945501061931023">"عملیات شناسایی چهره لغو شد."</string>
+    <!-- no translation found for face_error_user_canceled (5317030072349668946) -->
+    <skip />
     <string name="face_error_lockout" msgid="3407426963155388504">"تعداد زیادی تلاش ناموفق. بعداً دوباره امتحان کنید."</string>
-    <string name="face_error_lockout_permanent" msgid="3485837851962070925">"تعداد تلاش‌ها بیش‌ازحد مجاز است. احرازهویت چهره غیرفعال شد."</string>
+    <!-- no translation found for face_error_lockout_permanent (4723594314443097159) -->
+    <skip />
     <string name="face_error_unable_to_process" msgid="4940944939691171539">"چهره تأیید نشد. دوباره امتحان کنید."</string>
-    <string name="face_error_not_enrolled" msgid="2600952202843125796">"احراز هویت چهره راه‌اندازی نشده است"</string>
-    <string name="face_error_hw_not_present" msgid="1317845121210260372">"احراز هویت چهره در این دستگاه پشتیبانی نمی‌شود."</string>
+    <!-- no translation found for face_error_not_enrolled (4016937174832839540) -->
+    <skip />
+    <!-- no translation found for face_error_hw_not_present (8302690289757559738) -->
+    <skip />
     <string name="face_name_template" msgid="7004562145809595384">"چهره <xliff:g id="FACEID">%d</xliff:g>"</string>
   <string-array name="face_error_vendor">
   </string-array>

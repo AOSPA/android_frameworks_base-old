@@ -1697,6 +1697,7 @@ package android.os {
   }
 
   public static class Build.VERSION {
+    field public static final String[] ACTIVE_CODENAMES;
     field public static final int FIRST_SDK_INT;
     field public static final int RESOURCES_SDK_INT;
   }
@@ -2912,7 +2913,7 @@ package android.telephony.mbms {
 
 package android.telephony.mbms.vendor {
 
-  public class MbmsDownloadServiceBase extends android.os.Binder {
+  public class MbmsDownloadServiceBase extends android.os.Binder implements android.os.IInterface {
     ctor public MbmsDownloadServiceBase();
     method public int addProgressListener(android.telephony.mbms.DownloadRequest, android.telephony.mbms.DownloadProgressListener) throws android.os.RemoteException;
     method public int addStatusListener(android.telephony.mbms.DownloadRequest, android.telephony.mbms.DownloadStatusListener) throws android.os.RemoteException;
@@ -2943,7 +2944,7 @@ package android.telephony.mbms.vendor {
     method public void updateGroupCall(int, long, @NonNull java.util.List<java.lang.Integer>, @NonNull java.util.List<java.lang.Integer>);
   }
 
-  public class MbmsStreamingServiceBase extends android.os.Binder {
+  public class MbmsStreamingServiceBase extends android.os.Binder implements android.os.IInterface {
     ctor public MbmsStreamingServiceBase();
     method public android.os.IBinder asBinder();
     method public void dispose(int) throws android.os.RemoteException;
@@ -3010,7 +3011,6 @@ package android.util {
     field public static final String FFLAG_PREFIX = "sys.fflag.";
     field public static final String HEARING_AID_SETTINGS = "settings_bluetooth_hearing_aid";
     field public static final String PERSIST_PREFIX = "persist.sys.fflag.override.";
-    field public static final String PIXEL_WALLPAPER_CATEGORY_SWITCH = "settings_pixel_wallpaper_category_switch";
     field public static final String SCREENRECORD_LONG_PRESS = "settings_screenrecord_long_press";
     field public static final String SEAMLESS_TRANSFER = "settings_seamless_transfer";
   }
