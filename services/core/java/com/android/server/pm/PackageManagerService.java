@@ -16657,13 +16657,13 @@ public class PackageManagerService extends IPackageManager.Stub
                                 && compareSignatures(sharedUserSignatures,
                                         pkg.mSigningDetails.signatures)
                                         != PackageManager.SIGNATURE_MATCH) {
-                            if (SystemProperties.getInt("ro.product.first_api_level", 0) <= 28) {
+                            if (SystemProperties.getInt("ro.product.first_api_level", 0) <= 29) {
                                 // Mismatched signatures is an error and silently skipping system
                                 // packages will likely break the device in unforeseen ways.
-                                // However,
-                                // we allow the device to boot anyway because, prior to P,
-                                // vendors were
-                                // not expecting the platform to crash in this situation.
+                                // However, we allow the device to boot anyway because, prior to Q,
+                                // vendors were not expecting the platform to crash in this
+                                // situation.
+                                // This WILL be a hard failure on any new API levels after Q.
                                 throw new ReconcileFailure(
                                         INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES,
                                         "Signature mismatch for shared user: "
@@ -22676,7 +22676,7 @@ public class PackageManagerService extends IPackageManager.Stub
         final UserManager um = mContext.getSystemService(UserManager.class);
         UserManagerInternal umInternal = getUserManagerInternal();
         for (UserInfo user : um.getUsers()) {
-            final int flags;
+            int flags = 0;
             if (umInternal.isUserUnlockingOrUnlocked(user.id)) {
                 flags = StorageManager.FLAG_STORAGE_DE | StorageManager.FLAG_STORAGE_CE;
             } else if (umInternal.isUserRunning(user.id)) {
@@ -22684,9 +22684,12 @@ public class PackageManagerService extends IPackageManager.Stub
             } else {
                 continue;
             }
-
+            if ((vol.disk.flags & DiskInfo.FLAG_UFS_CARD) == DiskInfo.FLAG_UFS_CARD) {
+                flags = flags | DiskInfo.FLAG_UFS_CARD;
+            }
+            final int pflags = flags;
             try {
-                sm.prepareUserStorage(volumeUuid, user.id, user.serialNumber, flags);
+                sm.prepareUserStorage(volumeUuid, user.id, user.serialNumber, pflags);
                 synchronized (mInstallLock) {
                     reconcileAppsDataLI(volumeUuid, user.id, flags, true /* migrateAppData */);
                 }
