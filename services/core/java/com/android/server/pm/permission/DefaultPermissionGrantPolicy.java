@@ -731,6 +731,10 @@ public final class DefaultPermissionGrantPolicy {
                     CAMERA_PERMISSIONS);
         }
 
+        // Google Markup
+        grantSystemFixedPermissionsToSystemPackage("com.google.android.markup", userId,
+                STORAGE_PERMISSIONS);
+
         // There is no real "marker" interface to identify the shared storage backup, it is
         // hardcoded in BackupManagerService.SHARED_BACKUP_AGENT_PACKAGE.
         grantSystemFixedPermissionsToSystemPackage("com.android.sharedstoragebackup", userId,
