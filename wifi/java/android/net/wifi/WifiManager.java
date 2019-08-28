@@ -52,12 +52,14 @@ import android.os.Messenger;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.WorkSource;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.AsyncChannel;
 import com.android.internal.util.Protocol;
 import com.android.server.net.NetworkPinner;
@@ -1958,6 +1960,7 @@ public class WifiManager {
         try {
             IWifiManager iWifiManager = getIWifiManager();
             if (iWifiManager == null) {
+                if (config == null) return;
                 throw new RemoteException("Wifi service is not running");
             }
             if (!iWifiManager.addOrUpdatePasspointConfiguration(
@@ -1986,6 +1989,7 @@ public class WifiManager {
         try {
             IWifiManager iWifiManager = getIWifiManager();
             if (iWifiManager == null) {
+                if (TextUtils.isEmpty(fqdn)) return;
                 throw new RemoteException("Wifi service is not running");
             }
             if (!iWifiManager.removePasspointConfiguration(
@@ -2036,6 +2040,7 @@ public class WifiManager {
         try {
             IWifiManager iWifiManager = getIWifiManager();
             if (iWifiManager == null) {
+                if (bssid == 0L || TextUtils.isEmpty(fileName)) return;
                 throw new RemoteException("Wifi service is not running");
             }
             iWifiManager.queryPasspointIcon(bssid, fileName);
@@ -2065,6 +2070,8 @@ public class WifiManager {
      * @param holdoff hold off time in milliseconds
      * @param ess set if the hold off pertains to an ESS rather than a BSS
      * @hide
+     *
+     * TODO (140167680): This needs to be removed, the implementation is empty!
      */
     public void deauthenticateNetwork(long holdoff, boolean ess) {
         try {
@@ -2642,6 +2649,7 @@ public class WifiManager {
         try {
             IWifiManager iWifiManager = getIWifiManager();
             if (iWifiManager == null) {
+                if (TextUtils.isEmpty(country)) return;
                 throw new RemoteException("Wifi service is not running");
             }
             iWifiManager.setCountryCode(country);
@@ -2830,6 +2838,7 @@ public class WifiManager {
         try {
             IWifiManager iWifiManager = getIWifiManager();
             if (iWifiManager == null) {
+                if (TextUtils.isEmpty(ifaceName) || mode == IFACE_IP_MODE_UNSPECIFIED) return;
                 throw new RemoteException("Wifi service is not running");
             }
             iWifiManager.updateInterfaceIpState(ifaceName, mode);
@@ -3182,6 +3191,7 @@ public class WifiManager {
         try {
             IWifiManager iWifiManager = getIWifiManager();
             if (iWifiManager == null) {
+                if (remoteIPAddress == null || !enable) return;
                 throw new RemoteException("Wifi service is not running");
             }
             iWifiManager.enableTdls(remoteIPAddress.getHostAddress(), enable);
@@ -3200,6 +3210,7 @@ public class WifiManager {
         try {
             IWifiManager iWifiManager = getIWifiManager();
             if (iWifiManager == null) {
+                if (TextUtils.isEmpty(remoteMacAddress) || !enable) return;
                 throw new RemoteException("Wifi service is not running");
             }
             iWifiManager.enableTdlsWithMacAddress(remoteMacAddress, enable);
@@ -4120,7 +4131,7 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_STACK
     })
     public void disableEphemeralNetwork(String SSID) {
-        if (SSID == null) throw new IllegalArgumentException("SSID cannot be null");
+        if (TextUtils.isEmpty(SSID)) throw new IllegalArgumentException("SSID cannot be null");
         try {
             IWifiManager iWifiManager = getIWifiManager();
             if (iWifiManager == null) {
@@ -4659,6 +4670,7 @@ public class WifiManager {
         try {
             IWifiManager iWifiManager = getIWifiManager();
             if (iWifiManager == null) {
+                if (verbose == 0) return;
                 throw new RemoteException("Wifi service is not running");
             }
             iWifiManager.enableVerboseLogging(verbose);
@@ -4745,6 +4757,7 @@ public class WifiManager {
         try {
             IWifiManager iWifiManager = getIWifiManager();
             if (iWifiManager == null) {
+                if (enabled) return;
                 throw new RemoteException("Wifi service is not running");
             }
             iWifiManager.enableWifiConnectivityManager(enabled);
@@ -4775,6 +4788,7 @@ public class WifiManager {
         try {
             IWifiManager iWifiManager = getIWifiManager();
             if (iWifiManager == null) {
+                if (ArrayUtils.isEmpty(data)) return;
                 throw new RemoteException("Wifi service is not running");
             }
             iWifiManager.restoreBackupData(data);
@@ -4795,6 +4809,7 @@ public class WifiManager {
         try {
             IWifiManager iWifiManager = getIWifiManager();
             if (iWifiManager == null) {
+                if (ArrayUtils.isEmpty(supplicantData) && ArrayUtils.isEmpty(ipConfigData)) return;
                 throw new RemoteException("Wifi service is not running");
             }
             iWifiManager.restoreSupplicantBackupData(supplicantData, ipConfigData);
@@ -5285,6 +5300,7 @@ public class WifiManager {
         try {
             IWifiManager iWifiManager = getIWifiManager();
             if (iWifiManager == null) {
+                if (state == DEVICE_MOBILITY_STATE_UNKNOWN) return;
                 throw new RemoteException("Wifi service is not running");
             }
             iWifiManager.setDeviceMobilityState(state);
