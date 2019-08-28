@@ -841,6 +841,12 @@ public final class DefaultPermissionGrantPolicy {
             }
         }
 
+        // Google Markup
+        PackageParser.Package googlemarkupPackage = getSystemPackage("com.google.android.markup");
+        if (googlemarkupPackage != null && doesPackageSupportRuntimePermissions(googlemarkupPackage)) {
+            grantRuntimePermissions(googlemarkupPackage, STORAGE_PERMISSIONS, userId);
+        }
+
         // There is no real "marker" interface to identify the shared storage backup, it is
         // hardcoded in BackupManagerService.SHARED_BACKUP_AGENT_PACKAGE.
         PackageParser.Package sharedStorageBackupPackage = getSystemPackage(
