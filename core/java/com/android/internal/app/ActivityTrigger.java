@@ -50,14 +50,11 @@ public class ActivityTrigger
     }
 
     /** @hide */
-    public void activityStartTrigger(Intent intent, ActivityInfo acInfo,
-            ApplicationInfo appInfo, boolean IsInFullScreen) {
+    public void activityStartTrigger(ApplicationInfo appInfo, int pid) {
         int reserved =0;
-        ComponentName cn = intent.getComponent();
         String activity = null;
-
-        if(cn != null)
-            activity = cn.flattenToString() + "/" + appInfo.versionCode;
+        activity = appInfo.packageName + "/" + appInfo.processName + "/" +
+               appInfo.longVersionCode + "/" + pid;
         native_at_startActivity(activity, reserved);
     }
 
