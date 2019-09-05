@@ -99,14 +99,13 @@ public class MobileSignalController extends SignalController<
 
     private int mCallState = TelephonyManager.CALL_STATE_IDLE;
 
-    /****************************5G****************************/
+    /****************************SideCar****************************/
     @VisibleForTesting
     FiveGStateListener mFiveGStateListener;
     @VisibleForTesting
     FiveGServiceState mFiveGState;
     private FiveGServiceClient mClient;
     private CellSignalStrengthNr mCellSignalStrengthNr;
-    private final int NUM_LEVELS_ON_5G;
     /**********************************************************/
 
     private ImsManager mImsManager;
@@ -143,8 +142,6 @@ public class MobileSignalController extends SignalController<
         mLastState.iconGroup = mCurrentState.iconGroup = mDefaultIcons;
         // Get initial data sim state.
         updateDataSim();
-
-        NUM_LEVELS_ON_5G = FiveGServiceClient.getNumLevels(mContext);
 
         int phoneId = mSubscriptionInfo.getSimSlotIndex();
         mImsManagerConnector = new ImsManager.Connector(mContext, phoneId,
@@ -346,18 +343,6 @@ public class MobileSignalController extends SignalController<
         }
     }
 
-    public int getAlertSignalStrengthIconId() {
-        int level = mFiveGState.getSignalLevel();
-        if (mConfig.inflateSignalStrengths) {
-            level++;
-        }
-        boolean dataDisabled = mCurrentState.userSetup
-                && mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED;
-        boolean noInternet = mCurrentState.inetCondition == 0;
-        boolean cutOut = dataDisabled || noInternet;
-        return SignalDrawable.getState(level, NUM_LEVELS_ON_5G , cutOut);
-    }
-
     @Override
     public int getQsCurrentIconId() {
         return getCurrentIconId();
@@ -447,11 +432,8 @@ public class MobileSignalController extends SignalController<
 
         // Show icon in QS when we are connected or data is disabled.
         boolean showDataIcon = mCurrentState.dataConnected || dataDisabled;
-        boolean showAlertSignalStrength =
-                mDataNetType == TelephonyManager.NETWORK_TYPE_NR && !isCellSignalStrengthNrValid();
         IconState statusIcon = new IconState(mCurrentState.enabled && !mCurrentState.airplaneMode,
-                showAlertSignalStrength ? getAlertSignalStrengthIconId() : getCurrentIconId(),
-                contentDescription);
+                getCurrentIconId(), contentDescription);
 
         int qsTypeIcon = 0;
         IconState qsIcon = null;
@@ -680,14 +662,28 @@ public class MobileSignalController extends SignalController<
         if ( mDataNetType == TelephonyManager.NETWORK_TYPE_NR ) {
             if (mFiveGState.isNrIconTypeValid()) {
                 mCurrentState.iconGroup = mFiveGState.getIconGroup();
+                if (DEBUG) {
+                    Log.d(mTag,"get 5G SA icon from side-car");
+                }
+            }
+            int nrLevel = getNrLevel();
+            if (nrLevel > mFiveGState.getSignalLevel()) {
+                mCurrentState.level = nrLevel;
+                if (DEBUG) {
+                    Log.d(mTag,"get 5G SA sinal strength from AOSP");
+                }
+            }else{
+                mCurrentState.level = mFiveGState.getSignalLevel();
+                if (DEBUG) {
+                    Log.d(mTag,"get 5G SA sinal strength from side-car");
+                }
             }
 
-            if ( isCellSignalStrengthNrValid() ) {
-                mCurrentState.level = mCellSignalStrengthNr.getLevel();
-            }
-
-        }else if ( isAlertNsaValid() ) {
+        }else if ( nr5GIconGroup == null && isSideCarNsaValid() ) {
             mCurrentState.iconGroup = mFiveGState.getIconGroup();
+            if (DEBUG) {
+                Log.d(mTag,"get 5G NSA icon from side-car");
+            }
         }
 
         mCurrentState.dataConnected = mCurrentState.connected
@@ -866,12 +862,16 @@ public class MobileSignalController extends SignalController<
         return registered;
     }
 
-    private boolean isAlertNsaValid() {
+    private boolean isSideCarNsaValid() {
         return  mFiveGState.isNrIconTypeValid() && isDataRegisteredOnLte();
     }
 
     private boolean isCellSignalStrengthNrValid() {
         return ( mCellSignalStrengthNr != null && mCellSignalStrengthNr.isValid());
+    }
+
+    private int getNrLevel() {
+        return mCellSignalStrengthNr != null ? mCellSignalStrengthNr.getLevel() : 0;
     }
 
     @Override

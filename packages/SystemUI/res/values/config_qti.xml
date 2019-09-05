@@ -31,36 +31,8 @@
     <bool name="kg_hide_emgcy_btn_when_oos">false</bool>
     <bool name="config_showEmergencyButton">false</bool>
     <bool name="config_show_customize_carrier_name">false</bool>
-
-    <!-- Whether to show VoLTE icon in the status bar -->
+    <bool name="config_showRsrpSignalLevelforLTE">false</bool>
+    <bool name="config_alwaysShowTypeIcon">false</bool>
+    <bool name="config_hideNoInternetState">false</bool>
     <bool name="config_display_volte">false</bool>
-
-    <integer name="config_5g_num_signal_strength_bins">4</integer>
-
-    <!-- mmWave 5G NR Signal Strength Indicator -->
-    <!-- SS-RSRP. -->
-    <!--          rsrp <  -110 : level=0 -->
-    <!-- -110 <= rsrp  <= -90  : level=1 -->
-    <!--  -90 <  rsrp  <= -80  : level=2 -->
-    <!--  -80 <   rsrp <= -30 : level=3 -->
-    <!--  -30 <   rsrp         : level=0 -->
-    <integer-array name="config_5g_signal_rsrp_thresholds">
-        <item>-110</item>
-        <item>-90</item>
-        <item>-80</item>
-        <item>-30</item>
-    </integer-array>
-
-    <!-- SS-SNR -->
-    <!--      snr < -5  :  level=0 -->
-    <!-- -5<= snr <= 10 :  level=1 -->
-    <!-- 20 < snr <= 10 : level=2 -->
-    <!-- 20 < snr <= 40 : level=3 -->
-    <!-- 40 <  snr      : level=0 -->
-    <integer-array name="config_5g_signal_snr_thresholds">
-        <item>-5</item>
-        <item>10</item>
-        <item>20</item>
-        <item>40</item>
-    </integer-array>
 </resources>

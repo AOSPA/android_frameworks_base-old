@@ -1125,7 +1125,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
         boolean alwaysShowDataRatIcon = false;
         public String patternOfCarrierSpecificDataIcon = "";
 
-        boolean readIconsFromXml;
         boolean showRsrpSignalLevelforLTE = false;
         boolean hideNoInternetState = false;
         boolean showVolteIcon = false;
@@ -1186,10 +1185,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     }
                 }
             }
-            config.readIconsFromXml = res.getBoolean(R.bool.config_read_icons_from_xml);
-            config.showRsrpSignalLevelforLTE =
-                    res.getBoolean(R.bool.config_showRsrpSignalLevelforLTE);
-            config.showVolteIcon = res.getBoolean(R.bool.config_display_volte);
             return config;
         }
 
