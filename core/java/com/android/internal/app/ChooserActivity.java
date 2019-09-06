@@ -493,6 +493,9 @@ public class ChooserActivity extends ResolverActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         final long intentReceivedTime = System.currentTimeMillis();
+        // This is the only place this value is being set. Effectively final.
+        mIsAppPredictorComponentAvailable = isAppPredictionServiceAvailable();
+
         mIsSuccessfullySelected = false;
         Intent intent = getIntent();
         Parcelable targetParcelable = intent.getParcelableExtra(Intent.EXTRA_INTENT);
