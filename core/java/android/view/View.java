@@ -14432,8 +14432,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         notifyAppearedOrDisappearedForContentCaptureIfNeeded(isVisible);
-        if (isVisible != oldVisible) {
-            updateSystemGestureExclusionRects();
+        if (!getSystemGestureExclusionRects().isEmpty() && isVisible != oldVisible) {
+            postUpdateSystemGestureExclusionRects();
         }
     }
 
