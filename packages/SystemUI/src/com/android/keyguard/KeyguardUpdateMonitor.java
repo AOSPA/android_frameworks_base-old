@@ -512,7 +512,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
             if (cb != null) {
                 cb.onRefreshCarrierInfo();
-                cb.onServiceStateChanged(subId, serviceState);
             }
         }
     }
@@ -2253,7 +2252,17 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
 
         mServiceStates.put(subId, serviceState);
 
-        callbacksRefreshCarrierInfo();
+        // The upstream method (callbacksRefreshCarrierInfo) does not subId or
+        // serviceState as input. Thus onServiceStateChanged cannot be called
+        // from that new method. For now, re-use the same logic as before here
+        // instead of a call to callbacksRefreshCarrierInfo.
+        for (int j = 0; j < mCallbacks.size(); j++) {
+            KeyguardUpdateMonitorCallback cb = mCallbacks.get(j).get();
+            if (cb != null) {
+                cb.onRefreshCarrierInfo();
+                cb.onServiceStateChanged(subId, serviceState);
+            }
+        }
     }
 
     public boolean isKeyguardVisible() {
