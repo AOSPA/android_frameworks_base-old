@@ -61,7 +61,7 @@ abstract class SystemUIDefaultModule {
 
     @Binds
     abstract NotificationLockscreenUserManager bindNotificationLockscreenUserManager(
-            NotificationLockscreenUserManagerImpl notificationLockscreenUserManager);
+            NotificationLockscreenUserManagerGoogle notificationLockscreenUserManager);
 
     @Binds
     abstract DockManager bindDockManager(DockManagerImpl dockManager);
