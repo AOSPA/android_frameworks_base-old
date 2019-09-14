@@ -19,7 +19,9 @@ package com.android.systemui.assist.ui;
 import android.animation.ArgbEvaluator;
 import android.annotation.ColorInt;
 import android.annotation.Nullable;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -30,6 +32,8 @@ import android.util.MathUtils;
 import android.view.ContextThemeWrapper;
 import android.view.View;
 
+import com.android.internal.app.AssistUtils;
+import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.settingslib.Utils;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
@@ -113,6 +117,16 @@ public class InvocationLightsView extends View
 
         for (int i = 0; i < 4; i++) {
             mAssistInvocationLights.add(new EdgeLight(Color.TRANSPARENT, 0, 0));
+        }
+
+        Resources res = mContext.getResources();
+        ComponentName curAssistant = mAssistUtils.getAssistComponentForUser(KeyguardUpdateMonitor.getCurrentUser()$
+        if (curAssistant.getPackageName().equals("com.google.android.googlequicksearchbox")) {
+            int colorRed = res.getColor(R.color.edge_light_red);
+            int colorYellow = res.getColor(R.color.edge_light_yellow);
+            int colorBlue = res.getColor(R.color.edge_light_blue);
+            int colorGreen = res.getColor(R.color.edge_light_green);
+            setColors(colorBlue, colorRed, colorYellow, colorGreen);
         }
     }
 
