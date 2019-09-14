@@ -536,6 +536,21 @@ public class WifiManager {
      */
     public static final String EXTRA_WIFI_AP_FAILURE_REASON = "wifi_ap_error_code";
     /**
+     * The look up key for a string that gives additonal info about EXTRA_WIFI_AP_FAILURE_REASON
+     * currently support no_5ghz_support
+     * @see #WIFI_AP_FAILURE_DESC_NO_5GHZ_SUPPORT
+     *
+     * @hide
+     */
+    public static final String EXTRA_WIFI_AP_FAILURE_DESCRIPTION = "wifi_ap_error_description";
+    /**
+     *  If Wi-Fi AP start failed with SAP_START_FAILURE_NO_CHANNEL reason code and has this
+     *  description means that no supported channel exists on 5G band
+     *
+     *  @hide
+     */
+    public static final String WIFI_AP_FAILURE_DESC_NO_5GHZ_SUPPORT = "wifi_ap_error_no_5g_support";
+    /**
      * The previous Wi-Fi state.
      *
      * @see #EXTRA_WIFI_AP_STATE
