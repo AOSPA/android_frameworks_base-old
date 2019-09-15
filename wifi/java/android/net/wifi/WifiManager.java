@@ -1211,6 +1211,16 @@ public class WifiManager {
     @GuardedBy("mLock")
     private LocalOnlyHotspotObserverProxy mLOHSObserverProxy;
 
+    /* Wi-Fi generation codes */
+    /** @hide */
+    public static final int WIFI_GENERATION_DEFAULT = 0;
+    /** @hide */
+    public static final int WIFI_GENERATION_4 = 4;
+    /** @hide */
+    public static final int WIFI_GENERATION_5 = 5;
+    /** @hide */
+    public static final int WIFI_GENERATION_6 = 6;
+
     /**
      * Create a new WifiManager instance.
      * Applications will almost always want to use
@@ -1508,6 +1518,20 @@ public class WifiManager {
           }
       }
 
+     /**
+      * Get SoftAp Wi-Fi generation.
+      *
+      * @return Wi-Fi generation if SoftAp enabled or -1.
+      *
+      * @hide no intent to publish
+      */
+      public int getSoftApWifiGeneration() {
+          try {
+              return mService.getSoftApWifiGeneration();
+          } catch (RemoteException e) {
+              throw e.rethrowFromSystemServer();
+          }
+      }
 
     /**
      * Internal method for doing the RPC that creates a new network description
