@@ -153,7 +153,6 @@ class ActivityMetricsLogger {
     private ArtManagerInternal mArtManagerInternal;
     private final StringBuilder mStringBuilder = new StringBuilder();
 
-    public static BoostFramework mPerfFirstDraw = null;
     public static BoostFramework mUxPerf = new BoostFramework();
     private static ActivityRecord mLaunchedActivity;
 
@@ -795,14 +794,6 @@ class ActivityMetricsLogger {
         int isGame = mLaunchedActivity.isAppInfoGame();
         if (mUxPerf !=  null) {
             mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_GAME, 0, info.packageName, isGame);
-        }
-
-        if (mPerfFirstDraw == null) {
-            mPerfFirstDraw = new BoostFramework();
-        }
-
-        if (mPerfFirstDraw != null) {
-            mPerfFirstDraw.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW, info.packageName, info.windowsDrawnDelayMs, BoostFramework.Draw.EVENT_TYPE_V1);
         }
 
         if (mLaunchedActivity.mPerf != null && mLaunchedActivity.perfActivityBoostHandler > 0) {
