@@ -552,4 +552,9 @@ public class BaseWifiService extends IWifiManager.Stub {
     public String dppConfiguratorGetKey(int id) {
         throw new UnsupportedOperationException();
     }
+
+    @Override
+    public int getSoftApWifiGeneration() {
+        throw new UnsupportedOperationException();
+    }
 }
