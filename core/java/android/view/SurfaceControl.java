@@ -84,14 +84,13 @@ public final class SurfaceControl implements Parcelable {
     private static native long nativeCopyFromSurfaceControl(long nativeObject);
     private static native void nativeWriteToParcel(long nativeObject, Parcel out);
     private static native void nativeRelease(long nativeObject);
-    private static native void nativeDestroy(long nativeObject);
     private static native void nativeDisconnect(long nativeObject);
 
     private static native ScreenshotGraphicBuffer nativeScreenshot(IBinder displayToken,
             Rect sourceCrop, int width, int height, boolean useIdentityTransform, int rotation,
             boolean captureSecureLayers);
     private static native ScreenshotGraphicBuffer nativeCaptureLayers(IBinder displayToken,
-            IBinder layerHandleToken, Rect sourceCrop, float frameScale, IBinder[] excludeLayers);
+            long layerObject, Rect sourceCrop, float frameScale, long[] excludeLayerObjects);
 
     private static native long nativeCreateTransaction();
     private static native long nativeGetNativeTransactionFinalizer();
@@ -103,7 +102,7 @@ public final class SurfaceControl implements Parcelable {
 
     private static native void nativeSetLayer(long transactionObj, long nativeObject, int zorder);
     private static native void nativeSetRelativeLayer(long transactionObj, long nativeObject,
-            IBinder relativeTo, int zorder);
+            long relativeToObject, int zorder);
     private static native void nativeSetPosition(long transactionObj, long nativeObject,
             float x, float y);
     private static native void nativeSetGeometryAppliesWithResize(long transactionObj,
@@ -173,18 +172,17 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeSetDisplayPowerMode(
             IBinder displayToken, int mode);
     private static native void nativeDeferTransactionUntil(long transactionObj, long nativeObject,
-            IBinder handle, long frame);
+            long barrierObject, long frame);
     private static native void nativeDeferTransactionUntilSurface(long transactionObj,
             long nativeObject,
             long surfaceObject, long frame);
     private static native void nativeReparentChildren(long transactionObj, long nativeObject,
-            IBinder handle);
+            long newParentObject);
     private static native void nativeReparent(long transactionObj, long nativeObject,
             long newParentNativeObject);
     private static native void nativeSeverChildren(long transactionObj, long nativeObject);
     private static native void nativeSetOverrideScalingMode(long transactionObj, long nativeObject,
             int scalingMode);
-    private static native IBinder nativeGetHandle(long nativeObject);
     private static native boolean nativeGetTransformToDisplayInverse(long nativeObject);
 
     private static native Display.HdrCapabilities nativeGetHdrCapabilities(IBinder displayToken);
@@ -200,6 +198,8 @@ public final class SurfaceControl implements Parcelable {
     private static native boolean nativeGetDisplayBrightnessSupport(IBinder displayToken);
     private static native boolean nativeSetDisplayBrightness(IBinder displayToken,
             float brightness);
+    private static native long nativeReadTransactionFromParcel(Parcel in);
+    private static native void nativeWriteTransactionToParcel(long nativeObject, Parcel out);
 
     private final CloseGuard mCloseGuard = CloseGuard.get();
     private String mName;
@@ -933,19 +933,6 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
-     * Release the local resources like {@link #release} but also
-     * remove the Surface from the screen.
-     * @hide
-     */
-    public void remove() {
-        if (mNativeObject != 0) {
-            nativeDestroy(mNativeObject);
-            mNativeObject = 0;
-        }
-        mCloseGuard.close();
-    }
-
-    /**
      * Disconnect any client still connected to the surface.
      * @hide
      */
@@ -1024,9 +1011,9 @@ public final class SurfaceControl implements Parcelable {
     /**
      * @hide
      */
-    public void deferTransactionUntil(IBinder handle, long frame) {
+    public void deferTransactionUntil(SurfaceControl barrier, long frame) {
         synchronized(SurfaceControl.class) {
-            sGlobalTransaction.deferTransactionUntil(this, handle, frame);
+            sGlobalTransaction.deferTransactionUntil(this, barrier, frame);
         }
     }
 
@@ -1042,9 +1029,9 @@ public final class SurfaceControl implements Parcelable {
     /**
      * @hide
      */
-    public void reparentChildren(IBinder newParentHandle) {
+    public void reparentChildren(SurfaceControl newParent) {
         synchronized(SurfaceControl.class) {
-            sGlobalTransaction.reparentChildren(this, newParentHandle);
+            sGlobalTransaction.reparentChildren(this, newParent);
         }
     }
 
@@ -1074,13 +1061,6 @@ public final class SurfaceControl implements Parcelable {
         synchronized(SurfaceControl.class) {
             sGlobalTransaction.setOverrideScalingMode(this, scalingMode);
         }
-    }
-
-    /**
-     * @hide
-     */
-    public IBinder getHandle() {
-        return nativeGetHandle(mNativeObject);
     }
 
     /**
@@ -1869,7 +1849,8 @@ public final class SurfaceControl implements Parcelable {
         final ScreenshotGraphicBuffer buffer = screenshotToBuffer(display, sourceCrop, width,
                 height, useIdentityTransform, rotation);
         try {
-            consumer.attachAndQueueBuffer(buffer.getGraphicBuffer());
+            consumer.attachAndQueueBufferWithColorSpace(buffer.getGraphicBuffer(),
+                    buffer.getColorSpace());
         } catch (RuntimeException e) {
             Log.w(TAG, "Failed to take screenshot - " + e.getMessage());
         }
@@ -1990,7 +1971,7 @@ public final class SurfaceControl implements Parcelable {
     /**
      * Captures a layer and its children and returns a {@link GraphicBuffer} with the content.
      *
-     * @param layerHandleToken The root layer to capture.
+     * @param layer            The root layer to capture.
      * @param sourceCrop       The portion of the root surface to capture; caller may pass in 'new
      *                         Rect()' or null if no cropping is desired.
      * @param frameScale       The desired scale of the returned buffer; the raw
@@ -1999,20 +1980,25 @@ public final class SurfaceControl implements Parcelable {
      * @return Returns a GraphicBuffer that contains the layer capture.
      * @hide
      */
-    public static ScreenshotGraphicBuffer captureLayers(IBinder layerHandleToken, Rect sourceCrop,
+    public static ScreenshotGraphicBuffer captureLayers(SurfaceControl layer, Rect sourceCrop,
             float frameScale) {
         final IBinder displayToken = SurfaceControl.getInternalDisplayToken();
-        return nativeCaptureLayers(displayToken, layerHandleToken, sourceCrop, frameScale, null);
+        return nativeCaptureLayers(displayToken, layer.mNativeObject, sourceCrop, frameScale, null);
     }
 
     /**
      * Like {@link captureLayers} but with an array of layer handles to exclude.
      * @hide
      */
-    public static ScreenshotGraphicBuffer captureLayersExcluding(IBinder layerHandleToken,
-            Rect sourceCrop, float frameScale, IBinder[] exclude) {
+    public static ScreenshotGraphicBuffer captureLayersExcluding(SurfaceControl layer,
+            Rect sourceCrop, float frameScale, SurfaceControl[] exclude) {
         final IBinder displayToken = SurfaceControl.getInternalDisplayToken();
-        return nativeCaptureLayers(displayToken, layerHandleToken, sourceCrop, frameScale, exclude);
+        long[] nativeExcludeObjects = new long[exclude.length];
+        for (int i = 0; i < exclude.length; i++) {
+            nativeExcludeObjects[i] = exclude[i].mNativeObject;
+        }
+        return nativeCaptureLayers(displayToken, layer.mNativeObject, sourceCrop, frameScale,
+                nativeExcludeObjects);
     }
 
     /**
@@ -2064,10 +2050,10 @@ public final class SurfaceControl implements Parcelable {
         return nativeSetDisplayBrightness(displayToken, brightness);
     }
 
-    /**
+     /**
      * An atomic set of changes to a set of SurfaceControl.
      */
-    public static class Transaction implements Closeable {
+    public static class Transaction implements Closeable, Parcelable {
         /**
          * @hide
          */
@@ -2090,6 +2076,10 @@ public final class SurfaceControl implements Parcelable {
             mNativeObject = nativeCreateTransaction();
             mFreeNativeResources
                 = sRegistry.registerNativeAllocation(this, mNativeObject);
+        }
+
+        private Transaction(Parcel in) {
+            readFromParcel(in);
         }
 
         /**
@@ -2225,8 +2215,7 @@ public final class SurfaceControl implements Parcelable {
          */
         public Transaction setRelativeLayer(SurfaceControl sc, SurfaceControl relativeTo, int z) {
             sc.checkNotReleased();
-            nativeSetRelativeLayer(mNativeObject, sc.mNativeObject,
-                    relativeTo.getHandle(), z);
+            nativeSetRelativeLayer(mNativeObject, sc.mNativeObject, relativeTo.mNativeObject, z);
             return this;
         }
 
@@ -2413,13 +2402,14 @@ public final class SurfaceControl implements Parcelable {
          * @hide
          */
         @UnsupportedAppUsage
-        public Transaction deferTransactionUntil(SurfaceControl sc, IBinder handle,
+        public Transaction deferTransactionUntil(SurfaceControl sc, SurfaceControl barrier,
                 long frameNumber) {
             if (frameNumber < 0) {
                 return this;
             }
             sc.checkNotReleased();
-            nativeDeferTransactionUntil(mNativeObject, sc.mNativeObject, handle, frameNumber);
+            nativeDeferTransactionUntil(mNativeObject, sc.mNativeObject, barrier.mNativeObject,
+                    frameNumber);
             return this;
         }
 
@@ -2441,9 +2431,9 @@ public final class SurfaceControl implements Parcelable {
         /**
          * @hide
          */
-        public Transaction reparentChildren(SurfaceControl sc, IBinder newParentHandle) {
+        public Transaction reparentChildren(SurfaceControl sc, SurfaceControl newParent) {
             sc.checkNotReleased();
-            nativeReparentChildren(mNativeObject, sc.mNativeObject, newParentHandle);
+            nativeReparentChildren(mNativeObject, sc.mNativeObject, newParent.mNativeObject);
             return this;
         }
 
@@ -2689,5 +2679,47 @@ public final class SurfaceControl implements Parcelable {
             sc.release();
             return this;
         }
+
+        /**
+         * Writes the transaction to parcel, clearing the transaction as if it had been applied so
+         * it can be used to store future transactions. It's the responsibility of the parcel
+         * reader to apply the original transaction.
+         *
+         * @param dest parcel to write the transaction to
+         * @param flags
+         */
+        @Override
+        public void writeToParcel(@NonNull Parcel dest, @WriteFlags int flags) {
+            if (mNativeObject == 0) {
+                dest.writeInt(0);
+            } else {
+                dest.writeInt(1);
+            }
+            nativeWriteTransactionToParcel(mNativeObject, dest);
+        }
+
+        private void readFromParcel(Parcel in) {
+            mNativeObject = 0;
+            if (in.readInt() != 0) {
+                mNativeObject = nativeReadTransactionFromParcel(in);
+                mFreeNativeResources = sRegistry.registerNativeAllocation(this, mNativeObject);
+            }
+        }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        public static final @NonNull Creator<Transaction> CREATOR = new Creator<Transaction>() {
+                    @Override
+                    public Transaction createFromParcel(Parcel in) {
+                        return new Transaction(in);
+                    }
+                    @Override
+                    public Transaction[] newArray(int size) {
+                        return new Transaction[size];
+                    }
+                };
     }
 }

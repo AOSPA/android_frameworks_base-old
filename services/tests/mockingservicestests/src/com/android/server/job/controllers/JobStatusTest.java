@@ -82,7 +82,7 @@ public class JobStatusTest {
         JobSchedulerService.sSystemClock =
                 Clock.fixed(Clock.systemUTC().instant(), ZoneOffset.UTC);
         JobSchedulerService.sUptimeMillisClock =
-                Clock.fixed(SystemClock.uptimeMillisClock().instant(), ZoneOffset.UTC);
+                Clock.fixed(SystemClock.uptimeClock().instant(), ZoneOffset.UTC);
         JobSchedulerService.sElapsedRealtimeClock =
                 Clock.fixed(SystemClock.elapsedRealtimeClock().instant(), ZoneOffset.UTC);
     }
@@ -573,7 +573,7 @@ public class JobStatusTest {
             long latestRunTimeElapsedMillis) {
         final JobInfo job = new JobInfo.Builder(101, new ComponentName("foo", "bar"))
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).build();
-        return new JobStatus(job, 0, null, -1, 0, 0, null, earliestRunTimeElapsedMillis,
+        return new JobStatus(job, 0, null, -1, 0, null, earliestRunTimeElapsedMillis,
                 latestRunTimeElapsedMillis, 0, 0, null, 0);
     }
 

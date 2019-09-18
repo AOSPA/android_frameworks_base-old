@@ -47,6 +47,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.os.UserManagerInternal;
 import android.service.pm.PackageServiceDumpProto;
 import android.system.ErrnoException;
 import android.system.Os;
@@ -62,6 +63,7 @@ import com.android.internal.util.FastPrintWriter;
 import com.android.server.EventLogTags;
 import com.android.server.pm.dex.DexManager;
 import com.android.server.pm.dex.PackageDexUsage;
+import com.android.server.pm.permission.PermissionsState;
 
 import dalvik.system.VMRuntime;
 
@@ -374,10 +376,12 @@ public class PackageManagerServiceUtils {
         }
     }
 
-    public static void enforceShellRestriction(String restriction, int callingUid, int userHandle) {
+    /** Enforces that if the caller is shell, it does not have the provided user restriction. */
+    public static void enforceShellRestriction(
+            UserManagerInternal userManager, String restriction, int callingUid, int userHandle) {
         if (callingUid == Process.SHELL_UID) {
             if (userHandle >= 0
-                    && PackageManagerService.sUserManager.hasUserRestriction(
+                    && userManager.hasUserRestriction(
                             restriction, userHandle)) {
                 throw new SecurityException("Shell does not have permission to access user "
                         + userHandle);
@@ -385,6 +389,17 @@ public class PackageManagerServiceUtils {
                 Slog.e(PackageManagerService.TAG, "Unable to check shell permission for user "
                         + userHandle + "\n\t" + Debug.getCallers(3));
             }
+        }
+    }
+
+    /**
+     * Enforces that the caller must be either the system process or the phone process.
+     * If not, throws a {@link SecurityException}.
+     */
+    public static void enforceSystemOrPhoneCaller(String methodName, int callingUid) {
+        if (callingUid != Process.PHONE_UID && callingUid != Process.SYSTEM_UID) {
+            throw new SecurityException(
+                    "Cannot call " + methodName + " from UID " + callingUid);
         }
     }
 
@@ -884,5 +899,17 @@ public class PackageManagerServiceUtils {
         } finally {
             IoUtils.closeQuietly(source);
         }
+    }
+
+    /**
+     * Returns the {@link PermissionsState} for the given package. If the {@link PermissionsState}
+     * could not be found, {@code null} will be returned.
+     */
+    public static PermissionsState getPermissionsState(PackageParser.Package pkg) {
+        final PackageSetting packageSetting = (PackageSetting) pkg.mExtras;
+        if (packageSetting == null) {
+            return null;
+        }
+        return packageSetting.getPermissionsState();
     }
 }

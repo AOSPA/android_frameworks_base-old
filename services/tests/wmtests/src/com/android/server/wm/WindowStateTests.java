@@ -18,6 +18,7 @@ package com.android.server.wm;
 
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.hardware.camera2.params.OutputConfiguration.ROTATION_90;
 import static android.view.InsetsState.TYPE_TOP_BAR;
 import static android.view.Surface.ROTATION_0;
@@ -36,6 +37,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.never;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.reset;
@@ -249,6 +251,23 @@ public class WindowStateTests extends WindowTestsBase {
         // Invisible window can't be IME targets even if they have the right flags.
         assertFalse(appWindow.canBeImeTarget());
         assertFalse(imeWindow.canBeImeTarget());
+
+        // Simulate the window is in split screen primary stack and the current state is
+        // minimized and home stack is resizable, so that we should ignore input for the stack.
+        final DockedStackDividerController controller =
+                mDisplayContent.getDockedDividerController();
+        final TaskStack stack = createTaskStackOnDisplay(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY,
+                ACTIVITY_TYPE_STANDARD, mDisplayContent);
+        spyOn(appWindow);
+        spyOn(controller);
+        spyOn(stack);
+        doReturn(true).when(controller).isMinimizedDock();
+        doReturn(true).when(controller).isHomeStackResizable();
+        doReturn(stack).when(appWindow).getStack();
+
+        // Make sure canBeImeTarget is false due to shouldIgnoreInput is true;
+        assertFalse(appWindow.canBeImeTarget());
+        assertTrue(stack.shouldIgnoreInput());
     }
 
     @Test
@@ -283,43 +302,38 @@ public class WindowStateTests extends WindowTestsBase {
 
     @Test
     public void testPrepareWindowToDisplayDuringRelayout() {
-        testPrepareWindowToDisplayDuringRelayout(false /*wasVisible*/);
-        testPrepareWindowToDisplayDuringRelayout(true /*wasVisible*/);
-
-        // Call prepareWindowToDisplayDuringRelayout for a window without FLAG_TURN_SCREEN_ON
-        // before calling prepareWindowToDisplayDuringRelayout for windows with flag in the same
-        // appWindowToken.
+        // Call prepareWindowToDisplayDuringRelayout for a window without FLAG_TURN_SCREEN_ON before
+        // calling setCurrentLaunchCanTurnScreenOn for windows with flag in the same appWindowToken.
         final AppWindowToken appWindowToken = createAppWindowToken(mDisplayContent,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);
         final WindowState first = createWindow(null, TYPE_APPLICATION, appWindowToken, "first");
         final WindowState second = createWindow(null, TYPE_APPLICATION, appWindowToken, "second");
         second.mAttrs.flags |= WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON;
 
-        reset(sPowerManagerWrapper);
-        first.prepareWindowToDisplayDuringRelayout(false /*wasVisible*/);
-        verify(sPowerManagerWrapper, never()).wakeUp(anyLong(), anyInt(), anyString());
-        assertTrue(appWindowToken.canTurnScreenOn());
-
-        reset(sPowerManagerWrapper);
-        second.prepareWindowToDisplayDuringRelayout(false /*wasVisible*/);
-        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyInt(), anyString());
-        assertFalse(appWindowToken.canTurnScreenOn());
+        testPrepareWindowToDisplayDuringRelayout(first, false /* expectedWakeupCalled */,
+                true /* expectedCurrentLaunchCanTurnScreenOn */);
+        testPrepareWindowToDisplayDuringRelayout(second, true /* expectedWakeupCalled */,
+                false /* expectedCurrentLaunchCanTurnScreenOn */);
 
         // Call prepareWindowToDisplayDuringRelayout for two window that have FLAG_TURN_SCREEN_ON
         // from the same appWindowToken. Only one should trigger the wakeup.
-        appWindowToken.setCanTurnScreenOn(true);
+        appWindowToken.setCurrentLaunchCanTurnScreenOn(true);
         first.mAttrs.flags |= WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON;
         second.mAttrs.flags |= WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON;
 
-        reset(sPowerManagerWrapper);
-        first.prepareWindowToDisplayDuringRelayout(false /*wasVisible*/);
-        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyInt(), anyString());
-        assertFalse(appWindowToken.canTurnScreenOn());
+        testPrepareWindowToDisplayDuringRelayout(first, true /* expectedWakeupCalled */,
+                false /* expectedCurrentLaunchCanTurnScreenOn */);
+        testPrepareWindowToDisplayDuringRelayout(second, false /* expectedWakeupCalled */,
+                false /* expectedCurrentLaunchCanTurnScreenOn */);
 
-        reset(sPowerManagerWrapper);
-        second.prepareWindowToDisplayDuringRelayout(false /*wasVisible*/);
-        verify(sPowerManagerWrapper, never()).wakeUp(anyLong(), anyInt(), anyString());
-        assertFalse(appWindowToken.canTurnScreenOn());
+        // Without window flags, the state of ActivityRecord.canTurnScreenOn should still be able to
+        // turn on the screen.
+        appWindowToken.setCurrentLaunchCanTurnScreenOn(true);
+        first.mAttrs.flags &= ~WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON;
+        doReturn(true).when(appWindowToken.mActivityRecord).canTurnScreenOn();
+
+        testPrepareWindowToDisplayDuringRelayout(first, true /* expectedWakeupCalled */,
+                false /* expectedCurrentLaunchCanTurnScreenOn */);
 
         // Call prepareWindowToDisplayDuringRelayout for a windows that are not children of an
         // appWindowToken. Both windows have the FLAG_TURNS_SCREEN_ON so both should call wakeup
@@ -332,13 +346,33 @@ public class WindowStateTests extends WindowTestsBase {
         firstWindow.mAttrs.flags |= WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON;
         secondWindow.mAttrs.flags |= WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON;
 
-        reset(sPowerManagerWrapper);
+        final WindowState.PowerManagerWrapper powerManagerWrapper =
+                mSystemServicesTestRule.getPowerManagerWrapper();
+        reset(powerManagerWrapper);
         firstWindow.prepareWindowToDisplayDuringRelayout(false /*wasVisible*/);
-        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyInt(), anyString());
+        verify(powerManagerWrapper).wakeUp(anyLong(), anyInt(), anyString());
 
-        reset(sPowerManagerWrapper);
+        reset(powerManagerWrapper);
         secondWindow.prepareWindowToDisplayDuringRelayout(false /*wasVisible*/);
-        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyInt(), anyString());
+        verify(powerManagerWrapper).wakeUp(anyLong(), anyInt(), anyString());
+    }
+
+    private void testPrepareWindowToDisplayDuringRelayout(WindowState appWindow,
+            boolean expectedWakeupCalled, boolean expectedCurrentLaunchCanTurnScreenOn) {
+        final WindowState.PowerManagerWrapper powerManagerWrapper =
+                mSystemServicesTestRule.getPowerManagerWrapper();
+        reset(powerManagerWrapper);
+        appWindow.prepareWindowToDisplayDuringRelayout(false /* wasVisible */);
+
+        if (expectedWakeupCalled) {
+            verify(powerManagerWrapper).wakeUp(anyLong(), anyInt(), anyString());
+        } else {
+            verify(powerManagerWrapper, never()).wakeUp(anyLong(), anyInt(), anyString());
+        }
+        // If wakeup is expected to be called, the currentLaunchCanTurnScreenOn should be false
+        // because the state will be consumed.
+        assertThat(appWindow.mAppToken.currentLaunchCanTurnScreenOn(),
+                is(expectedCurrentLaunchCanTurnScreenOn));
     }
 
     @Test
@@ -468,15 +502,6 @@ public class WindowStateTests extends WindowTestsBase {
         assertThat(app.getWmDisplayCutout().getDisplayCutout(), is(cutout.inset(7, 10, 5, 20)));
     }
 
-    private void testPrepareWindowToDisplayDuringRelayout(boolean wasVisible) {
-        reset(sPowerManagerWrapper);
-        final WindowState root = createWindow(null, TYPE_APPLICATION, "root");
-        root.mAttrs.flags |= WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON;
-
-        root.prepareWindowToDisplayDuringRelayout(wasVisible /*wasVisible*/);
-        verify(sPowerManagerWrapper).wakeUp(anyLong(), anyInt(), anyString());
-    }
-
     @Test
     public void testVisibilityChangeSwitchUser() {
         final WindowState window = createWindow(null, TYPE_APPLICATION, "app");
@@ -496,13 +521,19 @@ public class WindowStateTests extends WindowTestsBase {
 
     @Test
     public void testGetTransformationMatrix() {
+        final int PARENT_WINDOW_OFFSET = 1;
+        final int DISPLAY_IN_PARENT_WINDOW_OFFSET = 2;
+        final int WINDOW_OFFSET = 3;
+        final float OFFSET_SUM =
+                PARENT_WINDOW_OFFSET + DISPLAY_IN_PARENT_WINDOW_OFFSET + WINDOW_OFFSET;
+
         synchronized (mWm.mGlobalLock) {
             final WindowState win0 = createWindow(null, TYPE_APPLICATION, "win0");
-            win0.getFrameLw().offsetTo(1, 0);
 
             final DisplayContent dc = createNewDisplay();
+            win0.getFrameLw().offsetTo(PARENT_WINDOW_OFFSET, 0);
             dc.reparentDisplayContent(win0, win0.getSurfaceControl());
-            dc.updateLocation(win0, 2, 0);
+            dc.updateLocation(win0, DISPLAY_IN_PARENT_WINDOW_OFFSET, 0);
 
             final float[] values = new float[9];
             final Matrix matrix = new Matrix();
@@ -510,12 +541,12 @@ public class WindowStateTests extends WindowTestsBase {
             final WindowState win1 = createWindow(null, TYPE_APPLICATION, dc, "win1");
             win1.mHasSurface = true;
             win1.mSurfaceControl = mock(SurfaceControl.class);
-            win1.getFrameLw().offsetTo(3, 0);
+            win1.getFrameLw().offsetTo(WINDOW_OFFSET, 0);
             win1.updateSurfacePosition(t);
             win1.getTransformationMatrix(values, matrix);
 
             matrix.getValues(values);
-            assertEquals(6f, values[Matrix.MTRANS_X], 0f);
+            assertEquals(OFFSET_SUM, values[Matrix.MTRANS_X], 0f);
             assertEquals(0f, values[Matrix.MTRANS_Y], 0f);
         }
     }

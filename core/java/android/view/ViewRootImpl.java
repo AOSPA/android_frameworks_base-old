@@ -399,7 +399,6 @@ public final class ViewRootImpl implements ViewParent,
 
     @UnsupportedAppUsage
     final View.AttachInfo mAttachInfo;
-    InputChannel mInputChannel;
     InputQueue.Callback mInputQueueCallback;
     InputQueue mInputQueue;
     @UnsupportedAppUsage
@@ -478,15 +477,19 @@ public final class ViewRootImpl implements ViewParent,
     private final SurfaceControl mSurfaceControl = new SurfaceControl();
 
     /**
-     * Child surface of {@code mSurface} with the same bounds as its parent, and crop bounds
-     * are set to the parent's bounds adjusted for surface insets. This surface is created when
-     * {@link ViewRootImpl#createBoundsSurface(int)} is called.
-     * By parenting to this bounds surface, child surfaces can ensure they do not draw into the
-     * surface inset regions set by the parent window.
+     * Transaction object that can be used to synchronize child SurfaceControl changes with
+     * ViewRootImpl SurfaceControl changes by the server. The object is passed along with
+     * the SurfaceChangedCallback.
      */
-    public final Surface mBoundsSurface = new Surface();
-    private SurfaceSession mSurfaceSession;
-    private SurfaceControl mBoundsSurfaceControl;
+    private final Transaction mSurfaceChangedTransaction = new Transaction();
+    /**
+     * Child container layer of {@code mSurface} with the same bounds as its parent, and cropped to
+     * the surface insets. This surface is created only if a client requests it via {@link
+     * #getBoundsLayer()}. By parenting to this bounds surface, child surfaces can ensure they do
+     * not draw into the surface inset region set by the parent window.
+     */
+    private SurfaceControl mBoundsLayer;
+    private final SurfaceSession mSurfaceSession = new SurfaceSession();
     private final Transaction mTransaction = new Transaction();
 
     @UnsupportedAppUsage
@@ -612,8 +615,12 @@ public final class ViewRootImpl implements ViewParent,
     boolean mHaveMoveEvent = false;
 
     public ViewRootImpl(Context context, Display display) {
+        this(context, display, WindowManagerGlobal.getWindowSession());
+    }
+
+    public ViewRootImpl(Context context, Display display, IWindowSession session) {
         mContext = context;
-        mWindowSession = WindowManagerGlobal.getWindowSession();
+        mWindowSession = session;
         mDisplay = display;
         mBasePackageName = context.getBasePackageName();
         mThread = Thread.currentThread();
@@ -876,9 +883,10 @@ public final class ViewRootImpl implements ViewParent,
                 // manager, to make sure we do the relayout before receiving
                 // any other events from the system.
                 requestLayout();
+                InputChannel inputChannel = null;
                 if ((mWindowAttributes.inputFeatures
                         & WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHANNEL) == 0) {
-                    mInputChannel = new InputChannel();
+                    inputChannel = new InputChannel();
                 }
                 mForceDecorViewVisibility = (mWindowAttributes.privateFlags
                         & PRIVATE_FLAG_FORCE_DECOR_VIEW_VISIBILITY) != 0;
@@ -889,14 +897,14 @@ public final class ViewRootImpl implements ViewParent,
                     res = mWindowSession.addToDisplay(mWindow, mSeq, mWindowAttributes,
                             getHostVisibility(), mDisplay.getDisplayId(), mTmpFrame,
                             mAttachInfo.mContentInsets, mAttachInfo.mStableInsets,
-                            mAttachInfo.mOutsets, mAttachInfo.mDisplayCutout, mInputChannel,
+                            mAttachInfo.mOutsets, mAttachInfo.mDisplayCutout, inputChannel,
                             mTempInsets);
                     setFrame(mTmpFrame);
                 } catch (RemoteException e) {
                     mAdded = false;
                     mView = null;
                     mAttachInfo.mRootView = null;
-                    mInputChannel = null;
+                    inputChannel = null;
                     mFallbackEventHandler.setView(null);
                     unscheduleTraversals();
                     setAccessibilityFocus(null, null);
@@ -972,12 +980,12 @@ public final class ViewRootImpl implements ViewParent,
                     mInputQueueCallback =
                         ((RootViewSurfaceTaker)view).willYouTakeTheInputQueue();
                 }
-                if (mInputChannel != null) {
+                if (inputChannel != null) {
                     if (mInputQueueCallback != null) {
                         mInputQueue = new InputQueue();
                         mInputQueueCallback.onInputQueueCreated(mInputQueue);
                     }
-                    mInputEventReceiver = new WindowInputEventReceiver(mInputChannel,
+                    mInputEventReceiver = new WindowInputEventReceiver(inputChannel,
                             Looper.myLooper());
                 }
 
@@ -1130,7 +1138,7 @@ public final class ViewRootImpl implements ViewParent,
      *
      * @param callback The callback to register.
      */
-    public void registerRtFrameCallback(FrameDrawingCallback callback) {
+    public void registerRtFrameCallback(@NonNull FrameDrawingCallback callback) {
         if (mAttachInfo.mThreadedRenderer != null) {
             mAttachInfo.mThreadedRenderer.registerRtFrameCallback(frame -> {
                 try {
@@ -1539,19 +1547,6 @@ public final class ViewRootImpl implements ViewParent,
         mIsAmbientMode = ambient;
     }
 
-    interface WindowStoppedCallback {
-        public void windowStopped(boolean stopped);
-    }
-    private final ArrayList<WindowStoppedCallback> mWindowStoppedCallbacks =  new ArrayList<>();
-
-    void addWindowStoppedCallback(WindowStoppedCallback c) {
-        mWindowStoppedCallbacks.add(c);
-    }
-
-    void removeWindowStoppedCallback(WindowStoppedCallback c) {
-        mWindowStoppedCallbacks.remove(c);
-    }
-
     void setWindowStopped(boolean stopped) {
         checkThread();
         if (mStopped != stopped) {
@@ -1568,14 +1563,11 @@ public final class ViewRootImpl implements ViewParent,
                 if (renderer != null) {
                     renderer.destroyHardwareResources(mView);
                 }
-            }
 
-            for (int i = 0; i < mWindowStoppedCallbacks.size(); i++) {
-                mWindowStoppedCallbacks.get(i).windowStopped(stopped);
-            }
-
-            if (mStopped) {
-                if (mSurfaceHolder != null && mSurface.isValid()) {
+                if (mSurface.isValid()) {
+                    if (mSurfaceHolder != null) {
+                        notifyHolderSurfaceDestroyed();
+                    }
                     notifySurfaceDestroyed();
                 }
                 destroySurface();
@@ -1583,65 +1575,94 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    /**
-     * Creates a surface as a child of {@code mSurface} with the same bounds as its parent and
-     * crop bounds set to the parent's bounds adjusted for surface insets.
-     *
-     * @param zOrderLayer Z order relative to the parent surface.
-     */
-    public void createBoundsSurface(int zOrderLayer) {
-        if (mSurfaceSession == null) {
-            mSurfaceSession = new SurfaceSession();
-        }
-        if (mBoundsSurfaceControl != null && mBoundsSurface.isValid()) {
-            return; // surface control for bounds surface already exists.
-        }
-
-        mBoundsSurfaceControl = new SurfaceControl.Builder(mSurfaceSession)
-                .setName("Bounds for - " + getTitle().toString())
-                .setParent(mSurfaceControl)
-                .build();
-
-        setBoundsSurfaceCrop();
-        mTransaction.setLayer(mBoundsSurfaceControl, zOrderLayer)
-                    .show(mBoundsSurfaceControl)
-                    .apply();
-        mBoundsSurface.copyFrom(mBoundsSurfaceControl);
+    /** Register callbacks to be notified when the ViewRootImpl surface changes. */
+    interface SurfaceChangedCallback {
+        void surfaceCreated(Transaction t);
+        void surfaceReplaced(Transaction t);
+        void surfaceDestroyed();
     }
 
-    private void setBoundsSurfaceCrop() {
+    private final ArrayList<SurfaceChangedCallback> mSurfaceChangedCallbacks = new ArrayList<>();
+    void addSurfaceChangedCallback(SurfaceChangedCallback c) {
+        mSurfaceChangedCallbacks.add(c);
+    }
+
+    void removeSurfaceChangedCallback(SurfaceChangedCallback c) {
+        mSurfaceChangedCallbacks.remove(c);
+    }
+
+    private void notifySurfaceCreated() {
+        for (int i = 0; i < mSurfaceChangedCallbacks.size(); i++) {
+            mSurfaceChangedCallbacks.get(i).surfaceCreated(mSurfaceChangedTransaction);
+        }
+    }
+
+    /**
+     * Notify listeners when the ViewRootImpl surface has been replaced. This callback will not be
+     * called if a new surface is created, only if the valid surface has been replaced with another
+     * valid surface.
+     */
+    private void notifySurfaceReplaced() {
+        for (int i = 0; i < mSurfaceChangedCallbacks.size(); i++) {
+            mSurfaceChangedCallbacks.get(i).surfaceReplaced(mSurfaceChangedTransaction);
+        }
+    }
+
+    private void notifySurfaceDestroyed() {
+        for (int i = 0; i < mSurfaceChangedCallbacks.size(); i++) {
+            mSurfaceChangedCallbacks.get(i).surfaceDestroyed();
+        }
+    }
+
+    /**
+     * @return child layer with the same bounds as its parent {@code mSurface} and cropped to the
+     * surface insets. If the layer does not exist, it is created.
+     *
+     * <p>Parenting to this layer will ensure that its children are cropped by the view's surface
+     * insets.
+     */
+    public SurfaceControl getBoundsLayer() {
+        if (mBoundsLayer == null) {
+            mBoundsLayer = new SurfaceControl.Builder(mSurfaceSession)
+                    .setContainerLayer()
+                    .setName("Bounds for - " + getTitle().toString())
+                    .setParent(mSurfaceControl)
+                    .build();
+            setBoundsLayerCrop();
+            mTransaction.show(mBoundsLayer).apply();
+        }
+        return mBoundsLayer;
+    }
+
+    private void setBoundsLayerCrop() {
         // mWinFrame is already adjusted for surface insets. So offset it and use it as
         // the cropping bounds.
         mTempBoundsRect.set(mWinFrame);
         mTempBoundsRect.offsetTo(mWindowAttributes.surfaceInsets.left,
                 mWindowAttributes.surfaceInsets.top);
-        mTransaction.setWindowCrop(mBoundsSurfaceControl, mTempBoundsRect);
+        mTransaction.setWindowCrop(mBoundsLayer, mTempBoundsRect);
     }
 
     /**
-     * Called after window layout to update the bounds surface. If the surface insets have
-     * changed or the surface has resized, update the bounds surface.
+     * Called after window layout to update the bounds surface. If the surface insets have changed
+     * or the surface has resized, update the bounds surface.
      */
-    private void updateBoundsSurface() {
-        if (mBoundsSurfaceControl != null && mSurface.isValid()) {
-            setBoundsSurfaceCrop();
-            mTransaction.deferTransactionUntilSurface(mBoundsSurfaceControl,
+    private void updateBoundsLayer() {
+        if (mBoundsLayer != null) {
+            setBoundsLayerCrop();
+            mTransaction.deferTransactionUntilSurface(mBoundsLayer,
                     mSurface, mSurface.getNextFrameNumber())
                     .apply();
         }
     }
 
     private void destroySurface() {
+        if (mBoundsLayer != null) {
+            mBoundsLayer.release();
+            mBoundsLayer = null;
+        }
         mSurface.release();
         mSurfaceControl.release();
-
-        mSurfaceSession = null;
-
-        if (mBoundsSurfaceControl != null) {
-            mBoundsSurfaceControl.remove();
-            mBoundsSurface.release();
-            mBoundsSurfaceControl = null;
-        }
     }
 
     /**
@@ -1982,7 +2003,7 @@ public final class ViewRootImpl implements ViewParent,
         mIsInTraversal = true;
         mWillDrawSoon = true;
         boolean windowSizeMayChange = false;
-        boolean surfaceChanged = false;
+        final boolean windowAttributesChanged = mWindowAttributesChanged;
         WindowManager.LayoutParams lp = mWindowAttributes;
 
         int desiredWindowWidth;
@@ -2001,7 +2022,6 @@ public final class ViewRootImpl implements ViewParent,
         WindowManager.LayoutParams params = null;
         if (mWindowAttributesChanged) {
             mWindowAttributesChanged = false;
-            surfaceChanged = true;
             params = lp;
         }
         CompatibilityInfo compatibilityInfo =
@@ -2242,6 +2262,10 @@ public final class ViewRootImpl implements ViewParent,
         final boolean isViewVisible = viewVisibility == View.VISIBLE;
         final boolean windowRelayoutWasForced = mForceNextWindowRelayout;
         boolean surfaceSizeChanged = false;
+        boolean surfaceCreated = false;
+        boolean surfaceDestroyed = false;
+        /* True if surface generation id changes. */
+        boolean surfaceReplaced = false;
 
         if (mFirst || windowShouldResize || insetsChanged ||
                 viewVisibilityChanged || params != null || mForceNextWindowRelayout) {
@@ -2323,10 +2347,14 @@ public final class ViewRootImpl implements ViewParent,
                 final boolean outsetsChanged = !mPendingOutsets.equals(mAttachInfo.mOutsets);
                 surfaceSizeChanged = (relayoutResult
                         & WindowManagerGlobal.RELAYOUT_RES_SURFACE_RESIZED) != 0;
-                surfaceChanged |= surfaceSizeChanged;
                 final boolean alwaysConsumeSystemBarsChanged =
                         mPendingAlwaysConsumeSystemBars != mAttachInfo.mAlwaysConsumeSystemBars;
                 final boolean colorModeChanged = hasColorModeChanged(lp.getColorMode());
+                surfaceCreated = !hadSurface && mSurface.isValid();
+                surfaceDestroyed = hadSurface && !mSurface.isValid();
+                surfaceReplaced = (surfaceGenerationId != mSurface.getGenerationId())
+                        && mSurface.isValid();
+
                 if (contentInsetsChanged) {
                     mAttachInfo.mContentInsets.set(mPendingContentInsets);
                     if (DEBUG_LAYOUT) Log.v(mTag, "Content insets changing to: "
@@ -2381,33 +2409,32 @@ public final class ViewRootImpl implements ViewParent,
                             lp.getColorMode() == ActivityInfo.COLOR_MODE_WIDE_COLOR_GAMUT);
                 }
 
-                if (!hadSurface) {
-                    if (mSurface.isValid()) {
-                        // If we are creating a new surface, then we need to
-                        // completely redraw it.
-                        mFullRedrawNeeded = true;
-                        mPreviousTransparentRegion.setEmpty();
+                if (surfaceCreated) {
+                    // If we are creating a new surface, then we need to
+                    // completely redraw it.
+                    mFullRedrawNeeded = true;
+                    mPreviousTransparentRegion.setEmpty();
 
-                        // Only initialize up-front if transparent regions are not
-                        // requested, otherwise defer to see if the entire window
-                        // will be transparent
-                        if (mAttachInfo.mThreadedRenderer != null) {
-                            try {
-                                hwInitialized = mAttachInfo.mThreadedRenderer.initialize(
-                                        mSurface);
-                                if (hwInitialized && (host.mPrivateFlags
-                                        & View.PFLAG_REQUEST_TRANSPARENT_REGIONS) == 0) {
-                                    // Don't pre-allocate if transparent regions
-                                    // are requested as they may not be needed
-                                    mAttachInfo.mThreadedRenderer.allocateBuffers();
-                                }
-                            } catch (OutOfResourcesException e) {
-                                handleOutOfResourcesException(e);
-                                return;
+                    // Only initialize up-front if transparent regions are not
+                    // requested, otherwise defer to see if the entire window
+                    // will be transparent
+                    if (mAttachInfo.mThreadedRenderer != null) {
+                        try {
+                            hwInitialized = mAttachInfo.mThreadedRenderer.initialize(
+                                    mSurface);
+                            if (hwInitialized && (host.mPrivateFlags
+                                    & View.PFLAG_REQUEST_TRANSPARENT_REGIONS) == 0) {
+                                // Don't pre-allocate if transparent regions
+                                // are requested as they may not be needed
+                                mAttachInfo.mThreadedRenderer.allocateBuffers();
                             }
+                        } catch (OutOfResourcesException e) {
+                            handleOutOfResourcesException(e);
+                            return;
                         }
                     }
-                } else if (!mSurface.isValid()) {
+                    notifySurfaceCreated();
+                } else if (surfaceDestroyed) {
                     // If the surface has been removed, then reset the scroll
                     // positions.
                     if (mLastScrolledFocus != null) {
@@ -2425,10 +2452,12 @@ public final class ViewRootImpl implements ViewParent,
                             mAttachInfo.mThreadedRenderer.isEnabled()) {
                         mAttachInfo.mThreadedRenderer.destroy();
                     }
-                } else if ((surfaceGenerationId != mSurface.getGenerationId()
+                    notifySurfaceDestroyed();
+                } else if ((surfaceReplaced
                         || surfaceSizeChanged || windowRelayoutWasForced || colorModeChanged)
                         && mSurfaceHolder == null
-                        && mAttachInfo.mThreadedRenderer != null) {
+                        && mAttachInfo.mThreadedRenderer != null
+                        && mSurface.isValid()) {
                     mFullRedrawNeeded = true;
                     try {
                         // Need to do updateSurface (which leads to CanvasContext::setSurface and
@@ -2444,6 +2473,10 @@ public final class ViewRootImpl implements ViewParent,
                         handleOutOfResourcesException(e);
                         return;
                     }
+                }
+
+                if (!surfaceCreated && surfaceReplaced) {
+                    notifySurfaceReplaced();
                 }
 
                 final boolean freeformResizing = (relayoutResult
@@ -2501,31 +2534,32 @@ public final class ViewRootImpl implements ViewParent,
                 }
                 mSurfaceHolder.setSurfaceFrameSize(mWidth, mHeight);
                 mSurfaceHolder.mSurfaceLock.unlock();
-                if (mSurface.isValid()) {
-                    if (!hadSurface) {
-                        mSurfaceHolder.ungetCallbacks();
+                if (surfaceCreated) {
+                    mSurfaceHolder.ungetCallbacks();
 
-                        mIsCreating = true;
-                        SurfaceHolder.Callback callbacks[] = mSurfaceHolder.getCallbacks();
-                        if (callbacks != null) {
-                            for (SurfaceHolder.Callback c : callbacks) {
-                                c.surfaceCreated(mSurfaceHolder);
-                            }
+                    mIsCreating = true;
+                    SurfaceHolder.Callback[] callbacks = mSurfaceHolder.getCallbacks();
+                    if (callbacks != null) {
+                        for (SurfaceHolder.Callback c : callbacks) {
+                            c.surfaceCreated(mSurfaceHolder);
                         }
-                        surfaceChanged = true;
                     }
-                    if (surfaceChanged || surfaceGenerationId != mSurface.getGenerationId()) {
-                        SurfaceHolder.Callback callbacks[] = mSurfaceHolder.getCallbacks();
-                        if (callbacks != null) {
-                            for (SurfaceHolder.Callback c : callbacks) {
-                                c.surfaceChanged(mSurfaceHolder, lp.format,
-                                        mWidth, mHeight);
-                            }
+                }
+
+                if ((surfaceCreated || surfaceReplaced || surfaceSizeChanged
+                        || windowAttributesChanged) && mSurface.isValid()) {
+                    SurfaceHolder.Callback[] callbacks = mSurfaceHolder.getCallbacks();
+                    if (callbacks != null) {
+                        for (SurfaceHolder.Callback c : callbacks) {
+                            c.surfaceChanged(mSurfaceHolder, lp.format,
+                                    mWidth, mHeight);
                         }
                     }
                     mIsCreating = false;
-                } else if (hadSurface) {
-                    notifySurfaceDestroyed();
+                }
+
+                if (surfaceDestroyed) {
+                    notifyHolderSurfaceDestroyed();
                     mSurfaceHolder.mSurfaceLock.lock();
                     try {
                         mSurfaceHolder.mSurface = new Surface();
@@ -2604,8 +2638,8 @@ public final class ViewRootImpl implements ViewParent,
             maybeHandleWindowMove(frame);
         }
 
-        if (surfaceSizeChanged) {
-            updateBoundsSurface();
+        if (surfaceSizeChanged || surfaceReplaced || surfaceCreated || windowAttributesChanged) {
+            updateBoundsLayer();
         }
 
         final boolean didLayout = layoutRequested && (!mStopped || mReportNextDraw);
@@ -2839,7 +2873,7 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    private void notifySurfaceDestroyed() {
+    private void notifyHolderSurfaceDestroyed() {
         mSurfaceHolder.ungetCallbacks();
         SurfaceHolder.Callback[] callbacks = mSurfaceHolder.getCallbacks();
         if (callbacks != null) {
@@ -3445,7 +3479,7 @@ public final class ViewRootImpl implements ViewParent,
     private void reportDrawFinished() {
         try {
             mDrawsNeededToReport = 0;
-            mWindowSession.finishDrawing(mWindow);
+            mWindowSession.finishDrawing(mWindow, mSurfaceChangedTransaction);
         } catch (RemoteException e) {
             // Have fun!
         }
@@ -4341,13 +4375,6 @@ public final class ViewRootImpl implements ViewParent,
         try {
             mWindowSession.remove(mWindow);
         } catch (RemoteException e) {
-        }
-
-        // Dispose the input channel after removing the window so the Window Manager
-        // doesn't interpret the input channel being closed as an abnormal termination.
-        if (mInputChannel != null) {
-            mInputChannel.dispose();
-            mInputChannel = null;
         }
 
         mDisplayManager.unregisterDisplayListener(mDisplayListener);
@@ -7341,7 +7368,8 @@ public final class ViewRootImpl implements ViewParent,
                         try {
                             if ((relayoutWindow(mWindowAttributes, viewVisibility, false)
                                     & WindowManagerGlobal.RELAYOUT_RES_FIRST_TIME) != 0) {
-                                mWindowSession.finishDrawing(mWindow);
+                                mWindowSession.finishDrawing(
+                                        mWindow, null /* postDrawTransaction */);
                             }
                         } catch (RemoteException e) {
                         }

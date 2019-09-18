@@ -23,7 +23,6 @@
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 
-#include <gui/GLConsumer.h>
 #include <gui/Surface.h>
 #include <gui/BufferQueue.h>
 
@@ -129,13 +128,6 @@ sp<SurfaceTexture> SurfaceTexture_getSurfaceTexture(JNIEnv* env, jobject thiz) {
 
 sp<IGraphicBufferProducer> SurfaceTexture_getProducer(JNIEnv* env, jobject thiz) {
     return (IGraphicBufferProducer*)env->GetLongField(thiz, fields.producer);
-}
-
-sp<ANativeWindow> android_SurfaceTexture_getNativeWindow(JNIEnv* env, jobject thiz) {
-    sp<SurfaceTexture> surfaceTexture(SurfaceTexture_getSurfaceTexture(env, thiz));
-    sp<IGraphicBufferProducer> producer(SurfaceTexture_getProducer(env, thiz));
-    sp<Surface> surfaceTextureClient(surfaceTexture != NULL ? new Surface(producer) : NULL);
-    return surfaceTextureClient;
 }
 
 bool android_SurfaceTexture_isInstanceOf(JNIEnv* env, jobject thiz) {

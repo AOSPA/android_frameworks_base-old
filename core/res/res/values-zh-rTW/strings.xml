@@ -95,6 +95,7 @@
     <string name="notification_channel_voice_mail" msgid="3954099424160511919">"語音留言"</string>
     <string name="notification_channel_wfc" msgid="2130802501654254801">"Wi-Fi 通話"</string>
     <string name="notification_channel_sim" msgid="4052095493875188564">"SIM 卡狀態"</string>
+    <string name="notification_channel_sim_high_prio" msgid="1787666807724243207">"高優先順序 SIM 卡狀態"</string>
     <string name="peerTtyModeFull" msgid="6165351790010341421">"通訊對象要求使用 TTY 的 FULL 模式"</string>
     <string name="peerTtyModeHco" msgid="5728602160669216784">"通訊對象要求使用 TTY 的 HCO 模式"</string>
     <string name="peerTtyModeVco" msgid="1742404978686538049">"通訊對象要求使用 TTY 的 VCO 模式"</string>
@@ -257,6 +258,7 @@
     <string name="notification_channel_car_mode" msgid="3553380307619874564">"車用模式"</string>
     <string name="notification_channel_account" msgid="7577959168463122027">"帳戶狀態"</string>
     <string name="notification_channel_developer" msgid="7579606426860206060">"開發人員的訊息"</string>
+    <string name="notification_channel_developer_important" msgid="5251192042281632002">"重要開發人員訊息"</string>
     <string name="notification_channel_updates" msgid="4794517569035110397">"更新"</string>
     <string name="notification_channel_network_status" msgid="5025648583129035447">"網路狀態"</string>
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"網路警示"</string>
@@ -550,15 +552,11 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="2340202869968465936">"指紋圖示"</string>
-    <!-- no translation found for permlab_manageFace (7262837876352591553) -->
-    <skip />
+    <string name="permlab_manageFace" msgid="7262837876352591553">"管理人臉解鎖硬體"</string>
     <string name="permdesc_manageFace" msgid="8919637120670185330">"允許應用程式呼叫方法來新增及移除可用的臉孔範本。"</string>
-    <!-- no translation found for permlab_useFaceAuthentication (2565716575739037572) -->
-    <skip />
-    <!-- no translation found for permdesc_useFaceAuthentication (4712947955047607722) -->
-    <skip />
-    <!-- no translation found for face_recalibrate_notification_name (1913676850645544352) -->
-    <skip />
+    <string name="permlab_useFaceAuthentication" msgid="2565716575739037572">"使用人臉解鎖硬體"</string>
+    <string name="permdesc_useFaceAuthentication" msgid="4712947955047607722">"允許應用程式使用人臉解鎖硬體進行驗證"</string>
+    <string name="face_recalibrate_notification_name" msgid="1913676850645544352">"人臉解鎖"</string>
     <string name="face_recalibrate_notification_title" msgid="4087620069451499365">"請重新註冊你的臉孔"</string>
     <string name="face_recalibrate_notification_content" msgid="5530308842361499835">"為提升辨識精準度，請重新註冊你的臉孔"</string>
     <string name="face_acquired_insufficient" msgid="2767330364802375742">"無法擷取精準臉孔資料，請再試一次。"</string>
@@ -571,7 +569,7 @@
     <string name="face_acquired_too_right" msgid="3667075962661863218">"請將手機向左移動。"</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"請將手機向右移動。"</string>
     <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"請儘可能直視裝置正面。"</string>
-    <string name="face_acquired_not_detected" msgid="4885504661626728809">"無法偵測你的臉孔，請直視手機。"</string>
+    <string name="face_acquired_not_detected" msgid="1879714205006680222">"將你的臉孔正對手機。"</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"鏡頭過度晃動，請拿穩手機。"</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"請重新註冊你的臉孔。"</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"已無法辨識臉孔，請再試一次。"</string>
@@ -580,24 +578,19 @@
     <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"請將你的頭部稍微向上或向下傾斜。"</string>
     <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"請將你的頭部稍微向左或向右旋轉。"</string>
     <string name="face_acquired_obscured" msgid="5357207702967893283">"請移除任何會遮住臉孔的物體。"</string>
-    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"請清除螢幕頂端感應器的髒汙。"</string>
+    <string name="face_acquired_sensor_dirty" msgid="7905138627046865579">"請清理螢幕頂端，包括黑色橫列"</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"相關硬體無法使用，因此無法驗證臉孔。"</string>
-    <!-- no translation found for face_error_timeout (981512090365729465) -->
-    <skip />
+    <string name="face_error_timeout" msgid="981512090365729465">"請重新進行人臉解鎖。"</string>
     <string name="face_error_no_space" msgid="2712120617457553825">"無法儲存新的臉孔資料，請先刪除舊的資料。"</string>
     <string name="face_error_canceled" msgid="283945501061931023">"臉孔處理作業已取消。"</string>
-    <!-- no translation found for face_error_user_canceled (5317030072349668946) -->
-    <skip />
+    <string name="face_error_user_canceled" msgid="5317030072349668946">"使用者已取消人臉解鎖作業。"</string>
     <string name="face_error_lockout" msgid="3407426963155388504">"嘗試次數過多，請稍後再試。"</string>
-    <!-- no translation found for face_error_lockout_permanent (4723594314443097159) -->
-    <skip />
+    <string name="face_error_lockout_permanent" msgid="4723594314443097159">"嘗試次數過多，因此系統已停用人臉解鎖功能。"</string>
     <string name="face_error_unable_to_process" msgid="4940944939691171539">"無法驗證臉孔，請再試一次。"</string>
-    <!-- no translation found for face_error_not_enrolled (4016937174832839540) -->
-    <skip />
-    <!-- no translation found for face_error_hw_not_present (8302690289757559738) -->
-    <skip />
+    <string name="face_error_not_enrolled" msgid="4016937174832839540">"你尚未設定人臉解鎖功能。"</string>
+    <string name="face_error_hw_not_present" msgid="8302690289757559738">"這個裝置不支援人臉解鎖功能。"</string>
     <string name="face_name_template" msgid="7004562145809595384">"臉孔 <xliff:g id="FACEID">%d</xliff:g>"</string>
   <string-array name="face_error_vendor">
   </string-array>

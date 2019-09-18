@@ -808,7 +808,9 @@ public class Activity extends ContextThemeWrapper
     /*package*/ ActivityInfo mActivityInfo;
     @UnsupportedAppUsage
     /*package*/ ActivityThread mMainThread;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(trackingBug = 137825207, maxTargetSdk = Build.VERSION_CODES.Q,
+            publicAlternatives = "Use {@code androidx.fragment.app.Fragment} and "
+                    + "{@code androidx.fragment.app.FragmentManager} instead")
     Activity mParent;
     @UnsupportedAppUsage
     boolean mCalled;
@@ -1547,7 +1549,9 @@ public class Activity extends ContextThemeWrapper
      * had previously been frozen by {@link #onSaveInstanceState}.
      *
      * <p>This method is called between {@link #onStart} and
-     * {@link #onPostCreate}.
+     * {@link #onPostCreate}. This method is called only when recreating
+     * an activity; the method isn't invoked if {@link #onStart} is called for
+     * any other reason.</p>
      *
      * @param savedInstanceState the data most recently supplied in {@link #onSaveInstanceState}.
      *
@@ -2682,12 +2686,6 @@ public class Activity extends ContextThemeWrapper
         enterPictureInPictureMode(new PictureInPictureParams.Builder().build());
     }
 
-    /** @removed */
-    @Deprecated
-    public boolean enterPictureInPictureMode(@NonNull PictureInPictureArgs args) {
-        return enterPictureInPictureMode(PictureInPictureArgs.convert(args));
-    }
-
     /**
      * Puts the activity in picture-in-picture mode if possible in the current system state. The
      * set parameters in {@param params} will be combined with the parameters from prior calls to
@@ -2722,12 +2720,6 @@ public class Activity extends ContextThemeWrapper
         } catch (RemoteException e) {
             return false;
         }
-    }
-
-    /** @removed */
-    @Deprecated
-    public void setPictureInPictureArgs(@NonNull PictureInPictureArgs args) {
-        setPictureInPictureParams(PictureInPictureArgs.convert(args));
     }
 
     /**
@@ -8566,8 +8558,7 @@ public class Activity extends ContextThemeWrapper
 
     /** Log a lifecycle event for current user id and component class. */
     private void writeEventLog(int event, String reason) {
-        EventLog.writeEvent(event, UserHandle.myUserId(), getComponentName().getClassName(),
-                reason);
+        EventLog.writeEvent(event, mIdent, getComponentName().getClassName(), reason);
     }
 
     class HostCallbacks extends FragmentHostCallback<Activity> {

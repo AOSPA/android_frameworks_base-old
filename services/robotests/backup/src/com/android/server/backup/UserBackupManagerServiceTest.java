@@ -63,6 +63,7 @@ import com.android.server.testing.shadows.ShadowApplicationPackageManager;
 import com.android.server.testing.shadows.ShadowBinder;
 import com.android.server.testing.shadows.ShadowKeyValueBackupJob;
 import com.android.server.testing.shadows.ShadowKeyValueBackupTask;
+import com.android.server.testing.shadows.ShadowSystemServiceRegistry;
 
 import org.junit.After;
 import org.junit.Before;
@@ -88,7 +89,12 @@ import java.util.List;
  * UserBackupManagerService} that performs operations for its target user.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(shadows = {ShadowAppBackupUtils.class, ShadowApplicationPackageManager.class})
+@Config(
+        shadows = {
+            ShadowAppBackupUtils.class,
+            ShadowApplicationPackageManager.class,
+            ShadowSystemServiceRegistry.class
+        })
 @Presubmit
 public class UserBackupManagerServiceTest {
     private static final String TAG = "BMSTest";
@@ -999,7 +1005,7 @@ public class UserBackupManagerServiceTest {
         UserBackupManagerService.createAndInitializeService(
                 USER_ID,
                 mContext,
-                new Trampoline(mContext),
+                new BackupManagerService(mContext),
                 mBackupThread,
                 mBaseStateDir,
                 mDataDir,
@@ -1020,7 +1026,7 @@ public class UserBackupManagerServiceTest {
         UserBackupManagerService.createAndInitializeService(
                 USER_ID,
                 mContext,
-                new Trampoline(mContext),
+                new BackupManagerService(mContext),
                 mBackupThread,
                 mBaseStateDir,
                 mDataDir,
@@ -1039,7 +1045,7 @@ public class UserBackupManagerServiceTest {
                         UserBackupManagerService.createAndInitializeService(
                                 USER_ID,
                                 /* context */ null,
-                                new Trampoline(mContext),
+                                new BackupManagerService(mContext),
                                 mBackupThread,
                                 mBaseStateDir,
                                 mDataDir,
@@ -1071,7 +1077,7 @@ public class UserBackupManagerServiceTest {
                         UserBackupManagerService.createAndInitializeService(
                                 USER_ID,
                                 mContext,
-                                new Trampoline(mContext),
+                                new BackupManagerService(mContext),
                                 /* backupThread */ null,
                                 mBaseStateDir,
                                 mDataDir,
@@ -1087,7 +1093,7 @@ public class UserBackupManagerServiceTest {
                         UserBackupManagerService.createAndInitializeService(
                                 USER_ID,
                                 mContext,
-                                new Trampoline(mContext),
+                                new BackupManagerService(mContext),
                                 mBackupThread,
                                 /* baseStateDir */ null,
                                 mDataDir,
@@ -1096,8 +1102,8 @@ public class UserBackupManagerServiceTest {
 
     /**
      * Test checking non-null argument on {@link
-     * UserBackupManagerService#createAndInitializeService(int, Context, Trampoline, HandlerThread,
-     * File, File, TransportManager)}.
+     * UserBackupManagerService#createAndInitializeService(int, Context, BackupManagerService,
+     * HandlerThread, File, File, TransportManager)}.
      */
     @Test
     public void testCreateAndInitializeService_withNullDataDir_throws() {
@@ -1107,7 +1113,7 @@ public class UserBackupManagerServiceTest {
                         UserBackupManagerService.createAndInitializeService(
                                 USER_ID,
                                 mContext,
-                                new Trampoline(mContext),
+                                new BackupManagerService(mContext),
                                 mBackupThread,
                                 mBaseStateDir,
                                 /* dataDir */ null,
@@ -1116,8 +1122,8 @@ public class UserBackupManagerServiceTest {
 
     /**
      * Test checking non-null argument on {@link
-     * UserBackupManagerService#createAndInitializeService(int, Context, Trampoline, HandlerThread,
-     * File, File, TransportManager)}.
+     * UserBackupManagerService#createAndInitializeService(int, Context, BackupManagerService,
+     * HandlerThread, File, File, TransportManager)}.
      */
     @Test
     public void testCreateAndInitializeService_withNullTransportManager_throws() {
@@ -1127,7 +1133,7 @@ public class UserBackupManagerServiceTest {
                         UserBackupManagerService.createAndInitializeService(
                                 USER_ID,
                                 mContext,
-                                new Trampoline(mContext),
+                                new BackupManagerService(mContext),
                                 mBackupThread,
                                 mBaseStateDir,
                                 mDataDir,
@@ -1145,7 +1151,7 @@ public class UserBackupManagerServiceTest {
         UserBackupManagerService service = UserBackupManagerService.createAndInitializeService(
                 USER_ID,
                 contextSpy,
-                new Trampoline(mContext),
+                new BackupManagerService(mContext),
                 mBackupThread,
                 mBaseStateDir,
                 mDataDir,

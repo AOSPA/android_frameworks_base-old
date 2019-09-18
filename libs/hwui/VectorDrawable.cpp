@@ -16,17 +16,23 @@
 
 #include "VectorDrawable.h"
 
+#include <math.h>
+#include <string.h>
 #include <utils/Log.h>
+
 #include "PathParser.h"
 #include "SkColorFilter.h"
 #include "SkImageInfo.h"
 #include "SkShader.h"
+#include "hwui/Paint.h"
+
+#ifdef __ANDROID__
+#include "renderthread/RenderThread.h"
+#endif
+
 #include "utils/Macros.h"
 #include "utils/TraceUtils.h"
 #include "utils/VectorDrawableUtils.h"
-
-#include <math.h>
-#include <string.h>
 
 namespace android {
 namespace uirenderer {
@@ -458,8 +464,12 @@ void Tree::drawStaging(Canvas* outCanvas) {
         mStagingCache.dirty = false;
     }
 
-    SkPaint paint;
-    getPaintFor(&paint, mStagingProperties);
+    SkPaint skp;
+    getPaintFor(&skp, mStagingProperties);
+    Paint paint;
+    paint.setFilterQuality(skp.getFilterQuality());
+    paint.setColorFilter(skp.refColorFilter());
+    paint.setAlpha(skp.getAlpha());
     outCanvas->drawBitmap(*mStagingCache.bitmap, 0, 0, mStagingCache.bitmap->width(),
                           mStagingCache.bitmap->height(), mStagingProperties.getBounds().left(),
                           mStagingProperties.getBounds().top(),
@@ -467,7 +477,7 @@ void Tree::drawStaging(Canvas* outCanvas) {
                           mStagingProperties.getBounds().bottom(), &paint);
 }
 
-void Tree::getPaintFor(SkPaint* outPaint, const TreeProperties &prop) const {
+void Tree::getPaintFor(SkPaint* outPaint, const TreeProperties& prop) const {
     // HWUI always draws VD with bilinear filtering.
     outPaint->setFilterQuality(kLow_SkFilterQuality);
     if (prop.getColorFilter() != nullptr) {
@@ -487,6 +497,7 @@ Bitmap& Tree::getBitmapUpdateIfDirty() {
 }
 
 void Tree::updateCache(sp<skiapipeline::VectorDrawableAtlas>& atlas, GrContext* context) {
+#ifdef __ANDROID__  // Layoutlib does not support hardware acceleration
     SkRect dst;
     sk_sp<SkSurface> surface = mCache.getSurface(&dst);
     bool canReuseSurface = surface && dst.width() >= mProperties.getScaledWidth() &&
@@ -514,6 +525,7 @@ void Tree::updateCache(sp<skiapipeline::VectorDrawableAtlas>& atlas, GrContext* 
         }
         mCache.dirty = false;
     }
+#endif
 }
 
 void Tree::Cache::setAtlas(sp<skiapipeline::VectorDrawableAtlas> newAtlas,
@@ -526,6 +538,7 @@ void Tree::Cache::setAtlas(sp<skiapipeline::VectorDrawableAtlas> newAtlas,
 
 sk_sp<SkSurface> Tree::Cache::getSurface(SkRect* bounds) {
     sk_sp<SkSurface> surface;
+#ifdef __ANDROID__  // Layoutlib does not support hardware acceleration
     sp<skiapipeline::VectorDrawableAtlas> atlas = mAtlas.promote();
     if (atlas.get() && mAtlasKey != INVALID_ATLAS_KEY) {
         auto atlasEntry = atlas->getEntry(mAtlasKey);
@@ -533,17 +546,35 @@ sk_sp<SkSurface> Tree::Cache::getSurface(SkRect* bounds) {
         surface = atlasEntry.surface;
         mAtlasKey = atlasEntry.key;
     }
+#endif
 
     return surface;
 }
 
 void Tree::Cache::clear() {
-    sp<skiapipeline::VectorDrawableAtlas> lockAtlas = mAtlas.promote();
-    if (lockAtlas.get()) {
-        lockAtlas->releaseEntry(mAtlasKey);
+#ifdef __ANDROID__  // Layoutlib does not support hardware acceleration
+    if (mAtlasKey != INVALID_ATLAS_KEY) {
+        if (renderthread::RenderThread::isCurrent()) {
+            sp<skiapipeline::VectorDrawableAtlas> lockAtlas = mAtlas.promote();
+            if (lockAtlas.get()) {
+                lockAtlas->releaseEntry(mAtlasKey);
+            }
+        } else {
+            // VectorDrawableAtlas can be accessed only on RenderThread.
+            // Use by-copy capture of the current Cache variables, because "this" may not be valid
+            // by the time the lambda is evaluated on RenderThread.
+            renderthread::RenderThread::getInstance().queue().post(
+                    [atlas = mAtlas, atlasKey = mAtlasKey]() {
+                        sp<skiapipeline::VectorDrawableAtlas> lockAtlas = atlas.promote();
+                        if (lockAtlas.get()) {
+                            lockAtlas->releaseEntry(atlasKey);
+                        }
+                    });
+        }
+        mAtlasKey = INVALID_ATLAS_KEY;
     }
     mAtlas = nullptr;
-    mAtlasKey = INVALID_ATLAS_KEY;
+#endif
 }
 
 void Tree::draw(SkCanvas* canvas, const SkRect& bounds, const SkPaint& inPaint) {

@@ -1558,10 +1558,11 @@ class StorageManagerService extends IStorageManager.Stub
     }
 
     private void start() {
-        connect();
+        connectStoraged();
+        connectVold();
     }
 
-    private void connect() {
+    private void connectStoraged() {
         IBinder binder = ServiceManager.getService("storaged");
         if (binder != null) {
             try {
@@ -1570,7 +1571,7 @@ class StorageManagerService extends IStorageManager.Stub
                     public void binderDied() {
                         Slog.w(TAG, "storaged died; reconnecting");
                         mStoraged = null;
-                        connect();
+                        connectStoraged();
                     }
                 }, 0);
             } catch (RemoteException e) {
@@ -1584,7 +1585,17 @@ class StorageManagerService extends IStorageManager.Stub
             Slog.w(TAG, "storaged not found; trying again");
         }
 
-        binder = ServiceManager.getService("vold");
+        if (mStoraged == null) {
+            BackgroundThread.getHandler().postDelayed(() -> {
+                connectStoraged();
+            }, DateUtils.SECOND_IN_MILLIS);
+        } else {
+            onDaemonConnected();
+        }
+    }
+
+    private void connectVold() {
+        IBinder binder = ServiceManager.getService("vold");
         if (binder != null) {
             try {
                 binder.linkToDeath(new DeathRecipient() {
@@ -1592,7 +1603,7 @@ class StorageManagerService extends IStorageManager.Stub
                     public void binderDied() {
                         Slog.w(TAG, "vold died; reconnecting");
                         mVold = null;
-                        connect();
+                        connectVold();
                     }
                 }, 0);
             } catch (RemoteException e) {
@@ -1612,9 +1623,9 @@ class StorageManagerService extends IStorageManager.Stub
             Slog.w(TAG, "vold not found; trying again");
         }
 
-        if (mStoraged == null || mVold == null) {
+        if (mVold == null) {
             BackgroundThread.getHandler().postDelayed(() -> {
-                connect();
+                connectVold();
             }, DateUtils.SECOND_IN_MILLIS);
         } else {
             onDaemonConnected();
@@ -3241,28 +3252,28 @@ class StorageManagerService extends IStorageManager.Stub
             // should be kept in sync with getFreeBytes().
             final File path = storage.findPathForUuid(volumeUuid);
 
-            final long usable = path.getUsableSpace();
-            final long lowReserved = storage.getStorageLowBytes(path);
-            final long fullReserved = storage.getStorageFullBytes(path);
+            long usable = 0;
+            long lowReserved = 0;
+            long fullReserved = 0;
+            long cacheClearable = 0;
 
-            if (stats.isQuotaSupported(volumeUuid)) {
+            if ((flags & StorageManager.FLAG_ALLOCATE_CACHE_ONLY) == 0) {
+                usable = path.getUsableSpace();
+                lowReserved = storage.getStorageLowBytes(path);
+                fullReserved = storage.getStorageFullBytes(path);
+            }
+
+            if ((flags & StorageManager.FLAG_ALLOCATE_NON_CACHE_ONLY) == 0
+                    && stats.isQuotaSupported(volumeUuid)) {
                 final long cacheTotal = stats.getCacheBytes(volumeUuid);
                 final long cacheReserved = storage.getStorageCacheBytes(path, flags);
-                final long cacheClearable = Math.max(0, cacheTotal - cacheReserved);
+                cacheClearable = Math.max(0, cacheTotal - cacheReserved);
+            }
 
-                if ((flags & StorageManager.FLAG_ALLOCATE_AGGRESSIVE) != 0) {
-                    return Math.max(0, (usable + cacheClearable) - fullReserved);
-                } else {
-                    return Math.max(0, (usable + cacheClearable) - lowReserved);
-                }
+            if ((flags & StorageManager.FLAG_ALLOCATE_AGGRESSIVE) != 0) {
+                return Math.max(0, (usable + cacheClearable) - fullReserved);
             } else {
-                // When we don't have fast quota information, we ignore cached
-                // data and only consider unused bytes.
-                if ((flags & StorageManager.FLAG_ALLOCATE_AGGRESSIVE) != 0) {
-                    return Math.max(0, usable - fullReserved);
-                } else {
-                    return Math.max(0, usable - lowReserved);
-                }
+                return Math.max(0, (usable + cacheClearable) - lowReserved);
             }
         } catch (IOException e) {
             throw new ParcelableException(e);
@@ -3275,10 +3286,17 @@ class StorageManagerService extends IStorageManager.Stub
     public void allocateBytes(String volumeUuid, long bytes, int flags, String callingPackage) {
         flags = adjustAllocateFlags(flags, Binder.getCallingUid(), callingPackage);
 
-        final long allocatableBytes = getAllocatableBytes(volumeUuid, flags, callingPackage);
+        final long allocatableBytes = getAllocatableBytes(volumeUuid,
+                flags | StorageManager.FLAG_ALLOCATE_NON_CACHE_ONLY, callingPackage);
         if (bytes > allocatableBytes) {
-            throw new ParcelableException(new IOException("Failed to allocate " + bytes
-                    + " because only " + allocatableBytes + " allocatable"));
+            // If we don't have room without taking cache into account, check to see if we'd have
+            // room if we included freeable cache space.
+            final long cacheClearable = getAllocatableBytes(volumeUuid,
+                    flags | StorageManager.FLAG_ALLOCATE_CACHE_ONLY, callingPackage);
+            if (bytes > allocatableBytes + cacheClearable) {
+                throw new ParcelableException(new IOException("Failed to allocate " + bytes
+                    + " because only " + (allocatableBytes + cacheClearable) + " allocatable"));
+            }
         }
 
         final StorageManager storage = mContext.getSystemService(StorageManager.class);

@@ -46,6 +46,7 @@ import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
 import com.android.systemui.Dependency;
 import com.android.systemui.SystemUIFactory;
+import com.android.systemui.statusbar.phone.UnlockMethodCache;
 import com.android.systemui.util.InjectionInflationController;
 
 public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSecurityView {
@@ -90,6 +91,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
     private final SpringAnimation mSpringAnimation;
     private final VelocityTracker mVelocityTracker = VelocityTracker.obtain();
     private final KeyguardUpdateMonitor mUpdateMonitor;
+    private final UnlockMethodCache mUnlockMethodCache;
 
     private final MetricsLogger mMetricsLogger = Dependency.get(MetricsLogger.class);
     private float mLastTouchY = -1;
@@ -129,6 +131,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         mSpringAnimation = new SpringAnimation(this, DynamicAnimation.Y);
         mInjectionInflationController =  new InjectionInflationController(
             SystemUIFactory.getInstance().getRootComponent());
+        mUnlockMethodCache = UnlockMethodCache.getInstance(context);
         mViewConfiguration = ViewConfiguration.get(context);
     }
 
@@ -234,6 +237,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
                     MIN_DRAG_SIZE, getResources().getDisplayMetrics())
                     && !mUpdateMonitor.isFaceDetectionRunning()) {
                 mUpdateMonitor.requestFaceAuth();
+                mCallback.userActivity();
                 showMessage(null, null);
             }
         }
@@ -265,12 +269,10 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
      */
     private void updateBiometricRetry() {
         SecurityMode securityMode = getSecurityMode();
-        int userId = KeyguardUpdateMonitor.getCurrentUser();
-        mSwipeUpToRetry = mUpdateMonitor.isUnlockWithFacePossible(userId)
+        mSwipeUpToRetry = mUnlockMethodCache.isFaceAuthEnabled()
                 && securityMode != SecurityMode.SimPin
                 && securityMode != SecurityMode.SimPuk
-                && securityMode != SecurityMode.None
-                && securityMode != SecurityMode.Pattern;
+                && securityMode != SecurityMode.None;
     }
 
     public CharSequence getTitle() {
@@ -594,6 +596,11 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
             }
         }
 
+        @Override
+        public void onUserInput() {
+            mUpdateMonitor.cancelFaceAuth();
+        }
+
         public void dismiss(boolean authenticated, int targetId) {
             mSecurityCallback.dismiss(authenticated, targetId);
         }
@@ -637,6 +644,8 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         public boolean isVerifyUnlockOnly() { return false; }
         @Override
         public void dismiss(boolean securityVerified, int targetUserId) { }
+        @Override
+        public void onUserInput() { }
         @Override
         public void reset() {}
     };

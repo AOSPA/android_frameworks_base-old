@@ -429,7 +429,15 @@ public class DeviceIdleController extends SystemService
     private long mNextLightIdleDelay;
     private long mNextLightAlarmTime;
     private long mNextSensingTimeoutAlarmTime;
-    private long mCurIdleBudget;
+
+    /** How long a light idle maintenance window should last. */
+    private long mCurLightIdleBudget;
+
+    /**
+     * Start time of the current (light or full) maintenance window, in the elapsed timebase. Valid
+     * only if {@link #mState} == {@link #STATE_IDLE_MAINTENANCE} or
+     * {@link #mLightState} == {@link #LIGHT_STATE_IDLE_MAINTENANCE}.
+     */
     private long mMaintenanceStartTime;
     private long mIdleStartTime;
 
@@ -1628,27 +1636,32 @@ public class DeviceIdleController extends SystemService
         }
     }
 
-    public class LocalService {
+    private class LocalService implements DeviceIdleInternal {
+        @Override
         public void onConstraintStateChanged(IDeviceIdleConstraint constraint, boolean active) {
             synchronized (DeviceIdleController.this) {
                 onConstraintStateChangedLocked(constraint, active);
             }
         }
 
+        @Override
         public void registerDeviceIdleConstraint(IDeviceIdleConstraint constraint, String name,
                 @IDeviceIdleConstraint.MinimumState int minState) {
             registerDeviceIdleConstraintInternal(constraint, name, minState);
         }
 
+        @Override
         public void unregisterDeviceIdleConstraint(IDeviceIdleConstraint constraint) {
             unregisterDeviceIdleConstraintInternal(constraint);
         }
 
+        @Override
         public void exitIdle(String reason) {
             exitIdleInternal(reason);
         }
 
         // duration in milliseconds
+        @Override
         public void addPowerSaveTempWhitelistApp(int callingUid, String packageName,
                 long duration, int userId, boolean sync, String reason) {
             addPowerSaveTempWhitelistAppInternal(callingUid, packageName, duration,
@@ -1656,26 +1669,31 @@ public class DeviceIdleController extends SystemService
         }
 
         // duration in milliseconds
+        @Override
         public void addPowerSaveTempWhitelistAppDirect(int uid, long duration, boolean sync,
                 String reason) {
             addPowerSaveTempWhitelistAppDirectInternal(0, uid, duration, sync, reason);
         }
 
         // duration in milliseconds
+        @Override
         public long getNotificationWhitelistDuration() {
             return mConstants.NOTIFICATION_WHITELIST_DURATION;
         }
 
+        @Override
         public void setJobsActive(boolean active) {
             DeviceIdleController.this.setJobsActive(active);
         }
 
         // Up-call from alarm manager.
+        @Override
         public void setAlarmsActive(boolean active) {
             DeviceIdleController.this.setAlarmsActive(active);
         }
 
         /** Is the app on any of the power save whitelists, whether system or user? */
+        @Override
         public boolean isAppOnWhitelist(int appid) {
             return DeviceIdleController.this.isAppOnWhitelistInternal(appid);
         }
@@ -1686,10 +1704,12 @@ public class DeviceIdleController extends SystemService
          * can change when the list changes, so it needs to be re-acquired when
          * {@link PowerManager#ACTION_POWER_SAVE_WHITELIST_CHANGED} is sent.
          */
+        @Override
         public int[] getPowerSaveWhitelistUserAppIds() {
             return DeviceIdleController.this.getPowerSaveWhitelistUserAppIds();
         }
 
+        @Override
         public int[] getPowerSaveTempWhitelistAppIds() {
             return DeviceIdleController.this.getAppIdTempWhitelistInternal();
         }
@@ -1734,6 +1754,12 @@ public class DeviceIdleController extends SystemService
             return mConstants;
         }
 
+
+        /** Returns the current elapsed realtime in milliseconds. */
+        long getElapsedRealtime() {
+            return SystemClock.elapsedRealtime();
+        }
+
         LocationManager getLocationManager() {
             if (mLocationManager == null) {
                 mLocationManager = mContext.getSystemService(LocationManager.class);
@@ -1753,7 +1779,8 @@ public class DeviceIdleController extends SystemService
             return mContext.getSystemService(SensorManager.class);
         }
 
-        ConstraintController getConstraintController(Handler handler, LocalService localService) {
+        ConstraintController getConstraintController(Handler handler,
+                DeviceIdleInternal localService) {
             if (mContext.getPackageManager()
                     .hasSystemFeature(PackageManager.FEATURE_LEANBACK_ONLY)) {
                 return new TvConstraintController(mContext, handler);
@@ -1870,7 +1897,7 @@ public class DeviceIdleController extends SystemService
 
         mBinderService = new BinderService();
         publishBinderService(Context.DEVICE_IDLE_CONTROLLER, mBinderService);
-        publishLocalService(LocalService.class, new LocalService());
+        publishLocalService(DeviceIdleInternal.class, new LocalService());
     }
 
     @Override
@@ -2015,7 +2042,7 @@ public class DeviceIdleController extends SystemService
 
     private void unregisterDeviceIdleConstraintInternal(IDeviceIdleConstraint constraint) {
         synchronized (this) {
-            // Artifically force the constraint to inactive to unblock anything waiting for it.
+            // Artificially force the constraint to inactive to unblock anything waiting for it.
             onConstraintStateChangedLocked(constraint, /* active= */ false);
 
             // Let the constraint know that we are not listening to it any more.
@@ -2651,9 +2678,12 @@ public class DeviceIdleController extends SystemService
             EventLogTags.writeDeviceIdle(STATE_ACTIVE, activeReason);
             mState = STATE_ACTIVE;
             mInactiveTimeout = newInactiveTimeout;
-            mCurIdleBudget = 0;
-            mMaintenanceStartTime = 0;
             resetIdleManagementLocked();
+            // Don't reset maintenance window start time if we're in a light idle maintenance window
+            // because its used in the light idle budget calculation.
+            if (mLightState != LIGHT_STATE_IDLE_MAINTENANCE) {
+                mMaintenanceStartTime = 0;
+            }
 
             if (changeLightIdle) {
                 EventLogTags.writeDeviceIdleLight(LIGHT_STATE_ACTIVE, activeReason);
@@ -2735,9 +2765,18 @@ public class DeviceIdleController extends SystemService
                 mState = STATE_QUICK_DOZE_DELAY;
                 // Make sure any motion sensing or locating is stopped.
                 resetIdleManagementLocked();
-                // Wait a small amount of time in case something (eg: background service from
-                // recently closed app) needs to finish running.
-                scheduleAlarmLocked(mConstants.QUICK_DOZE_DELAY_TIMEOUT, false);
+                if (isUpcomingAlarmClock()) {
+                    // If there's an upcoming AlarmClock alarm, we won't go into idle, so
+                    // setting a wakeup alarm before the upcoming alarm is futile. Set the quick
+                    // doze alarm to after the upcoming AlarmClock alarm.
+                    scheduleAlarmLocked(
+                            mAlarmManager.getNextWakeFromIdleTime() - mInjector.getElapsedRealtime()
+                                    + mConstants.QUICK_DOZE_DELAY_TIMEOUT, false);
+                } else {
+                    // Wait a small amount of time in case something (eg: background service from
+                    // recently closed app) needs to finish running.
+                    scheduleAlarmLocked(mConstants.QUICK_DOZE_DELAY_TIMEOUT, false);
+                }
                 EventLogTags.writeDeviceIdle(mState, "no activity");
             } else if (mState == STATE_ACTIVE) {
                 mState = STATE_INACTIVE;
@@ -2747,7 +2786,16 @@ public class DeviceIdleController extends SystemService
                 if (shouldUseIdleTimeoutFactorLocked()) {
                     delay = (long) (mPreIdleFactor * delay);
                 }
-                scheduleAlarmLocked(delay, false);
+                if (isUpcomingAlarmClock()) {
+                    // If there's an upcoming AlarmClock alarm, we won't go into idle, so
+                    // setting a wakeup alarm before the upcoming alarm is futile. Set the idle
+                    // alarm to after the upcoming AlarmClock alarm.
+                    scheduleAlarmLocked(
+                            mAlarmManager.getNextWakeFromIdleTime() - mInjector.getElapsedRealtime()
+                                    + delay, false);
+                } else {
+                    scheduleAlarmLocked(delay, false);
+                }
                 EventLogTags.writeDeviceIdle(mState, "no activity");
             }
         }
@@ -2763,7 +2811,6 @@ public class DeviceIdleController extends SystemService
     private void resetIdleManagementLocked() {
         mNextIdlePendingDelay = 0;
         mNextIdleDelay = 0;
-        mNextLightIdleDelay = 0;
         mIdleStartTime = 0;
         cancelAlarmLocked();
         cancelSensingTimeoutAlarmLocked();
@@ -2774,6 +2821,8 @@ public class DeviceIdleController extends SystemService
     }
 
     private void resetLightIdleManagementLocked() {
+        mNextLightIdleDelay = 0;
+        mCurLightIdleBudget = 0;
         cancelLightAlarmLocked();
     }
 
@@ -2816,7 +2865,7 @@ public class DeviceIdleController extends SystemService
 
         switch (mLightState) {
             case LIGHT_STATE_INACTIVE:
-                mCurIdleBudget = mConstants.LIGHT_IDLE_MAINTENANCE_MIN_BUDGET;
+                mCurLightIdleBudget = mConstants.LIGHT_IDLE_MAINTENANCE_MIN_BUDGET;
                 // Reset the upcoming idle delays.
                 mNextLightIdleDelay = mConstants.LIGHT_IDLE_TIMEOUT;
                 mMaintenanceStartTime = 0;
@@ -2835,10 +2884,12 @@ public class DeviceIdleController extends SystemService
                     long duration = SystemClock.elapsedRealtime() - mMaintenanceStartTime;
                     if (duration < mConstants.LIGHT_IDLE_MAINTENANCE_MIN_BUDGET) {
                         // We didn't use up all of our minimum budget; add this to the reserve.
-                        mCurIdleBudget += (mConstants.LIGHT_IDLE_MAINTENANCE_MIN_BUDGET-duration);
+                        mCurLightIdleBudget +=
+                                (mConstants.LIGHT_IDLE_MAINTENANCE_MIN_BUDGET - duration);
                     } else {
                         // We used more than our minimum budget; this comes out of the reserve.
-                        mCurIdleBudget -= (duration-mConstants.LIGHT_IDLE_MAINTENANCE_MIN_BUDGET);
+                        mCurLightIdleBudget -=
+                                (duration - mConstants.LIGHT_IDLE_MAINTENANCE_MIN_BUDGET);
                     }
                 }
                 mMaintenanceStartTime = 0;
@@ -2862,12 +2913,12 @@ public class DeviceIdleController extends SystemService
                     mActiveIdleOpCount = 1;
                     mActiveIdleWakeLock.acquire();
                     mMaintenanceStartTime = SystemClock.elapsedRealtime();
-                    if (mCurIdleBudget < mConstants.LIGHT_IDLE_MAINTENANCE_MIN_BUDGET) {
-                        mCurIdleBudget = mConstants.LIGHT_IDLE_MAINTENANCE_MIN_BUDGET;
-                    } else if (mCurIdleBudget > mConstants.LIGHT_IDLE_MAINTENANCE_MAX_BUDGET) {
-                        mCurIdleBudget = mConstants.LIGHT_IDLE_MAINTENANCE_MAX_BUDGET;
+                    if (mCurLightIdleBudget < mConstants.LIGHT_IDLE_MAINTENANCE_MIN_BUDGET) {
+                        mCurLightIdleBudget = mConstants.LIGHT_IDLE_MAINTENANCE_MIN_BUDGET;
+                    } else if (mCurLightIdleBudget > mConstants.LIGHT_IDLE_MAINTENANCE_MAX_BUDGET) {
+                        mCurLightIdleBudget = mConstants.LIGHT_IDLE_MAINTENANCE_MAX_BUDGET;
                     }
-                    scheduleLightAlarmLocked(mCurIdleBudget);
+                    scheduleLightAlarmLocked(mCurLightIdleBudget);
                     if (DEBUG) Slog.d(TAG,
                             "Moved from LIGHT_STATE_IDLE to LIGHT_STATE_IDLE_MAINTENANCE.");
                     mLightState = LIGHT_STATE_IDLE_MAINTENANCE;
@@ -2892,13 +2943,21 @@ public class DeviceIdleController extends SystemService
         return mState;
     }
 
+    /**
+     * Returns true if there's an upcoming AlarmClock alarm that is soon enough to prevent the
+     * device from going into idle.
+     */
+    private boolean isUpcomingAlarmClock() {
+        return mInjector.getElapsedRealtime() + mConstants.MIN_TIME_TO_ALARM
+                >= mAlarmManager.getNextWakeFromIdleTime();
+    }
+
     @VisibleForTesting
     void stepIdleStateLocked(String reason) {
         if (DEBUG) Slog.d(TAG, "stepIdleStateLocked: mState=" + mState);
         EventLogTags.writeDeviceIdleStep();
 
-        final long now = SystemClock.elapsedRealtime();
-        if ((now+mConstants.MIN_TIME_TO_ALARM) > mAlarmManager.getNextWakeFromIdleTime()) {
+        if (isUpcomingAlarmClock()) {
             // Whoops, there is an upcoming alarm.  We don't actually want to go idle.
             if (mState != STATE_ACTIVE) {
                 mActiveReason = ACTIVE_REASON_ALARM;
@@ -4360,9 +4419,9 @@ public class DeviceIdleController extends SystemService
                 TimeUtils.formatDuration(mNextLightAlarmTime, SystemClock.elapsedRealtime(), pw);
                 pw.println();
             }
-            if (mCurIdleBudget != 0) {
-                pw.print("  mCurIdleBudget=");
-                TimeUtils.formatDuration(mCurIdleBudget, pw);
+            if (mCurLightIdleBudget != 0) {
+                pw.print("  mCurLightIdleBudget=");
+                TimeUtils.formatDuration(mCurLightIdleBudget, pw);
                 pw.println();
             }
             if (mMaintenanceStartTime != 0) {

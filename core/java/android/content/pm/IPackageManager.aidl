@@ -32,7 +32,6 @@ import android.content.pm.IPackageDeleteObserver2;
 import android.content.pm.IPackageDataObserver;
 import android.content.pm.IPackageMoveObserver;
 import android.content.pm.IPackageStatsObserver;
-import android.content.pm.IOnPermissionsChangeListener;
 import android.content.pm.IntentFilterVerificationInfo;
 import android.content.pm.InstrumentationInfo;
 import android.content.pm.KeySet;
@@ -78,15 +77,6 @@ interface IPackageManager {
     @UnsupportedAppUsage
     String[] canonicalToCurrentPackageNames(in String[] names);
 
-    PermissionInfo getPermissionInfo(String name, String packageName, int flags);
-
-    ParceledListSlice queryPermissionsByGroup(String group, int flags);
-
-    @UnsupportedAppUsage
-    PermissionGroupInfo getPermissionGroupInfo(String name, int flags);
-
-    ParceledListSlice getAllPermissionGroups(int flags);
-
     @UnsupportedAppUsage
     ApplicationInfo getApplicationInfo(String packageName, int flags ,int userId);
 
@@ -104,43 +94,6 @@ interface IPackageManager {
 
     @UnsupportedAppUsage
     ProviderInfo getProviderInfo(in ComponentName className, int flags, int userId);
-
-    @UnsupportedAppUsage
-    int checkPermission(String permName, String pkgName, int userId);
-
-    int checkUidPermission(String permName, int uid);
-
-    @UnsupportedAppUsage
-    boolean addPermission(in PermissionInfo info);
-
-    @UnsupportedAppUsage
-    void removePermission(String name);
-
-    @UnsupportedAppUsage
-    void grantRuntimePermission(String packageName, String permissionName, int userId);
-
-    void revokeRuntimePermission(String packageName, String permissionName, int userId);
-
-    void resetRuntimePermissions();
-
-    int getPermissionFlags(String permissionName, String packageName, int userId);
-
-    void updatePermissionFlags(String permissionName, String packageName, int flagMask,
-            int flagValues, boolean checkAdjustPolicyFlagPermission, int userId);
-
-    void updatePermissionFlagsForAllApps(int flagMask, int flagValues, int userId);
-
-    List<String> getWhitelistedRestrictedPermissions(String packageName, int flags,
-            int userId);
-
-    boolean addWhitelistedRestrictedPermission(String packageName, String permission,
-            int whitelistFlags, int userId);
-
-    boolean removeWhitelistedRestrictedPermission(String packageName, String permission,
-            int whitelistFlags, int userId);
-
-    boolean shouldShowRequestPermissionRationale(String permissionName,
-            String packageName, int userId);
 
     boolean isProtectedBroadcast(String actionName);
 
@@ -169,9 +122,6 @@ interface IPackageManager {
 
     @UnsupportedAppUsage
     boolean isUidPrivileged(int uid);
-
-    @UnsupportedAppUsage
-    String[] getAppOpPermissionPackages(String permissionName);
 
     @UnsupportedAppUsage
     ResolveInfo resolveIntent(in Intent intent, String resolvedType, int flags, int userId);
@@ -626,9 +576,6 @@ interface IPackageManager {
     int movePackage(in String packageName, in String volumeUuid);
     int movePrimaryStorage(in String volumeUuid);
 
-    @UnsupportedAppUsage
-    boolean addPermissionAsync(in PermissionInfo info);
-
     boolean setInstallLocation(int loc);
     @UnsupportedAppUsage
     int getInstallLocation();
@@ -645,17 +592,11 @@ interface IPackageManager {
     ParceledListSlice getIntentFilterVerifications(String packageName);
     ParceledListSlice getAllIntentFilters(String packageName);
 
-    boolean setDefaultBrowserPackageName(String packageName, int userId);
-    String getDefaultBrowserPackageName(int userId);
-
     VerifierDeviceIdentity getVerifierDeviceIdentity();
 
     boolean isFirstBoot();
     boolean isOnlyCoreApps();
     boolean isDeviceUpgrading();
-
-    void setPermissionEnforced(String permission, boolean enforced);
-    boolean isPermissionEnforced(String permission);
 
     /** Reflects current DeviceStorageMonitorService state */
     @UnsupportedAppUsage
@@ -679,19 +620,6 @@ interface IPackageManager {
     KeySet getSigningKeySet(String packageName);
     boolean isPackageSignedByKeySet(String packageName, in KeySet ks);
     boolean isPackageSignedByKeySetExactly(String packageName, in KeySet ks);
-
-    void addOnPermissionsChangeListener(in IOnPermissionsChangeListener listener);
-    void removeOnPermissionsChangeListener(in IOnPermissionsChangeListener listener);
-    void grantDefaultPermissionsToEnabledCarrierApps(in String[] packageNames, int userId);
-    void grantDefaultPermissionsToEnabledImsServices(in String[] packageNames, int userId);
-    void grantDefaultPermissionsToEnabledTelephonyDataServices(
-            in String[] packageNames, int userId);
-    void revokeDefaultPermissionsFromDisabledTelephonyDataServices(
-            in String[] packageNames, int userId);
-    void grantDefaultPermissionsToActiveLuiApp(in String packageName, int userId);
-    void revokeDefaultPermissionsFromLuiApps(in String[] packageNames, int userId);
-
-    boolean isPermissionRevokedByPolicy(String permission, String packageName, int userId);
 
     @UnsupportedAppUsage
     String getPermissionControllerPackageName();
@@ -772,4 +700,41 @@ interface IPackageManager {
     void setRuntimePermissionsVersion(int version, int userId);
 
     void notifyPackagesReplacedReceived(in String[] packages);
+
+    //------------------------------------------------------------------------
+    //
+    // The following binder interfaces have been moved to IPermissionManager
+    //
+    //------------------------------------------------------------------------
+
+    //------------------------------------------------------------------------
+    // We need to keep these in IPackageManager for app compatibility
+    //------------------------------------------------------------------------
+    @UnsupportedAppUsage
+    String[] getAppOpPermissionPackages(String permissionName);
+
+    @UnsupportedAppUsage
+    PermissionGroupInfo getPermissionGroupInfo(String name, int flags);
+
+    @UnsupportedAppUsage
+    boolean addPermission(in PermissionInfo info);
+
+    @UnsupportedAppUsage
+    boolean addPermissionAsync(in PermissionInfo info);
+
+    @UnsupportedAppUsage
+    void removePermission(String name);
+
+    @UnsupportedAppUsage
+    int checkPermission(String permName, String pkgName, int userId);
+
+    @UnsupportedAppUsage
+    void grantRuntimePermission(String packageName, String permissionName, int userId);
+
+    //------------------------------------------------------------------------
+    // We need to keep these in IPackageManager for convenience in splitting
+    // out the permission manager. This should be cleaned up, but, will require
+    // a large change that modifies many repos.
+    //------------------------------------------------------------------------
+    int checkUidPermission(String permName, int uid);
 }

@@ -29,7 +29,6 @@ import android.net.wifi.INetworkRequestMatchCallback;
 import android.net.wifi.ISoftApCallback;
 import android.net.wifi.ITrafficStateCallback;
 import android.net.wifi.IOnWifiUsabilityStatsListener;
-import android.net.wifi.PasspointManagementObjectDefinition;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiActivityEnergyInfo;
 import android.net.wifi.WifiConfiguration;
@@ -234,6 +233,8 @@ interface IWifiManager
     int addNetworkSuggestions(in List<WifiNetworkSuggestion> networkSuggestions, in String packageName);
 
     int removeNetworkSuggestions(in List<WifiNetworkSuggestion> networkSuggestions, in String packageName);
+
+    List<WifiNetworkSuggestion> getNetworkSuggestions(in String packageName);
 
     String[] getFactoryMacAddresses();
 

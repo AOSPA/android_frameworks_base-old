@@ -21,14 +21,18 @@ import android.content.ContentResolver;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.os.RemoteException;
+import android.permission.IPermissionManager;
 import android.provider.Settings;
 import android.telephony.TelephonyManager;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Slog;
 
+import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.ArrayUtils;
 import com.android.server.SystemConfig;
 
 import java.util.ArrayList;
@@ -71,8 +75,8 @@ public final class CarrierAppUtils {
      * privileged apps may have changed.
      */
     public synchronized static void disableCarrierAppsUntilPrivileged(String callingPackage,
-            IPackageManager packageManager, TelephonyManager telephonyManager,
-            ContentResolver contentResolver, int userId) {
+            IPackageManager packageManager, IPermissionManager permissionManager,
+            TelephonyManager telephonyManager, ContentResolver contentResolver, int userId) {
         if (DEBUG) {
             Slog.d(TAG, "disableCarrierAppsUntilPrivileged");
         }
@@ -81,8 +85,8 @@ public final class CarrierAppUtils {
                 config.getDisabledUntilUsedPreinstalledCarrierApps();
         ArrayMap<String, List<String>> systemCarrierAssociatedAppsDisabledUntilUsed =
                 config.getDisabledUntilUsedPreinstalledCarrierAssociatedApps();
-        disableCarrierAppsUntilPrivileged(callingPackage, packageManager, telephonyManager,
-                contentResolver, userId, systemCarrierAppsDisabledUntilUsed,
+        disableCarrierAppsUntilPrivileged(callingPackage, packageManager, permissionManager,
+                telephonyManager, contentResolver, userId, systemCarrierAppsDisabledUntilUsed,
                 systemCarrierAssociatedAppsDisabledUntilUsed);
     }
 
@@ -98,7 +102,8 @@ public final class CarrierAppUtils {
      * Manager can kill it, and this can lead to crashes as the app is in an unexpected state.
      */
     public synchronized static void disableCarrierAppsUntilPrivileged(String callingPackage,
-            IPackageManager packageManager, ContentResolver contentResolver, int userId) {
+            IPackageManager packageManager, IPermissionManager permissionManager,
+            ContentResolver contentResolver, int userId) {
         if (DEBUG) {
             Slog.d(TAG, "disableCarrierAppsUntilPrivileged");
         }
@@ -109,7 +114,7 @@ public final class CarrierAppUtils {
 
         ArrayMap<String, List<String>> systemCarrierAssociatedAppsDisabledUntilUsed =
                 config.getDisabledUntilUsedPreinstalledCarrierAssociatedApps();
-        disableCarrierAppsUntilPrivileged(callingPackage, packageManager,
+        disableCarrierAppsUntilPrivileged(callingPackage, packageManager, permissionManager,
                 null /* telephonyManager */, contentResolver, userId,
                 systemCarrierAppsDisabledUntilUsed, systemCarrierAssociatedAppsDisabledUntilUsed);
     }
@@ -117,7 +122,8 @@ public final class CarrierAppUtils {
     // Must be public b/c framework unit tests can't access package-private methods.
     @VisibleForTesting
     public static void disableCarrierAppsUntilPrivileged(String callingPackage,
-            IPackageManager packageManager, @Nullable TelephonyManager telephonyManager,
+            IPackageManager packageManager, IPermissionManager permissionManager,
+            @Nullable TelephonyManager telephonyManager,
             ContentResolver contentResolver, int userId,
             ArraySet<String> systemCarrierAppsDisabledUntilUsed,
             ArrayMap<String, List<String>> systemCarrierAssociatedAppsDisabledUntilUsed) {
@@ -140,9 +146,12 @@ public final class CarrierAppUtils {
         try {
             for (ApplicationInfo ai : candidates) {
                 String packageName = ai.packageName;
-                boolean hasPrivileges = telephonyManager != null &&
-                        telephonyManager.checkCarrierPrivilegesForPackageAnyPhone(packageName) ==
-                                TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS;
+                String[] restrictedCarrierApps = Resources.getSystem().getStringArray(
+                        R.array.config_restrictedPreinstalledCarrierApps);
+                boolean hasPrivileges = telephonyManager != null
+                        && telephonyManager.checkCarrierPrivilegesForPackageAnyPhone(packageName)
+                                == TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS
+                        && !ArrayUtils.contains(restrictedCarrierApps, packageName);
 
                 // add hiddenUntilInstalled flag for carrier apps and associated apps
                 packageManager.setSystemAppHiddenUntilInstalled(packageName, true);
@@ -256,7 +265,7 @@ public final class CarrierAppUtils {
                 // apps.
                 String[] packageNames = new String[enabledCarrierPackages.size()];
                 enabledCarrierPackages.toArray(packageNames);
-                packageManager.grantDefaultPermissionsToEnabledCarrierApps(packageNames, userId);
+                permissionManager.grantDefaultPermissionsToEnabledCarrierApps(packageNames, userId);
             }
         } catch (RemoteException e) {
             Slog.w(TAG, "Could not reach PackageManager", e);

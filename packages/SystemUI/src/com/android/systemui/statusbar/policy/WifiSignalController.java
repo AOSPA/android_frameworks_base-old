@@ -38,6 +38,7 @@ import java.util.Objects;
 public class WifiSignalController extends
         SignalController<WifiSignalController.WifiState, SignalController.IconGroup> {
     private final boolean mHasMobileData;
+    private final WifiManager mWifiManager;
     private final WifiStatusTracker mWifiTracker;
     private final IconGroup mDefaultWifiIconGroup;
     private final IconGroup mWifi4IconGroup;
@@ -53,6 +54,7 @@ public class WifiSignalController extends
                 context.getSystemService(NetworkScoreManager.class);
         ConnectivityManager connectivityManager =
                 context.getSystemService(ConnectivityManager.class);
+        mWifiManager = wifiManager;
         mWifiTracker = new WifiStatusTracker(mContext, wifiManager, networkScoreManager,
                 connectivityManager, this::handleStatusUpdated);
         mWifiTracker.setListening(true);
@@ -183,6 +185,10 @@ public class WifiSignalController extends
         mCurrentState.activityOut = wifiActivity == DATA_ACTIVITY_INOUT
                 || wifiActivity == DATA_ACTIVITY_OUT;
         notifyListenersIfNecessary();
+    }
+
+    public void handleBootCompleted() {
+        mWifiManager.registerTrafficStateCallback(new WifiTrafficStateCallback(), null);
     }
 
     /**

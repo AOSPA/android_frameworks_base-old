@@ -94,6 +94,7 @@ interface ITelephony {
      * @param callingPackage the name of the package making the call.
      * @return returns true if the radio is on.
      */
+    @UnsupportedAppUsage
     boolean isRadioOn(String callingPackage);
 
     /**
@@ -308,18 +309,48 @@ interface ITelephony {
      */
     List<NeighboringCellInfo> getNeighboringCellInfo(String callingPkg);
 
-     @UnsupportedAppUsage
-     int getCallState();
+    @UnsupportedAppUsage
+    int getCallState();
 
     /**
      * Returns the call state for a slot.
      */
-     int getCallStateForSlot(int slotIndex);
+    int getCallStateForSlot(int slotIndex);
 
-     @UnsupportedAppUsage
-     int getDataActivity();
-     @UnsupportedAppUsage
-     int getDataState();
+    /**
+     * Replaced by getDataActivityForSubId.
+     */
+    @UnsupportedAppUsage(maxTargetSdk = 28)
+    int getDataActivity();
+
+    /**
+     * Returns a constant indicating the type of activity on a data connection
+     * (cellular).
+     *
+     * @see #DATA_ACTIVITY_NONE
+     * @see #DATA_ACTIVITY_IN
+     * @see #DATA_ACTIVITY_OUT
+     * @see #DATA_ACTIVITY_INOUT
+     * @see #DATA_ACTIVITY_DORMANT
+     */
+    int getDataActivityForSubId(int subId);
+
+    /**
+     * Replaced by getDataStateForSubId.
+     */
+    @UnsupportedAppUsage(maxTargetSdk = 28)
+    int getDataState();
+
+    /**
+     * Returns a constant indicating the current data connection state
+     * (cellular).
+     *
+     * @see #DATA_DISCONNECTED
+     * @see #DATA_CONNECTING
+     * @see #DATA_CONNECTED
+     * @see #DATA_SUSPENDED
+     */
+    int getDataStateForSubId(int subId);
 
     /**
      * Returns the current active phone type as integer.
@@ -1059,6 +1090,11 @@ interface ITelephony {
     String[] getMergedSubscriberIds(int subId, String callingPackage);
 
     /**
+     * @hide
+     */
+    String[] getMergedSubscriberIdsFromGroup(int subId, String callingPackage);
+
+    /**
      * Override the operator branding for the current ICCID.
      *
      * Once set, whenever the SIM is present in the device, the service
@@ -1219,6 +1255,7 @@ interface ITelephony {
       * <p>Requires Permission:
       *   {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
       */
+    @UnsupportedAppUsage
     String getDeviceId(String callingPackage);
 
     /**

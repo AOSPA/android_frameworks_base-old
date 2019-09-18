@@ -122,8 +122,6 @@ public class NotificationData {
             } else if (aHeadsUp) {
                 // Provide consistent ranking with headsUpManager
                 return mHeadsUpManager.compare(a, b);
-            } else if (a.getRow().showingAmbientPulsing() != b.getRow().showingAmbientPulsing()) {
-                return a.getRow().showingAmbientPulsing() ? -1 : 1;
             } else if (aMedia != bMedia) {
                 // Upsort current media notification.
                 return aMedia ? -1 : 1;
@@ -422,7 +420,14 @@ public class NotificationData {
             }
         }
 
-        Collections.sort(mSortedAndFiltered, mRankingComparator);
+        if (mSortedAndFiltered.size() == 1) {
+            // HACK: We need the comparator to run on all children in order to set the
+            // isHighPriority field. If there is only one child, then the comparison won't be run,
+            // so we have to trigger it manually. Get rid of this code as soon as possible.
+            mRankingComparator.compare(mSortedAndFiltered.get(0), mSortedAndFiltered.get(0));
+        } else {
+            Collections.sort(mSortedAndFiltered, mRankingComparator);
+        }
     }
 
     public void dump(PrintWriter pw, String indent) {

@@ -28,6 +28,7 @@ import static com.android.server.job.JobSchedulerService.FREQUENT_INDEX;
 import static com.android.server.job.JobSchedulerService.NEVER_INDEX;
 import static com.android.server.job.JobSchedulerService.RARE_INDEX;
 import static com.android.server.job.JobSchedulerService.WORKING_INDEX;
+import static com.android.server.job.JobSchedulerService.sElapsedRealtimeClock;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -73,6 +74,7 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.server.LocalServices;
 import com.android.server.job.JobSchedulerService;
 import com.android.server.job.JobSchedulerService.Constants;
+import com.android.server.job.JobServiceContext;
 import com.android.server.job.JobStore;
 import com.android.server.job.controllers.QuotaController.ExecutionStats;
 import com.android.server.job.controllers.QuotaController.TimingSession;
@@ -105,7 +107,6 @@ public class QuotaControllerTest {
     private static final int SOURCE_USER_ID = 0;
 
     private BroadcastReceiver mChargingReceiver;
-    private Constants mJsConstants;
     private QuotaController mQuotaController;
     private QuotaController.QcConstants mQcConstants;
     private int mSourceUid;
@@ -132,14 +133,11 @@ public class QuotaControllerTest {
                 .strictness(Strictness.LENIENT)
                 .mockStatic(LocalServices.class)
                 .startMocking();
-        // Make sure constants turn on QuotaController.
-        mJsConstants = new Constants();
-        mJsConstants.USE_HEARTBEATS = false;
 
         // Called in StateController constructor.
         when(mJobSchedulerService.getTestableContext()).thenReturn(mContext);
         when(mJobSchedulerService.getLock()).thenReturn(mJobSchedulerService);
-        when(mJobSchedulerService.getConstants()).thenReturn(mJsConstants);
+        when(mJobSchedulerService.getConstants()).thenReturn(mock(Constants.class));
         // Called in QuotaController constructor.
         IActivityManager activityManager = ActivityManager.getService();
         spyOn(activityManager);
@@ -170,7 +168,7 @@ public class QuotaControllerTest {
                 getAdvancedClock(Clock.fixed(Clock.systemUTC().instant(), ZoneOffset.UTC),
                         24 * HOUR_IN_MILLIS);
         JobSchedulerService.sUptimeMillisClock = getAdvancedClock(
-                Clock.fixed(SystemClock.uptimeMillisClock().instant(), ZoneOffset.UTC),
+                Clock.fixed(SystemClock.uptimeClock().instant(), ZoneOffset.UTC),
                 24 * HOUR_IN_MILLIS);
         JobSchedulerService.sElapsedRealtimeClock = getAdvancedClock(
                 Clock.fixed(SystemClock.elapsedRealtimeClock().instant(), ZoneOffset.UTC),
@@ -975,6 +973,37 @@ public class QuotaControllerTest {
         assertEquals(expectedStats, newStatsRare);
     }
 
+    @Test
+    public void testGetMaxJobExecutionTimeLocked() {
+        mQuotaController.saveTimingSession(0, SOURCE_PACKAGE,
+                createTimingSession(sElapsedRealtimeClock.millis() - (6 * MINUTE_IN_MILLIS),
+                        3 * MINUTE_IN_MILLIS, 5));
+        JobStatus job = createJobStatus("testGetMaxJobExecutionTimeLocked", 0);
+        job.setStandbyBucket(RARE_INDEX);
+
+        setCharging();
+        assertEquals(JobServiceContext.EXECUTING_TIMESLICE_MILLIS,
+                mQuotaController.getMaxJobExecutionTimeMsLocked((job)));
+
+        setDischarging();
+        setProcessState(ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE);
+        assertEquals(JobServiceContext.EXECUTING_TIMESLICE_MILLIS,
+                mQuotaController.getMaxJobExecutionTimeMsLocked((job)));
+
+        // Top-started job
+        setProcessState(ActivityManager.PROCESS_STATE_TOP);
+        mQuotaController.maybeStartTrackingJobLocked(job, null);
+        mQuotaController.prepareForExecutionLocked(job);
+        setProcessState(ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND);
+        assertEquals(JobServiceContext.EXECUTING_TIMESLICE_MILLIS,
+                mQuotaController.getMaxJobExecutionTimeMsLocked((job)));
+        mQuotaController.maybeStopTrackingJobLocked(job, null, false);
+
+        setProcessState(ActivityManager.PROCESS_STATE_RECEIVER);
+        assertEquals(7 * MINUTE_IN_MILLIS,
+                mQuotaController.getMaxJobExecutionTimeMsLocked(job));
+    }
+
     /**
      * Test getTimeUntilQuotaConsumedLocked when the determination is based within the bucket
      * window.
@@ -1776,30 +1805,6 @@ public class QuotaControllerTest {
                 .set(anyInt(), eq(expectedAlarmTime), eq(TAG_QUOTA_CHECK), any(), any());
     }
 
-    /** Tests that QuotaController doesn't throttle if throttling is turned off. */
-    @Test
-    public void testThrottleToggling() throws Exception {
-        setDischarging();
-        mQuotaController.saveTimingSession(SOURCE_USER_ID, SOURCE_PACKAGE,
-                createTimingSession(
-                        JobSchedulerService.sElapsedRealtimeClock.millis() - HOUR_IN_MILLIS,
-                        10 * MINUTE_IN_MILLIS, 4));
-        JobStatus jobStatus = createJobStatus("testThrottleToggling", 1);
-        setStandbyBucket(WORKING_INDEX, jobStatus); // 2 hour window
-        mQuotaController.maybeStartTrackingJobLocked(jobStatus, null);
-        assertFalse(jobStatus.isConstraintSatisfied(JobStatus.CONSTRAINT_WITHIN_QUOTA));
-
-        mJsConstants.USE_HEARTBEATS = true;
-        mQuotaController.onConstantsUpdatedLocked();
-        Thread.sleep(SECOND_IN_MILLIS); // Job updates are done in the background.
-        assertTrue(jobStatus.isConstraintSatisfied(JobStatus.CONSTRAINT_WITHIN_QUOTA));
-
-        mJsConstants.USE_HEARTBEATS = false;
-        mQuotaController.onConstantsUpdatedLocked();
-        Thread.sleep(SECOND_IN_MILLIS); // Job updates are done in the background.
-        assertFalse(jobStatus.isConstraintSatisfied(JobStatus.CONSTRAINT_WITHIN_QUOTA));
-    }
-
     @Test
     public void testConstantsUpdating_ValidValues() {
         mQcConstants.ALLOWED_TIME_PER_PERIOD_MS = 5 * MINUTE_IN_MILLIS;
@@ -1891,6 +1896,16 @@ public class QuotaControllerTest {
         assertEquals(1, mQuotaController.getBucketMaxSessionCounts()[FREQUENT_INDEX]);
         assertEquals(1, mQuotaController.getBucketMaxSessionCounts()[RARE_INDEX]);
         assertEquals(0, mQuotaController.getTimingSessionCoalescingDurationMs());
+
+        // Invalid configurations.
+        // In_QUOTA_BUFFER should never be greater than ALLOWED_TIME_PER_PERIOD
+        mQcConstants.ALLOWED_TIME_PER_PERIOD_MS = 2 * MINUTE_IN_MILLIS;
+        mQcConstants.IN_QUOTA_BUFFER_MS = 5 * MINUTE_IN_MILLIS;
+
+        mQcConstants.updateConstants();
+
+        assertTrue(mQuotaController.getInQuotaBufferMs()
+                <= mQuotaController.getAllowedTimePerPeriodMs());
 
         // Test larger than a day. Controller should cap at one day.
         mQcConstants.ALLOWED_TIME_PER_PERIOD_MS = 25 * HOUR_IN_MILLIS;

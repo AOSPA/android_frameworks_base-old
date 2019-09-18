@@ -37,6 +37,7 @@ import android.util.TimingsTraceLog;
 import com.android.systemui.plugins.OverlayPlugin;
 import com.android.systemui.plugins.PluginListener;
 import com.android.systemui.shared.plugins.PluginManager;
+import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
 import com.android.systemui.util.NotificationChannels;
@@ -59,16 +60,20 @@ public class SystemUIApplication extends Application implements SysUiServiceProv
     private boolean mServicesStarted;
     private boolean mBootCompleted;
     private final Map<Class<?>, Object> mComponents = new HashMap<>();
+    private ContextAvailableCallback mContextAvailableCallback;
 
     @Override
     public void onCreate() {
         super.onCreate();
+        // This line is used to setup Dagger's dependency injection and should be kept at the
+        // top of this method.
+        mContextAvailableCallback.onContextAvailable(this);
+
         // Set the application theme that is inherited by all services. Note that setting the
         // application theme in the manifest does only work for activities. Keep this in sync with
         // the theme set there.
         setTheme(R.style.Theme_SystemUI);
 
-        SystemUIFactory.createFromConfig(this);
 
         if (Process.myUserHandle().equals(UserHandle.SYSTEM)) {
             IntentFilter bootCompletedFilter = new IntentFilter(Intent.ACTION_BOOT_COMPLETED);
@@ -215,7 +220,8 @@ public class SystemUIApplication extends Application implements SysUiServiceProv
                                 StatusBar statusBar = getComponent(StatusBar.class);
                                 if (statusBar != null) {
                                     plugin.setup(statusBar.getStatusBarWindow(),
-                                            statusBar.getNavigationBarView(), new Callback(plugin));
+                                            statusBar.getNavigationBarView(), new Callback(plugin),
+                                            DozeParameters.getInstance(getBaseContext()));
                                 }
                             }
                         });
@@ -283,5 +289,13 @@ public class SystemUIApplication extends Application implements SysUiServiceProv
 
     public SystemUI[] getServices() {
         return mServices;
+    }
+
+    void setContextAvailableCallback(ContextAvailableCallback callback) {
+        mContextAvailableCallback = callback;
+    }
+
+    interface ContextAvailableCallback {
+        void onContextAvailable(Context context);
     }
 }

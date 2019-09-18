@@ -58,7 +58,7 @@ oneway interface IStatusBar
 
     void topAppWindowChanged(int displayId, boolean menuVisible);
     void setImeWindowStatus(int displayId, in IBinder token, int vis, int backDisposition,
-            boolean showImeSwitcher);
+            boolean showImeSwitcher, boolean isMultiClientImeEnabled);
     void setWindowState(int display, int window, int state);
 
     void showRecentApps(boolean triggeredFromAltTab);
@@ -153,7 +153,7 @@ oneway interface IStatusBar
 
     // Used to show the dialog when BiometricService starts authentication
     void showBiometricDialog(in Bundle bundle, IBiometricServiceReceiverInternal receiver, int type,
-            boolean requireConfirmation, int userId);
+            boolean requireConfirmation, int userId, String opPackageName);
     // Used to hide the dialog when a biometric is authenticated
     void onBiometricAuthenticated(boolean authenticated, String failureReason);
     // Used to set a temporary message, e.g. fingerprint not recognized, finger moved too fast, etc

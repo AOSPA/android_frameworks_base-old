@@ -34,6 +34,7 @@ import static android.os.Process.THREAD_GROUP_BG_NONINTERACTIVE;
 import static android.os.Process.THREAD_GROUP_DEFAULT;
 import static android.os.Process.THREAD_GROUP_RESTRICTED;
 import static android.os.Process.THREAD_GROUP_TOP_APP;
+import static android.os.Process.THREAD_PRIORITY_DISPLAY;
 import static android.os.Process.setProcessGroup;
 import static android.os.Process.setThreadPriority;
 import static android.os.Process.setThreadScheduler;
@@ -173,6 +174,21 @@ public final class OomAdjuster {
     public static BoostFramework mPerf = new BoostFramework();
 
     OomAdjuster(ActivityManagerService service, ProcessList processList, ActiveUids activeUids) {
+        this(service, processList, activeUids, createAdjusterThread());
+    }
+
+    private static ServiceThread createAdjusterThread() {
+        // The process group is usually critical to the response time of foreground app, so the
+        // setter should apply it as soon as possible.
+        final ServiceThread adjusterThread =
+                new ServiceThread(TAG, TOP_APP_PRIORITY_BOOST, false /* allowIo */);
+        adjusterThread.start();
+        Process.setThreadGroupAndCpuset(adjusterThread.getThreadId(), THREAD_GROUP_TOP_APP);
+        return adjusterThread;
+    }
+
+    OomAdjuster(ActivityManagerService service, ProcessList processList, ActiveUids activeUids,
+            ServiceThread adjusterThread) {
         mService = service;
         mProcessList = processList;
         mActiveUids = activeUids;
@@ -187,16 +203,13 @@ public final class OomAdjuster {
             mEnableBServicePropagation = Boolean.parseBoolean(mPerf.perfGetProp("ro.vendor.qti.sys.fw.bservice_enable", "false"));
         }
 
-        // The process group is usually critical to the response time of foreground app, so the
-        // setter should apply it as soon as possible.
-        final ServiceThread adjusterThread = new ServiceThread(TAG, TOP_APP_PRIORITY_BOOST,
-                false /* allowIo */);
-        adjusterThread.start();
-        Process.setThreadGroupAndCpuset(adjusterThread.getThreadId(), THREAD_GROUP_TOP_APP);
         mProcessGroupHandler = new Handler(adjusterThread.getLooper(), msg -> {
-            Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "setProcessGroup");
             final int pid = msg.arg1;
             final int group = msg.arg2;
+            if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+                Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "setProcessGroup "
+                        + msg.obj + " to " + group);
+            }
             try {
                 setProcessGroup(pid, group);
             } catch (Exception e) {
@@ -1147,10 +1160,13 @@ public final class OomAdjuster {
         // this gives us a baseline and makes sure we don't get into an
         // infinite recursion. If we're re-evaluating due to cycles, use the previously computed
         // values.
-        app.setCurRawAdj(!cycleReEval ? adj : Math.min(adj, app.getCurRawAdj()));
-        app.setCurRawProcState(!cycleReEval
-                ? procState
-                : Math.min(procState, app.getCurRawProcState()));
+        if (cycleReEval) {
+            procState = Math.min(procState, app.getCurRawProcState());
+            adj = Math.min(adj, app.getCurRawAdj());
+            schedGroup = Math.max(schedGroup, app.getCurrentSchedulingGroup());
+        }
+        app.setCurRawAdj(adj);
+        app.setCurRawProcState(procState);
 
         app.hasStartedServices = false;
         app.adjSeq = mAdjSeq;
@@ -1815,7 +1831,7 @@ public final class OomAdjuster {
                         break;
                 }
                 mProcessGroupHandler.sendMessage(mProcessGroupHandler.obtainMessage(
-                        0 /* unused */, app.pid, processGroup));
+                        0 /* unused */, app.pid, processGroup, app.processName));
                 try {
                     if (curSchedGroup == ProcessList.SCHED_GROUP_TOP_APP) {
                         // do nothing if we already switched to RT
@@ -1861,7 +1877,6 @@ public final class OomAdjuster {
                                 if (app.renderThreadTid != 0) {
                                     setThreadScheduler(app.renderThreadTid,
                                             SCHED_OTHER, 0);
-                                    setThreadPriority(app.renderThreadTid, -4);
                                 }
                             } catch (IllegalArgumentException e) {
                                 Slog.w(TAG,
@@ -1873,9 +1888,10 @@ public final class OomAdjuster {
                         } else {
                             // Reset priority for top app UI and render threads
                             setThreadPriority(app.pid, 0);
-                            if (app.renderThreadTid != 0) {
-                                setThreadPriority(app.renderThreadTid, 0);
-                            }
+                        }
+
+                        if (app.renderThreadTid != 0) {
+                            setThreadPriority(app.renderThreadTid, THREAD_PRIORITY_DISPLAY);
                         }
                     }
                 } catch (Exception e) {
@@ -2004,6 +2020,38 @@ public final class OomAdjuster {
         }
 
         return success;
+    }
+
+    @GuardedBy("mService")
+    void setAttachingSchedGroupLocked(ProcessRecord app) {
+        int initialSchedGroup = ProcessList.SCHED_GROUP_DEFAULT;
+        // If the process has been marked as foreground via Zygote.START_FLAG_USE_TOP_APP_PRIORITY,
+        // then verify that the top priority is actually is applied.
+        if (app.hasForegroundActivities()) {
+            String fallbackReason = null;
+            try {
+                // The priority must be the same as how does {@link #applyOomAdjLocked} set for
+                // {@link ProcessList.SCHED_GROUP_TOP_APP}. We don't check render thread because it
+                // is not ready when attaching.
+                if (Process.getProcessGroup(app.pid) == THREAD_GROUP_TOP_APP) {
+                    app.getWindowProcessController().onTopProcChanged();
+                    setThreadPriority(app.pid, TOP_APP_PRIORITY_BOOST);
+                } else {
+                    fallbackReason = "not expected top priority";
+                }
+            } catch (Exception e) {
+                fallbackReason = e.toString();
+            }
+            if (fallbackReason == null) {
+                initialSchedGroup = ProcessList.SCHED_GROUP_TOP_APP;
+            } else {
+                // The real scheduling group will depend on if there is any component of the process
+                // did something during attaching.
+                Slog.w(TAG, "Fallback pre-set sched group to default: " + fallbackReason);
+            }
+        }
+
+        app.setCurrentSchedulingGroup(app.setSchedGroup = initialSchedGroup);
     }
 
     // ONLY used for unit testing in OomAdjusterTests.java

@@ -3278,6 +3278,7 @@ public class Notification implements Parcelable
      * @hide
      */
     @Nullable
+    @SystemApi
     public Pair<RemoteInput, Action> findRemoteInputActionPair(boolean requiresFreeform) {
         if (actions == null) {
             return null;
@@ -3304,7 +3305,8 @@ public class Notification implements Parcelable
      *
      * @hide
      */
-    public List<Notification.Action> getContextualActions() {
+    @SystemApi
+    public @NonNull List<Notification.Action> getContextualActions() {
         if (actions == null) return Collections.emptyList();
 
         List<Notification.Action> contextualActions = new ArrayList<>();
@@ -3386,11 +3388,7 @@ public class Notification implements Parcelable
          */
         private int mCachedContrastColor = COLOR_INVALID;
         private int mCachedContrastColorIsFor = COLOR_INVALID;
-        /**
-         * Caches a ambient version of {@link #mCachedAmbientColorIsFor}.
-         */
-        private int mCachedAmbientColor = COLOR_INVALID;
-        private int mCachedAmbientColorIsFor = COLOR_INVALID;
+
         /**
          * A neutral color color that can be used for icons.
          */
@@ -5441,26 +5439,14 @@ public class Notification implements Parcelable
         /**
          * Construct a RemoteViews for the display in public contexts like on the lockscreen.
          *
+         * @param isLowPriority is this notification low priority
          * @hide
          */
         @UnsupportedAppUsage
-        public RemoteViews makePublicContentView() {
-            return makePublicView(false /* ambient */);
-        }
-
-        /**
-         * Construct a RemoteViews for the display in public contexts like on the lockscreen.
-         *
-         * @hide
-         */
-        public RemoteViews makePublicAmbientNotification() {
-            return makePublicView(true /* ambient */);
-        }
-
-        private RemoteViews makePublicView(boolean ambient) {
+        public RemoteViews makePublicContentView(boolean isLowPriority) {
             if (mN.publicVersion != null) {
                 final Builder builder = recoverBuilder(mContext, mN.publicVersion);
-                return ambient ? builder.makeAmbientNotification() : builder.createContentView();
+                return builder.createContentView();
             }
             Bundle savedBundle = mN.extras;
             Style style = mStyle;
@@ -5484,7 +5470,11 @@ public class Notification implements Parcelable
             }
             mN.extras = publicExtras;
             RemoteViews view;
-            view = makeNotificationHeader();
+            StandardTemplateParams params = mParams.reset().fillTextsFrom(this);
+            if (isLowPriority) {
+                params.forceDefaultColor();
+            }
+            view = makeNotificationHeader(params);
             view.setBoolean(R.id.notification_header, "setExpandOnlyOnButton", true);
             mN.extras = savedBundle;
             mN.mLargeIcon = largeIcon;
@@ -7742,7 +7732,8 @@ public class Notification implements Parcelable
              * @hide
              */
             @Nullable
-            public static Message getMessageFromBundle(Bundle bundle) {
+            @SystemApi
+            public static Message getMessageFromBundle(@NonNull Bundle bundle) {
                 try {
                     if (!bundle.containsKey(KEY_TEXT) || !bundle.containsKey(KEY_TIMESTAMP)) {
                         return null;
@@ -8118,8 +8109,7 @@ public class Notification implements Parcelable
          */
         @Override
         public RemoteViews makeHeadsUpContentView(boolean increasedHeight) {
-            RemoteViews expanded = makeMediaBigContentView();
-            return expanded != null ? expanded : makeMediaContentView();
+            return makeMediaContentView();
         }
 
         /** @hide */

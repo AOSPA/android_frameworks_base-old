@@ -2516,7 +2516,6 @@ public final class PowerManagerService extends SystemService
                     }
                 }
                 mScreenBrightnessBoostInProgress = false;
-                mNotifier.onScreenBrightnessBoostChanged();
                 userActivityNoUpdateLocked(now,
                         PowerManager.USER_ACTIVITY_EVENT_OTHER, 0, Process.SYSTEM_UID);
             }
@@ -2723,6 +2722,14 @@ public final class PowerManagerService extends SystemService
                     || !mSuspendWhenScreenOffDueToProximityConfig) {
                 return true;
             }
+        }
+
+        if (mDisplayPowerRequest.policy == DisplayPowerRequest.POLICY_DOZE
+                && mDisplayPowerRequest.dozeScreenState == Display.STATE_ON) {
+            // Although we are in DOZE and would normally allow the device to suspend,
+            // the doze service has explicitly requested the display to remain in the ON
+            // state which means we should hold the display suspend blocker.
+            return true;
         }
         if (mScreenBrightnessBoostInProgress) {
             return true;
@@ -3123,10 +3130,7 @@ public final class PowerManagerService extends SystemService
 
             Slog.i(TAG, "Brightness boost activated (uid " + uid +")...");
             mLastScreenBrightnessBoostTime = eventTime;
-            if (!mScreenBrightnessBoostInProgress) {
-                mScreenBrightnessBoostInProgress = true;
-                mNotifier.onScreenBrightnessBoostChanged();
-            }
+            mScreenBrightnessBoostInProgress = true;
             mDirty |= DIRTY_SCREEN_BRIGHTNESS_BOOST;
 
             userActivityNoUpdateLocked(eventTime,
@@ -4858,7 +4862,8 @@ public final class PowerManagerService extends SystemService
         }
     }
 
-    private final class LocalService extends PowerManagerInternal {
+    @VisibleForTesting
+    final class LocalService extends PowerManagerInternal {
         @Override
         public void setScreenBrightnessOverrideFromWindowManager(int screenBrightness) {
             if (screenBrightness < PowerManager.BRIGHTNESS_DEFAULT

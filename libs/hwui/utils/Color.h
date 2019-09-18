@@ -25,6 +25,9 @@
 #include <SkColorSpace.h>
 #include <SkImageInfo.h>
 
+struct ANativeWindow_Buffer;
+struct AHardwareBuffer_Desc;
+
 namespace android {
 namespace uirenderer {
 namespace Color {
@@ -88,6 +91,14 @@ static constexpr float EOCF_sRGB(float srgb) {
     // IEC 61966-2-1:1999
     return srgb <= 0.04045f ? srgb / 12.92f : powf((srgb + 0.055f) / 1.055f, 2.4f);
 }
+
+#ifdef __ANDROID__ // Layoutlib does not support hardware buffers or native windows
+ANDROID_API SkImageInfo ANativeWindowToImageInfo(const ANativeWindow_Buffer& buffer,
+                                                 sk_sp<SkColorSpace> colorSpace);
+
+SkImageInfo BufferDescriptionToImageInfo(const AHardwareBuffer_Desc& bufferDesc,
+                                         sk_sp<SkColorSpace> colorSpace);
+#endif
 
 android::PixelFormat ColorTypeToPixelFormat(SkColorType colorType);
 ANDROID_API SkColorType PixelFormatToColorType(android::PixelFormat format);

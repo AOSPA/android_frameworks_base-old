@@ -29,7 +29,6 @@
 #include <EGL/eglext.h>
 #include <GLES/gl.h>
 
-#include <gui/Surface.h>
 #include <system/window.h>
 #include <string>
 #include <vector>
@@ -289,6 +288,10 @@ void EglManager::createPBufferSurface() {
     if (mPBufferSurface == EGL_NO_SURFACE && !EglExtensions.surfacelessContext) {
         EGLint attribs[] = {EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE};
         mPBufferSurface = eglCreatePbufferSurface(mEglDisplay, mEglConfig, attribs);
+        LOG_ALWAYS_FATAL_IF(mPBufferSurface == EGL_NO_SURFACE,
+                            "Failed to create a pixel buffer display=%p, "
+                            "mEglConfig=%p, error=%s",
+                            mEglDisplay, mEglConfig, eglErrorString());
     }
 }
 

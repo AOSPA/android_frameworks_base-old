@@ -181,6 +181,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
     protected void setDefaultSubId(int subId) {
         when(mMockSubDefaults.getDefaultDataSubId()).thenReturn(subId);
         when(mMockSubDefaults.getDefaultVoiceSubId()).thenReturn(subId);
+        when(mMockSubDefaults.getActiveDataSubId()).thenReturn(subId);
     }
 
     protected void setSubscriptions(int... subIds) {
@@ -225,6 +226,18 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
     public void setupDefaultNr5GIconConfiguration() {
         NetworkControllerImpl.Config.add5GIconMapping("connected_mmwave:5g_plus", mConfig);
         NetworkControllerImpl.Config.add5GIconMapping("connected:5g", mConfig);
+    }
+
+    public void setupNr5GIconConfigurationForNotRestrictedRrcCon() {
+        NetworkControllerImpl.Config.add5GIconMapping("connected_mmwave:5g_plus", mConfig);
+        NetworkControllerImpl.Config.add5GIconMapping("connected:5g_plus", mConfig);
+        NetworkControllerImpl.Config.add5GIconMapping("not_restricted_rrc_con:5g", mConfig);
+    }
+
+    public void setupNr5GIconConfigurationForNotRestrictedRrcIdle() {
+        NetworkControllerImpl.Config.add5GIconMapping("connected_mmwave:5g_plus", mConfig);
+        NetworkControllerImpl.Config.add5GIconMapping("connected:5g_plus", mConfig);
+        NetworkControllerImpl.Config.add5GIconMapping("not_restricted_rrc_idle:5g", mConfig);
     }
 
     public void setConnectivityViaBroadcast(

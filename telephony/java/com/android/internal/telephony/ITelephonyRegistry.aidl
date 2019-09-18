@@ -49,8 +49,10 @@ interface ITelephonyRegistry {
     void notifySignalStrengthForPhoneId(in int phoneId, in int subId,
             in SignalStrength signalStrength);
     void notifyMessageWaitingChangedForPhoneId(in int phoneId, in int subId, in boolean mwi);
+    @UnsupportedAppUsage(maxTargetSdk = 28)
     void notifyCallForwardingChanged(boolean cfi);
     void notifyCallForwardingChangedForSubscriber(in int subId, boolean cfi);
+    @UnsupportedAppUsage(maxTargetSdk = 28)
     void notifyDataActivity(int state);
     void notifyDataActivityForSubscriber(in int subId, int state);
     void notifyDataConnection(int state, boolean isDataConnectivityPossible,
@@ -63,13 +65,14 @@ interface ITelephonyRegistry {
     @UnsupportedAppUsage
     void notifyDataConnectionFailed(String apnType);
     void notifyDataConnectionFailedForSubscriber(int phoneId, int subId, String apnType);
+    @UnsupportedAppUsage(maxTargetSdk = 28)
     void notifyCellLocation(in Bundle cellLocation);
     void notifyCellLocationForSubscriber(in int subId, in Bundle cellLocation);
+    @UnsupportedAppUsage(maxTargetSdk = 28)
     void notifyOtaspChanged(in int subId, in int otaspMode);
     @UnsupportedAppUsage
     void notifyCellInfo(in List<CellInfo> cellInfo);
-    void notifyPhysicalChannelConfiguration(in List<PhysicalChannelConfig> configs);
-    void notifyPhysicalChannelConfigurationForSubscriber(in int subId,
+    void notifyPhysicalChannelConfigurationForSubscriber(in int phoneId, in int subId,
             in List<PhysicalChannelConfig> configs);
     void notifyPreciseCallState(int phoneId, int subId, int ringingCallState,
             int foregroundCallState, int backgroundCallState);

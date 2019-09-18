@@ -991,6 +991,11 @@ public class Build {
          * engaged. It's now time to see if you can dance.</em>
          */
         public static final int Q = 29;
+
+        /**
+         * R.
+         */
+        public static final int R = CUR_DEVELOPMENT;
     }
 
     /** The type of build, like "user" or "eng". */
@@ -1186,7 +1191,7 @@ public class Build {
         ArrayList<Partition> partitions = new ArrayList();
 
         String[] names = new String[] {
-            "bootimage", "odm", "product", "product_services", Partition.PARTITION_NAME_SYSTEM,
+            "bootimage", "odm", "product", "system_ext", Partition.PARTITION_NAME_SYSTEM,
             "vendor"
         };
         for (String name : names) {

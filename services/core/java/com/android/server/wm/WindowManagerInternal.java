@@ -51,9 +51,10 @@ public abstract class WindowManagerInternal {
         /**
          * Called when the windows for accessibility changed.
          *
+         * @param forceSend Send the windows for accessibility even if they haven't changed.
          * @param windows The windows for accessibility.
          */
-        public void onWindowsForAccessibilityChanged(List<WindowInfo> windows);
+        void onWindowsForAccessibilityChanged(boolean forceSend, List<WindowInfo> windows);
     }
 
     /**
@@ -262,11 +263,13 @@ public abstract class WindowManagerInternal {
 
     /**
      * Sets a callback for observing which windows are touchable for the purposes
-     * of accessibility.
+     * of accessibility on specified display.
      *
+     * @param displayId The logical display id.
      * @param callback The callback.
+     * @return {@code false} if display id is not valid.
      */
-    public abstract void setWindowsForAccessibilityCallback(
+    public abstract boolean setWindowsForAccessibilityCallback(int displayId,
             WindowsForAccessibilityCallback callback);
 
     /**
@@ -417,9 +420,11 @@ public abstract class WindowManagerInternal {
     public abstract boolean isStackVisibleLw(int windowingMode);
 
     /**
-     * Requests the window manager to resend the windows for accessibility.
+     * Requests the window manager to resend the windows for accessibility on specified display.
+     *
+     * @param displayId Display ID to be computed its windows for accessibility
      */
-    public abstract void computeWindowsForAccessibility();
+    public abstract void computeWindowsForAccessibility(int displayId);
 
     /**
      * Called after virtual display Id is updated by
@@ -505,5 +510,10 @@ public abstract class WindowManagerInternal {
      * Tell window manager to stop constraining refresh rate for the given package.
      */
     public abstract void removeNonHighRefreshRatePackage(@NonNull String packageName);
+
+    /**
+     * Checks if this display is touchable.
+     */
+    public abstract boolean isTouchableDisplay(int displayId);
 
 }

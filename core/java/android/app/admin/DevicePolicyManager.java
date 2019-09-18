@@ -4981,6 +4981,76 @@ public class DevicePolicyManager {
         return null;
     }
 
+
+    /**
+     * Called by a device or profile owner, or delegated certificate chooser (an app that has been
+     * delegated the {@link #DELEGATION_CERT_SELECTION} privilege), to grant an application access
+     * to an already-installed (or generated) KeyChain key.
+     * This is useful (in combination with {@link #installKeyPair} or {@link #generateKeyPair}) to
+     * let an application call {@link android.security.KeyChain#getPrivateKey} without having to
+     * call {@link android.security.KeyChain#choosePrivateKeyAlias} first.
+     *
+     * The grantee app will receive the {@link android.security.KeyChain#ACTION_KEY_ACCESS_CHANGED}
+     * broadcast when access to a key is granted.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
+     *        {@code null} if calling from a delegated certificate installer.
+     * @param alias The alias of the key to grant access to.
+     * @param packageName The name of the (already installed) package to grant access to.
+     * @return {@code true} if the grant was set successfully, {@code false} otherwise.
+     *
+     * @throws SecurityException if the caller is not a device owner, a profile owner or
+     *         delegated certificate chooser.
+     * @throws IllegalArgumentException if {@code packageName} or {@code alias} are empty, or if
+     *         {@code packageName} is not a name of an installed package.
+     * @see #revokeKeyPairFromApp
+     */
+    public boolean grantKeyPairToApp(@Nullable ComponentName admin, @NonNull String alias,
+            @NonNull String packageName) {
+        throwIfParentInstance("grantKeyPairToApp");
+        try {
+            return mService.setKeyGrantForApp(
+                    admin, mContext.getPackageName(), alias, packageName, true);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+        return false;
+    }
+
+    /**
+     * Called by a device or profile owner, or delegated certificate chooser (an app that has been
+     * delegated the {@link #DELEGATION_CERT_SELECTION} privilege), to revoke an application's
+     * grant to a KeyChain key pair.
+     * Calls by the application to {@link android.security.KeyChain#getPrivateKey}
+     * will fail after the grant is revoked.
+     *
+     * The grantee app will receive the {@link android.security.KeyChain#ACTION_KEY_ACCESS_CHANGED}
+     * broadcast when access to a key is revoked.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
+     *        {@code null} if calling from a delegated certificate installer.
+     * @param alias The alias of the key to revoke access from.
+     * @param packageName The name of the (already installed) package to revoke access from.
+     * @return {@code true} if the grant was revoked successfully, {@code false} otherwise.
+     *
+     * @throws SecurityException if the caller is not a device owner, a profile owner or
+     *         delegated certificate chooser.
+     * @throws IllegalArgumentException if {@code packageName} or {@code alias} are empty, or if
+     *         {@code packageName} is not a name of an installed package.
+     * @see #grantKeyPairToApp
+     */
+    public boolean revokeKeyPairFromApp(@Nullable ComponentName admin, @NonNull String alias,
+            @NonNull String packageName) {
+        throwIfParentInstance("revokeKeyPairFromApp");
+        try {
+            return mService.setKeyGrantForApp(
+                    admin, mContext.getPackageName(), alias, packageName, false);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+        return false;
+    }
+
     /**
      * Returns {@code true} if the device supports attestation of device identifiers in addition
      * to key attestation.
@@ -6061,30 +6131,6 @@ public class DevicePolicyManager {
                 throw re.rethrowFromSystemServer();
             }
         }
-        return null;
-    }
-
-    /**
-     * @hide
-     * @deprecated Do not use
-     * @removed
-     */
-    @Deprecated
-    @SystemApi
-    @SuppressLint("Doclava125")
-    public @Nullable String getDeviceInitializerApp() {
-        return null;
-    }
-
-    /**
-     * @hide
-     * @deprecated Do not use
-     * @removed
-     */
-    @Deprecated
-    @SystemApi
-    @SuppressLint("Doclava125")
-    public @Nullable ComponentName getDeviceInitializerComponent() {
         return null;
     }
 
@@ -7391,60 +7437,6 @@ public class DevicePolicyManager {
                 throw e.rethrowFromSystemServer();
             }
         }
-    }
-
-    /**
-     * Called by a device owner to create a user with the specified name. The UserHandle returned
-     * by this method should not be persisted as user handles are recycled as users are removed and
-     * created. If you need to persist an identifier for this user, use
-     * {@link UserManager#getSerialNumberForUser}.
-     *
-     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
-     * @param name the user's name
-     * @see UserHandle
-     * @return the {@link android.os.UserHandle} object for the created user, or {@code null} if the
-     *         user could not be created.
-     *
-     * @deprecated From {@link android.os.Build.VERSION_CODES#M}
-     * @removed From {@link android.os.Build.VERSION_CODES#N}
-     */
-    @Deprecated
-    public @Nullable UserHandle createUser(@NonNull ComponentName admin, String name) {
-        return null;
-    }
-
-    /**
-     * Called by a device owner to create a user with the specified name. The UserHandle returned
-     * by this method should not be persisted as user handles are recycled as users are removed and
-     * created. If you need to persist an identifier for this user, use
-     * {@link UserManager#getSerialNumberForUser}.  The new user will be started in the background
-     * immediately.
-     *
-     * <p> profileOwnerComponent is the {@link DeviceAdminReceiver} to be the profile owner as well
-     * as registered as an active admin on the new user.  The profile owner package will be
-     * installed on the new user if it already is installed on the device.
-     *
-     * <p>If the optionalInitializeData is not null, then the extras will be passed to the
-     * profileOwnerComponent when onEnable is called.
-     *
-     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
-     * @param name the user's name
-     * @param ownerName the human readable name of the organisation associated with this DPM.
-     * @param profileOwnerComponent The {@link DeviceAdminReceiver} that will be an active admin on
-     *      the user.
-     * @param adminExtras Extras that will be passed to onEnable of the admin receiver
-     *      on the new user.
-     * @see UserHandle
-     * @return the {@link android.os.UserHandle} object for the created user, or {@code null} if the
-     *         user could not be created.
-     *
-     * @deprecated From {@link android.os.Build.VERSION_CODES#M}
-     * @removed From {@link android.os.Build.VERSION_CODES#N}
-     */
-    @Deprecated
-    public @Nullable UserHandle createAndInitializeUser(@NonNull ComponentName admin, String name,
-            String ownerName, @NonNull ComponentName profileOwnerComponent, Bundle adminExtras) {
-        return null;
     }
 
     /**

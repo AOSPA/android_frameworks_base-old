@@ -34,6 +34,7 @@ import com.android.keyguard.clock.ClockManager;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
 import com.android.systemui.appops.AppOpsController;
 import com.android.systemui.assist.AssistManager;
+import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.dock.DockManager;
@@ -48,12 +49,12 @@ import com.android.systemui.plugins.VolumeDialogController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.PowerUI;
+import com.android.systemui.privacy.PrivacyItemController;
 import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.DevicePolicyManagerWrapper;
 import com.android.systemui.shared.system.PackageManagerWrapper;
-import com.android.systemui.statusbar.AmbientPulseManager;
 import com.android.systemui.statusbar.NavigationBarController;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
@@ -200,6 +201,7 @@ public class Dependency extends SystemUI {
 
     @Inject Lazy<ActivityStarter> mActivityStarter;
     @Inject Lazy<ActivityStarterDelegate> mActivityStarterDelegate;
+    @Inject Lazy<BroadcastDispatcher> mBroadcastDispatcher;
     @Inject Lazy<AsyncSensorManager> mAsyncSensorManager;
     @Inject Lazy<BluetoothController> mBluetoothController;
     @Inject Lazy<LocationController> mLocationController;
@@ -267,7 +269,6 @@ public class Dependency extends SystemUI {
     @Inject Lazy<VisualStabilityManager> mVisualStabilityManager;
     @Inject Lazy<NotificationGutsManager> mNotificationGutsManager;
     @Inject Lazy<NotificationMediaManager> mNotificationMediaManager;
-    @Inject Lazy<AmbientPulseManager> mAmbientPulseManager;
     @Inject Lazy<NotificationBlockingHelperManager> mNotificationBlockingHelperManager;
     @Inject Lazy<NotificationRemoteInputManager> mNotificationRemoteInputManager;
     @Inject Lazy<SmartReplyConstants> mSmartReplyConstants;
@@ -286,6 +287,7 @@ public class Dependency extends SystemUI {
     @Inject Lazy<SensorPrivacyManager> mSensorPrivacyManager;
     @Inject Lazy<AutoHideController> mAutoHideController;
     @Inject Lazy<ForegroundServiceNotificationListener> mForegroundServiceNotificationListener;
+    @Inject Lazy<PrivacyItemController> mPrivacyItemController;
     @Inject @Named(BG_LOOPER_NAME) Lazy<Looper> mBgLooper;
     @Inject @Named(BG_HANDLER_NAME) Lazy<Handler> mBgHandler;
     @Inject @Named(MAIN_HANDLER_NAME) Lazy<Handler> mMainHandler;
@@ -317,6 +319,7 @@ public class Dependency extends SystemUI {
         mProviders.put(MAIN_HANDLER, mMainHandler::get);
         mProviders.put(ActivityStarter.class, mActivityStarter::get);
         mProviders.put(ActivityStarterDelegate.class, mActivityStarterDelegate::get);
+        mProviders.put(BroadcastDispatcher.class, mBroadcastDispatcher::get);
 
         mProviders.put(AsyncSensorManager.class, mAsyncSensorManager::get);
 
@@ -447,7 +450,6 @@ public class Dependency extends SystemUI {
                 mNotificationGroupAlertTransferHelper::get);
         mProviders.put(NotificationMediaManager.class, mNotificationMediaManager::get);
         mProviders.put(NotificationGutsManager.class, mNotificationGutsManager::get);
-        mProviders.put(AmbientPulseManager.class, mAmbientPulseManager::get);
         mProviders.put(NotificationBlockingHelperManager.class,
                 mNotificationBlockingHelperManager::get);
         mProviders.put(NotificationRemoteInputManager.class,
@@ -470,6 +472,7 @@ public class Dependency extends SystemUI {
         mProviders.put(ForegroundServiceNotificationListener.class,
                 mForegroundServiceNotificationListener::get);
         mProviders.put(ClockManager.class, mClockManager::get);
+        mProviders.put(PrivacyItemController.class, mPrivacyItemController::get);
         mProviders.put(ActivityManagerWrapper.class, mActivityManagerWrapper::get);
         mProviders.put(DevicePolicyManagerWrapper.class, mDevicePolicyManagerWrapper::get);
         mProviders.put(PackageManagerWrapper.class, mPackageManagerWrapper::get);
@@ -496,6 +499,7 @@ public class Dependency extends SystemUI {
         // Make sure that the DumpController gets added to mDependencies, as they are only added
         // with Dependency#get.
         getDependency(DumpController.class);
+        getDependency(BroadcastDispatcher.class);
 
         // If an arg is specified, try to dump the dependency
         String controller = args != null && args.length > 1

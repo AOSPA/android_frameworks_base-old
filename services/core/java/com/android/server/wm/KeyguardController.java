@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION;
+import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER;
 import static android.view.WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
@@ -26,6 +27,7 @@ import static android.view.WindowManager.TRANSIT_KEYGUARD_OCCLUDE;
 import static android.view.WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
 import static android.view.WindowManager.TRANSIT_UNSET;
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_NO_WINDOW_ANIMATIONS;
+import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_SUBTLE_WINDOW_ANIMATIONS;
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_TO_SHADE;
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_WITH_WALLPAPER;
 
@@ -41,11 +43,13 @@ import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLAS
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.Trace;
+import android.util.EventLog;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.policy.IKeyguardDismissCallback;
+import com.android.server.am.EventLogTags;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.ActivityTaskManagerInternal.SleepToken;
 
@@ -140,6 +144,11 @@ class KeyguardController {
         if (!keyguardChanged && !aodChanged) {
             return;
         }
+        EventLog.writeEvent(EventLogTags.AM_SET_KEYGUARD_SHOWN,
+                keyguardShowing ? 1 : 0,
+                aodShowing ? 1 : 0,
+                mKeyguardGoingAway ? 1 : 0,
+                "setKeyguardShown");
         mKeyguardShowing = keyguardShowing;
         mAodShowing = aodShowing;
         mWindowManager.setAodShowing(aodShowing);
@@ -176,6 +185,11 @@ class KeyguardController {
         mWindowManager.deferSurfaceLayout();
         try {
             setKeyguardGoingAway(true);
+            EventLog.writeEvent(EventLogTags.AM_SET_KEYGUARD_SHOWN,
+                    1 /* keyguardShowing */,
+                    mAodShowing ? 1 : 0,
+                    1 /* keyguardGoingAway */,
+                    "keyguardGoingAway");
             mRootActivityContainer.getDefaultDisplay().mDisplayContent
                     .prepareAppTransition(TRANSIT_KEYGUARD_GOING_AWAY,
                             false /* alwaysKeepCurrent */, convertTransitFlags(flags),
@@ -237,6 +251,9 @@ class KeyguardController {
         }
         if ((keyguardGoingAwayFlags & KEYGUARD_GOING_AWAY_FLAG_WITH_WALLPAPER) != 0) {
             result |= TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER;
+        }
+        if ((keyguardGoingAwayFlags & KEYGUARD_GOING_AWAY_FLAG_SUBTLE_WINDOW_ANIMATIONS) != 0) {
+            result |= TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION;
         }
         return result;
     }

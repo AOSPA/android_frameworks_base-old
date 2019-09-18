@@ -21,12 +21,17 @@ import static com.android.server.am.AppCompactor.compactActionIntToString;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import android.content.Context;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Process;
 import android.platform.test.annotations.Presubmit;
 import android.provider.DeviceConfig;
 import android.text.TextUtils;
 
+import androidx.test.platform.app.InstrumentationRegistry;
+
+import com.android.server.ServiceThread;
 import com.android.server.appop.AppOpsService;
 import com.android.server.testables.TestableDeviceConfig;
 
@@ -54,6 +59,8 @@ import java.util.concurrent.TimeUnit;
 @RunWith(MockitoJUnitRunner.class)
 public final class AppCompactorTest {
 
+    private ServiceThread mThread;
+
     @Mock
     private AppOpsService mAppOpsService;
     private AppCompactor mCompactorUnderTest;
@@ -62,14 +69,22 @@ public final class AppCompactorTest {
     private CountDownLatch mCountDown;
 
     @Rule
-    public TestableDeviceConfig mDeviceConfig = new TestableDeviceConfig();
+    public TestableDeviceConfig.TestableDeviceConfigRule
+            mDeviceConfigRule = new TestableDeviceConfig.TestableDeviceConfigRule();
 
     @Before
     public void setUp() {
         mHandlerThread = new HandlerThread("");
         mHandlerThread.start();
         mHandler = new Handler(mHandlerThread.getLooper());
-        ActivityManagerService ams = new ActivityManagerService(new TestInjector());
+
+        mThread = new ServiceThread("TestServiceThread", Process.THREAD_PRIORITY_DEFAULT,
+                true /* allowIo */);
+        mThread.start();
+
+        ActivityManagerService ams = new ActivityManagerService(
+                new TestInjector(InstrumentationRegistry.getInstrumentation().getContext()),
+                mThread);
         mCompactorUnderTest = new AppCompactor(ams,
                 new AppCompactor.PropertyChangedCallbackForTest() {
                     @Override
@@ -84,6 +99,7 @@ public final class AppCompactorTest {
     @After
     public void tearDown() {
         mHandlerThread.quit();
+        mThread.quit();
         mCountDown = null;
     }
 
@@ -646,6 +662,11 @@ public final class AppCompactorTest {
     }
 
     private class TestInjector extends Injector {
+
+        TestInjector(Context context) {
+            super(context);
+        }
+
         @Override
         public AppOpsService getAppOpsService(File file, Handler handler) {
             return mAppOpsService;

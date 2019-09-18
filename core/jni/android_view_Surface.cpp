@@ -20,29 +20,25 @@
 
 #include "jni.h"
 #include <nativehelper/JNIHelp.h>
-#include "android_os_Parcel.h"
-#include "android/graphics/GraphicBuffer.h"
-#include "android/graphics/GraphicsJNI.h"
-
 #include "core_jni_helpers.h"
-#include <android_runtime/android_view_Surface.h>
-#include <android_runtime/android_graphics_SurfaceTexture.h>
-#include <android_runtime/Log.h>
 
+#include <android/graphics/canvas.h>
+#include <android_runtime/android_graphics_GraphicBuffer.h>
+#include <android_runtime/android_graphics_SurfaceTexture.h>
+#include <android_runtime/android_view_Surface.h>
+#include <android_runtime/Log.h>
+#include <private/android/AHardwareBufferHelpers.h>
+
+#include "android_os_Parcel.h"
 #include <binder/Parcel.h>
 
 #include <gui/Surface.h>
 #include <gui/view/Surface.h>
 #include <gui/SurfaceControl.h>
-#include <gui/GLConsumer.h>
 
+#include <ui/GraphicBuffer.h>
 #include <ui/Rect.h>
 #include <ui/Region.h>
-
-#include <SkCanvas.h>
-#include <SkBitmap.h>
-#include <SkImage.h>
-#include <SkRegion.h>
 
 #include <utils/misc.h>
 #include <utils/Log.h>
@@ -58,8 +54,8 @@
 
 namespace android {
 
-static const char* const OutOfResourcesException =
-    "android/view/Surface$OutOfResourcesException";
+static const char* const IllegalArgumentException = "java/lang/IllegalArgumentException";
+static const char* const OutOfResourcesException = "android/view/Surface$OutOfResourcesException";
 
 static struct {
     jclass clazz;
@@ -74,6 +70,24 @@ static struct {
     jfieldID right;
     jfieldID bottom;
 } gRectClassInfo;
+
+class JNamedColorSpace {
+public:
+    // ColorSpace.Named.SRGB.ordinal() = 0;
+    static constexpr jint SRGB = 0;
+
+    // ColorSpace.Named.DISPLAY_P3.ordinal() = 7;
+    static constexpr jint DISPLAY_P3 = 7;
+};
+
+constexpr ui::Dataspace fromNamedColorSpaceValueToDataspace(const jint colorSpace) {
+    switch (colorSpace) {
+        case JNamedColorSpace::DISPLAY_P3:
+            return ui::Dataspace::DISPLAY_P3;
+        default:
+            return ui::Dataspace::V0_SRGB;
+    }
+}
 
 // ----------------------------------------------------------------------------
 
@@ -126,19 +140,6 @@ jobject android_view_Surface_createFromIGraphicBufferProducer(JNIEnv* env,
     return android_view_Surface_createFromSurface(env, surface);
 }
 
-int android_view_Surface_mapPublicFormatToHalFormat(PublicFormat f) {
-    return mapPublicFormatToHalFormat(f);
-}
-
-android_dataspace android_view_Surface_mapPublicFormatToHalDataspace(
-        PublicFormat f) {
-    return mapPublicFormatToHalDataspace(f);
-}
-
-PublicFormat android_view_Surface_mapHalFormatDataspaceToPublicFormat(
-        int format, android_dataspace dataSpace) {
-    return mapHalFormatDataspaceToPublicFormat(format, dataSpace);
-}
 // ----------------------------------------------------------------------------
 
 static inline bool isSurfaceValid(const sp<Surface>& sur) {
@@ -151,7 +152,7 @@ static jlong nativeCreateFromSurfaceTexture(JNIEnv* env, jclass clazz,
         jobject surfaceTextureObj) {
     sp<IGraphicBufferProducer> producer(SurfaceTexture_getProducer(env, surfaceTextureObj));
     if (producer == NULL) {
-        jniThrowException(env, "java/lang/IllegalArgumentException",
+        jniThrowException(env, IllegalArgumentException,
                 "SurfaceTexture has already been released");
         return 0;
     }
@@ -179,7 +180,7 @@ static jboolean nativeIsValid(JNIEnv* env, jclass clazz, jlong nativeObject) {
 static jboolean nativeIsConsumerRunningBehind(JNIEnv* env, jclass clazz, jlong nativeObject) {
     sp<Surface> sur(reinterpret_cast<Surface *>(nativeObject));
     if (!isSurfaceValid(sur)) {
-        doThrowIAE(env);
+        jniThrowException(env, IllegalArgumentException, NULL);
         return JNI_FALSE;
     }
     int value = 0;
@@ -208,7 +209,7 @@ static jlong nativeLockCanvas(JNIEnv* env, jclass clazz,
     sp<Surface> surface(reinterpret_cast<Surface *>(nativeObject));
 
     if (!isSurfaceValid(surface)) {
-        doThrowIAE(env);
+        jniThrowException(env, IllegalArgumentException, NULL);
         return 0;
     }
 
@@ -227,37 +228,21 @@ static jlong nativeLockCanvas(JNIEnv* env, jclass clazz,
         dirtyRectPtr = &dirtyRect;
     }
 
-    ANativeWindow_Buffer outBuffer;
-    status_t err = surface->lock(&outBuffer, dirtyRectPtr);
+    ANativeWindow_Buffer buffer;
+    status_t err = surface->lock(&buffer, dirtyRectPtr);
     if (err < 0) {
         const char* const exception = (err == NO_MEMORY) ?
-                OutOfResourcesException :
-                "java/lang/IllegalArgumentException";
+                OutOfResourcesException : IllegalArgumentException;
         jniThrowException(env, exception, NULL);
         return 0;
     }
 
-    SkImageInfo info = SkImageInfo::Make(outBuffer.width, outBuffer.height,
-                                         convertPixelFormat(outBuffer.format),
-                                         outBuffer.format == PIXEL_FORMAT_RGBX_8888
-                                                 ? kOpaque_SkAlphaType : kPremul_SkAlphaType);
-
-    SkBitmap bitmap;
-    ssize_t bpr = outBuffer.stride * bytesPerPixel(outBuffer.format);
-    bitmap.setInfo(info, bpr);
-    if (outBuffer.width > 0 && outBuffer.height > 0) {
-        bitmap.setPixels(outBuffer.bits);
-    } else {
-        // be safe with an empty bitmap.
-        bitmap.setPixels(NULL);
-    }
-
-    Canvas* nativeCanvas = GraphicsJNI::getNativeCanvas(env, canvasObj);
-    nativeCanvas->setBitmap(bitmap);
+    ACanvas* canvas = ACanvas_getNativeHandleFromJava(env, canvasObj);
+    ACanvas_setBuffer(canvas, &buffer, static_cast<int32_t>(surface->getBuffersDataSpace()));
 
     if (dirtyRectPtr) {
-        nativeCanvas->clipRect(dirtyRect.left, dirtyRect.top,
-                dirtyRect.right, dirtyRect.bottom, SkClipOp::kIntersect);
+        ACanvas_clipRect(canvas, {dirtyRect.left, dirtyRect.top,
+                                  dirtyRect.right, dirtyRect.bottom});
     }
 
     if (dirtyRectObj) {
@@ -283,13 +268,13 @@ static void nativeUnlockCanvasAndPost(JNIEnv* env, jclass clazz,
     }
 
     // detach the canvas from the surface
-    Canvas* nativeCanvas = GraphicsJNI::getNativeCanvas(env, canvasObj);
-    nativeCanvas->setBitmap(SkBitmap());
+    ACanvas* canvas = ACanvas_getNativeHandleFromJava(env, canvasObj);
+    ACanvas_setBuffer(canvas, nullptr, ADATASPACE_UNKNOWN);
 
     // unlock surface
     status_t err = surface->unlockAndPost();
     if (err < 0) {
-        doThrowIAE(env);
+        jniThrowException(env, IllegalArgumentException, NULL);
     }
 }
 
@@ -340,7 +325,7 @@ static jlong nativeReadFromParcel(JNIEnv* env, jclass clazz,
         jlong nativeObject, jobject parcelObj) {
     Parcel* parcel = parcelForJavaObject(env, parcelObj);
     if (parcel == NULL) {
-        doThrowNPE(env);
+        jniThrowNullPointerException(env, NULL);
         return 0;
     }
 
@@ -381,7 +366,7 @@ static void nativeWriteToParcel(JNIEnv* env, jclass clazz,
         jlong nativeObject, jobject parcelObj) {
     Parcel* parcel = parcelForJavaObject(env, parcelObj);
     if (parcel == NULL) {
-        doThrowNPE(env);
+        jniThrowNullPointerException(env, NULL);
         return;
     }
     sp<Surface> self(reinterpret_cast<Surface *>(nativeObject));
@@ -425,11 +410,13 @@ static jint nativeForceScopedDisconnect(JNIEnv *env, jclass clazz, jlong nativeO
     return surface->disconnect(-1, IGraphicBufferProducer::DisconnectMode::AllLocal);
 }
 
-static jint nativeAttachAndQueueBuffer(JNIEnv *env, jclass clazz, jlong nativeObject,
-        jobject graphicBuffer) {
+static jint nativeAttachAndQueueBufferWithColorSpace(JNIEnv *env, jclass clazz, jlong nativeObject,
+        jobject graphicBuffer, jint colorSpaceId) {
     Surface* surface = reinterpret_cast<Surface*>(nativeObject);
-    sp<GraphicBuffer> bp = graphicBufferForJavaObject(env, graphicBuffer);
-    int err = Surface::attachAndQueueBuffer(surface, bp);
+    sp<GraphicBuffer> gb(android_graphics_GraphicBuffer_getNativeGraphicsBuffer(env,
+                                                                                graphicBuffer));
+    int err = Surface::attachAndQueueBufferWithDataspace(surface, gb,
+            fromNamedColorSpaceValueToDataspace(colorSpaceId));
     return err;
 }
 
@@ -485,7 +472,7 @@ static void setSurface(JNIEnv* env, jclass clazz, jlong rendererPtr, jlong surfa
 
 static void draw(JNIEnv* env, jclass clazz, jlong rendererPtr) {
     RenderProxy* proxy = reinterpret_cast<RenderProxy*>(rendererPtr);
-    nsecs_t vsync = systemTime(CLOCK_MONOTONIC);
+    nsecs_t vsync = systemTime(SYSTEM_TIME_MONOTONIC);
     UiFrameInfoBuilder(proxy->frameInfo())
             .setVsync(vsync, vsync)
             .addFlag(FrameInfoFlags::SurfaceCanvas);
@@ -531,7 +518,8 @@ static const JNINativeMethod gSurfaceMethods[] = {
     {"nativeGetNextFrameNumber", "(J)J", (void*)nativeGetNextFrameNumber },
     {"nativeSetScalingMode", "(JI)I", (void*)nativeSetScalingMode },
     {"nativeForceScopedDisconnect", "(J)I", (void*)nativeForceScopedDisconnect},
-    {"nativeAttachAndQueueBuffer", "(JLandroid/graphics/GraphicBuffer;)I", (void*)nativeAttachAndQueueBuffer},
+    {"nativeAttachAndQueueBufferWithColorSpace", "(JLandroid/graphics/GraphicBuffer;I)I",
+            (void*)nativeAttachAndQueueBufferWithColorSpace},
     {"nativeSetSharedBufferModeEnabled", "(JZ)I", (void*)nativeSetSharedBufferModeEnabled},
     {"nativeSetAutoRefreshEnabled", "(JZ)I", (void*)nativeSetAutoRefreshEnabled},
 

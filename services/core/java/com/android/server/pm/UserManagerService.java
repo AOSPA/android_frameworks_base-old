@@ -75,6 +75,7 @@ import android.os.storage.StorageManager;
 import android.security.GateKeeper;
 import android.service.gatekeeper.IGateKeeperService;
 import android.stats.devicepolicy.DevicePolicyEnums;
+import android.util.ArraySet;
 import android.util.AtomicFile;
 import android.util.IntArray;
 import android.util.Log;
@@ -100,6 +101,7 @@ import com.android.server.LockGuard;
 import com.android.server.SystemService;
 import com.android.server.am.UserState;
 import com.android.server.storage.DeviceStorageMonitorInternal;
+import com.android.server.utils.TimingsTraceAndSlog;
 import com.android.server.wm.ActivityTaskManagerInternal;
 
 import libcore.io.IoUtils;
@@ -124,6 +126,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Service for {@link UserManager}.
@@ -213,7 +216,7 @@ public class UserManagerService extends IUserManager.Stub {
     @VisibleForTesting
     static final int MAX_RECENTLY_REMOVED_IDS_SIZE = 100;
 
-    private static final int USER_VERSION = 7;
+    private static final int USER_VERSION = 8;
 
     private static final long EPOCH_PLUS_30_YEARS = 30L * 365 * 24 * 60 * 60 * 1000L; // ms
 
@@ -573,6 +576,14 @@ public class UserManagerService extends IUserManager.Stub {
         mContext.registerReceiver(mDisableQuietModeCallback,
                 new IntentFilter(ACTION_DISABLE_QUIET_MODE_AFTER_UNLOCK),
                 null, mHandler);
+    }
+
+    /**
+     * This method retrieves the  {@link UserManagerInternal} only for the purpose of
+     * PackageManagerService construction.
+     */
+    UserManagerInternal getInternalForInjectorOnly() {
+        return mLocalService;
     }
 
     void cleanupPartialUsers() {
@@ -1548,11 +1559,7 @@ public class UserManagerService extends IUserManager.Stub {
     /** @return a specific user restriction that's in effect currently. */
     @Override
     public boolean hasUserRestriction(String restrictionKey, int userId) {
-        if (!UserRestrictionsUtils.isValidRestriction(restrictionKey)) {
-            return false;
-        }
-        Bundle restrictions = getEffectiveUserRestrictions(userId);
-        return restrictions != null && restrictions.getBoolean(restrictionKey);
+        return mLocalService.hasUserRestriction(restrictionKey, userId);
     }
 
     /** @return if any user has the given restriction. */
@@ -2134,6 +2141,7 @@ public class UserManagerService extends IUserManager.Stub {
      */
     @GuardedBy({"mRestrictionsLock", "mPackagesLock"})
     private void upgradeIfNecessaryLP(Bundle oldGlobalUserRestrictions) {
+        Set<Integer> userIdsToWrite = new ArraySet<>();
         final int originalVersion = mUserVersion;
         int userVersion = mUserVersion;
         if (userVersion < 1) {
@@ -2142,7 +2150,7 @@ public class UserManagerService extends IUserManager.Stub {
             if ("Primary".equals(userData.info.name)) {
                 userData.info.name =
                         mContext.getResources().getString(com.android.internal.R.string.owner_name);
-                scheduleWriteUser(userData);
+                userIdsToWrite.add(userData.info.id);
             }
             userVersion = 1;
         }
@@ -2152,7 +2160,7 @@ public class UserManagerService extends IUserManager.Stub {
             UserData userData = getUserDataNoChecks(UserHandle.USER_SYSTEM);
             if ((userData.info.flags & UserInfo.FLAG_INITIALIZED) == 0) {
                 userData.info.flags |= UserInfo.FLAG_INITIALIZED;
-                scheduleWriteUser(userData);
+                userIdsToWrite.add(userData.info.id);
             }
             userVersion = 2;
         }
@@ -2177,7 +2185,7 @@ public class UserManagerService extends IUserManager.Stub {
                             && (userData.info.restrictedProfileParentId
                                     == UserInfo.NO_PROFILE_GROUP_ID)) {
                         userData.info.restrictedProfileParentId = UserHandle.USER_SYSTEM;
-                        scheduleWriteUser(userData);
+                        userIdsToWrite.add(userData.info.id);
                     }
                 }
             }
@@ -2201,6 +2209,29 @@ public class UserManagerService extends IUserManager.Stub {
             userVersion = 7;
         }
 
+        if (userVersion < 8) {
+            // Added FLAG_FULL and FLAG_SYSTEM flags.
+            synchronized (mUsersLock) {
+                UserData userData = mUsers.get(UserHandle.USER_SYSTEM);
+                userData.info.flags |= UserInfo.FLAG_SYSTEM;
+                if (!UserManager.isHeadlessSystemUserMode()) {
+                    userData.info.flags |= UserInfo.FLAG_FULL;
+                }
+                userIdsToWrite.add(userData.info.id);
+
+                // Mark FULL all non-profile users except USER_SYSTEM.
+                // Start index at 1 since USER_SYSTEM is the smallest userId and we're skipping it.
+                for (int i = 1; i < mUsers.size(); i++) {
+                    userData = mUsers.valueAt(i);
+                    if ((userData.info.flags & UserInfo.FLAG_MANAGED_PROFILE) == 0) {
+                        userData.info.flags |= UserInfo.FLAG_FULL;
+                        userIdsToWrite.add(userData.info.id);
+                    }
+                }
+            }
+            userVersion = 8;
+        }
+
         if (userVersion < USER_VERSION) {
             Slog.w(LOG_TAG, "User version " + mUserVersion + " didn't upgrade as expected to "
                     + USER_VERSION);
@@ -2208,6 +2239,12 @@ public class UserManagerService extends IUserManager.Stub {
             mUserVersion = userVersion;
 
             if (originalVersion < mUserVersion) {
+                for (int userId : userIdsToWrite) {
+                    UserData userData = getUserDataNoChecks(userId);
+                    if (userData != null) {
+                        writeUserLP(userData);
+                    }
+                }
                 writeUserListLP();
             }
         }
@@ -2215,11 +2252,10 @@ public class UserManagerService extends IUserManager.Stub {
 
     @GuardedBy({"mPackagesLock", "mRestrictionsLock"})
     private void fallbackToSingleUserLP() {
-        int flags = UserInfo.FLAG_INITIALIZED;
-        // In split system user mode, the admin and primary flags are assigned to the first human
-        // user.
-        if (!UserManager.isSplitSystemUser()) {
-            flags |= UserInfo.FLAG_ADMIN | UserInfo.FLAG_PRIMARY;
+        int flags = UserInfo.FLAG_SYSTEM | UserInfo.FLAG_INITIALIZED | UserInfo.FLAG_ADMIN;
+        // In headless system user mode, the primary flag is assigned to the first human user.
+        if (!UserManager.isHeadlessSystemUserMode()) {
+            flags |= UserInfo.FLAG_PRIMARY | UserInfo.FLAG_FULL;
         }
         // Create the system user
         UserInfo system = new UserInfo(UserHandle.USER_SYSTEM, null, null, flags);
@@ -2257,14 +2293,14 @@ public class UserManagerService extends IUserManager.Stub {
         return mContext.getResources().getString(com.android.internal.R.string.owner_name);
     }
 
-    private void scheduleWriteUser(UserData UserData) {
+    private void scheduleWriteUser(UserData userData) {
         if (DBG) {
             debug("scheduleWriteUser");
         }
         // No need to wrap it within a lock -- worst case, we'll just post the same message
         // twice.
-        if (!mHandler.hasMessages(WRITE_USER_MSG, UserData)) {
-            Message msg = mHandler.obtainMessage(WRITE_USER_MSG, UserData);
+        if (!mHandler.hasMessages(WRITE_USER_MSG, userData)) {
+            Message msg = mHandler.obtainMessage(WRITE_USER_MSG, userData);
             mHandler.sendMessageDelayed(msg, WRITE_USER_DELAY);
         }
     }
@@ -2733,9 +2769,9 @@ public class UserManagerService extends IUserManager.Stub {
                         return null;
                     }
                 }
-                // In split system user mode, we assign the first human user the primary flag.
+                // In headless system user mode, we assign the first human user the primary flag.
                 // And if there is no device owner, we also assign the admin flag to primary user.
-                if (UserManager.isSplitSystemUser()
+                if (UserManager.isHeadlessSystemUserMode()
                         && !isGuest && !isManagedProfile && getPrimaryUser() == null) {
                     flags |= UserInfo.FLAG_PRIMARY;
                     synchronized (mUsersLock) {
@@ -2743,6 +2779,10 @@ public class UserManagerService extends IUserManager.Stub {
                             flags |= UserInfo.FLAG_ADMIN;
                         }
                     }
+                }
+                if (!isManagedProfile) {
+                    // New users cannot be system, and it's not a profile, so per-force it's FULL.
+                    flags |= UserInfo.FLAG_FULL;
                 }
 
                 userId = getNextAvailableId();
@@ -3450,17 +3490,26 @@ public class UserManagerService extends IUserManager.Stub {
         if (userInfo == null) {
             return;
         }
+        TimingsTraceAndSlog t = new TimingsTraceAndSlog();
+        t.traceBegin("onBeforeStartUser-" + userId);
         final int userSerial = userInfo.serialNumber;
         // Migrate only if build fingerprints mismatch
         boolean migrateAppsData = !Build.FINGERPRINT.equals(userInfo.lastLoggedInFingerprint);
+        t.traceBegin("prepareUserData");
         mUserDataPreparer.prepareUserData(userId, userSerial, StorageManager.FLAG_STORAGE_DE);
+        t.traceEnd();
+        t.traceBegin("reconcileAppsData");
         mPm.reconcileAppsData(userId, StorageManager.FLAG_STORAGE_DE, migrateAppsData);
+        t.traceEnd();
 
         if (userId != UserHandle.USER_SYSTEM) {
+            t.traceBegin("applyUserRestrictions");
             synchronized (mRestrictionsLock) {
                 applyUserRestrictionsLR(userId);
             }
+            t.traceEnd();
         }
+        t.traceEnd(); // onBeforeStartUser
     }
 
     /**
@@ -3683,6 +3732,11 @@ public class UserManagerService extends IUserManager.Stub {
 
         long now = System.currentTimeMillis();
         final long nowRealtime = SystemClock.elapsedRealtime();
+
+        final int currentUser = LocalServices.getService(ActivityManagerInternal.class)
+                .getCurrentUserId();
+        pw.print("Current user: "); pw.println(currentUser);
+
         StringBuilder sb = new StringBuilder();
         synchronized (mPackagesLock) {
             synchronized (mUsersLock) {
@@ -3696,6 +3750,7 @@ public class UserManagerService extends IUserManager.Stub {
                     final int userId = userInfo.id;
                     pw.print("  "); pw.print(userInfo);
                     pw.print(" serialNo="); pw.print(userInfo.serialNumber);
+                    pw.print(" isPrimary="); pw.print(userInfo.isPrimary());
                     if (mRemovingUserIds.get(userId)) {
                         pw.print(" <removing> ");
                     }
@@ -3703,6 +3758,8 @@ public class UserManagerService extends IUserManager.Stub {
                         pw.print(" <partial>");
                     }
                     pw.println();
+                    pw.print("    Flags: "); pw.print(userInfo.flags); pw.print(" (");
+                    pw.print(UserInfo.flagsToString(userInfo.flags)); pw.println(")");
                     pw.print("    State: ");
                     final int state;
                     synchronized (mUserStates) {
@@ -3778,13 +3835,17 @@ public class UserManagerService extends IUserManager.Stub {
             synchronized (mUserStates) {
                 pw.println("  Started users state: " + mUserStates);
             }
-            // Dump some capabilities
-            pw.println();
-            pw.println("  Max users: " + UserManager.getMaxSupportedUsers());
-            pw.println("  Supports switchable users: " + UserManager.supportsMultipleUsers());
-            pw.println("  All guests ephemeral: " + Resources.getSystem().getBoolean(
-                    com.android.internal.R.bool.config_guestUserEphemeral));
-        }
+        } // synchronized (mPackagesLock)
+
+        // Dump some capabilities
+        pw.println();
+        pw.println("  Max users: " + UserManager.getMaxSupportedUsers());
+        pw.println("  Supports switchable users: " + UserManager.supportsMultipleUsers());
+        pw.println("  All guests ephemeral: " + Resources.getSystem().getBoolean(
+                com.android.internal.R.bool.config_guestUserEphemeral));
+        pw.println("  Is split-system user: " + UserManager.isSplitSystemUser());
+        pw.println("  Is headless-system mode: " + UserManager.isHeadlessSystemUserMode());
+        pw.println("  User version: " + mUserVersion);
     }
 
     private static void dumpTimeAgo(PrintWriter pw, StringBuilder sb, long nowTime, long time) {
@@ -4101,6 +4162,23 @@ public class UserManagerService extends IUserManager.Stub {
                 String value, int callingUid) {
             return UserRestrictionsUtils.isSettingRestrictedForUser(mContext, setting, userId,
                     value, callingUid);
+        }
+
+        @Override
+        public boolean hasUserRestriction(String restrictionKey, int userId) {
+            if (!UserRestrictionsUtils.isValidRestriction(restrictionKey)) {
+                return false;
+            }
+            Bundle restrictions = getEffectiveUserRestrictions(userId);
+            return restrictions != null && restrictions.getBoolean(restrictionKey);
+        }
+
+        public @Nullable UserInfo getUserInfo(@UserIdInt int userId) {
+            UserData userData;
+            synchronized (mUsersLock) {
+                userData = mUsers.get(userId);
+            }
+            return userData == null ? null : userData.info;
         }
     }
 

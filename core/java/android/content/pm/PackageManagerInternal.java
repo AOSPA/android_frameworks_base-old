@@ -32,13 +32,10 @@ import android.os.PersistableBundle;
 import android.util.ArraySet;
 import android.util.SparseArray;
 
-import com.android.internal.util.function.TriFunction;
-
 import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.List;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
 /**
@@ -86,165 +83,6 @@ public abstract class PackageManagerInternal {
         void onPackageRemoved(@NonNull String packageName, int uid);
     }
 
-    /** Interface to override permission checks via composition */
-    public interface CheckPermissionDelegate {
-        /**
-         * Allows overriding check permission behavior.
-         *
-         * @param permName The permission to check.
-         * @param pkgName The package for which to check.
-         * @param userId The user for which to check.
-         * @param superImpl The super implementation.
-         * @return The check permission result.
-         */
-        int checkPermission(String permName, String pkgName, int userId,
-                TriFunction<String, String, Integer, Integer> superImpl);
-
-        /**
-         * Allows overriding check UID permission behavior.
-         *
-         * @param permName The permission to check.
-         * @param uid The UID for which to check.
-         * @param superImpl The super implementation.
-         * @return The check permission result.
-         */
-        int checkUidPermission(String permName, int uid,
-                BiFunction<String, Integer, Integer> superImpl);
-    }
-
-    /**
-     * Provider for package names.
-     */
-    public interface PackagesProvider {
-
-        /**
-         * Gets the packages for a given user.
-         * @param userId The user id.
-         * @return The package names.
-         */
-        public String[] getPackages(int userId);
-    }
-
-    /**
-     * Provider for package names.
-     */
-    public interface SyncAdapterPackagesProvider {
-
-        /**
-         * Gets the sync adapter packages for given authority and user.
-         * @param authority The authority.
-         * @param userId The user id.
-         * @return The package names.
-         */
-        public String[] getPackages(String authority, int userId);
-    }
-
-    /**
-     * Provider for default browser
-     */
-    public interface DefaultBrowserProvider {
-
-        /**
-         * Get the package name of the default browser.
-         *
-         * @param userId the user id
-         *
-         * @return the package name of the default browser, or {@code null} if none
-         */
-        @Nullable
-        String getDefaultBrowser(@UserIdInt int userId);
-
-        /**
-         * Set the package name of the default browser.
-         *
-         * @param packageName package name of the default browser, or {@code null} to remove
-         * @param userId the user id
-         *
-         * @return whether the default browser was successfully set.
-         */
-        boolean setDefaultBrowser(@Nullable String packageName, @UserIdInt int userId);
-
-        /**
-         * Set the package name of the default browser asynchronously.
-         *
-         * @param packageName package name of the default browser, or {@code null} to remove
-         * @param userId the user id
-         */
-        void setDefaultBrowserAsync(@Nullable String packageName, @UserIdInt int userId);
-    }
-
-    /**
-     * Provider for default dialer
-     */
-    public interface DefaultDialerProvider {
-
-        /**
-         * Get the package name of the default dialer.
-         *
-         * @param userId the user id
-         *
-         * @return the package name of the default dialer, or {@code null} if none
-         */
-        @Nullable
-        String getDefaultDialer(@UserIdInt int userId);
-    }
-
-    /**
-     * Provider for default home
-     */
-    public interface DefaultHomeProvider {
-
-        /**
-         * Get the package name of the default home.
-         *
-         * @param userId the user id
-         *
-         * @return the package name of the default home, or {@code null} if none
-         */
-        @Nullable
-        String getDefaultHome(@UserIdInt int userId);
-
-        /**
-         * Set the package name of the default home.
-         *
-         * @param packageName package name of the default home, or {@code null} to remove
-         * @param userId the user id
-         * @param callback the callback made after the default home as been updated
-         */
-        void setDefaultHomeAsync(@Nullable String packageName, @UserIdInt int userId,
-                @NonNull Consumer<Boolean> callback);
-    }
-
-    /**
-     * Sets the location provider packages provider.
-     * @param provider The packages provider.
-     */
-    public abstract void setLocationPackagesProvider(PackagesProvider provider);
-
-    /**
-     * Set the location extra packages provider.
-     * @param provider The packages provider.
-     */
-    public abstract  void setLocationExtraPackagesProvider(PackagesProvider provider);
-
-    /**
-     * Sets the voice interaction packages provider.
-     * @param provider The packages provider.
-     */
-    public abstract void setVoiceInteractionPackagesProvider(PackagesProvider provider);
-
-    /**
-     * Sets the Use Open Wifi packages provider.
-     * @param provider The packages provider.
-     */
-    public abstract void setUseOpenWifiAppPackagesProvider(PackagesProvider provider);
-
-    /**
-     * Sets the sync adapter packages provider.
-     * @param provider The provider.
-     */
-    public abstract void setSyncAdapterPackagesprovider(SyncAdapterPackagesProvider provider);
-
     /**
      * Called when the package for the default SMS handler changed
      *
@@ -260,14 +98,6 @@ public abstract class PackageManagerInternal {
      * @param userId user for which the change was made
      */
     public void onDefaultSimCallManagerAppChanged(String packageName, int userId) {}
-
-    /**
-     * Requests granting of the default permissions to the current default Use Open Wifi app.
-     * @param packageName The default use open wifi package name.
-     * @param userId The user for which to grant the permissions.
-     */
-    public abstract void grantDefaultPermissionsToDefaultUseOpenWifiApp(String packageName,
-            int userId);
 
     /**
      * Sets a list of apps to keep in PM's internal data structures and as APKs even if no user has
@@ -464,26 +294,6 @@ public abstract class PackageManagerInternal {
     public abstract boolean wasPackageEverLaunched(String packageName, int userId);
 
     /**
-     * Grants a runtime permission
-     * @param packageName The package name.
-     * @param name The name of the permission.
-     * @param userId The userId for which to grant the permission.
-     * @param overridePolicy If true, grant this permission even if it is fixed by policy.
-     */
-    public abstract void grantRuntimePermission(String packageName, String name, int userId,
-            boolean overridePolicy);
-
-    /**
-     * Revokes a runtime permission
-     * @param packageName The package name.
-     * @param name The name of the permission.
-     * @param userId The userId for which to revoke the permission.
-     * @param overridePolicy If true, revoke this permission even if it is fixed by policy.
-     */
-    public abstract void revokeRuntimePermission(String packageName, String name, int userId,
-            boolean overridePolicy);
-
-    /**
      * Retrieve the official name associated with a uid. This name is
      * guaranteed to never change, though it is possible for the underlying
      * uid to be changed. That is, if you are storing information about
@@ -668,6 +478,12 @@ public abstract class PackageManagerInternal {
     public abstract @Nullable PackageParser.Package getPackage(@NonNull String packageName);
 
     /**
+     * Returns a package for the given UID. If the UID is part of a shared user ID, one
+     * of the packages will be chosen to be returned.
+     */
+    public abstract @Nullable PackageParser.Package getPackage(int uid);
+
+    /**
      * Returns a list without a change observer.
      *
      * @see #getPackageList(PackageListObserver)
@@ -740,18 +556,15 @@ public abstract class PackageManagerInternal {
      * @see #canAccessInstantApps
      */
     public abstract boolean filterAppAccess(
-            @Nullable PackageParser.Package pkg, int callingUid, int userId);
+            @NonNull PackageParser.Package pkg, int callingUid, int userId);
 
-    /*
-     * NOTE: The following methods are temporary until permissions are extracted from
-     * the package manager into a component specifically for handling permissions.
+    /**
+     * Returns whether or not access to the application should be filtered.
+     *
+     * @see #filterAppAccess(android.content.pm.PackageParser.Package, int, int)
      */
-    /** Returns the flags for the given permission. */
-    public abstract @Nullable int getPermissionFlagsTEMP(@NonNull String permName,
-            @NonNull String packageName, int userId);
-    /** Updates the flags for the given permission. */
-    public abstract void updatePermissionFlagsTEMP(@NonNull String permName,
-            @NonNull String packageName, int flagMask, int flagValues, int userId);
+    public abstract boolean filterAppAccess(
+            @NonNull String packageName, int callingUid, int userId);
 
     /** Returns whether the given package was signed by the platform */
     public abstract boolean isPlatformSigned(String pkg);
@@ -780,20 +593,6 @@ public abstract class PackageManagerInternal {
      */
     public abstract boolean hasSignatureCapability(int serverUid, int clientUid,
             @PackageParser.SigningDetails.CertCapabilities int capability);
-
-    /**
-     * Get the delegate to influence permission checking.
-     *
-     * @return The delegate instance or null to clear.
-     */
-    public abstract @Nullable CheckPermissionDelegate getCheckPermissionDelegate();
-
-    /**
-     * Set a delegate to influence permission checking.
-     *
-     * @param delegate A delegate instance or null to clear.
-     */
-    public abstract void setCheckPermissionDelegate(@Nullable CheckPermissionDelegate delegate);
 
     /**
      * Get appIds of all available apps which specified android:sharedUserId in the manifest.
@@ -876,12 +675,6 @@ public abstract class PackageManagerInternal {
             "android.content.pm.extra.ENABLE_ROLLBACK_INSTALL_FLAGS";
 
     /**
-     * Extra field name for the set of installed users for a given rollback package.
-     */
-    public static final String EXTRA_ENABLE_ROLLBACK_INSTALLED_USERS =
-            "android.content.pm.extra.ENABLE_ROLLBACK_INSTALLED_USERS";
-
-    /**
      * Extra field name for the user id an install is associated with when
      * enabling rollback.
      */
@@ -940,27 +733,6 @@ public abstract class PackageManagerInternal {
     public abstract String removeLegacyDefaultBrowserPackageName(int userId);
 
     /**
-     * Sets the default browser provider.
-     *
-     * @param provider the provider
-     */
-    public abstract void setDefaultBrowserProvider(@NonNull DefaultBrowserProvider provider);
-
-    /**
-     * Sets the default dialer provider.
-     *
-     * @param provider the provider
-     */
-    public abstract void setDefaultDialerProvider(@NonNull DefaultDialerProvider provider);
-
-    /**
-     * Sets the default home provider.
-     *
-     * @param provider the provider
-     */
-    public abstract void setDefaultHomeProvider(@NonNull DefaultHomeProvider provider);
-
-    /**
      * Returns {@code true} if given {@code packageName} is an apex package.
      */
     public abstract boolean isApexPackage(String packageName);
@@ -978,15 +750,6 @@ public abstract class PackageManagerInternal {
             IntentSender intentSender);
 
     /**
-     * Whether default permission grants have been performed for a user
-     * since the device booted.
-     *
-     * @param userId The user id.
-     * @return true if default permissions
-     */
-    public abstract boolean wereDefaultPermissionsGrantedSinceBoot(int userId);
-
-    /**
      * Get fingerprint of build that updated the runtime permissions for a user.
      *
      * @param userId The user to update
@@ -999,4 +762,39 @@ public abstract class PackageManagerInternal {
      * Migrates legacy obb data to its new location.
      */
     public abstract void migrateLegacyObbData();
+
+    /**
+     * Writes all package manager settings to disk. If {@code async} is {@code true}, the
+     * settings are written at some point in the future. Otherwise, the call blocks until
+     * the settings have been written.
+     */
+    public abstract void writeSettings(boolean async);
+
+    /**
+     * Writes all permission settings for the given set of users to disk. If {@code async}
+     * is {@code true}, the settings are written at some point in the future. Otherwise,
+     * the call blocks until the settings have been written.
+     */
+    public abstract void writePermissionSettings(@NonNull @UserIdInt int[] userIds, boolean async);
+
+    /**
+     * Returns the target SDK for the given UID. Will return {@code 0} if there is no
+     * package associated with the UID or if the package has not been installed for
+     * the user. Will return the highest target SDK if the UID references packages with
+     * a shared user id.
+     */
+    public abstract int getTargetSdk(int uid);
+
+    /**
+     * Returns {@code true} if the caller is the installer of record for the given package.
+     * Otherwise, {@code false}.
+     */
+    public abstract boolean isCallerInstallerOfRecord(
+            @NonNull PackageParser.Package pkg, int callingUid);
+
+    /** Returns whether or not default runtime permissions are granted for the given user */
+    public abstract boolean areDefaultRuntimePermissionsGranted(@UserIdInt int userId);
+
+    /** Sets the enforcement of reading external storage */
+    public abstract void setReadExternalStorageEnforced(boolean enforced);
 }

@@ -105,7 +105,7 @@ public:
         void* arg);
 
     /** return a pointer to the VM running in this process */
-    static JavaVM* getJavaVM() { return mJavaVM; }
+    static JavaVM* getJavaVM();
 
     /** return a pointer to the JNIEnv pointer for this thread */
     static JNIEnv* getJNIEnv();
@@ -131,7 +131,7 @@ private:
                                     const char* runtimeArg,
                                     const char* quotingArg);
     void parseExtraOpts(char* extraOptsBuf, const char* quotingArg);
-    int startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote);
+    int startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool primary_zygote);
 
     Vector<JavaVMOption> mOptions;
     bool mExitWithoutCleanup;

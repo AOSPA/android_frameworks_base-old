@@ -124,6 +124,7 @@
     <string name="biometric_dialog_face_icon_description_authenticating" msgid="4512727754496228488">"正在尋找你的臉孔"</string>
     <string name="biometric_dialog_face_icon_description_authenticated" msgid="595380451325425259">"臉孔驗證成功"</string>
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="2003141400387093967">"確認完畢"</string>
+    <string name="biometric_dialog_tap_confirm" msgid="4540715260292022404">"輕觸 [確認] 完成驗證設定"</string>
     <string name="fingerprint_dialog_touch_sensor" msgid="8511557690663181761">"請輕觸指紋感應器"</string>
     <string name="accessibility_fingerprint_dialog_fingerprint_icon" msgid="3125122495414253226">"指紋圖示"</string>
     <string name="face_dialog_looking_for_face" msgid="7049276266074494689">"正在尋找你的臉孔…"</string>
@@ -181,7 +182,7 @@
     <string name="data_connection_5g" msgid="6357743323196864504">"5G"</string>
     <string name="data_connection_5g_plus" msgid="3284146603743732965">"5G+"</string>
     <string name="data_connection_cdma" msgid="8176597308239086780">"1X"</string>
-    <string name="data_connection_roaming" msgid="6037232010953697354">"數據漫遊"</string>
+    <string name="data_connection_roaming" msgid="6037232010953697354">"漫遊"</string>
     <string name="data_connection_edge" msgid="871835227939216682">"EDGE"</string>
     <string name="accessibility_data_connection_wifi" msgid="2324496756590645221">"Wi-Fi"</string>
     <string name="accessibility_no_sim" msgid="8274017118472455155">"沒有 SIM 卡。"</string>
@@ -399,7 +400,7 @@
     <string name="keyguard_more_overflow_text" msgid="9195222469041601365">"還有 <xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g> 則通知"</string>
     <string name="speed_bump_explanation" msgid="1288875699658819755">"較不緊急的通知會顯示在下方"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"再次輕觸即可開啟"</string>
-    <string name="keyguard_unlock" msgid="8043466894212841998">"向上滑動即可解鎖"</string>
+    <string name="keyguard_unlock" msgid="6035822649218712063">"向上滑動即可開啟"</string>
     <string name="do_disclosure_generic" msgid="5615898451805157556">"這個裝置是由貴機構所管理"</string>
     <string name="do_disclosure_with_name" msgid="5640615509915445501">"這個裝置是由 <xliff:g id="ORGANIZATION_NAME">%s</xliff:g> 所管理"</string>
     <string name="phone_hint" msgid="4872890986869209950">"滑動手機圖示即可啟用"</string>
@@ -778,8 +779,7 @@
     <string name="drag_to_add_tiles" msgid="230586591689084925">"按住並拖曳即可新增圖塊"</string>
     <string name="drag_to_rearrange_tiles" msgid="4566074720193667473">"按住並拖曳即可重新排列圖塊"</string>
     <string name="drag_to_remove_tiles" msgid="3361212377437088062">"拖曳到這裡即可移除"</string>
-    <!-- no translation found for drag_to_remove_disabled (4785920129548299268) -->
-    <skip />
+    <string name="drag_to_remove_disabled" msgid="4785920129548299268">"你至少必須要有 <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g> 個資訊方塊"</string>
     <string name="qs_edit" msgid="2232596095725105230">"編輯"</string>
     <string name="tuner_time" msgid="6572217313285536011">"時間"</string>
   <string-array name="clock_options">
@@ -894,7 +894,6 @@
     <string name="mobile_data_disable_message" msgid="4756541658791493506">"你將無法透過「<xliff:g id="CARRIER">%s</xliff:g>」使用行動數據或網際網路。你只能透過 Wi-Fi 使用網際網路。"</string>
     <string name="mobile_data_disable_message_default_carrier" msgid="6078110473451946831">"你的電信業者"</string>
     <string name="touch_filtered_warning" msgid="8671693809204767551">"由於某個應用程式覆蓋了權限要求畫面，因此「設定」應用程式無法驗證你的回應。"</string>
-
     <string name="slice_permission_title" msgid="7465009437851044444">"要允許「<xliff:g id="APP_0">%1$s</xliff:g>」顯示「<xliff:g id="APP_2">%2$s</xliff:g>」的區塊嗎？"</string>
     <string name="slice_permission_text_1" msgid="3514586565609596523">"- 它可以讀取「<xliff:g id="APP">%1$s</xliff:g>」的資訊"</string>
     <string name="slice_permission_text_2" msgid="3146758297471143723">"- 它可以在「<xliff:g id="APP">%1$s</xliff:g>」內執行操作"</string>

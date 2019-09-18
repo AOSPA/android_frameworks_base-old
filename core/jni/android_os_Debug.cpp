@@ -259,6 +259,8 @@ static void load_maps(int pid, stats_t* stats, bool* foundSwapPss)
             which_heap = HEAP_NATIVE;
         } else if (base::StartsWith(name, "[stack")) {
             which_heap = HEAP_STACK;
+        } else if (base::StartsWith(name, "[anon:stack_and_tls:")) {
+            which_heap = HEAP_STACK;
         } else if (base::EndsWith(name, ".so")) {
             which_heap = HEAP_SO;
             is_swappable = true;
@@ -575,7 +577,7 @@ static void android_os_Debug_getMemInfo(JNIEnv *env, jobject clazz, jlongArray o
     if (outArray != NULL) {
         outLen = MEMINFO_COUNT;
         for (int i = 0; i < outLen; i++) {
-            if (i == MEMINFO_VMALLOC_USED) {
+            if (i == MEMINFO_VMALLOC_USED && mem[i] == 0) {
                 outArray[i] = smi.ReadVmallocInfo() / 1024;
                 continue;
             }
