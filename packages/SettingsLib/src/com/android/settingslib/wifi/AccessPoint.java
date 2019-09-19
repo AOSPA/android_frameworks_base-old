@@ -1401,7 +1401,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         return SECURITY_NONE;
     }
 
-    private static boolean checkForSaeAndPsk(ScanResult result) {
+    public static boolean checkForSaeAndPsk(ScanResult result) {
         if (result.capabilities.contains("SAE")
             && result.capabilities.contains("PSK"))
             return true;

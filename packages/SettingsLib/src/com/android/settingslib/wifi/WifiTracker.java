@@ -464,7 +464,18 @@ public class WifiTracker implements LifecycleObserver, OnStart, OnStop, OnDestro
                 continue;
             }
 
-            String apKey = AccessPoint.getKey(result);
+            String apKey;
+
+            if (!mWpa3Support && AccessPoint.checkForSaeAndPsk(result)) {
+                if (result.SSID == null || result.SSID.length() == 0) {
+                    apKey = result.BSSID + "," + AccessPoint.SECURITY_PSK;
+                } else {
+                    apKey = result.SSID + "," + AccessPoint.SECURITY_PSK;
+                }
+            } else {
+                apKey = AccessPoint.getKey(result);
+            }
+
             List<ScanResult> resultList;
             if (scanResultsByApKey.containsKey(apKey)) {
                 resultList = scanResultsByApKey.get(apKey);
