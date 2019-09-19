@@ -5010,6 +5010,23 @@ public final class Settings {
        public static final String GESTURE_TWO_FINGER_SWIPE = "gesture_two_finger_swipe";
 
         /**
+         * Number of qs columns on landscape orientation
+         * @hide
+         */
+        public static final String OMNI_QS_LAYOUT_COLUMNS_LANDSCAPE = "qs_layout_columns_landscape";
+
+         /**
+         * @hide
+         */
+        public static final String OMNI_QS_LAYOUT_COLUMNS = "qs_layout_columns";
+
+        /**
+         * Number of qs columns on quickbar
+         * @hide
+         */
+        public static final String QS_QUICKBAR_COLUMNS = "qs_quickbar_columns";
+
+        /**
          * Keys we no longer back up under the current schema, but want to continue to
          * process when restoring historical backup datasets.
          *
