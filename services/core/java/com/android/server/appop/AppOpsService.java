@@ -210,7 +210,7 @@ public class AppOpsService extends IAppOpsService.Stub {
     @VisibleForTesting
     final SparseArray<UidState> mUidStates = new SparseArray<>();
 
-    private final HistoricalRegistry mHistoricalRegistry = new HistoricalRegistry(this);
+    final HistoricalRegistry mHistoricalRegistry = new HistoricalRegistry(this);
 
     long mLastRealtime;
 
