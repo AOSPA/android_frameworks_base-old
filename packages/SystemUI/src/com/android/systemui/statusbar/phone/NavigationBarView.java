@@ -832,6 +832,7 @@ public class NavigationBarView extends FrameLayout implements
                 Log.e(TAG, "Failed to refresh navbar.");
             }
         }
+        mEdgeBackGestureHandler.onSettingsChanged();
     }
 
     public void setAccessibilityButtonState(final boolean visible, final boolean longClickable) {
