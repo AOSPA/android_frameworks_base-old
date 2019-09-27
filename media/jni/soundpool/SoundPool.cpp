@@ -17,7 +17,9 @@
 //#define LOG_NDEBUG 0
 #define LOG_TAG "SoundPool"
 
+#include <chrono>
 #include <inttypes.h>
+#include <thread>
 
 #include <utils/Log.h>
 
