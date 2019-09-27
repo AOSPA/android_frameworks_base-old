@@ -248,4 +248,6 @@ interface IWifiManager
     void stopDppSession();
 
     void updateWifiUsabilityScore(int seqNum, int score, int predictionHorizonSec);
+
+    int getSoftApWifiGeneration();
 }
