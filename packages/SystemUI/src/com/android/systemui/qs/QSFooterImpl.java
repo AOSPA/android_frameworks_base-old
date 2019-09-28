@@ -164,6 +164,7 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
     private void setBuildText() {
         TextView v = findViewById(R.id.build);
         if (v == null) return;
+<<<<<<< HEAD   (f7b4bf base: Introduce Immersive Navigation [1/3])
         if (DevelopmentSettingsEnabler.isDevelopmentSettingsEnabled(mContext)) {
             v.setText(mContext.getString(
                     com.android.internal.R.string.bugreport_status,
@@ -173,6 +174,9 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
         } else {
             v.setVisibility(View.GONE);
         }
+=======
+        v.setVisibility(View.GONE);
+>>>>>>> CHANGE (8480b6 SystemUI: Don't show build version in QS footer)
     }
 
     private void updateAnimator(int width) {
