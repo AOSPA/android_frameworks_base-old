@@ -29,6 +29,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
+import static android.os.Build.VERSION_CODES.N;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.FLAG_PRIVATE;
 import static android.view.Display.REMOVE_MODE_DESTROY_CONTENT;
@@ -42,6 +43,7 @@ import static com.android.server.am.ActivityDisplayProto.STACKS;
 import static com.android.server.wm.ActivityStack.ActivityState.RESUMED;
 import static com.android.server.wm.ActivityStack.ActivityState.DESTROYED;
 import static com.android.server.wm.ActivityStack.ActivityState.STOPPED;
+import static com.android.server.wm.ActivityStack.REMOVE_TASK_MODE_DESTROYING;
 import static com.android.server.wm.ActivityStack.STACK_VISIBILITY_VISIBLE;
 import static com.android.server.wm.ActivityStackSupervisor.TAG_TASKS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_STACK;
@@ -57,12 +59,17 @@ import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
 
 import android.annotation.Nullable;
+import android.app.ActivityManager;
+import android.app.ActivityManagerInternal;
 import android.app.ActivityOptions;
 import android.app.WindowConfiguration;
+import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Point;
 import android.os.IBinder;
+import android.os.Message;
 import android.os.UserHandle;
+import android.provider.Settings;
 import android.util.IntArray;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
@@ -70,6 +77,7 @@ import android.view.Display;
 import android.util.BoostFramework;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.am.EventLogTags;
 
 import java.io.PrintWriter;
@@ -164,6 +172,9 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
     // Used in updating the display size
     private Point mTmpDisplaySize = new Point();
 
+    // Used in updating override configurations
+    private final Configuration mTempConfig = new Configuration();
+
     private final FindTaskResult mTmpFindTaskResult = new FindTaskResult();
 
     ActivityDisplay(RootActivityContainer root, Display display) {
@@ -171,17 +182,10 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         mService = root.mService;
         mDisplayId = display.getDisplayId();
         mDisplay = display;
-        mDisplayContent = createDisplayContent();
-        updateBounds();
-    }
-
-    protected DisplayContent createDisplayContent() {
-        return mService.mWindowManager.mRoot.createDisplayContent(mDisplay, this);
-    }
-
-    private void updateBounds() {
-        mDisplay.getRealSize(mTmpDisplaySize);
-        setBounds(0, 0, mTmpDisplaySize.x, mTmpDisplaySize.y);
+        mDisplayContent = mService.mWindowManager.mRoot.createDisplayContent(mDisplay, this);
+        mDisplayContent.reconfigureDisplayLocked();
+        onRequestedOverrideConfigurationChanged(
+                mDisplayContent.getRequestedOverrideConfiguration());
     }
 
     void onDisplayChanged() {
@@ -197,7 +201,8 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
             }
         }
 
-        updateBounds();
+        mDisplay.getRealSize(mTmpDisplaySize);
+        setBounds(0, 0, mTmpDisplaySize.x, mTmpDisplaySize.y);
         if (mDisplayContent != null) {
             mDisplayContent.updateDisplayInfo();
             mService.mWindowManager.requestTraversal();
@@ -365,7 +370,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         return null;
     }
 
-    private boolean alwaysCreateStack(int windowingMode, int activityType) {
+    boolean alwaysCreateStack(int windowingMode, int activityType) {
         // Always create a stack for fullscreen, freeform, and split-screen-secondary windowing
         // modes so that we can manage visual ordering and return types correctly.
         return activityType == ACTIVITY_TYPE_STANDARD
@@ -493,10 +498,6 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         return null;
     }
 
-    ActivityStack getNextFocusableStack() {
-        return getNextFocusableStack(null /* currentFocus */, false /* ignoreCurrent */);
-    }
-
     ActivityStack getNextFocusableStack(ActivityStack currentFocus, boolean ignoreCurrent) {
         final int currentWindowingMode = currentFocus != null
                 ? currentFocus.getWindowingMode() : WINDOWING_MODE_UNDEFINED;
@@ -621,9 +622,9 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
            if (mPerfHandle > 0)
                mIsPerfBoostAcquired = true;
            // Start IOP
-           if(r.appInfo != null && r.appInfo.sourceDir != null) {
+           if(r.info.applicationInfo != null && r.info.applicationInfo.sourceDir != null) {
                mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
-                   r.appInfo.sourceDir.substring(0, r.appInfo.sourceDir.lastIndexOf('/')));
+                   r.info.applicationInfo.sourceDir.substring(0, r.info.applicationInfo.sourceDir.lastIndexOf('/')));
            }
        }
    }
@@ -1054,6 +1055,89 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         return mStacks.indexOf(stack);
     }
 
+    boolean updateDisplayOverrideConfigurationLocked() {
+        Configuration values = new Configuration();
+        mDisplayContent.computeScreenConfiguration(values);
+
+        if (mService.mWindowManager != null) {
+            final Message msg = PooledLambda.obtainMessage(
+                    ActivityManagerInternal::updateOomLevelsForDisplay, mService.mAmInternal,
+                    mDisplayId);
+            mService.mH.sendMessage(msg);
+        }
+
+        Settings.System.clearConfiguration(values);
+        updateDisplayOverrideConfigurationLocked(values, null /* starting */,
+                false /* deferResume */, mService.mTmpUpdateConfigurationResult);
+        return mService.mTmpUpdateConfigurationResult.changes != 0;
+    }
+
+    /**
+     * Updates override configuration specific for the selected display. If no config is provided,
+     * new one will be computed in WM based on current display info.
+     */
+    boolean updateDisplayOverrideConfigurationLocked(Configuration values,
+            ActivityRecord starting, boolean deferResume,
+            ActivityTaskManagerService.UpdateConfigurationResult result) {
+
+        int changes = 0;
+        boolean kept = true;
+
+        if (mService.mWindowManager != null) {
+            mService.mWindowManager.deferSurfaceLayout();
+        }
+        try {
+            if (values != null) {
+                if (mDisplayId == DEFAULT_DISPLAY) {
+                    // Override configuration of the default display duplicates global config, so
+                    // we're calling global config update instead for default display. It will also
+                    // apply the correct override config.
+                    changes = mService.updateGlobalConfigurationLocked(values,
+                            false /* initLocale */, false /* persistent */,
+                            UserHandle.USER_NULL /* userId */, deferResume);
+                } else {
+                    changes = performDisplayOverrideConfigUpdate(values, deferResume);
+                }
+            }
+
+            kept = mService.ensureConfigAndVisibilityAfterUpdate(starting, changes);
+        } finally {
+            if (mService.mWindowManager != null) {
+                mService.mWindowManager.continueSurfaceLayout();
+            }
+        }
+
+        if (result != null) {
+            result.changes = changes;
+            result.activityRelaunched = !kept;
+        }
+        return kept;
+    }
+
+    int performDisplayOverrideConfigUpdate(Configuration values, boolean deferResume) {
+        mTempConfig.setTo(getRequestedOverrideConfiguration());
+        final int changes = mTempConfig.updateFrom(values);
+        if (changes != 0) {
+            Slog.i(TAG, "Override config changes=" + Integer.toHexString(changes) + " "
+                    + mTempConfig + " for displayId=" + mDisplayId);
+            onRequestedOverrideConfigurationChanged(mTempConfig);
+
+            final boolean isDensityChange = (changes & ActivityInfo.CONFIG_DENSITY) != 0;
+            if (isDensityChange && mDisplayId == DEFAULT_DISPLAY) {
+                mService.mAppWarnings.onDensityChanged();
+
+                // Post message to start process to avoid possible deadlock of calling into AMS with
+                // the ATMS lock held.
+                final Message msg = PooledLambda.obtainMessage(
+                        ActivityManagerInternal::killAllBackgroundProcessesExcept,
+                        mService.mAmInternal, N,
+                        ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND);
+                mService.mH.sendMessage(msg);
+            }
+        }
+        return changes;
+    }
+
     @Override
     public void onRequestedOverrideConfigurationChanged(Configuration overrideConfiguration) {
         final int currRotation =
@@ -1191,7 +1275,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
                 final ActivityStack stack = mStacks.get(stackNdx);
                 // Always finish non-standard type stacks.
                 if (destroyContentOnRemoval || !stack.isActivityTypeStandardOrUndefined()) {
-                    stack.finishAllActivitiesLocked(true /* immediately */);
+                    stack.finishAllActivitiesImmediately();
                 } else {
                     // If default display is in split-window mode, set windowing mode of the stack
                     // to split-screen secondary. Otherwise, set the windowing mode to undefined by
@@ -1500,6 +1584,17 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
     /** Returns true if the display can only contain one task */
     boolean isSingleTaskInstance() {
         return mSingleTaskInstance;
+    }
+
+    @VisibleForTesting
+    void removeAllTasks() {
+        for (int i = getChildCount() - 1; i >= 0; --i) {
+            final ActivityStack stack = getChildAt(i);
+            final ArrayList<TaskRecord> tasks = stack.getAllTasks();
+            for (int j = tasks.size() - 1; j >= 0; --j) {
+                stack.removeTask(tasks.get(j), "removeAllTasks", REMOVE_TASK_MODE_DESTROYING);
+            }
+        }
     }
 
     public void dump(PrintWriter pw, String prefix) {

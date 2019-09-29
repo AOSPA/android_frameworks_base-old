@@ -124,6 +124,7 @@
     <string name="biometric_dialog_face_icon_description_authenticating" msgid="4512727754496228488">"നിങ്ങളുടെ മുഖത്തിന് വേണ്ടി തിരയുന്നു"</string>
     <string name="biometric_dialog_face_icon_description_authenticated" msgid="595380451325425259">"മുഖം പരിശോധിച്ചുറപ്പിച്ചു"</string>
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="2003141400387093967">"സ്ഥിരീകരിച്ചു"</string>
+    <string name="biometric_dialog_tap_confirm" msgid="4540715260292022404">"പൂർത്തിയാക്കാൻ സ്ഥിരീകരിക്കുക ടാപ്പ് ചെയ്യൂ"</string>
     <string name="fingerprint_dialog_touch_sensor" msgid="8511557690663181761">"വിരലടയാള സെൻസർ സ്‌പർശിക്കുക"</string>
     <string name="accessibility_fingerprint_dialog_fingerprint_icon" msgid="3125122495414253226">"വിരലടയാള ഐക്കൺ"</string>
     <string name="face_dialog_looking_for_face" msgid="7049276266074494689">"നിങ്ങൾക്കായി തിരയുന്നു…"</string>
@@ -399,7 +400,7 @@
     <string name="keyguard_more_overflow_text" msgid="9195222469041601365">"+<xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g>"</string>
     <string name="speed_bump_explanation" msgid="1288875699658819755">"ആവശ്യം കുറഞ്ഞ അറിയിപ്പുകൾ ചുവടെ നൽകിയിരിക്കുന്നു"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"തുറക്കുന്നതിന് വീണ്ടും ടാപ്പുചെയ്യുക"</string>
-    <string name="keyguard_unlock" msgid="8043466894212841998">"അൺലോക്കുചെയ്യുന്നതിന് മുകളിലേക്ക് സ്വൈപ്പുചെയ്യുക"</string>
+    <string name="keyguard_unlock" msgid="6035822649218712063">"തുറക്കാൻ മുകളിലോട്ട് സ്വൈപ്പ് ചെയ്യുക"</string>
     <string name="do_disclosure_generic" msgid="5615898451805157556">"ഈ ഉപകരണം മാനേജുചെയ്യുന്നത് നിങ്ങളുടെ സ്ഥാപനമാണ്"</string>
     <string name="do_disclosure_with_name" msgid="5640615509915445501">"<xliff:g id="ORGANIZATION_NAME">%s</xliff:g> മാനേജുചെയ്യുന്ന ഉപകരണമാണിത്"</string>
     <string name="phone_hint" msgid="4872890986869209950">"ഫോൺ ഐക്കണിൽ നിന്ന് സ്വൈപ്പുചെയ്യുക"</string>
@@ -778,8 +779,7 @@
     <string name="drag_to_add_tiles" msgid="230586591689084925">"ടൈലുകൾ ചേർക്കാൻ ക്ലിക്ക് ചെയ്ത് ഇഴയ്‌ക്കുക"</string>
     <string name="drag_to_rearrange_tiles" msgid="4566074720193667473">"ടൈലുകൾ പുനഃക്രമീകരിക്കാൻ അമർത്തിപ്പിടിച്ച് വലിച്ചിടുക"</string>
     <string name="drag_to_remove_tiles" msgid="3361212377437088062">"നീക്കംചെയ്യുന്നതിന് ഇവിടെ വലിച്ചിടുക"</string>
-    <!-- no translation found for drag_to_remove_disabled (4785920129548299268) -->
-    <skip />
+    <string name="drag_to_remove_disabled" msgid="4785920129548299268">"നിങ്ങൾക്ക് ചുരുങ്ങിയത് <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g> ടൈലുകളെങ്കിലും വേണം"</string>
     <string name="qs_edit" msgid="2232596095725105230">"എഡിറ്റുചെയ്യുക"</string>
     <string name="tuner_time" msgid="6572217313285536011">"സമയം"</string>
   <string-array name="clock_options">

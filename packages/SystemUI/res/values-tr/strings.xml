@@ -124,6 +124,7 @@
     <string name="biometric_dialog_face_icon_description_authenticating" msgid="4512727754496228488">"Yüzünüz aranıyor"</string>
     <string name="biometric_dialog_face_icon_description_authenticated" msgid="595380451325425259">"Yüz kimliği doğrulandı"</string>
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="2003141400387093967">"Onaylandı"</string>
+    <string name="biometric_dialog_tap_confirm" msgid="4540715260292022404">"Tamamlamak için Onayla\'ya dokunun"</string>
     <string name="fingerprint_dialog_touch_sensor" msgid="8511557690663181761">"Parmak izi sensörüne dokunun"</string>
     <string name="accessibility_fingerprint_dialog_fingerprint_icon" msgid="3125122495414253226">"Parmak izi simgesi"</string>
     <string name="face_dialog_looking_for_face" msgid="7049276266074494689">"Yüzünüz tanınmaya çalışılıyor…"</string>
@@ -399,7 +400,7 @@
     <string name="keyguard_more_overflow_text" msgid="9195222469041601365">"+<xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g>"</string>
     <string name="speed_bump_explanation" msgid="1288875699658819755">"Daha az acil bildirimler aşağıdadır"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"Açmak için tekrar dokunun"</string>
-    <string name="keyguard_unlock" msgid="8043466894212841998">"Kilidi açmak için hızlıca yukarı kaydırın"</string>
+    <string name="keyguard_unlock" msgid="6035822649218712063">"Açmak için yukarı kaydırın"</string>
     <string name="do_disclosure_generic" msgid="5615898451805157556">"Bu cihaz kuruluşunuz tarafından yönetiliyor"</string>
     <string name="do_disclosure_with_name" msgid="5640615509915445501">"Bu cihaz <xliff:g id="ORGANIZATION_NAME">%s</xliff:g> tarafından yönetilmektedir."</string>
     <string name="phone_hint" msgid="4872890986869209950">"Telefon için, simgeden hızlıca kaydırın"</string>
@@ -778,8 +779,7 @@
     <string name="drag_to_add_tiles" msgid="230586591689084925">"Blok eklemek için basılı tutup sürükleyin"</string>
     <string name="drag_to_rearrange_tiles" msgid="4566074720193667473">"Blokları yeniden düzenlemek için basılı tutun ve sürükleyin"</string>
     <string name="drag_to_remove_tiles" msgid="3361212377437088062">"Kaldırmak için buraya sürükleyin"</string>
-    <!-- no translation found for drag_to_remove_disabled (4785920129548299268) -->
-    <skip />
+    <string name="drag_to_remove_disabled" msgid="4785920129548299268">"En az <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g> blok gerekiyor"</string>
     <string name="qs_edit" msgid="2232596095725105230">"Düzenle"</string>
     <string name="tuner_time" msgid="6572217313285536011">"Saat"</string>
   <string-array name="clock_options">

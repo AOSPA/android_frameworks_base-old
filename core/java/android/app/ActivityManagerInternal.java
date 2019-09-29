@@ -26,6 +26,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ActivityPresentationInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.UserInfo;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.TransactionTooLargeException;
@@ -51,6 +52,12 @@ public abstract class ActivityManagerInternal {
      * Verify that calling app has access to the given provider.
      */
     public abstract String checkContentProviderAccess(String authority, int userId);
+
+    /**
+     * Verify that calling UID has access to the given provider.
+     */
+    public abstract int checkContentProviderUriPermission(Uri uri, int userId,
+            int callingUid, int modeFlags);
 
     // Called by the power manager.
     public abstract void onWakefulnessChanged(int wakefulness);
@@ -118,17 +125,6 @@ public abstract class ActivityManagerInternal {
      * @see android.view.WindowManager.LayoutParams#TYPE_APPLICATION_OVERLAY
      */
     public abstract void setHasOverlayUi(int pid, boolean hasOverlayUi);
-
-    /**
-     * Sets if the given pid is currently running a remote animation, which is taken a signal for
-     * determining oom adjustment and scheduling behavior.
-     *
-     * @param pid The pid we are setting overlay UI for.
-     * @param runningRemoteAnimation True if the process is running a remote animation, false
-     *                               otherwise.
-     * @see RemoteAnimationAdapter
-     */
-    public abstract void setRunningRemoteAnimation(int pid, boolean runningRemoteAnimation);
 
     /**
      * Called after the network policy rules are updated by
@@ -311,7 +307,7 @@ public abstract class ActivityManagerInternal {
 
     /** Starts a given process. */
     public abstract void startProcess(String processName, ApplicationInfo info,
-            boolean knownToBeDead, String hostingType, ComponentName hostingName);
+            boolean knownToBeDead, boolean isTop, String hostingType, ComponentName hostingName);
 
     /** Starts up the starting activity process for debugging if needed.
      * This function needs to be called synchronously from WindowManager context so the caller

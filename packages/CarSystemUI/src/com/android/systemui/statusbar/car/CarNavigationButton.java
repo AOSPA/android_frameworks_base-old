@@ -16,9 +16,11 @@
 
 package com.android.systemui.statusbar.car;
 
+import android.app.ActivityOptions;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.TypedArray;
+import android.os.Build;
 import android.os.UserHandle;
 import android.util.AttributeSet;
 import android.util.Log;
@@ -68,13 +70,9 @@ public class CarNavigationButton extends com.android.keyguard.AlphaOptimizedImag
                 R.styleable.CarNavigationButton_unselectedAlpha, mUnselectedAlpha);
         mSelectedIconResourceId = typedArray.getResourceId(
                 R.styleable.CarNavigationButton_selectedIcon, mIconResourceId);
+        mIconResourceId = typedArray.getResourceId(
+                R.styleable.CarNavigationButton_icon, 0);
         typedArray.recycle();
-
-        // ImageView attrs
-        TypedArray a = context.obtainStyledAttributes(
-                attrs, com.android.internal.R.styleable.ImageView);
-        mIconResourceId = a.getResourceId(com.android.internal.R.styleable.ImageView_src, 0);
-        a.recycle();
     }
 
 
@@ -94,9 +92,15 @@ public class CarNavigationButton extends com.android.keyguard.AlphaOptimizedImag
                     try {
                         if (mBroadcastIntent) {
                             mContext.sendBroadcastAsUser(intent, UserHandle.CURRENT);
+                            mContext.sendBroadcastAsUser(
+                                    new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS),
+                                    UserHandle.CURRENT);
                             return;
                         }
-                        mContext.startActivityAsUser(intent, UserHandle.CURRENT);
+                        ActivityOptions options = ActivityOptions.makeBasic();
+                        options.setLaunchDisplayId(mContext.getDisplayId());
+                        mContext.startActivityAsUser(intent, options.toBundle(),
+                                UserHandle.CURRENT);
                     } catch (Exception e) {
                         Log.e(TAG, "Failed to launch intent", e);
                     }
@@ -107,11 +111,14 @@ public class CarNavigationButton extends com.android.keyguard.AlphaOptimizedImag
         }
 
         try {
-            if (mLongIntent != null) {
+            if (mLongIntent != null && (Build.IS_ENG || Build.IS_USERDEBUG)) {
                 final Intent intent = Intent.parseUri(mLongIntent, Intent.URI_INTENT_SCHEME);
                 setOnLongClickListener(v -> {
                     try {
-                        mContext.startActivityAsUser(intent, UserHandle.CURRENT);
+                        ActivityOptions options = ActivityOptions.makeBasic();
+                        options.setLaunchDisplayId(mContext.getDisplayId());
+                        mContext.startActivityAsUser(intent, options.toBundle(),
+                                UserHandle.CURRENT);
                     } catch (Exception e) {
                         Log.e(TAG, "Failed to launch intent", e);
                     }

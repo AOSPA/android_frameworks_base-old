@@ -315,6 +315,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
         filter.addAction(ConnectivityManager.INET_CONDITION_ACTION);
         filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+        filter.addAction(Intent.ACTION_BOOT_COMPLETED);
         filter.addAction(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED);
         filter.addAction(TelephonyIntents.ACTION_ANY_DATA_CONNECTION_STATE_CHANGED);
         mContext.registerReceiver(this, filter, null, mReceiverHandler);
@@ -366,7 +367,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
     }
 
     private MobileSignalController getDataController() {
-        int dataSubId = mSubDefaults.getDefaultDataSubId();
+        int dataSubId = mSubDefaults.getActiveDataSubId();
         if (!SubscriptionManager.isValidSubscriptionId(dataSubId)) {
             if (DEBUG) Log.e(TAG, "No data sim selected");
             return mDefaultSignalController;
@@ -517,6 +518,9 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     // emergency state.
                     recalculateEmergency();
                 }
+                break;
+            case Intent.ACTION_BOOT_COMPLETED:
+                mWifiSignalController.handleBootCompleted();
                 break;
             case CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED:
                 mConfig = Config.readConfig(mContext);
@@ -1105,18 +1109,24 @@ public class NetworkControllerImpl extends BroadcastReceiver
         public int getDefaultDataSubId() {
             return SubscriptionManager.getDefaultDataSubscriptionId();
         }
+
+        public int getActiveDataSubId() {
+            return SubscriptionManager.getActiveDataSubscriptionId();
+        }
     }
 
     @VisibleForTesting
     static class Config {
         static final int NR_CONNECTED_MMWAVE = 1;
         static final int NR_CONNECTED = 2;
-        static final int NR_NOT_RESTRICTED = 3;
-        static final int NR_RESTRICTED = 4;
+        static final int NR_NOT_RESTRICTED_RRC_IDLE = 3;
+        static final int NR_NOT_RESTRICTED_RRC_CON = 4;
+        static final int NR_RESTRICTED = 5;
 
         Map<Integer, MobileIconGroup> nr5GIconMap = new HashMap<>();
 
         boolean showAtLeast3G = false;
+        boolean show4gFor3g = false;
         boolean alwaysShowCdmaRssi = false;
         boolean show4gForLte = false;
         boolean hideLtePlus = false;
@@ -1135,10 +1145,11 @@ public class NetworkControllerImpl extends BroadcastReceiver
          */
         private static final Map<String, Integer> NR_STATUS_STRING_TO_INDEX;
         static {
-            NR_STATUS_STRING_TO_INDEX = new HashMap<>(4);
+            NR_STATUS_STRING_TO_INDEX = new HashMap<>(5);
             NR_STATUS_STRING_TO_INDEX.put("connected_mmwave", NR_CONNECTED_MMWAVE);
             NR_STATUS_STRING_TO_INDEX.put("connected", NR_CONNECTED);
-            NR_STATUS_STRING_TO_INDEX.put("not_restricted", NR_NOT_RESTRICTED);
+            NR_STATUS_STRING_TO_INDEX.put("not_restricted_rrc_idle", NR_NOT_RESTRICTED_RRC_IDLE);
+            NR_STATUS_STRING_TO_INDEX.put("not_restricted_rrc_con", NR_NOT_RESTRICTED_RRC_CON);
             NR_STATUS_STRING_TO_INDEX.put("restricted", NR_RESTRICTED);
         }
 
@@ -1172,6 +1183,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
                         CarrierConfigManager.KEY_ALWAYS_SHOW_DATA_RAT_ICON_BOOL);
                 config.show4gForLte = b.getBoolean(
                         CarrierConfigManager.KEY_SHOW_4G_FOR_LTE_DATA_ICON_BOOL);
+                config.show4gFor3g = b.getBoolean(
+                        CarrierConfigManager.KEY_SHOW_4G_FOR_3G_DATA_ICON_BOOL);
                 config.hideLtePlus = b.getBoolean(
                         CarrierConfigManager.KEY_HIDE_LTE_PLUS_DATA_ICON_BOOL);
                 config.patternOfCarrierSpecificDataIcon = b.getString(

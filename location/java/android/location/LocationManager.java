@@ -48,6 +48,7 @@ import android.util.ArrayMap;
 import android.util.Log;
 
 import com.android.internal.location.ProviderProperties;
+import com.android.internal.util.Preconditions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -190,19 +191,6 @@ public class LocationManager {
     public static final String MODE_CHANGED_ACTION = "android.location.MODE_CHANGED";
 
     /**
-     * Broadcast intent action when {@link android.provider.Settings.Secure#LOCATION_MODE} is
-     * about to be changed through Settings app or Quick Settings.
-     * For use with the {@link android.provider.Settings.Secure#LOCATION_MODE} API.
-     * If you're interacting with {@link #isProviderEnabled(String)}, use
-     * {@link #PROVIDERS_CHANGED_ACTION} instead.
-     *
-     * @deprecated Do not use.
-     * @hide
-     */
-    @Deprecated
-    public static final String MODE_CHANGING_ACTION = "com.android.settings.location.MODE_CHANGING";
-
-    /**
      * Broadcast intent action indicating that a high power location requests
      * has either started or stopped being active.  The current state of
      * active location requests should be read from AppOpsManager using
@@ -215,17 +203,10 @@ public class LocationManager {
 
     /**
      * Broadcast intent action for Settings app to inject a footer at the bottom of location
-     * settings.
+     * settings. This is for use only by apps that are included in the system image.
      *
-     * <p>This broadcast is used for two things:
-     * <ol>
-     *     <li>For receivers to inject a footer with provided text. This is for use only by apps
-     *         that are included in the system image. </li>
-     *     <li>For receivers to know their footer is injected under location settings.</li>
-     * </ol>
-     *
-     * <p>To inject a footer to location settings, you must declare a broadcast receiver of
-     * {@link LocationManager#SETTINGS_FOOTER_DISPLAYED_ACTION} in the manifest as so:
+     * <p>To inject a footer to location settings, you must declare a broadcast receiver for
+     * this action in the manifest:
      * <pre>
      *     &lt;receiver android:name="com.example.android.footer.MyFooterInjector"&gt;
      *         &lt;intent-filter&gt;
@@ -237,25 +218,13 @@ public class LocationManager {
      *     &lt;/receiver&gt;
      * </pre>
      *
-     * <p>On entering location settings, Settings app will send a
-     * {@link #SETTINGS_FOOTER_DISPLAYED_ACTION} broadcast to receivers whose footer is successfully
-     * injected. On leaving location settings, the footer becomes not visible to users. Settings app
-     * will send a {@link #SETTINGS_FOOTER_REMOVED_ACTION} broadcast to those receivers.
+     * <p>This broadcast receiver will never actually be invoked. See also
+     * {#METADATA_SETTINGS_FOOTER_STRING}.
      *
      * @hide
      */
     public static final String SETTINGS_FOOTER_DISPLAYED_ACTION =
             "com.android.settings.location.DISPLAYED_FOOTER";
-
-    /**
-     * Broadcast intent action when location settings footer is not visible to users.
-     *
-     * <p>See {@link #SETTINGS_FOOTER_DISPLAYED_ACTION} for more detail on how to use.
-     *
-     * @hide
-     */
-    public static final String SETTINGS_FOOTER_REMOVED_ACTION =
-            "com.android.settings.location.REMOVED_FOOTER";
 
     /**
      * Metadata name for {@link LocationManager#SETTINGS_FOOTER_DISPLAYED_ACTION} broadcast
@@ -2314,19 +2283,20 @@ public class LocationManager {
     }
 
     /**
-     * Sends additional commands to a location provider.
-     * Can be used to support provider specific extensions to the Location Manager API
+     * Sends additional commands to a location provider. Can be used to support provider specific
+     * extensions to the Location Manager API.
      *
      * @param provider name of the location provider.
-     * @param command name of the command to send to the provider.
-     * @param extras optional arguments for the command (or null).
-     * The provider may optionally fill the extras Bundle with results from the command.
-     *
-     * @return true if the command succeeds.
+     * @param command  name of the command to send to the provider.
+     * @param extras   optional arguments for the command (or null).
+     * @return true always
      */
     public boolean sendExtraCommand(
             @NonNull String provider, @NonNull String command, @Nullable Bundle extras) {
         android.util.SeempLog.record(48);
+        Preconditions.checkArgument(provider != null, "invalid null provider");
+        Preconditions.checkArgument(command != null, "invalid null command");
+
         try {
             return mService.sendExtraCommand(provider, command, extras);
         } catch (RemoteException e) {

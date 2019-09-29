@@ -66,6 +66,7 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.FileUtils;
@@ -254,6 +255,8 @@ public class PackageParser {
 
     /** @hide */
     public static final String APK_FILE_EXTENSION = ".apk";
+    /** @hide */
+    public static final String APEX_FILE_EXTENSION = ".apex";
 
     /** @hide */
     public static class NewPermissionInfo {
@@ -618,21 +621,6 @@ public class PackageParser {
     }
 
     /**
-     * Generate and return the {@link PackageInfo} for a parsed package.
-     *
-     * @param p the parsed package.
-     * @param flags indicating which optional information is included.
-     */
-    @UnsupportedAppUsage
-    public static PackageInfo generatePackageInfo(PackageParser.Package p,
-            int gids[], int flags, long firstInstallTime, long lastUpdateTime,
-            Set<String> grantedPermissions, PackageUserState state) {
-
-        return generatePackageInfo(p, gids, flags, firstInstallTime, lastUpdateTime,
-                grantedPermissions, state, UserHandle.getCallingUserId());
-    }
-
-    /**
      * Returns true if the package is installed and not hidden, or if the caller
      * explicitly wanted all uninstalled and hidden packages as well.
      * @param appInfo The applicationInfo of the app being checked.
@@ -658,8 +646,45 @@ public class PackageParser {
         return checkUseInstalledOrHidden(0, state, null);
     }
 
+    /**
+     * Generate and return the {@link PackageInfo} for a parsed package.
+     *
+     * @param p the parsed package.
+     * @param flags indicating which optional information is included.
+     */
     @UnsupportedAppUsage
     public static PackageInfo generatePackageInfo(PackageParser.Package p,
+            int[] gids, int flags, long firstInstallTime, long lastUpdateTime,
+            Set<String> grantedPermissions, PackageUserState state) {
+
+        return generatePackageInfo(p, gids, flags, firstInstallTime, lastUpdateTime,
+                grantedPermissions, state, UserHandle.getCallingUserId());
+    }
+
+    @UnsupportedAppUsage
+    public static PackageInfo generatePackageInfo(PackageParser.Package p,
+            int[] gids, int flags, long firstInstallTime, long lastUpdateTime,
+            Set<String> grantedPermissions, PackageUserState state, int userId) {
+
+        return generatePackageInfo(p, null, gids, flags, firstInstallTime, lastUpdateTime,
+                grantedPermissions, state, userId);
+    }
+
+    /**
+     * PackageInfo generator specifically for apex files.
+     *
+     * @param pkg Package to generate info from. Should be derived from an apex.
+     * @param apexInfo Apex info relating to the package.
+     * @return PackageInfo
+     * @throws PackageParserException
+     */
+    public static PackageInfo generatePackageInfo(
+            PackageParser.Package pkg, ApexInfo apexInfo, int flags) {
+        return generatePackageInfo(pkg, apexInfo, EmptyArray.INT, flags, 0, 0,
+                Collections.emptySet(), new PackageUserState(), UserHandle.getCallingUserId());
+    }
+
+    private static PackageInfo generatePackageInfo(PackageParser.Package p, ApexInfo apexInfo,
             int gids[], int flags, long firstInstallTime, long lastUpdateTime,
             Set<String> grantedPermissions, PackageUserState state, int userId) {
         if (!checkUseInstalledOrHidden(flags, state, p.applicationInfo) || !p.isMatch(flags)) {
@@ -806,8 +831,27 @@ public class PackageParser {
                 }
             }
         }
+
+        if (apexInfo != null) {
+            File apexFile = new File(apexInfo.modulePath);
+
+            pi.applicationInfo.sourceDir = apexFile.getPath();
+            pi.applicationInfo.publicSourceDir = apexFile.getPath();
+            if (apexInfo.isFactory) {
+                pi.applicationInfo.flags |= ApplicationInfo.FLAG_SYSTEM;
+            } else {
+                pi.applicationInfo.flags &= ~ApplicationInfo.FLAG_SYSTEM;
+            }
+            if (apexInfo.isActive) {
+                pi.applicationInfo.flags |= ApplicationInfo.FLAG_INSTALLED;
+            } else {
+                pi.applicationInfo.flags &= ~ApplicationInfo.FLAG_INSTALLED;
+            }
+            pi.isApex = true;
+        }
+
         // deprecated method of getting signing certificates
-        if ((flags&PackageManager.GET_SIGNATURES) != 0) {
+        if ((flags & PackageManager.GET_SIGNATURES) != 0) {
             if (p.mSigningDetails.hasPastSigningCertificates()) {
                 // Package has included signing certificate rotation information.  Return the oldest
                 // cert so that programmatic checks keep working even if unaware of key rotation.
@@ -2443,6 +2487,8 @@ public class PackageParser {
                 mParseError = PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
                 return null;
 
+            } else if (tagName.equals("queries")) {
+                parseQueries(pkg, res, parser, flags, outError);
             } else {
                 Slog.w(TAG, "Unknown element under <manifest>: " + parser.getName()
                         + " at " + mArchiveSourcePath + " "
@@ -3536,6 +3582,9 @@ public class PackageParser {
             owner.mRequiredAccountType = requiredAccountType;
         }
 
+        owner.mForceQueryable =
+                sa.getBoolean(R.styleable.AndroidManifestApplication_forceQueryable, false);
+
         if (sa.getBoolean(
                 com.android.internal.R.styleable.AndroidManifestApplication_debuggable,
                 false)) {
@@ -3951,7 +4000,6 @@ public class PackageParser {
                     ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_PROFILEABLE_BY_SHELL;
                 }
                 XmlUtils.skipCurrentTag(parser);
-
             } else {
                 if (!RIGID_PARSER) {
                     Slog.w(TAG, "Unknown element under <application>: " + tagName
@@ -3995,6 +4043,67 @@ public class PackageParser {
             owner.applicationInfo.privateFlags &= ~ApplicationInfo.PRIVATE_FLAG_HAS_DOMAIN_URLS;
         }
 
+        return true;
+    }
+
+    private boolean parseQueries(Package owner, Resources res, XmlResourceParser parser, int flags,
+            String[] outError)
+            throws IOException, XmlPullParserException {
+
+        final int outerDepth = parser.getDepth();
+        int type;
+        while ((type = parser.next()) != XmlPullParser.END_DOCUMENT
+                && (type != XmlPullParser.END_TAG
+                || parser.getDepth() > outerDepth)) {
+            if (type == XmlPullParser.END_TAG || type == XmlPullParser.TEXT) {
+                continue;
+            }
+            if (parser.getName().equals("intent")) {
+                QueriesIntentInfo intentInfo = new QueriesIntentInfo();
+                if (!parseIntent(res, parser, true /*allowGlobs*/, true /*allowAutoVerify*/,
+                        intentInfo, outError)) {
+                    return false;
+                }
+                Intent intent = new Intent();
+                if (intentInfo.countActions() != 1) {
+                    outError[0] = "intent tags must contain exactly one action.";
+                    return false;
+                }
+                intent.setAction(intentInfo.getAction(0));
+                for (int i = 0, max = intentInfo.countCategories(); i < max; i++) {
+                    intent.addCategory(intentInfo.getCategory(i));
+                }
+                Uri data = null;
+                String dataType = null;
+                if (intentInfo.countDataTypes() > 1) {
+                    outError[0] = "intent tag may have at most one data type.";
+                    return false;
+                }
+                if (intentInfo.countDataSchemes() > 1) {
+                    outError[0] = "intent tag may have at most one data scheme.";
+                    return false;
+                }
+                if (intentInfo.countDataTypes() == 1) {
+                    data = Uri.fromParts(intentInfo.getDataType(0), "", null);
+                }
+                if (intentInfo.countDataSchemes() == 1) {
+                    dataType = intentInfo.getDataScheme(0);
+                }
+                intent.setDataAndType(data, dataType);
+                owner.mQueriesIntents = ArrayUtils.add(owner.mQueriesIntents, intent);
+            } else if (parser.getName().equals("package")) {
+                final TypedArray sa = res.obtainAttributes(parser,
+                        com.android.internal.R.styleable.AndroidManifestQueriesPackage);
+                final String packageName =
+                        sa.getString(R.styleable.AndroidManifestQueriesPackage_name);
+                if (TextUtils.isEmpty(packageName)) {
+                    outError[0] = "Package name is missing from package tag.";
+                    return false;
+                }
+                owner.mQueriesPackages =
+                        ArrayUtils.add(owner.mQueriesPackages, packageName.intern());
+            }
+        }
         return true;
     }
 
@@ -4288,7 +4397,7 @@ public class PackageParser {
         a.info.screenOrientation = SCREEN_ORIENTATION_UNSPECIFIED;
         a.info.resizeMode = RESIZE_MODE_FORCE_RESIZEABLE;
         a.info.lockTaskLaunchMode = 0;
-        a.info.encryptionAware = a.info.directBootAware = false;
+        a.info.directBootAware = false;
         a.info.rotationAnimation = ROTATION_ANIMATION_UNSPECIFIED;
         a.info.colorMode = ActivityInfo.COLOR_MODE_DEFAULT;
         if (hardwareAccelerated) {
@@ -4492,7 +4601,7 @@ public class PackageParser {
             a.info.lockTaskLaunchMode =
                     sa.getInt(R.styleable.AndroidManifestActivity_lockTaskMode, 0);
 
-            a.info.encryptionAware = a.info.directBootAware = sa.getBoolean(
+            a.info.directBootAware = sa.getBoolean(
                     R.styleable.AndroidManifestActivity_directBootAware,
                     false);
 
@@ -4524,7 +4633,7 @@ public class PackageParser {
                 a.info.flags |= ActivityInfo.FLAG_SINGLE_USER;
             }
 
-            a.info.encryptionAware = a.info.directBootAware = sa.getBoolean(
+            a.info.directBootAware = sa.getBoolean(
                     R.styleable.AndroidManifestActivity_directBootAware,
                     false);
         }
@@ -4920,7 +5029,7 @@ public class PackageParser {
         info.minAspectRatio = target.info.minAspectRatio;
         info.requestedVrComponent = target.info.requestedVrComponent;
 
-        info.encryptionAware = info.directBootAware = target.info.directBootAware;
+        info.directBootAware = target.info.directBootAware;
 
         Activity a = new Activity(cachedArgs.mActivityAliasArgs, info);
         if (outError[0] != null) {
@@ -5131,7 +5240,7 @@ public class PackageParser {
             p.info.flags |= ProviderInfo.FLAG_SINGLE_USER;
         }
 
-        p.info.encryptionAware = p.info.directBootAware = sa.getBoolean(
+        p.info.directBootAware = sa.getBoolean(
                 R.styleable.AndroidManifestProvider_directBootAware,
                 false);
         if (p.info.directBootAware) {
@@ -5451,7 +5560,7 @@ public class PackageParser {
             s.info.flags |= ServiceInfo.FLAG_SINGLE_USER;
         }
 
-        s.info.encryptionAware = s.info.directBootAware = sa.getBoolean(
+        s.info.directBootAware = sa.getBoolean(
                 R.styleable.AndroidManifestService_directBootAware,
                 false);
         if (s.info.directBootAware) {
@@ -6512,6 +6621,9 @@ public class PackageParser {
         // The major version code declared for this package.
         public int mVersionCodeMajor;
 
+        // Whether the package declares that it should be queryable by all normal apps on device.
+        public boolean mForceQueryable;
+
         // Return long containing mVersionCode and mVersionCodeMajor.
         public long getLongVersionCode() {
             return PackageInfo.composeLongVersionCode(mVersionCodeMajor, mVersionCode);
@@ -6616,6 +6728,9 @@ public class PackageParser {
         public boolean visibleToInstantApps;
         /** Whether or not the package is a stub and must be replaced by the full version. */
         public boolean isStub;
+
+        public ArrayList<String> mQueriesPackages;
+        public ArrayList<Intent> mQueriesIntents;
 
         @UnsupportedAppUsage
         public Package(String packageName) {
@@ -6897,8 +7012,8 @@ public class PackageParser {
         }
 
         /** @hide */
-        public boolean isProductServices() {
-            return applicationInfo.isProductServices();
+        public boolean isSystemExt() {
+            return applicationInfo.isSystemExt();
         }
 
         /** @hide */
@@ -7120,6 +7235,9 @@ public class PackageParser {
             use32bitAbi = (dest.readInt() == 1);
             restrictUpdateHash = dest.createByteArray();
             visibleToInstantApps = dest.readInt() == 1;
+            mForceQueryable = dest.readBoolean();
+            mQueriesIntents = dest.createTypedArrayList(Intent.CREATOR);
+            mQueriesPackages = dest.createStringArrayList();
         }
 
         private static void internStringArrayList(List<String> list) {
@@ -7245,6 +7363,9 @@ public class PackageParser {
             dest.writeInt(use32bitAbi ? 1 : 0);
             dest.writeByteArray(restrictUpdateHash);
             dest.writeInt(visibleToInstantApps ? 1 : 0);
+            dest.writeBoolean(mForceQueryable);
+            dest.writeTypedList(mQueriesIntents);
+            dest.writeList(mQueriesPackages);
         }
 
 
@@ -8255,6 +8376,8 @@ public class PackageParser {
         }
     }
 
+    public static final class QueriesIntentInfo extends IntentInfo {}
+
     public final static class ActivityIntentInfo extends IntentInfo {
         @UnsupportedAppUsage
         public Activity activity;
@@ -8379,61 +8502,4 @@ public class PackageParser {
         }
     }
 
-    // TODO(b/129261524): Clean up API
-    /**
-     * PackageInfo parser specifically for apex files.
-     * NOTE: It will collect certificates
-     *
-     * @param apexInfo
-     * @return PackageInfo
-     * @throws PackageParserException
-     */
-    public static PackageInfo generatePackageInfoFromApex(ApexInfo apexInfo, int flags)
-            throws PackageParserException {
-        PackageParser pp = new PackageParser();
-        File apexFile = new File(apexInfo.packagePath);
-        final Package p = pp.parsePackage(apexFile, flags, false);
-        PackageUserState state = new PackageUserState();
-        PackageInfo pi = generatePackageInfo(p, EmptyArray.INT, flags, 0, 0,
-                Collections.emptySet(), state);
-        pi.applicationInfo.sourceDir = apexFile.getPath();
-        pi.applicationInfo.publicSourceDir = apexFile.getPath();
-        if (apexInfo.isFactory) {
-            pi.applicationInfo.flags |= ApplicationInfo.FLAG_SYSTEM;
-        } else {
-            pi.applicationInfo.flags &= ~ApplicationInfo.FLAG_SYSTEM;
-        }
-        if (apexInfo.isActive) {
-            pi.applicationInfo.flags |= ApplicationInfo.FLAG_INSTALLED;
-        } else {
-            pi.applicationInfo.flags &= ~ApplicationInfo.FLAG_INSTALLED;
-        }
-        pi.isApex = true;
-
-        // Collect certificates
-        if ((flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
-            collectCertificates(p, apexFile, false);
-            // Keep legacy mechanism for handling signatures. While this is deprecated, it's
-            // still part of the public API and needs to be maintained
-            if (p.mSigningDetails.hasPastSigningCertificates()) {
-                // Package has included signing certificate rotation information.  Return
-                // the oldest cert so that programmatic checks keep working even if unaware
-                // of key rotation.
-                pi.signatures = new Signature[1];
-                pi.signatures[0] = p.mSigningDetails.pastSigningCertificates[0];
-            } else if (p.mSigningDetails.hasSignatures()) {
-                // otherwise keep old behavior
-                int numberOfSigs = p.mSigningDetails.signatures.length;
-                pi.signatures = new Signature[numberOfSigs];
-                System.arraycopy(p.mSigningDetails.signatures, 0, pi.signatures, 0, numberOfSigs);
-            }
-            if (p.mSigningDetails != SigningDetails.UNKNOWN) {
-                // only return a valid SigningInfo if there is signing information to report
-                pi.signingInfo = new SigningInfo(p.mSigningDetails);
-            } else {
-                pi.signingInfo = null;
-            }
-        }
-        return pi;
-    }
 }

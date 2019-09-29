@@ -50,13 +50,16 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.WorkSource;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.AsyncChannel;
 import com.android.internal.util.Protocol;
 import com.android.server.net.NetworkPinner;
@@ -69,7 +72,6 @@ import java.lang.ref.WeakReference;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -536,6 +538,21 @@ public class WifiManager {
      */
     public static final String EXTRA_WIFI_AP_FAILURE_REASON = "wifi_ap_error_code";
     /**
+     * The look up key for a string that gives additonal info about EXTRA_WIFI_AP_FAILURE_REASON
+     * currently support no_5ghz_support
+     * @see #WIFI_AP_FAILURE_DESC_NO_5GHZ_SUPPORT
+     *
+     * @hide
+     */
+    public static final String EXTRA_WIFI_AP_FAILURE_DESCRIPTION = "wifi_ap_error_description";
+    /**
+     *  If Wi-Fi AP start failed with SAP_START_FAILURE_NO_CHANNEL reason code and has this
+     *  description means that no supported channel exists on 5G band
+     *
+     *  @hide
+     */
+    public static final String WIFI_AP_FAILURE_DESC_NO_5GHZ_SUPPORT = "wifi_ap_error_no_5g_support";
+    /**
      * The previous Wi-Fi state.
      *
      * @see #EXTRA_WIFI_AP_STATE
@@ -682,6 +699,14 @@ public class WifiManager {
      * @hide
      */
     public static final int IFACE_IP_MODE_LOCAL_ONLY = 2;
+
+    /**
+     * Broadcast intent action indicating that the wifi network settings
+     * had been reset.
+     * @hide
+     */
+    public static final String WIFI_NETWORK_SETTINGS_RESET_ACTION =
+            "android.net.wifi.action.NETWORK_SETTINGS_RESET";
 
     /**
      * Broadcast intent action indicating that a connection to the supplicant has
@@ -1196,22 +1221,55 @@ public class WifiManager {
     @GuardedBy("mLock")
     private LocalOnlyHotspotObserverProxy mLOHSObserverProxy;
 
+    /* Wi-Fi generation codes */
+    /** @hide */
+    public static final int WIFI_GENERATION_DEFAULT = 0;
+    /** @hide */
+    public static final int WIFI_GENERATION_4 = 4;
+    /** @hide */
+    public static final int WIFI_GENERATION_5 = 5;
+    /** @hide */
+    public static final int WIFI_GENERATION_6 = 6;
+
     /**
      * Create a new WifiManager instance.
      * Applications will almost always want to use
      * {@link android.content.Context#getSystemService Context.getSystemService()} to retrieve
      * the standard {@link android.content.Context#WIFI_SERVICE Context.WIFI_SERVICE}.
      * @param context the application context
-     * @param service the Binder interface
      * @hide - hide this because it takes in a parameter of type IWifiManager, which
      * is a system private class.
      */
-    public WifiManager(Context context, IWifiManager service, Looper looper) {
+    public WifiManager(Context context, Looper looper) {
         mContext = context;
-        mService = service;
         mLooper = looper;
         mTargetSdkVersion = context.getApplicationInfo().targetSdkVersion;
+    }
+
+    /**
+     * This is used only for unit testing.
+     * @hide
+     */
+    @VisibleForTesting
+    public WifiManager(Context context, IWifiManager service, Looper looper) {
+        this(context, looper);
+        mService = service;
         updateVerboseLoggingEnabledFromService();
+    }
+
+    private IWifiManager getIWifiManager() {
+        if (mService == null) {
+            synchronized (this) {
+                mService = IWifiManager.Stub.asInterface(
+                        ServiceManager.getService(Context.WIFI_SERVICE));
+                if (mService != null) {
+                    updateVerboseLoggingEnabledFromService();
+                } else {
+                    Log.e(TAG, "Wifi Service not running yet, ignoring WifiManager API call");
+                }
+            }
+        }
+        return mService;
     }
 
     /**
@@ -1253,8 +1311,10 @@ public class WifiManager {
     @RequiresPermission(allOf = {ACCESS_FINE_LOCATION, ACCESS_WIFI_STATE})
     public List<WifiConfiguration> getConfiguredNetworks() {
         try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return Collections.emptyList();
             ParceledListSlice<WifiConfiguration> parceledList =
-                    mService.getConfiguredNetworks(mContext.getOpPackageName());
+                    iWifiManager.getConfiguredNetworks(mContext.getOpPackageName());
             if (parceledList == null) {
                 return Collections.emptyList();
             }
@@ -1269,8 +1329,10 @@ public class WifiManager {
     @RequiresPermission(allOf = {ACCESS_FINE_LOCATION, ACCESS_WIFI_STATE, READ_WIFI_CREDENTIAL})
     public List<WifiConfiguration> getPrivilegedConfiguredNetworks() {
         try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return Collections.emptyList();
             ParceledListSlice<WifiConfiguration> parceledList =
-                    mService.getPrivilegedConfiguredNetworks(mContext.getOpPackageName());
+                    iWifiManager.getPrivilegedConfiguredNetworks(mContext.getOpPackageName());
             if (parceledList == null) {
                 return Collections.emptyList();
             }
@@ -1301,14 +1363,16 @@ public class WifiManager {
             @NonNull List<ScanResult> scanResults) {
         List<Pair<WifiConfiguration, Map<Integer, List<ScanResult>>>> configs = new ArrayList<>();
         try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return Collections.emptyList();
             Map<String, Map<Integer, List<ScanResult>>> results =
-                    mService.getAllMatchingFqdnsForScanResults(
+                    iWifiManager.getAllMatchingFqdnsForScanResults(
                             scanResults);
             if (results.isEmpty()) {
                 return configs;
             }
             List<WifiConfiguration> wifiConfigurations =
-                    mService.getWifiConfigsForPasspointProfiles(
+                    iWifiManager.getWifiConfigsForPasspointProfiles(
                             new ArrayList<>(results.keySet()));
             for (WifiConfiguration configuration : wifiConfigurations) {
                 Map<Integer, List<ScanResult>> scanResultsPerNetworkType = results.get(
@@ -1343,10 +1407,12 @@ public class WifiManager {
     public Map<OsuProvider, List<ScanResult>> getMatchingOsuProviders(
             @Nullable List<ScanResult> scanResults) {
         if (scanResults == null) {
-            return new HashMap<>();
+            return Collections.emptyMap();
         }
         try {
-            return mService.getMatchingOsuProviders(scanResults);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return Collections.emptyMap();
+            return iWifiManager.getMatchingOsuProviders(scanResults);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1373,7 +1439,9 @@ public class WifiManager {
     public Map<OsuProvider, PasspointConfiguration> getMatchingPasspointConfigsForOsuProviders(
             @NonNull Set<OsuProvider> osuProviders) {
         try {
-            return mService.getMatchingPasspointConfigsForOsuProviders(
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return Collections.emptyMap();
+            return iWifiManager.getMatchingPasspointConfigsForOsuProviders(
                     new ArrayList<>(osuProviders));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -1493,6 +1561,20 @@ public class WifiManager {
           }
       }
 
+     /**
+      * Get SoftAp Wi-Fi generation.
+      *
+      * @return Wi-Fi generation if SoftAp enabled or -1.
+      *
+      * @hide no intent to publish
+      */
+      public int getSoftApWifiGeneration() {
+          try {
+              return mService.getSoftApWifiGeneration();
+          } catch (RemoteException e) {
+              throw e.rethrowFromSystemServer();
+          }
+      }
 
     /**
      * Internal method for doing the RPC that creates a new network description
@@ -1504,7 +1586,9 @@ public class WifiManager {
      */
     private int addOrUpdateNetwork(WifiConfiguration config) {
         try {
-            return mService.addOrUpdateNetwork(config, mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return -1;
+            return iWifiManager.addOrUpdateNetwork(config, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1730,7 +1814,11 @@ public class WifiManager {
         Looper looper = (handler == null) ? mContext.getMainLooper() : handler.getLooper();
         Binder binder = new Binder();
         try {
-            mService.registerNetworkRequestMatchCallback(
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.registerNetworkRequestMatchCallback(
                     binder, new NetworkRequestMatchCallbackProxy(looper, callback),
                     callback.hashCode());
         } catch (RemoteException e) {
@@ -1756,7 +1844,11 @@ public class WifiManager {
         Log.v(TAG, "unregisterNetworkRequestMatchCallback: callback=" + callback);
 
         try {
-            mService.unregisterNetworkRequestMatchCallback(callback.hashCode());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.unregisterNetworkRequestMatchCallback(callback.hashCode());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1790,7 +1882,10 @@ public class WifiManager {
     public @NetworkSuggestionsStatusCode int addNetworkSuggestions(
             @NonNull List<WifiNetworkSuggestion> networkSuggestions) {
         try {
-            return mService.addNetworkSuggestions(networkSuggestions, mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return STATUS_NETWORK_SUGGESTIONS_ERROR_INTERNAL;
+            return iWifiManager.addNetworkSuggestions(
+                    networkSuggestions, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1798,6 +1893,8 @@ public class WifiManager {
 
     /**
      * Remove some or all of the network suggestions that were previously provided by the app.
+     * If the current network is a suggestion being removed and if it was only provided by this app
+     * and is not a saved network then the framework will immediately disconnect.
      * See {@link WifiNetworkSuggestion} for a detailed explanation of the parameters.
      * See {@link WifiNetworkSuggestion#equals(Object)} for the equivalence evaluation used.
      *
@@ -1811,10 +1908,29 @@ public class WifiManager {
     public @NetworkSuggestionsStatusCode int removeNetworkSuggestions(
             @NonNull List<WifiNetworkSuggestion> networkSuggestions) {
         try {
-            return mService.removeNetworkSuggestions(
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return STATUS_NETWORK_SUGGESTIONS_ERROR_INTERNAL;
+            return iWifiManager.removeNetworkSuggestions(
                     networkSuggestions, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get all network suggestions provided by the calling app.
+     * See {@link #addNetworkSuggestions(List)}
+     * See {@link #removeNetworkSuggestions(List)}
+     * @return a list of {@link WifiNetworkSuggestion}
+     */
+    @RequiresPermission(ACCESS_WIFI_STATE)
+    public @NonNull List<WifiNetworkSuggestion> getNetworkSuggestions() {
+        try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return Collections.emptyList();
+            return iWifiManager.getNetworkSuggestions(mContext.getOpPackageName());
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
         }
     }
 
@@ -1842,7 +1958,13 @@ public class WifiManager {
      */
     public void addOrUpdatePasspointConfiguration(PasspointConfiguration config) {
         try {
-            if (!mService.addOrUpdatePasspointConfiguration(config, mContext.getOpPackageName())) {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                if (config == null) return;
+                throw new RemoteException("Wifi service is not running");
+            }
+            if (!iWifiManager.addOrUpdatePasspointConfiguration(
+                    config, mContext.getOpPackageName())) {
                 throw new IllegalArgumentException();
             }
         } catch (RemoteException e) {
@@ -1865,7 +1987,13 @@ public class WifiManager {
     })
     public void removePasspointConfiguration(String fqdn) {
         try {
-            if (!mService.removePasspointConfiguration(fqdn, mContext.getOpPackageName())) {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                if (TextUtils.isEmpty(fqdn)) return;
+                throw new RemoteException("Wifi service is not running");
+            }
+            if (!iWifiManager.removePasspointConfiguration(
+                    fqdn, mContext.getOpPackageName())) {
                 throw new IllegalArgumentException();
             }
         } catch (RemoteException e) {
@@ -1888,7 +2016,9 @@ public class WifiManager {
     })
     public List<PasspointConfiguration> getPasspointConfigurations() {
         try {
-            return mService.getPasspointConfigurations(mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) Collections.emptyList();
+            return iWifiManager.getPasspointConfigurations(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1908,7 +2038,12 @@ public class WifiManager {
      */
     public void queryPasspointIcon(long bssid, String fileName) {
         try {
-            mService.queryPasspointIcon(bssid, fileName);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                if (bssid == 0L || TextUtils.isEmpty(fileName)) return;
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.queryPasspointIcon(bssid, fileName);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1922,7 +2057,9 @@ public class WifiManager {
      */
     public int matchProviderWithCurrentNetwork(String fqdn) {
         try {
-            return mService.matchProviderWithCurrentNetwork(fqdn);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return -1;
+            return iWifiManager.matchProviderWithCurrentNetwork(fqdn);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1933,10 +2070,16 @@ public class WifiManager {
      * @param holdoff hold off time in milliseconds
      * @param ess set if the hold off pertains to an ESS rather than a BSS
      * @hide
+     *
+     * TODO (140167680): This needs to be removed, the implementation is empty!
      */
     public void deauthenticateNetwork(long holdoff, boolean ess) {
         try {
-            mService.deauthenticateNetwork(holdoff, ess);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.deauthenticateNetwork(holdoff, ess);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1966,7 +2109,9 @@ public class WifiManager {
     @Deprecated
     public boolean removeNetwork(int netId) {
         try {
-            return mService.removeNetwork(netId, mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            return iWifiManager.removeNetwork(netId, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2021,7 +2166,10 @@ public class WifiManager {
 
         boolean success;
         try {
-            success = mService.enableNetwork(netId, attemptConnect, mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            success = iWifiManager.enableNetwork(
+                    netId, attemptConnect, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2057,7 +2205,9 @@ public class WifiManager {
     @Deprecated
     public boolean disableNetwork(int netId) {
         try {
-            return mService.disableNetwork(netId, mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            return iWifiManager.disableNetwork(netId, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2080,7 +2230,9 @@ public class WifiManager {
     @Deprecated
     public boolean disconnect() {
         try {
-            return mService.disconnect(mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            return iWifiManager.disconnect(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2104,7 +2256,9 @@ public class WifiManager {
     @Deprecated
     public boolean reconnect() {
         try {
-            return mService.reconnect(mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            return iWifiManager.reconnect(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2128,7 +2282,9 @@ public class WifiManager {
     @Deprecated
     public boolean reassociate() {
         try {
-            return mService.reassociate(mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            return iWifiManager.reassociate(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2214,7 +2370,9 @@ public class WifiManager {
 
     private long getSupportedFeatures() {
         try {
-            return mService.getSupportedFeatures();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return 0L;
+            return iWifiManager.getSupportedFeatures();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2343,10 +2501,11 @@ public class WifiManager {
      * @hide
      */
     public WifiActivityEnergyInfo getControllerActivityEnergyInfo() {
-        if (mService == null) return null;
         try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return null;
             synchronized(this) {
-                return mService.reportActivityInfo();
+                return iWifiManager.reportActivityInfo();
             }
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -2385,8 +2544,10 @@ public class WifiManager {
     @RequiresPermission(android.Manifest.permission.UPDATE_DEVICE_STATS)
     public boolean startScan(WorkSource workSource) {
         try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
             String packageName = mContext.getOpPackageName();
-            return mService.startScan(packageName);
+            return iWifiManager.startScan(packageName);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2415,7 +2576,9 @@ public class WifiManager {
      */
     public WifiInfo getConnectionInfo() {
         try {
-            return mService.getConnectionInfo(mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return null;
+            return iWifiManager.getConnectionInfo(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2430,7 +2593,9 @@ public class WifiManager {
     public List<ScanResult> getScanResults() {
         android.util.SeempLog.record(55);
         try {
-            return mService.getScanResults(mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return Collections.emptyList();
+            return iWifiManager.getScanResults(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2449,7 +2614,9 @@ public class WifiManager {
     @Deprecated
     public boolean isScanAlwaysAvailable() {
         try {
-            return mService.isScanAlwaysAvailable();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            return iWifiManager.isScanAlwaysAvailable();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2480,7 +2647,12 @@ public class WifiManager {
      */
     public void setCountryCode(@NonNull String country) {
         try {
-            mService.setCountryCode(country);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                if (TextUtils.isEmpty(country)) return;
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.setCountryCode(country);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2494,12 +2666,14 @@ public class WifiManager {
     */
     @UnsupportedAppUsage
     public String getCountryCode() {
-       try {
-           String country = mService.getCountryCode();
-           return country;
-       } catch (RemoteException e) {
-           throw e.rethrowFromSystemServer();
-       }
+        try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return null;
+            String country = iWifiManager.getCountryCode();
+            return country;
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -2510,7 +2684,9 @@ public class WifiManager {
     @UnsupportedAppUsage
     public boolean isDualBandSupported() {
         try {
-            return mService.isDualBandSupported();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            return iWifiManager.isDualBandSupported();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2523,7 +2699,9 @@ public class WifiManager {
      */
     public boolean isDualModeSupported() {
         try {
-            return mService.needs5GHzToAnyApBandConversion();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            return iWifiManager.needs5GHzToAnyApBandConversion();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2536,7 +2714,9 @@ public class WifiManager {
      */
     public DhcpInfo getDhcpInfo() {
         try {
-            return mService.getDhcpInfo();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return null;
+            return iWifiManager.getDhcpInfo();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2563,7 +2743,9 @@ public class WifiManager {
     @Deprecated
     public boolean setWifiEnabled(boolean enabled) {
         try {
-            return mService.setWifiEnabled(mContext.getOpPackageName(), enabled);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            return iWifiManager.setWifiEnabled(mContext.getOpPackageName(), enabled);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2578,7 +2760,9 @@ public class WifiManager {
      */
     public int getWifiState() {
         try {
-            return mService.getWifiEnabledState();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return WIFI_STATE_UNKNOWN;
+            return iWifiManager.getWifiEnabledState();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2652,7 +2836,12 @@ public class WifiManager {
      */
     public void updateInterfaceIpState(String ifaceName, int mode) {
         try {
-            mService.updateInterfaceIpState(ifaceName, mode);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                if (TextUtils.isEmpty(ifaceName) || mode == IFACE_IP_MODE_UNSPECIFIED) return;
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.updateInterfaceIpState(ifaceName, mode);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2670,7 +2859,9 @@ public class WifiManager {
      */
     public boolean startSoftAp(@Nullable WifiConfiguration wifiConfig) {
         try {
-            return mService.startSoftAp(wifiConfig);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            return iWifiManager.startSoftAp(wifiConfig);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2685,7 +2876,9 @@ public class WifiManager {
      */
     public boolean stopSoftAp() {
         try {
-            return mService.stopSoftAp();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            return iWifiManager.stopSoftAp();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2753,8 +2946,12 @@ public class WifiManager {
             LocalOnlyHotspotCallbackProxy proxy =
                     new LocalOnlyHotspotCallbackProxy(this, looper, callback);
             try {
+                IWifiManager iWifiManager = getIWifiManager();
+                if (iWifiManager == null) {
+                    throw new RemoteException("Wifi service is not running");
+                }
                 String packageName = mContext.getOpPackageName();
-                int returnCode = mService.startLocalOnlyHotspot(
+                int returnCode = iWifiManager.startLocalOnlyHotspot(
                         proxy.getMessenger(), new Binder(), packageName);
                 if (returnCode != LocalOnlyHotspotCallback.REQUEST_REGISTERED) {
                     // Send message to the proxy to make sure we call back on the correct thread
@@ -2806,7 +3003,11 @@ public class WifiManager {
             }
             mLOHSCallbackProxy = null;
             try {
-                mService.stopLocalOnlyHotspot();
+                IWifiManager iWifiManager = getIWifiManager();
+                if (iWifiManager == null) {
+                    throw new RemoteException("Wifi service is not running");
+                }
+                iWifiManager.stopLocalOnlyHotspot();
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -2836,7 +3037,11 @@ public class WifiManager {
             Looper looper = (handler == null) ? mContext.getMainLooper() : handler.getLooper();
             mLOHSObserverProxy = new LocalOnlyHotspotObserverProxy(this, looper, observer);
             try {
-                mService.startWatchLocalOnlyHotspot(
+                IWifiManager iWifiManager = getIWifiManager();
+                if (iWifiManager == null) {
+                    throw new RemoteException("Wifi service is not running");
+                }
+                iWifiManager.startWatchLocalOnlyHotspot(
                         mLOHSObserverProxy.getMessenger(), new Binder());
                 mLOHSObserverProxy.registered();
             } catch (RemoteException e) {
@@ -2860,7 +3065,11 @@ public class WifiManager {
             }
             mLOHSObserverProxy = null;
             try {
-                mService.stopWatchLocalOnlyHotspot();
+                IWifiManager iWifiManager = getIWifiManager();
+                if (iWifiManager == null) {
+                    throw new RemoteException("Wifi service is not running");
+                }
+                iWifiManager.stopWatchLocalOnlyHotspot();
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -2880,7 +3089,9 @@ public class WifiManager {
     @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE)
     public int getWifiApState() {
         try {
-            return mService.getWifiApEnabledState();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return WIFI_AP_STATE_FAILED;
+            return iWifiManager.getWifiApEnabledState();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2909,7 +3120,9 @@ public class WifiManager {
     @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE)
     public WifiConfiguration getWifiApConfiguration() {
         try {
-            return mService.getWifiApConfiguration();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return null;
+            return iWifiManager.getWifiApConfiguration();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2926,7 +3139,10 @@ public class WifiManager {
     @RequiresPermission(android.Manifest.permission.CHANGE_WIFI_STATE)
     public boolean setWifiApConfiguration(WifiConfiguration wifiConfig) {
         try {
-            return mService.setWifiApConfiguration(wifiConfig, mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            return iWifiManager.setWifiApConfiguration(
+                    wifiConfig, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2941,7 +3157,11 @@ public class WifiManager {
     public void notifyUserOfApBandConversion() {
         Log.d(TAG, "apBand was converted, notify the user");
         try {
-            mService.notifyUserOfApBandConversion(mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.notifyUserOfApBandConversion(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2969,7 +3189,12 @@ public class WifiManager {
      */
     public void setTdlsEnabled(InetAddress remoteIPAddress, boolean enable) {
         try {
-            mService.enableTdls(remoteIPAddress.getHostAddress(), enable);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                if (remoteIPAddress == null || !enable) return;
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.enableTdls(remoteIPAddress.getHostAddress(), enable);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2983,7 +3208,12 @@ public class WifiManager {
      */
     public void setTdlsEnabledWithMacAddress(String remoteMacAddress, boolean enable) {
         try {
-            mService.enableTdlsWithMacAddress(remoteMacAddress, enable);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                if (TextUtils.isEmpty(remoteMacAddress) || !enable) return;
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.enableTdlsWithMacAddress(remoteMacAddress, enable);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3304,8 +3534,12 @@ public class WifiManager {
         Looper looper = (handler == null) ? mContext.getMainLooper() : handler.getLooper();
         Binder binder = new Binder();
         try {
-            mService.registerSoftApCallback(binder, new SoftApCallbackProxy(looper, callback),
-                    callback.hashCode());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.registerSoftApCallback(
+                    binder, new SoftApCallbackProxy(looper, callback), callback.hashCode());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3325,7 +3559,11 @@ public class WifiManager {
         Log.v(TAG, "unregisterSoftApCallback: callback=" + callback);
 
         try {
-            mService.unregisterSoftApCallback(callback.hashCode());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.unregisterSoftApCallback(callback.hashCode());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3893,9 +4131,13 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_STACK
     })
     public void disableEphemeralNetwork(String SSID) {
-        if (SSID == null) throw new IllegalArgumentException("SSID cannot be null");
+        if (TextUtils.isEmpty(SSID)) throw new IllegalArgumentException("SSID cannot be null");
         try {
-            mService.disableEphemeralNetwork(SSID, mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.disableEphemeralNetwork(SSID, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3939,7 +4181,9 @@ public class WifiManager {
     @UnsupportedAppUsage
     private Messenger getWifiServiceMessenger() {
         try {
-            return mService.getWifiServiceMessenger(mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return null;
+            return iWifiManager.getWifiServiceMessenger(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3999,10 +4243,14 @@ public class WifiManager {
             synchronized (mBinder) {
                 if (mRefCounted ? (++mRefCount == 1) : (!mHeld)) {
                     try {
-                        mService.acquireWifiLock(mBinder, mLockType, mTag, mWorkSource);
+                        IWifiManager iWifiManager = getIWifiManager();
+                        if (iWifiManager == null) {
+                            throw new RemoteException("Wifi service is not running");
+                        }
+                        iWifiManager.acquireWifiLock(mBinder, mLockType, mTag, mWorkSource);
                         synchronized (WifiManager.this) {
                             if (mActiveLockCount >= MAX_ACTIVE_LOCKS) {
-                                mService.releaseWifiLock(mBinder);
+                                iWifiManager.releaseWifiLock(mBinder);
                                 throw new UnsupportedOperationException(
                                             "Exceeded maximum number of wifi locks");
                             }
@@ -4032,7 +4280,11 @@ public class WifiManager {
             synchronized (mBinder) {
                 if (mRefCounted ? (--mRefCount == 0) : (mHeld)) {
                     try {
-                        mService.releaseWifiLock(mBinder);
+                        IWifiManager iWifiManager = getIWifiManager();
+                        if (iWifiManager == null) {
+                            throw new RemoteException("Wifi service is not running");
+                        }
+                        iWifiManager.releaseWifiLock(mBinder);
                         synchronized (WifiManager.this) {
                             mActiveLockCount--;
                         }
@@ -4095,7 +4347,11 @@ public class WifiManager {
                 }
                 if (changed && mHeld) {
                     try {
-                        mService.updateWifiLockWorkSource(mBinder, mWorkSource);
+                        IWifiManager iWifiManager = getIWifiManager();
+                        if (iWifiManager == null) {
+                            throw new RemoteException("Wifi service is not running");
+                        }
+                        iWifiManager.updateWifiLockWorkSource(mBinder, mWorkSource);
                     } catch (RemoteException e) {
                         throw e.rethrowFromSystemServer();
                     }
@@ -4123,7 +4379,11 @@ public class WifiManager {
             synchronized (mBinder) {
                 if (mHeld) {
                     try {
-                        mService.releaseWifiLock(mBinder);
+                        IWifiManager iWifiManager = getIWifiManager();
+                        if (iWifiManager == null) {
+                            throw new RemoteException("Wifi service is not running");
+                        }
+                        iWifiManager.releaseWifiLock(mBinder);
                         synchronized (WifiManager.this) {
                             mActiveLockCount--;
                         }
@@ -4236,10 +4496,14 @@ public class WifiManager {
             synchronized (mBinder) {
                 if (mRefCounted ? (++mRefCount == 1) : (!mHeld)) {
                     try {
-                        mService.acquireMulticastLock(mBinder, mTag);
+                        IWifiManager iWifiManager = getIWifiManager();
+                        if (iWifiManager == null) {
+                            throw new RemoteException("Wifi service is not running");
+                        }
+                        iWifiManager.acquireMulticastLock(mBinder, mTag);
                         synchronized (WifiManager.this) {
                             if (mActiveLockCount >= MAX_ACTIVE_LOCKS) {
-                                mService.releaseMulticastLock(mTag);
+                                iWifiManager.releaseMulticastLock(mTag);
                                 throw new UnsupportedOperationException(
                                         "Exceeded maximum number of wifi locks");
                             }
@@ -4281,7 +4545,11 @@ public class WifiManager {
             synchronized (mBinder) {
                 if (mRefCounted ? (--mRefCount == 0) : (mHeld)) {
                     try {
-                        mService.releaseMulticastLock(mTag);
+                        IWifiManager iWifiManager = getIWifiManager();
+                        if (iWifiManager == null) {
+                            throw new RemoteException("Wifi service is not running");
+                        }
+                        iWifiManager.releaseMulticastLock(mTag);
                         synchronized (WifiManager.this) {
                             mActiveLockCount--;
                         }
@@ -4358,7 +4626,9 @@ public class WifiManager {
      */
     public boolean isMulticastEnabled() {
         try {
-            return mService.isMulticastEnabled();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            return iWifiManager.isMulticastEnabled();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4371,7 +4641,9 @@ public class WifiManager {
     @UnsupportedAppUsage
     public boolean initializeMulticastFiltering() {
         try {
-            mService.initializeMulticastFiltering();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return false;
+            iWifiManager.initializeMulticastFiltering();
             return true;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -4396,7 +4668,12 @@ public class WifiManager {
     @UnsupportedAppUsage
     public void enableVerboseLogging (int verbose) {
         try {
-            mService.enableVerboseLogging(verbose);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                if (verbose == 0) return;
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.enableVerboseLogging(verbose);
         } catch (Exception e) {
             //ignore any failure here
             Log.e(TAG, "enableVerboseLogging " + e.toString());
@@ -4411,7 +4688,9 @@ public class WifiManager {
     @UnsupportedAppUsage
     public int getVerboseLoggingLevel() {
         try {
-            return mService.getVerboseLoggingLevel();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return -1;
+            return iWifiManager.getVerboseLoggingLevel();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4424,7 +4703,11 @@ public class WifiManager {
      */
     public void factoryReset() {
         try {
-            mService.factoryReset(mContext.getOpPackageName());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.factoryReset(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4438,7 +4721,9 @@ public class WifiManager {
     @UnsupportedAppUsage
     public Network getCurrentNetwork() {
         try {
-            return mService.getCurrentNetwork();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return null;
+            return iWifiManager.getCurrentNetwork();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4470,7 +4755,12 @@ public class WifiManager {
      */
     public void enableWifiConnectivityManager(boolean enabled) {
         try {
-            mService.enableWifiConnectivityManager(enabled);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                if (enabled) return;
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.enableWifiConnectivityManager(enabled);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4482,7 +4772,9 @@ public class WifiManager {
      */
     public byte[] retrieveBackupData() {
         try {
-            return mService.retrieveBackupData();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return null;
+            return iWifiManager.retrieveBackupData();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4494,7 +4786,12 @@ public class WifiManager {
      */
     public void restoreBackupData(byte[] data) {
         try {
-            mService.restoreBackupData(data);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                if (ArrayUtils.isEmpty(data)) return;
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.restoreBackupData(data);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4510,7 +4807,12 @@ public class WifiManager {
     @Deprecated
     public void restoreSupplicantBackupData(byte[] supplicantData, byte[] ipConfigData) {
         try {
-            mService.restoreSupplicantBackupData(supplicantData, ipConfigData);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                if (ArrayUtils.isEmpty(supplicantData) && ArrayUtils.isEmpty(ipConfigData)) return;
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.restoreSupplicantBackupData(supplicantData, ipConfigData);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4539,7 +4841,11 @@ public class WifiManager {
             throw new IllegalArgumentException("callback must not be null");
         }
         try {
-            mService.startSubscriptionProvisioning(provider,
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.startSubscriptionProvisioning(provider,
                     new ProvisioningCallbackProxy(executor, callback));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -4652,7 +4958,11 @@ public class WifiManager {
         Looper looper = (handler == null) ? mContext.getMainLooper() : handler.getLooper();
         Binder binder = new Binder();
         try {
-            mService.registerTrafficStateCallback(
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.registerTrafficStateCallback(
                     binder, new TrafficStateCallbackProxy(looper, callback), callback.hashCode());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -4672,7 +4982,11 @@ public class WifiManager {
         Log.v(TAG, "unregisterTrafficStateCallback: callback=" + callback);
 
         try {
-            mService.unregisterTrafficStateCallback(callback.hashCode());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.unregisterTrafficStateCallback(callback.hashCode());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4913,7 +5227,9 @@ public class WifiManager {
     @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
     public String[] getFactoryMacAddresses() {
         try {
-            return mService.getFactoryMacAddresses();
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) return null;
+            return iWifiManager.getFactoryMacAddresses();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4982,7 +5298,12 @@ public class WifiManager {
     @RequiresPermission(android.Manifest.permission.WIFI_SET_DEVICE_MOBILITY_STATE)
     public void setDeviceMobilityState(@DeviceMobilityState int state) {
         try {
-            mService.setDeviceMobilityState(state);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                if (state == DEVICE_MOBILITY_STATE_UNKNOWN) return;
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.setDeviceMobilityState(state);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5037,8 +5358,13 @@ public class WifiManager {
             @NonNull EasyConnectStatusCallback callback) {
         Binder binder = new Binder();
         try {
-            mService.startDppAsConfiguratorInitiator(binder, enrolleeUri, selectedNetworkId,
-                    enrolleeNetworkRole, new EasyConnectCallbackProxy(executor, callback));
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.startDppAsConfiguratorInitiator(
+                    binder, enrolleeUri, selectedNetworkId, enrolleeNetworkRole,
+                    new EasyConnectCallbackProxy(executor, callback));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5063,7 +5389,11 @@ public class WifiManager {
             @NonNull EasyConnectStatusCallback callback) {
         Binder binder = new Binder();
         try {
-            mService.startDppAsEnrolleeInitiator(binder, configuratorUri,
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.startDppAsEnrolleeInitiator(binder, configuratorUri,
                     new EasyConnectCallbackProxy(executor, callback));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -5084,8 +5414,12 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_SETUP_WIZARD})
     public void stopEasyConnectSession() {
         try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
             /* Request lower layers to stop/abort and clear resources */
-            mService.stopDppSession();
+            iWifiManager.stopDppSession();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5184,7 +5518,11 @@ public class WifiManager {
             Log.v(TAG, "addOnWifiUsabilityStatsListener: listener=" + listener);
         }
         try {
-            mService.addOnWifiUsabilityStatsListener(new Binder(),
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.addOnWifiUsabilityStatsListener(new Binder(),
                     new IOnWifiUsabilityStatsListener.Stub() {
                         @Override
                         public void onWifiUsabilityStats(int seqNum, boolean isSameBssidAndFreq,
@@ -5221,7 +5559,11 @@ public class WifiManager {
             Log.v(TAG, "removeOnWifiUsabilityStatsListener: listener=" + listener);
         }
         try {
-            mService.removeOnWifiUsabilityStatsListener(listener.hashCode());
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.removeOnWifiUsabilityStatsListener(listener.hashCode());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5244,7 +5586,11 @@ public class WifiManager {
     @RequiresPermission(android.Manifest.permission.WIFI_UPDATE_USABILITY_STATS_SCORE)
     public void updateWifiUsabilityScore(int seqNum, int score, int predictionHorizonSec) {
         try {
-            mService.updateWifiUsabilityScore(seqNum, score, predictionHorizonSec);
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.updateWifiUsabilityScore(seqNum, score, predictionHorizonSec);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

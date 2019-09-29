@@ -18,6 +18,7 @@ package com.android.server.accessibility;
 
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
 
+import android.Manifest;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.accessibilityservice.IAccessibilityServiceClient;
 import android.content.ComponentName;
@@ -27,10 +28,12 @@ import android.content.pm.ParceledListSlice;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Slog;
+import android.view.Display;
 
 import com.android.server.accessibility.AccessibilityManagerService.UserState;
 import com.android.server.wm.WindowManagerInternal;
@@ -196,7 +199,7 @@ class AccessibilityServiceConnection extends AbstractAccessibilityServiceConnect
             return;
         }
         try {
-            serviceInterface.init(this, mId, mOverlayWindowToken);
+            serviceInterface.init(this, mId, mOverlayWindowTokens.get(Display.DEFAULT_DISPLAY));
         } catch (RemoteException re) {
             Slog.w(LOG_TAG, "Error while setting connection for service: "
                     + serviceInterface, re);
@@ -210,19 +213,31 @@ class AccessibilityServiceConnection extends AbstractAccessibilityServiceConnect
     }
 
     @Override
-    protected boolean isCalledForCurrentUserLocked() {
+    protected boolean hasRightsToCurrentUserLocked() {
         // We treat calls from a profile as if made by its parent as profiles
         // share the accessibility state of the parent. The call below
         // performs the current profile parent resolution.
-        final int resolvedUserId = mSecurityPolicy
-                .resolveCallingUserIdEnforcingPermissionsLocked(UserHandle.USER_CURRENT);
-        return resolvedUserId == mSystemSupport.getCurrentUserIdLocked();
+        final int callingUid = Binder.getCallingUid();
+        if (callingUid == Process.ROOT_UID
+                || callingUid == Process.SYSTEM_UID
+                || callingUid == Process.SHELL_UID) {
+            return true;
+        }
+        if (mSecurityPolicy.resolveProfileParentLocked(UserHandle.getUserId(callingUid))
+                == mSystemSupport.getCurrentUserIdLocked()) {
+            return true;
+        }
+        if (mSecurityPolicy.hasPermission(Manifest.permission.INTERACT_ACROSS_USERS)
+                || mSecurityPolicy.hasPermission(Manifest.permission.INTERACT_ACROSS_USERS_FULL)) {
+            return true;
+        }
+        return false;
     }
 
     @Override
     public boolean setSoftKeyboardShowMode(int showMode) {
         synchronized (mLock) {
-            if (!isCalledForCurrentUserLocked()) {
+            if (!hasRightsToCurrentUserLocked()) {
                 return false;
             }
             final UserState userState = mUserStateWeakReference.get();
@@ -237,11 +252,10 @@ class AccessibilityServiceConnection extends AbstractAccessibilityServiceConnect
         return (userState != null) ? userState.getSoftKeyboardShowMode() : 0;
     }
 
-
     @Override
     public boolean isAccessibilityButtonAvailable() {
         synchronized (mLock) {
-            if (!isCalledForCurrentUserLocked()) {
+            if (!hasRightsToCurrentUserLocked()) {
                 return false;
             }
             UserState userState = mUserStateWeakReference.get();
@@ -353,14 +367,15 @@ class AccessibilityServiceConnection extends AbstractAccessibilityServiceConnect
     }
 
     @Override
-    public void sendGesture(int sequence, ParceledListSlice gestureSteps) {
+    public void dispatchGesture(int sequence, ParceledListSlice gestureSteps, int displayId) {
+        final boolean isTouchableDisplay = mWindowManagerService.isTouchableDisplay(displayId);
         synchronized (mLock) {
             if (mSecurityPolicy.canPerformGestures(this)) {
                 MotionEventInjector motionEventInjector =
-                        mSystemSupport.getMotionEventInjectorLocked();
-                if (motionEventInjector != null) {
+                        mSystemSupport.getMotionEventInjectorForDisplayLocked(displayId);
+                if (motionEventInjector != null && isTouchableDisplay) {
                     motionEventInjector.injectEvents(
-                            gestureSteps.getList(), mServiceInterface, sequence);
+                            gestureSteps.getList(), mServiceInterface, sequence, displayId);
                 } else {
                     try {
                         mServiceInterface.onPerformGestureResult(sequence, false);

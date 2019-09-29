@@ -27,6 +27,7 @@ import static com.android.internal.util.FunctionalUtils.ignoreRemoteException;
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
 
 import android.Manifest;
+import android.accessibilityservice.AccessibilityGestureInfo;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.accessibilityservice.IAccessibilityServiceClient;
@@ -210,7 +211,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
     private KeyEventDispatcher mKeyEventDispatcher;
 
-    private MotionEventInjector mMotionEventInjector;
+    private SparseArray<MotionEventInjector> mMotionEventInjectors;
 
     private FingerprintGestureDispatcher mFingerprintGestureDispatcher;
 
@@ -541,7 +542,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             if (event.getWindowId() ==
                 AccessibilityWindowInfo.PICTURE_IN_PICTURE_ACTION_REPLACER_WINDOW_ID) {
                 // The replacer window isn't shown to services. Move its events into the pip.
-                AccessibilityWindowInfo pip = mA11yWindowManager.getPictureInPictureWindow();
+                AccessibilityWindowInfo pip = mA11yWindowManager.getPictureInPictureWindowLocked();
                 if (pip != null) {
                     int pipId = pip.getId();
                     event.setWindowId(pipId);
@@ -579,10 +580,11 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             // Make sure clients receiving this event will be able to get the
             // current state of the windows as the window manager may be delaying
             // the computation for performance reasons.
+            // TODO [Multi-Display] : using correct display Id to replace DEFAULT_DISPLAY
             if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
                     && mA11yWindowManager.isTrackingWindowsLocked()) {
                 WindowManagerInternal wm = LocalServices.getService(WindowManagerInternal.class);
-                wm.computeWindowsForAccessibility();
+                wm.computeWindowsForAccessibility(Display.DEFAULT_DISPLAY);
             }
             synchronized (mLock) {
                 notifyAccessibilityServicesDelayedLocked(event, false);
@@ -769,7 +771,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             if (resolvedUserId != mCurrentUserId) {
                 return null;
             }
-            if (mA11yWindowManager.findA11yWindowInfoById(windowId) == null) {
+            if (mA11yWindowManager.findA11yWindowInfoByIdLocked(windowId) == null) {
                 return null;
             }
             return mA11yWindowManager.getWindowTokenForUserAndWindowIdLocked(userId, windowId);
@@ -814,11 +816,11 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     }
 
 
-    boolean onGesture(int gestureId) {
+    public boolean onGesture(AccessibilityGestureInfo gestureInfo) {
         synchronized (mLock) {
-            boolean handled = notifyGestureLocked(gestureId, false);
+            boolean handled = notifyGestureLocked(gestureInfo, false);
             if (!handled) {
-                handled = notifyGestureLocked(gestureId, true);
+                handled = notifyGestureLocked(gestureInfo, true);
             }
             return handled;
         }
@@ -859,30 +861,34 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
      * Called by AccessibilityInputFilter when it creates or destroys the motionEventInjector.
      * Not using a getter because the AccessibilityInputFilter isn't thread-safe
      *
-     * @param motionEventInjector The new value of the motionEventInjector. May be null.
+     * @param motionEventInjectors The array of motionEventInjectors. May be null.
+     *
      */
-    void setMotionEventInjector(MotionEventInjector motionEventInjector) {
+    void setMotionEventInjectors(SparseArray<MotionEventInjector> motionEventInjectors) {
         synchronized (mLock) {
-            mMotionEventInjector = motionEventInjector;
+            mMotionEventInjectors = motionEventInjectors;
             // We may be waiting on this object being set
             mLock.notifyAll();
         }
     }
 
     @Override
-    public MotionEventInjector getMotionEventInjectorLocked() {
+    public @Nullable MotionEventInjector getMotionEventInjectorForDisplayLocked(int displayId) {
         final long endMillis = SystemClock.uptimeMillis() + WAIT_MOTION_INJECTOR_TIMEOUT_MILLIS;
-        while ((mMotionEventInjector == null) && (SystemClock.uptimeMillis() < endMillis)) {
+        MotionEventInjector motionEventInjector = null;
+        while ((mMotionEventInjectors == null) && (SystemClock.uptimeMillis() < endMillis)) {
             try {
                 mLock.wait(endMillis - SystemClock.uptimeMillis());
             } catch (InterruptedException ie) {
                 /* ignore */
             }
         }
-        if (mMotionEventInjector == null) {
+        if (mMotionEventInjectors == null) {
             Slog.e(LOG_TAG, "MotionEventInjector installation timed out");
+        } else {
+            motionEventInjector = mMotionEventInjectors.get(displayId);
         }
-        return mMotionEventInjector;
+        return motionEventInjector;
     }
 
     /**
@@ -899,15 +905,15 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         return getInteractionBridge().performActionOnAccessibilityFocusedItemNotLocked(action);
     }
 
-    int getActiveWindowId() {
+    public int getActiveWindowId() {
         return mA11yWindowManager.getActiveWindowId(mCurrentUserId);
     }
 
-    void onTouchInteractionStart() {
+    public void onTouchInteractionStart() {
         mA11yWindowManager.onTouchInteractionStart();
     }
 
-    void onTouchInteractionEnd() {
+    public void onTouchInteractionEnd() {
         mA11yWindowManager.onTouchInteractionEnd();
     }
 
@@ -1009,7 +1015,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         }
     }
 
-    private boolean notifyGestureLocked(int gestureId, boolean isDefault) {
+    private boolean notifyGestureLocked(AccessibilityGestureInfo gestureInfo, boolean isDefault) {
         // TODO: Now we are giving the gestures to the last enabled
         //       service that can handle them which is the last one
         //       in our list since we write the last enabled as the
@@ -1023,7 +1029,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         for (int i = state.mBoundServices.size() - 1; i >= 0; i--) {
             AccessibilityServiceConnection service = state.mBoundServices.get(i);
             if (service.mRequestTouchExplorationMode && service.mIsDefault == isDefault) {
-                service.notifyGesture(gestureId);
+                service.notifyGesture(gestureInfo);
                 return true;
             }
         }
@@ -1079,9 +1085,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 for (int i = state.mBoundServices.size() - 1; i >= 0; i--) {
                     final AccessibilityServiceConnection service = state.mBoundServices.get(i);
                     if (service.mRequestAccessibilityButton) {
-                        // TODO(b/120762691): Need to notify each accessibility service if
-                        // accessibility button is clicked per display.
-                        service.notifyAccessibilityButtonClickedLocked();
+                        service.notifyAccessibilityButtonClickedLocked(displayId);
                         return;
                     }
                 }
@@ -1103,9 +1107,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     final AccessibilityServiceConnection service = state.mBoundServices.get(i);
                     if (service.mRequestAccessibilityButton && (service.mComponentName.equals(
                             state.mServiceAssignedToAccessibilityButton))) {
-                        // TODO(b/120762691): Need to notify each accessibility service if
-                        // accessibility button is clicked per display.
-                        service.notifyAccessibilityButtonClickedLocked();
+                        service.notifyAccessibilityButtonClickedLocked(displayId);
                         return;
                     }
                 }
@@ -2529,10 +2531,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     // to create event handler per display. The events should be handled by the
                     // display which is overlaid by it.
                     final Display display = displays[i];
-                    if (display.getType() == Display.TYPE_OVERLAY) {
-                        continue;
+                    if (isValidDisplay(display)) {
+                        mDisplaysList.add(display);
                     }
-                    mDisplaysList.add(display);
                 }
             }
         }
@@ -2540,7 +2541,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         @Override
         public void onDisplayAdded(int displayId) {
             final Display display = mDisplayManager.getDisplay(displayId);
-            if (display == null || display.getType() == Display.TYPE_OVERLAY) {
+            if (!isValidDisplay(display)) {
                 return;
             }
 
@@ -2550,6 +2551,13 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     mInputFilter.onDisplayChanged();
                 }
                 UserState userState = getCurrentUserStateLocked();
+                if (displayId != Display.DEFAULT_DISPLAY) {
+                    final List<AccessibilityServiceConnection> services = userState.mBoundServices;
+                    for (int i = 0; i < services.size(); i++) {
+                        AccessibilityServiceConnection boundClient = services.get(i);
+                        boundClient.onDisplayAdded(displayId);
+                    }
+                }
                 updateMagnificationLocked(userState);
             }
         }
@@ -2566,6 +2574,14 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 if (mInputFilter != null) {
                     mInputFilter.onDisplayChanged();
                 }
+                UserState userState = getCurrentUserStateLocked();
+                if (displayId != Display.DEFAULT_DISPLAY) {
+                    final List<AccessibilityServiceConnection> services = userState.mBoundServices;
+                    for (int i = 0; i < services.size(); i++) {
+                        AccessibilityServiceConnection boundClient = services.get(i);
+                        boundClient.onDisplayRemoved(displayId);
+                    }
+                }
             }
             if (mMagnificationController != null) {
                 mMagnificationController.onDisplayRemoved(displayId);
@@ -2575,6 +2591,19 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         @Override
         public void onDisplayChanged(int displayId) {
             /* do nothing */
+        }
+
+        private boolean isValidDisplay(@Nullable Display display) {
+            if (display == null || display.getType() == Display.TYPE_OVERLAY) {
+                return false;
+            }
+            // Private virtual displays are created by the ap and is not allowed to access by other
+            // aps. We assume we could ignore them.
+            if ((display.getType() == Display.TYPE_VIRTUAL
+                    && (display.getFlags() & Display.FLAG_PRIVATE) != 0)) {
+                return false;
+            }
+            return true;
         }
     }
 
@@ -2600,8 +2629,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
         public final RemoteCallbackList<IAccessibilityManagerClient> mUserClients =
                 new RemoteCallbackList<>();
-
-        public final SparseArray<IBinder> mWindowTokens = new SparseArray<>();
 
         // Transient state.
 

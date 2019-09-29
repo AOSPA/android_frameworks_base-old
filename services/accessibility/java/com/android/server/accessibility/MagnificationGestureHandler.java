@@ -24,7 +24,7 @@ import static android.view.MotionEvent.ACTION_POINTER_DOWN;
 import static android.view.MotionEvent.ACTION_POINTER_UP;
 import static android.view.MotionEvent.ACTION_UP;
 
-import static com.android.server.accessibility.GestureUtils.distance;
+import static com.android.server.accessibility.gestures.GestureUtils.distance;
 
 import static java.lang.Math.abs;
 import static java.util.Arrays.asList;
@@ -39,6 +39,7 @@ import android.content.IntentFilter;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.SystemClock;
 import android.util.Log;
 import android.util.MathUtils;
 import android.util.Slog;
@@ -53,6 +54,7 @@ import android.view.ScaleGestureDetector.OnScaleGestureListener;
 import android.view.ViewConfiguration;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.server.accessibility.gestures.GestureUtils;
 
 import java.util.ArrayDeque;
 import java.util.Queue;
@@ -622,6 +624,8 @@ class MagnificationGestureHandler extends BaseEventStreamTransformation {
         private MotionEvent mLastUp;
         private MotionEvent mPreLastUp;
 
+        private long mLastDetectingDownEventTime;
+
         @VisibleForTesting boolean mShortcutTriggered;
 
         @VisibleForTesting Handler mHandler = new Handler(Looper.getMainLooper(), this);
@@ -662,6 +666,7 @@ class MagnificationGestureHandler extends BaseEventStreamTransformation {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN: {
 
+                    mLastDetectingDownEventTime = event.getDownTime();
                     mHandler.removeMessages(MESSAGE_TRANSITION_TO_DELEGATING_STATE);
 
                     if (!mMagnificationController.magnificationRegionContains(
@@ -838,14 +843,25 @@ class MagnificationGestureHandler extends BaseEventStreamTransformation {
         }
 
         private void sendDelayedMotionEvents() {
-            while (mDelayedEventQueue != null) {
+            if (mDelayedEventQueue == null) {
+                return;
+            }
+
+            // Adjust down time to prevent subsequent modules being misleading, and also limit
+            // the maximum offset to mMultiTapMaxDelay to prevent the down time of 2nd tap is
+            // in the future when multi-tap happens.
+            final long offset = Math.min(
+                    SystemClock.uptimeMillis() - mLastDetectingDownEventTime, mMultiTapMaxDelay);
+
+            do {
                 MotionEventInfo info = mDelayedEventQueue;
                 mDelayedEventQueue = info.mNext;
 
+                info.event.setDownTime(info.event.getDownTime() + offset);
                 handleEventWith(mDelegatingState, info.event, info.rawEvent, info.policyFlags);
 
                 info.recycle();
-            }
+            } while (mDelayedEventQueue != null);
         }
 
         private void clearDelayedMotionEvents() {

@@ -127,6 +127,7 @@ class RecentTasks {
     // iterating through the recents list
     private static final ActivityInfo NO_ACTIVITY_INFO_TOKEN = new ActivityInfo();
     private static final ApplicationInfo NO_APPLICATION_INFO_TOKEN = new ApplicationInfo();
+    private TaskChangeNotificationController mTaskNotificationController;
 
     /**
      * Callbacks made when manipulating the list.
@@ -230,6 +231,7 @@ class RecentTasks {
         mTaskPersister = taskPersister;
         mGlobalMaxNumTasks = ActivityTaskManager.getMaxRecentTasksStatic();
         mHasVisibleRecentTasks = true;
+        mTaskNotificationController = service.getTaskChangeNotificationController();
     }
 
     RecentTasks(ActivityTaskManagerService service, ActivityStackSupervisor stackSupervisor) {
@@ -240,6 +242,7 @@ class RecentTasks {
         mTaskPersister = new TaskPersister(systemDir, stackSupervisor, service, this,
                 stackSupervisor.mPersisterQueue);
         mGlobalMaxNumTasks = ActivityTaskManager.getMaxRecentTasksStatic();
+        mTaskNotificationController = service.getTaskChangeNotificationController();
         mHasVisibleRecentTasks = res.getBoolean(com.android.internal.R.bool.config_hasRecents);
         loadParametersFromResources(res);
     }
@@ -300,7 +303,7 @@ class RecentTasks {
         // Resume trimming tasks
         trimInactiveRecentTasks();
 
-        mService.getTaskChangeNotificationController().notifyTaskStackChanged();
+        mTaskNotificationController.notifyTaskStackChanged();
     }
 
     /**
@@ -429,12 +432,14 @@ class RecentTasks {
         for (int i = 0; i < mCallbacks.size(); i++) {
             mCallbacks.get(i).onRecentTaskAdded(task);
         }
+        mTaskNotificationController.notifyTaskListUpdated();
     }
 
     private void notifyTaskRemoved(TaskRecord task, boolean wasTrimmed, boolean killProcess) {
         for (int i = 0; i < mCallbacks.size(); i++) {
             mCallbacks.get(i).onRecentTaskRemoved(task, wasTrimmed, killProcess);
         }
+        mTaskNotificationController.notifyTaskListUpdated();
     }
 
     /**

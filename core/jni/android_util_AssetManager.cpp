@@ -18,10 +18,8 @@
 #define LOG_TAG "asset"
 
 #include <inttypes.h>
-#include <linux/capability.h>
 #include <stdio.h>
 #include <sys/stat.h>
-#include <sys/system_properties.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -163,7 +161,7 @@ static void NativeVerifySystemIdmaps(JNIEnv* /*env*/, jclass /*clazz*/) {
       }
 
       // Generic idmap parameters
-      const char* argv[10];
+      const char* argv[11];
       int argc = 0;
       struct stat st;
 
@@ -195,8 +193,8 @@ static void NativeVerifySystemIdmaps(JNIEnv* /*env*/, jclass /*clazz*/) {
         argv[argc++] = AssetManager::PRODUCT_OVERLAY_DIR;
       }
 
-      if (stat(AssetManager::PRODUCT_SERVICES_OVERLAY_DIR, &st) == 0) {
-        argv[argc++] = AssetManager::PRODUCT_SERVICES_OVERLAY_DIR;
+      if (stat(AssetManager::SYSTEM_EXT_OVERLAY_DIR, &st) == 0) {
+        argv[argc++] = AssetManager::SYSTEM_EXT_OVERLAY_DIR;
       }
 
       if (stat(AssetManager::ODM_OVERLAY_DIR, &st) == 0) {
@@ -237,8 +235,8 @@ static jobjectArray NativeCreateIdmapsForStaticOverlaysTargetingAndroid(JNIEnv* 
     input_dirs.push_back(AssetManager::PRODUCT_OVERLAY_DIR);
   }
 
-  if (stat(AssetManager::PRODUCT_SERVICES_OVERLAY_DIR, &st) == 0) {
-    input_dirs.push_back(AssetManager::PRODUCT_SERVICES_OVERLAY_DIR);
+  if (stat(AssetManager::SYSTEM_EXT_OVERLAY_DIR, &st) == 0) {
+    input_dirs.push_back(AssetManager::SYSTEM_EXT_OVERLAY_DIR);
   }
 
   if (stat(AssetManager::ODM_OVERLAY_DIR, &st) == 0) {
@@ -399,6 +397,7 @@ static jobject NativeGetOverlayableMap(JNIEnv* env, jclass /*clazz*/, jlong ptr,
   return array_map;
 }
 
+#ifdef __ANDROID__ // Layoutlib does not support parcel
 static jobject ReturnParcelFileDescriptor(JNIEnv* env, std::unique_ptr<Asset> asset,
                                           jlongArray out_offsets) {
   off64_t start_offset, length;
@@ -430,6 +429,15 @@ static jobject ReturnParcelFileDescriptor(JNIEnv* env, std::unique_ptr<Asset> as
   }
   return newParcelFileDescriptor(env, file_desc);
 }
+#else
+static jobject ReturnParcelFileDescriptor(JNIEnv* env, std::unique_ptr<Asset> asset,
+                                          jlongArray out_offsets) {
+  jniThrowException(env, "java/lang/UnsupportedOperationException",
+                    "Implement me");
+  // never reached
+  return nullptr;
+}
+#endif
 
 static jint NativeGetGlobalAssetCount(JNIEnv* /*env*/, jobject /*clazz*/) {
   return Asset::getGlobalCount();

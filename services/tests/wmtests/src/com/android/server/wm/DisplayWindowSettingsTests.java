@@ -41,6 +41,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Matchers.eq;
 
 import android.app.WindowConfiguration;
+import android.content.res.Configuration;
 import android.platform.test.annotations.Presubmit;
 import android.util.Xml;
 import android.view.Display;
@@ -94,7 +95,7 @@ public class DisplayWindowSettingsTests extends WindowTestsBase {
     public void setUp() throws Exception {
         deleteRecursively(TEST_FOLDER);
 
-        mWm.setSupportsFreeformWindowManagement(false);
+        mWm.mAtmService.mSupportsFreeformWindowManagement = false;
         mWm.setIsPc(false);
         mWm.setForceDesktopModeOnExternalDisplays(false);
 
@@ -133,7 +134,7 @@ public class DisplayWindowSettingsTests extends WindowTestsBase {
 
     @Test
     public void testPrimaryDisplayDefaultToFullscreen_HasFreeformSupport_NonPc_NoDesktopMode() {
-        mWm.setSupportsFreeformWindowManagement(true);
+        mWm.mAtmService.mSupportsFreeformWindowManagement = true;
 
         mTarget.applySettingsToDisplayLocked(mPrimaryDisplay);
 
@@ -143,7 +144,7 @@ public class DisplayWindowSettingsTests extends WindowTestsBase {
 
     @Test
     public void testPrimaryDisplayDefaultToFullscreen_HasFreeformSupport_NonPc_HasDesktopMode() {
-        mWm.setSupportsFreeformWindowManagement(true);
+        mWm.mAtmService.mSupportsFreeformWindowManagement = true;
         mWm.setForceDesktopModeOnExternalDisplays(true);
 
         mTarget.applySettingsToDisplayLocked(mPrimaryDisplay);
@@ -154,7 +155,7 @@ public class DisplayWindowSettingsTests extends WindowTestsBase {
 
     @Test
     public void testPrimaryDisplayDefaultToFreeform_HasFreeformSupport_IsPc() {
-        mWm.setSupportsFreeformWindowManagement(true);
+        mWm.mAtmService.mSupportsFreeformWindowManagement = true;
         mWm.setIsPc(true);
 
         mTarget.applySettingsToDisplayLocked(mPrimaryDisplay);
@@ -167,7 +168,7 @@ public class DisplayWindowSettingsTests extends WindowTestsBase {
     public void testPrimaryDisplayUpdateToFreeform_HasFreeformSupport_IsPc() {
         mTarget.applySettingsToDisplayLocked(mPrimaryDisplay);
 
-        mWm.setSupportsFreeformWindowManagement(true);
+        mWm.mAtmService.mSupportsFreeformWindowManagement = true;
         mWm.setIsPc(true);
 
         mTarget.updateSettingsForDisplay(mPrimaryDisplay);
@@ -186,7 +187,7 @@ public class DisplayWindowSettingsTests extends WindowTestsBase {
 
     @Test
     public void testSecondaryDisplayDefaultToFreeform_HasFreeformSupport_NonPc_NoDesktopMode() {
-        mWm.setSupportsFreeformWindowManagement(true);
+        mWm.mAtmService.mSupportsFreeformWindowManagement = true;
 
         mTarget.applySettingsToDisplayLocked(mSecondaryDisplay);
 
@@ -196,7 +197,7 @@ public class DisplayWindowSettingsTests extends WindowTestsBase {
 
     @Test
     public void testSecondaryDisplayDefaultToFreeform_HasFreeformSupport_NonPc_HasDesktopMode() {
-        mWm.setSupportsFreeformWindowManagement(true);
+        mWm.mAtmService.mSupportsFreeformWindowManagement = true;
         mWm.setForceDesktopModeOnExternalDisplays(true);
 
         mTarget.applySettingsToDisplayLocked(mSecondaryDisplay);
@@ -207,7 +208,7 @@ public class DisplayWindowSettingsTests extends WindowTestsBase {
 
     @Test
     public void testSecondaryDisplayDefaultToFreeform_HasFreeformSupport_IsPc() {
-        mWm.setSupportsFreeformWindowManagement(true);
+        mWm.mAtmService.mSupportsFreeformWindowManagement = true;
         mWm.setIsPc(true);
 
         mTarget.applySettingsToDisplayLocked(mSecondaryDisplay);
@@ -604,6 +605,32 @@ public class DisplayWindowSettingsTests extends WindowTestsBase {
         } finally {
             mWm.setForceDesktopModeOnExternalDisplays(false);
         }
+    }
+
+    @Test
+    public void testDisplayWindowSettingsAppliedOnDisplayReady() {
+        // Set forced densities for two displays in DisplayWindowSettings
+        final DisplayContent dc = createMockSimulatedDisplay();
+        final DisplayWindowSettings settings = new DisplayWindowSettings(mWm, mStorage);
+        settings.setForcedDensity(mPrimaryDisplay, 123, 0 /* userId */);
+        settings.setForcedDensity(dc, 456, 0 /* userId */);
+
+        // Apply settings to displays - the settings will be stored, but config will not be
+        // recalculated immediately.
+        settings.applySettingsToDisplayLocked(mPrimaryDisplay);
+        settings.applySettingsToDisplayLocked(dc);
+        assertFalse(mPrimaryDisplay.mWaitingForConfig);
+        assertFalse(dc.mWaitingForConfig);
+
+        // Notify WM that the displays are ready and check that they are reconfigured.
+        mWm.displayReady();
+        waitUntilHandlersIdle();
+
+        final Configuration config = new Configuration();
+        mPrimaryDisplay.computeScreenConfiguration(config);
+        assertEquals(123, config.densityDpi);
+        dc.computeScreenConfiguration(config);
+        assertEquals(456, config.densityDpi);
     }
 
     /**

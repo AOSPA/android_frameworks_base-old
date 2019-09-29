@@ -35,6 +35,7 @@ import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.internal.widget.LockPatternUtils.CredentialType;
@@ -48,6 +49,8 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.channels.FileChannel;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -75,10 +78,7 @@ class LockSettingsStorage {
 
     private static final String SYSTEM_DIRECTORY = "/system/";
     private static final String LOCK_PATTERN_FILE = "gatekeeper.pattern.key";
-    private static final String BASE_ZERO_LOCK_PATTERN_FILE = "gatekeeper.gesture.key";
-    private static final String LEGACY_LOCK_PATTERN_FILE = "gesture.key";
     private static final String LOCK_PASSWORD_FILE = "gatekeeper.password.key";
-    private static final String LEGACY_LOCK_PASSWORD_FILE = "password.key";
     private static final String CHILD_PROFILE_LOCK_FILE = "gatekeeper.profile.key";
 
     private static final String SYNTHETIC_PASSWORD_DIRECTORY = "spblob/";
@@ -94,59 +94,43 @@ class LockSettingsStorage {
 
     @VisibleForTesting
     public static class CredentialHash {
-        static final int VERSION_LEGACY = 0;
-        static final int VERSION_GATEKEEPER = 1;
+        /** Deprecated private static final int VERSION_LEGACY = 0; */
+        private static final int VERSION_GATEKEEPER = 1;
 
-        private CredentialHash(byte[] hash, @CredentialType int type, int version) {
-            this(hash, type, version, false /* isBaseZeroPattern */);
-        }
-
-        private CredentialHash(
-                byte[] hash, @CredentialType int type, int version, boolean isBaseZeroPattern) {
+        private CredentialHash(byte[] hash, @CredentialType int type) {
             if (type != LockPatternUtils.CREDENTIAL_TYPE_NONE) {
                 if (hash == null) {
-                    throw new RuntimeException("Empty hash for CredentialHash");
+                    throw new IllegalArgumentException("Empty hash for CredentialHash");
                 }
             } else /* type == LockPatternUtils.CREDENTIAL_TYPE_NONE */ {
                 if (hash != null) {
-                    throw new RuntimeException("None type CredentialHash should not have hash");
+                    throw new IllegalArgumentException(
+                            "None type CredentialHash should not have hash");
                 }
             }
             this.hash = hash;
             this.type = type;
-            this.version = version;
-            this.isBaseZeroPattern = isBaseZeroPattern;
-        }
-
-        private static CredentialHash createBaseZeroPattern(byte[] hash) {
-            return new CredentialHash(hash, LockPatternUtils.CREDENTIAL_TYPE_PATTERN,
-                    VERSION_GATEKEEPER, true /* isBaseZeroPattern */);
         }
 
         static CredentialHash create(byte[] hash, int type) {
             if (type == LockPatternUtils.CREDENTIAL_TYPE_NONE) {
-                throw new RuntimeException("Bad type for CredentialHash");
+                throw new IllegalArgumentException("Bad type for CredentialHash");
             }
-            return new CredentialHash(hash, type, VERSION_GATEKEEPER);
+            return new CredentialHash(hash, type);
         }
 
         static CredentialHash createEmptyHash() {
-            return new CredentialHash(null, LockPatternUtils.CREDENTIAL_TYPE_NONE,
-                    VERSION_GATEKEEPER);
+            return new CredentialHash(null, LockPatternUtils.CREDENTIAL_TYPE_NONE);
         }
 
         byte[] hash;
         @CredentialType int type;
-        int version;
-        boolean isBaseZeroPattern;
 
         public byte[] toBytes() {
-            Preconditions.checkState(!isBaseZeroPattern, "base zero patterns are not serializable");
-
             try {
                 ByteArrayOutputStream os = new ByteArrayOutputStream();
                 DataOutputStream dos = new DataOutputStream(os);
-                dos.write(version);
+                dos.write(VERSION_GATEKEEPER);
                 dos.write(type);
                 if (hash != null && hash.length > 0) {
                     dos.writeInt(hash.length);
@@ -157,14 +141,14 @@ class LockSettingsStorage {
                 dos.close();
                 return os.toByteArray();
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                throw new IllegalStateException("Fail to serialze credential hash", e);
             }
         }
 
         public static CredentialHash fromBytes(byte[] bytes) {
             try {
                 DataInputStream is = new DataInputStream(new ByteArrayInputStream(bytes));
-                int version = is.read();
+                /* int version = */ is.read();
                 int type = is.read();
                 int hashSize = is.readInt();
                 byte[] hash = null;
@@ -172,9 +156,9 @@ class LockSettingsStorage {
                     hash = new byte[hashSize];
                     is.readFully(hash);
                 }
-                return new CredentialHash(hash, type, version);
+                return new CredentialHash(hash, type);
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                throw new IllegalStateException("Fail to deserialze credential hash", e);
             }
         }
     }
@@ -267,14 +251,7 @@ class LockSettingsStorage {
     private CredentialHash readPasswordHashIfExists(int userId) {
         byte[] stored = readFile(getLockPasswordFilename(userId));
         if (!ArrayUtils.isEmpty(stored)) {
-            return new CredentialHash(stored, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD,
-                    CredentialHash.VERSION_GATEKEEPER);
-        }
-
-        stored = readFile(getLegacyLockPasswordFilename(userId));
-        if (!ArrayUtils.isEmpty(stored)) {
-            return new CredentialHash(stored, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD,
-                    CredentialHash.VERSION_LEGACY);
+            return new CredentialHash(stored, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD);
         }
         return null;
     }
@@ -282,39 +259,22 @@ class LockSettingsStorage {
     private CredentialHash readPatternHashIfExists(int userId) {
         byte[] stored = readFile(getLockPatternFilename(userId));
         if (!ArrayUtils.isEmpty(stored)) {
-            return new CredentialHash(stored, LockPatternUtils.CREDENTIAL_TYPE_PATTERN,
-                    CredentialHash.VERSION_GATEKEEPER);
-        }
-
-        stored = readFile(getBaseZeroLockPatternFilename(userId));
-        if (!ArrayUtils.isEmpty(stored)) {
-            return CredentialHash.createBaseZeroPattern(stored);
-        }
-
-        stored = readFile(getLegacyLockPatternFilename(userId));
-        if (!ArrayUtils.isEmpty(stored)) {
-            return new CredentialHash(stored, LockPatternUtils.CREDENTIAL_TYPE_PATTERN,
-                    CredentialHash.VERSION_LEGACY);
+            return new CredentialHash(stored, LockPatternUtils.CREDENTIAL_TYPE_PATTERN);
         }
         return null;
     }
 
     public CredentialHash readCredentialHash(int userId) {
         CredentialHash passwordHash = readPasswordHashIfExists(userId);
-        CredentialHash patternHash = readPatternHashIfExists(userId);
-        if (passwordHash != null && patternHash != null) {
-            if (passwordHash.version == CredentialHash.VERSION_GATEKEEPER) {
-                return passwordHash;
-            } else {
-                return patternHash;
-            }
-        } else if (passwordHash != null) {
+        if (passwordHash != null) {
             return passwordHash;
-        } else if (patternHash != null) {
-            return patternHash;
-        } else {
-            return CredentialHash.createEmptyHash();
         }
+
+        CredentialHash patternHash = readPatternHashIfExists(userId);
+        if (patternHash != null) {
+            return patternHash;
+        }
+        return CredentialHash.createEmptyHash();
     }
 
     public void removeChildProfileLock(int userId) {
@@ -340,14 +300,11 @@ class LockSettingsStorage {
     }
 
     public boolean hasPassword(int userId) {
-        return hasFile(getLockPasswordFilename(userId)) ||
-            hasFile(getLegacyLockPasswordFilename(userId));
+        return hasFile(getLockPasswordFilename(userId));
     }
 
     public boolean hasPattern(int userId) {
-        return hasFile(getLockPatternFilename(userId)) ||
-            hasFile(getBaseZeroLockPatternFilename(userId)) ||
-            hasFile(getLegacyLockPatternFilename(userId));
+        return hasFile(getLockPatternFilename(userId));
     }
 
     public boolean hasCredential(int userId) {
@@ -390,6 +347,17 @@ class LockSettingsStorage {
         return stored;
     }
 
+    private void fsyncDirectory(File directory) {
+        try {
+            try (FileChannel file = FileChannel.open(directory.toPath(),
+                    StandardOpenOption.READ)) {
+                file.force(true);
+            }
+        } catch (IOException e) {
+            Slog.e(TAG, "Error syncing directory: " + directory, e);
+        }
+    }
+
     private void writeFile(String name, byte[] hash) {
         synchronized (mFileWriteLock) {
             RandomAccessFile raf = null;
@@ -406,6 +374,7 @@ class LockSettingsStorage {
                     raf.write(hash, 0, hash.length);
                 }
                 raf.close();
+                fsyncDirectory((new File(name)).getAbsoluteFile().getParentFile());
             } catch (IOException e) {
                 Slog.e(TAG, "Error writing to file " + e);
             } finally {
@@ -453,20 +422,6 @@ class LockSettingsStorage {
     @VisibleForTesting
     String getLockPasswordFilename(int userId) {
         return getLockCredentialFilePathForUser(userId, LOCK_PASSWORD_FILE);
-    }
-
-    @VisibleForTesting
-    String getLegacyLockPatternFilename(int userId) {
-        return getLockCredentialFilePathForUser(userId, LEGACY_LOCK_PATTERN_FILE);
-    }
-
-    @VisibleForTesting
-    String getLegacyLockPasswordFilename(int userId) {
-        return getLockCredentialFilePathForUser(userId, LEGACY_LOCK_PASSWORD_FILE);
-    }
-
-    private String getBaseZeroLockPatternFilename(int userId) {
-        return getLockCredentialFilePathForUser(userId, BASE_ZERO_LOCK_PATTERN_FILE);
     }
 
     @VisibleForTesting
@@ -712,7 +667,7 @@ class LockSettingsStorage {
                 dos.writeInt(qualityForUi);
                 dos.write(payload);
             } catch (IOException e) {
-                throw new RuntimeException("ByteArrayOutputStream cannot throw IOException");
+                throw new IllegalStateException("ByteArrayOutputStream cannot throw IOException");
             }
             return os.toByteArray();
         }
@@ -720,6 +675,26 @@ class LockSettingsStorage {
 
     public interface Callback {
         void initialize(SQLiteDatabase db);
+    }
+
+    public void dump(IndentingPrintWriter pw) {
+        final UserManager um = UserManager.get(mContext);
+        for (UserInfo user : um.getUsers(false)) {
+            File userPath = getSyntheticPasswordDirectoryForUser(user.id);
+            pw.println(String.format("User %d [%s]:", user.id, userPath.getAbsolutePath()));
+            pw.increaseIndent();
+            File[] files = userPath.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    pw.println(String.format("%4d %s %s", file.length(),
+                            LockSettingsService.timestampToString(file.lastModified()),
+                            file.getName()));
+                }
+            } else {
+                pw.println("[Not found]");
+            }
+            pw.decreaseIndent();
+        }
     }
 
     static class DatabaseHelper extends SQLiteOpenHelper {

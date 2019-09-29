@@ -1440,6 +1440,11 @@ public class AccountManagerService
 
     @Override
     public void onServiceChanged(AuthenticatorDescription desc, int userId, boolean removed) {
+        UserInfo user = getUserManager().getUserInfo(userId);
+        if (user == null) {
+            Log.w(TAG, "onServiceChanged: ignore removed user " + userId);
+            return;
+        }
         validateAccountsInternal(getUserAccounts(userId), false /* invalidateAuthenticatorCache */);
     }
 
@@ -5318,7 +5323,8 @@ public class AccountManagerService
         long identityToken = clearCallingIdentity();
         try {
             INotificationManager service = mInjector.getNotificationManager();
-            service.cancelNotificationWithTag(packageName, id.mTag, id.mId, user.getIdentifier());
+            service.cancelNotificationWithTag(
+                    packageName, "android", id.mTag, id.mId, user.getIdentifier());
         } catch (RemoteException e) {
             /* ignore - local call */
         } finally {

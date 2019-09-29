@@ -33,6 +33,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.TRANSIT_DOCK_TASK_FROM_RECENTS;
 import static android.view.WindowManager.TRANSIT_TASK_CHANGE_WINDOWING_MODE;
+import static android.view.WindowManager.TRANSIT_TASK_OPEN_BEHIND;
 import static android.view.WindowManager.TRANSIT_UNSET;
 import static android.view.WindowManager.TRANSIT_WALLPAPER_OPEN;
 
@@ -79,6 +80,7 @@ import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_PLACE_SURFACES;
 import static com.android.server.wm.WindowManagerService.logWithStack;
 import static com.android.server.wm.WindowState.LEGACY_POLICY_VISIBILITY;
+import static com.android.server.wm.WindowStateAnimator.HAS_DRAWN;
 import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_AFTER_ANIM;
 import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_BEFORE_ANIM;
 
@@ -90,6 +92,7 @@ import android.content.ComponentName;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.graphics.GraphicBuffer;
+import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Binder;
@@ -151,8 +154,11 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     final ComponentName mActivityComponent;
     final boolean mVoiceInteraction;
 
-    /** @see WindowContainer#fillsParent() */
-    private boolean mFillsParent;
+    /**
+     * The activity is opaque and fills the entire space of this task.
+     * @see WindowContainer#fillsParent()
+     */
+    private boolean mOccludesParent;
     boolean mShowForAllUsers;
     int mTargetSdk;
 
@@ -205,6 +211,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     boolean removed;
 
     // Information about an application starting window if displayed.
+    // Note: these are de-referenced before the starting window animates away.
     StartingData mStartingData;
     WindowState startingWindow;
     StartingSurface startingSurface;
@@ -258,9 +265,9 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     ActivityRecord mActivityRecord;
 
     /**
-     * See {@link #canTurnScreenOn()}
+     * @see #currentLaunchCanTurnScreenOn()
      */
-    private boolean mCanTurnScreenOn = true;
+    private boolean mCurrentLaunchCanTurnScreenOn = true;
 
     /**
      * If we are running an animation, this determines the transition type. Must be one of
@@ -370,7 +377,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         appToken = token;
         mActivityComponent = activityComponent;
         mVoiceInteraction = voiceInteraction;
-        mFillsParent = fillsParent;
+        mOccludesParent = fillsParent;
         mInputApplicationHandle = new InputApplicationHandle(appToken.asBinder());
     }
 
@@ -540,6 +547,18 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 // If the app was already visible, don't reset the waitingToShow state.
                 if (isHidden()) {
                     waitingToShow = true;
+
+                    // Let's reset the draw state in order to prevent the starting window to be
+                    // immediately dismissed when the app still has the surface.
+                    forAllWindows(w -> {
+                        if (w.mWinAnimator.mDrawState == HAS_DRAWN) {
+                            w.mWinAnimator.resetDrawState();
+
+                            // Force add to mResizingWindows, so that we are guaranteed to get
+                            // another reportDrawn callback.
+                            w.resetLastContentInsets();
+                        }
+                    },  true /* traverseTopToBottom */);
                 }
             }
 
@@ -568,8 +587,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 displayContent.mClosingApps.add(this);
                 mEnteringAnimation = false;
             }
-            if (appTransition.getAppTransition()
-                    == WindowManager.TRANSIT_TASK_OPEN_BEHIND) {
+            if (appTransition.getAppTransition() == TRANSIT_TASK_OPEN_BEHIND) {
                 // We're launchingBehind, add the launching activity to mOpeningApps.
                 final WindowState win = getDisplayContent().findFocusedWindow();
                 if (win != null) {
@@ -580,7 +598,6 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                                     + " adding " + focusedToken + " to mOpeningApps");
                         }
                         // Force animation to be loaded.
-                        focusedToken.setHidden(true);
                         displayContent.mOpeningApps.add(focusedToken);
                     }
                 }
@@ -607,9 +624,14 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         // * token is transitioning visibility state
         // * or the token was marked as hidden and is exiting before we had a chance to play the
         // transition animation
-        // * or this is an opening app and windows are being replaced.
+        // * or this is an opening app and windows are being replaced
+        // * or the token is the opening app and visible while opening task behind existing one.
+        final DisplayContent displayContent = getDisplayContent();
         boolean visibilityChanged = false;
-        if (isHidden() == visible || (isHidden() && mIsExiting) || (visible && waitingForReplacement())) {
+        if (isHidden() == visible || (isHidden() && mIsExiting)
+                || (visible && waitingForReplacement())
+                || (visible && displayContent.mOpeningApps.contains(this)
+                && displayContent.mAppTransition.getAppTransition() == TRANSIT_TASK_OPEN_BEHIND)) {
             final AccessibilityController accessibilityController =
                     mWmService.mAccessibilityController;
             boolean changed = false;
@@ -662,13 +684,13 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             }
 
             if (changed) {
-                getDisplayContent().getInputMonitor().setUpdateInputWindowsNeededLw();
+                displayContent.getInputMonitor().setUpdateInputWindowsNeededLw();
                 if (performLayout) {
                     mWmService.updateFocusedWindowLocked(UPDATE_FOCUS_WILL_PLACE_SURFACES,
                             false /*updateInputWindows*/);
                     mWmService.mWindowPlacerLocked.performSurfacePlacement();
                 }
-                getDisplayContent().getInputMonitor().updateInputWindowsLw(false /*force*/);
+                displayContent.getInputMonitor().updateInputWindowsLw(false /*force*/);
             }
         }
         mUseTransferredAnimation = false;
@@ -707,14 +729,14 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 setClientHidden(!visible);
             }
 
-            if (!getDisplayContent().mClosingApps.contains(this)
-                    && !getDisplayContent().mOpeningApps.contains(this)) {
+            if (!displayContent.mClosingApps.contains(this)
+                    && !displayContent.mOpeningApps.contains(this)) {
                 // The token is not closing nor opening, so even if there is an animation set, that
                 // doesn't mean that it goes through the normal app transition cycle so we have
                 // to inform the docked controller about visibility change.
                 // TODO(multi-display): notify docked divider on all displays where visibility was
                 // affected.
-                getDisplayContent().getDockedDividerController().notifyAppVisibilityChanged();
+                displayContent.getDockedDividerController().notifyAppVisibilityChanged();
 
                 // Take the screenshot before possibly hiding the WSA, otherwise the screenshot
                 // will not be taken.
@@ -731,7 +753,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             // no animation but there will still be a transition set.
             // We still need to delay hiding the surface such that it
             // can be synchronized with showing the next surface in the transition.
-            if (isHidden() && !delayed && !getDisplayContent().mAppTransition.isTransitionSet()) {
+            if (isHidden() && !delayed && !displayContent.mAppTransition.isTransitionSet()) {
                 SurfaceControl.openTransaction();
                 for (int i = mChildren.size() - 1; i >= 0; i--) {
                     mChildren.get(i).mWinAnimator.hide("immediately hidden");
@@ -985,7 +1007,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 + " " + this);
         mAppStopped = false;
         // Allow the window to turn the screen on once the app is resumed again.
-        setCanTurnScreenOn(true);
+        setCurrentLaunchCanTurnScreenOn(true);
         if (!wasStopped) {
             destroySurfaces(true /*cleanupOnResume*/);
         }
@@ -998,6 +1020,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     void notifyAppStopped() {
         if (DEBUG_ADD_REMOVE) Slog.v(TAG, "notifyAppStopped: " + this);
         mAppStopped = true;
+        // Reset the last saved PiP snap fraction on app stop.
+        mDisplayContent.mPinnedStackControllerLocked.resetReentrySnapFraction(this);
         destroySurfaces();
         // Remove any starting window that was added for this app if they are still around.
         removeStartingWindow();
@@ -1228,6 +1252,21 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
         // Otherwise the new window is greater than the existing window.
         return true;
+    }
+
+    /**
+     * @return {@code true} if starting window is in app's hierarchy.
+     */
+    boolean hasStartingWindow() {
+        if (startingDisplayed || mStartingData != null) {
+            return true;
+        }
+        for (int i = mChildren.size() - 1; i >= 0; i--) {
+            if (getChildAt(i).mAttrs.type == TYPE_APPLICATION_STARTING) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -2319,11 +2358,29 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
     @Override
     boolean fillsParent() {
-        return mFillsParent;
+        return occludesParent();
     }
 
-    void setFillsParent(boolean fillsParent) {
-        mFillsParent = fillsParent;
+    /** Returns true if this activity is opaque and fills the entire space of this task. */
+    boolean occludesParent() {
+        return mOccludesParent;
+    }
+
+    boolean setOccludesParent(boolean occludesParent) {
+        final boolean changed = occludesParent != mOccludesParent;
+        mOccludesParent = occludesParent;
+        setMainWindowOpaque(occludesParent);
+        mWmService.mWindowPlacerLocked.requestTraversal();
+        return changed;
+    }
+
+    void setMainWindowOpaque(boolean isOpaque) {
+        final WindowState win = findMainWindow();
+        if (win == null) {
+            return;
+        }
+        isOpaque = isOpaque & !PixelFormat.formatHasAlpha(win.getAttrs().format);
+        win.mWinAnimator.setOpaqueLocked(isOpaque);
     }
 
     boolean containsDismissKeyguardWindow() {
@@ -2403,21 +2460,25 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     }
 
     /**
-     * Sets whether the current launch can turn the screen on. See {@link #canTurnScreenOn()}
+     * Sets whether the current launch can turn the screen on.
+     * @see #currentLaunchCanTurnScreenOn()
      */
-    void setCanTurnScreenOn(boolean canTurnScreenOn) {
-        mCanTurnScreenOn = canTurnScreenOn;
+    void setCurrentLaunchCanTurnScreenOn(boolean currentLaunchCanTurnScreenOn) {
+        mCurrentLaunchCanTurnScreenOn = currentLaunchCanTurnScreenOn;
     }
 
     /**
      * Indicates whether the current launch can turn the screen on. This is to prevent multiple
      * relayouts from turning the screen back on. The screen should only turn on at most
      * once per activity resume.
+     * <p>
+     * Note this flag is only meaningful when {@link WindowManager.LayoutParams#FLAG_TURN_SCREEN_ON}
+     * or {@link ActivityRecord#canTurnScreenOn} is set.
      *
-     * @return true if the screen can be turned on.
+     * @return {@code true} if the activity is ready to turn on the screen.
      */
-    boolean canTurnScreenOn() {
-        return mCanTurnScreenOn;
+    boolean currentLaunchCanTurnScreenOn() {
+        return mCurrentLaunchCanTurnScreenOn;
     }
 
     /**
@@ -2464,7 +2525,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         // transformed the task.
         final RecentsAnimationController controller = mWmService.getRecentsAnimationController();
         if (controller != null && controller.isAnimatingTask(getTask())
-                && controller.shouldCancelWithDeferredScreenshot()) {
+                && controller.shouldDeferCancelUntilNextTransition()) {
             return false;
         }
 
@@ -2996,7 +3057,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         }
         pw.println(prefix + "component=" + mActivityComponent.flattenToShortString());
         pw.print(prefix); pw.print("task="); pw.println(getTask());
-        pw.print(prefix); pw.print(" mFillsParent="); pw.print(mFillsParent);
+        pw.print(prefix); pw.print(" mOccludesParent="); pw.print(mOccludesParent);
                 pw.print(" mOrientation="); pw.println(mOrientation);
         pw.println(prefix + "hiddenRequested=" + hiddenRequested + " mClientHidden=" + mClientHidden
             + ((mDeferHidingClient) ? " mDeferHidingClient=" + mDeferHidingClient : "")
@@ -3055,11 +3116,6 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     @Override
     void setHidden(boolean hidden) {
         super.setHidden(hidden);
-
-        if (hidden) {
-            // Once the app window is hidden, reset the last saved PiP snap fraction
-            mDisplayContent.mPinnedStackControllerLocked.resetReentrySnapFraction(this);
-        }
         scheduleAnimation();
     }
 
@@ -3118,7 +3174,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         if (mThumbnail != null){
             mThumbnail.writeToProto(proto, THUMBNAIL);
         }
-        proto.write(FILLS_PARENT, mFillsParent);
+        proto.write(FILLS_PARENT, mOccludesParent);
         proto.write(APP_STOPPED, mAppStopped);
         proto.write(HIDDEN_REQUESTED, hiddenRequested);
         proto.write(CLIENT_HIDDEN, mClientHidden);

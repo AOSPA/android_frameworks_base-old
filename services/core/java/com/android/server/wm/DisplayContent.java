@@ -67,6 +67,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_DRAWN_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_DREAM;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
+import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ERROR;
@@ -118,15 +119,12 @@ import static com.android.server.wm.WindowManagerDebugConfig.SHOW_STACK_CRAWLS;
 import static com.android.server.wm.WindowManagerDebugConfig.SHOW_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
-import static com.android.server.wm.WindowManagerService.CUSTOM_SCREEN_ROTATION;
 import static com.android.server.wm.WindowManagerService.H.REPORT_FOCUS_CHANGE;
 import static com.android.server.wm.WindowManagerService.H.REPORT_HARD_KEYBOARD_STATUS_CHANGE;
 import static com.android.server.wm.WindowManagerService.H.REPORT_LOSING_FOCUS;
-import static com.android.server.wm.WindowManagerService.H.SEND_NEW_CONFIGURATION;
 import static com.android.server.wm.WindowManagerService.H.UPDATE_DOCKED_STACK_DIVIDER;
 import static com.android.server.wm.WindowManagerService.H.WINDOW_HIDE_TIMEOUT;
 import static com.android.server.wm.WindowManagerService.LAYOUT_REPEAT_THRESHOLD;
-import static com.android.server.wm.WindowManagerService.MAX_ANIMATION_DURATION;
 import static com.android.server.wm.WindowManagerService.SEAMLESS_ROTATION_TIMEOUT_DURATION;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_PLACING_SURFACES;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_REMOVING_FOCUS;
@@ -137,6 +135,8 @@ import static com.android.server.wm.WindowManagerService.WINDOWS_FREEZING_SCREEN
 import static com.android.server.wm.WindowManagerService.WINDOW_FREEZE_TIMEOUT_DURATION;
 import static com.android.server.wm.WindowManagerService.dipToPixel;
 import static com.android.server.wm.WindowManagerService.logSurface;
+import static com.android.server.wm.WindowState.EXCLUSION_LEFT;
+import static com.android.server.wm.WindowState.EXCLUSION_RIGHT;
 import static com.android.server.wm.WindowState.RESIZE_HANDLE_WIDTH_IN_DP;
 import static com.android.server.wm.WindowStateAnimator.DRAW_PENDING;
 import static com.android.server.wm.WindowStateAnimator.READY_TO_SHOW;
@@ -329,6 +329,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     private final RemoteCallbackList<ISystemGestureExclusionListener>
             mSystemGestureExclusionListeners = new RemoteCallbackList<>();
     private final Region mSystemGestureExclusion = new Region();
+    private boolean mSystemGestureExclusionWasRestricted = false;
+    private final Region mSystemGestureExclusionUnrestricted = new Region();
     private int mSystemGestureExclusionLimit;
 
     /**
@@ -1212,9 +1214,46 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         }
     }
 
-    /** Notify the configuration change of this display. */
+    void reconfigureDisplayLocked() {
+        if (!isReady()) {
+            return;
+        }
+        configureDisplayPolicy();
+        setLayoutNeeded();
+
+        boolean configChanged = updateOrientationFromAppTokens();
+        final Configuration currentDisplayConfig = getConfiguration();
+        mTmpConfiguration.setTo(currentDisplayConfig);
+        computeScreenConfiguration(mTmpConfiguration);
+        configChanged |= currentDisplayConfig.diff(mTmpConfiguration) != 0;
+
+        if (configChanged) {
+            mWaitingForConfig = true;
+            mWmService.startFreezingDisplayLocked(0 /* exitAnim */, 0 /* enterAnim */, this);
+            sendNewConfiguration();
+        }
+
+        mWmService.mWindowPlacerLocked.performSurfacePlacement();
+    }
+
     void sendNewConfiguration() {
-        mWmService.mH.obtainMessage(SEND_NEW_CONFIGURATION, this).sendToTarget();
+        if (!isReady() || mAcitvityDisplay == null) {
+            return;
+        }
+        final boolean configUpdated = mAcitvityDisplay.updateDisplayOverrideConfigurationLocked();
+        if (configUpdated) {
+            return;
+        }
+        // Something changed (E.g. device rotation), but no configuration update is needed.
+        // E.g. changing device rotation by 180 degrees. Go ahead and perform surface placement to
+        // unfreeze the display since we froze it when the rotation was updated in
+        // DisplayContent#updateRotationUnchecked.
+        if (mWaitingForConfig) {
+            mWaitingForConfig = false;
+            mWmService.mLastFinishedFreezeSource = "config-unchanged";
+            setLayoutNeeded();
+            mWmService.mWindowPlacerLocked.performSurfacePlacement();
+        }
     }
 
     @Override
@@ -1232,8 +1271,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         if (handled && requestingContainer instanceof ActivityRecord) {
             final ActivityRecord activityRecord = (ActivityRecord) requestingContainer;
-            final boolean kept = mWmService.mAtmService.updateDisplayOverrideConfigurationLocked(
-                    config, activityRecord, false /* deferResume */, getDisplayId());
+            final boolean kept = mAcitvityDisplay.updateDisplayOverrideConfigurationLocked(
+                    config, activityRecord, false /* deferResume */, null /* result */);
             activityRecord.frozenBeforeDestroy = true;
             if (!kept) {
                 mWmService.mAtmService.mRootActivityContainer.resumeFocusedStacksTopActivities();
@@ -1241,8 +1280,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         } else {
             // We have a new configuration to push so we need to update ATMS for now.
             // TODO: Clean up display configuration push between ATMS and WMS after unification.
-            mWmService.mAtmService.updateDisplayOverrideConfigurationLocked(
-                    config, null /* starting */, false /* deferResume */, getDisplayId());
+            mAcitvityDisplay.updateDisplayOverrideConfigurationLocked(
+                    config, null /* starting */, false /* deferResume */, null);
         }
         return handled;
     }
@@ -1351,7 +1390,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      * Update rotation of the DisplayContent with an option to force the update. This updates
      * the container's perception of rotation and, depending on the top activities, will freeze
      * the screen or start seamless rotation. The display itself gets rotated in
-     * {@link #applyRotationLocked} during {@link WindowManagerService#sendNewConfiguration}.
+     * {@link #applyRotationLocked} during {@link DisplayContent#sendNewConfiguration}.
      *
      * @param forceUpdate Force the rotation update. Sometimes in WM we might skip updating
      *                    orientation because we're waiting for some rotation to finish or display
@@ -1493,13 +1532,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         // NOTE: We disable the rotation in the emulator because
         //       it doesn't support hardware OpenGL emulation yet.
-        if (CUSTOM_SCREEN_ROTATION && screenRotationAnimation != null
-                && screenRotationAnimation.hasScreenshot()) {
-            if (screenRotationAnimation.setRotation(getPendingTransaction(), rotation,
-                    MAX_ANIMATION_DURATION, mWmService.getTransitionAnimationScaleLocked(),
-                    mDisplayInfo.logicalWidth, mDisplayInfo.logicalHeight)) {
-                mWmService.scheduleAnimationLocked();
-            }
+        if (screenRotationAnimation != null && screenRotationAnimation.hasScreenshot()) {
+            screenRotationAnimation.setRotation(getPendingTransaction(), rotation);
         }
 
         forAllWindows(w -> {
@@ -2273,7 +2307,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             mInitialDisplayHeight = newHeight;
             mInitialDisplayDensity = newDensity;
             mInitialDisplayCutout = newCutout;
-            mWmService.reconfigureDisplayLocked(this);
+            reconfigureDisplayLocked();
         }
     }
 
@@ -2326,7 +2360,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         final boolean updateCurrent = userId == UserHandle.USER_CURRENT;
         if (mWmService.mCurrentUserId == userId || updateCurrent) {
             mBaseDisplayDensity = density;
-            mWmService.reconfigureDisplayLocked(this);
+            reconfigureDisplayLocked();
         }
         if (updateCurrent) {
             // We are applying existing settings so no need to save it again.
@@ -2347,7 +2381,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         mDisplayScalingDisabled = (mode != FORCE_SCALING_MODE_AUTO);
         Slog.i(TAG_WM, "Using display scaling mode: " + (mDisplayScalingDisabled ? "off" : "auto"));
-        mWmService.reconfigureDisplayLocked(this);
+        reconfigureDisplayLocked();
 
         mWmService.mDisplayWindowSettings.setForcedScalingMode(this, mode);
     }
@@ -2366,7 +2400,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         Slog.i(TAG_WM, "Using new display size: " + width + "x" + height);
         updateBaseDisplayMetrics(width, height, mBaseDisplayDensity);
-        mWmService.reconfigureDisplayLocked(this);
+        reconfigureDisplayLocked();
 
         if (clear) {
             width = height = 0;
@@ -3491,12 +3525,14 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     /**
      * Starts the Keyguard exit animation on all windows that don't belong to an app token.
      */
-    void startKeyguardExitOnNonAppWindows(boolean onWallpaper, boolean goingToShade) {
+    void startKeyguardExitOnNonAppWindows(boolean onWallpaper, boolean goingToShade,
+            boolean subtle) {
         final WindowManagerPolicy policy = mWmService.mPolicy;
         forAllWindows(w -> {
             if (w.mAppToken == null && policy.canBeHiddenByKeyguardLw(w)
                     && w.wouldBeVisibleIfPolicyIgnored() && !w.isVisible()) {
-                w.startAnimation(policy.createHiddenByKeyguardExit(onWallpaper, goingToShade));
+                w.startAnimation(policy.createHiddenByKeyguardExit(
+                        onWallpaper, goingToShade, subtle));
             }
         }, true /* traverseTopToBottom */);
     }
@@ -4570,13 +4606,15 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                         .show(mSplitScreenDividerAnchor);
                 scheduleAnimation();
             } else {
-                mAppAnimationLayer.remove();
+                mWmService.mTransactionFactory.make()
+                        .remove(mAppAnimationLayer)
+                        .remove(mBoostedAppAnimationLayer)
+                        .remove(mHomeAppAnimationLayer)
+                        .remove(mSplitScreenDividerAnchor)
+                        .apply();
                 mAppAnimationLayer = null;
-                mBoostedAppAnimationLayer.remove();
                 mBoostedAppAnimationLayer = null;
-                mHomeAppAnimationLayer.remove();
                 mHomeAppAnimationLayer = null;
-                mSplitScreenDividerAnchor.remove();
                 mSplitScreenDividerAnchor = null;
             }
         }
@@ -4831,9 +4869,13 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         //
         // In the case where we have no IME target we assign it where it's base layer would
         // place it in the AboveAppWindowContainers.
-        if (imeTarget != null && !(imeTarget.inSplitScreenWindowingMode()
-                || imeTarget.mToken.isAppAnimating())
-                && (imeTarget.getSurfaceControl() != null)) {
+        //
+        // Keep IME window in mAboveAppWindowsContainers as long as app's starting window exists
+        // so it get's layered above the starting window.
+        if (imeTarget != null
+                && !(imeTarget.mAppToken != null && imeTarget.mAppToken.hasStartingWindow())
+                && (!(imeTarget.inSplitScreenWindowingMode() || imeTarget.mToken.isAppAnimating())
+                && (imeTarget.getSurfaceControl() != null))) {
             mImeWindowsContainers.assignRelativeLayer(t, imeTarget.getSurfaceControl(),
                     // TODO: We need to use an extra level on the app surface to ensure
                     // this is always above SurfaceView but always below attached window.
@@ -5071,7 +5113,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         if (!mLocationInParentWindow.equals(x, y)) {
             mLocationInParentWindow.set(x, y);
             if (mWmService.mAccessibilityController != null) {
-                mWmService.mAccessibilityController.onSomeWindowResizedOrMovedLocked();
+                mWmService.mAccessibilityController.onSomeWindowResizedOrMovedLocked(mDisplayId);
             }
             notifyLocationInParentDisplayChanged();
         }
@@ -5121,16 +5163,21 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             return false;
         }
 
-        final Region systemGestureExclusion = calculateSystemGestureExclusion();
+        final Region systemGestureExclusion = Region.obtain();
+        mSystemGestureExclusionWasRestricted = calculateSystemGestureExclusion(
+                systemGestureExclusion, mSystemGestureExclusionUnrestricted);
         try {
             if (mSystemGestureExclusion.equals(systemGestureExclusion)) {
                 return false;
             }
             mSystemGestureExclusion.set(systemGestureExclusion);
+            final Region unrestrictedOrNull = mSystemGestureExclusionWasRestricted
+                    ? mSystemGestureExclusionUnrestricted : null;
             for (int i = mSystemGestureExclusionListeners.beginBroadcast() - 1; i >= 0; --i) {
                 try {
                     mSystemGestureExclusionListeners.getBroadcastItem(i)
-                            .onSystemGestureExclusionChanged(mDisplayId, systemGestureExclusion);
+                            .onSystemGestureExclusionChanged(mDisplayId, systemGestureExclusion,
+                                    unrestrictedOrNull);
                 } catch (RemoteException e) {
                     Slog.e(TAG, "Failed to notify SystemGestureExclusionListener", e);
                 }
@@ -5142,8 +5189,22 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         }
     }
 
+    /**
+     * Calculates the system gesture exclusion.
+     *
+     * @param outExclusion will be set to the gesture exclusion region
+     * @param outExclusionUnrestricted will be set to the gesture exclusion region without
+     *                                 any restrictions applied.
+     * @return whether any restrictions were applied, i.e. outExclusion and outExclusionUnrestricted
+     *         differ.
+     */
     @VisibleForTesting
-    Region calculateSystemGestureExclusion() {
+    boolean calculateSystemGestureExclusion(Region outExclusion, @Nullable
+            Region outExclusionUnrestricted) {
+        outExclusion.setEmpty();
+        if (outExclusionUnrestricted != null) {
+            outExclusionUnrestricted.setEmpty();
+        }
         final Region unhandled = Region.obtain();
         unhandled.set(0, 0, mDisplayFrames.mDisplayWidth, mDisplayFrames.mDisplayHeight);
 
@@ -5152,7 +5213,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         final Rect rightEdge = mInsetsStateController.getSourceProvider(TYPE_RIGHT_GESTURES)
                 .getSource().getFrame();
 
-        final Region global = Region.obtain();
         final Region touchableRegion = Region.obtain();
         final Region local = Region.obtain();
         final int[] remainingLeftRight =
@@ -5190,28 +5250,39 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             if (needsGestureExclusionRestrictions(w, mLastDispatchedSystemUiVisibility)) {
 
                 // Processes the region along the left edge.
-                remainingLeftRight[0] = addToGlobalAndConsumeLimit(local, global, leftEdge,
-                        remainingLeftRight[0]);
+                remainingLeftRight[0] = addToGlobalAndConsumeLimit(local, outExclusion, leftEdge,
+                        remainingLeftRight[0], w, EXCLUSION_LEFT);
 
                 // Processes the region along the right edge.
-                remainingLeftRight[1] = addToGlobalAndConsumeLimit(local, global, rightEdge,
-                        remainingLeftRight[1]);
+                remainingLeftRight[1] = addToGlobalAndConsumeLimit(local, outExclusion, rightEdge,
+                        remainingLeftRight[1], w, EXCLUSION_RIGHT);
 
                 // Adds the middle (unrestricted area)
                 final Region middle = Region.obtain(local);
                 middle.op(leftEdge, Op.DIFFERENCE);
                 middle.op(rightEdge, Op.DIFFERENCE);
-                global.op(middle, Op.UNION);
+                outExclusion.op(middle, Op.UNION);
                 middle.recycle();
             } else {
-                global.op(local, Op.UNION);
+                boolean loggable = needsGestureExclusionRestrictions(w, 0 /* lastSysUiVis */);
+                if (loggable) {
+                    addToGlobalAndConsumeLimit(local, outExclusion, leftEdge,
+                            Integer.MAX_VALUE, w, EXCLUSION_LEFT);
+                    addToGlobalAndConsumeLimit(local, outExclusion, rightEdge,
+                            Integer.MAX_VALUE, w, EXCLUSION_RIGHT);
+                }
+                outExclusion.op(local, Op.UNION);
+            }
+            if (outExclusionUnrestricted != null) {
+                outExclusionUnrestricted.op(local, Op.UNION);
             }
             unhandled.op(touchableRegion, Op.DIFFERENCE);
         }, true /* topToBottom */);
         local.recycle();
         touchableRegion.recycle();
         unhandled.recycle();
-        return global;
+        return remainingLeftRight[0] < mSystemGestureExclusionLimit
+                || remainingLeftRight[1] < mSystemGestureExclusionLimit;
     }
 
     /**
@@ -5229,31 +5300,57 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     }
 
     /**
+     * @return Whether gesture exclusion area should be logged for the given window
+     */
+    static boolean logsGestureExclusionRestrictions(WindowState win) {
+        if (win.mWmService.mSystemGestureExclusionLogDebounceTimeoutMillis <= 0) {
+            return false;
+        }
+        final WindowManager.LayoutParams attrs = win.getAttrs();
+        final int type = attrs.type;
+        return type != TYPE_WALLPAPER
+                && type != TYPE_APPLICATION_STARTING
+                && type != TYPE_NAVIGATION_BAR
+                && (attrs.flags & FLAG_NOT_TOUCHABLE) == 0
+                && needsGestureExclusionRestrictions(win, 0 /* sysUiVisibility */)
+                && win.getDisplayContent().mDisplayPolicy.hasSideGestures();
+    }
+
+    /**
      * Adds a local gesture exclusion area to the global area while applying a limit per edge.
      *
      * @param local The gesture exclusion area to add.
      * @param global The destination.
      * @param edge Only processes the part in that region.
      * @param limit How much limit in pixels we have.
-     * @return How much of the limit are remaining.
+     * @param win The WindowState that is being processed
+     * @param side The side that is being processed, either {@link WindowState#EXCLUSION_LEFT} or
+     *             {@link WindowState#EXCLUSION_RIGHT}
+     * @return How much of the limit is remaining.
      */
     private static int addToGlobalAndConsumeLimit(Region local, Region global, Rect edge,
-            int limit) {
+            int limit, WindowState win, int side) {
         final Region r = Region.obtain(local);
         r.op(edge, Op.INTERSECT);
 
         final int[] remaining = {limit};
+        final int[] requestedExclusion = {0};
         forEachRectReverse(r, rect -> {
             if (remaining[0] <= 0) {
                 return;
             }
             final int height = rect.height();
+            requestedExclusion[0] += height;
             if (height > remaining[0]) {
                 rect.top = rect.bottom - remaining[0];
             }
             remaining[0] -= height;
             global.op(rect, Op.UNION);
         });
+
+        final int grantedExclusion = limit - remaining[0];
+        win.setLastExclusionHeights(side, requestedExclusion[0], grantedExclusion);
+
         r.recycle();
         return remaining[0];
     }
@@ -5268,10 +5365,13 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         }
 
         if (!changed) {
+            final Region unrestrictedOrNull = mSystemGestureExclusionWasRestricted
+                    ? mSystemGestureExclusionUnrestricted : null;
             // If updateSystemGestureExclusion changed the exclusion, it will already have
             // notified the listener. Otherwise, we'll do it here.
             try {
-                listener.onSystemGestureExclusionChanged(mDisplayId, mSystemGestureExclusion);
+                listener.onSystemGestureExclusionChanged(mDisplayId, mSystemGestureExclusion,
+                        unrestrictedOrNull);
             } catch (RemoteException e) {
                 Slog.e(TAG, "Failed to notify SystemGestureExclusionListener during register", e);
             }

@@ -95,6 +95,7 @@
     <string name="notification_channel_voice_mail" msgid="3954099424160511919">"Röstmeddelanden"</string>
     <string name="notification_channel_wfc" msgid="2130802501654254801">"Wi-Fi-samtal"</string>
     <string name="notification_channel_sim" msgid="4052095493875188564">"Status för SIM-kort"</string>
+    <string name="notification_channel_sim_high_prio" msgid="1787666807724243207">"SIM-aviseringar med hög prioritet"</string>
     <string name="peerTtyModeFull" msgid="6165351790010341421">"Peer-enheten begärde texttelefonläget FULL"</string>
     <string name="peerTtyModeHco" msgid="5728602160669216784">"Peer-enheten begärde texttelefonläget HCO"</string>
     <string name="peerTtyModeVco" msgid="1742404978686538049">"Peer-enheten begärde texttelefonläget VCO"</string>
@@ -257,6 +258,7 @@
     <string name="notification_channel_car_mode" msgid="3553380307619874564">"Billäge"</string>
     <string name="notification_channel_account" msgid="7577959168463122027">"Kontostatus"</string>
     <string name="notification_channel_developer" msgid="7579606426860206060">"Meddelanden till utvecklare"</string>
+    <string name="notification_channel_developer_important" msgid="5251192042281632002">"Viktiga meddelanden till utvecklare"</string>
     <string name="notification_channel_updates" msgid="4794517569035110397">"Uppdateringar"</string>
     <string name="notification_channel_network_status" msgid="5025648583129035447">"Nätverksstatus"</string>
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"Nätverksvarningar"</string>
@@ -550,15 +552,11 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="2340202869968465936">"Ikon för fingeravtryck"</string>
-    <!-- no translation found for permlab_manageFace (7262837876352591553) -->
-    <skip />
+    <string name="permlab_manageFace" msgid="7262837876352591553">"hantera maskinvara för ansiktslås"</string>
     <string name="permdesc_manageFace" msgid="8919637120670185330">"Tillåter att appen anropar metoder för att lägga till och radera ansiktsmallar."</string>
-    <!-- no translation found for permlab_useFaceAuthentication (2565716575739037572) -->
-    <skip />
-    <!-- no translation found for permdesc_useFaceAuthentication (4712947955047607722) -->
-    <skip />
-    <!-- no translation found for face_recalibrate_notification_name (1913676850645544352) -->
-    <skip />
+    <string name="permlab_useFaceAuthentication" msgid="2565716575739037572">"använd maskinvara för ansiktslås"</string>
+    <string name="permdesc_useFaceAuthentication" msgid="4712947955047607722">"Tillåter att appen använder maskinvara för ansiktslås vid autentisering"</string>
+    <string name="face_recalibrate_notification_name" msgid="1913676850645544352">"Ansiktslås"</string>
     <string name="face_recalibrate_notification_title" msgid="4087620069451499365">"Registrera ansiktet på nytt"</string>
     <string name="face_recalibrate_notification_content" msgid="5530308842361499835">"Gör om registreringen av ansiktet så att ansiktsigenkänningen ska fungera bättre"</string>
     <string name="face_acquired_insufficient" msgid="2767330364802375742">"Det gick inte att fånga ansiktsdata. Försök igen."</string>
@@ -571,7 +569,7 @@
     <string name="face_acquired_too_right" msgid="3667075962661863218">"Flytta mobilen åt vänster."</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"Flytta mobilen åt höger."</string>
     <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"Titta rakt på enheten."</string>
-    <string name="face_acquired_not_detected" msgid="4885504661626728809">"Ansiktet syns inte. Titta på mobilen."</string>
+    <string name="face_acquired_not_detected" msgid="1879714205006680222">"Ha ansiktet direkt framför telefonen."</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"För mycket rörelse. Håll mobilen stilla."</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"Registrera ansiktet på nytt."</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"Ansiktet kan inte längre kännas igen. Försök igen."</string>
@@ -580,24 +578,19 @@
     <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"Vrid mindre på huvudet."</string>
     <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"Vrid mindre på huvudet."</string>
     <string name="face_acquired_obscured" msgid="5357207702967893283">"Ta bort allt som täcker ansiktet."</string>
-    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"Rengör sensorn på skärmens överkant."</string>
+    <string name="face_acquired_sensor_dirty" msgid="7905138627046865579">"Rengör skärmens överkant, inklusive det svarta fältet"</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"Ansiktsverifiering går ej. Otillgänglig maskinvara."</string>
-    <!-- no translation found for face_error_timeout (981512090365729465) -->
-    <skip />
+    <string name="face_error_timeout" msgid="981512090365729465">"Försök att använda ansiktslåset igen."</string>
     <string name="face_error_no_space" msgid="2712120617457553825">"Kan inte lagra ny ansiktsdata. Radera först gammal data."</string>
     <string name="face_error_canceled" msgid="283945501061931023">"Ansiktsåtgärden har avbrutits."</string>
-    <!-- no translation found for face_error_user_canceled (5317030072349668946) -->
-    <skip />
+    <string name="face_error_user_canceled" msgid="5317030072349668946">"Ansiktslås avbröts av användaren."</string>
     <string name="face_error_lockout" msgid="3407426963155388504">"Du har gjort för många försök. Försök igen senare."</string>
-    <!-- no translation found for face_error_lockout_permanent (4723594314443097159) -->
-    <skip />
+    <string name="face_error_lockout_permanent" msgid="4723594314443097159">"För många försök. Ansiktslås har inaktiverats."</string>
     <string name="face_error_unable_to_process" msgid="4940944939691171539">"Det gick inte att verifiera ansiktet. Försök igen."</string>
-    <!-- no translation found for face_error_not_enrolled (4016937174832839540) -->
-    <skip />
-    <!-- no translation found for face_error_hw_not_present (8302690289757559738) -->
-    <skip />
+    <string name="face_error_not_enrolled" msgid="4016937174832839540">"Du har inte konfigurerat ansiktslås."</string>
+    <string name="face_error_hw_not_present" msgid="8302690289757559738">"Ansiktslås stöds inte på den här enheten."</string>
     <string name="face_name_template" msgid="7004562145809595384">"Ansikte <xliff:g id="FACEID">%d</xliff:g>"</string>
   <string-array name="face_error_vendor">
   </string-array>

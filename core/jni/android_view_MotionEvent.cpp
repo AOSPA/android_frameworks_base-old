@@ -27,7 +27,6 @@
 #include "android_os_Parcel.h"
 #include "android_view_MotionEvent.h"
 #include "android_util_Binder.h"
-#include "android/graphics/Matrix.h"
 
 #include "core_jni_helpers.h"
 
@@ -375,6 +374,7 @@ static jlong android_view_MotionEvent_nativeInitialize(JNIEnv* env, jclass clazz
     event->initialize(deviceId, source, displayId, action, 0, flags, edgeFlags, metaState,
             buttonState, static_cast<MotionClassification>(classification),
             xOffset, yOffset, xPrecision, yPrecision,
+            AMOTION_EVENT_INVALID_CURSOR_POSITION, AMOTION_EVENT_INVALID_CURSOR_POSITION,
             downTimeNanos, eventTimeNanos, pointerCount, pointerProperties, rawPointerCoords);
 
     return reinterpret_cast<jlong>(event);
@@ -700,6 +700,21 @@ static jfloat android_view_MotionEvent_nativeGetYPrecision(jlong nativePtr) {
     return event->getYPrecision();
 }
 
+static jfloat android_view_MotionEvent_nativeGetXCursorPosition(jlong nativePtr) {
+    MotionEvent* event = reinterpret_cast<MotionEvent*>(nativePtr);
+    return event->getXCursorPosition();
+}
+
+static jfloat android_view_MotionEvent_nativeGetYCursorPosition(jlong nativePtr) {
+    MotionEvent* event = reinterpret_cast<MotionEvent*>(nativePtr);
+    return event->getYCursorPosition();
+}
+
+static void android_view_MotionEvent_nativeSetCursorPosition(jlong nativePtr, jfloat x, jfloat y) {
+    MotionEvent* event = reinterpret_cast<MotionEvent*>(nativePtr);
+    event->setCursorPosition(x, y);
+}
+
 static jlong android_view_MotionEvent_nativeGetDownTimeNanos(jlong nativePtr) {
     MotionEvent* event = reinterpret_cast<MotionEvent*>(nativePtr);
     return event->getDownTime();
@@ -870,6 +885,15 @@ static const JNINativeMethod gMotionEventMethods[] = {
     { "nativeGetYPrecision",
             "(J)F",
             (void*)android_view_MotionEvent_nativeGetYPrecision },
+    { "nativeGetXCursorPosition",
+            "(J)F",
+            (void*)android_view_MotionEvent_nativeGetXCursorPosition },
+    { "nativeGetYCursorPosition",
+            "(J)F",
+            (void*)android_view_MotionEvent_nativeGetYCursorPosition },
+    { "nativeSetCursorPosition",
+            "(JFF)V",
+            (void*)android_view_MotionEvent_nativeSetCursorPosition },
     { "nativeGetDownTimeNanos",
             "(J)J",
             (void*)android_view_MotionEvent_nativeGetDownTimeNanos },

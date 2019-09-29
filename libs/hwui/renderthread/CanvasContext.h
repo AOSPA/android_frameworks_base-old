@@ -22,14 +22,15 @@
 #include "FrameMetricsReporter.h"
 #include "IContextFactory.h"
 #include "IRenderPipeline.h"
+#include "JankTracker.h"
 #include "LayerUpdateQueue.h"
 #include "Lighting.h"
 #include "ReliableSurface.h"
 #include "RenderNode.h"
 #include "renderthread/RenderTask.h"
 #include "renderthread/RenderThread.h"
+#include "utils/RingBuffer.h"
 
-#include <EGL/egl.h>
 #include <SkBitmap.h>
 #include <SkRect.h>
 #include <SkSize.h>
@@ -41,6 +42,7 @@
 #include <future>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace android {
@@ -55,7 +57,6 @@ class RenderState;
 
 namespace renderthread {
 
-class EglManager;
 class Frame;
 
 // This per-renderer class manages the bridge between the global EGL context
@@ -152,8 +153,6 @@ public:
 
     void setContentDrawBounds(const Rect& bounds) { mContentDrawBounds = bounds; }
 
-    RenderState& getRenderState() { return mRenderThread.renderState(); }
-
     void addFrameMetricsObserver(FrameMetricsObserver* observer) {
         if (mFrameMetricsReporter.get() == nullptr) {
             mFrameMetricsReporter.reset(new FrameMetricsReporter());
@@ -216,8 +215,9 @@ private:
 
     SkRect computeDirtyRect(const Frame& frame, SkRect* dirty);
 
-    EGLint mLastFrameWidth = 0;
-    EGLint mLastFrameHeight = 0;
+    // The same type as Frame.mWidth and Frame.mHeight
+    int32_t mLastFrameWidth = 0;
+    int32_t mLastFrameHeight = 0;
 
     RenderThread& mRenderThread;
     sp<ReliableSurface> mNativeSurface;
@@ -262,6 +262,7 @@ private:
     std::vector<sp<RenderNode>> mRenderNodes;
 
     FrameInfo* mCurrentFrameInfo = nullptr;
+    RingBuffer<std::pair<FrameInfo*, int64_t>, 4> mLast4FrameInfos;
     std::string mName;
     JankTracker mJankTracker;
     FrameInfoVisualizer mProfiler;

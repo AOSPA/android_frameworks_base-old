@@ -428,6 +428,18 @@ public class PackageParserTest {
                 "com.android.frameworks.coretests.install_complete_package_info.test_permission",
                 packageName, PermissionInfo.PROTECTION_NORMAL, p.permissions.get(0));
 
+        // Hidden "app details" activity is added to every package.
+        boolean foundAppDetailsActivity = false;
+        for (int i = 0; i < p.activities.size(); i++) {
+            if (p.activities.get(i).className.equals(
+                    PackageManager.APP_DETAILS_ACTIVITY_CLASS_NAME)) {
+                foundAppDetailsActivity = true;
+                p.activities.remove(i);
+                break;
+            }
+        }
+        assertTrue("Did not find app details activity", foundAppDetailsActivity);
+
         assertOneComponentOfEachType("com.android.frameworks.coretests.Test%s", p);
 
         assertMetadata(p.mAppMetaData,
@@ -498,17 +510,22 @@ public class PackageParserTest {
 
     @Test
     public void testApexPackageInfoGeneration() throws Exception {
-        String apexPackageName = "com.android.tzdata.apex";
-        File apexFile = copyRawResourceToFile(apexPackageName,
+        String apexModuleName = "com.android.tzdata.apex";
+        File apexFile = copyRawResourceToFile(apexModuleName,
                 R.raw.com_android_tzdata);
         ApexInfo apexInfo = new ApexInfo();
         apexInfo.isActive = true;
         apexInfo.isFactory = false;
-        apexInfo.packageName = apexPackageName;
-        apexInfo.packagePath = apexFile.getPath();
+        apexInfo.moduleName = apexModuleName;
+        apexInfo.modulePath = apexFile.getPath();
         apexInfo.versionCode = 191000070;
         int flags = PackageManager.GET_META_DATA | PackageManager.GET_SIGNING_CERTIFICATES;
-        PackageInfo pi = PackageParser.generatePackageInfoFromApex(apexInfo, flags);
+
+        PackageParser pp = new PackageParser();
+        Package p = pp.parsePackage(apexFile, flags, false);
+        PackageParser.collectCertificates(p, false);
+        PackageInfo pi = PackageParser.generatePackageInfo(p, apexInfo, flags);
+
         assertEquals("com.google.android.tzdata", pi.applicationInfo.packageName);
         assertTrue(pi.applicationInfo.enabled);
         assertEquals(28, pi.applicationInfo.targetSdkVersion);

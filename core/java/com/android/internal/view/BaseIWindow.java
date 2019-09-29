@@ -33,7 +33,13 @@ import android.view.PointerIcon;
 
 import com.android.internal.os.IResultReceiver;
 
+import dalvik.annotation.compat.UnsupportedAppUsage;
+
 public class BaseIWindow extends IWindow.Stub {
+
+    @UnsupportedAppUsage(maxTargetSdk = android.os.Build.VERSION_CODES.P)
+    public BaseIWindow() {}
+
     private IWindowSession mSession;
     public int mSeq;
 
@@ -49,7 +55,7 @@ public class BaseIWindow extends IWindow.Stub {
             DisplayCutout.ParcelableWrapper displayCutout) {
         if (reportDraw) {
             try {
-                mSession.finishDrawing(this);
+                mSession.finishDrawing(this, null /* postDrawTransaction */);
             } catch (RemoteException e) {
             }
         }

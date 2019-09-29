@@ -187,6 +187,11 @@ class ZygoteArguments {
     boolean mPidQuery;
 
     /**
+     * Whether the current arguments constitute a notification that boot completed.
+     */
+    boolean mBootCompleted;
+
+    /**
      * Exemptions from API blacklisting. These are sent to the pre-forked zygote at boot time, or
      * when they change, via --set-api-blacklist-exemptions.
      */
@@ -203,6 +208,11 @@ class ZygoteArguments {
      * pre-forked zygote at boot time, or when it changes, via --hidden-api-statslog-sampling-rate.
      */
     int mHiddenApiAccessStatslogSampleRate = -1;
+
+    /**
+     * @see Zygote#START_AS_TOP_APP_ARG
+     */
+    boolean mIsTopApp;
 
     /**
      * Constructs instance and parses args
@@ -356,6 +366,8 @@ class ZygoteArguments {
                 mAbiListQuery = true;
             } else if (arg.equals("--get-pid")) {
                 mPidQuery = true;
+            } else if (arg.equals("--boot-completed")) {
+                mBootCompleted = true;
             } else if (arg.startsWith("--instruction-set=")) {
                 mInstructionSet = getAssignmentValue(arg);
             } else if (arg.startsWith("--app-data-dir=")) {
@@ -405,12 +417,18 @@ class ZygoteArguments {
                 mUsapPoolStatusSpecified = true;
                 mUsapPoolEnabled = Boolean.parseBoolean(getAssignmentValue(arg));
                 expectRuntimeArgs = false;
+            } else if (arg.startsWith(Zygote.START_AS_TOP_APP_ARG)) {
+                mIsTopApp = true;
             } else {
                 break;
             }
         }
 
-        if (mAbiListQuery || mPidQuery) {
+        if (mBootCompleted) {
+            if (args.length - curArg > 0) {
+                throw new IllegalArgumentException("Unexpected arguments after --boot-completed");
+            }
+        } else if (mAbiListQuery || mPidQuery) {
             if (args.length - curArg > 0) {
                 throw new IllegalArgumentException("Unexpected arguments after --query-abi-list.");
             }

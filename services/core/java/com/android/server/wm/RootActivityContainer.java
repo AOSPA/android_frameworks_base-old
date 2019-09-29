@@ -227,15 +227,10 @@ public class RootActivityContainer extends ConfigurationContainer
         mStackSupervisor.mRootActivityContainer = this;
     }
 
-    @VisibleForTesting
-    void setWindowContainer(RootWindowContainer container) {
-        mRootWindowContainer = container;
-        mRootWindowContainer.setRootActivityContainer(this);
-    }
-
     void setWindowManager(WindowManagerService wm) {
         mWindowManager = wm;
-        setWindowContainer(mWindowManager.mRoot);
+        mRootWindowContainer = mWindowManager.mRoot;
+        mRootWindowContainer.setRootActivityContainer(this);
         mDisplayManager = mService.mContext.getSystemService(DisplayManager.class);
         mDisplayManager.registerDisplayListener(this, mService.mUiHandler);
         mDisplayManagerInternal = LocalServices.getService(DisplayManagerInternal.class);
@@ -315,11 +310,6 @@ public class RootActivityContainer extends ConfigurationContainer
         activityDisplay = new ActivityDisplay(this, display);
         addChild(activityDisplay, ActivityDisplay.POSITION_BOTTOM);
         return activityDisplay;
-    }
-
-    /** Check if display with specified id is added to the list. */
-    boolean isDisplayAdded(int displayId) {
-        return getActivityDisplayOrCreate(displayId) != null;
     }
 
     ActivityRecord getDefaultDisplayHomeActivity() {
@@ -656,9 +646,13 @@ public class RootActivityContainer extends ConfigurationContainer
             starting.frozenBeforeDestroy = true;
         }
 
-        // Update the configuration of the activities on the display.
-        return mService.updateDisplayOverrideConfigurationLocked(config, starting, deferResume,
-                displayId);
+        if (displayContent != null && displayContent.mAcitvityDisplay != null) {
+            // Update the configuration of the activities on the display.
+            return displayContent.mAcitvityDisplay.updateDisplayOverrideConfigurationLocked(config,
+                    starting, deferResume, null /* result */);
+        } else {
+            return true;
+        }
     }
 
     /**
@@ -2267,7 +2261,7 @@ public class RootActivityContainer extends ConfigurationContainer
             @WindowConfiguration.ActivityType int ignoreActivityType,
             @WindowConfiguration.WindowingMode int ignoreWindowingMode, int callingUid,
             boolean allowed) {
-        mStackSupervisor.mRunningTasks.getTasks(maxNum, list, ignoreActivityType,
+        mStackSupervisor.getRunningTasks().getTasks(maxNum, list, ignoreActivityType,
                 ignoreWindowingMode, mActivityDisplays, callingUid, allowed);
     }
 

@@ -564,6 +564,7 @@
     <protected-broadcast android:name="android.app.action.INTERRUPTION_FILTER_CHANGED_INTERNAL" />
     <protected-broadcast android:name="android.app.action.NOTIFICATION_POLICY_CHANGED" />
     <protected-broadcast android:name="android.app.action.NOTIFICATION_POLICY_ACCESS_GRANTED_CHANGED" />
+    <protected-broadcast android:name="android.app.action.AUTOMATIC_ZEN_RULE_STATUS_CHANGED" />
     <protected-broadcast android:name="android.os.action.ACTION_EFFECTS_SUPPRESSOR_CHANGED" />
     <protected-broadcast android:name="android.app.action.NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED" />
     <protected-broadcast android:name="android.app.action.NOTIFICATION_CHANNEL_GROUP_BLOCK_STATE_CHANGED" />
@@ -759,7 +760,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.SEND_SMS"
@@ -773,7 +774,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.RECEIVE_SMS"
@@ -787,7 +788,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.READ_SMS"
@@ -801,7 +802,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.RECEIVE_WAP_PUSH"
@@ -815,7 +816,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.RECEIVE_MMS"
@@ -838,7 +839,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
 
          @hide Pending API council approval -->
@@ -884,7 +885,7 @@
       targetSdkVersion}</a> is 4 or higher.
 
       <p> This is a soft restricted permission which cannot be held by an app it its
-      full form until the installer on record did not whitelist the permission.
+      full form until the installer on record whitelists the permission.
       Specifically, if the permission is whitelisted the holder app can access
       external storage and the visual and aural media collections while if the
       permission is not whitelisted the holder app can only access to the visual
@@ -892,7 +893,7 @@
       meaning that the whitelist state can be specified only at install time and
       cannot change until the app is installed. For more details see
       {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
-     -->
+     <p>Protection level: dangerous -->
     <permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_sdcardRead"
@@ -913,8 +914,9 @@
          read/write files in your application-specific directories returned by
          {@link android.content.Context#getExternalFilesDir} and
          {@link android.content.Context#getExternalCacheDir}.
-         <p>Is this permission is not whitelisted for an app that targets an API level before
+         <p>If this permission is not whitelisted for an app that targets an API level before
          {@link android.os.Build.VERSION_CODES#Q} this permission cannot be granted to apps.</p>
+         <p>Protection level: dangerous</p>
     -->
     <permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:permissionGroup="android.permission-group.UNDEFINED"
@@ -924,7 +926,8 @@
         android:protectionLevel="dangerous" />
 
     <!-- Allows an application to access any geographic locations persisted in the
-         user's shared collection. -->
+         user's shared collection.
+         <p>Protection level: dangerous -->
     <permission android:name="android.permission.ACCESS_MEDIA_LOCATION"
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_mediaLocation"
@@ -981,7 +984,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"
@@ -1027,7 +1030,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.READ_CALL_LOG"
@@ -1051,7 +1054,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
     -->
     <permission android:name="android.permission.WRITE_CALL_LOG"
@@ -1067,7 +1070,7 @@
          <p>Protection level: dangerous
 
          <p> This is a hard restricted permission which cannot be held by an app until
-         the installer on record did not whitelist the permission. For more details see
+         the installer on record whitelists the permission. For more details see
          {@link android.content.pm.PackageInstaller.SessionParams#setWhitelistedRestrictedPermissions(Set)}.
 
          @deprecated Applications should use {@link android.telecom.CallRedirectionService} instead
@@ -1294,6 +1297,15 @@
         android:description="@string/permdesc_camera"
         android:protectionLevel="dangerous|instant" />
 
+      <!-- @SystemApi Required in addition to android.permission.CAMERA to be able to access
+           system only camera devices.
+           <p>Protection level: system|signature
+           @hide -->
+    <permission android:name="android.permission.SYSTEM_CAMERA"
+        android:permissionGroup="android.permission-group.UNDEFINED"
+        android:label="@string/permlab_systemCamera"
+        android:description="@string/permdesc_systemCamera"
+        android:protectionLevel="system|signature" />
 
     <!-- ====================================================================== -->
     <!-- Permissions for accessing the device sensors                           -->
@@ -1623,7 +1635,7 @@
          recommendations and scores from the NetworkScoreService.
          <p>Not for use by third-party applications. @hide -->
     <permission android:name="android.permission.REQUEST_NETWORK_SCORES"
-        android:protectionLevel="signature|setup" />
+        android:protectionLevel="signature|setup|privileged" />
 
     <!-- Allows network stack services (Connectivity and Wifi) to coordinate
          <p>Not for use by third-party or privileged applications.
@@ -1731,7 +1743,7 @@
 
     <!-- Allows applications to pair bluetooth devices without user interaction, and to
          allow or disallow phonebook access or message access.
-         This is not available to third party applications. -->
+         <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.BLUETOOTH_PRIVILEGED"
         android:protectionLevel="signature|privileged" />
 
@@ -2581,7 +2593,8 @@
         android:protectionLevel="signature" />
 
     <!-- Allows an application to modify the current configuration, such
-         as locale. -->
+         as locale.
+         <p>Protection level: signature|privileged|development -->
     <permission android:name="android.permission.CHANGE_CONFIGURATION"
         android:protectionLevel="signature|privileged|development" />
 
@@ -2880,7 +2893,8 @@
     <!-- ==================================== -->
     <eat-comment />
 
-    <!-- Allows access to the list of accounts in the Accounts Service. -->
+    <!-- Allows access to the list of accounts in the Accounts Service.
+         <p>Protection level: signature|privileged -->
     <permission android:name="android.permission.GET_ACCOUNTS_PRIVILEGED"
         android:protectionLevel="signature|privileged" />
 
@@ -2899,6 +2913,13 @@
          <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.STATUS_BAR"
         android:protectionLevel="signature|privileged" />
+
+    <!-- Allows an application to trigger bugreport via shell using the bugreport API.
+        <p>Not for use by third-party applications.
+        @hide
+    -->
+    <permission android:name="android.permission.TRIGGER_SHELL_BUGREPORT"
+        android:protectionLevel="signature" />
 
     <!-- Allows an application to be the status bar.  Currently used only by SystemUI.apk
     @hide -->
@@ -3459,7 +3480,8 @@
         android:protectionLevel="signature" />
 
     <!-- Old permission for deleting an app's cache files, no longer used,
-         but signals for us to quietly ignore calls instead of throwing an exception. -->
+         but signals for us to quietly ignore calls instead of throwing an exception.
+         <p>Protection level: signature|privileged -->
     <permission android:name="android.permission.DELETE_CACHE_FILES"
         android:protectionLevel="signature|privileged" />
 
@@ -3822,7 +3844,8 @@
     <!-- Allows an application to collect component usage
          statistics
          <p>Declaring the permission implies intention to use the API and the user of the
-         device can grant permission through the Settings application. -->
+         device can grant permission through the Settings application.
+         <p>Protection level: signature|privileged|development|appop -->
     <permission android:name="android.permission.PACKAGE_USAGE_STATS"
         android:protectionLevel="signature|privileged|development|appop" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
@@ -3845,14 +3868,14 @@
 
     <!-- Permission an application must hold in order to use
          {@link android.provider.Settings#ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS}.
-         This is a normal permission: an app requesting it will always be granted the
-         permission, without the user needing to approve or see it. -->
+         <p>Protection level: normal -->
     <permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
         android:label="@string/permlab_requestIgnoreBatteryOptimizations"
         android:description="@string/permdesc_requestIgnoreBatteryOptimizations"
         android:protectionLevel="normal" />
 
-    <!-- Allows an application to collect battery statistics -->
+    <!-- Allows an application to collect battery statistics
+         <p>Protection level: signature|privileged|development -->
     <permission android:name="android.permission.BATTERY_STATS"
         android:protectionLevel="signature|privileged|development" />
 
@@ -3882,7 +3905,8 @@
         android:protectionLevel="signature" />
 
     <!-- Must be required by a {@link android.widget.RemoteViewsService},
-         to ensure that only the system can bind to it. -->
+         to ensure that only the system can bind to it.
+         <p>Protection level: signature|privileged -->
     <permission android:name="android.permission.BIND_REMOTEVIEWS"
         android:protectionLevel="signature|privileged" />
 
@@ -3924,7 +3948,8 @@
          to the path in the provider where global search queries are
          performed.  This permission can not be held by regular applications;
          it is used by applications to protect themselves from everyone else
-         besides global search. -->
+         besides global search.
+         <p>Protection level: signature|privileged -->
     <permission android:name="android.permission.GLOBAL_SEARCH"
         android:protectionLevel="signature|privileged" />
 
@@ -4463,7 +4488,8 @@
     <permission android:name="android.permission.MODIFY_THEME_OVERLAY"
                 android:protectionLevel="signature" />
 
-    <!-- Allows an instant app to create foreground services. -->
+    <!-- Allows an instant app to create foreground services.
+         <p>Protection level: signature|development|instant|appop -->
     <permission android:name="android.permission.INSTANT_APP_FOREGROUND_SERVICE"
         android:protectionLevel="signature|development|instant|appop" />
 
@@ -4479,12 +4505,12 @@
     <!-- @SystemApi Allows to access all app shortcuts.
          @hide -->
     <permission android:name="android.permission.ACCESS_SHORTCUTS"
-        android:protectionLevel="signature|textClassifier" />
+        android:protectionLevel="signature|appPredictor" />
 
     <!-- @SystemApi Allows unlimited calls to shortcut mutation APIs.
          @hide -->
     <permission android:name="android.permission.UNLIMITED_SHORTCUTS_API_CALLS"
-        android:protectionLevel="signature|textClassifier" />
+        android:protectionLevel="signature|appPredictor" />
 
     <!-- @SystemApi Allows an application to read the runtime profiles of other apps.
          @hide <p>Not for use by third-party applications. -->
@@ -4533,7 +4559,8 @@
     <permission android:name="android.permission.MONITOR_DEFAULT_SMS_PACKAGE"
         android:protectionLevel="signature|privileged" />
 
-    <!-- A subclass of {@link android.service.carrier.CarrierMessagingClientService} must be protected with this permission. -->
+    <!-- A subclass of {@link android.service.carrier.CarrierMessagingClientService} must be protected with this permission.
+           <p>Protection level: signature -->
     <permission android:name="android.permission.BIND_CARRIER_MESSAGING_CLIENT_SERVICE"
         android:protectionLevel="signature" />
 
@@ -4543,6 +4570,13 @@
     -->
     <permission android:name="android.permission.BIND_EXPLICIT_HEALTH_CHECK_SERVICE"
         android:protectionLevel="signature|privileged" />
+
+    <!-- @SystemApi Must be required by an {@link android.service.storage.ExternalStorageService} to
+         ensure that only the system can bind to it.
+         @hide This is not a third-party API (intended for OEMs and system apps).
+    -->
+    <permission android:name="android.permission.BIND_EXTERNAL_STORAGE_SERVICE"
+        android:protectionLevel="signature" />
 
     <!-- @hide Permission that allows configuring appops.
      <p>Not for use by third-party applications. -->
@@ -4565,13 +4599,15 @@
     <permission android:name="android.permission.GRANT_PROFILE_OWNER_DEVICE_IDS_ACCESS"
         android:protectionLevel="signature" />
 
-    <!-- Allows financial apps to read filtered sms messages. -->
+    <!-- Allows financial apps to read filtered sms messages.
+         Protection level: signature|appop  -->
     <permission android:name="android.permission.SMS_FINANCIAL_TRANSACTIONS"
         android:protectionLevel="signature|appop" />
 
     <!-- Required for apps targeting {@link android.os.Build.VERSION_CODES#Q} that want to use
          {@link android.app.Notification.Builder#setFullScreenIntent notification full screen
-         intents}.  -->
+         intents}.
+         <p>Protection level: normal -->
     <permission android:name="android.permission.USE_FULL_SCREEN_INTENT"
                 android:protectionLevel="normal" />
 
@@ -4617,6 +4653,11 @@
     <permission android:name="android.permission.MONITOR_INPUT"
                 android:protectionLevel="signature" />
 
+    <!-- Allows query of any normal app on the device, regardless of manifest declarations. -->
+    <permission android:name="android.permission.QUERY_ALL_PACKAGES"
+                android:protectionLevel="normal" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
+
     <application android:process="system"
                  android:persistent="true"
                  android:hasCode="false"
@@ -4628,6 +4669,7 @@
                  android:supportsRtl="true"
                  android:theme="@style/Theme.DeviceDefault.Light.DarkActionBar"
                  android:defaultToDeviceProtectedStorage="true"
+                 android:forceQueryable="true"
                  android:directBootAware="true">
         <activity android:name="com.android.internal.app.ChooserActivity"
                 android:theme="@style/Theme.DeviceDefault.Resolver"
@@ -4680,7 +4722,7 @@
                 android:label="@string/managed_profile_label">
         </activity-alias>
         <activity android:name="com.android.internal.app.HeavyWeightSwitcherActivity"
-                android:theme="@style/Theme.DeviceDefault.Light.Dialog"
+                android:theme="@style/Theme.DeviceDefault.System.Dialog.Alert"
                 android:label="@string/heavy_weight_switcher_title"
                 android:finishOnCloseSystemDialogs="true"
                 android:excludeFromRecents="true"

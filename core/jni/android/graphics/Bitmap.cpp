@@ -1,7 +1,6 @@
 #define LOG_TAG "Bitmap"
 #include "Bitmap.h"
 
-#include "GraphicBuffer.h"
 #include "SkBitmap.h"
 #include "SkPixelRef.h"
 #include "SkImageEncoder.h"
@@ -11,19 +10,21 @@
 #include "GraphicsJNI.h"
 #include "SkStream.h"
 
-#include <binder/Parcel.h>
 #include "android_os_Parcel.h"
 #include "android_util_Binder.h"
 #include "android_nio_utils.h"
 #include "CreateJavaOutputStreamAdaptor.h"
 #include <hwui/Paint.h>
 #include <hwui/Bitmap.h>
-#include <renderthread/RenderProxy.h>
 #include <utils/Color.h>
 
+#ifdef __ANDROID__ // Layoutlib does not support graphic buffer, parcel or render thread
+#include <binder/Parcel.h>
+#include <renderthread/RenderProxy.h>
+#include <android_runtime/android_graphics_GraphicBuffer.h>
 #include <android_runtime/android_hardware_HardwareBuffer.h>
-
 #include <private/android/AHardwareBufferHelpers.h>
+#endif
 
 #include "core_jni_helpers.h"
 
@@ -236,10 +237,6 @@ Bitmap& toBitmap(jlong bitmapHandle) {
 }
 
 void imageInfo(JNIEnv* env, jobject bitmap, AndroidBitmapInfo* info) {
-    SkASSERT(info);
-    SkASSERT(env);
-    SkASSERT(bitmap);
-    SkASSERT(env->IsInstanceOf(bitmap, gBitmap_class));
     jlong bitmapHandle = env->GetLongField(bitmap, gBitmap_nativePtr);
     LocalScopedBitmap localBitmap(bitmapHandle);
 
@@ -260,6 +257,9 @@ void imageInfo(JNIEnv* env, jobject bitmap, AndroidBitmapInfo* info) {
             break;
         case kAlpha_8_SkColorType:
             info->format = ANDROID_BITMAP_FORMAT_A_8;
+            break;
+        case kRGBA_F16_SkColorType:
+            info->format = ANDROID_BITMAP_FORMAT_RGBA_F16;
             break;
         default:
             info->format = ANDROID_BITMAP_FORMAT_NONE;
@@ -667,6 +667,7 @@ static void Bitmap_setHasMipMap(JNIEnv* env, jobject, jlong bitmapHandle,
 static constexpr uint32_t kMaxColorSpaceSerializedBytes = 80;
 
 static jobject Bitmap_createFromParcel(JNIEnv* env, jobject, jobject parcel) {
+#ifdef __ANDROID__ // Layoutlib does not support parcel
     if (parcel == NULL) {
         SkDebugf("-------- unparcel parcel is NULL\n");
         return NULL;
@@ -783,12 +784,17 @@ static jobject Bitmap_createFromParcel(JNIEnv* env, jobject, jobject parcel) {
 
     return createBitmap(env, nativeBitmap.release(),
             getPremulBitmapCreateFlags(isMutable), NULL, NULL, density);
+#else
+    doThrowRE(env, "Cannot use parcels outside of Android");
+    return NULL;
+#endif
 }
 
 static jboolean Bitmap_writeToParcel(JNIEnv* env, jobject,
                                      jlong bitmapHandle,
                                      jboolean isMutable, jint density,
                                      jobject parcel) {
+#ifdef __ANDROID__ // Layoutlib does not support parcel
     if (parcel == NULL) {
         SkDebugf("------- writeToParcel null parcel\n");
         return JNI_FALSE;
@@ -868,6 +874,10 @@ static jboolean Bitmap_writeToParcel(JNIEnv* env, jobject,
 
     blob.release();
     return JNI_TRUE;
+#else
+    doThrowRE(env, "Cannot use parcels outside of Android");
+    return JNI_FALSE;
+#endif
 }
 
 static jobject Bitmap_extractAlpha(JNIEnv* env, jobject clazz,
@@ -1085,9 +1095,11 @@ static jboolean Bitmap_sameAs(JNIEnv* env, jobject, jlong bm0Handle, jlong bm1Ha
 }
 
 static void Bitmap_prepareToDraw(JNIEnv* env, jobject, jlong bitmapPtr) {
+#ifdef __ANDROID__ // Layoutlib does not support render thread
     LocalScopedBitmap bitmapHandle(bitmapPtr);
     if (!bitmapHandle.valid()) return;
     android::uirenderer::renderthread::RenderProxy::prepareToDraw(bitmapHandle->bitmap());
+#endif
 }
 
 static jint Bitmap_getAllocationByteCount(JNIEnv* env, jobject, jlong bitmapPtr) {
@@ -1114,30 +1126,35 @@ static jobject Bitmap_copyPreserveInternalConfig(JNIEnv* env, jobject, jlong bit
 
 static jobject Bitmap_wrapHardwareBufferBitmap(JNIEnv* env, jobject, jobject hardwareBuffer,
                                                jlong colorSpacePtr) {
-    AHardwareBuffer* hwBuf = android_hardware_HardwareBuffer_getNativeHardwareBuffer(env,
+#ifdef __ANDROID__ // Layoutlib does not support graphic buffer
+    AHardwareBuffer* buffer = android_hardware_HardwareBuffer_getNativeHardwareBuffer(env,
         hardwareBuffer);
-    sp<GraphicBuffer> buffer(AHardwareBuffer_to_GraphicBuffer(hwBuf));
-    SkColorType ct = uirenderer::PixelFormatToColorType(buffer->getPixelFormat());
-    sk_sp<Bitmap> bitmap = Bitmap::createFrom(buffer, ct,
-            GraphicsJNI::getNativeColorSpace(colorSpacePtr));
+    sk_sp<Bitmap> bitmap = Bitmap::createFrom(buffer,
+                                              GraphicsJNI::getNativeColorSpace(colorSpacePtr));
     if (!bitmap.get()) {
         ALOGW("failed to create hardware bitmap from hardware buffer");
         return NULL;
     }
     return bitmap::createBitmap(env, bitmap.release(), getPremulBitmapCreateFlags(false));
+#else
+    return NULL;
+#endif
 }
 
 static jobject Bitmap_createGraphicBufferHandle(JNIEnv* env, jobject, jlong bitmapPtr) {
+#ifdef __ANDROID__ // Layoutlib does not support graphic buffer
     LocalScopedBitmap bitmapHandle(bitmapPtr);
     LOG_ALWAYS_FATAL_IF(!bitmapHandle->isHardware(),
             "Hardware config is only supported config in Bitmap_getGraphicBuffer");
 
-    Bitmap& hwuiBitmap = bitmapHandle->bitmap();
-    sp<GraphicBuffer> buffer(hwuiBitmap.graphicBuffer());
-    return createJavaGraphicBuffer(env, buffer);
+    Bitmap& bitmap = bitmapHandle->bitmap();
+    return android_graphics_GraphicBuffer_createFromAHardwareBuffer(env, bitmap.hardwareBuffer());
+#else
+    return NULL;
+#endif
 }
 
-static jboolean Bitmap_isImmutable(jlong bitmapHandle) {
+static jboolean Bitmap_isImmutable(CRITICAL_JNI_PARAMS_COMMA jlong bitmapHandle) {
     LocalScopedBitmap bitmapHolder(bitmapHandle);
     if (!bitmapHolder.valid()) return JNI_FALSE;
 

@@ -31,6 +31,7 @@
 #include "Frame.h"
 #include "IRenderPipeline.h"
 #include "VulkanSurface.h"
+#include "private/hwui/DrawVkInfo.h"
 
 class GrVkExtensions;
 
@@ -106,14 +107,6 @@ private:
     private:
         FNPTR_TYPE fPtr;
     };
-
-    // WSI interface functions
-    VkPtr<PFN_vkCreateAndroidSurfaceKHR> mCreateAndroidSurfaceKHR;
-    VkPtr<PFN_vkDestroySurfaceKHR> mDestroySurfaceKHR;
-    VkPtr<PFN_vkGetPhysicalDeviceSurfaceSupportKHR> mGetPhysicalDeviceSurfaceSupportKHR;
-    VkPtr<PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR> mGetPhysicalDeviceSurfaceCapabilitiesKHR;
-    VkPtr<PFN_vkGetPhysicalDeviceSurfaceFormatsKHR> mGetPhysicalDeviceSurfaceFormatsKHR;
-    VkPtr<PFN_vkGetPhysicalDeviceSurfacePresentModesKHR> mGetPhysicalDeviceSurfacePresentModesKHR;
 
     // Instance Functions
     VkPtr<PFN_vkEnumerateInstanceVersion> mEnumerateInstanceVersion;

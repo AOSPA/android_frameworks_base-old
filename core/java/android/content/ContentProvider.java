@@ -17,6 +17,7 @@
 package android.content;
 
 import static android.Manifest.permission.INTERACT_ACROSS_USERS;
+import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.MODE_DEFAULT;
 import static android.app.AppOpsManager.MODE_ERRORED;
@@ -28,6 +29,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UnsupportedAppUsage;
 import android.app.AppOpsManager;
+import android.content.pm.PackageManager;
 import android.content.pm.PathPermission;
 import android.content.pm.ProviderInfo;
 import android.content.res.AssetFileDescriptor;
@@ -582,6 +584,22 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
             }
         }
 
+        @Override
+        public int checkUriPermission(String callingPkg, Uri uri, int uid, int modeFlags) {
+            uri = validateIncomingUri(uri);
+            uri = maybeGetUriWithoutUserId(uri);
+            Trace.traceBegin(TRACE_TAG_DATABASE, "checkUriPermission");
+            final String original = setCallingPackage(callingPkg);
+            try {
+                return mInterface.checkUriPermission(uri, uid, modeFlags);
+            } catch (RemoteException e) {
+                throw e.rethrowAsRuntimeException();
+            } finally {
+                setCallingPackage(original);
+                Trace.traceEnd(TRACE_TAG_DATABASE);
+            }
+        }
+
         private void enforceFilePermission(String callingPkg, Uri uri, String mode,
                 IBinder callerToken) throws FileNotFoundException, SecurityException {
             if (mode != null && mode.indexOf('w') != -1) {
@@ -628,9 +646,11 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
     }
 
     boolean checkUser(int pid, int uid, Context context) {
-        return UserHandle.getUserId(uid) == context.getUserId()
-                || mSingleUser
-                || context.checkPermission(INTERACT_ACROSS_USERS, pid, uid)
+        if (UserHandle.getUserId(uid) == context.getUserId() || mSingleUser) {
+            return true;
+        }
+        return context.checkPermission(INTERACT_ACROSS_USERS, pid, uid) == PERMISSION_GRANTED
+                || context.checkPermission(INTERACT_ACROSS_USERS_FULL, pid, uid)
                 == PERMISSION_GRANTED;
     }
 
@@ -1013,10 +1033,12 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
 
     /** @hide */
     public final void setTransportLoggingEnabled(boolean enabled) {
-        if (enabled) {
-            mTransport.mInterface = new LoggingContentInterface(getClass().getSimpleName(), this);
-        } else {
-            mTransport.mInterface = this;
+        if (mTransport != null) {
+            if (enabled) {
+                mTransport.mInterface = new LoggingContentInterface(getClass().getSimpleName(), this);
+            } else {
+                mTransport.mInterface = this;
+            }
         }
     }
 
@@ -1414,6 +1436,12 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
     public boolean refresh(Uri uri, @Nullable Bundle args,
             @Nullable CancellationSignal cancellationSignal) {
         return false;
+    }
+
+    /** {@hide} */
+    @Override
+    public int checkUriPermission(@NonNull Uri uri, int uid, @Intent.AccessUriMode int modeFlags) {
+        return PackageManager.PERMISSION_DENIED;
     }
 
     /**
@@ -2088,6 +2116,10 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
                 mExported = info.exported;
                 mSingleUser = (info.flags & ProviderInfo.FLAG_SINGLE_USER) != 0;
                 setAuthorities(info.authority);
+            }
+            if (Build.IS_DEBUGGABLE) {
+                setTransportLoggingEnabled(Log.isLoggable(getClass().getSimpleName(),
+                        Log.VERBOSE));
             }
             ContentProvider.this.onCreate();
         }

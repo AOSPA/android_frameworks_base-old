@@ -16,6 +16,12 @@
 
 package com.android.server.notification;
 
+import static android.app.NotificationManager.INTERRUPTION_FILTER_ALARMS;
+import static android.app.NotificationManager.INTERRUPTION_FILTER_ALL;
+import static android.app.NotificationManager.INTERRUPTION_FILTER_NONE;
+import static android.app.NotificationManager.INTERRUPTION_FILTER_PRIORITY;
+import static android.app.NotificationManager.INTERRUPTION_FILTER_UNKNOWN;
+
 import android.app.ActivityManager;
 import android.app.INotificationManager;
 import android.app.Notification;
@@ -33,11 +39,14 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ShellCommand;
 import android.os.UserHandle;
 import android.text.TextUtils;
 import android.util.Slog;
+
+import com.android.internal.util.FunctionalUtils;
 
 import java.io.PrintWriter;
 import java.net.URISyntaxException;
@@ -47,13 +56,13 @@ import java.util.Collections;
  * Implementation of `cmd notification` in NotificationManagerService.
  */
 public class NotificationShellCmd extends ShellCommand {
-    private static final String USAGE =
-              "usage: cmd notification SUBCMD [args]\n\n"
+    private static final String USAGE = "usage: cmd notification SUBCMD [args]\n\n"
             + "SUBCMDs:\n"
             + "  allow_listener COMPONENT [user_id (current user if not specified)]\n"
             + "  disallow_listener COMPONENT [user_id (current user if not specified)]\n"
             + "  allow_assistant COMPONENT [user_id (current user if not specified)]\n"
             + "  remove_assistant COMPONENT [user_id (current user if not specified)]\n"
+            + "  set_dnd [on|none (same as on)|priority|alarms|all|off (same as all)]"
             + "  allow_dnd PACKAGE [user_id (current user if not specified)]\n"
             + "  disallow_dnd PACKAGE [user_id (current user if not specified)]\n"
             + "  suspend_package PACKAGE\n"
@@ -90,7 +99,7 @@ public class NotificationShellCmd extends ShellCommand {
             + "  <args> are as described in `am start`";
 
     public static final int NOTIFICATION_ID = 1138;
-    public static final String NOTIFICATION_PACKAGE = "com.android.shell";
+    public static final String NOTIFICATION_PACKAGE = "android";
     public static final String CHANNEL_ID = "shellcmd";
     public static final String CHANNEL_NAME = "Shell command";
     public static final int CHANNEL_IMP = NotificationManager.IMPORTANCE_DEFAULT;
@@ -111,6 +120,29 @@ public class NotificationShellCmd extends ShellCommand {
         final PrintWriter pw = getOutPrintWriter();
         try {
             switch (cmd.replace('-', '_')) {
+                case "set_dnd": {
+                    String mode = getNextArgRequired();
+                    int interruptionFilter = INTERRUPTION_FILTER_UNKNOWN;
+                    switch(mode) {
+                        case "none":
+                        case "on":
+                            interruptionFilter = INTERRUPTION_FILTER_NONE;
+                            break;
+                        case "priority":
+                            interruptionFilter = INTERRUPTION_FILTER_PRIORITY;
+                            break;
+                        case "alarms":
+                            interruptionFilter = INTERRUPTION_FILTER_ALARMS;
+                            break;
+                        case "all":
+                        case "off":
+                            interruptionFilter = INTERRUPTION_FILTER_ALL;
+                    }
+                    final int filter = interruptionFilter;
+                    Binder.withCleanCallingIdentity(() -> mBinderService.setInterruptionFilter(
+                            mDirectService.getContext().getPackageName(), filter));
+                }
+                break;
                 case "allow_dnd": {
                     String packageName = getNextArgRequired();
                     int userId = ActivityManager.getCurrentUser();
@@ -239,7 +271,7 @@ public class NotificationShellCmd extends ShellCommand {
     }
 
     void ensureChannel() throws RemoteException {
-        final int uid = Binder.getCallingUid();
+        final int uid = Process.myUid();
         final int userid = UserHandle.getCallingUserId();
         final long token = Binder.clearCallingIdentity();
         try {
@@ -491,7 +523,7 @@ public class NotificationShellCmd extends ShellCommand {
         final long token = Binder.clearCallingIdentity();
         try {
             mBinderService.enqueueNotificationWithTag(
-                    NOTIFICATION_PACKAGE, "android",
+                    NOTIFICATION_PACKAGE, NOTIFICATION_PACKAGE,
                     tag, NOTIFICATION_ID,
                     n, userId);
         } finally {

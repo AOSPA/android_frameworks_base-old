@@ -30,12 +30,14 @@ import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentat
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyBoolean;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 
 import android.graphics.Rect;
 import android.os.IBinder;
@@ -195,6 +197,7 @@ public class AppTransitionTests extends WindowTestsBase {
     @Test
     public void testCancelRemoteAnimationWhenFreeze() {
         final DisplayContent dc = createNewDisplay(Display.STATE_ON);
+        doReturn(false).when(dc).onDescendantOrientationChanged(any(), any());
         final WindowState exitingAppWindow = createWindow(null /* parent */, TYPE_BASE_APPLICATION,
                 dc, "exiting app");
         final AppWindowToken exitingAppToken = exitingAppWindow.mAppToken;
@@ -207,7 +210,7 @@ public class AppTransitionTests extends WindowTestsBase {
         final RemoteAnimationAdapter adapter = new RemoteAnimationAdapter(
                 runner, 100, 50, true /* changeNeedsSnapshot */);
         // RemoteAnimationController will tracking RemoteAnimationAdapter's caller with calling pid.
-        adapter.setCallingPid(123);
+        adapter.setCallingPidUid(123, 456);
 
         // Simulate activity finish flows to prepare app transition & set visibility,
         // make sure transition is set as expected.

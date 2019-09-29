@@ -1376,8 +1376,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
      * Can only be called for unsecured networks.
      */
     public void generateOpenNetworkConfig() {
-        if ((security != SECURITY_NONE) && (security != SECURITY_OWE)
-                && (security != SECURITY_OWE_TRANSITION)) {
+        if (!isOpenNetwork()) {
             throw new IllegalStateException();
         }
         if (mConfig != null)
@@ -1601,7 +1600,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
 
     void update(@Nullable WifiConfiguration config) {
         mConfig = config;
-        if (mConfig != null) {
+        if (mConfig != null && !isPasspoint()) {
             ssid = removeDoubleQuotes(mConfig.SSID);
         }
         networkId = config != null ? config.networkId : WifiConfiguration.INVALID_NETWORK_ID;
@@ -1886,6 +1885,14 @@ public class AccessPoint implements Comparable<AccessPoint> {
             mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
         }
         return mWifiManager;
+    }
+
+    /**
+     * Return true if this is an open network AccessPoint.
+     */
+    public boolean isOpenNetwork() {
+        return security == SECURITY_NONE || security == SECURITY_OWE
+                || security == SECURITY_OWE_TRANSITION;
     }
 
     /**

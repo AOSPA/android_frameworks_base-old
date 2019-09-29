@@ -122,19 +122,17 @@ public class LockSettingsStorageTests extends AndroidTestCase {
     }
 
     public void testKeyValue_Concurrency() {
-        final Object monitor = new Object();
+        final CountDownLatch latch = new CountDownLatch(1);
         List<Thread> threads = new ArrayList<>();
         for (int i = 0; i < 100; i++) {
             final int threadId = i;
             threads.add(new Thread("testKeyValue_Concurrency_" + i) {
                 @Override
                 public void run() {
-                    synchronized (monitor) {
-                        try {
-                            monitor.wait();
-                        } catch (InterruptedException e) {
-                            return;
-                        }
+                    try {
+                        latch.await();
+                    } catch (InterruptedException e) {
+                        return;
                     }
                     mStorage.writeKeyValue("key", "1 from thread " + threadId, 0);
                     mStorage.readKeyValue("key", "default", 0);
@@ -151,9 +149,7 @@ public class LockSettingsStorageTests extends AndroidTestCase {
             threads.get(i).start();
         }
         mStorage.writeKeyValue("key", "initalValue", 0);
-        synchronized (monitor) {
-            monitor.notifyAll();
-        }
+        latch.countDown();
         joinAll(threads, 10000);
         assertEquals('5', mStorage.readKeyValue("key", "default", 0).charAt(0));
         mStorage.clearCache();
@@ -315,8 +311,6 @@ public class LockSettingsStorageTests extends AndroidTestCase {
     public void testFileLocation_Owner() {
         LockSettingsStorage storage = new LockSettingsStorage(getContext());
 
-        assertEquals("/data/system/gesture.key", storage.getLegacyLockPatternFilename(0));
-        assertEquals("/data/system/password.key", storage.getLegacyLockPasswordFilename(0));
         assertEquals("/data/system/gatekeeper.pattern.key", storage.getLockPatternFilename(0));
         assertEquals("/data/system/gatekeeper.password.key", storage.getLockPasswordFilename(0));
     }
@@ -440,10 +434,8 @@ public class LockSettingsStorageTests extends AndroidTestCase {
                 PAYLOAD, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD).toBytes();
         CredentialHash deserialized = CredentialHash.fromBytes(serialized);
 
-        assertEquals(CredentialHash.VERSION_GATEKEEPER, deserialized.version);
         assertEquals(LockPatternUtils.CREDENTIAL_TYPE_PASSWORD, deserialized.type);
         assertArrayEquals(PAYLOAD, deserialized.hash);
-        assertFalse(deserialized.isBaseZeroPattern);
     }
 
     public void testCredentialHash_unserialize_versionGatekeeper() {
@@ -457,10 +449,8 @@ public class LockSettingsStorageTests extends AndroidTestCase {
         };
         CredentialHash deserialized = CredentialHash.fromBytes(serialized);
 
-        assertEquals(CredentialHash.VERSION_GATEKEEPER, deserialized.version);
         assertEquals(LockPatternUtils.CREDENTIAL_TYPE_PASSWORD, deserialized.type);
         assertArrayEquals(PAYLOAD, deserialized.hash);
-        assertFalse(deserialized.isBaseZeroPattern);
 
         // Make sure the constants we use on the wire do not change.
         assertEquals(-1, LockPatternUtils.CREDENTIAL_TYPE_NONE);

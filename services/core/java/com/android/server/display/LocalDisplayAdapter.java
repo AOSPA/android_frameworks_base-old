@@ -733,6 +733,9 @@ final class LocalDisplayAdapter extends DisplayAdapter {
 
             SurfaceControl.setAllowedDisplayConfigs(getDisplayTokenLocked(), allowedPhysIndexes);
             int activePhysIndex = SurfaceControl.getActiveConfig(getDisplayTokenLocked());
+            if (activePhysIndex < 0) {
+                return false;
+            }
             return updateActiveModeLocked(activePhysIndex);
         }
 
@@ -878,7 +881,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
 
     private final class PhysicalDisplayEventReceiver extends DisplayEventReceiver {
         PhysicalDisplayEventReceiver(Looper looper) {
-            super(looper, VSYNC_SOURCE_APP);
+            super(looper, VSYNC_SOURCE_APP, CONFIG_CHANGED_EVENT_DISPATCH);
         }
 
         @Override

@@ -19,8 +19,8 @@
 
 #include "RenderTask.h"
 
-#include "../JankTracker.h"
 #include "CacheManager.h"
+#include "ProfileDataContainer.h"
 #include "TimeLord.h"
 #include "WebViewFunctorManager.h"
 #include "thread/ThreadBase.h"
@@ -51,6 +51,10 @@ class TestUtils;
 
 namespace skiapipeline {
 class VkFunctorDrawHandler;
+}
+
+namespace VectorDrawable {
+class Tree;
 }
 
 namespace renderthread {
@@ -138,6 +142,7 @@ private:
     friend class android::uirenderer::TestUtils;
     friend class android::uirenderer::WebViewFunctor;
     friend class android::uirenderer::skiapipeline::VkFunctorDrawHandler;
+    friend class android::uirenderer::VectorDrawable::Tree;
 
     RenderThread();
     virtual ~RenderThread();

@@ -17,6 +17,7 @@
 package android.view;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.HardwareRenderer;
@@ -27,6 +28,7 @@ import android.graphics.Rect;
 import android.graphics.RenderNode;
 import android.os.SystemProperties;
 import android.os.Trace;
+import android.util.Log;
 import android.view.Surface.OutOfResourcesException;
 import android.view.View.AttachInfo;
 import android.view.animation.AnimationUtils;
@@ -35,6 +37,7 @@ import com.android.internal.R;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 
 /**
  * Threaded renderer that proxies the rendering to a render thread. Most calls
@@ -286,9 +289,6 @@ public final class ThreadedRenderer extends HardwareRenderer {
     // applied as translation when updating the root render node.
     private int mInsetTop, mInsetLeft;
 
-    // Whether the surface has insets. Used to protect opacity.
-    private boolean mHasInsets;
-
     // Light properties specified by the theme.
     private final float mLightY;
     private final float mLightZ;
@@ -300,7 +300,8 @@ public final class ThreadedRenderer extends HardwareRenderer {
     private boolean mEnabled;
     private boolean mRequested = true;
 
-    private FrameDrawingCallback mNextRtFrameCallback;
+    @Nullable
+    private ArrayList<FrameDrawingCallback> mNextRtFrameCallbacks;
 
     ThreadedRenderer(Context context, boolean translucent, String name) {
         super();
@@ -441,8 +442,11 @@ public final class ThreadedRenderer extends HardwareRenderer {
      *
      * @param callback The callback to register.
      */
-    void registerRtFrameCallback(FrameDrawingCallback callback) {
-        mNextRtFrameCallback = callback;
+    void registerRtFrameCallback(@NonNull FrameDrawingCallback callback) {
+        if (mNextRtFrameCallbacks == null) {
+            mNextRtFrameCallbacks = new ArrayList<>();
+        }
+        mNextRtFrameCallbacks.add(callback);
     }
 
     /**
@@ -474,7 +478,6 @@ public final class ThreadedRenderer extends HardwareRenderer {
 
         if (surfaceInsets != null && (surfaceInsets.left != 0 || surfaceInsets.right != 0
                 || surfaceInsets.top != 0 || surfaceInsets.bottom != 0)) {
-            mHasInsets = true;
             mInsetLeft = surfaceInsets.left;
             mInsetTop = surfaceInsets.top;
             mSurfaceWidth = width + mInsetLeft + surfaceInsets.right;
@@ -483,7 +486,6 @@ public final class ThreadedRenderer extends HardwareRenderer {
             // If the surface has insets, it can't be opaque.
             setOpaque(false);
         } else {
-            mHasInsets = false;
             mInsetLeft = 0;
             mInsetTop = 0;
             mSurfaceWidth = width;
@@ -583,10 +585,14 @@ public final class ThreadedRenderer extends HardwareRenderer {
         // Consume and set the frame callback after we dispatch draw to the view above, but before
         // onPostDraw below which may reset the callback for the next frame.  This ensures that
         // updates to the frame callback during scroll handling will also apply in this frame.
-        final FrameDrawingCallback callback = mNextRtFrameCallback;
-        mNextRtFrameCallback = null;
-        if (callback != null) {
-            setFrameCallback(callback);
+        if (mNextRtFrameCallbacks != null) {
+            final ArrayList<FrameDrawingCallback> frameCallbacks = mNextRtFrameCallbacks;
+            mNextRtFrameCallbacks = null;
+            setFrameCallback(frame -> {
+                for (int i = 0; i < frameCallbacks.size(); ++i) {
+                    frameCallbacks.get(i).onFrameDraw(frame);
+                }
+            });
         }
 
         if (mRootNodeNeedsUpdate || !mRootNode.hasDisplayList()) {
@@ -669,11 +675,11 @@ public final class ThreadedRenderer extends HardwareRenderer {
 
         int syncResult = syncAndDrawFrame(choreographer.mFrameInfo);
         if ((syncResult & SYNC_LOST_SURFACE_REWARD_IF_FOUND) != 0) {
-            setEnabled(false);
-            attachInfo.mViewRootImpl.mSurface.release();
-            // Invalidate since we failed to draw. This should fetch a Surface
-            // if it is still needed or do nothing if we are no longer drawing
-            attachInfo.mViewRootImpl.invalidate();
+            Log.w("OpenGLRenderer", "Surface lost, forcing relayout");
+            // We lost our surface. For a relayout next frame which should give us a new
+            // surface from WindowManager, which hopefully will work.
+            attachInfo.mViewRootImpl.mForceNextWindowRelayout = true;
+            attachInfo.mViewRootImpl.requestLayout();
         }
         if ((syncResult & SYNC_REDRAW_REQUESTED) != 0) {
             attachInfo.mViewRootImpl.invalidate();

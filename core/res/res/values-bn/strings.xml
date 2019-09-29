@@ -95,6 +95,7 @@
     <string name="notification_channel_voice_mail" msgid="3954099424160511919">"ভয়েসমেল মেসেজ"</string>
     <string name="notification_channel_wfc" msgid="2130802501654254801">"ওয়াই-ফাই কলিং"</string>
     <string name="notification_channel_sim" msgid="4052095493875188564">"সিম কার্ডের স্টাটাস"</string>
+    <string name="notification_channel_sim_high_prio" msgid="1787666807724243207">"উচ্চ প্রায়রিটি সিম স্ট্যাটাস"</string>
     <string name="peerTtyModeFull" msgid="6165351790010341421">"পির TTY মোড FULL অনুরোধ করেছে"</string>
     <string name="peerTtyModeHco" msgid="5728602160669216784">"পির TTY মোড HCO অনুরোধ করেছে"</string>
     <string name="peerTtyModeVco" msgid="1742404978686538049">"পির TTY মোড VCO অনুরোধ করেছে"</string>
@@ -257,6 +258,7 @@
     <string name="notification_channel_car_mode" msgid="3553380307619874564">"গাড়ি মোড"</string>
     <string name="notification_channel_account" msgid="7577959168463122027">"অ্যাকাউন্টের স্থিতি"</string>
     <string name="notification_channel_developer" msgid="7579606426860206060">"ডেভেলপার সম্পর্কিত মেসেজ"</string>
+    <string name="notification_channel_developer_important" msgid="5251192042281632002">"ডেভেলপার সম্পর্কিত গুরুত্বপূর্ণ মেসেজ"</string>
     <string name="notification_channel_updates" msgid="4794517569035110397">"আপডেটগুলি"</string>
     <string name="notification_channel_network_status" msgid="5025648583129035447">"নেটওয়ার্কের স্থিতি"</string>
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"নেটওয়ার্ক সক্রান্ত অ্যালার্ট"</string>
@@ -550,15 +552,11 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="2340202869968465936">"আঙ্গুলের ছাপ আইকন"</string>
-    <!-- no translation found for permlab_manageFace (7262837876352591553) -->
-    <skip />
+    <string name="permlab_manageFace" msgid="7262837876352591553">"মুখের সাহায্যে আনলক করার হার্ডওয়্যার ম্যানেজ করা"</string>
     <string name="permdesc_manageFace" msgid="8919637120670185330">"ব্যবহার করার জন্য ফেস টেম্পলেট যোগ করা এবং মোছার পদ্ধতি গ্রহণ করতে অ্যাপটিকে অনুমতি দেয়৷"</string>
-    <!-- no translation found for permlab_useFaceAuthentication (2565716575739037572) -->
-    <skip />
-    <!-- no translation found for permdesc_useFaceAuthentication (4712947955047607722) -->
-    <skip />
-    <!-- no translation found for face_recalibrate_notification_name (1913676850645544352) -->
-    <skip />
+    <string name="permlab_useFaceAuthentication" msgid="2565716575739037572">"মুখের সাহায্যে আনলক করার হার্ডওয়্যার ব্যবহার করা"</string>
+    <string name="permdesc_useFaceAuthentication" msgid="4712947955047607722">"অ্যাপকে যাচাইকরণের জন্য মুখের সাহায্যে আনলক করার হার্ডওয়্যার ব্যবহার করতে দেয়"</string>
+    <string name="face_recalibrate_notification_name" msgid="1913676850645544352">"মুখের সাহায্যে আনলক"</string>
     <string name="face_recalibrate_notification_title" msgid="4087620069451499365">"আপনার ফেস আবার এনরোল করুন"</string>
     <string name="face_recalibrate_notification_content" msgid="5530308842361499835">"শনাক্তকরণের উন্নতি করতে আপনার ফেস আবার এনরোল করুন"</string>
     <string name="face_acquired_insufficient" msgid="2767330364802375742">"মুখের সঠিক ডেটা পাওয়া যায়নি। আবার চেষ্টা করুন।"</string>
@@ -571,7 +569,7 @@
     <string name="face_acquired_too_right" msgid="3667075962661863218">"ফোনটি বাঁদিকে সরান।"</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"ফোনটি ডানদিকে সরান।"</string>
     <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"সরাসরি ডিভাইসের দিকে তাকান।"</string>
-    <string name="face_acquired_not_detected" msgid="4885504661626728809">"আপনার মুখ দেখা যাচ্ছে না। ফোনের দিকে তাকান।"</string>
+    <string name="face_acquired_not_detected" msgid="1879714205006680222">"আপনার মুখ সরাসরি ফোনের সামনে রাখুন।"</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"খুব বেশি নড়ছে। ফোনটি যাতে না কাঁপে সেইভাবে ধরুন।"</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"আপনার মুখের ছবি আবার নথিভুক্ত করুন।"</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"আর মুখ চিনতে পারবেন না। আবার চেষ্টা করুন।"</string>
@@ -580,24 +578,19 @@
     <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"আপনার মাথাটি নিচের দিকে সামান্য নামান।"</string>
     <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"আপনার মাথাটি সামান্য ঘোরান।"</string>
     <string name="face_acquired_obscured" msgid="5357207702967893283">"আপনার ফেসকে আড়াল করে এমন সব কিছু সরিয়ে দিন।"</string>
-    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"স্ক্রিনের উপরের প্রান্তের সেন্সর মুছুন।"</string>
+    <string name="face_acquired_sensor_dirty" msgid="7905138627046865579">"ব্ল্যাক বার সহ আপনার স্ক্রিনের উপরের অংশ মুছে ফেলুন"</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"ফেস যাচাই করা যায়নি। হার্ডওয়্যার উপলভ্য নেই।"</string>
-    <!-- no translation found for face_error_timeout (981512090365729465) -->
-    <skip />
+    <string name="face_error_timeout" msgid="981512090365729465">"আবার মুখের সাহায্যে আনলক করার চেষ্টা করুন।"</string>
     <string name="face_error_no_space" msgid="2712120617457553825">"নতুন ফেস ডেটা স্টোর করা যায়নি। প্রথমে পুরনোটি মুছে ফেলুন।"</string>
     <string name="face_error_canceled" msgid="283945501061931023">"ফেস অপারেশন বাতিল করা হয়েছে৷"</string>
-    <!-- no translation found for face_error_user_canceled (5317030072349668946) -->
-    <skip />
+    <string name="face_error_user_canceled" msgid="5317030072349668946">"ব্যবহারকারী মুখের সাহায্যে আনলক বাতিল করে দিয়েছেন।"</string>
     <string name="face_error_lockout" msgid="3407426963155388504">"অনেকবার চেষ্টা করা হয়েছে। পরে আবার চেষ্টা করুন।"</string>
-    <!-- no translation found for face_error_lockout_permanent (4723594314443097159) -->
-    <skip />
+    <string name="face_error_lockout_permanent" msgid="4723594314443097159">"অনেকবার চেষ্টা করেছেন। মুখের সাহায্যে আনলক করার সুবিধা বন্ধ করা হয়েছে।"</string>
     <string name="face_error_unable_to_process" msgid="4940944939691171539">"আপনার মুখ যাচাই করা যাচ্ছে না। আবার চেষ্টা করুন।"</string>
-    <!-- no translation found for face_error_not_enrolled (4016937174832839540) -->
-    <skip />
-    <!-- no translation found for face_error_hw_not_present (8302690289757559738) -->
-    <skip />
+    <string name="face_error_not_enrolled" msgid="4016937174832839540">"এখনও মুখের সাহায্যে আনলক করার সুবিধা সেট-আপ করেননি।"</string>
+    <string name="face_error_hw_not_present" msgid="8302690289757559738">"এই ডিভাইসে মুখের সাহায্যে আনলক করার সুবিধাটি কাজ করে না।"</string>
     <string name="face_name_template" msgid="7004562145809595384">"<xliff:g id="FACEID">%d</xliff:g> ফেস"</string>
   <string-array name="face_error_vendor">
   </string-array>

@@ -298,6 +298,8 @@ public class DisplayPolicy {
     /** See {@link #getNavigationBarFrameHeight} */
     private int[] mNavigationBarFrameHeightForRotationDefault = new int[4];
 
+    private boolean mIsFreeformWindowOverlappingWithNavBar;
+
     /** Cached value of {@link ScreenShapeHelper#getWindowOutsetBottomPx} */
     @Px private int mWindowOutsetBottom;
 
@@ -513,9 +515,10 @@ public class DisplayPolicy {
 
                     @Override
                     public void onSwipeFromRight() {
-                        final Region excludedRegion;
+                        final Region excludedRegion = Region.obtain();
                         synchronized (mLock) {
-                            excludedRegion = mDisplayContent.calculateSystemGestureExclusion();
+                            mDisplayContent.calculateSystemGestureExclusion(
+                                    excludedRegion, null /* outUnrestricted */);
                         }
                         final boolean sideAllowed = mNavigationBarAlwaysShowOnSideGesture
                                 || mNavigationBarPosition == NAV_BAR_RIGHT;
@@ -523,13 +526,15 @@ public class DisplayPolicy {
                                 && !mSystemGestures.currentGestureStartedInRegion(excludedRegion)) {
                             requestTransientBars(mNavigationBar);
                         }
+                        excludedRegion.recycle();
                     }
 
                     @Override
                     public void onSwipeFromLeft() {
-                        final Region excludedRegion;
+                        final Region excludedRegion = Region.obtain();
                         synchronized (mLock) {
-                            excludedRegion = mDisplayContent.calculateSystemGestureExclusion();
+                            mDisplayContent.calculateSystemGestureExclusion(
+                                    excludedRegion, null /* outUnrestricted */);
                         }
                         final boolean sideAllowed = mNavigationBarAlwaysShowOnSideGesture
                                 || mNavigationBarPosition == NAV_BAR_LEFT;
@@ -537,6 +542,7 @@ public class DisplayPolicy {
                                 && !mSystemGestures.currentGestureStartedInRegion(excludedRegion)) {
                             requestTransientBars(mNavigationBar);
                         }
+                        excludedRegion.recycle();
                     }
 
                     @Override
@@ -783,6 +789,10 @@ public class DisplayPolicy {
         return mHasStatusBar;
     }
 
+    boolean hasSideGestures() {
+        return mHasNavigationBar && mSideGestureInset > 0;
+    }
+
     public boolean navigationBarCanMove() {
         return mNavigationBarCanMove;
     }
@@ -986,27 +996,24 @@ public class DisplayPolicy {
     }
 
     /**
-     * Preflight adding a window to the system.
+     * Check if a window can be added to the system.
      *
-     * Currently enforces that three window types are singletons per display:
+     * Currently enforces that two window types are singletons per display:
      * <ul>
      * <li>{@link WindowManager.LayoutParams#TYPE_STATUS_BAR}</li>
      * <li>{@link WindowManager.LayoutParams#TYPE_NAVIGATION_BAR}</li>
      * </ul>
      *
-     * @param win The window to be added
-     * @param attrs Information about the window to be added
+     * @param attrs Information about the window to be added.
      *
      * @return If ok, WindowManagerImpl.ADD_OKAY.  If too many singletons,
      * WindowManagerImpl.ADD_MULTIPLE_SINGLETON
      */
-    public int prepareAddWindowLw(WindowState win, WindowManager.LayoutParams attrs) {
-
+    int validateAddingWindowLw(WindowManager.LayoutParams attrs) {
         if ((attrs.privateFlags & PRIVATE_FLAG_IS_SCREEN_DECOR) != 0) {
             mContext.enforceCallingOrSelfPermission(
                     android.Manifest.permission.STATUS_BAR_SERVICE,
                     "DisplayPolicy");
-            mScreenDecorWindows.add(win);
         }
 
         switch (attrs.type) {
@@ -1019,6 +1026,42 @@ public class DisplayPolicy {
                         return WindowManagerGlobal.ADD_MULTIPLE_SINGLETON;
                     }
                 }
+                break;
+            case TYPE_NAVIGATION_BAR:
+                mContext.enforceCallingOrSelfPermission(
+                        android.Manifest.permission.STATUS_BAR_SERVICE,
+                        "DisplayPolicy");
+                if (mNavigationBar != null) {
+                    if (mNavigationBar.isAlive()) {
+                        return WindowManagerGlobal.ADD_MULTIPLE_SINGLETON;
+                    }
+                }
+                break;
+            case TYPE_NAVIGATION_BAR_PANEL:
+            case TYPE_STATUS_BAR_PANEL:
+            case TYPE_STATUS_BAR_SUB_PANEL:
+            case TYPE_VOICE_INTERACTION_STARTING:
+                mContext.enforceCallingOrSelfPermission(
+                        android.Manifest.permission.STATUS_BAR_SERVICE,
+                        "DisplayPolicy");
+                break;
+        }
+        return ADD_OKAY;
+    }
+
+    /**
+     * Called when a window is being added to the system.  Must not throw an exception.
+     *
+     * @param win The window being added.
+     * @param attrs Information about the window to be added.
+     */
+    void addWindowLw(WindowState win, WindowManager.LayoutParams attrs) {
+        if ((attrs.privateFlags & PRIVATE_FLAG_IS_SCREEN_DECOR) != 0) {
+            mScreenDecorWindows.add(win);
+        }
+
+        switch (attrs.type) {
+            case TYPE_STATUS_BAR:
                 mStatusBar = win;
                 mStatusBarController.setWindow(win);
                 if (mDisplayContent.isDefaultDisplay) {
@@ -1034,14 +1077,6 @@ public class DisplayPolicy {
                 mDisplayContent.setInsetProvider(TYPE_TOP_TAPPABLE_ELEMENT, win, frameProvider);
                 break;
             case TYPE_NAVIGATION_BAR:
-                mContext.enforceCallingOrSelfPermission(
-                        android.Manifest.permission.STATUS_BAR_SERVICE,
-                        "DisplayPolicy");
-                if (mNavigationBar != null) {
-                    if (mNavigationBar.isAlive()) {
-                        return WindowManagerGlobal.ADD_MULTIPLE_SINGLETON;
-                    }
-                }
                 mNavigationBar = win;
                 mNavigationBarController.setWindow(win);
                 mNavigationBarController.setOnBarVisibilityChangedListener(
@@ -1075,16 +1110,7 @@ public class DisplayPolicy {
                         });
                 if (DEBUG_LAYOUT) Slog.i(TAG, "NAVIGATION BAR: " + mNavigationBar);
                 break;
-            case TYPE_NAVIGATION_BAR_PANEL:
-            case TYPE_STATUS_BAR_PANEL:
-            case TYPE_STATUS_BAR_SUB_PANEL:
-            case TYPE_VOICE_INTERACTION_STARTING:
-                mContext.enforceCallingOrSelfPermission(
-                        android.Manifest.permission.STATUS_BAR_SERVICE,
-                        "DisplayPolicy");
-                break;
         }
-        return ADD_OKAY;
     }
 
     /**
@@ -1093,7 +1119,7 @@ public class DisplayPolicy {
      *
      * @param win The window being removed.
      */
-    public void removeWindowLw(WindowState win) {
+    void removeWindowLw(WindowState win) {
         if (mStatusBar == win) {
             mStatusBar = null;
             mStatusBarController.setWindow(null);
@@ -2488,6 +2514,7 @@ public class DisplayPolicy {
         mAllowLockscreenWhenOn = false;
         mShowingDream = false;
         mWindowSleepTokenNeeded = false;
+        mIsFreeformWindowOverlappingWithNavBar = false;
     }
 
     /**
@@ -2585,6 +2612,13 @@ public class DisplayPolicy {
             if (mTopDockedOpaqueOrDimmingWindowState == null) {
                 mTopDockedOpaqueOrDimmingWindowState = win;
             }
+        }
+
+        // Check if the freeform window overlaps with the navigation bar area.
+        final WindowState navBarWin = hasNavigationBar() ? mNavigationBar : null;
+        if (!mIsFreeformWindowOverlappingWithNavBar && win.inFreeformWindowingMode()
+                && isOverlappingWithNavBar(win, navBarWin)) {
+            mIsFreeformWindowOverlappingWithNavBar = true;
         }
 
         // Also keep track of any windows that are dimming but not necessarily fullscreen in the
@@ -2913,7 +2947,11 @@ public class DisplayPolicy {
         mHandler.post(() -> {
             final int displayId = getDisplayId();
             getStatusBarManagerInternal().onDisplayReady(displayId);
-            LocalServices.getService(WallpaperManagerInternal.class).onDisplayReady(displayId);
+            final WallpaperManagerInternal wpMgr = LocalServices
+                    .getService(WallpaperManagerInternal.class);
+            if (wpMgr != null) {
+                wpMgr.onDisplayReady(displayId);
+            }
         });
     }
 
@@ -3567,7 +3605,11 @@ public class DisplayPolicy {
             }
         } else if (mNavBarOpacityMode == NAV_BAR_OPAQUE_WHEN_FREEFORM_OR_DOCKED) {
             if (dockedStackVisible || freeformStackVisible || isDockedDividerResizing) {
-                visibility = setNavBarOpaqueFlag(visibility);
+                if (mIsFreeformWindowOverlappingWithNavBar) {
+                    visibility = setNavBarTranslucentFlag(visibility);
+                } else {
+                    visibility = setNavBarOpaqueFlag(visibility);
+                }
             } else if (fullscreenDrawsBackground) {
                 visibility = setNavBarTransparentFlag(visibility);
             }
@@ -3855,5 +3897,15 @@ public class DisplayPolicy {
         final WindowManager wm = mContext.getSystemService(WindowManager.class);
         wm.removeView(mPointerLocationView);
         mPointerLocationView = null;
+    }
+
+    @VisibleForTesting
+    static boolean isOverlappingWithNavBar(WindowState targetWindow, WindowState navBarWindow) {
+        if (navBarWindow == null || !navBarWindow.isVisibleLw()
+                || targetWindow.mAppToken == null || !targetWindow.isVisibleLw()) {
+            return false;
+        }
+
+        return Rect.intersects(targetWindow.getFrameLw(), navBarWindow.getFrameLw());
     }
 }

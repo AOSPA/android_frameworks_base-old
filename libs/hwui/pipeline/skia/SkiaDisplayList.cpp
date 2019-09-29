@@ -15,11 +15,18 @@
  */
 
 #include "SkiaDisplayList.h"
+#include "FunctorDrawable.h"
 
 #include "DumpOpsCanvas.h"
+#ifdef __ANDROID__ // Layoutlib does not support SkiaPipeline
 #include "SkiaPipeline.h"
+#else
+#include "DamageAccumulator.h"
+#endif
 #include "VectorDrawable.h"
+#ifdef __ANDROID__
 #include "renderthread/CanvasContext.h"
+#endif
 
 #include <SkImagePriv.h>
 #include <SkPathOps.h>
@@ -81,6 +88,7 @@ bool SkiaDisplayList::prepareListAndChildren(
     // If the prepare tree is triggered by the UI thread and no previous call to
     // pinImages has failed then we must pin all mutable images in the GPU cache
     // until the next UI thread draw.
+#ifdef __ANDROID__ // Layoutlib does not support CanvasContext
     if (info.prepareTextures && !info.canvasContext.pinImages(mMutableImages)) {
         // In the event that pinning failed we prevent future pinImage calls for the
         // remainder of this tree traversal and also unpin any currently pinned images
@@ -88,6 +96,7 @@ bool SkiaDisplayList::prepareListAndChildren(
         info.prepareTextures = false;
         info.canvasContext.unpinImages();
     }
+#endif
 
     bool hasBackwardProjectedNodesHere = false;
     bool hasBackwardProjectedNodesSubtree = false;
@@ -141,10 +150,12 @@ bool SkiaDisplayList::prepareListAndChildren(
             const SkRect& bounds = vectorDrawable->properties().getBounds();
             if (intersects(info.screenSize, totalMatrix, bounds)) {
                 isDirty = true;
+#ifdef __ANDROID__ // Layoutlib does not support CanvasContext
                 static_cast<SkiaPipeline*>(info.canvasContext.getRenderPipeline())
                         ->getVectorDrawables()
                         ->push_back(vectorDrawable);
                 vectorDrawable->setPropertyChangeWillBeConsumed(true);
+#endif
             }
         }
     }

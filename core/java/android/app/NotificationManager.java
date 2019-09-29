@@ -171,6 +171,78 @@ public class NotificationManager {
             "android.app.action.NOTIFICATION_CHANNEL_GROUP_BLOCK_STATE_CHANGED";
 
     /**
+     * Intent that is broadcast when the status of an {@link AutomaticZenRule} has changed.
+     *
+     * <p>Use this to know whether you need to continue monitor to device state in order to
+     * provide up-to-date states (with {@link #setAutomaticZenRuleState(String, Condition)}) for
+     * this rule.</p>
+     *
+     * Input: nothing
+     * Output: {@link #EXTRA_AUTOMATIC_ZEN_RULE_ID}
+     * Output: {@link #EXTRA_AUTOMATIC_ZEN_RULE_STATUS}
+     */
+    @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_AUTOMATIC_ZEN_RULE_STATUS_CHANGED =
+            "android.app.action.AUTOMATIC_ZEN_RULE_STATUS_CHANGED";
+
+    /**
+     * Integer extra for {@link #ACTION_AUTOMATIC_ZEN_RULE_STATUS_CHANGED} containing the state of
+     * the {@link AutomaticZenRule}.
+     *
+     * <p>
+     *     The value will be one of {@link #AUTOMATIC_RULE_STATUS_ENABLED},
+     *     {@link #AUTOMATIC_RULE_STATUS_DISABLED}, {@link #AUTOMATIC_RULE_STATUS_REMOVED},
+     *     {@link #AUTOMATIC_RULE_STATUS_UNKNOWN}.
+     * </p>
+     */
+    public static final String EXTRA_AUTOMATIC_ZEN_RULE_STATUS =
+            "android.app.extra.AUTOMATIC_ZEN_RULE_STATUS";
+
+    /**
+     * String extra for {@link #ACTION_AUTOMATIC_ZEN_RULE_STATUS_CHANGED} containing the id of the
+     * {@link AutomaticZenRule} (see {@link #addAutomaticZenRule(AutomaticZenRule)}) that has
+     * changed.
+     */
+    public static final String EXTRA_AUTOMATIC_ZEN_RULE_ID =
+            "android.app.extra.AUTOMATIC_ZEN_RULE_ID";
+
+    /** @hide */
+    @IntDef(prefix = { "AUTOMATIC_RULE_STATUS" }, value = {
+            AUTOMATIC_RULE_STATUS_ENABLED, AUTOMATIC_RULE_STATUS_DISABLED,
+            AUTOMATIC_RULE_STATUS_REMOVED, AUTOMATIC_RULE_STATUS_UNKNOWN
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface AutomaticZenRuleStatus {}
+
+    /**
+     * Constant value for {@link #EXTRA_AUTOMATIC_ZEN_RULE_STATUS} - the current status of the
+     * rule is unknown at your target sdk version, and you should continue to provide state changes
+     * via {@link #setAutomaticZenRuleState(String, Condition)}.
+     */
+    public static final int AUTOMATIC_RULE_STATUS_UNKNOWN = -1;
+
+    /**
+     * Constant value for {@link #EXTRA_AUTOMATIC_ZEN_RULE_STATUS} - the given rule currently
+     * exists and is enabled. You should continue to provide state changes via
+     * {@link #setAutomaticZenRuleState(String, Condition)}.
+     */
+    public static final int AUTOMATIC_RULE_STATUS_ENABLED = 1;
+
+    /**
+     * Constant value for {@link #EXTRA_AUTOMATIC_ZEN_RULE_STATUS} - the given rule currently
+     * exists but is disabled. You do not need to continue to provide state changes via
+     * {@link #setAutomaticZenRuleState(String, Condition)} until the rule is reenabled.
+     */
+    public static final int AUTOMATIC_RULE_STATUS_DISABLED = 2;
+
+    /**
+     * Constant value for {@link #EXTRA_AUTOMATIC_ZEN_RULE_STATUS} - the given rule has been
+     * deleted. Further calls to {@link #setAutomaticZenRuleState(String, Condition)} will be
+     * ignored.
+     */
+    public static final int AUTOMATIC_RULE_STATUS_REMOVED = 3;
+
+    /**
      * Intent that is broadcast when the state of {@link #getEffectsSuppressor()} changes.
      * This broadcast is only sent to registered receivers.
      *
@@ -466,7 +538,7 @@ public class NotificationManager {
      * @param notification A {@link Notification} object describing what to
      *        show the user. Must not be null.
      */
-    public void notifyAsPackage(@NonNull String targetPackage, @NonNull String tag, int id,
+    public void notifyAsPackage(@NonNull String targetPackage, @Nullable String tag, int id,
             @NonNull Notification notification) {
         INotificationManager service = getService();
         String sender = mContext.getPackageName();
@@ -532,9 +604,13 @@ public class NotificationManager {
     }
 
     /**
-     * Cancel a previously shown notification.  If it's transient, the view
-     * will be hidden.  If it's persistent, it will be removed from the status
-     * bar.
+     * Cancels a previously posted notification.
+     *
+     *  <p>If the notification does not currently represent a
+     *  {@link Service#startForeground(int, Notification) foreground service}, it will be
+     *  removed from the UI and live
+     *  {@link android.service.notification.NotificationListenerService notification listeners}
+     *  will be informed so they can remove the notification from their UIs.</p>
      */
     public void cancel(int id)
     {
@@ -542,13 +618,46 @@ public class NotificationManager {
     }
 
     /**
-     * Cancel a previously shown notification.  If it's transient, the view
-     * will be hidden.  If it's persistent, it will be removed from the status
-     * bar.
+     * Cancels a previously posted notification.
+     *
+     *  <p>If the notification does not currently represent a
+     *  {@link Service#startForeground(int, Notification) foreground service}, it will be
+     *  removed from the UI and live
+     *  {@link android.service.notification.NotificationListenerService notification listeners}
+     *  will be informed so they can remove the notification from their UIs.</p>
      */
-    public void cancel(String tag, int id)
+    public void cancel(@Nullable String tag, int id)
     {
         cancelAsUser(tag, id, mContext.getUser());
+    }
+
+    /**
+     * Cancels a previously posted notification.
+     *
+     * <p>If the notification does not currently represent a
+     * {@link Service#startForeground(int, Notification) foreground service}, it will be
+     * removed from the UI and live
+     * {@link android.service.notification.NotificationListenerService notification listeners}
+     * will be informed so they can remove the notification from their UIs.</p>
+     *
+     * <p>This method may be used by {@link #getNotificationDelegate() a notification delegate} to
+     * cancel notifications that they have posted via {@link #notifyAsPackage(String, String, int,
+     * Notification)}.</p>
+     *
+     * @param targetPackage The package to cancel the notification as. If this package is not your
+     *                      package, you can only cancel notifications you posted with
+     *                      {@link #notifyAsPackage(String, String, int, Notification).
+     * @param tag A string identifier for this notification.  May be {@code null}.
+     * @param id An identifier for this notification.
+     */
+    public void cancelAsPackage(@NonNull String targetPackage, @Nullable String tag, int id) {
+        INotificationManager service = getService();
+        try {
+            service.cancelNotificationWithTag(targetPackage, mContext.getOpPackageName(),
+                    tag, id, mContext.getUser().getIdentifier());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -561,7 +670,8 @@ public class NotificationManager {
         String pkg = mContext.getPackageName();
         if (localLOGV) Log.v(TAG, pkg + ": cancel(" + id + ")");
         try {
-            service.cancelNotificationWithTag(pkg, tag, id, user.getIdentifier());
+            service.cancelNotificationWithTag(
+                    pkg, mContext.getOpPackageName(), tag, id, user.getIdentifier());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1089,6 +1199,25 @@ public class NotificationManager {
         INotificationManager service = getService();
         try {
             return service.areBubblesAllowed(mContext.getPackageName());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Silences the current notification sound, if ones currently playing.
+     * <p>
+     * It is intended to handle use-cases such as silencing a ringing call
+     * when the user presses the volume button during ringing.
+     * <p>
+     * If this method is called prior to when the notification begins playing, the sound will not be
+     * silenced.  As such it is not intended as a means to avoid playing of a sound.
+     * @hide
+     */
+    public void silenceNotificationSound() {
+        INotificationManager service = getService();
+        try {
+            service.silenceNotificationSound();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

@@ -153,6 +153,7 @@ interface IActivityTaskManager {
     void moveTaskToFront(in IApplicationThread app, in String callingPackage, int task,
             int flags, in Bundle options);
     int getTaskForActivity(in IBinder token, in boolean onlyRoot);
+    /** Finish all activities that were started for result from the specified activity. */
     void finishSubActivity(in IBinder token, in String resultWho, int requestCode);
     ParceledListSlice getRecentTasks(int maxNum, int flags, int userId);
     boolean willActivityBeVisible(in IBinder token);
@@ -386,15 +387,6 @@ interface IActivityTaskManager {
      */
     void resizePinnedStack(in Rect pinnedBounds, in Rect tempPinnedTaskBounds);
 
-    /**
-     * Updates override configuration applied to specific display.
-     * @param values Update values for display configuration. If null is passed it will request the
-     *               Window Manager to compute new config for the specified display.
-     * @param displayId Id of the display to apply the config to.
-     * @throws RemoteException
-     * @return Returns true if the configuration was updated.
-     */
-    boolean updateDisplayOverrideConfiguration(in Configuration values, int displayId);
     void dismissKeyguard(in IBinder token, in IKeyguardDismissCallback callback,
             in CharSequence message);
 

@@ -80,6 +80,7 @@ import android.graphics.Canvas;
 import android.graphics.HardwareRenderer;
 import android.graphics.ImageDecoder;
 import android.hardware.display.DisplayManagerGlobal;
+import android.inputmethodservice.InputMethodService;
 import android.net.ConnectivityManager;
 import android.net.IConnectivityManager;
 import android.net.Proxy;
@@ -113,6 +114,7 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
+import android.permission.IPermissionManager;
 import android.provider.BlockedNumberContract;
 import android.provider.CalendarContract;
 import android.provider.CallLog;
@@ -191,6 +193,7 @@ import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -289,6 +292,7 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     @UnsupportedAppUsage
     static volatile IPackageManager sPackageManager;
+    private static volatile IPermissionManager sPermissionManager;
 
     @UnsupportedAppUsage
     final ApplicationThread mAppThread = new ApplicationThread();
@@ -454,6 +458,8 @@ public final class ActivityThread extends ClientTransactionHandler {
     static volatile Handler sMainThreadHandler;  // set once in main()
 
     Bundle mCoreSettings = null;
+
+    boolean mHasImeComponent = false;
 
     /** Activity client record, used for bookkeeping for the real {@link Activity} instance. */
     public static final class ActivityClientRecord {
@@ -791,6 +797,8 @@ public final class ActivityThread extends ClientTransactionHandler {
         @Nullable
         ContentCaptureOptions contentCaptureOptions;
 
+        long[] disabledCompatChanges;
+
         @Override
         public String toString() {
             return "AppBindData{appInfo=" + appInfo + "}";
@@ -1003,7 +1011,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                 boolean isRestrictedBackupMode, boolean persistent, Configuration config,
                 CompatibilityInfo compatInfo, Map services, Bundle coreSettings,
                 String buildSerial, AutofillOptions autofillOptions,
-                ContentCaptureOptions contentCaptureOptions) {
+                ContentCaptureOptions contentCaptureOptions, long[] disabledCompatChanges) {
             if (services != null) {
                 if (false) {
                     // Test code to make sure the app could see the passed-in services.
@@ -1051,6 +1059,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             data.buildSerial = buildSerial;
             data.autofillOptions = autofillOptions;
             data.contentCaptureOptions = contentCaptureOptions;
+            data.disabledCompatChanges = disabledCompatChanges;
             sendMessage(H.BIND_APPLICATION, data);
         }
 
@@ -1872,7 +1881,10 @@ public final class ActivityThread extends ClientTransactionHandler {
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
                 case CREATE_SERVICE:
-                    Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, ("serviceCreate: " + String.valueOf(msg.obj)));
+                    if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+                        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                                ("serviceCreate: " + String.valueOf(msg.obj)));
+                    }
                     handleCreateService((CreateServiceData)msg.obj);
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
@@ -1888,7 +1900,10 @@ public final class ActivityThread extends ClientTransactionHandler {
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
                 case SERVICE_ARGS:
-                    Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, ("serviceStart: " + String.valueOf(msg.obj)));
+                    if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
+                        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                                ("serviceStart: " + String.valueOf(msg.obj)));
+                    }
                     handleServiceArgs((ServiceArgsData)msg.obj);
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
@@ -2132,14 +2147,21 @@ public final class ActivityThread extends ClientTransactionHandler {
     @UnsupportedAppUsage
     public static IPackageManager getPackageManager() {
         if (sPackageManager != null) {
-            //Slog.v("PackageManager", "returning cur default = " + sPackageManager);
             return sPackageManager;
         }
-        IBinder b = ServiceManager.getService("package");
-        //Slog.v("PackageManager", "default service binder = " + b);
+        final IBinder b = ServiceManager.getService("package");
         sPackageManager = IPackageManager.Stub.asInterface(b);
-        //Slog.v("PackageManager", "default service = " + sPackageManager);
         return sPackageManager;
+    }
+
+    /** Returns the permission manager */
+    public static IPermissionManager getPermissionManager() {
+        if (sPermissionManager != null) {
+            return sPermissionManager;
+        }
+        final IBinder b = ServiceManager.getService("permissionmgr");
+        sPermissionManager = IPermissionManager.Stub.asInterface(b);
+        return sPermissionManager;
     }
 
     private Configuration mMainThreadConfig = new Configuration();
@@ -2473,13 +2495,15 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
-    private static final String HEAP_FULL_COLUMN
-            = "%13s %8s %8s %8s %8s %8s %8s %8s %8s %8s %8s";
-    private static final String HEAP_COLUMN
-            = "%13s %8s %8s %8s %8s %8s %8s %8s";
+    private static final String HEAP_FULL_COLUMN =
+            "%13s %8s %8s %8s %8s %8s %8s %8s %8s %8s %8s %8s";
+    private static final String HEAP_COLUMN =
+            "%13s %8s %8s %8s %8s %8s %8s %8s %8s";
     private static final String ONE_COUNT_COLUMN = "%21s %8d";
     private static final String TWO_COUNT_COLUMNS = "%21s %8d %21s %8d";
-    private static final String ONE_COUNT_COLUMN_HEADER = "%21s %8s";
+    private static final String THREE_COUNT_COLUMNS = "%21s %8d %21s %8s %21s %8d";
+    private static final String TWO_COUNT_COLUMN_HEADER = "%21s %8s %21s %8s";
+    private static final String ONE_ALT_COUNT_COLUMN = "%21s %8s %21s %8d";
 
     // Formatting for checkin service - update version if row format changes
     private static final int ACTIVITY_THREAD_CHECKIN_VERSION = 4;
@@ -2600,43 +2624,43 @@ public final class ActivityThread extends ClientTransactionHandler {
             if (dumpFullInfo) {
                 printRow(pw, HEAP_FULL_COLUMN, "", "Pss", "Pss", "Shared", "Private",
                         "Shared", "Private", memInfo.hasSwappedOutPss ? "SwapPss" : "Swap",
-                        "Heap", "Heap", "Heap");
+                        "Rss", "Heap", "Heap", "Heap");
                 printRow(pw, HEAP_FULL_COLUMN, "", "Total", "Clean", "Dirty", "Dirty",
-                        "Clean", "Clean", "Dirty",
+                        "Clean", "Clean", "Dirty", "Total",
                         "Size", "Alloc", "Free");
                 printRow(pw, HEAP_FULL_COLUMN, "", "------", "------", "------", "------",
-                        "------", "------", "------", "------", "------", "------");
+                        "------", "------", "------", "------", "------", "------", "------");
                 printRow(pw, HEAP_FULL_COLUMN, "Native Heap", memInfo.nativePss,
                         memInfo.nativeSwappablePss, memInfo.nativeSharedDirty,
                         memInfo.nativePrivateDirty, memInfo.nativeSharedClean,
                         memInfo.nativePrivateClean, memInfo.hasSwappedOutPss ?
                         memInfo.nativeSwappedOutPss : memInfo.nativeSwappedOut,
-                        nativeMax, nativeAllocated, nativeFree);
+                        memInfo.nativeRss, nativeMax, nativeAllocated, nativeFree);
                 printRow(pw, HEAP_FULL_COLUMN, "Dalvik Heap", memInfo.dalvikPss,
                         memInfo.dalvikSwappablePss, memInfo.dalvikSharedDirty,
                         memInfo.dalvikPrivateDirty, memInfo.dalvikSharedClean,
                         memInfo.dalvikPrivateClean, memInfo.hasSwappedOutPss ?
                         memInfo.dalvikSwappedOutPss : memInfo.dalvikSwappedOut,
-                        dalvikMax, dalvikAllocated, dalvikFree);
+                        memInfo.dalvikRss, dalvikMax, dalvikAllocated, dalvikFree);
             } else {
                 printRow(pw, HEAP_COLUMN, "", "Pss", "Private",
                         "Private", memInfo.hasSwappedOutPss ? "SwapPss" : "Swap",
-                        "Heap", "Heap", "Heap");
+                        "Rss", "Heap", "Heap", "Heap");
                 printRow(pw, HEAP_COLUMN, "", "Total", "Dirty",
-                        "Clean", "Dirty", "Size", "Alloc", "Free");
+                        "Clean", "Dirty", "Total", "Size", "Alloc", "Free");
                 printRow(pw, HEAP_COLUMN, "", "------", "------", "------",
-                        "------", "------", "------", "------", "------");
+                        "------", "------", "------", "------", "------", "------");
                 printRow(pw, HEAP_COLUMN, "Native Heap", memInfo.nativePss,
                         memInfo.nativePrivateDirty,
                         memInfo.nativePrivateClean,
                         memInfo.hasSwappedOutPss ? memInfo.nativeSwappedOutPss :
-                        memInfo.nativeSwappedOut,
+                        memInfo.nativeSwappedOut, memInfo.nativeRss,
                         nativeMax, nativeAllocated, nativeFree);
                 printRow(pw, HEAP_COLUMN, "Dalvik Heap", memInfo.dalvikPss,
                         memInfo.dalvikPrivateDirty,
                         memInfo.dalvikPrivateClean,
                         memInfo.hasSwappedOutPss ? memInfo.dalvikSwappedOutPss :
-                        memInfo.dalvikSwappedOut,
+                        memInfo.dalvikSwappedOut, memInfo.dalvikRss,
                         dalvikMax, dalvikAllocated, dalvikFree);
             }
 
@@ -2648,6 +2672,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             int otherPrivateClean = memInfo.otherPrivateClean;
             int otherSwappedOut = memInfo.otherSwappedOut;
             int otherSwappedOutPss = memInfo.otherSwappedOutPss;
+            int otherRss = memInfo.otherRss;
 
             for (int i=0; i<Debug.MemoryInfo.NUM_OTHER_STATS; i++) {
                 final int myPss = memInfo.getOtherPss(i);
@@ -2658,21 +2683,22 @@ public final class ActivityThread extends ClientTransactionHandler {
                 final int myPrivateClean = memInfo.getOtherPrivateClean(i);
                 final int mySwappedOut = memInfo.getOtherSwappedOut(i);
                 final int mySwappedOutPss = memInfo.getOtherSwappedOutPss(i);
+                final int myRss = memInfo.getOtherRss(i);
                 if (myPss != 0 || mySharedDirty != 0 || myPrivateDirty != 0
-                        || mySharedClean != 0 || myPrivateClean != 0
+                        || mySharedClean != 0 || myPrivateClean != 0 || myRss != 0
                         || (memInfo.hasSwappedOutPss ? mySwappedOutPss : mySwappedOut) != 0) {
                     if (dumpFullInfo) {
                         printRow(pw, HEAP_FULL_COLUMN, Debug.MemoryInfo.getOtherLabel(i),
                                 myPss, mySwappablePss, mySharedDirty, myPrivateDirty,
                                 mySharedClean, myPrivateClean,
                                 memInfo.hasSwappedOutPss ? mySwappedOutPss : mySwappedOut,
-                                "", "", "");
+                                myRss, "", "", "");
                     } else {
                         printRow(pw, HEAP_COLUMN, Debug.MemoryInfo.getOtherLabel(i),
                                 myPss, myPrivateDirty,
                                 myPrivateClean,
                                 memInfo.hasSwappedOutPss ? mySwappedOutPss : mySwappedOut,
-                                "", "", "");
+                                myRss, "", "", "");
                     }
                     otherPss -= myPss;
                     otherSwappablePss -= mySwappablePss;
@@ -2682,6 +2708,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     otherPrivateClean -= myPrivateClean;
                     otherSwappedOut -= mySwappedOut;
                     otherSwappedOutPss -= mySwappedOutPss;
+                    otherRss -= myRss;
                 }
             }
 
@@ -2689,25 +2716,25 @@ public final class ActivityThread extends ClientTransactionHandler {
                 printRow(pw, HEAP_FULL_COLUMN, "Unknown", otherPss, otherSwappablePss,
                         otherSharedDirty, otherPrivateDirty, otherSharedClean, otherPrivateClean,
                         memInfo.hasSwappedOutPss ? otherSwappedOutPss : otherSwappedOut,
-                        "", "", "");
+                        otherRss, "", "", "");
                 printRow(pw, HEAP_FULL_COLUMN, "TOTAL", memInfo.getTotalPss(),
                         memInfo.getTotalSwappablePss(),
                         memInfo.getTotalSharedDirty(), memInfo.getTotalPrivateDirty(),
                         memInfo.getTotalSharedClean(), memInfo.getTotalPrivateClean(),
                         memInfo.hasSwappedOutPss ? memInfo.getTotalSwappedOutPss() :
-                        memInfo.getTotalSwappedOut(),
+                        memInfo.getTotalSwappedOut(), memInfo.getTotalRss(),
                         nativeMax+dalvikMax, nativeAllocated+dalvikAllocated,
                         nativeFree+dalvikFree);
             } else {
                 printRow(pw, HEAP_COLUMN, "Unknown", otherPss,
                         otherPrivateDirty, otherPrivateClean,
                         memInfo.hasSwappedOutPss ? otherSwappedOutPss : otherSwappedOut,
-                        "", "", "");
+                        otherRss, "", "", "");
                 printRow(pw, HEAP_COLUMN, "TOTAL", memInfo.getTotalPss(),
                         memInfo.getTotalPrivateDirty(),
                         memInfo.getTotalPrivateClean(),
                         memInfo.hasSwappedOutPss ? memInfo.getTotalSwappedOutPss() :
-                        memInfo.getTotalSwappedOut(),
+                        memInfo.getTotalSwappedOut(), memInfo.getTotalPss(),
                         nativeMax+dalvikMax,
                         nativeAllocated+dalvikAllocated, nativeFree+dalvikFree);
             }
@@ -2726,6 +2753,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     final int myPrivateClean = memInfo.getOtherPrivateClean(i);
                     final int mySwappedOut = memInfo.getOtherSwappedOut(i);
                     final int mySwappedOutPss = memInfo.getOtherSwappedOutPss(i);
+                    final int myRss = memInfo.getOtherRss(i);
                     if (myPss != 0 || mySharedDirty != 0 || myPrivateDirty != 0
                             || mySharedClean != 0 || myPrivateClean != 0
                             || (memInfo.hasSwappedOutPss ? mySwappedOutPss : mySwappedOut) != 0) {
@@ -2734,13 +2762,13 @@ public final class ActivityThread extends ClientTransactionHandler {
                                     myPss, mySwappablePss, mySharedDirty, myPrivateDirty,
                                     mySharedClean, myPrivateClean,
                                     memInfo.hasSwappedOutPss ? mySwappedOutPss : mySwappedOut,
-                                    "", "", "");
+                                    myRss, "", "", "");
                         } else {
                             printRow(pw, HEAP_COLUMN, Debug.MemoryInfo.getOtherLabel(i),
                                     myPss, myPrivateDirty,
                                     myPrivateClean,
                                     memInfo.hasSwappedOutPss ? mySwappedOutPss : mySwappedOut,
-                                    "", "", "");
+                                    myRss, "", "", "");
                         }
                     }
                 }
@@ -2749,31 +2777,36 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         pw.println(" ");
         pw.println(" App Summary");
-        printRow(pw, ONE_COUNT_COLUMN_HEADER, "", "Pss(KB)");
-        printRow(pw, ONE_COUNT_COLUMN_HEADER, "", "------");
+        printRow(pw, TWO_COUNT_COLUMN_HEADER, "", "Pss(KB)", "", "Rss(KB)");
+        printRow(pw, TWO_COUNT_COLUMN_HEADER, "", "------", "", "------");
+        printRow(pw, TWO_COUNT_COLUMNS,
+                "Java Heap:", memInfo.getSummaryJavaHeap(), "", memInfo.getSummaryJavaHeapRss());
+        printRow(pw, TWO_COUNT_COLUMNS,
+                "Native Heap:", memInfo.getSummaryNativeHeap(), "",
+                memInfo.getSummaryNativeHeapRss());
+        printRow(pw, TWO_COUNT_COLUMNS,
+                "Code:", memInfo.getSummaryCode(), "", memInfo.getSummaryCodeRss());
+        printRow(pw, TWO_COUNT_COLUMNS,
+                "Stack:", memInfo.getSummaryStack(), "", memInfo.getSummaryStackRss());
+        printRow(pw, TWO_COUNT_COLUMNS,
+                "Graphics:", memInfo.getSummaryGraphics(), "", memInfo.getSummaryGraphicsRss());
         printRow(pw, ONE_COUNT_COLUMN,
-            "Java Heap:", memInfo.getSummaryJavaHeap());
+                "Private Other:", memInfo.getSummaryPrivateOther());
         printRow(pw, ONE_COUNT_COLUMN,
-            "Native Heap:", memInfo.getSummaryNativeHeap());
-        printRow(pw, ONE_COUNT_COLUMN,
-            "Code:", memInfo.getSummaryCode());
-        printRow(pw, ONE_COUNT_COLUMN,
-            "Stack:", memInfo.getSummaryStack());
-        printRow(pw, ONE_COUNT_COLUMN,
-            "Graphics:", memInfo.getSummaryGraphics());
-        printRow(pw, ONE_COUNT_COLUMN,
-            "Private Other:", memInfo.getSummaryPrivateOther());
-        printRow(pw, ONE_COUNT_COLUMN,
-            "System:", memInfo.getSummarySystem());
+                "System:", memInfo.getSummarySystem());
+        printRow(pw, ONE_ALT_COUNT_COLUMN,
+                "Unknown:", "", "", memInfo.getSummaryUnknownRss());
         pw.println(" ");
         if (memInfo.hasSwappedOutPss) {
-            printRow(pw, TWO_COUNT_COLUMNS,
-                "TOTAL:", memInfo.getSummaryTotalPss(),
-                "TOTAL SWAP PSS:", memInfo.getSummaryTotalSwapPss());
+            printRow(pw, THREE_COUNT_COLUMNS,
+                    "TOTAL PSS:", memInfo.getSummaryTotalPss(),
+                    "TOTAL RSS:", memInfo.getTotalRss(),
+                    "TOTAL SWAP PSS:", memInfo.getSummaryTotalSwapPss());
         } else {
-            printRow(pw, TWO_COUNT_COLUMNS,
-                "TOTAL:", memInfo.getSummaryTotalPss(),
-                "TOTAL SWAP (KB):", memInfo.getSummaryTotalSwap());
+            printRow(pw, THREE_COUNT_COLUMNS,
+                    "TOTAL PSS:", memInfo.getSummaryTotalPss(),
+                    "TOTAL RSS:", memInfo.getTotalRss(),
+                    "TOTAL SWAP (KB):", memInfo.getSummaryTotalSwap());
         }
     }
 
@@ -2785,7 +2818,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     private static void dumpMemoryInfo(ProtoOutputStream proto, long fieldId, String name,
             int pss, int cleanPss, int sharedDirty, int privateDirty,
             int sharedClean, int privateClean,
-            boolean hasSwappedOutPss, int dirtySwap, int dirtySwapPss) {
+            boolean hasSwappedOutPss, int dirtySwap, int dirtySwapPss, int rss) {
         final long token = proto.start(fieldId);
 
         proto.write(MemInfoDumpProto.ProcessMemory.MemoryInfo.NAME, name);
@@ -2800,6 +2833,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         } else {
             proto.write(MemInfoDumpProto.ProcessMemory.MemoryInfo.DIRTY_SWAP_KB, dirtySwap);
         }
+        proto.write(MemInfoDumpProto.ProcessMemory.MemoryInfo.TOTAL_RSS_KB, rss);
 
         proto.end(token);
     }
@@ -2818,7 +2852,8 @@ public final class ActivityThread extends ClientTransactionHandler {
                     memInfo.nativePss, memInfo.nativeSwappablePss, memInfo.nativeSharedDirty,
                     memInfo.nativePrivateDirty, memInfo.nativeSharedClean,
                     memInfo.nativePrivateClean, memInfo.hasSwappedOutPss,
-                    memInfo.nativeSwappedOut, memInfo.nativeSwappedOutPss);
+                    memInfo.nativeSwappedOut, memInfo.nativeSwappedOutPss,
+                    memInfo.nativeRss);
             proto.write(MemInfoDumpProto.ProcessMemory.HeapInfo.HEAP_SIZE_KB, nativeMax);
             proto.write(MemInfoDumpProto.ProcessMemory.HeapInfo.HEAP_ALLOC_KB, nativeAllocated);
             proto.write(MemInfoDumpProto.ProcessMemory.HeapInfo.HEAP_FREE_KB, nativeFree);
@@ -2829,7 +2864,8 @@ public final class ActivityThread extends ClientTransactionHandler {
                     memInfo.dalvikPss, memInfo.dalvikSwappablePss, memInfo.dalvikSharedDirty,
                     memInfo.dalvikPrivateDirty, memInfo.dalvikSharedClean,
                     memInfo.dalvikPrivateClean, memInfo.hasSwappedOutPss,
-                    memInfo.dalvikSwappedOut, memInfo.dalvikSwappedOutPss);
+                    memInfo.dalvikSwappedOut, memInfo.dalvikSwappedOutPss,
+                    memInfo.dalvikRss);
             proto.write(MemInfoDumpProto.ProcessMemory.HeapInfo.HEAP_SIZE_KB, dalvikMax);
             proto.write(MemInfoDumpProto.ProcessMemory.HeapInfo.HEAP_ALLOC_KB, dalvikAllocated);
             proto.write(MemInfoDumpProto.ProcessMemory.HeapInfo.HEAP_FREE_KB, dalvikFree);
@@ -2843,6 +2879,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             int otherPrivateClean = memInfo.otherPrivateClean;
             int otherSwappedOut = memInfo.otherSwappedOut;
             int otherSwappedOutPss = memInfo.otherSwappedOutPss;
+            int otherRss = memInfo.otherRss;
 
             for (int i = 0; i < Debug.MemoryInfo.NUM_OTHER_STATS; i++) {
                 final int myPss = memInfo.getOtherPss(i);
@@ -2853,14 +2890,15 @@ public final class ActivityThread extends ClientTransactionHandler {
                 final int myPrivateClean = memInfo.getOtherPrivateClean(i);
                 final int mySwappedOut = memInfo.getOtherSwappedOut(i);
                 final int mySwappedOutPss = memInfo.getOtherSwappedOutPss(i);
+                final int myRss = memInfo.getOtherRss(i);
                 if (myPss != 0 || mySharedDirty != 0 || myPrivateDirty != 0
-                        || mySharedClean != 0 || myPrivateClean != 0
+                        || mySharedClean != 0 || myPrivateClean != 0 || myRss != 0
                         || (memInfo.hasSwappedOutPss ? mySwappedOutPss : mySwappedOut) != 0) {
                     dumpMemoryInfo(proto, MemInfoDumpProto.ProcessMemory.OTHER_HEAPS,
                             Debug.MemoryInfo.getOtherLabel(i),
                             myPss, mySwappablePss, mySharedDirty, myPrivateDirty,
                             mySharedClean, myPrivateClean,
-                            memInfo.hasSwappedOutPss, mySwappedOut, mySwappedOutPss);
+                            memInfo.hasSwappedOutPss, mySwappedOut, mySwappedOutPss, myRss);
 
                     otherPss -= myPss;
                     otherSwappablePss -= mySwappablePss;
@@ -2870,20 +2908,21 @@ public final class ActivityThread extends ClientTransactionHandler {
                     otherPrivateClean -= myPrivateClean;
                     otherSwappedOut -= mySwappedOut;
                     otherSwappedOutPss -= mySwappedOutPss;
+                    otherRss -= myRss;
                 }
             }
 
             dumpMemoryInfo(proto, MemInfoDumpProto.ProcessMemory.UNKNOWN_HEAP, "Unknown",
                     otherPss, otherSwappablePss,
                     otherSharedDirty, otherPrivateDirty, otherSharedClean, otherPrivateClean,
-                    memInfo.hasSwappedOutPss, otherSwappedOut, otherSwappedOutPss);
+                    memInfo.hasSwappedOutPss, otherSwappedOut, otherSwappedOutPss, otherRss);
             final long tToken = proto.start(MemInfoDumpProto.ProcessMemory.TOTAL_HEAP);
             dumpMemoryInfo(proto, MemInfoDumpProto.ProcessMemory.HeapInfo.MEM_INFO, "TOTAL",
                     memInfo.getTotalPss(), memInfo.getTotalSwappablePss(),
                     memInfo.getTotalSharedDirty(), memInfo.getTotalPrivateDirty(),
                     memInfo.getTotalSharedClean(), memInfo.getTotalPrivateClean(),
                     memInfo.hasSwappedOutPss, memInfo.getTotalSwappedOut(),
-                    memInfo.getTotalSwappedOutPss());
+                    memInfo.getTotalSwappedOutPss(), memInfo.getTotalRss());
             proto.write(MemInfoDumpProto.ProcessMemory.HeapInfo.HEAP_SIZE_KB,
                     nativeMax + dalvikMax);
             proto.write(MemInfoDumpProto.ProcessMemory.HeapInfo.HEAP_ALLOC_KB,
@@ -2904,6 +2943,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     final int myPrivateClean = memInfo.getOtherPrivateClean(i);
                     final int mySwappedOut = memInfo.getOtherSwappedOut(i);
                     final int mySwappedOutPss = memInfo.getOtherSwappedOutPss(i);
+                    final int myRss = memInfo.getOtherRss(i);
                     if (myPss != 0 || mySharedDirty != 0 || myPrivateDirty != 0
                             || mySharedClean != 0 || myPrivateClean != 0
                             || (memInfo.hasSwappedOutPss ? mySwappedOutPss : mySwappedOut) != 0) {
@@ -2911,7 +2951,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                                 Debug.MemoryInfo.getOtherLabel(i),
                                 myPss, mySwappablePss, mySharedDirty, myPrivateDirty,
                                 mySharedClean, myPrivateClean,
-                                memInfo.hasSwappedOutPss, mySwappedOut, mySwappedOutPss);
+                                memInfo.hasSwappedOutPss, mySwappedOut, mySwappedOutPss, myRss);
                     }
                 }
             }
@@ -2939,6 +2979,19 @@ public final class ActivityThread extends ClientTransactionHandler {
             proto.write(MemInfoDumpProto.ProcessMemory.AppSummary.TOTAL_SWAP_PSS,
                     memInfo.getSummaryTotalSwap());
         }
+        proto.write(MemInfoDumpProto.ProcessMemory.AppSummary.JAVA_HEAP_RSS_KB,
+                memInfo.getSummaryJavaHeapRss());
+        proto.write(MemInfoDumpProto.ProcessMemory.AppSummary.NATIVE_HEAP_RSS_KB,
+                memInfo.getSummaryNativeHeapRss());
+        proto.write(MemInfoDumpProto.ProcessMemory.AppSummary.CODE_RSS_KB,
+                memInfo.getSummaryCodeRss());
+        proto.write(MemInfoDumpProto.ProcessMemory.AppSummary.STACK_RSS_KB,
+                memInfo.getSummaryStackRss());
+        proto.write(MemInfoDumpProto.ProcessMemory.AppSummary.GRAPHICS_RSS_KB,
+                memInfo.getSummaryGraphicsRss());
+        proto.write(MemInfoDumpProto.ProcessMemory.AppSummary.UNKNOWN_RSS_KB,
+                memInfo.getSummaryUnknownRss());
+
         proto.end(asToken);
     }
 
@@ -5344,7 +5397,11 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
             final int NSVC = mServices.size();
             for (int i=0; i<NSVC; i++) {
-                callbacks.add(mServices.valueAt(i));
+                final ComponentCallbacks2 serviceComp = mServices.valueAt(i);
+                if (serviceComp instanceof InputMethodService) {
+                    mHasImeComponent = true;
+                }
+                callbacks.add(serviceComp);
             }
         }
         synchronized (mProviderMap) {
@@ -5584,6 +5641,10 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
 
             if (config == null) {
+                // TODO (b/135719017): Temporary log for debugging IME service.
+                if (Build.IS_DEBUGGABLE && mHasImeComponent) {
+                    Log.w(TAG, "handleConfigurationChanged for IME app but config is null");
+                }
                 return;
             }
 
@@ -5605,6 +5666,12 @@ public final class ActivityThread extends ClientTransactionHandler {
                 mConfiguration = new Configuration();
             }
             if (!mConfiguration.isOtherSeqNewer(config) && compat == null) {
+                // TODO (b/135719017): Temporary log for debugging IME service.
+                if (Build.IS_DEBUGGABLE && mHasImeComponent) {
+                    Log.w(TAG, "handleConfigurationChanged for IME app but config seq is obsolete "
+                            + ", config=" + config
+                            + ", mConfiguration=" + mConfiguration);
+                }
                 return;
             }
 
@@ -5636,6 +5703,13 @@ public final class ActivityThread extends ClientTransactionHandler {
                             config);
                 } else if (!equivalent) {
                     performConfigurationChanged(cb, config);
+                } else {
+                    // TODO (b/135719017): Temporary log for debugging IME service.
+                    if (Build.IS_DEBUGGABLE && cb instanceof InputMethodService) {
+                        Log.w(TAG, "performConfigurationChanged didn't callback to IME "
+                                + ", configDiff=" + configDiff
+                                + ", mConfiguration=" + mConfiguration);
+                    }
                 }
             }
         }
@@ -6133,10 +6207,10 @@ public final class ActivityThread extends ClientTransactionHandler {
         if (data.trackAllocation) {
             DdmVmInternal.enableRecentAllocations(true);
         }
-
         // Note when this process has started.
         Process.setStartTimes(SystemClock.elapsedRealtime(), SystemClock.uptimeMillis());
 
+        AppCompatCallbacks.install(data.disabledCompatChanges);
         mBoundApplication = data;
         mConfiguration = new Configuration(data.config);
         mCompatConfiguration = new Configuration(data.config);
@@ -6322,7 +6396,8 @@ public final class ActivityThread extends ClientTransactionHandler {
         final InstrumentationInfo ii;
         if (data.instrumentationName != null) {
             try {
-                ii = new ApplicationPackageManager(null, getPackageManager())
+                ii = new ApplicationPackageManager(
+                        null, getPackageManager(), getPermissionManager())
                         .getInstrumentationInfo(data.instrumentationName, 0);
             } catch (PackageManager.NameNotFoundException e) {
                 throw new RuntimeException(
@@ -6380,6 +6455,26 @@ public final class ActivityThread extends ClientTransactionHandler {
         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "NetworkSecurityConfigProvider.install");
         NetworkSecurityConfigProvider.install(appContext);
         Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+
+
+        if (isAppDebuggable) {
+            try {
+                // Load all the agents in the code_cache/startup_agents directory.
+                // We pass the absolute path to the data_dir as an argument.
+                Path startup_path = appContext.getCodeCacheDir().toPath().resolve("startup_agents");
+                if (Files.exists(startup_path)) {
+                    for (Path p : Files.newDirectoryStream(startup_path)) {
+                        handleAttachAgent(
+                                p.toAbsolutePath().toString()
+                                + "="
+                                + appContext.getDataDir().toPath().toAbsolutePath().toString(),
+                                data.info);
+                    }
+                }
+            } catch (Exception e) {
+                // Ignored.
+            }
+        }
 
         // Continue loading instrumentation.
         if (ii != null) {
@@ -7165,6 +7260,12 @@ public final class ActivityThread extends ClientTransactionHandler {
         ViewRootImpl.ConfigChangedCallback configChangedCallback
                 = (Configuration globalConfig) -> {
             synchronized (mResourcesManager) {
+                // TODO (b/135719017): Temporary log for debugging IME service.
+                if (Build.IS_DEBUGGABLE && mHasImeComponent) {
+                    Log.d(TAG, "ViewRootImpl.ConfigChangedCallback for IME, "
+                            + "config=" + globalConfig);
+                }
+
                 // We need to apply this change to the resources immediately, because upon returning
                 // the view hierarchy will be informed about it.
                 if (mResourcesManager.applyConfigurationToResourcesLocked(globalConfig,
@@ -7326,24 +7427,6 @@ public final class ActivityThread extends ClientTransactionHandler {
                 deleteDeprecatedDataPath(path);
             } else {
                 super.remove(path);
-            }
-        }
-
-        @Override
-        public void rename(String oldPath, String newPath) throws ErrnoException {
-            try {
-                super.rename(oldPath, newPath);
-            } catch (ErrnoException e) {
-                if (e.errno == OsConstants.EXDEV) {
-                    Log.v(TAG, "Recovering failed rename " + oldPath + " to " + newPath);
-                    try {
-                        Files.move(new File(oldPath).toPath(), new File(newPath).toPath());
-                    } catch (IOException e2) {
-                        throw e;
-                    }
-                } else {
-                    throw e;
-                }
             }
         }
     }

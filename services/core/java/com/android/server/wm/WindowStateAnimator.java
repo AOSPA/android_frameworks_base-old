@@ -220,7 +220,16 @@ class WindowStateAnimator {
 
     private final Rect mTmpSize = new Rect();
 
-    private final SurfaceControl.Transaction mReparentTransaction = new SurfaceControl.Transaction();
+    /**
+     * Handles surface changes synchronized to after the client has drawn the surface. This
+     * transaction is currently used to reparent the old surface children to the new surface once
+     * the client has completed drawing to the new surface.
+     * This transaction is also used to merge transactions parceled in by the client. The client
+     * uses the transaction to update the relative z of its children from the old parent surface
+     * to the new parent surface once window manager reparents its children.
+     */
+    private final SurfaceControl.Transaction mPostDrawTransaction =
+            new SurfaceControl.Transaction();
 
     // Used to track whether we have called detach children on the way to invisibility, in which
     // case we need to give the client a new Surface if it lays back out to a visible state.
@@ -301,7 +310,7 @@ class WindowStateAnimator {
         SurfaceControl.mergeToGlobalTransaction(mTmpTransaction);
     }
 
-    boolean finishDrawingLocked() {
+    boolean finishDrawingLocked(SurfaceControl.Transaction postDrawTransaction) {
         final boolean startingWindow =
                 mWin.mAttrs.type == WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
         if (DEBUG_STARTING_WINDOW && startingWindow) {
@@ -320,6 +329,14 @@ class WindowStateAnimator {
             }
             mDrawState = COMMIT_DRAW_PENDING;
             layoutNeeded = true;
+
+            if (postDrawTransaction != null) {
+                mPostDrawTransaction.merge(postDrawTransaction);
+            }
+        } else if (postDrawTransaction != null) {
+            // If draw state is not pending we may delay applying this transaction from the client,
+            // so apply it now.
+            postDrawTransaction.apply();
         }
 
         return layoutNeeded;
@@ -358,6 +375,13 @@ class WindowStateAnimator {
             // of the proper size. The preserved surface will still be removed when client
             // finishes drawing to the new surface.
             mSurfaceDestroyDeferred = false;
+
+            // Make sure to reparent any children of the new surface back to the preserved
+            // surface before destroying it.
+            if (mSurfaceController != null && mPendingDestroySurface != null) {
+                mPostDrawTransaction.reparentChildren(mSurfaceController.mSurfaceControl,
+                        mPendingDestroySurface.mSurfaceControl).apply();
+            }
             destroySurfaceLocked();
             mSurfaceDestroyDeferred = true;
             return;
@@ -385,8 +409,8 @@ class WindowStateAnimator {
                 // child layers need to be reparented to the new surface to make this
                 // transparent to the app.
                 if (mWin.mAppToken == null || mWin.mAppToken.isRelaunching() == false) {
-                    mReparentTransaction.reparentChildren(mPendingDestroySurface.mSurfaceControl,
-                            mSurfaceController.mSurfaceControl.getHandle())
+                    mPostDrawTransaction.reparentChildren(mPendingDestroySurface.mSurfaceControl,
+                            mSurfaceController.mSurfaceControl)
                             .apply();
                 }
             }
@@ -717,12 +741,7 @@ class WindowStateAnimator {
             if (!mService.mLimitedAlphaCompositing
                     || (!PixelFormat.formatHasAlpha(mWin.mAttrs.format)
                     || (mWin.isIdentityMatrix(mDsDx, mDtDx, mDtDy, mDsDy)))) {
-                //Slog.i(TAG_WM, "Applying alpha transform");
-                if (screenAnimation) {
-                    mShownAlpha *= screenRotationAnimation.getEnterTransformation().getAlpha();
-                }
-            } else {
-                //Slog.i(TAG_WM, "Not applying alpha transform");
+                mShownAlpha *= screenRotationAnimation.getEnterTransformation().getAlpha();
             }
 
             if ((DEBUG_ANIM || WindowManagerService.localLOGV)
@@ -1001,7 +1020,7 @@ class WindowStateAnimator {
                         // the WS position is reset (so the stack position is shown) at the same
                         // time that the buffer size changes.
                         setOffsetPositionForStackResize(false);
-                        mSurfaceController.deferTransactionUntil(mSurfaceController.getHandle(),
+                        mSurfaceController.deferTransactionUntil(mSurfaceController.mSurfaceControl,
                                 mWin.getFrameNumber());
                     } else {
                         final TaskStack stack = mWin.getStack();
@@ -1032,7 +1051,7 @@ class WindowStateAnimator {
         // comes in at the new size (normally position and crop are unfrozen).
         // setGeometryAppliesWithResizeInTransaction accomplishes this for us.
         if (wasForceScaled && !mForceScaleUntilResize) {
-            mSurfaceController.deferTransactionUntil(mSurfaceController.getHandle(),
+            mSurfaceController.deferTransactionUntil(mSurfaceController.mSurfaceControl,
                     mWin.getFrameNumber());
             mSurfaceController.forceScaleableInTransaction(false);
         }
@@ -1150,7 +1169,7 @@ class WindowStateAnimator {
                             // LogicalDisplay.
                             mAnimator.setPendingLayoutChanges(w.getDisplayId(),
                                     FINISH_LAYOUT_REDO_ANIM);
-                            if (DEBUG_LAYOUT_REPEATS) {                        
+                            if (DEBUG_LAYOUT_REPEATS) {
                                 mService.mWindowPlacerLocked.debugLayoutRepeats(
                                         "showSurfaceRobustlyLocked " + w,
                                         mAnimator.getPendingLayoutChanges(w.getDisplayId()));
@@ -1281,10 +1300,13 @@ class WindowStateAnimator {
         // If we had a preserved surface it's no longer needed, and it may be harmful
         // if we are transparent.
         if (mPendingDestroySurface != null && mDestroyPreservedSurfaceUponRedraw) {
-            mPendingDestroySurface.mSurfaceControl.hide();
-            mPendingDestroySurface.reparentChildrenInTransaction(mSurfaceController);
+            final SurfaceControl pendingSurfaceControl = mPendingDestroySurface.mSurfaceControl;
+            mPostDrawTransaction.reparent(pendingSurfaceControl, null);
+            mPostDrawTransaction.reparentChildren(pendingSurfaceControl,
+                    mSurfaceController.mSurfaceControl);
         }
 
+        SurfaceControl.mergeToGlobalTransaction(mPostDrawTransaction);
         return true;
     }
 
@@ -1493,6 +1515,12 @@ class WindowStateAnimator {
     }
 
     void detachChildren() {
+
+        // Do not detach children of starting windows, as their lifecycle is well under control and
+        // it may lead to issues in case we relaunch when we just added the starting window.
+        if (mWin.mAttrs.type == TYPE_APPLICATION_STARTING) {
+            return;
+        }
         if (mSurfaceController != null) {
             mSurfaceController.detachChildren();
         }

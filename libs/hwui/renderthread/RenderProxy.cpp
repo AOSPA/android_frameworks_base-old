@@ -16,24 +16,21 @@
 
 #include "RenderProxy.h"
 
+#include <gui/Surface.h>
+
 #include "DeferredLayerUpdater.h"
 #include "DisplayList.h"
 #include "Properties.h"
 #include "Readback.h"
 #include "Rect.h"
 #include "WebViewFunctorManager.h"
-#include "pipeline/skia/SkiaOpenGLPipeline.h"
 #include "pipeline/skia/VectorDrawableAtlas.h"
-#include "renderstate/RenderState.h"
 #include "renderthread/CanvasContext.h"
-#include "renderthread/EglManager.h"
 #include "renderthread/RenderTask.h"
 #include "renderthread/RenderThread.h"
 #include "utils/Macros.h"
 #include "utils/TimeUtils.h"
 #include "utils/TraceUtils.h"
-
-#include <ui/GraphicBuffer.h>
 
 namespace android {
 namespace uirenderer {
@@ -339,7 +336,7 @@ void RenderProxy::prepareToDraw(Bitmap& bitmap) {
     };
     nsecs_t lastVsync = renderThread->timeLord().latestVsync();
     nsecs_t estimatedNextVsync = lastVsync + renderThread->timeLord().frameIntervalNanos();
-    nsecs_t timeToNextVsync = estimatedNextVsync - systemTime(CLOCK_MONOTONIC);
+    nsecs_t timeToNextVsync = estimatedNextVsync - systemTime(SYSTEM_TIME_MONOTONIC);
     // We expect the UI thread to take 4ms and for RT to be active from VSYNC+4ms to
     // VSYNC+12ms or so, so aim for the gap during which RT is expected to
     // be idle

@@ -3478,10 +3478,8 @@ public class BatteryStatsImpl extends BatteryStats {
         if (deltaTimeToken < DELTA_TIME_ABS) {
             cur.time += deltaTimeToken;
         } else if (deltaTimeToken == DELTA_TIME_ABS) {
-            cur.time = src.readLong();
-            cur.numReadInts += 2;
-            if (DEBUG) Slog.i(TAG, "READ DELTA: ABS time=" + cur.time);
             cur.readFromParcel(src);
+            if (DEBUG) Slog.i(TAG, "READ DELTA: ABS time=" + cur.time);
             return;
         } else if (deltaTimeToken == DELTA_TIME_INT) {
             int delta = src.readInt();
@@ -4752,11 +4750,11 @@ public class BatteryStatsImpl extends BatteryStats {
             final long uptime = mClocks.uptimeMillis();
 
             boolean updateHistory = false;
-            if (isScreenDoze(state)) {
+            if (isScreenDoze(state) && !isScreenDoze(oldState)) {
                 mHistoryCur.states |= HistoryItem.STATE_SCREEN_DOZE_FLAG;
                 mScreenDozeTimer.startRunningLocked(elapsedRealtime);
                 updateHistory = true;
-            } else if (isScreenDoze(oldState)) {
+            } else if (isScreenDoze(oldState) && !isScreenDoze(state)) {
                 mHistoryCur.states &= ~HistoryItem.STATE_SCREEN_DOZE_FLAG;
                 mScreenDozeTimer.stopRunningLocked(elapsedRealtime);
                 updateHistory = true;
@@ -13459,9 +13457,8 @@ public class BatteryStatsImpl extends BatteryStats {
             return;
         }
         mHistory = mHistoryEnd = mHistoryCache = null;
-        long time;
-        while (in.dataAvail() > 0 && (time=in.readLong()) >= 0) {
-            HistoryItem rec = new HistoryItem(time, in);
+        while (in.dataAvail() > 0) {
+            HistoryItem rec = new HistoryItem(in);
             addHistoryRecordLocked(rec);
         }
     }

@@ -33,8 +33,8 @@ import android.view.WindowManager.LayoutParams;
 import android.util.Log;
 
 /**
- * CompatibilityInfo class keeps the information about compatibility mode that the application is
- * running under.
+ * CompatibilityInfo class keeps the information about the screen compatibility mode that the
+ * application is running under.
  * 
  *  {@hide} 
  */

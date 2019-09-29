@@ -301,6 +301,11 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                         + "mForAugmentedAutofillOnly: %s", mForAugmentedAutofillOnly);
                 return;
             }
+            if (mCurrentViewId == null) {
+                Slog.w(TAG, "No current view id - session might have finished");
+                return;
+            }
+
             final AssistStructure structure = resultData.getParcelable(ASSIST_KEY_STRUCTURE);
             if (structure == null) {
                 Slog.e(TAG, "No assist structure - app might have crashed providing it");
@@ -767,13 +772,19 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         final long disableDuration = response.getDisableDuration();
         if (disableDuration > 0) {
             final int flags = response.getFlags();
-            if ((flags & FillResponse.FLAG_DISABLE_ACTIVITY_ONLY) != 0) {
+            final boolean disableActivityOnly =
+                    (flags & FillResponse.FLAG_DISABLE_ACTIVITY_ONLY) != 0;
+            notifyDisableAutofillToClient(disableDuration,
+                    disableActivityOnly ? mComponentName : null);
+
+            if (disableActivityOnly) {
                 mService.disableAutofillForActivity(mComponentName, disableDuration,
                         id, mCompatMode);
             } else {
                 mService.disableAutofillForApp(mComponentName.getPackageName(), disableDuration,
                         id, mCompatMode);
             }
+
             // Although "standard" autofill is disabled, it might still trigger augmented autofill
             if (triggerAugmentedAutofillLocked() != null) {
                 mForAugmentedAutofillOnly = true;
@@ -887,7 +898,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         mMetricsLogger.write(log);
         if (intentSender != null) {
             if (sDebug) Slog.d(TAG, "Starting intent sender on save()");
-            startIntentSender(intentSender);
+            startIntentSenderAndFinishSession(intentSender);
         }
 
         // Nothing left to do...
@@ -1101,24 +1112,32 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
 
     // AutoFillUiCallback
     @Override
-    public void startIntentSender(IntentSender intentSender) {
+    public void startIntentSenderAndFinishSession(IntentSender intentSender) {
+        startIntentSender(intentSender, null);
+    }
+
+    // AutoFillUiCallback
+    @Override
+    public void startIntentSender(IntentSender intentSender, Intent intent) {
         synchronized (mLock) {
             if (mDestroyed) {
                 Slog.w(TAG, "Call to Session#startIntentSender() rejected - session: "
                         + id + " destroyed");
                 return;
             }
-            removeSelfLocked();
+            if (intent == null) {
+                removeSelfLocked();
+            }
         }
         mHandler.sendMessage(obtainMessage(
                 Session::doStartIntentSender,
-                this, intentSender));
+                this, intentSender, intent));
     }
 
-    private void doStartIntentSender(IntentSender intentSender) {
+    private void doStartIntentSender(IntentSender intentSender, Intent intent) {
         try {
             synchronized (mLock) {
-                mClient.startIntentSender(intentSender, null);
+                mClient.startIntentSender(intentSender, intent);
             }
         } catch (RemoteException e) {
             Slog.e(TAG, "Error launching auth intent", e);
@@ -1863,7 +1882,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 mHandler.sendMessage(obtainMessage(Session::logSaveShown, this));
 
                 final IAutoFillManagerClient client = getClient();
-                mPendingSaveUi = new PendingUi(mActivityToken, id, client);
+                mPendingSaveUi = new PendingUi(new Binder(), id, client);
 
                 final CharSequence serviceLabel;
                 final Drawable serviceIcon;
@@ -2402,7 +2421,9 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
 
                 // Update the view states first...
                 mCurrentViewId = viewState.id;
-                viewState.setCurrentValue(value);
+                if (value != null) {
+                    viewState.setCurrentValue(value);
+                }
 
                 if (mCompatMode && (viewState.getState() & ViewState.STATE_URL_BAR) != 0) {
                     if (sDebug) Slog.d(TAG, "Ignoring VIEW_ENTERED on URL BAR (id=" + id + ")");
@@ -2497,6 +2518,8 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 mService.getServicePackageName(), mComponentName,
                 serviceLabel, serviceIcon, this, id, mCompatMode);
 
+        mService.logDatasetShown(id, mClientState);
+
         synchronized (mLock) {
             if (mUiShownTime == 0) {
                 // Log first time UI is shown.
@@ -2546,6 +2569,17 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 }
             } catch (RemoteException e) {
                 Slog.e(TAG, "Error notifying client no fill UI: id=" + mCurrentViewId, e);
+            }
+        }
+    }
+
+    private void notifyDisableAutofillToClient(long disableDuration, ComponentName componentName) {
+        synchronized (mLock) {
+            if (mCurrentViewId == null) return;
+            try {
+                mClient.notifyDisableAutofill(disableDuration, componentName);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Error notifying client disable autofill: id=" + mCurrentViewId, e);
             }
         }
     }

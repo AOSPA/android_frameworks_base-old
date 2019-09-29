@@ -24,7 +24,6 @@ import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
-import android.app.job.JobService;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -728,7 +727,7 @@ public final class Telephony {
         }
 
         /**
-         * Contains all sent text-based SMS messages in the SMS app.
+         * Contains all draft text-based SMS messages in the SMS app.
          */
         public static final class Draft implements BaseColumns, TextBasedSmsColumns {
 
@@ -844,7 +843,15 @@ public final class Telephony {
         }
 
         /**
-         * Contains all sent text-based SMS messages in the SMS app.
+         * Contains a view of SMS conversations (also referred to as threads). This is similar to
+         * {@link Threads}, but only includes SMS messages and columns relevant to SMS
+         * conversations.
+         * <p>
+         * Note that this view ignores any information about MMS messages, it is a
+         * view of conversations as if MMS messages did not exist at all. This means that all
+         * relevant information, such as snippets and message count, will ignore any MMS messages
+         * that might be in the same thread through other views and present only data based on the
+         * SMS messages in that thread.
          */
         public static final class Conversations
                 implements BaseColumns, TextBasedSmsColumns {
@@ -3282,6 +3289,8 @@ public final class Telephony {
 
         /**
          * The {@code content://} style URL for locked messages in this table.
+         * <P>This {@link Uri} is used to check at most one locked message found in the union of MMS
+         * and SMS messages. Also this will return only _id column in response.</P>
          */
         public static final Uri CONTENT_LOCKED_URI = Uri.parse(
                 "content://mms-sms/locked");
@@ -4153,9 +4162,11 @@ public final class Telephony {
          * ServiceState provider.
          * <p>
          * Use this {@link Uri} with a {@link ContentObserver} to be notified of changes to the
-         * {@link ServiceState} while your app is running.  You can also use a {@link JobService} to
+         * {@link ServiceState} while your app is running.
+         * You can also use a {@link android.app.job.JobService} to
          * ensure your app is notified of changes to the {@link Uri} even when it is not running.
-         * Note, however, that using a {@link JobService} does not guarantee timely delivery of
+         * Note, however, that using a {@link android.app.job.JobService}
+         * does not guarantee timely delivery of
          * updates to the {@link Uri}.
          *
          * @param subscriptionId the subscriptionId to receive updates on
@@ -4172,9 +4183,11 @@ public final class Telephony {
          * ServiceState provider.
          * <p>
          * Use this {@link Uri} with a {@link ContentObserver} to be notified of changes to the
-         * {@link ServiceState} while your app is running.  You can also use a {@link JobService} to
+         * {@link ServiceState} while your app is running.  You can also use a
+         * {@link android.app.job.JobService} to
          * ensure your app is notified of changes to the {@link Uri} even when it is not running.
-         * Note, however, that using a {@link JobService} does not guarantee timely delivery of
+         * Note, however, that using a {@link android.app.job.JobService}
+         * does not guarantee timely delivery of
          * updates to the {@link Uri}.
          *
          * @param subscriptionId the subscriptionId to receive updates on
@@ -4429,10 +4442,11 @@ public final class Telephony {
          * <p>
          * Use this {@link Uri} with a {@link ContentObserver} to be notified of changes to the
          * carrier identity {@link TelephonyManager#getSimCarrierId()}
-         * while your app is running. You can also use a {@link JobService} to ensure your app
+         * while your app is running. You can also use a {@link android.app.job.JobService}
+         * to ensure your app
          * is notified of changes to the {@link Uri} even when it is not running.
-         * Note, however, that using a {@link JobService} does not guarantee timely delivery of
-         * updates to the {@link Uri}.
+         * Note, however, that using a {@link android.app.job.JobService} does not guarantee
+         * timely delivery of updates to the {@link Uri}.
          *
          * @param subscriptionId the subscriptionId to receive updates on
          * @return the Uri used to observe carrier identity changes
@@ -4450,10 +4464,11 @@ public final class Telephony {
          * <p>
          * Use this {@link Uri} with a {@link ContentObserver} to be notified of changes to the
          * specific carrier identity {@link TelephonyManager#getSimSpecificCarrierId()}
-         * while your app is running. You can also use a {@link JobService} to ensure your app
+         * while your app is running. You can also use a {@link android.app.job.JobService}
+         * to ensure your app
          * is notified of changes to the {@link Uri} even when it is not running.
-         * Note, however, that using a {@link JobService} does not guarantee timely delivery of
-         * updates to the {@link Uri}.
+         * Note, however, that using a {@link android.app.job.JobService} does not guarantee timely
+         * delivery of updates to the {@link Uri}.
          *
          * @param subscriptionId the subscriptionId to receive updates on
          * @return the Uri used to observe specific carrier identity changes

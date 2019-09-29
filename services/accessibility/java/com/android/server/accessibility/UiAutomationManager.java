@@ -27,6 +27,7 @@ import android.os.IBinder;
 import android.os.IBinder.DeathRecipient;
 import android.os.RemoteException;
 import android.util.Slog;
+import android.view.Display;
 import android.view.accessibility.AccessibilityEvent;
 
 import com.android.internal.util.DumpUtils;
@@ -65,6 +66,7 @@ class UiAutomationManager {
                     mUiAutomationServiceOwner.unlinkToDeath(this, 0);
                     mUiAutomationServiceOwner = null;
                     destroyUiAutomationService();
+                    Slog.v(LOG_TAG, "UiAutomation service owner died");
                 }
             };
 
@@ -246,7 +248,8 @@ class UiAutomationManager {
                     // another thread.
                     if (serviceInterface != null) {
                         service.linkToDeath(this, 0);
-                        serviceInterface.init(this, mId, mOverlayWindowToken);
+                        serviceInterface.init(this, mId,
+                                mOverlayWindowTokens.get(Display.DEFAULT_DISPLAY));
                     }
                 } catch (RemoteException re) {
                     Slog.w(LOG_TAG, "Error initialized connection", re);
@@ -261,7 +264,7 @@ class UiAutomationManager {
         }
 
         @Override
-        protected boolean isCalledForCurrentUserLocked() {
+        protected boolean hasRightsToCurrentUserLocked() {
             // Allow UiAutomation to work for any user
             return true;
         }

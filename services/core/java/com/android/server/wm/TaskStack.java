@@ -321,7 +321,9 @@ public class TaskStack extends WindowContainer<Task> implements
      */
     private void setAnimationFinalBounds(Rect sourceHintBounds, Rect destBounds,
             boolean toFullscreen) {
-        mBoundsAnimatingRequested = true;
+        if (mAnimationType == BoundsAnimationController.BOUNDS) {
+            mBoundsAnimatingRequested = true;
+        }
         mBoundsAnimatingToFullscreen = toFullscreen;
         if (destBounds != null) {
             mBoundsAnimationTarget.set(destBounds);
@@ -802,12 +804,7 @@ public class TaskStack extends WindowContainer<Task> implements
         if (width == mLastSurfaceSize.x && height == mLastSurfaceSize.y) {
             return;
         }
-        if (getWindowConfiguration().tasksAreFloating()) {
-            // Don't crop freeform windows to the stack.
-            transaction.setWindowCrop(mSurfaceControl, -1, -1);
-        } else {
-            transaction.setWindowCrop(mSurfaceControl, width, height);
-        }
+        transaction.setWindowCrop(mSurfaceControl, width, height);
         mLastSurfaceSize.set(width, height);
     }
 
@@ -1012,7 +1009,7 @@ public class TaskStack extends WindowContainer<Task> implements
         EventLog.writeEvent(EventLogTags.WM_STACK_REMOVED, mStackId);
 
         if (mAnimationBackgroundSurface != null) {
-            mAnimationBackgroundSurface.remove();
+            mWmService.mTransactionFactory.make().remove(mAnimationBackgroundSurface).apply();
             mAnimationBackgroundSurface = null;
         }
 
@@ -1591,8 +1588,10 @@ public class TaskStack extends WindowContainer<Task> implements
                 return false;
             }
 
-            mBoundsAnimatingRequested = false;
-            mBoundsAnimating = true;
+            if (animationType == BoundsAnimationController.BOUNDS) {
+                mBoundsAnimatingRequested = false;
+                mBoundsAnimating = true;
+            }
             mAnimationType = animationType;
 
             // If we are changing UI mode, as in the PiP to fullscreen
@@ -1667,7 +1666,7 @@ public class TaskStack extends WindowContainer<Task> implements
      *         default bounds.
      */
     Rect getPictureInPictureBounds(float aspectRatio, Rect stackBounds) {
-        if (!mWmService.mSupportsPictureInPicture) {
+        if (!mWmService.mAtmService.mSupportsPictureInPicture) {
             return null;
         }
 
@@ -1763,7 +1762,7 @@ public class TaskStack extends WindowContainer<Task> implements
      * Sets the current picture-in-picture aspect ratio.
      */
     void setPictureInPictureAspectRatio(float aspectRatio) {
-        if (!mWmService.mSupportsPictureInPicture) {
+        if (!mWmService.mAtmService.mSupportsPictureInPicture) {
             return;
         }
 
@@ -1793,7 +1792,7 @@ public class TaskStack extends WindowContainer<Task> implements
      * Sets the current picture-in-picture actions.
      */
     void setPictureInPictureActions(List<RemoteAction> actions) {
-        if (!mWmService.mSupportsPictureInPicture) {
+        if (!mWmService.mAtmService.mSupportsPictureInPicture) {
             return;
         }
 

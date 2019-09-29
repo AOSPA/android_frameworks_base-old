@@ -16,6 +16,8 @@
 
 package com.android.server.media;
 
+import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
@@ -30,15 +32,15 @@ import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.os.Message;
 import android.os.RemoteException;
+import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
-import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.util.function.pooled.PooledLambda;
 
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
@@ -167,12 +169,24 @@ class MediaRouter2ServiceImpl {
         }
     }
 
-    public void setRemoteRoute(@NonNull IMediaRouter2Manager manager,
-            int uid, @Nullable String routeId, boolean explicit) {
+    public void selectRoute2(@NonNull IMediaRouter2Client client,
+            @Nullable MediaRoute2Info route) {
         final long token = Binder.clearCallingIdentity();
         try {
             synchronized (mLock) {
-                setRemoteRouteLocked(manager, uid, routeId, explicit);
+                selectRoute2Locked(client, route);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void selectClientRoute2(@NonNull IMediaRouter2Manager manager,
+            String packageName, @Nullable MediaRoute2Info route) {
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                selectClientRoute2Locked(manager, packageName, route);
             }
         } finally {
             Binder.restoreCallingIdentity(token);
@@ -189,13 +203,15 @@ class MediaRouter2ServiceImpl {
 
                 UserRecord oldUser = mUserRecords.get(oldUserId);
                 if (oldUser != null) {
-                    oldUser.mHandler.sendEmptyMessage(MediaRouterService.UserHandler.MSG_STOP);
+                    oldUser.mHandler.sendMessage(
+                            obtainMessage(UserHandler::stop, oldUser.mHandler));
                     disposeUserIfNeededLocked(oldUser); // since no longer current user
                 }
 
                 UserRecord newUser = mUserRecords.get(userId);
                 if (newUser != null) {
-                    newUser.mHandler.sendEmptyMessage(MediaRouterService.UserHandler.MSG_START);
+                    newUser.mHandler.sendMessage(
+                            obtainMessage(UserHandler::start, newUser.mHandler));
                 }
             }
         }
@@ -252,6 +268,53 @@ class MediaRouter2ServiceImpl {
         }
     }
 
+    private void selectRoute2Locked(IMediaRouter2Client client, MediaRoute2Info route) {
+        ClientRecord clientRecord = mAllClientRecords.get(client.asBinder());
+        if (clientRecord != null) {
+            MediaRoute2Info oldRoute = clientRecord.mSelectedRoute;
+            clientRecord.mSelectedRoute = route;
+
+            UserHandler handler = clientRecord.mUserRecord.mHandler;
+            //TODO: Handle transfer instead of unselect and select
+            if (oldRoute != null) {
+                handler.sendMessage(
+                        obtainMessage(UserHandler::unselectRoute, handler, clientRecord,
+                                oldRoute));
+            }
+            if (route != null) {
+                handler.sendMessage(
+                        obtainMessage(UserHandler::selectRoute, handler, clientRecord, route));
+            }
+            handler.sendMessage(
+                    obtainMessage(UserHandler::updateClientUsage, handler, clientRecord));
+        }
+    }
+
+    private void setControlCategoriesLocked(IMediaRouter2Client client, List<String> categories) {
+        final IBinder binder = client.asBinder();
+        ClientRecord clientRecord = mAllClientRecords.get(binder);
+
+        if (clientRecord != null) {
+            clientRecord.mControlCategories = categories;
+
+            clientRecord.mUserRecord.mHandler.sendMessage(
+                    obtainMessage(UserHandler::updateClientUsage,
+                            clientRecord.mUserRecord.mHandler, clientRecord));
+        }
+    }
+
+    private void sendControlRequestLocked(IMediaRouter2Client client, MediaRoute2Info route,
+            Intent request) {
+        final IBinder binder = client.asBinder();
+        ClientRecord clientRecord = mAllClientRecords.get(binder);
+
+        if (clientRecord != null) {
+            clientRecord.mUserRecord.mHandler.sendMessage(
+                    obtainMessage(UserHandler::sendControlRequest,
+                            clientRecord.mUserRecord.mHandler, route, request));
+        }
+    }
+
     private void registerManagerLocked(IMediaRouter2Manager manager,
             int uid, int pid, String packageName, int userId, boolean trusted) {
         final IBinder binder = manager.asBinder();
@@ -285,8 +348,9 @@ class MediaRouter2ServiceImpl {
             final int count = userRecord.mClientRecords.size();
             for (int i = 0; i < count; i++) {
                 ClientRecord clientRecord = userRecord.mClientRecords.get(i);
-                clientRecord.mUserRecord.mHandler.obtainMessage(
-                        UserHandler.MSG_UPDATE_CLIENT_USAGE, clientRecord).sendToTarget();
+                clientRecord.mUserRecord.mHandler.sendMessage(
+                        obtainMessage(UserHandler::updateClientUsage,
+                            clientRecord.mUserRecord.mHandler, clientRecord));
             }
         }
     }
@@ -301,38 +365,17 @@ class MediaRouter2ServiceImpl {
         }
     }
 
-    private void setRemoteRouteLocked(IMediaRouter2Manager manager,
-            int uid, String routeId, boolean explicit) {
+    private void selectClientRoute2Locked(IMediaRouter2Manager manager,
+            String packageName, MediaRoute2Info route) {
         ManagerRecord managerRecord = mAllManagerRecords.get(manager.asBinder());
         if (managerRecord != null) {
-            if (explicit && managerRecord.mTrusted) {
-                Pair<Integer, String> obj = new Pair<>(uid, routeId);
-                managerRecord.mUserRecord.mHandler.obtainMessage(
-                        UserHandler.MSG_SELECT_REMOTE_ROUTE, obj).sendToTarget();
+            ClientRecord clientRecord = managerRecord.mUserRecord.findClientRecord(packageName);
+            if (clientRecord == null) {
+                Slog.w(TAG, "Ignoring route selection for unknown client.");
             }
-        }
-    }
-
-    private void setControlCategoriesLocked(IMediaRouter2Client client, List<String> categories) {
-        final IBinder binder = client.asBinder();
-        ClientRecord clientRecord = mAllClientRecords.get(binder);
-
-        if (clientRecord != null) {
-            clientRecord.mControlCategories = categories;
-            clientRecord.mUserRecord.mHandler.obtainMessage(
-                    UserHandler.MSG_UPDATE_CLIENT_USAGE, clientRecord).sendToTarget();
-        }
-    }
-
-    private void sendControlRequestLocked(IMediaRouter2Client client, MediaRoute2Info route,
-            Intent request) {
-        final IBinder binder = client.asBinder();
-        ClientRecord clientRecord = mAllClientRecords.get(binder);
-
-        if (clientRecord != null) {
-            Pair<MediaRoute2Info, Intent> obj = new Pair<>(route, request);
-            clientRecord.mUserRecord.mHandler.obtainMessage(
-                    UserHandler.MSG_SEND_CONTROL_REQUEST, obj).sendToTarget();
+            if (clientRecord != null && managerRecord.mTrusted) {
+                selectRoute2Locked(clientRecord.mClient, route);
+            }
         }
     }
 
@@ -341,7 +384,8 @@ class MediaRouter2ServiceImpl {
             Slog.d(TAG, userRecord + ": Initialized");
         }
         if (userRecord.mUserId == mCurrentUserId) {
-            userRecord.mHandler.sendEmptyMessage(UserHandler.MSG_START);
+            userRecord.mHandler.sendMessage(
+                    obtainMessage(UserHandler::start, userRecord.mHandler));
         }
     }
 
@@ -371,6 +415,15 @@ class MediaRouter2ServiceImpl {
             mUserId = userId;
             mHandler = new UserHandler(MediaRouter2ServiceImpl.this, this);
         }
+
+        ClientRecord findClientRecord(String packageName) {
+            for (ClientRecord clientRecord : mClientRecords) {
+                if (TextUtils.equals(clientRecord.mPackageName, packageName)) {
+                    return clientRecord;
+                }
+            }
+            return null;
+        }
     }
 
     final class ClientRecord implements IBinder.DeathRecipient {
@@ -381,6 +434,7 @@ class MediaRouter2ServiceImpl {
         public final String mPackageName;
         public final boolean mTrusted;
         public List<String> mControlCategories;
+        public MediaRoute2Info mSelectedRoute;
 
         ClientRecord(UserRecord userRecord, IMediaRouter2Client client,
                 int uid, int pid, String packageName, boolean trusted) {
@@ -447,20 +501,12 @@ class MediaRouter2ServiceImpl {
             MediaRoute2ProviderWatcher.Callback,
             MediaRoute2ProviderProxy.Callback {
 
-        //TODO: Should be rearranged
-        public static final int MSG_START = 1;
-        public static final int MSG_STOP = 2;
-
-        private static final int MSG_SELECT_REMOTE_ROUTE = 10;
-        private static final int MSG_UPDATE_CLIENT_USAGE = 11;
-        private static final int MSG_UPDATE_MANAGER_STATE = 12;
-        private static final int MSG_SEND_CONTROL_REQUEST = 13;
-
         private final WeakReference<MediaRouter2ServiceImpl> mServiceRef;
         private final UserRecord mUserRecord;
         private final MediaRoute2ProviderWatcher mWatcher;
         private final ArrayList<IMediaRouter2Manager> mTempManagers = new ArrayList<>();
 
+        //TODO: Make this thread-safe.
         private final ArrayList<MediaRoute2ProviderProxy> mMediaProviders =
                 new ArrayList<>();
 
@@ -473,37 +519,6 @@ class MediaRouter2ServiceImpl {
             mUserRecord = userRecord;
             mWatcher = new MediaRoute2ProviderWatcher(service.mContext, this,
                     this, mUserRecord.mUserId);
-        }
-
-        @Override
-        public void handleMessage(Message msg) {
-            switch (msg.what) {
-                case MSG_START: {
-                    start();
-                    break;
-                }
-                case MSG_STOP: {
-                    stop();
-                    break;
-                }
-                case MSG_SELECT_REMOTE_ROUTE: {
-                    Pair<Integer, String> obj = (Pair<Integer, String>) msg.obj;
-                    selectRemoteRoute(obj.first, obj.second);
-                    break;
-                }
-                case MSG_UPDATE_CLIENT_USAGE: {
-                    updateClientUsage((ClientRecord) msg.obj);
-                    break;
-                }
-                case MSG_UPDATE_MANAGER_STATE: {
-                    updateManagerState();
-                    break;
-                }
-                case MSG_SEND_CONTROL_REQUEST: {
-                    Pair<MediaRoute2Info, Intent> obj = (Pair<MediaRoute2Info, Intent>) msg.obj;
-                    sendControlRequest(obj.first, obj.second);
-                }
-            }
         }
 
         private void start() {
@@ -541,29 +556,39 @@ class MediaRouter2ServiceImpl {
             scheduleUpdateManagerState();
         }
 
+        private void selectRoute(ClientRecord clientRecord, MediaRoute2Info route) {
+            if (route != null) {
+                MediaRoute2ProviderProxy provider = findProvider(route.getProviderId());
+                if (provider == null) {
+                    Log.w(TAG, "Ignoring to select route of unknown provider " + route);
+                } else {
+                    provider.selectRoute(clientRecord.mPackageName, route.getId());
+                }
+            }
+        }
 
-        private void selectRemoteRoute(int uid, String routeId) {
-            if (routeId != null) {
-                final int providerCount = mMediaProviders.size();
-
-                //TODO: should find proper provider (currently assumes a single provider)
-                for (int i = 0; i < providerCount; i++) {
-                    mMediaProviders.get(i).setSelectedRoute(uid, routeId);
+        private void unselectRoute(ClientRecord clientRecord, MediaRoute2Info route) {
+            if (route != null) {
+                MediaRoute2ProviderProxy provider = findProvider(route.getProviderId());
+                if (provider == null) {
+                    Log.w(TAG, "Ignoring to unselect route of unknown provider " + route);
+                } else {
+                    provider.unselectRoute(clientRecord.mPackageName, route.getId());
                 }
             }
         }
 
         private void sendControlRequest(MediaRoute2Info route, Intent request) {
-            final int providerCount = mMediaProviders.size();
-            for (int i = 0; i < providerCount; i++) {
-                mMediaProviders.get(i).sendControlRequest(route, request);
+            final MediaRoute2ProviderProxy provider = findProvider(route.getProviderId());
+            if (provider != null) {
+                provider.sendControlRequest(route, request);
             }
         }
 
         private void scheduleUpdateManagerState() {
             if (!mManagerStateUpdateScheduled) {
                 mManagerStateUpdateScheduled = true;
-                sendEmptyMessage(MSG_UPDATE_MANAGER_STATE);
+                sendMessage(PooledLambda.obtainMessage(UserHandler::updateManagerState, this));
             }
         }
 
@@ -576,10 +601,9 @@ class MediaRouter2ServiceImpl {
             }
             //TODO: Consider using a member variable (like mTempManagers).
             final List<MediaRoute2ProviderInfo> providers = new ArrayList<>();
-            final int mediaCount = mMediaProviders.size();
-            for (int i = 0; i < mediaCount; i++) {
+            for (MediaRoute2ProviderProxy mediaProvider : mMediaProviders) {
                 final MediaRoute2ProviderInfo providerInfo =
-                        mMediaProviders.get(i).getProviderInfo();
+                        mediaProvider.getProviderInfo();
                 if (providerInfo == null || !providerInfo.isValid()) {
                     Log.w(TAG, "Ignoring invalid provider info : " + providerInfo);
                 } else {
@@ -594,16 +618,11 @@ class MediaRouter2ServiceImpl {
                         mTempManagers.add(mUserRecord.mManagerRecords.get(i).mManager);
                     }
                 }
-                //TODO: Call !proper callbacks when provider descriptor is implemented.
-                if (!providers.isEmpty()) {
-                    final int count = mTempManagers.size();
-                    for (int i = 0; i < count; i++) {
-                        try {
-                            mTempManagers.get(i).notifyProviderInfosUpdated(providers);
-                        } catch (RemoteException ex) {
-                            Slog.w(TAG, "Failed to call onStateChanged. Manager probably died.",
-                                    ex);
-                        }
+                for (IMediaRouter2Manager tempManager : mTempManagers) {
+                    try {
+                        tempManager.notifyProviderInfosUpdated(providers);
+                    } catch (RemoteException ex) {
+                        Slog.w(TAG, "Failed to update manager state. Manager probably died.", ex);
                     }
                 }
             } finally {
@@ -624,16 +643,27 @@ class MediaRouter2ServiceImpl {
                     managers.add(mUserRecord.mManagerRecords.get(i).mManager);
                 }
             }
-            final int count = managers.size();
-            for (int i = 0; i < count; i++) {
+            for (IMediaRouter2Manager manager : managers) {
                 try {
-                    managers.get(i).notifyControlCategoriesChanged(clientRecord.mUid,
+                    manager.notifyRouteSelected(clientRecord.mPackageName,
+                            clientRecord.mSelectedRoute);
+                    manager.notifyControlCategoriesChanged(clientRecord.mPackageName,
                             clientRecord.mControlCategories);
                 } catch (RemoteException ex) {
-                    Slog.w(TAG, "Failed to call onControlCategoriesChanged. "
-                            + "Manager probably died.", ex);
+                    Slog.w(TAG, "Failed to update client usage. Manager probably died.", ex);
                 }
             }
+        }
+
+        private MediaRoute2ProviderProxy findProvider(String providerId) {
+            for (MediaRoute2ProviderProxy provider : mMediaProviders) {
+                final MediaRoute2ProviderInfo providerInfo = provider.getProviderInfo();
+                if (providerInfo != null
+                        && TextUtils.equals(providerInfo.getUniqueId(), providerId)) {
+                    return provider;
+                }
+            }
+            return null;
         }
     }
 }

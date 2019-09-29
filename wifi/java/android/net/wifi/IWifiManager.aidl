@@ -29,7 +29,6 @@ import android.net.wifi.INetworkRequestMatchCallback;
 import android.net.wifi.ISoftApCallback;
 import android.net.wifi.ITrafficStateCallback;
 import android.net.wifi.IOnWifiUsabilityStatsListener;
-import android.net.wifi.PasspointManagementObjectDefinition;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiActivityEnergyInfo;
 import android.net.wifi.WifiConfiguration;
@@ -235,6 +234,8 @@ interface IWifiManager
 
     int removeNetworkSuggestions(in List<WifiNetworkSuggestion> networkSuggestions, in String packageName);
 
+    List<WifiNetworkSuggestion> getNetworkSuggestions(in String packageName);
+
     String[] getFactoryMacAddresses();
 
     void setDeviceMobilityState(int state);
@@ -248,4 +249,6 @@ interface IWifiManager
     void stopDppSession();
 
     void updateWifiUsabilityScore(int seqNum, int score, int predictionHorizonSec);
+
+    int getSoftApWifiGeneration();
 }

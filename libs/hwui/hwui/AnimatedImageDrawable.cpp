@@ -64,7 +64,7 @@ bool AnimatedImageDrawable::nextSnapshotReady() const {
 // Only called on the RenderThread while UI thread is locked.
 bool AnimatedImageDrawable::isDirty(nsecs_t* outDelay) {
     *outDelay = 0;
-    const nsecs_t currentTime = systemTime(CLOCK_MONOTONIC);
+    const nsecs_t currentTime = systemTime(SYSTEM_TIME_MONOTONIC);
     const nsecs_t lastWallTime = mLastWallTime;
 
     mLastWallTime = currentTime;
@@ -244,7 +244,7 @@ int AnimatedImageDrawable::drawStaging(SkCanvas* canvas) {
 
     bool update = false;
     {
-        const nsecs_t currentTime = systemTime(CLOCK_MONOTONIC);
+        const nsecs_t currentTime = systemTime(SYSTEM_TIME_MONOTONIC);
         std::unique_lock lock{mSwapLock};
         // mLastWallTime starts off at 0. If it is still 0, just update it to
         // the current time and avoid updating

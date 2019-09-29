@@ -26,6 +26,7 @@
 
 #include <gui/IProducerListener.h>
 #include <gui/Surface.h>
+#include <ui/PublicFormat.h>
 #include <android_runtime/AndroidRuntime.h>
 #include <android_runtime/android_view_Surface.h>
 #include <android_runtime/android_hardware_HardwareBuffer.h>
@@ -126,7 +127,7 @@ private:
             Condition mCondition;
             std::deque<wp<Surface>> mQueue;
 
-            static const nsecs_t kWaitDuration = 20000000; // 20 ms
+            static const nsecs_t kWaitDuration = 500000000; // 500 ms
         };
         sp<DetachThread> mThread;
 
@@ -401,8 +402,28 @@ static jlong ImageWriter_init(JNIEnv* env, jobject thiz, jobject weakThiz, jobje
             return 0;
         }
     } else {
+        // Set consumer buffer format to user specified format
+        PublicFormat publicFormat = static_cast<PublicFormat>(userFormat);
+        int nativeFormat = mapPublicFormatToHalFormat(publicFormat);
+        android_dataspace nativeDataspace = mapPublicFormatToHalDataspace(publicFormat);
+        res = native_window_set_buffers_format(anw.get(), nativeFormat);
+        if (res != OK) {
+            ALOGE("%s: Unable to configure consumer native buffer format to %#x",
+                    __FUNCTION__, nativeFormat);
+            jniThrowRuntimeException(env, "Failed to set Surface format");
+            return 0;
+        }
+
+        res = native_window_set_buffers_data_space(anw.get(), nativeDataspace);
+        if (res != OK) {
+            ALOGE("%s: Unable to configure consumer dataspace %#x",
+                    __FUNCTION__, nativeDataspace);
+            jniThrowRuntimeException(env, "Failed to set Surface dataspace");
+            return 0;
+        }
         surfaceFormat = userFormat;
     }
+
     ctx->setBufferFormat(surfaceFormat);
     env->SetIntField(thiz,
             gImageWriterClassInfo.mWriterFormat, reinterpret_cast<jint>(surfaceFormat));
@@ -777,6 +798,7 @@ static void Image_unlockIfLocked(JNIEnv* env, jobject thiz) {
         status_t res = buffer->unlock();
         if (res != OK) {
             jniThrowRuntimeException(env, "unlock buffer failed");
+            return;
         }
         ALOGV("Successfully unlocked the image");
     }
@@ -819,8 +841,8 @@ static jint Image_getFormat(JNIEnv* env, jobject thiz) {
     }
 
     // ImageWriter doesn't support data space yet, assuming it is unknown.
-    PublicFormat publicFmt = android_view_Surface_mapHalFormatDataspaceToPublicFormat(
-            buffer->getPixelFormat(), HAL_DATASPACE_UNKNOWN);
+    PublicFormat publicFmt = mapHalFormatDataspaceToPublicFormat(buffer->getPixelFormat(),
+                                                                 HAL_DATASPACE_UNKNOWN);
     return static_cast<jint>(publicFmt);
 }
 
@@ -872,7 +894,7 @@ static void Image_getLockedImage(JNIEnv* env, jobject thiz, LockedImage *image) 
     // and we don't set them here.
 }
 
-static void Image_getLockedImageInfo(JNIEnv* env, LockedImage* buffer, int idx,
+static bool Image_getLockedImageInfo(JNIEnv* env, LockedImage* buffer, int idx,
         int32_t writerFormat, uint8_t **base, uint32_t *size, int *pixelStride, int *rowStride) {
     ALOGV("%s", __FUNCTION__);
 
@@ -880,8 +902,10 @@ static void Image_getLockedImageInfo(JNIEnv* env, LockedImage* buffer, int idx,
             pixelStride, rowStride);
     if (res != OK) {
         jniThrowExceptionFmt(env, "java/lang/UnsupportedOperationException",
-                             "Pixel format: 0x%x is unsupported", buffer->flexFormat);
+                             "Pixel format: 0x%x is unsupported", writerFormat);
+        return false;
     }
+    return true;
 }
 
 static jobjectArray Image_createSurfacePlanes(JNIEnv* env, jobject thiz,
@@ -918,10 +942,12 @@ static jobjectArray Image_createSurfacePlanes(JNIEnv* env, jobject thiz,
 
     // Create all SurfacePlanes
     PublicFormat publicWriterFormat = static_cast<PublicFormat>(writerFormat);
-    writerFormat = android_view_Surface_mapPublicFormatToHalFormat(publicWriterFormat);
+    writerFormat = mapPublicFormatToHalFormat(publicWriterFormat);
     for (int i = 0; i < numPlanes; i++) {
-        Image_getLockedImageInfo(env, &lockedImg, i, writerFormat,
-                &pData, &dataSize, &pixelStride, &rowStride);
+        if (!Image_getLockedImageInfo(env, &lockedImg, i, writerFormat,
+                &pData, &dataSize, &pixelStride, &rowStride)) {
+            return NULL;
+        }
         byteBuffer = env->NewDirectByteBuffer(pData, dataSize);
         if ((byteBuffer == NULL) && (env->ExceptionCheck() == false)) {
             jniThrowException(env, "java/lang/IllegalStateException",
