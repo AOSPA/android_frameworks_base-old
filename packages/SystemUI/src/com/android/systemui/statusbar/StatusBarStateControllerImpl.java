@@ -20,10 +20,12 @@ import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.text.format.DateFormat;
 import android.util.FloatProperty;
+import android.util.Log;
 import android.view.View;
 import android.view.animation.Interpolator;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.systemui.DejankUtils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.Interpolators;
 import com.android.systemui.plugins.statusbar.StatusBarStateController.StateListener;
@@ -136,7 +138,14 @@ public class StatusBarStateControllerImpl implements SysuiStatusBarStateControll
         // Record the to-be mState and mLastState
         recordHistoricalState(state, mState);
 
+        // b/139259891
+        if (mState == StatusBarState.SHADE && state == StatusBarState.SHADE_LOCKED) {
+            Log.e(TAG, "Invalid state transition: SHADE -> SHADE_LOCKED", new Throwable());
+        }
+
         synchronized (mListeners) {
+            String tag = getClass().getSimpleName() + "#setState(" + state + ")";
+            DejankUtils.startDetectingBlockingIpcs(tag);
             for (RankedListener rl : new ArrayList<>(mListeners)) {
                 rl.mListener.onStatePreChange(mState, state);
             }
@@ -149,6 +158,7 @@ public class StatusBarStateControllerImpl implements SysuiStatusBarStateControll
             for (RankedListener rl : new ArrayList<>(mListeners)) {
                 rl.mListener.onStatePostChange();
             }
+            DejankUtils.stopDetectingBlockingIpcs(tag);
         }
 
         return true;
@@ -178,9 +188,12 @@ public class StatusBarStateControllerImpl implements SysuiStatusBarStateControll
         mIsDozing = isDozing;
 
         synchronized (mListeners) {
+            String tag = getClass().getSimpleName() + "#setIsDozing";
+            DejankUtils.startDetectingBlockingIpcs(tag);
             for (RankedListener rl : new ArrayList<>(mListeners)) {
                 rl.mListener.onDozingChanged(isDozing);
             }
+            DejankUtils.stopDetectingBlockingIpcs(tag);
         }
 
         return true;
@@ -220,9 +233,12 @@ public class StatusBarStateControllerImpl implements SysuiStatusBarStateControll
         mDozeAmount = dozeAmount;
         float interpolatedAmount = mDozeInterpolator.getInterpolation(dozeAmount);
         synchronized (mListeners) {
+            String tag = getClass().getSimpleName() + "#setDozeAmount";
+            DejankUtils.startDetectingBlockingIpcs(tag);
             for (RankedListener rl : new ArrayList<>(mListeners)) {
                 rl.mListener.onDozeAmountChanged(mDozeAmount, interpolatedAmount);
             }
+            DejankUtils.stopDetectingBlockingIpcs(tag);
         }
     }
 

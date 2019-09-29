@@ -3274,11 +3274,8 @@ public class Notification implements Parcelable
      *
      * @param requiresFreeform requires the remoteinput to allow freeform or not.
      * @return the result pair, {@code null} if no result is found.
-     *
-     * @hide
      */
     @Nullable
-    @SystemApi
     public Pair<RemoteInput, Action> findRemoteInputActionPair(boolean requiresFreeform) {
         if (actions == null) {
             return null;
@@ -3301,11 +3298,9 @@ public class Notification implements Parcelable
     }
 
     /**
-     * Returns the actions that are contextual out of the actions in this notification.
-     *
-     * @hide
+     * Returns the actions that are contextual (that is, suggested because of the content of the
+     * notification) out of the actions in this notification.
      */
-    @SystemApi
     public @NonNull List<Notification.Action> getContextualActions() {
         if (actions == null) return Collections.emptyList();
 
@@ -7705,11 +7700,11 @@ public class Notification implements Parcelable
             }
 
             /**
-             * @return A list of messages read from the bundles.
-             *
-             * @hide
+             * Returns a list of messages read from the given bundle list, e.g.
+             * {@link #EXTRA_MESSAGES} or {@link #EXTRA_HISTORIC_MESSAGES}.
              */
-            public static List<Message> getMessagesFromBundleArray(Parcelable[] bundles) {
+            @NonNull
+            public static List<Message> getMessagesFromBundleArray(@Nullable Parcelable[] bundles) {
                 if (bundles == null) {
                     return new ArrayList<>();
                 }
@@ -7726,13 +7721,12 @@ public class Notification implements Parcelable
             }
 
             /**
-             * @return The message that is stored in the bundle or null if the message couldn't be
-             * resolved.
-             *
+             * Returns the message that is stored in the bundle (e.g. one of the values in the lists
+             * in {@link #EXTRA_MESSAGES} or {@link #EXTRA_HISTORIC_MESSAGES}) or null if the
+             * message couldn't be resolved.
              * @hide
              */
             @Nullable
-            @SystemApi
             public static Message getMessageFromBundle(@NonNull Bundle bundle) {
                 try {
                     if (!bundle.containsKey(KEY_TEXT) || !bundle.containsKey(KEY_TIMESTAMP)) {
@@ -8156,7 +8150,9 @@ public class Notification implements Parcelable
                 Action action, StandardTemplateParams p) {
             final boolean tombstone = (action.actionIntent == null);
             container.setViewVisibility(buttonId, View.VISIBLE);
-            container.setImageViewIcon(buttonId, action.getIcon());
+            if (buttonId != R.id.media_seamless) {
+                container.setImageViewIcon(buttonId, action.getIcon());
+            }
 
             // If the action buttons should not be tinted, then just use the default
             // notification color. Otherwise, just use the passed-in color.
@@ -8210,6 +8206,10 @@ public class Notification implements Parcelable
                     view.setViewVisibility(MEDIA_BUTTON_IDS[i], View.GONE);
                 }
             }
+            bindMediaActionButton(view, R.id.media_seamless, new Action(
+                    R.drawable.ic_media_seamless, mBuilder.mContext.getString(
+                            com.android.internal.R.string.ext_media_seamless_action), null), p);
+            view.setViewVisibility(R.id.media_seamless, View.GONE);
             handleImage(view);
             // handle the content margin
             int endMargin = R.dimen.notification_content_margin_end;
@@ -8542,24 +8542,34 @@ public class Notification implements Parcelable
          * If set and the app creating the bubble is in the foreground, the bubble will be posted
          * in its expanded state, with the contents of {@link #getIntent()} in a floating window.
          *
-         * <p>If the app creating the bubble is not in the foreground this flag has no effect.</p>
+         * <p>This flag has no effect if the app posting the bubble is not in the foreground.
+         * The app is considered foreground if it is visible and on the screen, note that
+         * a foreground service does not qualify.
+         * </p>
          *
          * <p>Generally this flag should only be set if the user has performed an action to request
          * or create a bubble.</p>
+         *
+         * @hide
          */
-        private static final int FLAG_AUTO_EXPAND_BUBBLE = 0x00000001;
+        public static final int FLAG_AUTO_EXPAND_BUBBLE = 0x00000001;
 
         /**
          * If set and the app posting the bubble is in the foreground, the bubble will
          * be posted <b>without</b> the associated notification in the notification shade.
          *
-         * <p>If the app posting the bubble is not in the foreground this flag has no effect.</p>
+         * <p>This flag has no effect if the app posting the bubble is not in the foreground.
+         * The app is considered foreground if it is visible and on the screen, note that
+         * a foreground service does not qualify.
+         * </p>
          *
          * <p>Generally this flag should only be set if the user has performed an action to request
          * or create a bubble, or if the user has seen the content in the notification and the
          * notification is no longer relevant.</p>
+         *
+         * @hide
          */
-        private static final int FLAG_SUPPRESS_NOTIFICATION = 0x00000002;
+        public static final int FLAG_SUPPRESS_NOTIFICATION = 0x00000002;
 
         private BubbleMetadata(PendingIntent expandIntent, PendingIntent deleteIntent,
                 Icon icon, int height, @DimenRes int heightResId) {
@@ -8675,8 +8685,18 @@ public class Notification implements Parcelable
             out.writeInt(mDesiredHeightResId);
         }
 
-        private void setFlags(int flags) {
+        /**
+         * @hide
+         */
+        public void setFlags(int flags) {
             mFlags = flags;
+        }
+
+        /**
+         * @hide
+         */
+        public int getFlags() {
+            return mFlags;
         }
 
         /**
@@ -8795,6 +8815,8 @@ public class Notification implements Parcelable
              * {@link #getIntent()} in a floating window).
              *
              * <p>This flag has no effect if the app posting the bubble is not in the foreground.
+             * The app is considered foreground if it is visible and on the screen, note that
+             * a foreground service does not qualify.
              * </p>
              *
              * <p>Generally, this flag should only be set if the user has performed an action to
@@ -8813,6 +8835,8 @@ public class Notification implements Parcelable
              * the notification shade.
              *
              * <p>This flag has no effect if the app posting the bubble is not in the foreground.
+             * The app is considered foreground if it is visible and on the screen, note that
+             * a foreground service does not qualify.
              * </p>
              *
              * <p>Generally, this flag should only be set if the user has performed an action to

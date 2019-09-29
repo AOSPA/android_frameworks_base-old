@@ -57,11 +57,25 @@ cc_library_static {
     ],
 
     include_dirs: [
-        "bionic/libc/private",
         "frameworks/base/libs",
         "frameworks/native/services",
         "system/gatekeeper/include",
     ],
+
+    header_libs: [
+        "bionic_libc_platform_headers",
+    ],
+
+    product_variables: {
+        arc: {
+            exclude_srcs: [
+                "com_android_server_AlarmManagerService.cpp",
+            ],
+            srcs: [
+                ":arctimersrcs",
+            ],
+        }
+    }
 }
 
 cc_defaults {
@@ -98,8 +112,6 @@ cc_defaults {
         "libGLESv2",
         "libnetutils",
         "libhidlbase",
-        "libhidltransport",
-        "libhwbinder",
         "libutils",
         "libhwui",
         "libbpf_android",

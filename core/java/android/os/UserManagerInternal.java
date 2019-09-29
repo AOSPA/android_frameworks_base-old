@@ -15,6 +15,7 @@
  */
 package android.os;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.content.Context;
@@ -136,7 +137,7 @@ public abstract class UserManagerInternal {
             String[] disallowedPackages);
 
     /**
-     * Same as {@link UserManager#removeUser(int userHandle)}, but bypasses the check for
+     * Same as {@link UserManager#removeUser(int userId)}, but bypasses the check for
      * {@link UserManager#DISALLOW_REMOVE_USER} and
      * {@link UserManager#DISALLOW_REMOVE_MANAGED_PROFILE} and does not require the
      * {@link android.Manifest.permission#MANAGE_USERS} permission.
@@ -231,4 +232,9 @@ public abstract class UserManagerInternal {
      * found.
      */
     public abstract @Nullable UserInfo getUserInfo(@UserIdInt int userId);
+
+    /**
+     * Gets all {@link UserInfo UserInfos}.
+     */
+    public abstract @NonNull UserInfo[] getUserInfos();
 }

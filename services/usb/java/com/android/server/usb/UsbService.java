@@ -121,6 +121,7 @@ public class UsbService extends IUsbManager.Stub {
     private final UsbAlsaManager mAlsaManager;
 
     private final UsbSettingsManager mSettingsManager;
+    private final UsbPermissionManager mPermissionManager;
 
     /**
      * The user id of the current user. There might be several profiles (with separate user ids)
@@ -131,23 +132,35 @@ public class UsbService extends IUsbManager.Stub {
 
     private final Object mLock = new Object();
 
-    private UsbUserSettingsManager getSettingsForUser(@UserIdInt int userIdInt) {
-        return mSettingsManager.getSettingsForUser(userIdInt);
+    /**
+     * @return the {@link UsbUserSettingsManager} for the given userId
+     */
+    UsbUserSettingsManager getSettingsForUser(@UserIdInt int userId) {
+        return mSettingsManager.getSettingsForUser(userId);
+    }
+
+    /**
+     * @return the {@link UsbUserPermissionManager} for the given userId
+     */
+    UsbUserPermissionManager getPermissionsForUser(@UserIdInt int userId) {
+        return mPermissionManager.getPermissionsForUser(userId);
     }
 
     public UsbService(Context context) {
         mContext = context;
 
         mUserManager = context.getSystemService(UserManager.class);
-        mSettingsManager = new UsbSettingsManager(context);
+        mSettingsManager = new UsbSettingsManager(context, this);
+        mPermissionManager = new UsbPermissionManager(context, this);
         mAlsaManager = new UsbAlsaManager(context);
 
         final PackageManager pm = mContext.getPackageManager();
         if (pm.hasSystemFeature(PackageManager.FEATURE_USB_HOST)) {
-            mHostManager = new UsbHostManager(context, mAlsaManager, mSettingsManager);
+            mHostManager = new UsbHostManager(context, mAlsaManager, mPermissionManager);
         }
         if (new File("/sys/class/android_usb").exists()) {
-            mDeviceManager = new UsbDeviceManager(context, mAlsaManager, mSettingsManager);
+            mDeviceManager = new UsbDeviceManager(context, mAlsaManager, mSettingsManager,
+                    mPermissionManager);
         }
         if (mHostManager != null || mDeviceManager != null) {
             mPortManager = new UsbPortManager(context);
@@ -255,7 +268,7 @@ public class UsbService extends IUsbManager.Stub {
                 try {
                     synchronized (mLock) {
                         if (mUserManager.isSameProfileGroup(user, mCurrentUserId)) {
-                            fd = mHostManager.openDevice(deviceName, getSettingsForUser(user),
+                            fd = mHostManager.openDevice(deviceName, getPermissionsForUser(user),
                                     packageName, uid);
                         } else {
                             Slog.w(TAG, "Cannot open " + deviceName + " for user " + user
@@ -292,7 +305,7 @@ public class UsbService extends IUsbManager.Stub {
             try {
                 synchronized (mLock) {
                     if (mUserManager.isSameProfileGroup(user, mCurrentUserId)) {
-                        return mDeviceManager.openAccessory(accessory, getSettingsForUser(user),
+                        return mDeviceManager.openAccessory(accessory, getPermissionsForUser(user),
                                 uid);
                     } else {
                         Slog.w(TAG, "Cannot open " + accessory + " for user " + user
@@ -348,13 +361,119 @@ public class UsbService extends IUsbManager.Stub {
     }
 
     @Override
+    public void addDevicePackagesToPreferenceDenied(UsbDevice device, String[] packageNames,
+            UserHandle user) {
+        device = Preconditions.checkNotNull(device);
+        packageNames = Preconditions.checkArrayElementsNotNull(packageNames, "packageNames");
+        user = Preconditions.checkNotNull(user);
+
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_USB, null);
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            mSettingsManager.getSettingsForProfileGroup(user)
+                    .addDevicePackagesToDenied(device, packageNames, user);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public void addAccessoryPackagesToPreferenceDenied(UsbAccessory accessory,
+            String[] packageNames, UserHandle user) {
+        accessory = Preconditions.checkNotNull(accessory);
+        packageNames = Preconditions.checkArrayElementsNotNull(packageNames, "packageNames");
+        user = Preconditions.checkNotNull(user);
+
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_USB, null);
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            mSettingsManager.getSettingsForProfileGroup(user)
+                    .addAccessoryPackagesToDenied(accessory, packageNames, user);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public void removeDevicePackagesFromPreferenceDenied(UsbDevice device, String[] packageNames,
+            UserHandle user) {
+        device = Preconditions.checkNotNull(device);
+        packageNames = Preconditions.checkArrayElementsNotNull(packageNames, "packageNames");
+        user = Preconditions.checkNotNull(user);
+
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_USB, null);
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            mSettingsManager.getSettingsForProfileGroup(user)
+                    .removeDevicePackagesFromDenied(device, packageNames, user);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public void removeAccessoryPackagesFromPreferenceDenied(UsbAccessory accessory,
+            String[] packageNames, UserHandle user) {
+        accessory = Preconditions.checkNotNull(accessory);
+        packageNames = Preconditions.checkArrayElementsNotNull(packageNames, "packageNames");
+        user = Preconditions.checkNotNull(user);
+
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_USB, null);
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            mSettingsManager.getSettingsForProfileGroup(user)
+                    .removeAccessoryPackagesFromDenied(accessory, packageNames, user);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public void setDevicePersistentPermission(UsbDevice device, int uid, UserHandle user,
+            boolean shouldBeGranted) {
+        device = Preconditions.checkNotNull(device);
+        user = Preconditions.checkNotNull(user);
+
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_USB, null);
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            mPermissionManager.getPermissionsForUser(user).setDevicePersistentPermission(device,
+                    uid, shouldBeGranted);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public void setAccessoryPersistentPermission(UsbAccessory accessory, int uid,
+            UserHandle user, boolean shouldBeGranted) {
+        accessory = Preconditions.checkNotNull(accessory);
+        user = Preconditions.checkNotNull(user);
+
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_USB, null);
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            mPermissionManager.getPermissionsForUser(user).setAccessoryPersistentPermission(
+                    accessory, uid, shouldBeGranted);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
     public boolean hasDevicePermission(UsbDevice device, String packageName) {
         final int uid = Binder.getCallingUid();
         final int userId = UserHandle.getUserId(uid);
 
         final long token = Binder.clearCallingIdentity();
         try {
-            return getSettingsForUser(userId).hasPermission(device, packageName, uid);
+            return getPermissionsForUser(userId).hasPermission(device, packageName, uid);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -367,7 +486,7 @@ public class UsbService extends IUsbManager.Stub {
 
         final long token = Binder.clearCallingIdentity();
         try {
-            return getSettingsForUser(userId).hasPermission(accessory, uid);
+            return getPermissionsForUser(userId).hasPermission(accessory, uid);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -380,7 +499,7 @@ public class UsbService extends IUsbManager.Stub {
 
         final long token = Binder.clearCallingIdentity();
         try {
-            getSettingsForUser(userId).requestPermission(device, packageName, pi, uid);
+            getPermissionsForUser(userId).requestPermission(device, packageName, pi, uid);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -394,7 +513,7 @@ public class UsbService extends IUsbManager.Stub {
 
         final long token = Binder.clearCallingIdentity();
         try {
-            getSettingsForUser(userId).requestPermission(accessory, packageName, pi, uid);
+            getPermissionsForUser(userId).requestPermission(accessory, packageName, pi, uid);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -407,7 +526,7 @@ public class UsbService extends IUsbManager.Stub {
 
         final long token = Binder.clearCallingIdentity();
         try {
-            getSettingsForUser(userId).grantDevicePermission(device, uid);
+            getPermissionsForUser(userId).grantDevicePermission(device, uid);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -420,7 +539,7 @@ public class UsbService extends IUsbManager.Stub {
 
         final long token = Binder.clearCallingIdentity();
         try {
-            getSettingsForUser(userId).grantAccessoryPermission(accessory, uid);
+            getPermissionsForUser(userId).grantAccessoryPermission(accessory, uid);
         } finally {
             Binder.restoreCallingIdentity(token);
         }

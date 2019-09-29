@@ -297,6 +297,7 @@ message Atom {
         MediametricsMediadrmReported mediametrics_mediadrm_reported = 198;
         MediametricsNuPlayerReported mediametrics_nuplayer_reported = 199;
         MediametricsRecorderReported mediametrics_recorder_reported = 200;
+        MediametricsDrmManagerReported mediametrics_drmmanager_reported = 201;
         CarPowerStateChanged car_power_state_changed = 203;
         GarageModeInfo garage_mode_info = 204;
         TestAtomReported test_atom_reported = 205 [(log_from_module) = "cts"];
@@ -333,10 +334,13 @@ message Atom {
         BackGesture back_gesture_reported_reported = 224;
         UpdateEngineUpdateAttemptReported update_engine_update_attempt_reported = 225;
         UpdateEngineSuccessfulUpdateReported update_engine_successful_update_reported = 226;
+        CameraActionEvent camera_action_event = 227;
+        AppCompatibilityChangeReported app_compatibility_change_reported =
+            228 [(allow_from_any_uid) = true];
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10062
+    // Next: 10064
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000;
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001;
@@ -400,6 +404,8 @@ message Atom {
         CoolingDevice cooling_device = 10059;
         AppOps app_ops = 10060;
         ProcessSystemIonHeapSize process_system_ion_heap_size = 10061;
+        SurfaceflingerStatsGlobalInfo surfaceflinger_stats_global_info = 10062;
+        SurfaceflingerStatsLayerInfo surfaceflinger_stats_layer_info = 10063;
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
@@ -2614,12 +2620,14 @@ message SettingsUIChanged {
 message TouchEventReported {
     /**
      * The fields latency_{min|max|mean|stdev} represent minimum, maximum, mean,
-     * and the standard deviation of latency between the kernel and framework
-     * for touchscreen events. The units are microseconds.
+     * and the standard deviation of the time spent processing touchscreen events
+     * in the kernel and inputflinger. The units are microseconds.
      *
-     * The number is measured as the difference between the time at which
-     * the input event was received in the evdev driver,
-     * and the time at which the input event was received in EventHub.
+     * On supported devices, the starting point is taken during the hard interrupt inside the
+     * kernel touch driver. On all other devices, the starting point is taken inside
+     * the kernel's input event subsystem upon receipt of the input event.
+     * The ending point is taken inside InputDispatcher, just after the input event
+     * is sent to the app.
      */
     // Minimum value
     optional float latency_min_micros = 1;
@@ -3964,7 +3972,7 @@ message ModemActivityInfo {
     // rx time in ms at power level 5
     optional uint64 controller_rx_time_millis = 9;
     // product of current(mA), voltage(V) and time(ms)
-    optional uint64 energy_used = 10;
+    optional uint64 energy_used = 10 [deprecated=true];
 }
 
 /**
@@ -4090,9 +4098,13 @@ message ProcessMemoryHighWaterMark {
     // Provided by ActivityManagerService or read from /proc/PID/cmdline.
     optional string process_name = 2;
 
+    // Deprecated: use rss_high_water_mark_in_kilobytes instead. This field is
+    // computed by converting kilobytes to bytes.
+    optional int64 rss_high_water_mark_in_bytes = 3 [deprecated = true];
+
     // RSS high-water mark. Peak RSS usage of the process. Read from the VmHWM field in
     // /proc/PID/status.
-    optional int64 rss_high_water_mark_in_bytes = 3;
+    optional int32 rss_high_water_mark_in_kilobytes = 4;
 }
 
 /*
@@ -5936,7 +5948,8 @@ message BubbleUIChanged {
     optional bool is_ongoing = 10;
 
     // Whether the bubble is produced by an app running in foreground.
-    optional bool is_foreground = 11;
+    // This is deprecated and the value should be ignored.
+    optional bool is_foreground = 11 [deprecated = true];
 }
 
 /**
@@ -6201,6 +6214,41 @@ message MediametricsNuPlayerReported {
     optional int64 media_apex_version = 4;
 
     optional android.stats.mediametrics.NuPlayerData nuplayer_data = 5 [(android.os.statsd.log_mode) = MODE_BYTES];
+}
+
+/**
+ * Track Legacy DRM usage
+ * Logged from
+ *   frameworks/av/drm/drmserver/DrmManager.cpp
+ */
+message MediametricsDrmManagerReported {
+    optional int64 timestamp_nanos = 1;
+    optional string package_name = 2;
+    optional int64 package_version_code = 3;
+    optional int64 media_apex_version = 4;
+
+    enum Method {
+        METHOD_NOT_FOUND       = -1;
+        GET_CONSTRAINTS        =  0;
+        GET_METADATA           =  1;
+        CAN_HANDLE             =  2;
+        PROCESS_DRM_INFO       =  3;
+        ACQUIRE_DRM_INFO       =  4;
+        SAVE_RIGHTS            =  5;
+        GET_ORIGINAL_MIME_TYPE =  6;
+        GET_DRM_OBJECT_TYPE    =  7;
+        CHECK_RIGHTS_STATUS    =  8;
+        REMOVE_RIGHTS          =  9;
+        REMOVE_ALL_RIGHTS      = 10;
+        OPEN_CONVERT_SESSION   = 11;
+        OPEN_DECRYPT_SESSION   = 12;
+    }
+
+    // plugin_id+description inform which Legacy DRM plugins are still in use on device
+    optional string plugin_id = 5;
+    optional string description = 6;
+    optional Method method = 7;
+    optional string mime_types = 8;
 }
 
 /**
@@ -7050,4 +7098,139 @@ message UpdateEngineSuccessfulUpdateReported {
 
     // The number of reboot of the device during a successful update.
     optional int32 reboot_count = 7;
+}
+
+/**
+ * Global display pipeline metrics reported by SurfaceFlinger.
+ * Pulled from:
+ *    frameworks/native/services/surfaceflinger/TimeStats/TimeStats.cpp
+ */
+message SurfaceflingerStatsGlobalInfo {
+    // Total number of frames presented during the tracing period
+    optional int64 total_frames = 1;
+    // Total number of frames missed
+    optional int64 missed_frames = 2;
+    // Total number of frames that fell back to client composition
+    optional int64 client_composition_frames = 3;
+    // Total time the display was turned on
+    optional int64 display_on_millis = 4;
+    // Total time that was spent performing animations.
+    // This is derived from the present-to-present layer histogram
+    optional int64 animation_millis = 5;
+}
+
+/**
+ * Per-layer display pipeline metrics reported by SurfaceFlinger.
+ * The number of layers uploaded will be restricted due to size limitations.
+ * Pulled from:
+ *    frameworks/native/services/surfaceflinger/TimeStats/TimeStats.cpp
+ */
+message SurfaceflingerStatsLayerInfo {
+    // The layer for this set of metrics
+    // For now we can infer that the package name is included in the layer
+    // name.
+    optional string layer_name = 1;
+    // Total number of frames presented
+    optional int64 total_frames = 2;
+    // Total number of dropped frames while latching a buffer for this layer.
+    optional int64 dropped_frames = 3;
+    // Set of timings measured between successive presentation timestamps.
+    optional FrameTimingHistogram present_to_present = 4
+        [(android.os.statsd.log_mode) = MODE_BYTES];
+    // Set of timings measured from when an app queued a buffer for
+    // presentation, until the buffer was actually presented to the
+    // display.
+    optional FrameTimingHistogram post_to_present = 5
+        [(android.os.statsd.log_mode) = MODE_BYTES];
+    // Set of timings measured from when a buffer is ready to be presented,
+    // until the buffer was actually presented to the display.
+    optional FrameTimingHistogram acquire_to_present = 6
+        [(android.os.statsd.log_mode) = MODE_BYTES];
+    // Set of timings measured from when a buffer was latched by
+    // SurfaceFlinger, until the buffer was presented to the display
+    optional FrameTimingHistogram latch_to_present = 7
+        [(android.os.statsd.log_mode) = MODE_BYTES];
+    // Set of timings measured from the desired presentation to the actual
+    // presentation time
+    optional FrameTimingHistogram desired_to_present = 8
+        [(android.os.statsd.log_mode) = MODE_BYTES];
+    // Set of timings measured from when an app queued a buffer for
+    // presentation, until the buffer was ready to be presented.
+    optional FrameTimingHistogram post_to_acquire = 9
+        [(android.os.statsd.log_mode) = MODE_BYTES];
+}
+
+/**
+ * Histogram of frame counts bucketed by time in milliseconds.
+ * Because of size limitations, we hard-cap the number of buckets, with
+ * buckets for corresponding to larger milliseconds being less precise.
+ */
+message FrameTimingHistogram {
+    // Timings in milliseconds that describes a set of histogram buckets
+    repeated int32 time_millis_buckets = 1;
+    // Number of frames that match to each time_millis, i.e. the bucket
+    // contents
+    // It's required that len(time_millis) == len(frame_count)
+    repeated int64 frame_counts = 2;
+}
+
+/**
+ * Information about camera facing and API level usage.
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/camera/CameraServiceProxy.java
+ */
+message CameraActionEvent {
+    // Camera session duration
+    optional int64 duration = 1;
+
+    // Camera API level used
+    optional int32 api_level = 2;
+
+    // Name of client package
+    optional string package_name = 3;
+
+    // Camera facing
+    enum Facing {
+        UNKNOWN = 0;
+        BACK = 1;
+        FRONT = 2;
+        EXTERNAL = 3;
+    }
+    optional Facing facing = 4;
+}
+
+/**
+ * Logs when a compatibility change is affecting an app.
+ *
+ * Logged from:
+ *   frameworks/base/core/java/android/app/AppCompatCallbacks.java and
+ *   frameworks/base/services/core/java/com/android/server/compat/PlatformCompat.java
+ */
+message AppCompatibilityChangeReported {
+    // The UID of the app being affected by the compatibilty change.
+    optional int32 uid = 1 [(is_uid) = true];
+
+    // The ID of the change affecting the app.
+    optional int64 change_id = 2;
+
+    enum State {
+        UNKNOWN_STATE = 0;
+        ENABLED = 1;
+        DISABLED = 2;
+        LOGGED = 3;
+    }
+
+    // The state of the change - if logged from gating whether it was enabled or disabled, or just
+    // logged otherwise.
+    optional State state = 3;
+
+    enum Source {
+        UNKNOWN_SOURCE = 0;
+        APP_PROCESS = 1;
+        SYSTEM_SERVER = 2;
+    }
+
+    // Where it was logged from.
+    optional Source source = 4;
+
 }

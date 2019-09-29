@@ -18,7 +18,6 @@ package com.android.systemui.statusbar.phone;
 import static android.view.Display.INVALID_DISPLAY;
 
 import android.content.Context;
-import android.content.pm.ParceledListSlice;
 import android.content.res.Resources;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
@@ -36,8 +35,6 @@ import android.util.Log;
 import android.util.MathUtils;
 import android.util.StatsLog;
 import android.view.Gravity;
-import android.view.IPinnedStackController;
-import android.view.IPinnedStackListener;
 import android.view.ISystemGestureExclusionListener;
 import android.view.InputChannel;
 import android.view.InputDevice;
@@ -55,7 +52,9 @@ import android.view.WindowManagerGlobal;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.bubbles.BubbleController;
+import com.android.systemui.model.SysUiState;
 import com.android.systemui.recents.OverviewProxyService;
+import com.android.systemui.shared.system.PinnedStackListenerForwarder.PinnedStackListener;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.shared.system.WindowManagerWrapper;
 
@@ -71,34 +70,12 @@ public class EdgeBackGestureHandler implements DisplayListener {
     private static final int MAX_LONG_PRESS_TIMEOUT = SystemProperties.getInt(
             "gestures.back_timeout", 250);
 
-    private final IPinnedStackListener.Stub mImeChangedListener = new IPinnedStackListener.Stub() {
-        @Override
-        public void onListenerRegistered(IPinnedStackController controller) {
-        }
-
+    private final PinnedStackListener mImeChangedListener = new PinnedStackListener() {
         @Override
         public void onImeVisibilityChanged(boolean imeVisible, int imeHeight) {
             // No need to thread jump, assignments are atomic
             mImeHeight = imeVisible ? imeHeight : 0;
             // TODO: Probably cancel any existing gesture
-        }
-
-        @Override
-        public void onShelfVisibilityChanged(boolean shelfVisible, int shelfHeight) {
-        }
-
-        @Override
-        public void onMinimizedStateChanged(boolean isMinimized) {
-        }
-
-        @Override
-        public void onMovementBoundsChanged(Rect insetBounds, Rect normalBounds,
-                Rect animatingBounds, boolean fromImeAdjustment, boolean fromShelfAdjustment,
-                int displayRotation) {
-        }
-
-        @Override
-        public void onActionsChanged(ParceledListSlice actions) {
         }
     };
 
@@ -166,8 +143,10 @@ public class EdgeBackGestureHandler implements DisplayListener {
     private RegionSamplingHelper mRegionSamplingHelper;
     private int mLeftInset;
     private int mRightInset;
+    private int mSysUiFlags;
 
-    public EdgeBackGestureHandler(Context context, OverviewProxyService overviewProxyService) {
+    public EdgeBackGestureHandler(Context context, OverviewProxyService overviewProxyService,
+            SysUiState sysUiFlagContainer) {
         final Resources res = context.getResources();
         mContext = context;
         mDisplayId = context.getDisplayId();
@@ -186,6 +165,7 @@ public class EdgeBackGestureHandler implements DisplayListener {
         mMinArrowPosition = res.getDimensionPixelSize(R.dimen.navigation_edge_arrow_min_y);
         mFingerOffset = res.getDimensionPixelSize(R.dimen.navigation_edge_finger_offset);
         updateCurrentUserResources(res);
+        sysUiFlagContainer.addCallback(sysUiFlags -> mSysUiFlags = sysUiFlags);
     }
 
     public void updateCurrentUserResources(Resources res) {
@@ -352,10 +332,9 @@ public class EdgeBackGestureHandler implements DisplayListener {
         if (action == MotionEvent.ACTION_DOWN) {
             // Verify if this is in within the touch region and we aren't in immersive mode, and
             // either the bouncer is showing or the notification panel is hidden
-            int stateFlags = mOverviewProxyService.getSystemUiStateFlags();
             mIsOnLeftEdge = ev.getX() <= mEdgeWidth + mLeftInset;
             mInRejectedExclusion = false;
-            mAllowGesture = !QuickStepContract.isBackGestureDisabled(stateFlags)
+            mAllowGesture = !QuickStepContract.isBackGestureDisabled(mSysUiFlags)
                     && isWithinTouchRegion((int) ev.getX(), (int) ev.getY());
             if (mAllowGesture) {
                 mEdgePanelLp.gravity = mIsOnLeftEdge

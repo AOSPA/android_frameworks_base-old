@@ -582,11 +582,9 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
      * then we should explicitly pause that stack's top activity.
      * @param userLeaving Passed to pauseActivity() to indicate whether to call onUserLeaving().
      * @param resuming The resuming activity.
-     * @param dontWait The resuming activity isn't going to wait for all activities to be paused
-     *                 before resuming.
      * @return {@code true} if any activity was paused as a result of this call.
      */
-    boolean pauseBackStacks(boolean userLeaving, ActivityRecord resuming, boolean dontWait) {
+    boolean pauseBackStacks(boolean userLeaving, ActivityRecord resuming) {
         boolean someActivityPaused = false;
         for (int stackNdx = mStacks.size() - 1; stackNdx >= 0; --stackNdx) {
             final ActivityStack stack = mStacks.get(stackNdx);
@@ -596,8 +594,8 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
                         || !stack.isFocusable())) {
                 if (DEBUG_STATES) Slog.d(TAG_STATES, "pauseBackStacks: stack=" + stack +
                         " mResumedActivity=" + resumedActivity);
-                someActivityPaused |= stack.startPausingLocked(userLeaving, false, resuming,
-                        dontWait);
+                someActivityPaused |= stack.startPausingLocked(userLeaving, false /* uiSleeping*/,
+                        resuming);
             }
         }
         return someActivityPaused;
@@ -797,7 +795,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
     }
 
     private void onSplitScreenModeDismissed() {
-        mRootActivityContainer.mWindowManager.deferSurfaceLayout();
+        mService.deferWindowLayout();
         try {
             // Adjust the windowing mode of any stack in secondary split-screen to fullscreen.
             for (int i = mStacks.size() - 1; i >= 0; --i) {
@@ -821,12 +819,12 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
                 mHomeStack.moveToFront("onSplitScreenModeDismissed");
                 topFullscreenStack.moveToFront("onSplitScreenModeDismissed");
             }
-            mRootActivityContainer.mWindowManager.continueSurfaceLayout();
+            mService.continueWindowLayout();
         }
     }
 
     private void onSplitScreenModeActivated() {
-        mRootActivityContainer.mWindowManager.deferSurfaceLayout();
+        mService.deferWindowLayout();
         try {
             // Adjust the windowing mode of any affected by split-screen to split-screen secondary.
             for (int i = mStacks.size() - 1; i >= 0; --i) {
@@ -841,7 +839,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
                         false /* creating */);
             }
         } finally {
-            mRootActivityContainer.mWindowManager.continueSurfaceLayout();
+            mService.continueWindowLayout();
         }
     }
 
@@ -1059,12 +1057,9 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         Configuration values = new Configuration();
         mDisplayContent.computeScreenConfiguration(values);
 
-        if (mService.mWindowManager != null) {
-            final Message msg = PooledLambda.obtainMessage(
-                    ActivityManagerInternal::updateOomLevelsForDisplay, mService.mAmInternal,
-                    mDisplayId);
-            mService.mH.sendMessage(msg);
-        }
+        mService.mH.sendMessage(PooledLambda.obtainMessage(
+                ActivityManagerInternal::updateOomLevelsForDisplay, mService.mAmInternal,
+                mDisplayId));
 
         Settings.System.clearConfiguration(values);
         updateDisplayOverrideConfigurationLocked(values, null /* starting */,
@@ -1083,9 +1078,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         int changes = 0;
         boolean kept = true;
 
-        if (mService.mWindowManager != null) {
-            mService.mWindowManager.deferSurfaceLayout();
-        }
+        mService.deferWindowLayout();
         try {
             if (values != null) {
                 if (mDisplayId == DEFAULT_DISPLAY) {
@@ -1102,9 +1095,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
 
             kept = mService.ensureConfigAndVisibilityAfterUpdate(starting, changes);
         } finally {
-            if (mService.mWindowManager != null) {
-                mService.mWindowManager.continueSurfaceLayout();
-            }
+            mService.continueWindowLayout();
         }
 
         if (result != null) {
@@ -1153,6 +1144,8 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
             mService.mWindowManager.setNewDisplayOverrideConfiguration(
                     overrideConfiguration, mDisplayContent);
         }
+        mService.addWindowLayoutReasons(
+                ActivityTaskManagerService.LAYOUT_REASON_CONFIG_CHANGED);
     }
 
     @Override

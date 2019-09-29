@@ -27,9 +27,9 @@ import static com.android.internal.util.Preconditions.checkNotNull;
 import static com.android.server.am.MemoryStatUtil.readCmdlineFromProcfs;
 import static com.android.server.am.MemoryStatUtil.readMemoryStatFromFilesystem;
 import static com.android.server.am.MemoryStatUtil.readMemoryStatFromProcfs;
-import static com.android.server.am.MemoryStatUtil.readProcessSystemIonHeapSizesFromDebugfs;
-import static com.android.server.am.MemoryStatUtil.readRssHighWaterMarkFromProcfs;
-import static com.android.server.am.MemoryStatUtil.readSystemIonHeapSizeFromDebugfs;
+import static com.android.server.stats.IonMemoryUtil.readProcessSystemIonHeapSizesFromDebugfs;
+import static com.android.server.stats.IonMemoryUtil.readSystemIonHeapSizeFromDebugfs;
+import static com.android.server.stats.ProcfsMemoryUtil.readRssHighWaterMarkFromProcfs;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -138,9 +138,9 @@ import com.android.server.BinderCallsStatsService;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.SystemServiceManager;
-import com.android.server.am.MemoryStatUtil.IonAllocations;
 import com.android.server.am.MemoryStatUtil.MemoryStat;
 import com.android.server.role.RoleManagerInternal;
+import com.android.server.stats.IonMemoryUtil.IonAllocations;
 import com.android.server.storage.DiskStatsFileLogger;
 import com.android.server.storage.DiskStatsLoggingService;
 
@@ -1112,13 +1112,12 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             e.writeLong(modemInfo.getTimestamp());
             e.writeLong(modemInfo.getSleepTimeMillis());
             e.writeLong(modemInfo.getIdleTimeMillis());
-            e.writeLong(modemInfo.getTxTimeMillis()[0]);
-            e.writeLong(modemInfo.getTxTimeMillis()[1]);
-            e.writeLong(modemInfo.getTxTimeMillis()[2]);
-            e.writeLong(modemInfo.getTxTimeMillis()[3]);
-            e.writeLong(modemInfo.getTxTimeMillis()[4]);
-            e.writeLong(modemInfo.getRxTimeMillis());
-            e.writeLong(modemInfo.getEnergyUsed());
+            e.writeLong(modemInfo.getTransmitPowerInfo().get(0).getTimeInMillis());
+            e.writeLong(modemInfo.getTransmitPowerInfo().get(1).getTimeInMillis());
+            e.writeLong(modemInfo.getTransmitPowerInfo().get(2).getTimeInMillis());
+            e.writeLong(modemInfo.getTransmitPowerInfo().get(3).getTimeInMillis());
+            e.writeLong(modemInfo.getTransmitPowerInfo().get(4).getTimeInMillis());
+            e.writeLong(modemInfo.getReceiveTimeMillis());
             pulledData.add(e);
         }
     }
@@ -1237,15 +1236,17 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 LocalServices.getService(
                         ActivityManagerInternal.class).getMemoryStateForProcesses();
         for (ProcessMemoryState managedProcess : managedProcessList) {
-            final long rssHighWaterMarkInBytes =
+            final int rssHighWaterMarkInKilobytes =
                     readRssHighWaterMarkFromProcfs(managedProcess.pid);
-            if (rssHighWaterMarkInBytes == 0) {
+            if (rssHighWaterMarkInKilobytes == 0) {
                 continue;
             }
             StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
             e.writeInt(managedProcess.uid);
             e.writeString(managedProcess.processName);
-            e.writeLong(rssHighWaterMarkInBytes);
+            // RSS high-water mark in bytes.
+            e.writeLong((long) rssHighWaterMarkInKilobytes * 1024L);
+            e.writeInt(rssHighWaterMarkInKilobytes);
             pulledData.add(e);
         }
         int[] pids = getPidsForCommands(MEMORY_INTERESTING_NATIVE_PROCESSES);
@@ -1253,11 +1254,16 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             final int pid = pids[i];
             final int uid = getUidForPid(pid);
             final String processName = readCmdlineFromProcfs(pid);
-            final long rssHighWaterMarkInBytes = readRssHighWaterMarkFromProcfs(pid);
+            final int rssHighWaterMarkInKilobytes = readRssHighWaterMarkFromProcfs(pid);
+            if (rssHighWaterMarkInKilobytes == 0) {
+                continue;
+            }
             StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
             e.writeInt(uid);
             e.writeString(processName);
-            e.writeLong(rssHighWaterMarkInBytes);
+            // RSS high-water mark in bytes.
+            e.writeLong((long) rssHighWaterMarkInKilobytes * 1024L);
+            e.writeInt(rssHighWaterMarkInKilobytes);
             pulledData.add(e);
         }
         // Invoke rss_hwm_reset binary to reset RSS HWM counters for all processes.

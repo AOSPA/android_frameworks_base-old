@@ -79,6 +79,7 @@ public class ParcelFileDescriptor implements Parcelable, Closeable {
     /**
      * Wrapped {@link ParcelFileDescriptor}, if any. Used to avoid
      * double-closing {@link #mFd}.
+     * mClosed is always true if mWrapped is non-null.
      */
     private final ParcelFileDescriptor mWrapped;
 
@@ -616,10 +617,11 @@ public class ParcelFileDescriptor implements Parcelable, Closeable {
     public static File getFile(FileDescriptor fd) throws IOException {
         try {
             final String path = Os.readlink("/proc/self/fd/" + fd.getInt$());
-            if (OsConstants.S_ISREG(Os.stat(path).st_mode)) {
+            if (OsConstants.S_ISREG(Os.stat(path).st_mode)
+                    || OsConstants.S_ISCHR(Os.stat(path).st_mode)) {
                 return new File(path);
             } else {
-                throw new IOException("Not a regular file: " + path);
+                throw new IOException("Not a regular file or character device: " + path);
             }
         } catch (ErrnoException e) {
             throw e.rethrowAsIOException();
@@ -1022,6 +1024,7 @@ public class ParcelFileDescriptor implements Parcelable, Closeable {
         }
         try {
             if (!mClosed) {
+                // mWrapped was and is null.
                 closeWithStatus(Status.LEAKED, null);
             }
         } finally {

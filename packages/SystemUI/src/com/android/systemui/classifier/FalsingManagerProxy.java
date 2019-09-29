@@ -20,6 +20,7 @@ import static com.android.internal.config.sysui.SystemUiDeviceConfigFlags.BRIGHT
 import static com.android.systemui.Dependency.MAIN_HANDLER_NAME;
 
 import android.content.Context;
+import android.hardware.SensorManager;
 import android.net.Uri;
 import android.os.Handler;
 import android.provider.DeviceConfig;
@@ -34,7 +35,8 @@ import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.FalsingPlugin;
 import com.android.systemui.plugins.PluginListener;
 import com.android.systemui.shared.plugins.PluginManager;
-import com.android.systemui.util.AsyncSensorManager;
+import com.android.systemui.util.DeviceConfigProxy;
+import com.android.systemui.util.sensors.ProximitySensor;
 
 import java.io.PrintWriter;
 
@@ -50,18 +52,32 @@ import javax.inject.Singleton;
 @Singleton
 public class FalsingManagerProxy implements FalsingManager {
 
+    private static final String PROXIMITY_SENSOR_TAG = "FalsingManager";
+
+    private final ProximitySensor mProximitySensor;
     private FalsingManager mInternalFalsingManager;
-    private final Handler mMainHandler;
+    private DeviceConfig.OnPropertiesChangedListener mDeviceConfigListener;
+    private final DeviceConfigProxy mDeviceConfig;
+    private boolean mBrightlineEnabled;
 
     @Inject
     FalsingManagerProxy(Context context, PluginManager pluginManager,
-            @Named(MAIN_HANDLER_NAME) Handler handler) {
-        mMainHandler = handler;
-        DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_SYSTEMUI,
-                command -> mMainHandler.post(command),
-                properties -> onDeviceConfigPropertiesChanged(context, properties.getNamespace())
-        );
+            @Named(MAIN_HANDLER_NAME) Handler handler,
+            ProximitySensor proximitySensor,
+            DeviceConfigProxy deviceConfig) {
+        mProximitySensor = proximitySensor;
+        mProximitySensor.setTag(PROXIMITY_SENSOR_TAG);
+        mProximitySensor.setSensorDelay(SensorManager.SENSOR_DELAY_GAME);
+        mDeviceConfig = deviceConfig;
+        mDeviceConfigListener =
+                properties -> onDeviceConfigPropertiesChanged(context, properties.getNamespace());
         setupFalsingManager(context);
+        mDeviceConfig.addOnPropertiesChangedListener(
+                DeviceConfig.NAMESPACE_SYSTEMUI,
+                handler::post,
+                mDeviceConfigListener
+        );
+
         final PluginListener<FalsingPlugin> mPluginListener = new PluginListener<FalsingPlugin>() {
             public void onPluginConnected(FalsingPlugin plugin, Context context) {
                 FalsingManager pluginFalsingManager = plugin.getFalsingManager(context);
@@ -90,10 +106,13 @@ public class FalsingManagerProxy implements FalsingManager {
     /**
      * Chooses the FalsingManager implementation.
      */
-    @VisibleForTesting
-    public void setupFalsingManager(Context context) {
-        boolean brightlineEnabled = DeviceConfig.getBoolean(
+    private void setupFalsingManager(Context context) {
+        boolean brightlineEnabled = mDeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_SYSTEMUI, BRIGHTLINE_FALSING_MANAGER_ENABLED, true);
+        if (brightlineEnabled == mBrightlineEnabled && mInternalFalsingManager != null) {
+            return;
+        }
+        mBrightlineEnabled = brightlineEnabled;
 
         if (mInternalFalsingManager != null) {
             mInternalFalsingManager.cleanup();
@@ -103,11 +122,11 @@ public class FalsingManagerProxy implements FalsingManager {
         } else {
             mInternalFalsingManager = new BrightLineFalsingManager(
                     new FalsingDataProvider(context.getResources().getDisplayMetrics()),
-                    Dependency.get(AsyncSensorManager.class),
-                    KeyguardUpdateMonitor.getInstance(context)
+                    Dependency.get(KeyguardUpdateMonitor.class),
+                    mProximitySensor,
+                    mDeviceConfig
             );
         }
-
     }
 
     /**
@@ -300,6 +319,7 @@ public class FalsingManagerProxy implements FalsingManager {
 
     @Override
     public void cleanup() {
+        mDeviceConfig.removeOnPropertiesChangedListener(mDeviceConfigListener);
         mInternalFalsingManager.cleanup();
     }
 }

@@ -955,6 +955,9 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             updateReportedVisibilityLocked();
         }
 
+        // Reset the last saved PiP snap fraction on removal.
+        mDisplayContent.mPinnedStackControllerLocked.resetReentrySnapFraction(mActivityComponent);
+
         mRemovingFromDisplay = false;
     }
 
@@ -1021,7 +1024,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         if (DEBUG_ADD_REMOVE) Slog.v(TAG, "notifyAppStopped: " + this);
         mAppStopped = true;
         // Reset the last saved PiP snap fraction on app stop.
-        mDisplayContent.mPinnedStackControllerLocked.resetReentrySnapFraction(this);
+        mDisplayContent.mPinnedStackControllerLocked.resetReentrySnapFraction(mActivityComponent);
         destroySurfaces();
         // Remove any starting window that was added for this app if they are still around.
         removeStartingWindow();
@@ -1705,10 +1708,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             return;
         }
 
-        if (prevWinMode != WINDOWING_MODE_UNDEFINED && winMode == WINDOWING_MODE_PINNED) {
-            // Entering PiP from fullscreen, reset the snap fraction
-            mDisplayContent.mPinnedStackControllerLocked.resetReentrySnapFraction(this);
-        } else if (prevWinMode == WINDOWING_MODE_PINNED && winMode != WINDOWING_MODE_UNDEFINED
+        if (prevWinMode == WINDOWING_MODE_PINNED && winMode != WINDOWING_MODE_UNDEFINED
                 && !isHidden()) {
             // Leaving PiP to fullscreen, save the snap fraction based on the pre-animation bounds
             // for the next re-entry into PiP (assuming the activity is not hidden or destroyed)
@@ -1726,8 +1726,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                     stackBounds = mTmpRect;
                     pinnedStack.getBounds(stackBounds);
                 }
-                mDisplayContent.mPinnedStackControllerLocked.saveReentrySnapFraction(this,
-                        stackBounds);
+                mDisplayContent.mPinnedStackControllerLocked.saveReentrySnapFraction(
+                        mActivityComponent, stackBounds);
             }
         } else if (shouldStartChangeTransition(prevWinMode, winMode)) {
             initializeChangeTransition(mTmpPrevBounds);
@@ -1793,8 +1793,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                     mWmService.mTaskSnapshotController.createTaskSnapshot(
                             task, 1 /* scaleFraction */);
             if (snapshot != null) {
-                mThumbnail = new AppWindowThumbnail(t, this, snapshot.getGraphicBuffer(),
-                        true /* relative */);
+                mThumbnail = new AppWindowThumbnail(mWmService.mSurfaceFactory, t, this,
+                        snapshot.getGraphicBuffer(), true /* relative */);
             }
         }
     }
@@ -2033,7 +2033,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         final boolean needsLetterbox = surfaceReady && w.isLetterboxedAppWindow() && fillsParent();
         if (needsLetterbox) {
             if (mLetterbox == null) {
-                mLetterbox = new Letterbox(() -> makeChildSurface(null));
+                mLetterbox = new Letterbox(() -> makeChildSurface(null),
+                        mWmService.mTransactionFactory);
                 mLetterbox.attachInput(w);
             }
             getPosition(mTmpPoint);
@@ -2502,14 +2503,18 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
     @Override
     public SurfaceControl getAnimationLeashParent() {
-        // All normal app transitions take place in an animation layer which is below the pinned
-        // stack but may be above the parent stacks of the given animating apps.
         // For transitions in the pinned stack (menu activity) we just let them occur as a child
         // of the pinned stack.
-        if (!inPinnedWindowingMode()) {
-            return getAppAnimationLayer();
-        } else {
+        // All normal app transitions take place in an animation layer which is below the pinned
+        // stack but may be above the parent stacks of the given animating apps by default. When
+        // a new hierarchical animation is enabled, we just let them occur as a child of the parent
+        // stack, i.e. the hierarchy of the surfaces is unchanged.
+        if (inPinnedWindowingMode()) {
             return getStack().getSurfaceControl();
+        } else if (WindowManagerService.sHierarchicalAnimations) {
+            return super.getAnimationLeashParent();
+        } else {
+            return getAppAnimationLayer();
         }
     }
 
@@ -2981,7 +2986,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             return;
         }
         clearThumbnail();
-        mThumbnail = new AppWindowThumbnail(getPendingTransaction(), this, thumbnailHeader);
+        mThumbnail = new AppWindowThumbnail(mWmService.mSurfaceFactory, getPendingTransaction(),
+                this, thumbnailHeader);
         mThumbnail.startAnimation(getPendingTransaction(), loadThumbnailAnimation(thumbnailHeader));
     }
 
@@ -3009,7 +3015,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         if (thumbnail == null) {
             return;
         }
-        mThumbnail = new AppWindowThumbnail(getPendingTransaction(), this, thumbnail);
+        mThumbnail = new AppWindowThumbnail(mWmService.mSurfaceFactory,
+                getPendingTransaction(), this, thumbnail);
         final Animation animation =
                 getDisplayContent().mAppTransition.createCrossProfileAppsThumbnailAnimationLocked(
                         win.getFrameLw());

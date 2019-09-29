@@ -31,15 +31,11 @@ public:
     ReliableSurface(sp<Surface>&& surface);
     ~ReliableSurface();
 
-    void setDequeueTimeout(nsecs_t timeout) { mSurface->setDequeueTimeout(timeout); }
-
     int reserveNext();
 
     void allocateBuffers() { mSurface->allocateBuffers(); }
 
     int query(int what, int* value) const { return mSurface->query(what, value); }
-
-    nsecs_t getLastDequeueStartTime() const { return mSurface->getLastDequeueStartTime(); }
 
     uint64_t getNextFrameNumber() const { return mSurface->getNextFrameNumber(); }
 

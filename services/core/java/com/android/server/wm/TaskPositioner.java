@@ -64,10 +64,6 @@ class TaskPositioner implements IBinder.DeathRecipient {
 
     private static Factory sFactory;
 
-    // The margin the pointer position has to be within the side of the screen to be
-    // considered at the side of the screen.
-    static final int SIDE_MARGIN_DIP = 100;
-
     @IntDef(flag = true,
             value = {
                     CTRL_NONE,
@@ -101,7 +97,6 @@ class TaskPositioner implements IBinder.DeathRecipient {
     private DisplayContent mDisplayContent;
     private final DisplayMetrics mDisplayMetrics = new DisplayMetrics();
     private Rect mTmpRect = new Rect();
-    private int mSideMargin;
     private int mMinVisibleWidth;
     private int mMinVisibleHeight;
 
@@ -304,12 +299,11 @@ class TaskPositioner implements IBinder.DeathRecipient {
         if (DEBUG_ORIENTATION) {
             Slog.d(TAG, "Pausing rotation during re-position");
         }
-        mDisplayContent.pauseRotationLocked();
+        mDisplayContent.getDisplayRotation().pause();
 
         // Notify InputMonitor to take mDragWindowHandle.
         mDisplayContent.getInputMonitor().updateInputWindowsLw(true /*force*/);
 
-        mSideMargin = dipToPixel(SIDE_MARGIN_DIP, mDisplayMetrics);
         mMinVisibleWidth = dipToPixel(MINIMUM_VISIBLE_WIDTH_IN_DP, mDisplayMetrics);
         mMinVisibleHeight = dipToPixel(MINIMUM_VISIBLE_HEIGHT_IN_DP, mDisplayMetrics);
         display.getRealSize(mMaxVisibleSize);
@@ -347,7 +341,7 @@ class TaskPositioner implements IBinder.DeathRecipient {
         if (DEBUG_ORIENTATION) {
             Slog.d(TAG, "Resuming rotation after re-position");
         }
-        mDisplayContent.resumeRotationLocked();
+        mDisplayContent.getDisplayRotation().resume();
         mDisplayContent = null;
         mClientCallback.unlinkToDeath(this, 0 /* flags */);
     }
@@ -488,12 +482,6 @@ class TaskPositioner implements IBinder.DeathRecipient {
         int right = mWindowOriginalBounds.right;
         int bottom = mWindowOriginalBounds.bottom;
 
-        // The aspect which we have to respect. Note that if the orientation does not need to be
-        // preserved the aspect will be calculated as 1.0 which neutralizes the following
-        // computations.
-        final float minAspect = !mPreserveOrientation
-                ? 1.0f
-                : (mStartOrientationWasLandscape ? MIN_ASPECT : (1.0f / MIN_ASPECT));
         // Calculate the resulting width and height of the drag operation.
         int width = right - left;
         int height = bottom - top;

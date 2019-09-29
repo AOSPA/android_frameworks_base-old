@@ -16,16 +16,20 @@
 
 package com.android.systemui.qs;
 
+import static com.android.systemui.Dependency.BG_HANDLER;
+import static com.android.systemui.Dependency.BG_HANDLER_NAME;
 import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
 
 import android.content.Context;
 import android.content.Intent;
+import android.os.Handler;
 import android.provider.Settings;
 import android.telephony.SubscriptionManager;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.annotation.VisibleForTesting;
 
@@ -51,9 +55,11 @@ public class QSCarrierGroup extends LinearLayout implements
      */
     private static final int SIM_SLOTS = 3;
     private final NetworkController mNetworkController;
+    private final Handler mBgHandler;
 
     private View[] mCarrierDividers = new View[SIM_SLOTS - 1];
     private QSCarrier[] mCarrierGroups = new QSCarrier[SIM_SLOTS];
+    private TextView mNoSimTextView;
     private final CellSignalState[] mInfos = new CellSignalState[SIM_SLOTS];
     private CarrierTextController mCarrierTextController;
     private ActivityStarter mActivityStarter;
@@ -62,17 +68,20 @@ public class QSCarrierGroup extends LinearLayout implements
 
     @Inject
     public QSCarrierGroup(@Named(VIEW_CONTEXT) Context context, AttributeSet attrs,
-            NetworkController networkController, ActivityStarter activityStarter) {
+            NetworkController networkController, ActivityStarter activityStarter,
+            @Named(BG_HANDLER_NAME) Handler handler) {
         super(context, attrs);
         mNetworkController = networkController;
         mActivityStarter = activityStarter;
+        mBgHandler = handler;
     }
 
     @VisibleForTesting
     public QSCarrierGroup(Context context, AttributeSet attrs) {
         this(context, attrs,
                 Dependency.get(NetworkController.class),
-                Dependency.get(ActivityStarter.class));
+                Dependency.get(ActivityStarter.class),
+                Dependency.get(BG_HANDLER));
     }
 
     @Override
@@ -93,10 +102,13 @@ public class QSCarrierGroup extends LinearLayout implements
         mCarrierDividers[0] = findViewById(R.id.qs_carrier_divider1);
         mCarrierDividers[1] = findViewById(R.id.qs_carrier_divider2);
 
+        mNoSimTextView = findViewById(R.id.no_carrier_text);
+
         for (int i = 0; i < SIM_SLOTS; i++) {
             mInfos[i] = new CellSignalState();
             mCarrierGroups[i].setOnClickListener(this);
         }
+        mNoSimTextView.setOnClickListener(this);
 
         CharSequence separator = mContext.getString(
                 com.android.internal.R.string.kg_text_message_separator);
@@ -109,7 +121,7 @@ public class QSCarrierGroup extends LinearLayout implements
             return;
         }
         mListening = listening;
-        updateListeners();
+        mBgHandler.post(this::updateListeners);
     }
 
     @Override
@@ -153,50 +165,47 @@ public class QSCarrierGroup extends LinearLayout implements
 
     @Override
     public void updateCarrierInfo(CarrierTextController.CarrierTextCallbackInfo info) {
-        if (info.airplaneMode) {
-            setVisibility(View.GONE);
-        } else {
-            setVisibility(View.VISIBLE);
-            if (info.anySimReady) {
-                boolean[] slotSeen = new boolean[SIM_SLOTS];
-                if (info.listOfCarriers.length == info.subscriptionIds.length) {
-                    for (int i = 0; i < SIM_SLOTS && i < info.listOfCarriers.length; i++) {
-                        int slot = getSlotIndex(info.subscriptionIds[i]);
-                        if (slot >= SIM_SLOTS) {
-                            Log.w(TAG, "updateInfoCarrier - slot: " + slot);
-                            continue;
-                        }
-                        if (slot == SubscriptionManager.INVALID_SIM_SLOT_INDEX) {
-                            Log.e(TAG,
-                                    "Invalid SIM slot index for subscription: "
-                                            + info.subscriptionIds[i]);
-                            continue;
-                        }
-                        mInfos[slot].visible = true;
-                        slotSeen[slot] = true;
-                        mCarrierGroups[slot].setCarrierText(
-                                info.listOfCarriers[i].toString().trim());
-                        mCarrierGroups[slot].setVisibility(View.VISIBLE);
+        mNoSimTextView.setVisibility(View.GONE);
+        if (!info.airplaneMode && info.anySimReady) {
+            boolean[] slotSeen = new boolean[SIM_SLOTS];
+            if (info.listOfCarriers.length == info.subscriptionIds.length) {
+                for (int i = 0; i < SIM_SLOTS && i < info.listOfCarriers.length; i++) {
+                    int slot = getSlotIndex(info.subscriptionIds[i]);
+                    if (slot >= SIM_SLOTS) {
+                        Log.w(TAG, "updateInfoCarrier - slot: " + slot);
+                        continue;
                     }
-                    for (int i = 0; i < SIM_SLOTS; i++) {
-                        if (!slotSeen[i]) {
-                            mInfos[i].visible = false;
-                            mCarrierGroups[i].setVisibility(View.GONE);
-                        }
+                    if (slot == SubscriptionManager.INVALID_SIM_SLOT_INDEX) {
+                        Log.e(TAG,
+                                "Invalid SIM slot index for subscription: "
+                                        + info.subscriptionIds[i]);
+                        continue;
                     }
-                } else {
-                    Log.e(TAG, "Carrier information arrays not of same length");
+                    mInfos[slot].visible = true;
+                    slotSeen[slot] = true;
+                    mCarrierGroups[slot].setCarrierText(
+                            info.listOfCarriers[i].toString().trim());
+                    mCarrierGroups[slot].setVisibility(View.VISIBLE);
+                }
+                for (int i = 0; i < SIM_SLOTS; i++) {
+                    if (!slotSeen[i]) {
+                        mInfos[i].visible = false;
+                        mCarrierGroups[i].setVisibility(View.GONE);
+                    }
                 }
             } else {
-                mInfos[0].visible = false;
-                mCarrierGroups[0].setCarrierText(info.carrierText);
-                mCarrierGroups[0].setVisibility(View.VISIBLE);
-                for (int i = 1; i < SIM_SLOTS; i++) {
-                    mInfos[i].visible = false;
-                    mCarrierGroups[i].setCarrierText("");
-                    mCarrierGroups[i].setVisibility(View.GONE);
-                }
+                Log.e(TAG, "Carrier information arrays not of same length");
             }
+        } else {
+            // No sims or airplane mode (but not WFC). Do not show QSCarrierGroup, instead just show
+            // info.carrierText in a different view.
+            for (int i = 0; i < SIM_SLOTS; i++) {
+                mInfos[i].visible = false;
+                mCarrierGroups[i].setCarrierText("");
+                mCarrierGroups[i].setVisibility(View.GONE);
+            }
+            mNoSimTextView.setText(info.carrierText);
+            mNoSimTextView.setVisibility(View.VISIBLE);
         }
         handleUpdateState();
     }

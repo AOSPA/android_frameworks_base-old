@@ -56,6 +56,7 @@ import android.os.Looper;
 import android.os.PowerManager;
 import android.os.PowerManagerInternal;
 import android.os.PowerSaveState;
+import android.os.StrictMode;
 import android.os.UserHandle;
 import android.provider.DeviceConfig;
 import android.view.InputChannel;
@@ -73,6 +74,7 @@ import com.android.server.am.ActivityManagerService;
 import com.android.server.appop.AppOpsService;
 import com.android.server.display.color.ColorDisplayService;
 import com.android.server.input.InputManagerService;
+import com.android.server.pm.UserManagerService;
 import com.android.server.policy.PermissionPolicyInternal;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.statusbar.StatusBarManagerInternal;
@@ -99,6 +101,7 @@ public class SystemServicesTestRule implements TestRule {
     static int sNextTaskId = 100;
 
     private final AtomicBoolean mCurrentMessagesProcessed = new AtomicBoolean(false);
+    private static final int[] TEST_USER_PROFILE_IDS = {};
 
     private Context mContext;
     private StaticMockitoSession mMockitoSession;
@@ -228,7 +231,7 @@ public class SystemServicesTestRule implements TestRule {
                 new AMTestInjector(mContext, mHandlerThread), mHandlerThread);
         spyOn(mAmService);
         doReturn(mock(IPackageManager.class)).when(mAmService).getPackageManager();
-        doNothing().when(mAmService).grantEphemeralAccessLocked(
+        doNothing().when(mAmService).grantImplicitAccess(
                 anyInt(), any(), anyInt(), anyInt());
 
         // ActivityManagerInternal
@@ -253,18 +256,17 @@ public class SystemServicesTestRule implements TestRule {
         mPowerManagerWrapper = mock(WindowState.PowerManagerWrapper.class);
         mWMPolicy = new TestWindowManagerPolicy(this::getWindowManagerService,
                 mPowerManagerWrapper);
+        // Suppress StrictMode violation (DisplayWindowSettings) to avoid log flood.
+        DisplayThread.getHandler().post(StrictMode::allowThreadDiskWritesMask);
         mWmService = WindowManagerService.main(
-                mContext, mImService, false, false, mWMPolicy, mAtmService, StubTransaction::new);
+                mContext, mImService, false, false, mWMPolicy, mAtmService, StubTransaction::new,
+                () -> mock(Surface.class), (unused) -> new MockSurfaceControlBuilder());
         spyOn(mWmService);
 
         // Setup factory classes to prevent calls to native code.
         mTransaction = spy(StubTransaction.class);
         // Return a spied Transaction class than can be used to verify calls.
         mWmService.mTransactionFactory = () -> mTransaction;
-        // Return a SurfaceControl.Builder class that creates mocked SurfaceControl instances.
-        mWmService.mSurfaceBuilderFactory = (unused) -> new MockSurfaceControlBuilder();
-        // Return mocked Surface instances.
-        mWmService.mSurfaceFactory = () -> mock(Surface.class);
         mWmService.mSurfaceAnimationRunner = new SurfaceAnimationRunner(
                 null, null, mTransaction, mWmService.mPowerManagerInternal);
 
@@ -423,6 +425,11 @@ public class SystemServicesTestRule implements TestRule {
             // Make sure permission checks aren't overridden.
             doReturn(AppOpsManager.MODE_DEFAULT)
                     .when(aos).noteOperation(anyInt(), anyInt(), anyString());
+
+            // UserManagerService
+            final UserManagerService ums = mock(UserManagerService.class);
+            doReturn(ums).when(this).getUserManager();
+            doReturn(TEST_USER_PROFILE_IDS).when(ums).getProfileIds(anyInt(), eq(true));
 
             setUsageStatsManager(LocalServices.getService(UsageStatsManagerInternal.class));
             ams.mActivityTaskManager = this;

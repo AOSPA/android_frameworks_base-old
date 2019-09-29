@@ -15,12 +15,15 @@
  */
 package com.android.keyguard;
 
+import static com.android.systemui.DejankUtils.whitelistIpcs;
+
 import android.app.admin.DevicePolicyManager;
 import android.content.Context;
 import android.telephony.SubscriptionManager;
 
 import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.widget.LockPatternUtils;
+import com.android.systemui.Dependency;
 
 public class KeyguardSecurityModel {
 
@@ -55,7 +58,7 @@ public class KeyguardSecurityModel {
     }
 
     SecurityMode getSecurityMode(int userId) {
-        KeyguardUpdateMonitor monitor = KeyguardUpdateMonitor.getInstance(mContext);
+        KeyguardUpdateMonitor monitor = Dependency.get(KeyguardUpdateMonitor.class);
 
         if (mIsPukScreenAvailable && SubscriptionManager.isValidSubscriptionId(
                 monitor.getNextSubIdForState(IccCardConstants.State.PUK_REQUIRED))) {
@@ -67,7 +70,9 @@ public class KeyguardSecurityModel {
             return SecurityMode.SimPin;
         }
 
-        final int security = mLockPatternUtils.getActivePasswordQuality(userId);
+        // TODO(b/140034863)
+        final int security = whitelistIpcs(() ->
+                mLockPatternUtils.getActivePasswordQuality(userId));
         switch (security) {
             case DevicePolicyManager.PASSWORD_QUALITY_NUMERIC:
             case DevicePolicyManager.PASSWORD_QUALITY_NUMERIC_COMPLEX:

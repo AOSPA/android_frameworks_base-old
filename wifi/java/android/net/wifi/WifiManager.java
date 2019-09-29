@@ -664,10 +664,19 @@ public class WifiManager {
      */
     public static final int SAP_START_FAILURE_NO_CHANNEL = 1;
 
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"IFACE_IP_MODE_"}, value = {
+            IFACE_IP_MODE_UNSPECIFIED,
+            IFACE_IP_MODE_CONFIGURATION_ERROR,
+            IFACE_IP_MODE_TETHERED,
+            IFACE_IP_MODE_LOCAL_ONLY})
+    public @interface IfaceIpMode {}
+
     /**
      * Interface IP mode unspecified.
      *
-     * @see updateInterfaceIpState(String, int)
+     * @see #updateInterfaceIpState(String, int)
      *
      * @hide
      */
@@ -676,7 +685,7 @@ public class WifiManager {
     /**
      * Interface IP mode for configuration error.
      *
-     * @see updateInterfaceIpState(String, int)
+     * @see #updateInterfaceIpState(String, int)
      *
      * @hide
      */
@@ -685,7 +694,7 @@ public class WifiManager {
     /**
      * Interface IP mode for tethering.
      *
-     * @see updateInterfaceIpState(String, int)
+     * @see #updateInterfaceIpState(String, int)
      *
      * @hide
      */
@@ -694,7 +703,7 @@ public class WifiManager {
     /**
      * Interface IP mode for Local Only Hotspot.
      *
-     * @see updateInterfaceIpState(String, int)
+     * @see #updateInterfaceIpState(String, int)
      *
      * @hide
      */
@@ -1869,13 +1878,12 @@ public class WifiManager {
      * <li> When an app is uninstalled, all its suggested networks are discarded. If the device is
      * currently connected to a suggested network which is being removed then the device will
      * disconnect from that network.</li>
-     * <li> No in-place modification of existing suggestions are allowed. Apps are expected to
-     * remove suggestions using {@link #removeNetworkSuggestions(List)} and then add the modified
-     * suggestion back using this API.</li>
+     * <li> In-place modification of existing suggestions are allowed.
+     * If the provided suggestions {@link WifiNetworkSuggestion#equals(Object)} any previously
+     * provided suggestions by the app. Previous suggestions will be updated</li>
      *
      * @param networkSuggestions List of network suggestions provided by the app.
      * @return Status code for the operation. One of the STATUS_NETWORK_SUGGESTIONS_ values.
-     * {@link WifiNetworkSuggestion#equals(Object)} any previously provided suggestions by the app.
      * @throws {@link SecurityException} if the caller is missing required permissions.
      */
     @RequiresPermission(android.Manifest.permission.CHANGE_WIFI_STATE)
@@ -2825,9 +2833,9 @@ public class WifiManager {
     /**
      * Call allowing ConnectivityService to update WifiService with interface mode changes.
      *
-     * The possible modes include: {@link IFACE_IP_MODE_TETHERED},
-     *                             {@link IFACE_IP_MODE_LOCAL_ONLY},
-     *                             {@link IFACE_IP_MODE_CONFIGURATION_ERROR}
+     * The possible modes include: {@link #IFACE_IP_MODE_TETHERED},
+     *                             {@link #IFACE_IP_MODE_LOCAL_ONLY},
+     *                             {@link #IFACE_IP_MODE_CONFIGURATION_ERROR}
      *
      * @param ifaceName String name of the updated interface
      * @param mode int representing the new mode
@@ -3587,6 +3595,7 @@ public class WifiManager {
 
         private final CloseGuard mCloseGuard = CloseGuard.get();
         private final WifiConfiguration mConfig;
+        private boolean mClosed = false;
 
         /** @hide */
         @VisibleForTesting
@@ -3602,8 +3611,13 @@ public class WifiManager {
         @Override
         public void close() {
             try {
-                stopLocalOnlyHotspot();
-                mCloseGuard.close();
+                synchronized (mLock) {
+                    if (!mClosed) {
+                        mClosed = true;
+                        stopLocalOnlyHotspot();
+                        mCloseGuard.close();
+                    }
+                }
             } catch (Exception e) {
                 Log.e(TAG, "Failed to stop Local Only Hotspot.");
             }

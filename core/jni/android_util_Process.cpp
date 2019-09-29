@@ -30,7 +30,12 @@
 #include <meminfo/sysmeminfo.h>
 #include <processgroup/processgroup.h>
 #include <processgroup/sched_policy.h>
+#include <android-base/unique_fd.h>
 
+#include <algorithm>
+#include <array>
+#include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -60,9 +65,20 @@ using namespace android;
 
 static const bool kDebugPolicy = false;
 static const bool kDebugProc = false;
+
+// Stack reservation for reading small proc files.  Most callers of
+// readProcFile() are reading files under this threshold, e.g.,
+// /proc/pid/stat.  /proc/pid/time_in_state ends up being about 520
+// bytes, so use 1024 for the stack to provide a bit of slack.
+static const ssize_t kProcReadStackBufferSize = 1024;
+
+// The other files we read from proc tend to be a bit larger (e.g.,
+// /proc/stat is about 3kB), so once we exhaust the stack buffer,
+// retry with a relatively large heap-allocated buffer.  We double
+// this size and retry until the whole file fits.
+static const ssize_t kProcReadMinHeapBufferSize = 4096;
+
 static int kCgroupFollowForDex2oatOnly = -1;
-// When reading `proc` files, how many bytes to read at a time
-static const int kReadSize = 4096;
 
 #if GUARD_THREAD_PRIORITY
 Mutex gKeyCreateMutex;
@@ -708,14 +724,16 @@ static int pid_compare(const void* v1, const void* v2)
 
 static jlong android_os_Process_getFreeMemory(JNIEnv* env, jobject clazz)
 {
-    static const std::vector<std::string> memFreeTags = {
+    std::array<std::string_view, 2> memFreeTags = {
         ::android::meminfo::SysMemInfo::kMemFree,
         ::android::meminfo::SysMemInfo::kMemCached,
     };
     std::vector<uint64_t> mem(memFreeTags.size());
     ::android::meminfo::SysMemInfo smi;
 
-    if (!smi.ReadMemInfo(memFreeTags, &mem)) {
+    if (!smi.ReadMemInfo(memFreeTags.size(),
+                         memFreeTags.data(),
+                         mem.data())) {
         jniThrowRuntimeException(env, "SysMemInfo read failed to get Free Memory");
         return -1L;
     }
@@ -736,6 +754,12 @@ static jlong android_os_Process_getTotalMemory(JNIEnv* env, jobject clazz)
     return si.totalram;
 }
 
+/*
+ * The outFields array is initialized to -1 to allow the caller to identify
+ * when the status file (and therefore the process) they specified is invalid.
+ * This array should not be overwritten or cleared before we know that the
+ * status file can be read.
+ */
 void android_os_Process_readProcLines(JNIEnv* env, jobject clazz, jstring fileStr,
                                       jobjectArray reqFields, jlongArray outFields)
 {
@@ -784,14 +808,14 @@ void android_os_Process_readProcLines(JNIEnv* env, jobject clazz, jstring fileSt
         return;
     }
 
-    //ALOGI("Clearing %" PRId32 " sizes", count);
-    for (i=0; i<count; i++) {
-        sizesArray[i] = 0;
-    }
-
     int fd = open(file.string(), O_RDONLY | O_CLOEXEC);
 
     if (fd >= 0) {
+        //ALOGI("Clearing %" PRId32 " sizes", count);
+        for (i=0; i<count; i++) {
+            sizesArray[i] = 0;
+        }
+
         const size_t BUFFER_SIZE = 4096;
         char* buffer = (char*)malloc(BUFFER_SIZE);
         int len = read(fd, buffer, BUFFER_SIZE-1);
@@ -1096,9 +1120,9 @@ jboolean android_os_Process_readProcFile(JNIEnv* env, jobject clazz,
         jniThrowException(env, "java/lang/OutOfMemoryError", NULL);
         return JNI_FALSE;
     }
-    int fd = open(file8, O_RDONLY | O_CLOEXEC);
 
-    if (fd < 0) {
+    ::android::base::unique_fd fd(open(file8, O_RDONLY | O_CLOEXEC));
+    if (!fd.ok()) {
         if (kDebugProc) {
             ALOGW("Unable to open process file: %s\n", file8);
         }
@@ -1107,35 +1131,52 @@ jboolean android_os_Process_readProcFile(JNIEnv* env, jobject clazz,
     }
     env->ReleaseStringUTFChars(file, file8);
 
-    std::vector<char> fileBuffer(kReadSize);
-    int numBytesRead = 0;
-    while (true) {
-        // Resize buffer to make space for contents. This might be more than we need, but once we've
-        // read we resize back down
-        fileBuffer.resize(numBytesRead + kReadSize, 0);
-        // Read in contents
-        int len = TEMP_FAILURE_RETRY(read(fd, fileBuffer.data() + numBytesRead, kReadSize));
-        numBytesRead += len;
-        if (len < 0) {
-            // If `len` is negative, an error occurred on read
+    // Most proc files we read are small, so we only go through the
+    // loop once and use the stack buffer.  We allocate a buffer big
+    // enough for the whole file.
+
+    char readBufferStack[kProcReadStackBufferSize];
+    std::unique_ptr<char[]> readBufferHeap;
+    char* readBuffer = &readBufferStack[0];
+    ssize_t readBufferSize = kProcReadStackBufferSize;
+    ssize_t numberBytesRead;
+    for (;;) {
+        // By using pread, we can avoid an lseek to rewind the FD
+        // before retry, saving a system call.
+        numberBytesRead = pread(fd, readBuffer, readBufferSize, 0);
+        if (numberBytesRead < 0 && errno == EINTR) {
+            continue;
+        }
+        if (numberBytesRead < 0) {
             if (kDebugProc) {
-                ALOGW("Unable to open process file: %s fd=%d\n", file8, fd);
+                ALOGW("Unable to open process file: %s fd=%d\n", file8, fd.get());
             }
-            close(fd);
             return JNI_FALSE;
-        } else if (len == 0) {
-            // If nothing read, we're done
+        }
+        if (numberBytesRead < readBufferSize) {
             break;
         }
+        if (readBufferSize > std::numeric_limits<ssize_t>::max() / 2) {
+            if (kDebugProc) {
+                ALOGW("Proc file too big: %s fd=%d\n", file8, fd.get());
+            }
+            return JNI_FALSE;
+        }
+        readBufferSize = std::max(readBufferSize * 2,
+                                  kProcReadMinHeapBufferSize);
+        readBufferHeap.reset();  // Free address space before getting more.
+        readBufferHeap = std::make_unique<char[]>(readBufferSize);
+        if (!readBufferHeap) {
+            jniThrowException(env, "java/lang/OutOfMemoryError", NULL);
+            return JNI_FALSE;
+        }
+        readBuffer = readBufferHeap.get();
     }
-    // Resize back down to the amount we read
-    fileBuffer.resize(numBytesRead);
-    // Terminate buffer with null byte
-    fileBuffer.push_back('\0');
-    close(fd);
 
-    return android_os_Process_parseProcLineArray(env, clazz, fileBuffer.data(), 0, numBytesRead,
-            format, outStrings, outLongs, outFloats);
+    // parseProcLineArray below modifies the buffer while parsing!
+    return android_os_Process_parseProcLineArray(
+        env, clazz, readBuffer, 0, numberBytesRead,
+        format, outStrings, outLongs, outFloats);
 }
 
 void android_os_Process_setApplicationObject(JNIEnv* env, jobject clazz,

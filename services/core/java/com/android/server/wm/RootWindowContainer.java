@@ -134,7 +134,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
 
     // Only a separate transaction until we separate the apply surface changes
     // transaction from the global transaction.
-    private final SurfaceControl.Transaction mDisplayTransaction = new SurfaceControl.Transaction();
+    private final SurfaceControl.Transaction mDisplayTransaction;
 
     private final Consumer<WindowState> mCloseSystemDialogsConsumer = w -> {
         if (w.mHasSurface) {
@@ -154,6 +154,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
 
     RootWindowContainer(WindowManagerService service) {
         super(service);
+        mDisplayTransaction = service.mTransactionFactory.get();
         mHandler = new MyHandler(service.mH.getLooper());
     }
 
@@ -471,8 +472,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
 
         final int count = mChildren.size();
         for (int i = 0; i < count; ++i) {
-            final DisplayContent dc = mChildren.get(i);
-            final int pendingChanges = animator.getPendingLayoutChanges(dc.getDisplayId());
+            final int pendingChanges = mChildren.get(i).pendingLayoutChanges;
             if ((pendingChanges & FINISH_LAYOUT_REDO_WALLPAPER) != 0) {
                 animator.mBulkUpdateParams |= SET_WALLPAPER_ACTION_PENDING;
             }
@@ -925,8 +925,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
     boolean updateRotationUnchecked() {
         boolean changed = false;
         for (int i = mChildren.size() - 1; i >= 0; i--) {
-            final DisplayContent displayContent = mChildren.get(i);
-            if (displayContent.updateRotationAndSendNewConfigIfNeeded()) {
+            if (mChildren.get(i).getDisplayRotation().updateRotationAndSendNewConfigIfChanged()) {
                 changed = true;
             }
         }

@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.policy;
 
 import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
+import static com.android.systemui.DejankUtils.whitelistIpcs;
 import static com.android.systemui.Dependency.MAIN_HANDLER_NAME;
 
 import android.app.ActivityManager;
@@ -61,6 +62,7 @@ import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.qs.DetailAdapter;
 import com.android.systemui.qs.tiles.UserDetailView;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
+import com.android.systemui.statusbar.phone.UnlockMethodCache;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -313,9 +315,10 @@ public class UserSwitcherController implements Dumpable {
         // adb shell settings put system enable_fullscreen_user_switcher 1  # Turn it on.
         // Restart SystemUI or adb reboot.
         final int DEFAULT = -1;
+        // TODO(b/140061064)
         final int overrideUseFullscreenUserSwitcher =
-                Settings.System.getInt(mContext.getContentResolver(),
-                        "enable_fullscreen_user_switcher", DEFAULT);
+                whitelistIpcs(() -> Settings.System.getInt(mContext.getContentResolver(),
+                        "enable_fullscreen_user_switcher", DEFAULT));
         if (overrideUseFullscreenUserSwitcher != DEFAULT) {
             return overrideUseFullscreenUserSwitcher != 0;
         }
@@ -595,17 +598,19 @@ public class UserSwitcherController implements Dumpable {
 
         final UserSwitcherController mController;
         private final KeyguardMonitor mKeyguardMonitor;
+        private final UnlockMethodCache mUnlockMethodCache;
 
         protected BaseUserAdapter(UserSwitcherController controller) {
             mController = controller;
             mKeyguardMonitor = controller.mKeyguardMonitor;
+            mUnlockMethodCache = UnlockMethodCache.getInstance(controller.mContext);
             controller.addAdapter(new WeakReference<>(this));
         }
 
         public int getUserCount() {
             boolean secureKeyguardShowing = mKeyguardMonitor.isShowing()
                     && mKeyguardMonitor.isSecure()
-                    && !mKeyguardMonitor.canSkipBouncer();
+                    && !mUnlockMethodCache.canSkipBouncer();
             if (!secureKeyguardShowing) {
                 return mController.getUsers().size();
             }
@@ -627,7 +632,7 @@ public class UserSwitcherController implements Dumpable {
         public int getCount() {
             boolean secureKeyguardShowing = mKeyguardMonitor.isShowing()
                     && mKeyguardMonitor.isSecure()
-                    && !mKeyguardMonitor.canSkipBouncer();
+                    && !mUnlockMethodCache.canSkipBouncer();
             if (!secureKeyguardShowing) {
                 return mController.getUsers().size();
             }

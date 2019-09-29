@@ -1671,7 +1671,6 @@ public class Instrumentation {
      *
      * @see Activity#startActivity(Intent)
      * @see Activity#startActivityForResult(Intent, int)
-     * @see Activity#startActivityFromChild
      *
      * {@hide}
      */
@@ -1818,7 +1817,6 @@ public class Instrumentation {
      * 
      * @see Activity#startActivity(Intent)
      * @see Activity#startActivityForResult(Intent, int)
-     * @see Activity#startActivityFromChild
      * 
      * {@hide}
      */
@@ -1887,7 +1885,6 @@ public class Instrumentation {
      *
      * @see Activity#startActivity(Intent)
      * @see Activity#startActivityForResult(Intent, int)
-     * @see Activity#startActivityFromChild
      *
      * {@hide}
      */

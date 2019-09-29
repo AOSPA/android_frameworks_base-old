@@ -1139,19 +1139,21 @@ public class NotificationContentView extends FrameLayout {
     }
 
     private void applyMediaTransfer(final NotificationEntry entry) {
+        if (!entry.isMediaNotification()) {
+            return;
+        }
+
         View bigContentView = mExpandedChild;
-        if (bigContentView == null || !entry.isMediaNotification()) {
-            return;
+        if (bigContentView != null && (bigContentView instanceof ViewGroup)) {
+            mMediaTransferManager.applyMediaTransferView((ViewGroup) bigContentView,
+                    entry);
         }
 
-        View mediaActionContainer = bigContentView.findViewById(
-                com.android.internal.R.id.media_actions);
-        if (!(mediaActionContainer instanceof LinearLayout)) {
-            return;
+        View smallContentView = mContractedChild;
+        if (smallContentView != null && (smallContentView instanceof ViewGroup)) {
+            mMediaTransferManager.applyMediaTransferView((ViewGroup) smallContentView,
+                    entry);
         }
-
-        mMediaTransferManager.applyMediaTransferView((ViewGroup) mediaActionContainer,
-                entry);
     }
 
     private void applyRemoteInputAndSmartReply(final NotificationEntry entry) {
@@ -1181,7 +1183,7 @@ public class NotificationContentView extends FrameLayout {
                     mCurrentSmartRepliesAndActions.smartActions == null ? 0 :
                             mCurrentSmartRepliesAndActions.smartActions.actions.size(),
                     mCurrentSmartRepliesAndActions.smartReplies == null ? 0 :
-                            mCurrentSmartRepliesAndActions.smartReplies.choices.length));
+                            mCurrentSmartRepliesAndActions.smartReplies.choices.size()));
         }
         applySmartReplyView(mCurrentSmartRepliesAndActions, entry);
     }
@@ -1295,7 +1297,7 @@ public class NotificationContentView extends FrameLayout {
                 if (smartRepliesAndActions.smartReplies != null
                         || smartRepliesAndActions.smartActions != null) {
                     int numSmartReplies = smartRepliesAndActions.smartReplies == null
-                            ? 0 : smartRepliesAndActions.smartReplies.choices.length;
+                            ? 0 : smartRepliesAndActions.smartReplies.choices.size();
                     int numSmartActions = smartRepliesAndActions.smartActions == null
                             ? 0 : smartRepliesAndActions.smartActions.actions.size();
                     boolean fromAssistant = smartRepliesAndActions.smartReplies == null

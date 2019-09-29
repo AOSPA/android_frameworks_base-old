@@ -25,6 +25,8 @@ import static android.app.StatusBarManager.WindowVisibleState;
 import static android.app.StatusBarManager.windowStateToString;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN_OR_SPLIT_SCREEN_SECONDARY;
 
+import static com.android.systemui.DejankUtils.whitelistIpcs;
+import static com.android.systemui.Dependency.ALLOW_NOTIFICATION_LONG_PRESS_NAME;
 import static com.android.systemui.Dependency.BG_HANDLER;
 import static com.android.systemui.Dependency.MAIN_HANDLER;
 import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_ASLEEP;
@@ -130,6 +132,7 @@ import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.ActivityIntentHelper;
 import com.android.systemui.ActivityStarterDelegate;
 import com.android.systemui.AutoReinflateContainer;
+import com.android.systemui.DejankUtils;
 import com.android.systemui.DemoMode;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
@@ -238,6 +241,7 @@ import java.util.ArrayList;
 import java.util.Map;
 
 import javax.inject.Inject;
+import javax.inject.Named;
 
 import dagger.Subcomponent;
 
@@ -382,6 +386,9 @@ public class StatusBar extends SystemUI implements DemoMode,
     @Nullable
     @Inject
     protected KeyguardLiftController mKeyguardLiftController;
+    @Inject
+    @Named(ALLOW_NOTIFICATION_LONG_PRESS_NAME)
+    boolean mAllowNotificationLongPress;
 
     // expanded notifications
     protected NotificationPanelView mNotificationPanel; // the sliding/resizing panel within the notification window
@@ -694,7 +701,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                 mContext.getSystemService(Context.ACCESSIBILITY_SERVICE);
 
         mPowerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
-        mKeyguardUpdateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
+        mKeyguardUpdateMonitor = Dependency.get(KeyguardUpdateMonitor.class);
         mKeyguardUpdateMonitor.setKeyguardBypassController(mKeyguardBypassController);
         mBarService = IStatusBarService.Stub.asInterface(
                 ServiceManager.getService(Context.STATUS_BAR_SERVICE));
@@ -817,6 +824,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         // TODO: Deal with the ugliness that comes from having some of the statusbar broken out
         // into fragments, but the rest here, it leaves some awkward lifecycle and whatnot.
         mNotificationPanel = mStatusBarWindow.findViewById(R.id.notification_panel);
+
         mStackScroller = mStatusBarWindow.findViewById(R.id.notification_stack_scroller);
         mZenController.addCallback(this);
         NotificationListContainer notifListContainer = (NotificationListContainer) mStackScroller;
@@ -937,8 +945,10 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         ScrimView scrimBehind = mStatusBarWindow.findViewById(R.id.scrim_behind);
         ScrimView scrimInFront = mStatusBarWindow.findViewById(R.id.scrim_in_front);
+        ScrimView scrimForBubble = mStatusBarWindow.findViewById(R.id.scrim_for_bubble);
+
         mScrimController = SystemUIFactory.getInstance().createScrimController(
-                scrimBehind, scrimInFront, mLockscreenWallpaper,
+                scrimBehind, scrimInFront, scrimForBubble, mLockscreenWallpaper,
                 (state, alpha, color) -> mLightBarController.setScrimState(state, alpha, color),
                 scrimsVisible -> {
                     if (mStatusBarWindowController != null) {
@@ -1075,7 +1085,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         final NotificationRowBinderImpl rowBinder =
                 new NotificationRowBinderImpl(
                         mContext,
-                        SystemUIFactory.getInstance().provideAllowNotificationLongPress(),
+                        mAllowNotificationLongPress,
                         mKeyguardBypassController,
                         mStatusBarStateController);
 
@@ -1253,7 +1263,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         mStatusBarKeyguardViewManager = keyguardViewMediator.registerStatusBar(this,
                 getBouncerContainer(), mNotificationPanel, mBiometricUnlockController,
                 mStatusBarWindow.findViewById(R.id.lock_icon_container), mStackScroller,
-                mKeyguardBypassController, mFalsingManager);
+                mKeyguardBypassController);
         mKeyguardIndicationController
                 .setStatusBarKeyguardViewManager(mStatusBarKeyguardViewManager);
         mBiometricUnlockController.setStatusBarKeyguardViewManager(mStatusBarKeyguardViewManager);
@@ -2408,6 +2418,10 @@ public class StatusBar extends SystemUI implements DemoMode,
             mGroupManager.dump(fd, pw, args);
         } else {
             pw.println("  mGroupManager: null");
+        }
+
+        if (mBubbleController != null) {
+            mBubbleController.dump(fd, pw, args);
         }
 
         if (mLightBarController != null) {
@@ -3675,16 +3689,21 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         @Override
         public void onStartedGoingToSleep() {
+            String tag = "StatusBar#onStartedGoingToSleep";
+            DejankUtils.startDetectingBlockingIpcs(tag);
             updateNotificationPanelTouchState();
             notifyHeadsUpGoingToSleep();
             dismissVolumeDialog();
             mWakeUpCoordinator.setFullyAwake(false);
             mBypassHeadsUpNotifier.setFullyAwake(false);
             mKeyguardBypassController.onStartedGoingToSleep();
+            DejankUtils.stopDetectingBlockingIpcs(tag);
         }
 
         @Override
         public void onStartedWakingUp() {
+            String tag = "StatusBar#onStartedWakingUp";
+            DejankUtils.startDetectingBlockingIpcs(tag);
             mDeviceInteractive = true;
             mWakeUpCoordinator.setWakingUp(true);
             if (!mKeyguardBypassController.getBypassEnabled()) {
@@ -3699,6 +3718,7 @@ public class StatusBar extends SystemUI implements DemoMode,
             // once we fully woke up.
             updateNotificationPanelTouchState();
             mPulseExpansionHandler.onStartedWakingUp();
+            DejankUtils.stopDetectingBlockingIpcs(tag);
         }
 
         @Override
@@ -3850,18 +3870,20 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     boolean isCameraAllowedByAdmin() {
-        if (mDevicePolicyManager.getCameraDisabled(null,
-                mLockscreenUserManager.getCurrentUserId())) {
-            return false;
-        } else if (mStatusBarKeyguardViewManager == null ||
-                (isKeyguardShowing() && isKeyguardSecure())) {
-            // Check if the admin has disabled the camera specifically for the keyguard
-            return (mDevicePolicyManager.
-                    getKeyguardDisabledFeatures(null, mLockscreenUserManager.getCurrentUserId())
-                    & DevicePolicyManager.KEYGUARD_DISABLE_SECURE_CAMERA) == 0;
-        }
-
-        return true;
+        // TODO(b/140060745)
+        return whitelistIpcs(() -> {
+            if (mDevicePolicyManager.getCameraDisabled(null,
+                    mLockscreenUserManager.getCurrentUserId())) {
+                return false;
+            } else if (mStatusBarKeyguardViewManager == null
+                    || (isKeyguardShowing() && isKeyguardSecure())) {
+                // Check if the admin has disabled the camera specifically for the keyguard
+                return (mDevicePolicyManager.getKeyguardDisabledFeatures(null,
+                        mLockscreenUserManager.getCurrentUserId())
+                        & DevicePolicyManager.KEYGUARD_DISABLE_SECURE_CAMERA) == 0;
+            }
+            return true;
+        });
     }
 
     private boolean isGoingToSleep() {
@@ -4517,6 +4539,14 @@ public class StatusBar extends SystemUI implements DemoMode,
      */
     public boolean isBouncerShowingScrimmed() {
         return isBouncerShowing() && mStatusBarKeyguardViewManager.bouncerNeedsScrimming();
+    }
+
+    /**
+     * When {@link KeyguardBouncer} starts to be dismissed, playing its animation.
+     */
+    public void onBouncerPreHideAnimation() {
+        mNotificationPanel.onBouncerPreHideAnimation();
+        mStatusBarWindow.onBouncerPreHideAnimation();
     }
 
     /**

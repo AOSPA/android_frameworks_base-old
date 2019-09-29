@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.phone;
 
 import static com.android.keyguard.KeyguardSecurityModel.SecurityMode;
+import static com.android.systemui.DejankUtils.whitelistIpcs;
 import static com.android.systemui.plugins.ActivityStarter.OnDismissAction;
 
 import android.content.Context;
@@ -40,9 +41,9 @@ import com.android.keyguard.KeyguardHostView;
 import com.android.keyguard.KeyguardSecurityView;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
-import com.android.keyguard.R;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.DejankUtils;
+import com.android.systemui.R;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.plugins.FalsingManager;
 
@@ -92,7 +93,6 @@ public class KeyguardBouncer {
     private int mBouncerPromptReason;
     private boolean mIsAnimatingAway;
     private boolean mIsScrimmed;
-    private ViewGroup mLockIconContainer;
 
     public KeyguardBouncer(Context context, ViewMediatorCallback callback,
             LockPatternUtils lockPatternUtils, ViewGroup container,
@@ -187,10 +187,6 @@ public class KeyguardBouncer {
 
     public boolean isScrimmed() {
         return mIsScrimmed;
-    }
-
-    public ViewGroup getLockIconContainer() {
-        return mRoot == null || mRoot.getVisibility() != View.VISIBLE ? null : mLockIconContainer;
     }
 
     /**
@@ -373,11 +369,6 @@ public class KeyguardBouncer {
 
     private void showPrimarySecurityScreen() {
         mKeyguardView.showPrimarySecurityScreen();
-        KeyguardSecurityView keyguardSecurityView = mKeyguardView.getCurrentSecurityView();
-        if (keyguardSecurityView != null) {
-            mLockIconContainer = ((ViewGroup) keyguardSecurityView)
-                    .findViewById(R.id.lock_icon_container);
-        }
     }
 
     /**
@@ -468,12 +459,15 @@ public class KeyguardBouncer {
      * notifications on Keyguard, like SIM PIN/PUK.
      */
     public boolean needsFullscreenBouncer() {
-        ensureView();
-        if (mKeyguardView != null) {
-            SecurityMode mode = mKeyguardView.getSecurityMode();
-            return mode == SecurityMode.SimPin || mode == SecurityMode.SimPuk;
-        }
-        return false;
+        // TODO(b/140059518)
+        return whitelistIpcs(() -> {
+            ensureView();
+            if (mKeyguardView != null) {
+                SecurityMode mode = mKeyguardView.getSecurityMode();
+                return mode == SecurityMode.SimPin || mode == SecurityMode.SimPuk;
+            }
+            return false;
+        });
     }
 
     /**

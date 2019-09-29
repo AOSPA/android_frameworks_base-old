@@ -20,6 +20,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.UnsupportedAppUsage;
+import android.app.AppOpsManager;
 import android.util.ExceptionUtils;
 import android.util.Log;
 import android.util.Slog;
@@ -645,6 +646,17 @@ public class Binder implements IBinder {
          * Called before onTransact.
          *
          * @return an object that will be passed back to #onTransactEnded (or null).
+         * @hide
+         */
+        @Nullable
+        default Object onTransactStarted(@NonNull IBinder binder, int transactionCode, int flags) {
+            return onTransactStarted(binder, transactionCode);
+        }
+
+        /**
+         * Called before onTransact.
+         *
+         * @return an object that will be passed back to #onTransactEnded (or null).
          */
         @Nullable
         Object onTransactStarted(@NonNull IBinder binder, int transactionCode);
@@ -1018,7 +1030,17 @@ public class Binder implements IBinder {
                 Trace.traceBegin(Trace.TRACE_TAG_ALWAYS, getClass().getName() + ":"
                         + (transactionName != null ? transactionName : code));
             }
-            res = onTransact(code, data, reply, flags);
+
+            if ((flags & FLAG_COLLECT_NOTED_APP_OPS) != 0) {
+                AppOpsManager.startNotedAppOpsCollection(callingUid);
+                try {
+                    res = onTransact(code, data, reply, flags);
+                } finally {
+                    AppOpsManager.finishNotedAppOpsCollection();
+                }
+            } else {
+                res = onTransact(code, data, reply, flags);
+            }
         } catch (RemoteException|RuntimeException e) {
             if (observer != null) {
                 observer.callThrewException(callSession, e);

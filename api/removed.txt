@@ -5,10 +5,6 @@ package android.app {
     method @Deprecated public static int getMaxNumPictureInPictureActions();
   }
 
-  public class KeyguardManager {
-    method @Deprecated public void dismissKeyguard(@NonNull android.app.Activity, @Nullable android.app.KeyguardManager.KeyguardDismissCallback, @Nullable android.os.Handler);
-  }
-
   public class Notification implements android.os.Parcelable {
     method @Deprecated public String getChannel();
     method public static Class<? extends android.app.Notification.Style> getNotificationStyleClass(String);
@@ -481,9 +477,8 @@ package android.provider {
   @Deprecated public static class MediaStore.PendingParams {
     ctor public MediaStore.PendingParams(@NonNull android.net.Uri, @NonNull String, @NonNull String);
     method public void setDownloadUri(@Nullable android.net.Uri);
-    method public void setPrimaryDirectory(@Nullable String);
     method public void setRefererUri(@Nullable android.net.Uri);
-    method public void setSecondaryDirectory(@Nullable String);
+    method public void setRelativePath(@Nullable String);
   }
 
   @Deprecated public static class MediaStore.PendingSession implements java.lang.AutoCloseable {

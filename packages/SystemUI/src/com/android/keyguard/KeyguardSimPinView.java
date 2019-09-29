@@ -41,6 +41,8 @@ import com.android.internal.telephony.ITelephony;
 import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.IccCardConstants.State;
 import com.android.internal.telephony.PhoneConstants;
+import com.android.systemui.Dependency;
+import com.android.systemui.R;
 
 /**
  * Displays a PIN pad for unlocking.
@@ -113,8 +115,8 @@ public class KeyguardSimPinView extends KeyguardPinBasedInputView {
         if (count < 2) {
             msg = rez.getString(R.string.kg_sim_pin_instructions);
         } else {
-            SubscriptionInfo info = KeyguardUpdateMonitor.getInstance(mContext).
-                    getSubscriptionInfoForSubId(mSubId);
+            SubscriptionInfo info = Dependency.get(KeyguardUpdateMonitor.class)
+                    .getSubscriptionInfoForSubId(mSubId);
             CharSequence displayName = info != null ? info.getDisplayName() : ""; // don't crash
             msg = rez.getString(R.string.kg_sim_pin_instructions_multi, displayName);
             if (info != null) {
@@ -151,7 +153,7 @@ public class KeyguardSimPinView extends KeyguardPinBasedInputView {
     }
 
     private void handleSubInfoChangeIfNeeded() {
-        KeyguardUpdateMonitor monitor = KeyguardUpdateMonitor.getInstance(mContext);
+        KeyguardUpdateMonitor monitor = Dependency.get(KeyguardUpdateMonitor.class);
         int subId = monitor.getNextSubIdForState(IccCardConstants.State.PIN_REQUIRED);
         if (subId != mSubId && SubscriptionManager.isValidSubscriptionId(subId)) {
             mSubId = subId;
@@ -232,7 +234,7 @@ public class KeyguardSimPinView extends KeyguardPinBasedInputView {
     @Override
     public void onResume(int reason) {
         super.onResume(reason);
-        KeyguardUpdateMonitor.getInstance(mContext).registerCallback(mUpdateMonitorCallback);
+        Dependency.get(KeyguardUpdateMonitor.class).registerCallback(mUpdateMonitorCallback);
         resetState();
     }
 
@@ -243,7 +245,7 @@ public class KeyguardSimPinView extends KeyguardPinBasedInputView {
             mSimUnlockProgressDialog.dismiss();
             mSimUnlockProgressDialog = null;
         }
-        KeyguardUpdateMonitor.getInstance(mContext).removeCallback(mUpdateMonitorCallback);
+        Dependency.get(KeyguardUpdateMonitor.class).removeCallback(mUpdateMonitorCallback);
     }
 
     /**
@@ -347,7 +349,7 @@ public class KeyguardSimPinView extends KeyguardPinBasedInputView {
                             resetPasswordText(true /* animate */,
                                     result != PhoneConstants.PIN_RESULT_SUCCESS /* announce */);
                             if (result == PhoneConstants.PIN_RESULT_SUCCESS) {
-                                KeyguardUpdateMonitor.getInstance(getContext())
+                                Dependency.get(KeyguardUpdateMonitor.class)
                                         .reportSimUnlocked(mSubId);
                                 mRemainingAttempts = -1;
                                 mShowDefaultMessage = true;

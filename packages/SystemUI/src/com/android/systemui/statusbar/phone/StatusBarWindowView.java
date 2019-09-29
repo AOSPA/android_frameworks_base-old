@@ -65,8 +65,6 @@ import com.android.systemui.R;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.DragDownHelper;
-import com.android.systemui.statusbar.StatusBarState;
-import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 import com.android.systemui.statusbar.phone.ScrimController.ScrimVisibility;
 import com.android.systemui.tuner.TunerService;
@@ -526,6 +524,15 @@ public class StatusBarWindowView extends FrameLayout {
     public void setBouncerShowingScrimmed(boolean bouncerShowing) {
         if (mLockIcon != null) {
             mLockIcon.setBouncerShowingScrimmed(bouncerShowing);
+        }
+    }
+
+    /**
+     * When {@link KeyguardBouncer} starts to be dismissed and starts to play its animation.
+     */
+    public void onBouncerPreHideAnimation() {
+        if (mLockIcon != null) {
+            mLockIcon.onBouncerPreHideAnimation();
         }
     }
 

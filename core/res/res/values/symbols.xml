@@ -206,6 +206,8 @@
   <java-symbol type="id" name="action3" />
   <java-symbol type="id" name="action4" />
   <java-symbol type="id" name="media_seamless" />
+  <java-symbol type="id" name="media_seamless_image" />
+  <java-symbol type="id" name="media_seamless_text" />
   <java-symbol type="id" name="notification_media_seekbar_container" />
   <java-symbol type="id" name="notification_media_content" />
   <java-symbol type="id" name="notification_media_progress" />
@@ -1982,6 +1984,7 @@
   <java-symbol type="bool" name="config_wifi_local_only_hotspot_5ghz" />
   <java-symbol type="bool" name="config_wifi_connected_mac_randomization_supported" />
   <java-symbol type="bool" name="config_wifi_p2p_mac_randomization_supported" />
+  <java-symbol type="bool" name="config_wifi_aggressive_randomization_ssid_whitelist_enabled" />
   <java-symbol type="bool" name="config_wifi_link_probing_supported" />
   <java-symbol type="bool" name="config_wifi_fast_bss_transition_enabled" />
   <java-symbol type="bool" name="config_wimaxEnabled" />
@@ -2674,6 +2677,7 @@
   <java-symbol type="attr" name="ambientShadowAlpha" />
   <java-symbol type="attr" name="spotShadowAlpha" />
   <java-symbol type="bool" name="config_sms_decode_gsm_8bit_data" />
+  <java-symbol type="integer" name="default_reserved_data_coding_scheme" />
   <java-symbol type="dimen" name="text_size_small_material" />
   <java-symbol type="attr" name="checkMarkGravity" />
   <java-symbol type="layout" name="select_dialog_singlechoice_material" />
@@ -3828,6 +3832,7 @@
 
   <!-- For high refresh rate displays -->
   <java-symbol type="integer" name="config_defaultPeakRefreshRate" />
+  <java-symbol type="integer" name="config_defaultRefreshRateInZone" />
   <java-symbol type="array" name="config_brightnessThresholdsOfPeakRefreshRate" />
   <java-symbol type="array" name="config_ambientThresholdsOfPeakRefreshRate" />
 
@@ -3876,7 +3881,6 @@
   <java-symbol type="array" name="config_highRefreshRateBlacklist" />
 
   <java-symbol type="bool" name="config_automotiveHideNavBarForKeyboard" />
-
 
   <!-- For Pdn throttle feature -->
   <java-symbol type="bool" name="config_pdp_retry_for_29_33_55_enabled" />

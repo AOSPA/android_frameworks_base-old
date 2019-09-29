@@ -155,7 +155,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * The implementation of the volume manager service.
+ * The implementation of the audio service for volume, audio focus, device management...
  * <p>
  * This implementation focuses on delivering a responsive UI. Most methods are
  * asynchronous to external calls. For example, the task of setting a volume
@@ -472,11 +472,10 @@ public class AudioService extends IAudioService.Stub
 
     // List of binder death handlers for setMode() client processes.
     // The last process to have called setMode() is at the top of the list.
-    // package-private so it can be accessed in AudioDeviceBroker.getSetModeDeathHandlers
-    //TODO candidate to be moved to separate class that handles synchronization
-    @GuardedBy("mDeviceBroker.mSetModeLock")
-    /*package*/ final ArrayList<SetModeDeathHandler> mSetModeDeathHandlers =
+    private final ArrayList<SetModeDeathHandler> mSetModeDeathHandlers =
             new ArrayList<SetModeDeathHandler>();
+
+    private volatile int mCurrentModeOwnerPid = 0;
 
     // true if boot sequence has been completed
     private boolean mSystemReady;
@@ -848,7 +847,12 @@ public class AudioService extends IAudioService.Stub
 
         if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_HDMI_CEC)) {
             synchronized (mHdmiClientLock) {
+                mHdmiCecSink = false;
                 mHdmiManager = mContext.getSystemService(HdmiControlManager.class);
+                if (mHdmiManager != null) {
+                    mHdmiManager.addHdmiControlStatusChangeListener(
+                            mHdmiControlStatusChangeListenerCallback);
+                }
                 mHdmiTvClient = mHdmiManager.getTvClient();
                 if (mHdmiTvClient != null) {
                     mFixedVolumeDevices &= ~AudioSystem.DEVICE_ALL_HDMI_SYSTEM_AUDIO_AND_SPEAKER;
@@ -859,7 +863,6 @@ public class AudioService extends IAudioService.Stub
                     mFixedVolumeDevices &= ~AudioSystem.DEVICE_OUT_HDMI;
                     mFullVolumeDevices |= AudioSystem.DEVICE_OUT_HDMI;
                 }
-                mHdmiCecSink = false;
                 mHdmiAudioSystemClient = mHdmiManager.getAudioSystemClient();
             }
         }
@@ -1116,8 +1119,7 @@ public class AudioService extends IAudioService.Stub
                 checkAddAllFixedVolumeDevices(AudioSystem.DEVICE_OUT_HDMI, caller);
                 synchronized (mHdmiClientLock) {
                     if (mHdmiManager != null && mHdmiPlaybackClient != null) {
-                        mHdmiCecSink = false;
-                        mHdmiPlaybackClient.queryDisplayStatus(mHdmiDisplayStatusCallback);
+                        updateHdmiCecSinkLocked(mHdmiCecSink | false);
                     }
                 }
             }
@@ -1127,7 +1129,7 @@ public class AudioService extends IAudioService.Stub
             if (isPlatformTelevision()) {
                 synchronized (mHdmiClientLock) {
                     if (mHdmiManager != null) {
-                        mHdmiCecSink = false;
+                        updateHdmiCecSinkLocked(mHdmiCecSink | false);
                     }
                 }
             }
@@ -1917,16 +1919,9 @@ public class AudioService extends IAudioService.Stub
                         }
                     }
 
-                    if (mHdmiAudioSystemClient != null &&
-                            mHdmiSystemAudioSupported &&
-                            streamTypeAlias == AudioSystem.STREAM_MUSIC &&
-                            (oldIndex != newIndex || isMuteAdjust)) {
-                        final long identity = Binder.clearCallingIdentity();
-                        mHdmiAudioSystemClient.sendReportAudioStatusCecCommand(
-                                isMuteAdjust, getStreamVolume(AudioSystem.STREAM_MUSIC),
-                                getStreamMaxVolume(AudioSystem.STREAM_MUSIC),
-                                isStreamMute(AudioSystem.STREAM_MUSIC));
-                        Binder.restoreCallingIdentity(identity);
+                    if (streamTypeAlias == AudioSystem.STREAM_MUSIC
+                            && (oldIndex != newIndex || isMuteAdjust)) {
+                        maybeSendSystemAudioStatusCommand(isMuteAdjust);
                     }
                 }
             }
@@ -1937,12 +1932,35 @@ public class AudioService extends IAudioService.Stub
 
     // Called after a delay when volume down is pressed while muted
     private void onUnmuteStream(int stream, int flags) {
-        VolumeStreamState streamState = mStreamStates[stream];
-        streamState.mute(false);
+        boolean wasMuted;
+        synchronized (VolumeStreamState.class) {
+            final VolumeStreamState streamState = mStreamStates[stream];
+            wasMuted = streamState.mute(false); // if unmuting causes a change, it was muted
 
-        final int device = getDeviceForStream(stream);
-        final int index = mStreamStates[stream].getIndex(device);
-        sendVolumeUpdate(stream, index, index, flags, device);
+            final int device = getDeviceForStream(stream);
+            final int index = streamState.getIndex(device);
+            sendVolumeUpdate(stream, index, index, flags, device);
+        }
+        if (stream == AudioSystem.STREAM_MUSIC && wasMuted) {
+            synchronized (mHdmiClientLock) {
+                maybeSendSystemAudioStatusCommand(true);
+            }
+        }
+    }
+
+    @GuardedBy("mHdmiClientLock")
+    private void maybeSendSystemAudioStatusCommand(boolean isMuteAdjust) {
+        if (mHdmiAudioSystemClient == null
+                || !mHdmiSystemAudioSupported) {
+            return;
+        }
+
+        final long identity = Binder.clearCallingIdentity();
+        mHdmiAudioSystemClient.sendReportAudioStatusCecCommand(
+                isMuteAdjust, getStreamVolume(AudioSystem.STREAM_MUSIC),
+                getStreamMaxVolume(AudioSystem.STREAM_MUSIC),
+                isStreamMute(AudioSystem.STREAM_MUSIC));
+        Binder.restoreCallingIdentity(identity);
     }
 
     private void setSystemAudioVolume(int oldVolume, int newVolume, int maxVolume, int flags) {
@@ -2363,17 +2381,9 @@ public class AudioService extends IAudioService.Stub
             }
         }
         synchronized (mHdmiClientLock) {
-            if (mHdmiManager != null &&
-                    mHdmiAudioSystemClient != null &&
-                    mHdmiSystemAudioSupported &&
-                    streamTypeAlias == AudioSystem.STREAM_MUSIC &&
-                    (oldIndex != index)) {
-                final long identity = Binder.clearCallingIdentity();
-                mHdmiAudioSystemClient.sendReportAudioStatusCecCommand(
-                        false, getStreamVolume(AudioSystem.STREAM_MUSIC),
-                        getStreamMaxVolume(AudioSystem.STREAM_MUSIC),
-                        isStreamMute(AudioSystem.STREAM_MUSIC));
-                Binder.restoreCallingIdentity(identity);
+            if (streamTypeAlias == AudioSystem.STREAM_MUSIC
+                    && (oldIndex != index)) {
+                maybeSendSystemAudioStatusCommand(false);
             }
         }
         sendVolumeUpdate(streamType, oldIndex, index, flags, device);
@@ -3162,14 +3172,9 @@ public class AudioService extends IAudioService.Stub
      * @return 0 if nobody owns the mode
      */
     /*package*/ int getModeOwnerPid() {
-        int modeOwnerPid = 0;
-        try {
-            modeOwnerPid = mSetModeDeathHandlers.get(0).getPid();
-        } catch (Exception e) {
-            // nothing to do, modeOwnerPid is not modified
-        }
-        return modeOwnerPid;
+        return  mCurrentModeOwnerPid;
     }
+
 
     private class SetModeDeathHandler implements IBinder.DeathRecipient {
         private IBinder mCb; // To be notified of client's death
@@ -3184,7 +3189,7 @@ public class AudioService extends IAudioService.Stub
         public void binderDied() {
             int oldModeOwnerPid = 0;
             int newModeOwnerPid = 0;
-            synchronized (mDeviceBroker.mSetModeLock) {
+            synchronized (mSetModeDeathHandlers) {
                 Log.w(TAG, "setMode() client died");
                 if (!mSetModeDeathHandlers.isEmpty()) {
                     oldModeOwnerPid = mSetModeDeathHandlers.get(0).getPid();
@@ -3195,12 +3200,16 @@ public class AudioService extends IAudioService.Stub
                 } else {
                     newModeOwnerPid = setModeInt(AudioSystem.MODE_NORMAL, mCb, mPid, TAG);
                 }
-            }
-            // when entering RINGTONE, IN_CALL or IN_COMMUNICATION mode, clear all
-            // SCO connections not started by the application changing the mode when pid changes
-            if ((newModeOwnerPid != oldModeOwnerPid) && (newModeOwnerPid != 0)) {
-                Log.i(TAG, "In binderDied(), calling disconnectBluetoothSco()");
-                mDeviceBroker.postDisconnectBluetoothSco(newModeOwnerPid);
+
+                if (newModeOwnerPid != oldModeOwnerPid) {
+                    mCurrentModeOwnerPid = newModeOwnerPid;
+                    // when entering RINGTONE, IN_CALL or IN_COMMUNICATION mode, clear all SCO
+                    // connections not started by the application changing the mode when pid changes
+                    if (newModeOwnerPid != 0) {
+                        Log.i(TAG, "In binderDied(), calling disconnectBluetoothSco()");
+                        mDeviceBroker.postDisconnectBluetoothSco(newModeOwnerPid);
+                    }
+                }
             }
         }
 
@@ -3225,15 +3234,18 @@ public class AudioService extends IAudioService.Stub
     public void setMode(int mode, IBinder cb, String callingPackage) {
         Log.i(TAG, "setMode(mode = " + mode + ", callingPackage = " +
                   callingPackage + ", Process ID: " + Binder.getCallingPid());
-        if (DEBUG_MODE) { Log.v(TAG, "setMode(mode=" + mode + ", callingPackage=" + callingPackage + ")"); }
+        if (DEBUG_MODE) {
+            Log.v(TAG, "setMode(mode = " + mode + ", callingPackage = " +
+                      callingPackage + ", Process ID: " + Binder.getCallingPid());
+        }
         if (!checkAudioSettingsPermission("setMode()")) {
             return;
         }
 
-        if ( (mode == AudioSystem.MODE_IN_CALL) &&
-                (mContext.checkCallingOrSelfPermission(
+        if ((mode == AudioSystem.MODE_IN_CALL)
+                && (mContext.checkCallingOrSelfPermission(
                         android.Manifest.permission.MODIFY_PHONE_STATE)
-                            != PackageManager.PERMISSION_GRANTED)) {
+                        != PackageManager.PERMISSION_GRANTED)) {
             Log.w(TAG, "MODIFY_PHONE_STATE Permission Denial: setMode(MODE_IN_CALL) from pid="
                     + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid());
             return;
@@ -3245,7 +3257,7 @@ public class AudioService extends IAudioService.Stub
 
         int oldModeOwnerPid = 0;
         int newModeOwnerPid = 0;
-        synchronized (mDeviceBroker.mSetModeLock) {
+        synchronized (mSetModeDeathHandlers) {
             if (!mSetModeDeathHandlers.isEmpty()) {
                 oldModeOwnerPid = mSetModeDeathHandlers.get(0).getPid();
             }
@@ -3253,18 +3265,22 @@ public class AudioService extends IAudioService.Stub
                 mode = mMode;
             }
             newModeOwnerPid = setModeInt(mode, cb, Binder.getCallingPid(), callingPackage);
-        }
-        // when entering RINGTONE, IN_CALL or IN_COMMUNICATION mode, clear all
-        // SCO connections not started by the application changing the mode when pid changes
-        if ((newModeOwnerPid != oldModeOwnerPid) && (newModeOwnerPid != 0)) {
-            Log.i(TAG, "In setMode(), calling disconnectBluetoothSco()");
-            mDeviceBroker.postDisconnectBluetoothSco(newModeOwnerPid);
+
+            if (newModeOwnerPid != oldModeOwnerPid) {
+                mCurrentModeOwnerPid = newModeOwnerPid;
+                // when entering RINGTONE, IN_CALL or IN_COMMUNICATION mode, clear all
+                // SCO connections not started by the application changing the mode when pid changes
+                if (newModeOwnerPid != 0) {
+                    Log.i(TAG, "In setMode(), calling disconnectBluetoothSco()");
+                    mDeviceBroker.postDisconnectBluetoothSco(newModeOwnerPid);
+                }
+            }
         }
     }
 
     // setModeInt() returns a valid PID if the audio mode was successfully set to
     // any mode other than NORMAL.
-    @GuardedBy("mDeviceBroker.mSetModeLock")
+    @GuardedBy("mSetModeDeathHandlers")
     private int setModeInt(int mode, IBinder cb, int pid, String caller) {
         if (DEBUG_MODE) { Log.v(TAG, "setModeInt(mode=" + mode + ", pid=" + pid + ", caller="
                 + caller + ")"); }
@@ -3615,9 +3631,7 @@ public class AudioService extends IAudioService.Stub
                 !mSystemReady) {
             return;
         }
-        synchronized (mDeviceBroker.mSetModeLock) {
-            mDeviceBroker.startBluetoothScoForClient_Sync(cb, scoAudioMode, eventSource);
-        }
+        mDeviceBroker.startBluetoothScoForClient_Sync(cb, scoAudioMode, eventSource);
     }
 
     /** @see AudioManager#stopBluetoothSco() */
@@ -3635,9 +3649,7 @@ public class AudioService extends IAudioService.Stub
         final String eventSource =  new StringBuilder("stopBluetoothSco()")
                 .append(") from u/pid:").append(Binder.getCallingUid()).append("/")
                 .append(Binder.getCallingPid()).toString();
-        synchronized (mDeviceBroker.mSetModeLock) {
-            mDeviceBroker.stopBluetoothScoForClient_Sync(cb, eventSource);
-        }
+        mDeviceBroker.stopBluetoothScoForClient_Sync(cb, eventSource);
     }
 
 
@@ -4405,7 +4417,7 @@ public class AudioService extends IAudioService.Stub
 
     // NOTE: Locking order for synchronized objects related to volume or ringer mode management:
     //  1 mScoclient OR mSafeMediaVolumeState
-    //  2   mSetModeLock
+    //  2   mSetModeDeathHandlers
     //  3     mSettingsLock
     //  4       VolumeStreamState.class
     private class VolumeStreamState {
@@ -4744,7 +4756,12 @@ public class AudioService extends IAudioService.Stub
             }
         }
 
-        public void mute(boolean state) {
+        /**
+         * Mute/unmute the stream
+         * @param state the new mute state
+         * @return true if the mute state was changed
+         */
+        public boolean mute(boolean state) {
             boolean changed = false;
             synchronized (VolumeStreamState.class) {
                 if (state != mIsMuted) {
@@ -4769,6 +4786,7 @@ public class AudioService extends IAudioService.Stub
                 intent.putExtra(AudioManager.EXTRA_STREAM_VOLUME_MUTED, state);
                 sendBroadcastToAll(intent);
             }
+            return changed;
         }
 
         public int getStreamType() {
@@ -5837,31 +5855,36 @@ public class AudioService extends IAudioService.Stub
     //     are transformed into key events for the HDMI playback client.
     //==========================================================================================
 
-    private class MyDisplayStatusCallback implements HdmiPlaybackClient.DisplayStatusCallback {
-        public void onComplete(int status) {
+    @GuardedBy("mHdmiClientLock")
+    private void updateHdmiCecSinkLocked(boolean hdmiCecSink) {
+        mHdmiCecSink = hdmiCecSink;
+        if (mHdmiCecSink) {
+            if (DEBUG_VOL) {
+                Log.d(TAG, "CEC sink: setting HDMI as full vol device");
+            }
+            mFullVolumeDevices |= AudioSystem.DEVICE_OUT_HDMI;
+        } else {
+            if (DEBUG_VOL) {
+                Log.d(TAG, "TV, no CEC: setting HDMI as regular vol device");
+            }
+            // Android TV devices without CEC service apply software volume on
+            // HDMI output
+            mFullVolumeDevices &= ~AudioSystem.DEVICE_OUT_HDMI;
+        }
+
+        checkAddAllFixedVolumeDevices(AudioSystem.DEVICE_OUT_HDMI,
+                "HdmiPlaybackClient.DisplayStatusCallback");
+    }
+
+    private class MyHdmiControlStatusChangeListenerCallback
+            implements HdmiControlManager.HdmiControlStatusChangeListener {
+        public void onStatusChange(boolean isCecEnabled, boolean isCecAvailable) {
             synchronized (mHdmiClientLock) {
-                if (mHdmiManager != null) {
-                    mHdmiCecSink = (status != HdmiControlManager.POWER_STATUS_UNKNOWN);
-                    // Television devices without CEC service apply software volume on HDMI output
-                    if (mHdmiCecSink) {
-                        if (DEBUG_VOL) {
-                            Log.d(TAG, "CEC sink: setting HDMI as full vol device");
-                        }
-                        mFullVolumeDevices |= AudioSystem.DEVICE_OUT_HDMI;
-                    } else {
-                        if (DEBUG_VOL) {
-                            Log.d(TAG, "TV, no CEC: setting HDMI as regular vol device");
-                        }
-                        // Android TV devices without CEC service apply software volume on
-                        // HDMI output
-                        mFullVolumeDevices &= ~AudioSystem.DEVICE_OUT_HDMI;
-                    }
-                    checkAddAllFixedVolumeDevices(AudioSystem.DEVICE_OUT_HDMI,
-                            "HdmiPlaybackClient.DisplayStatusCallback");
-                }
+                if (mHdmiManager == null) return;
+                updateHdmiCecSinkLocked(isCecEnabled ? isCecAvailable : false);
             }
         }
-    }
+    };
 
     private final Object mHdmiClientLock = new Object();
 
@@ -5878,12 +5901,14 @@ public class AudioService extends IAudioService.Stub
     @GuardedBy("mHdmiClientLock")
     private HdmiPlaybackClient mHdmiPlaybackClient;
     // true if we are a set-top box, an HDMI sink is connected and it supports CEC.
+    @GuardedBy("mHdmiClientLock")
     private boolean mHdmiCecSink;
     // Set only when device is an audio system.
     @GuardedBy("mHdmiClientLock")
     private HdmiAudioSystemClient mHdmiAudioSystemClient;
 
-    private MyDisplayStatusCallback mHdmiDisplayStatusCallback = new MyDisplayStatusCallback();
+    private MyHdmiControlStatusChangeListenerCallback mHdmiControlStatusChangeListenerCallback =
+            new MyHdmiControlStatusChangeListenerCallback();
 
     @Override
     public int setHdmiSystemAudioSupported(boolean on) {

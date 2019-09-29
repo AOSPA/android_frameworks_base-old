@@ -749,6 +749,9 @@
     <!-- Indicates that p2p MAC randomization is supported on this device -->
     <bool translatable="false" name="config_wifi_p2p_mac_randomization_supported">false</bool>
 
+    <!-- flag for activating paranoid MAC randomization on a limited set of SSIDs -->
+    <bool translatable="false" name="config_wifi_aggressive_randomization_ssid_whitelist_enabled">false</bool>
+
     <!-- Indicates that wifi link probing is supported on this device -->
     <bool translatable="false" name="config_wifi_link_probing_supported">false</bool>
 
@@ -3044,6 +3047,16 @@
         string that's stored in 8-bit unpacked format) characters.-->
     <bool translatable="false" name="config_sms_decode_gsm_8bit_data">false</bool>
 
+    <!-- Configures encoding type to parse the User Data of an SMS for reserved TP-DCS value.
+         Refer to SmsConstants.java
+         ENCODING_UNKNOWN = 0;
+         ENCODING_7BIT = 1;
+         ENCODING_8BIT = 2;
+         ENCODING_16BIT = 3;
+         ENCODING_KSC5601 = 4;
+         -->
+    <integer name="default_reserved_data_coding_scheme">2</integer>
+
     <!-- If EMS is not supported, framework breaks down EMS into single segment SMS
          and adds page info " x/y". This config is used to set which carrier doesn't
          support EMS and whether page info should be added at the beginning or the end.
@@ -4210,6 +4223,10 @@
            <item>amb1</item>
         -->
     </integer-array>
+
+    <!-- Default refresh rate in the zone defined by brightness and ambient thresholds.
+         If non-positive, then the refresh rate is unchanged even if thresholds are configured. -->
+    <integer name="config_defaultRefreshRateInZone">0</integer>
 
     <!-- The type of the light sensor to be used by the display framework for things like
          auto-brightness. If unset, then it just gets the default sensor of type TYPE_LIGHT. -->

@@ -17,6 +17,7 @@
 package android.app;
 
 import android.Manifest;
+import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
@@ -27,12 +28,19 @@ import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.usage.UsageStatsManager;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
+import android.database.DatabaseUtils;
 import android.media.AudioAttributes.AttributeUsage;
 import android.os.Binder;
+import android.os.Build;
+import android.os.Handler;
+import android.os.HandlerExecutor;
+import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.Process;
@@ -47,9 +55,12 @@ import android.util.SparseArray;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.Immutable;
 import com.android.internal.app.IAppOpsActiveCallback;
+import com.android.internal.app.IAppOpsAsyncNotedCallback;
 import com.android.internal.app.IAppOpsCallback;
 import com.android.internal.app.IAppOpsNotedCallback;
 import com.android.internal.app.IAppOpsService;
+import com.android.internal.os.RuntimeInit;
+import com.android.internal.os.ZygoteInit;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.Preconditions;
 
@@ -57,10 +68,12 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -115,6 +128,12 @@ public class AppOpsManager {
     @GuardedBy("mNotedWatchers")
     private final ArrayMap<OnOpNotedListener, IAppOpsNotedCallback> mNotedWatchers =
             new ArrayMap<>();
+
+    private static final Object sLock = new Object();
+
+    /** Current {@link AppOpsCollector}. Change via {@link #setNotedAppOpsCollector} */
+    @GuardedBy("sLock")
+    private static @Nullable AppOpsCollector sNotedAppOpsCollector;
 
     static IBinder sToken;
 
@@ -1095,21 +1114,27 @@ public class AppOpsManager {
             "android:sms_financial_transactions";
 
     /** @hide Read media of audio type. */
+    @SystemApi @TestApi
     public static final String OPSTR_READ_MEDIA_AUDIO = "android:read_media_audio";
     /** @hide Write media of audio type. */
+    @SystemApi @TestApi
     public static final String OPSTR_WRITE_MEDIA_AUDIO = "android:write_media_audio";
     /** @hide Read media of video type. */
+    @SystemApi @TestApi
     public static final String OPSTR_READ_MEDIA_VIDEO = "android:read_media_video";
     /** @hide Write media of video type. */
+    @SystemApi @TestApi
     public static final String OPSTR_WRITE_MEDIA_VIDEO = "android:write_media_video";
     /** @hide Read media of image type. */
+    @SystemApi @TestApi
     public static final String OPSTR_READ_MEDIA_IMAGES = "android:read_media_images";
     /** @hide Write media of image type. */
+    @SystemApi @TestApi
     public static final String OPSTR_WRITE_MEDIA_IMAGES = "android:write_media_images";
     /** @hide Has a legacy (non-isolated) view of storage. */
-    @TestApi
-    @SystemApi
+    @SystemApi @TestApi
     public static final String OPSTR_LEGACY_STORAGE = "android:legacy_storage";
+
     /** @hide Interact with accessibility. */
     @SystemApi
     public static final String OPSTR_ACCESS_ACCESSIBILITY = "android:access_accessibility";
@@ -1117,6 +1142,22 @@ public class AppOpsManager {
     public static final String OPSTR_READ_DEVICE_IDENTIFIERS = "android:read_device_identifiers";
     /** @hide Query all packages on device */
     public static final String OPSTR_QUERY_ALL_PACKAGES = "android:query_all_packages";
+
+
+    /** {@link #sAppOpsToNote} not initialized yet for this op */
+    private static final byte SHOULD_COLLECT_NOTE_OP_NOT_INITIALIZED = 0;
+    /** Should not collect noting of this app-op in {@link #sAppOpsToNote} */
+    private static final byte SHOULD_NOT_COLLECT_NOTE_OP = 1;
+    /** Should collect noting of this app-op in {@link #sAppOpsToNote} */
+    private static final byte SHOULD_COLLECT_NOTE_OP = 2;
+
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(flag = true, prefix = { "SHOULD_" }, value = {
+            SHOULD_COLLECT_NOTE_OP_NOT_INITIALIZED,
+            SHOULD_NOT_COLLECT_NOTE_OP,
+            SHOULD_COLLECT_NOTE_OP
+    })
+    private @interface ShouldCollectNoteOp {}
 
     // Warning: If an permission is added here it also has to be added to
     // com.android.packageinstaller.permission.utils.EventLogger
@@ -1177,6 +1218,9 @@ public class AppOpsManager {
             OP_REQUEST_INSTALL_PACKAGES,
             OP_START_FOREGROUND,
             OP_SMS_FINANCIAL_TRANSACTIONS,
+            OP_MANAGE_IPSEC_TUNNELS,
+            OP_GET_USAGE_STATS,
+            OP_INSTANT_APP_START_FOREGROUND
     };
 
     /**
@@ -1557,7 +1601,7 @@ public class AppOpsManager {
             Manifest.permission.REQUEST_DELETE_PACKAGES,
             Manifest.permission.BIND_ACCESSIBILITY_SERVICE,
             Manifest.permission.ACCEPT_HANDOVER,
-            null, // no permission for OP_MANAGE_IPSEC_TUNNELS
+            Manifest.permission.MANAGE_IPSEC_TUNNELS,
             Manifest.permission.FOREGROUND_SERVICE,
             null, // no permission for OP_BLUETOOTH_SCAN
             Manifest.permission.USE_BIOMETRIC,
@@ -1980,6 +2024,27 @@ public class AppOpsManager {
      */
     private static HashMap<String, Integer> sPermToOp = new HashMap<>();
 
+    /**
+     * Set to the uid of the caller if this thread is currently executing a two-way binder
+     * transaction. Not set if this thread is currently not executing a two way binder transaction.
+     *
+     * @see #startNotedAppOpsCollection
+     * @see #markAppOpNoted
+     */
+    private static final ThreadLocal<Integer> sBinderThreadCallingUid = new ThreadLocal<>();
+
+    /**
+     * If a thread is currently executing a two-way binder transaction, this stores the op-codes of
+     * the app-ops that were noted during this transaction.
+     *
+     * @see #markAppOpNoted
+     */
+    private static final ThreadLocal<long[]> sAppOpsNotedInThisBinderTransaction =
+            new ThreadLocal<>();
+
+    /** Whether noting for an appop should be collected */
+    private static final @ShouldCollectNoteOp byte[] sAppOpsToNote = new byte[_NUM_OP];
+
     static {
         if (sOpToSwitch.length != _NUM_OP) {
             throw new IllegalStateException("sOpToSwitch length " + sOpToSwitch.length
@@ -2022,6 +2087,12 @@ public class AppOpsManager {
             if (sOpPerms[op] != null) {
                 sPermToOp.put(sOpPerms[op], op);
             }
+        }
+
+        if ((_NUM_OP + Long.SIZE - 1) / Long.SIZE != 2) {
+            // The code currently assumes that the length of sAppOpsNotedInThisBinderTransaction is
+            // two longs
+            throw new IllegalStateException("notedAppOps collection code assumes < 128 appops");
         }
     }
 
@@ -2600,7 +2671,7 @@ public class AppOpsManager {
          * @return The proxy UID.
          */
         public int getProxyUid() {
-            return (int) findFirstNonNegativeForFlagsInStates(mDurations,
+            return (int) findFirstNonNegativeForFlagsInStates(mProxyUids,
                     MAX_PRIORITY_UID_STATE, MIN_PRIORITY_UID_STATE, OP_FLAGS_ALL);
         }
 
@@ -2622,7 +2693,7 @@ public class AppOpsManager {
          * @return The proxy UID.
          */
         public int getProxyUid(@UidState int uidState, @OpFlags int flags) {
-            return (int) findFirstNonNegativeForFlagsInStates(mDurations,
+            return (int) findFirstNonNegativeForFlagsInStates(mProxyUids,
                     uidState, uidState, flags);
         }
 
@@ -3212,7 +3283,7 @@ public class AppOpsManager {
         }
 
         @Override
-        public boolean equals(Object obj) {
+        public boolean equals(@Nullable Object obj) {
             if (this == obj) {
                 return true;
             }
@@ -3243,6 +3314,7 @@ public class AppOpsManager {
             return result;
         }
 
+        @NonNull
         @Override
         public String toString() {
             return getClass().getSimpleName() + "[from:"
@@ -3478,7 +3550,7 @@ public class AppOpsManager {
         };
 
         @Override
-        public boolean equals(Object obj) {
+        public boolean equals(@Nullable Object obj) {
             if (this == obj) {
                 return true;
             }
@@ -3710,7 +3782,7 @@ public class AppOpsManager {
         };
 
         @Override
-        public boolean equals(Object obj) {
+        public boolean equals(@Nullable Object obj) {
             if (this == obj) {
                 return true;
             }
@@ -4064,7 +4136,7 @@ public class AppOpsManager {
         }
 
         @Override
-        public boolean equals(Object obj) {
+        public boolean equals(@Nullable Object obj) {
             if (this == obj) {
                 return true;
             }
@@ -4182,8 +4254,8 @@ public class AppOpsManager {
      * end UID states.
      *
      * @param counts The data array.
-     * @param beginUidState The beginning UID state (exclusive).
-     * @param endUidState The end UID state.
+     * @param beginUidState The beginning UID state (inclusive).
+     * @param endUidState The end UID state (inclusive).
      * @param flags The UID flags.
      * @return The sum.
      */
@@ -4212,13 +4284,13 @@ public class AppOpsManager {
      * end UID states.
      *
      * @param counts The data array.
+     * @param beginUidState The beginning UID state (inclusive).
+     * @param endUidState The end UID state (inclusive).
      * @param flags The UID flags.
-     * @param beginUidState The beginning UID state (exclusive).
-     * @param endUidState The end UID state.
      * @return The non-negative value or -1.
      */
     private static long findFirstNonNegativeForFlagsInStates(@Nullable LongSparseLongArray counts,
-            @OpFlags int flags, @UidState int beginUidState, @UidState int endUidState) {
+            @UidState int beginUidState, @UidState int endUidState, @OpFlags int flags) {
         if (counts == null) {
             return -1;
         }
@@ -4244,14 +4316,14 @@ public class AppOpsManager {
      * end UID states.
      *
      * @param counts The data array.
+     * @param beginUidState The beginning UID state (inclusive).
+     * @param endUidState The end UID state (inclusive).
      * @param flags The UID flags.
-     * @param beginUidState The beginning UID state (exclusive).
-     * @param endUidState The end UID state.
      * @return The non-negative value or -1.
      */
     private static @Nullable String findFirstNonNullForFlagsInStates(
-            @Nullable LongSparseArray<String> counts, @OpFlags int flags,
-            @UidState int beginUidState, @UidState int endUidState) {
+            @Nullable LongSparseArray<String> counts, @UidState int beginUidState,
+            @UidState int endUidState, @OpFlags int flags) {
         if (counts == null) {
             return null;
         }
@@ -4281,20 +4353,17 @@ public class AppOpsManager {
 
     /**
      * Callback for notification of changes to operation active state.
-     *
-     * @hide
      */
-    @TestApi
     public interface OnOpActiveChangedListener {
         /**
          * Called when the active state of an app op changes.
          *
-         * @param code The op code.
-         * @param uid The UID performing the operation.
+         * @param op The operation that changed.
          * @param packageName The package performing the operation.
          * @param active Whether the operation became active or inactive.
          */
-        void onOpActiveChanged(int code, int uid, String packageName, boolean active);
+        void onOpActiveChanged(@NonNull String op, int uid, @NonNull String packageName,
+                boolean active);
     }
 
     /**
@@ -4324,6 +4393,16 @@ public class AppOpsManager {
         public void onOpChanged(int op, String packageName) { }
     }
 
+    /**
+     * Callback for notification of changes to operation state.
+     * This allows you to see the raw op codes instead of strings.
+     * @hide
+     */
+    public interface OnOpActiveChangedInternalListener extends OnOpActiveChangedListener {
+        default void onOpActiveChanged(String op, int uid, String packageName, boolean active) { }
+        default void onOpActiveChanged(int op, int uid, String packageName, boolean active) { }
+    }
+
     AppOpsManager(Context context, IAppOpsService service) {
         mContext = context;
         mService = service;
@@ -4335,8 +4414,8 @@ public class AppOpsManager {
      * The mode of the ops returned are set for the package but may not reflect their effective
      * state due to UID policy or because it's controlled by a different master op.
      *
-     * Use {@link #unsafeCheckOp(String, int, String)}} or {@link #noteOp(String, int, String)}
-     * if the effective mode is needed.
+     * Use {@link #unsafeCheckOp(String, int, String)}} or
+     * {@link #noteOp(String, int, String, String)} if the effective mode is needed.
      *
      * @param ops The set of operations you are interested in, or null if you want all of them.
      * @hide
@@ -4359,8 +4438,8 @@ public class AppOpsManager {
      * The mode of the ops returned are set for the package but may not reflect their effective
      * state due to UID policy or because it's controlled by a different master op.
      *
-     * Use {@link #unsafeCheckOp(String, int, String)}} or {@link #noteOp(String, int, String)}
-     * if the effective mode is needed.
+     * Use {@link #unsafeCheckOp(String, int, String)}} or
+     * {@link #noteOp(String, int, String, String)} if the effective mode is needed.
      *
      * @param ops The set of operations you are interested in, or null if you want all of them.
      * @hide
@@ -4381,8 +4460,8 @@ public class AppOpsManager {
      * The mode of the ops returned are set for the package but may not reflect their effective
      * state due to UID policy or because it's controlled by a different master op.
      *
-     * Use {@link #unsafeCheckOp(String, int, String)}} or {@link #noteOp(String, int, String)}
-     * if the effective mode is needed.
+     * Use {@link #unsafeCheckOp(String, int, String)}} or
+     * {@link #noteOp(String, int, String, String)} if the effective mode is needed.
      *
      * @param uid The uid of the application of interest.
      * @param packageName The name of the application of interest.
@@ -4414,8 +4493,8 @@ public class AppOpsManager {
      * The mode of the ops returned are set for the package but may not reflect their effective
      * state due to UID policy or because it's controlled by a different master op.
      *
-     * Use {@link #unsafeCheckOp(String, int, String)}} or {@link #noteOp(String, int, String)}
-     * if the effective mode is needed.
+     * Use {@link #unsafeCheckOp(String, int, String)}} or
+     * {@link #noteOp(String, int, String, String)} if the effective mode is needed.
      *
      * @param uid The uid of the application of interest.
      * @param packageName The name of the application of interest.
@@ -4779,6 +4858,17 @@ public class AppOpsManager {
         }
     }
 
+    /** {@hide} */
+    @Deprecated
+    public void startWatchingActive(@NonNull int[] ops,
+            @NonNull OnOpActiveChangedListener callback) {
+        final String[] strOps = new String[ops.length];
+        for (int i = 0; i < ops.length; i++) {
+            strOps[i] = opToPublicName(ops[i]);
+        }
+        startWatchingActive(strOps, mContext.getMainExecutor(), callback);
+    }
+
     /**
      * Start watching for changes to the active state of app ops. An app op may be
      * long running and it has a clear start and stop delimiters. If an op is being
@@ -4786,26 +4876,25 @@ public class AppOpsManager {
      * watched ops for a registered callback you need to unregister and register it
      * again.
      *
-     * <p> If you don't hold the {@link android.Manifest.permission#WATCH_APPOPS} permission
+     * <p> If you don't hold the {@code android.Manifest.permission#WATCH_APPOPS} permission
      * you can watch changes only for your UID.
      *
-     * @param ops The ops to watch.
+     * @param ops The operations to watch.
      * @param callback Where to report changes.
      *
-     * @see #isOperationActive(int, int, String)
-     * @see #stopWatchingActive(OnOpActiveChangedListener)
-     * @see #startOp(int, int, String)
+     * @see #isOperationActive
+     * @see #stopWatchingActive
+     * @see #startOp(int, int, String, boolean, String)
      * @see #finishOp(int, int, String)
-     *
-     * @hide
      */
-    @TestApi
     // TODO: Uncomment below annotation once b/73559440 is fixed
     // @RequiresPermission(value=Manifest.permission.WATCH_APPOPS, conditional=true)
-    public void startWatchingActive(@NonNull int[] ops,
+    public void startWatchingActive(@NonNull String[] ops,
+            @CallbackExecutor @NonNull Executor executor,
             @NonNull OnOpActiveChangedListener callback) {
-        Preconditions.checkNotNull(ops, "ops cannot be null");
-        Preconditions.checkNotNull(callback, "callback cannot be null");
+        Objects.requireNonNull(ops);
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(callback);
         IAppOpsActiveCallback cb;
         synchronized (mActiveWatchers) {
             cb = mActiveWatchers.get(callback);
@@ -4815,13 +4904,25 @@ public class AppOpsManager {
             cb = new IAppOpsActiveCallback.Stub() {
                 @Override
                 public void opActiveChanged(int op, int uid, String packageName, boolean active) {
-                    callback.onOpActiveChanged(op, uid, packageName, active);
+                    executor.execute(() -> {
+                        if (callback instanceof OnOpActiveChangedInternalListener) {
+                            ((OnOpActiveChangedInternalListener) callback).onOpActiveChanged(op,
+                                    uid, packageName, active);
+                        }
+                        if (sOpToString[op] != null) {
+                            callback.onOpActiveChanged(sOpToString[op], uid, packageName, active);
+                        }
+                    });
                 }
             };
             mActiveWatchers.put(callback, cb);
         }
+        final int[] rawOps = new int[ops.length];
+        for (int i = 0; i < ops.length; i++) {
+            rawOps[i] = strOpToOp(ops[i]);
+        }
         try {
-            mService.startWatchingActive(ops, cb);
+            mService.startWatchingActive(rawOps, cb);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4832,14 +4933,11 @@ public class AppOpsManager {
      * long running and it has a clear start and stop delimiters. Unregistering a
      * non-registered callback has no effect.
      *
-     * @see #isOperationActive#(int, int, String)
-     * @see #startWatchingActive(int[], OnOpActiveChangedListener)
-     * @see #startOp(int, int, String)
+     * @see #isOperationActive
+     * @see #startWatchingActive
+     * @see #startOp(int, int, String, boolean, String)
      * @see #finishOp(int, int, String)
-     *
-     * @hide
      */
-    @TestApi
     public void stopWatchingActive(@NonNull OnOpActiveChangedListener callback) {
         synchronized (mActiveWatchers) {
             final IAppOpsActiveCallback cb = mActiveWatchers.remove(callback);
@@ -4868,7 +4966,7 @@ public class AppOpsManager {
      *
      * @see #startWatchingActive(int[], OnOpActiveChangedListener)
      * @see #stopWatchingNoted(OnOpNotedListener)
-     * @see #noteOp(String, int, String)
+     * @see #noteOp(String, int, String, String)
      *
      * @hide
      */
@@ -4900,7 +4998,7 @@ public class AppOpsManager {
      * Unregistering a non-registered callback has no effect.
      *
      * @see #startWatchingNoted(int[], OnOpNotedListener)
-     * @see #noteOp(String, int, String)
+     * @see #noteOp(String, int, String, String)
      *
      * @hide
      */
@@ -4935,15 +5033,16 @@ public class AppOpsManager {
 
     /**
      * Do a quick check for whether an application might be able to perform an operation.
-     * This is <em>not</em> a security check; you must use {@link #noteOp(String, int, String)}
-     * or {@link #startOp(String, int, String)} for your actual security checks, which also
-     * ensure that the given uid and package name are consistent.  This function can just be
-     * used for a quick check to see if an operation has been disabled for the application,
+     * This is <em>not</em> a security check; you must use {@link #noteOp(String, int, String,
+     * String)} or {@link #startOp(String, int, String, String)} for your actual security checks,
+     * which also ensure that the given uid and package name are consistent. This function can just
+     * be used for a quick check to see if an operation has been disabled for the application,
      * as an early reject of some work.  This does not modify the time stamp or other data
      * about the operation.
      *
      * <p>Important things this will not do (which you need to ultimate use
-     * {@link #noteOp(String, int, String)} or {@link #startOp(String, int, String)} to cover):</p>
+     * {@link #noteOp(String, int, String, String)} or
+     * {@link #startOp(String, int, String, String)} to cover):</p>
      * <ul>
      *     <li>Verifying the uid and package are consistent, so callers can't spoof
      *     their identity.</li>
@@ -5014,126 +5113,305 @@ public class AppOpsManager {
     }
 
     /**
+     * @deprecated Use {@link #noteOp(String, int, String, String)} instead
+     */
+    @Deprecated
+    public int noteOp(@NonNull String op, int uid, @NonNull String packageName) {
+        return noteOp(op, uid, packageName, null);
+    }
+
+    /**
+     * @deprecated Use {@link #noteOp(String, int, String, String)} instead
+     *
+     * @hide
+     */
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.Q, publicAlternatives = "Use {@link "
+            + "#noteOp(java.lang.String, int, java.lang.String, java.lang.String)} instead")
+    @Deprecated
+    public int noteOp(int op) {
+        return noteOp(op, Process.myUid(), mContext.getOpPackageName(), null);
+    }
+
+    /**
+     * @deprecated Use {@link #noteOp(String, int, String, String)} instead
+     *
+     * @hide
+     */
+    @Deprecated
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.Q, publicAlternatives = "Use {@link "
+            + "#noteOp(java.lang.String, int, java.lang.String, java.lang.String)} instead")
+    public int noteOp(int op, int uid, @Nullable String packageName) {
+        return noteOp(op, uid, packageName, null);
+    }
+
+    /**
      * Make note of an application performing an operation.  Note that you must pass
      * in both the uid and name of the application to be checked; this function will verify
      * that these two match, and if not, return {@link #MODE_IGNORED}.  If this call
      * succeeds, the last execution time of the operation for this app will be updated to
      * the current time.
+     *
      * @param op The operation to note.  One of the OPSTR_* constants.
      * @param uid The user id of the application attempting to perform the operation.
      * @param packageName The name of the application attempting to perform the operation.
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
-     * @throws SecurityException If the app has been configured to crash on this op.
-     */
-    public int noteOp(@NonNull String op, int uid, @NonNull String packageName) {
-        return noteOp(strOpToOp(op), uid, packageName);
-    }
-
-    /**
-     * Like {@link #noteOp} but instead of throwing a {@link SecurityException} it
-     * returns {@link #MODE_ERRORED}.
-     */
-    public int noteOpNoThrow(@NonNull String op, int uid, @NonNull String packageName) {
-        return noteOpNoThrow(strOpToOp(op), uid, packageName);
-    }
-
-    /**
-     * Make note of an application performing an operation on behalf of another
-     * application when handling an IPC. Note that you must pass the package name
-     * of the application that is being proxied while its UID will be inferred from
-     * the IPC state; this function will verify that the calling uid and proxied
-     * package name match, and if not, return {@link #MODE_IGNORED}. If this call
-     * succeeds, the last execution time of the operation for the proxied app and
-     * your app will be updated to the current time.
-     * @param op The operation to note.  One of the OPSTR_* constants.
-     * @param proxiedPackageName The name of the application calling into the proxy application.
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
-     * @throws SecurityException If the app has been configured to crash on this op.
-     */
-    public int noteProxyOp(@NonNull String op, @NonNull String proxiedPackageName) {
-        return noteProxyOp(strOpToOp(op), proxiedPackageName);
-    }
-
-    /**
-     * Like {@link #noteProxyOp(String, String)} but instead
-     * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
+     * @param message A message describing the reason the op was noted
      *
-     * <p>This API requires the package with the {@code proxiedPackageName} to belongs to
-     * {@link Binder#getCallingUid()}.
+     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
+     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
+     * causing the app to crash).
+     *
+     * @throws SecurityException If the app has been configured to crash on this op.
      */
-    public int noteProxyOpNoThrow(@NonNull String op, @NonNull String proxiedPackageName) {
-        return noteProxyOpNoThrow(strOpToOp(op), proxiedPackageName);
+    public int noteOp(@NonNull String op, int uid, @Nullable String packageName,
+            @Nullable String message) {
+        return noteOp(strOpToOp(op), uid, packageName, message);
     }
 
     /**
-     * Like {@link #noteProxyOpNoThrow(String, String)} but allows to specify the proxied uid.
+     * Make note of an application performing an operation.  Note that you must pass
+     * in both the uid and name of the application to be checked; this function will verify
+     * that these two match, and if not, return {@link #MODE_IGNORED}.  If this call
+     * succeeds, the last execution time of the operation for this app will be updated to
+     * the current time.
+     *
+     * @param op The operation to note.  One of the OP_* constants.
+     * @param uid The user id of the application attempting to perform the operation.
+     * @param packageName The name of the application attempting to perform the operation.
+     * @param message A message describing the reason the op was noted
+     *
+     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
+     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
+     * causing the app to crash).
+     *
+     * @throws SecurityException If the app has been configured to crash on this op.
+     *
+     * @hide
+     */
+    public int noteOp(int op, int uid, @Nullable String packageName, @Nullable String message) {
+        final int mode = noteOpNoThrow(op, uid, packageName, message);
+        if (mode == MODE_ERRORED) {
+            throw new SecurityException(buildSecurityExceptionMsg(op, uid, packageName));
+        }
+        return mode;
+    }
+
+    /**
+     * @deprecated Use {@link #noteOpNoThrow(String, int, String, String)} instead
+     */
+    @Deprecated
+    public int noteOpNoThrow(@NonNull String op, int uid, @NonNull String packageName) {
+        return noteOpNoThrow(op, uid, packageName, null);
+    }
+
+    /**
+     * @deprecated Use {@link #noteOpNoThrow(int, int, String, String)} instead
+     *
+     * @hide
+     */
+    @Deprecated
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.Q, publicAlternatives = "Use {@link "
+            + "#noteOpNoThrow(java.lang.String, int, java.lang.String, java.lang.String)} instead")
+    public int noteOpNoThrow(int op, int uid, String packageName) {
+        return noteOpNoThrow(op, uid, packageName, null);
+    }
+
+    /**
+     * Like {@link #noteOp(String, int, String, String)} but instead of throwing a
+     * {@link SecurityException} it returns {@link #MODE_ERRORED}.
+     *
+     * @param op The operation to note.  One of the OPSTR_* constants.
+     * @param uid The user id of the application attempting to perform the operation.
+     * @param packageName The name of the application attempting to perform the operation.
+     * @param message A message describing the reason the op was noted
+     *
+     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
+     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
+     * causing the app to crash).
+     */
+    public int noteOpNoThrow(@NonNull String op, int uid, @NonNull String packageName,
+            @Nullable String message) {
+        return noteOpNoThrow(strOpToOp(op), uid, packageName, message);
+    }
+
+    /**
+     * Like {@link #noteOp(String, int, String, String)} but instead of throwing a
+     * {@link SecurityException} it returns {@link #MODE_ERRORED}.
+     *
+     * @param op The operation to note.  One of the OP_* constants.
+     * @param uid The user id of the application attempting to perform the operation.
+     * @param packageName The name of the application attempting to perform the operation.
+     * @param message A message describing the reason the op was noted
+     *
+     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
+     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
+     * causing the app to crash).
+     *
+     * @hide
+     */
+    public int noteOpNoThrow(int op, int uid, @Nullable String packageName,
+            @Nullable String message) {
+        try {
+            int mode = mService.noteOperation(op, uid, packageName);
+            if (mode == MODE_ALLOWED) {
+                markAppOpNoted(uid, packageName, op, message);
+            }
+
+            return mode;
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @deprecated Use {@link #noteProxyOp(String, String, int, String)} instead
+     */
+    @Deprecated
+    public int noteProxyOp(@NonNull String op, @NonNull String proxiedPackageName) {
+        return noteProxyOp(op, proxiedPackageName, Binder.getCallingUid(), null);
+    }
+
+    /**
+     * @deprecated Use {@link #noteProxyOp(String, String, int, String)} instead
+     *
+     * @hide
+     */
+    @Deprecated
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.Q, publicAlternatives = "Use {@link "
+            + "#noteProxyOp(java.lang.String, java.lang.String, int, java.lang.String)} instead")
+    public int noteProxyOp(int op, @Nullable String proxiedPackageName) {
+        return noteProxyOp(op, proxiedPackageName, Binder.getCallingUid(), null);
+    }
+
+    /**
+     * Make note of an application performing an operation on behalf of another application when
+     * handling an IPC. This function will verify that the calling uid and proxied package name
+     * match, and if not, return {@link #MODE_IGNORED}. If this call succeeds, the last execution
+     * time of the operation for the proxied app and your app will be updated to the current time.
+     *
+     * @param op The operation to note. One of the OP_* constants.
+     * @param proxiedPackageName The name of the application calling into the proxy application.
+     * @param proxiedUid The uid of the proxied application
+     * @param message A message describing the reason the op was noted
+     *
+     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or {@link #MODE_IGNORED}
+     * if it is not allowed and should be silently ignored (without causing the app to crash).
+     *
+     * @throws SecurityException If the proxy or proxied app has been configured to crash on this
+     * op.
+     *
+     * @hide
+     */
+    public int noteProxyOp(int op, @Nullable String proxiedPackageName, int proxiedUid,
+            @Nullable String message) {
+        int mode = noteProxyOpNoThrow(op, proxiedPackageName, proxiedUid, message);
+        if (mode == MODE_ERRORED) {
+            throw new SecurityException("Proxy package " + mContext.getOpPackageName()
+                    + " from uid " + Process.myUid() + " or calling package " + proxiedPackageName
+                    + " from uid " + proxiedUid + " not allowed to perform " + sOpNames[op]);
+        }
+        return mode;
+    }
+
+    /**
+     * Make note of an application performing an operation on behalf of another application when
+     * handling an IPC. This function will verify that the calling uid and proxied package name
+     * match, and if not, return {@link #MODE_IGNORED}. If this call succeeds, the last execution
+     * time of the operation for the proxied app and your app will be updated to the current time.
+     *
+     * @param op The operation to note. One of the OPSTR_* constants.
+     * @param proxiedPackageName The name of the application calling into the proxy application.
+     * @param proxiedUid The uid of the proxied application
+     * @param message A message describing the reason the op was noted
+     *
+     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or {@link #MODE_IGNORED}
+     * if it is not allowed and should be silently ignored (without causing the app to crash).
+     *
+     * @throws SecurityException If the proxy or proxied app has been configured to crash on this
+     * op.
+     */
+    public int noteProxyOp(@NonNull String op, @Nullable String proxiedPackageName, int proxiedUid,
+            @Nullable String message) {
+        return noteProxyOp(strOpToOp(op), proxiedPackageName, proxiedUid, message);
+    }
+
+    /**
+     * @deprecated Use {@link #noteProxyOpNoThrow(String, String, int, String)} instead
+     */
+    @Deprecated
+    public int noteProxyOpNoThrow(@NonNull String op, @NonNull String proxiedPackageName) {
+        return noteProxyOpNoThrow(op, proxiedPackageName, Binder.getCallingUid(), null);
+    }
+
+    /**
+     * @deprecated Use {@link #noteProxyOpNoThrow(String, String, int, String)} instead
+     */
+    @Deprecated
+    public int noteProxyOpNoThrow(@NonNull String op, @Nullable String proxiedPackageName,
+            int proxiedUid) {
+        return noteProxyOpNoThrow(op, proxiedPackageName, proxiedUid, null);
+    }
+
+    /**
+     * Like {@link #noteProxyOp(String, String, int, String)} but instead
+     * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
      *
      * <p>This API requires package with the {@code proxiedPackageName} to belong to
      * {@code proxiedUid}.
      *
      * @param op The op to note
+     * @param proxiedPackageName The package to note the op for
+     * @param proxiedUid The uid the package belongs to
+     * @param message A message describing the reason the op was noted
+     */
+    public int noteProxyOpNoThrow(@NonNull String op, @Nullable String proxiedPackageName,
+            int proxiedUid, @Nullable String message) {
+        return noteProxyOpNoThrow(strOpToOp(op), proxiedPackageName, proxiedUid, message);
+    }
+
+    /**
+     * Like {@link #noteProxyOp(int, String, int, String)} but instead
+     * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
+     *
+     * @param op The op to note
      * @param proxiedPackageName The package to note the op for or {@code null} if the op should be
      *                           noted for the "android" package
      * @param proxiedUid The uid the package belongs to
+     * @param message A message describing the reason the op was noted
+     *
+     * @hide
      */
-    public int noteProxyOpNoThrow(@NonNull String op, @Nullable String proxiedPackageName,
-            int proxiedUid) {
-        return noteProxyOpNoThrow(strOpToOp(op), proxiedPackageName, proxiedUid);
-    }
+    public int noteProxyOpNoThrow(int op, @Nullable String proxiedPackageName, int proxiedUid,
+            @Nullable String message) {
+        int myUid = Process.myUid();
 
-    /**
-     * Report that an application has started executing a long-running operation.  Note that you
-     * must pass in both the uid and name of the application to be checked; this function will
-     * verify that these two match, and if not, return {@link #MODE_IGNORED}.  If this call
-     * succeeds, the last execution time of the operation for this app will be updated to
-     * the current time and the operation will be marked as "running".  In this case you must
-     * later call {@link #finishOp(String, int, String)} to report when the application is no
-     * longer performing the operation.
-     * @param op The operation to start.  One of the OPSTR_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
-     * @throws SecurityException If the app has been configured to crash on this op.
-     */
-    public int startOp(@NonNull String op, int uid, @NonNull String packageName) {
-        return startOp(strOpToOp(op), uid, packageName);
-    }
+        try {
+            int mode = mService.noteProxyOperation(op, myUid, mContext.getOpPackageName(),
+                    proxiedUid, proxiedPackageName);
+            if (mode == MODE_ALLOWED
+                    // Only collect app-ops when the proxy is trusted
+                    && mContext.checkPermission(Manifest.permission.UPDATE_APP_OPS_STATS, -1, myUid)
+                    == PackageManager.PERMISSION_GRANTED) {
+                markAppOpNoted(proxiedUid, proxiedPackageName, op, message);
+            }
 
-    /**
-     * Like {@link #startOp} but instead of throwing a {@link SecurityException} it
-     * returns {@link #MODE_ERRORED}.
-     */
-    public int startOpNoThrow(@NonNull String op, int uid, @NonNull String packageName) {
-        return startOpNoThrow(strOpToOp(op), uid, packageName);
-    }
-
-    /**
-     * Report that an application is no longer performing an operation that had previously
-     * been started with {@link #startOp(String, int, String)}.  There is no validation of input
-     * or result; the parameters supplied here must be the exact same ones previously passed
-     * in when starting the operation.
-     */
-    public void finishOp(@NonNull String op, int uid, @NonNull String packageName) {
-        finishOp(strOpToOp(op), uid, packageName);
+            return mode;
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
      * Do a quick check for whether an application might be able to perform an operation.
-     * This is <em>not</em> a security check; you must use {@link #noteOp(int, int, String)}
-     * or {@link #startOp(int, int, String)} for your actual security checks, which also
-     * ensure that the given uid and package name are consistent.  This function can just be
-     * used for a quick check to see if an operation has been disabled for the application,
-     * as an early reject of some work.  This does not modify the time stamp or other data
-     * about the operation.
+     * This is <em>not</em> a security check; you must use {@link #noteOp(String, int, String,
+     * String)} or {@link #startOp(int, int, String, boolean, String)} for your actual security
+     * checks, which also ensure that the given uid and package name are consistent. This function
+     * can just be used for a quick check to see if an operation has been disabled for the
+     * application, as an early reject of some work.  This does not modify the time stamp or other
+     * data about the operation.
      *
      * <p>Important things this will not do (which you need to ultimate use
-     * {@link #noteOp(int, int, String)} or {@link #startOp(int, int, String)} to cover):</p>
+     * {@link #noteOp(String, int, String, String)} or
+     * {@link #startOp(int, int, String, boolean, String)} to cover):</p>
      * <ul>
      *     <li>Verifying the uid and package are consistent, so callers can't spoof
      *     their identity.</li>
@@ -5225,107 +5503,6 @@ public class AppOpsManager {
         }
     }
 
-    /**
-     * Make note of an application performing an operation.  Note that you must pass
-     * in both the uid and name of the application to be checked; this function will verify
-     * that these two match, and if not, return {@link #MODE_IGNORED}.  If this call
-     * succeeds, the last execution time of the operation for this app will be updated to
-     * the current time.
-     * @param op The operation to note.  One of the OP_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
-     * @throws SecurityException If the app has been configured to crash on this op.
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public int noteOp(int op, int uid, String packageName) {
-        final int mode = noteOpNoThrow(op, uid, packageName);
-        if (mode == MODE_ERRORED) {
-            throw new SecurityException(buildSecurityExceptionMsg(op, uid, packageName));
-        }
-        return mode;
-    }
-
-    /**
-     * Make note of an application performing an operation on behalf of another
-     * application when handling an IPC. Note that you must pass the package name
-     * of the application that is being proxied while its UID will be inferred from
-     * the IPC state; this function will verify that the calling uid and proxied
-     * package name match, and if not, return {@link #MODE_IGNORED}. If this call
-     * succeeds, the last execution time of the operation for the proxied app and
-     * your app will be updated to the current time.
-     * @param op The operation to note. One of the OPSTR_* constants.
-     * @param proxiedPackageName The name of the application calling into the proxy application.
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
-     * @throws SecurityException If the proxy or proxied app has been configured to
-     * crash on this op.
-     *
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public int noteProxyOp(int op, String proxiedPackageName) {
-        int mode = noteProxyOpNoThrow(op, proxiedPackageName);
-        if (mode == MODE_ERRORED) {
-            throw new SecurityException("Proxy package " + mContext.getOpPackageName()
-                    + " from uid " + Process.myUid() + " or calling package "
-                    + proxiedPackageName + " from uid " + Binder.getCallingUid()
-                    + " not allowed to perform " + sOpNames[op]);
-        }
-        return mode;
-    }
-
-    /**
-     * Like {@link #noteProxyOp(int, String)} but instead
-     * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
-     * @hide
-     */
-    public int noteProxyOpNoThrow(int op, String proxiedPackageName, int proxiedUid) {
-        try {
-            return mService.noteProxyOperation(op, Process.myUid(), mContext.getOpPackageName(),
-                    proxiedUid, proxiedPackageName);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Like {@link #noteProxyOp(int, String)} but instead
-     * of throwing a {@link SecurityException} it returns {@link #MODE_ERRORED}.
-     *
-     * <p>This API requires the package with {@code proxiedPackageName} to belongs to
-     * {@link Binder#getCallingUid()}.
-     *
-     * @hide
-     */
-    public int noteProxyOpNoThrow(int op, String proxiedPackageName) {
-        return noteProxyOpNoThrow(op, proxiedPackageName, Binder.getCallingUid());
-    }
-
-    /**
-     * Like {@link #noteOp} but instead of throwing a {@link SecurityException} it
-     * returns {@link #MODE_ERRORED}.
-     * @hide
-     */
-    @UnsupportedAppUsage
-    public int noteOpNoThrow(int op, int uid, String packageName) {
-        try {
-            return mService.noteOperation(op, uid, packageName);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /** @hide */
-    @UnsupportedAppUsage
-    public int noteOp(int op) {
-        return noteOp(op, Process.myUid(), mContext.getOpPackageName());
-    }
-
     /** @hide */
     @UnsupportedAppUsage
     public static IBinder getToken(IAppOpsService service) {
@@ -5342,54 +5519,86 @@ public class AppOpsManager {
         }
     }
 
-    /** @hide */
-    public int startOp(int op) {
-        return startOp(op, Process.myUid(), mContext.getOpPackageName());
+
+    /**
+     * @deprecated use {@link #startOp(String, int, String, String)} instead
+     */
+    @Deprecated
+    public int startOp(@NonNull String op, int uid, @NonNull String packageName) {
+        return startOp(op, uid, packageName, null);
     }
 
     /**
-     * Report that an application has started executing a long-running operation.  Note that you
-     * must pass in both the uid and name of the application to be checked; this function will
-     * verify that these two match, and if not, return {@link #MODE_IGNORED}.  If this call
-     * succeeds, the last execution time of the operation for this app will be updated to
-     * the current time and the operation will be marked as "running".  In this case you must
-     * later call {@link #finishOp(int, int, String)} to report when the application is no
-     * longer performing the operation.
+     * @deprecated Use {@link #startOp(int, int, String, boolean, String)} instead
      *
-     * @param op The operation to start.  One of the OP_* constants.
-     * @param uid The user id of the application attempting to perform the operation.
-     * @param packageName The name of the application attempting to perform the operation.
-     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
-     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
-     * causing the app to crash).
-     * @throws SecurityException If the app has been configured to crash on this op.
      * @hide
      */
-    public int startOp(int op, int uid, String packageName) {
-        return startOp(op, uid, packageName, false);
+    @Deprecated
+    public int startOp(int op) {
+        return startOp(op, Process.myUid(), mContext.getOpPackageName(), false, null);
     }
 
     /**
-     * Report that an application has started executing a long-running operation. Similar
-     * to {@link #startOp(String, int, String) except that if the mode is {@link #MODE_DEFAULT}
-     * the operation should succeed since the caller has performed its standard permission
-     * checks which passed and would perform the protected operation for this mode.
+     * @deprecated Use {@link #startOp(int, int, String, boolean, String)} instead
+     *
+     * @hide
+     */
+    @Deprecated
+    public int startOp(int op, int uid, String packageName) {
+        return startOp(op, uid, packageName, false, null);
+    }
+
+    /**
+     * @deprecated Use {@link #startOp(int, int, String, boolean, String)} instead
+     *
+     * @hide
+     */
+    @Deprecated
+    public int startOp(int op, int uid, String packageName, boolean startIfModeDefault) {
+        return startOp(op, uid, packageName, startIfModeDefault, null);
+    }
+
+    /**
+     * Report that an application has started executing a long-running operation.
+     *
+     * @param op The operation to start.  One of the OPSTR_* constants.
+     * @param uid The user id of the application attempting to perform the operation.
+     * @param packageName The name of the application attempting to perform the operation.
+     * @param message Description why op was started
+     *
+     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
+     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
+     * causing the app to crash).
+     *
+     * @throws SecurityException If the app has been configured to crash on this op or
+     * the package is not in the passed in UID.
+     */
+    public int startOp(@NonNull String op, int uid, @Nullable String packageName,
+            @Nullable String message) {
+        return startOp(strOpToOp(op), uid, packageName, false, message);
+    }
+
+    /**
+     * Report that an application has started executing a long-running operation.
      *
      * @param op The operation to start.  One of the OP_* constants.
      * @param uid The user id of the application attempting to perform the operation.
      * @param packageName The name of the application attempting to perform the operation.
+     * @param startIfModeDefault Whether to start if mode is {@link #MODE_DEFAULT}.
+     * @param message Description why op was started
+     *
      * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
      * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
      * causing the app to crash).
-     * @param startIfModeDefault Whether to start if mode is {@link #MODE_DEFAULT}.
      *
      * @throws SecurityException If the app has been configured to crash on this op or
      * the package is not in the passed in UID.
      *
      * @hide
      */
-    public int startOp(int op, int uid, String packageName, boolean startIfModeDefault) {
-        final int mode = startOpNoThrow(op, uid, packageName, startIfModeDefault);
+    public int startOp(int op, int uid, @Nullable String packageName, boolean startIfModeDefault,
+            @Nullable String message) {
+        final int mode = startOpNoThrow(op, uid, packageName, startIfModeDefault, message);
         if (mode == MODE_ERRORED) {
             throw new SecurityException(buildSecurityExceptionMsg(op, uid, packageName));
         }
@@ -5397,45 +5606,111 @@ public class AppOpsManager {
     }
 
     /**
-     * Like {@link #startOp} but instead of throwing a {@link SecurityException} it
-     * returns {@link #MODE_ERRORED}.
-     * @hide
+     * @deprecated use {@link #startOpNoThrow(String, int, String, String)} instead
      */
-    public int startOpNoThrow(int op, int uid, String packageName) {
-        return startOpNoThrow(op, uid, packageName, false);
+    @Deprecated
+    public int startOpNoThrow(@NonNull String op, int uid, @NonNull String packageName) {
+        return startOpNoThrow(op, uid, packageName, null);
     }
 
     /**
-     * Like {@link #startOp(int, int, String, boolean)} but instead of throwing a
+     * @deprecated Use {@link #startOpNoThrow(int, int, String, boolean, String} instead
+     *
+     * @hide
+     */
+    @Deprecated
+    public int startOpNoThrow(int op, int uid, String packageName) {
+        return startOpNoThrow(op, uid, packageName, false, null);
+    }
+
+    /**
+     * @deprecated Use {@link #startOpNoThrow(int, int, String, boolean, String} instead
+     *
+     * @hide
+     */
+    @Deprecated
+    public int startOpNoThrow(int op, int uid, String packageName, boolean startIfModeDefault) {
+        return startOpNoThrow(op, uid, packageName, startIfModeDefault, null);
+    }
+
+    /**
+     * Like {@link #startOp(String, int, String, String)} but instead of throwing a
      * {@link SecurityException} it returns {@link #MODE_ERRORED}.
      *
      * @param op The operation to start.  One of the OP_* constants.
      * @param uid The user id of the application attempting to perform the operation.
      * @param packageName The name of the application attempting to perform the operation.
+     * @param message Description why op was started
+     *
      * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
      * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
      * causing the app to crash).
+     */
+    public int startOpNoThrow(@NonNull String op, int uid, @NonNull String packageName,
+            @Nullable String message) {
+        return startOpNoThrow(strOpToOp(op), uid, packageName, false, message);
+    }
+
+    /**
+     * Like {@link #startOp(int, int, String, boolean, String)} but instead of throwing a
+     * {@link SecurityException} it returns {@link #MODE_ERRORED}.
+     *
+     * @param op The operation to start.  One of the OP_* constants.
+     * @param uid The user id of the application attempting to perform the operation.
+     * @param packageName The name of the application attempting to perform the operation.
      * @param startIfModeDefault Whether to start if mode is {@link #MODE_DEFAULT}.
+     * @param message Description why op was started
+     *
+     * @return Returns {@link #MODE_ALLOWED} if the operation is allowed, or
+     * {@link #MODE_IGNORED} if it is not allowed and should be silently ignored (without
+     * causing the app to crash).
      *
      * @hide
      */
-    public int startOpNoThrow(int op, int uid, String packageName, boolean startIfModeDefault) {
+    public int startOpNoThrow(int op, int uid, @NonNull String packageName,
+            boolean startIfModeDefault, @Nullable String message) {
         try {
-            return mService.startOperation(getToken(mService), op, uid, packageName,
+            int mode = mService.startOperation(getToken(mService), op, uid, packageName,
                     startIfModeDefault);
+            if (mode == MODE_ALLOWED) {
+                markAppOpNoted(uid, packageName, op, message);
+            }
+
+            return mode;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
     }
 
     /**
-     * Report that an application is no longer performing an operation that had previously
-     * been started with {@link #startOp(int, int, String)}.  There is no validation of input
-     * or result; the parameters supplied here must be the exact same ones previously passed
-     * in when starting the operation.
+     * @deprecated Use {@link #finishOp(String, int, String)} instead
+     *
      * @hide
      */
-    public void finishOp(int op, int uid, String packageName) {
+    @Deprecated
+    public void finishOp(int op) {
+        finishOp(op, Process.myUid(), mContext.getOpPackageName());
+    }
+
+    /**
+     * Report that an application is no longer performing an operation that had previously
+     * been started with {@link #startOp(String, int, String, String)}.  There is no validation of
+     * input or result; the parameters supplied here must be the exact same ones previously passed
+     * in when starting the operation.
+     */
+    public void finishOp(@NonNull String op, int uid, @NonNull String packageName) {
+        finishOp(strOpToOp(op), uid, packageName);
+    }
+
+    /**
+     * Report that an application is no longer performing an operation that had previously
+     * been started with {@link #startOp(int, int, String, boolean, String)}. There is no
+     * validation of input or result; the parameters supplied here must be the exact same ones
+     * previously passed in when starting the operation.
+     *
+     * @hide
+     */
+    public void finishOp(int op, int uid, @NonNull String packageName) {
         try {
             mService.finishOperation(getToken(mService), op, uid, packageName);
         } catch (RemoteException e) {
@@ -5443,9 +5718,399 @@ public class AppOpsManager {
         }
     }
 
-    /** @hide */
-    public void finishOp(int op) {
-        finishOp(op, Process.myUid(), mContext.getOpPackageName());
+    /**
+     * Checks whether the given op for a package is active.
+     * <p>
+     * If you don't hold the {@code android.Manifest.permission#WATCH_APPOPS}
+     * permission you can query only for your UID.
+     *
+     * @see #finishOp(String, int, String)
+     * @see #startOp(String, int, String, String)
+     */
+    public boolean isOpActive(@NonNull String op, int uid, @NonNull String packageName) {
+        return isOperationActive(strOpToOp(op), uid, packageName);
+    }
+
+    /**
+     * Start collection of noted appops on this thread.
+     *
+     * <p>Called at the beginning of a two way binder transaction.
+     *
+     * @see #finishNotedAppOpsCollection()
+     *
+     * @hide
+     */
+    public static void startNotedAppOpsCollection(int callingUid) {
+        sBinderThreadCallingUid.set(callingUid);
+    }
+
+    /**
+     * State of a temporarily paused noted app-ops collection.
+     *
+     * @see #pauseNotedAppOpsCollection()
+     *
+     * @hide
+     */
+    public static class PausedNotedAppOpsCollection {
+        final int mUid;
+        final @Nullable long[] mCollectedNotedAppOps;
+
+        PausedNotedAppOpsCollection(int uid, @Nullable long[] collectedNotedAppOps) {
+            mUid = uid;
+            mCollectedNotedAppOps = collectedNotedAppOps;
+        }
+    }
+
+    /**
+     * Temporarily suspend collection of noted app-ops when binder-thread calls into the other
+     * process. During such a call there might be call-backs coming back on the same thread which
+     * should not be accounted to the current collection.
+     *
+     * @return a state needed to resume the collection
+     *
+     * @hide
+     */
+    public static @Nullable PausedNotedAppOpsCollection pauseNotedAppOpsCollection() {
+        Integer previousUid = sBinderThreadCallingUid.get();
+        if (previousUid != null) {
+            long[] previousCollectedNotedAppOps = sAppOpsNotedInThisBinderTransaction.get();
+
+            sBinderThreadCallingUid.remove();
+            sAppOpsNotedInThisBinderTransaction.remove();
+
+            return new PausedNotedAppOpsCollection(previousUid, previousCollectedNotedAppOps);
+        }
+
+        return null;
+    }
+
+    /**
+     * Resume a collection paused via {@link #pauseNotedAppOpsCollection}.
+     *
+     * @param prevCollection The state of the previous collection
+     *
+     * @hide
+     */
+    public static void resumeNotedAppOpsCollection(
+            @Nullable PausedNotedAppOpsCollection prevCollection) {
+        if (prevCollection != null) {
+            sBinderThreadCallingUid.set(prevCollection.mUid);
+
+            if (prevCollection.mCollectedNotedAppOps != null) {
+                sAppOpsNotedInThisBinderTransaction.set(prevCollection.mCollectedNotedAppOps);
+            }
+        }
+    }
+
+    /**
+     * Finish collection of noted appops on this thread.
+     *
+     * <p>Called at the end of a two way binder transaction.
+     *
+     * @see #startNotedAppOpsCollection(int)
+     *
+     * @hide
+     */
+    public static void finishNotedAppOpsCollection() {
+        sBinderThreadCallingUid.remove();
+        sAppOpsNotedInThisBinderTransaction.remove();
+    }
+
+    /**
+     * Mark an app-op as noted
+     */
+    private void markAppOpNoted(int uid, @NonNull String packageName, int code,
+            @Nullable String message) {
+        // check it the appops needs to be collected and cache result
+        if (sAppOpsToNote[code] == SHOULD_COLLECT_NOTE_OP_NOT_INITIALIZED) {
+            boolean shouldCollectNotes;
+            try {
+                shouldCollectNotes = mService.shouldCollectNotes(code);
+            } catch (RemoteException e) {
+                return;
+            }
+
+            if (shouldCollectNotes) {
+                sAppOpsToNote[code] = SHOULD_COLLECT_NOTE_OP;
+            } else {
+                sAppOpsToNote[code] = SHOULD_NOT_COLLECT_NOTE_OP;
+            }
+        }
+
+        if (sAppOpsToNote[code] != SHOULD_COLLECT_NOTE_OP) {
+            return;
+        }
+
+        Integer binderUid = sBinderThreadCallingUid.get();
+
+        synchronized (sLock) {
+            if (sNotedAppOpsCollector != null && uid == Process.myUid() && packageName.equals(
+                    ActivityThread.currentOpPackageName())) {
+                // This app is noting an app-op for itself. Deliver immediately.
+                sNotedAppOpsCollector.onSelfNoted(new SyncNotedAppOp(code));
+
+                return;
+            }
+        }
+
+        if (binderUid != null && binderUid == uid) {
+            // If this is inside of a two-way binder call: Delivered to caller via
+            // {@link #prefixParcelWithAppOpsIfNeeded}
+            long[] appOpsNotedInThisBinderTransaction;
+
+            appOpsNotedInThisBinderTransaction = sAppOpsNotedInThisBinderTransaction.get();
+            if (appOpsNotedInThisBinderTransaction == null) {
+                appOpsNotedInThisBinderTransaction = new long[2];
+                sAppOpsNotedInThisBinderTransaction.set(appOpsNotedInThisBinderTransaction);
+            }
+
+            if (code < 64) {
+                appOpsNotedInThisBinderTransaction[0] |= 1L << code;
+            } else {
+                appOpsNotedInThisBinderTransaction[1] |= 1L << (code - 64);
+            }
+        } else {
+            // Cannot deliver the note synchronous: Hence send it to the system server to
+            // notify the noted process.
+            if (message == null) {
+                // Default message is a stack trace
+                message = getFormattedStackTrace();
+            }
+
+            long token = Binder.clearCallingIdentity();
+            try {
+                mService.noteAsyncOp(mContext.getOpPackageName(), uid, packageName, code, message);
+            } catch (RemoteException e) {
+                e.rethrowFromSystemServer();
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+    }
+
+    /**
+     * Append app-ops noted in the current two-way binder transaction to parcel.
+     *
+     * <p>This is called on the callee side of a two way binder transaction just before the
+     * transaction returns.
+     *
+     * @param p the parcel to append the noted app-ops to
+     *
+     * @hide
+     */
+    public static void prefixParcelWithAppOpsIfNeeded(@NonNull Parcel p) {
+        long[] notedAppOps = sAppOpsNotedInThisBinderTransaction.get();
+        if (notedAppOps == null || (notedAppOps[0] == 0 && notedAppOps[1] == 0)) {
+            return;
+        }
+
+        p.writeInt(Parcel.EX_HAS_NOTED_APPOPS_REPLY_HEADER);
+        p.writeLong(notedAppOps[0]);
+        p.writeLong(notedAppOps[1]);
+    }
+
+    /**
+     * Read app-ops noted during a two-way binder transaction from parcel.
+     *
+     * <p>This is called on the calling side of a two way binder transaction just after the
+     * transaction returns.
+     *
+     * <p>Note: Make sure to keep frameworks/native/libs/binder/Status.cpp::readAndLogNotedAppops
+     * in sync.
+     *
+     * @param p The parcel to read from
+     *
+     * @hide
+     */
+    public static void readAndLogNotedAppops(@NonNull Parcel p) {
+        long[] rawNotedAppOps = new long[2];
+        rawNotedAppOps[0] = p.readLong();
+        rawNotedAppOps[1] = p.readLong();
+
+        if (rawNotedAppOps[0] != 0 || rawNotedAppOps[1] != 0) {
+            BitSet notedAppOps = BitSet.valueOf(rawNotedAppOps);
+
+            synchronized (sLock) {
+                for (int code = notedAppOps.nextSetBit(0); code != -1;
+                        code = notedAppOps.nextSetBit(code + 1)) {
+                    if (sNotedAppOpsCollector != null) {
+                        sNotedAppOpsCollector.onNoted(new SyncNotedAppOp(code));
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Register a new {@link AppOpsCollector}.
+     *
+     * <p>There can only ever be one collector per process. If there currently is a collector
+     * registered, it will be unregistered.
+     *
+     * <p><b>Only appops related to dangerous permissions are collected.</b>
+     *
+     * @param collector The collector to set or {@code null} to unregister.
+     */
+    public void setNotedAppOpsCollector(@Nullable AppOpsCollector collector) {
+        synchronized (sLock) {
+            if (sNotedAppOpsCollector != null) {
+                try {
+                    mService.stopWatchingAsyncNoted(mContext.getPackageName(),
+                            sNotedAppOpsCollector.mAsyncCb);
+                } catch (RemoteException e) {
+                    e.rethrowFromSystemServer();
+                }
+            }
+
+            sNotedAppOpsCollector = collector;
+
+            if (sNotedAppOpsCollector != null) {
+                List<AsyncNotedAppOp> missedAsyncOps = null;
+                try {
+                    mService.startWatchingAsyncNoted(mContext.getPackageName(),
+                            sNotedAppOpsCollector.mAsyncCb);
+                    missedAsyncOps = mService.extractAsyncOps(mContext.getPackageName());
+                } catch (RemoteException e) {
+                    e.rethrowFromSystemServer();
+                }
+
+                if (missedAsyncOps != null) {
+                    int numMissedAsyncOps = missedAsyncOps.size();
+                    for (int i = 0; i < numMissedAsyncOps; i++) {
+                        final AsyncNotedAppOp asyncNotedAppOp = missedAsyncOps.get(i);
+                        if (sNotedAppOpsCollector != null) {
+                            sNotedAppOpsCollector.getAsyncNotedExecutor().execute(
+                                    () -> sNotedAppOpsCollector.onAsyncNoted(
+                                            asyncNotedAppOp));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * @return {@code true} iff the process currently is currently collecting noted appops.
+     *
+     * @see #setNotedAppOpsCollector(AppOpsCollector)
+     *
+     * @hide
+     */
+    public static boolean isCollectingNotedAppOps() {
+        synchronized (sLock) {
+            return sNotedAppOpsCollector != null;
+        }
+    }
+
+    /**
+     * Callback an app can choose to {@link #setNotedAppOpsCollector register} to monitor it's noted
+     * appops.
+     *
+     * <p><b>Only appops related to dangerous permissions are collected.</b>
+     */
+    public abstract static class AppOpsCollector {
+        /** Callback registered with the system. This will receive the async notes ops */
+        private final IAppOpsAsyncNotedCallback mAsyncCb = new IAppOpsAsyncNotedCallback.Stub() {
+            @Override
+            public void opNoted(AsyncNotedAppOp op) {
+                Preconditions.checkNotNull(op);
+
+                getAsyncNotedExecutor().execute(() -> onAsyncNoted(op));
+            }
+        };
+
+        /**
+         * @return The executor for the system to use when calling {@link #onAsyncNoted}.
+         */
+        public @NonNull Executor getAsyncNotedExecutor() {
+            return new HandlerExecutor(Handler.getMain());
+        }
+
+        /**
+         * Called when an app-op was noted for this package inside of a two-way binder-call.
+         *
+         * <p>Called on the calling thread just after executing the binder-call. This allows
+         * the app to e.g. collect stack traces to figure out where the access came from.
+         *
+         * @param op The op noted
+         */
+        public abstract void onNoted(@NonNull SyncNotedAppOp op);
+
+        /**
+         * Called when this app noted an app-op for its own package.
+         *
+         * <p>Called on the thread the noted the op. This allows the app to e.g. collect stack
+         * traces to figure out where the access came from.
+         *
+         * @param op The op noted
+         */
+        public abstract void onSelfNoted(@NonNull SyncNotedAppOp op);
+
+        /**
+         * Called when an app-op was noted for this package which cannot be delivered via the other
+         * two mechanisms.
+         *
+         * <p>Called as soon as possible after the app-op was noted, but the delivery delay is not
+         * guaranteed. Due to how async calls work in Android this might even be delivered slightly
+         * before the private data is delivered to the app.
+         *
+         * <p>If the app is not running or no {@link AppOpsCollector} is registered a small amount
+         * of noted app-ops are buffered and then delivered as soon as a collector is registered.
+         *
+         * @param asyncOp The op noted
+         */
+        public abstract void onAsyncNoted(@NonNull AsyncNotedAppOp asyncOp);
+    }
+
+    /**
+     * Generate a stack trace used for noted app-ops logging.
+     *
+     * <p>This strips away the first few and last few stack trace elements as they are not
+     * interesting to apps.
+     */
+    private static String getFormattedStackTrace() {
+        StackTraceElement[] trace = new Exception().getStackTrace();
+
+        int firstInteresting = 0;
+        for (int i = 0; i < trace.length; i++) {
+            if (trace[i].getClassName().startsWith(AppOpsManager.class.getName())
+                    || trace[i].getClassName().startsWith(Parcel.class.getName())
+                    || trace[i].getClassName().contains("$Stub$Proxy")
+                    || trace[i].getClassName().startsWith(DatabaseUtils.class.getName())
+                    || trace[i].getClassName().startsWith("android.content.ContentProviderProxy")
+                    || trace[i].getClassName().startsWith(ContentResolver.class.getName())) {
+                firstInteresting = i;
+            } else {
+                break;
+            }
+        }
+
+        int lastInteresting = trace.length - 1;
+        for (int i = trace.length - 1; i >= 0; i--) {
+            if (trace[i].getClassName().startsWith(HandlerThread.class.getName())
+                    || trace[i].getClassName().startsWith(Handler.class.getName())
+                    || trace[i].getClassName().startsWith(Looper.class.getName())
+                    || trace[i].getClassName().startsWith(Binder.class.getName())
+                    || trace[i].getClassName().startsWith(RuntimeInit.class.getName())
+                    || trace[i].getClassName().startsWith(ZygoteInit.class.getName())
+                    || trace[i].getClassName().startsWith(ActivityThread.class.getName())
+                    || trace[i].getClassName().startsWith(Method.class.getName())
+                    || trace[i].getClassName().startsWith("com.android.server.SystemServer")) {
+                lastInteresting = i;
+            } else {
+                break;
+            }
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = firstInteresting; i <= lastInteresting; i++) {
+            sb.append(trace[i]);
+            if (i != lastInteresting) {
+                sb.append('\n');
+            }
+        }
+
+        return sb.toString();
     }
 
     /**
@@ -5457,7 +6122,7 @@ public class AppOpsManager {
      * @see #startWatchingActive(int[], OnOpActiveChangedListener)
      * @see #stopWatchingMode(OnOpChangedListener)
      * @see #finishOp(int)
-     * @see #startOp(int)
+     * @see #startOp(int, int, String, boolean, String)
      *
      * @hide */
     @TestApi

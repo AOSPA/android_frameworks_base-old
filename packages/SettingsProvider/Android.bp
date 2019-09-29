@@ -11,7 +11,7 @@ android_app {
     ],
     static_libs: [
         "junit",
-        "SettingsLib",
+        "SettingsLibDisplayDensityUtils",
     ],
     platform_apis: true,
     certificate: "platform",
@@ -24,13 +24,17 @@ android_test {
     // because this test is not an instrumentation test. (because the target runs in the system process.)
     srcs: [
         "test/**/*.java",
+        "src/android/provider/settings/backup/*",
+        "src/android/provider/settings/validators/*",
         "src/com/android/providers/settings/SettingsBackupAgent.java",
         "src/com/android/providers/settings/SettingsState.java",
         "src/com/android/providers/settings/SettingsHelper.java",
     ],
     static_libs: [
         "androidx.test.rules",
-        "SettingsLib",
+        "SettingsLibDisplayDensityUtils",
+        "platform-test-annotations",
+        "truth-prebuilt",
     ],
     libs: [
         "android.test.base",

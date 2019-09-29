@@ -3630,7 +3630,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public void crashApplication(int uid, int initialPid, String packageName, int userId,
-            String message) {
+            String message, boolean force) {
         if (checkCallingPermission(android.Manifest.permission.FORCE_STOP_PACKAGES)
                 != PackageManager.PERMISSION_GRANTED) {
             String msg = "Permission Denial: crashApplication() from pid="
@@ -3642,7 +3642,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         synchronized(this) {
-            mAppErrors.scheduleAppCrashLocked(uid, initialPid, packageName, userId, message);
+            mAppErrors.scheduleAppCrashLocked(uid, initialPid, packageName, userId,
+                    message, force);
         }
     }
 
@@ -4716,7 +4717,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mForceStopKill = true;
 
         boolean didSomething = mProcessList.killPackageProcessesLocked(packageName, appId, userId,
-                ProcessList.INVALID_ADJ, callerWillRestart, true /* allowRestart */, doit,
+                ProcessList.INVALID_ADJ, callerWillRestart, false /* allowRestart */, doit,
                 evenPersistent, true /* setRemoved */,
                 packageName == null ? ("stop user " + userId) : ("stop " + packageName));
 
@@ -5342,6 +5343,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         // Inform checkpointing systems of success
         try {
+            // This line is needed to CTS test for the correct exception handling
+            // See b/138952436#comment36 for context
+            Slog.i(TAG, "About to commit checkpoint");
             IStorageManager storageManager = PackageHelper.getStorageManager();
             storageManager.commitChanges();
         } catch (Exception e) {
@@ -6175,16 +6179,16 @@ public class ActivityManagerService extends IActivityManager.Stub
         return ptw != null ? ptw.tag : null;
     }
 
-    private ProviderInfo getProviderInfoLocked(String authority, int userHandle, int pmFlags) {
+    private ProviderInfo getProviderInfoLocked(String authority, @UserIdInt int userId,
+            int pmFlags) {
         ProviderInfo pi = null;
-        ContentProviderRecord cpr = mProviderMap.getProviderByName(authority, userHandle);
+        ContentProviderRecord cpr = mProviderMap.getProviderByName(authority, userId);
         if (cpr != null) {
             pi = cpr.info;
         } else {
             try {
                 pi = AppGlobals.getPackageManager().resolveContentProvider(
-                        authority, PackageManager.GET_URI_PERMISSION_PATTERNS | pmFlags,
-                        userHandle);
+                        authority, PackageManager.GET_URI_PERMISSION_PATTERNS | pmFlags, userId);
             } catch (RemoteException ex) {
             }
         }
@@ -6192,10 +6196,9 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @VisibleForTesting
-    public void grantEphemeralAccessLocked(int userId, Intent intent,
-            int targetAppId, int ephemeralAppId) {
+    public void grantImplicitAccess(int userId, Intent intent, int callingAppId, int targetAppId) {
         getPackageManagerInternalLocked().
-                grantEphemeralAccess(userId, intent, targetAppId, ephemeralAppId);
+                grantImplicitAccess(userId, intent, callingAppId, targetAppId);
     }
 
     /**
@@ -6398,13 +6401,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public void moveTaskToStack(int taskId, int stackId, boolean toTop) {
         mActivityTaskManager.moveTaskToStack(taskId, stackId, toTop);
-    }
-
-    @Override
-    public void resizeStack(int stackId, Rect destBounds, boolean allowResizeInDockedMode,
-            boolean preserveWindows, boolean animate, int animationDuration) {
-        mActivityTaskManager.resizeStack(stackId, destBounds, allowResizeInDockedMode,
-                preserveWindows, animate, animationDuration);
     }
 
     @Override
@@ -7172,9 +7168,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             checkTime(startTime, "getContentProviderImpl: done!");
 
-            grantEphemeralAccessLocked(userId, null /*intent*/,
-                    UserHandle.getAppId(cpi.applicationInfo.uid),
-                    UserHandle.getAppId(Binder.getCallingUid()));
+            grantImplicitAccess(userId, null /*intent*/,
+                    UserHandle.getAppId(Binder.getCallingUid()),
+                    UserHandle.getAppId(cpi.applicationInfo.uid)
+            );
         }
 
         // Wait for the provider to be published...
@@ -8281,10 +8278,12 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     /**
-     * @deprecated This method is only used by a few internal components and it will soon be
-     * replaced by a proper bug report API (which will be restricted to a few, pre-defined apps).
+     * @deprecated This method is only used by a few internal components and it will soon start
+     * using bug report API (which will be restricted to a few, pre-defined apps).
      * No new code should be calling it.
      */
+    // TODO(b/137825297): Remove deprecated annotation and rephrase comments for all
+    // requestBugreport functions below.
     @Deprecated
     @Override
     public void requestBugReport(int bugreportType) {
@@ -8292,11 +8291,12 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     /**
-     * @deprecated This method is only used by a few internal components and it will soon be
-     * replaced by a proper bug report API (which will be restricted to a few, pre-defined apps).
+     * @deprecated This method is only used by a few internal components and it will soon start
+     * using bug report API (which will be restricted to a few, pre-defined apps).
      * No new code should be calling it.
      */
     @Deprecated
+    @Override
     public void requestBugReportWithDescription(@Nullable String shareTitle,
             @Nullable String shareDescription, int bugreportType) {
         String type = null;
@@ -8363,8 +8363,13 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (shareDescription != null) {
                 triggerShellBugreport.putExtra(EXTRA_DESCRIPTION, shareDescription);
             }
-            // Send broadcast to shell to trigger bugreport using Bugreport API
-            mContext.sendBroadcast(triggerShellBugreport);
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                // Send broadcast to shell to trigger bugreport using Bugreport API
+                mContext.sendBroadcast(triggerShellBugreport);
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
         } else {
             SystemProperties.set("dumpstate.options", type);
             SystemProperties.set("ctl.start", "bugreport");
@@ -8372,8 +8377,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     /**
-     * @deprecated This method is only used by a few internal components and it will soon be
-     * replaced by a proper bug report API (which will be restricted to a few, pre-defined apps).
+     * @deprecated This method is only used by a few internal components and it will soon start
+     * using bug report API (which will be restricted to a few, pre-defined apps).
      * No new code should be calling it.
      */
     @Deprecated
@@ -8384,8 +8389,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     /**
-     * @deprecated This method is only used by a few internal components and it will soon be
-     * replaced by a proper bug report API (which will be restricted to a few, pre-defined apps).
+     * @deprecated This method is only used by a few internal components and it will soon start
+     * using bug report API (which will be restricted to a few, pre-defined apps).
      * No new code should be calling it.
      */
     @Deprecated
@@ -8393,6 +8398,41 @@ public class ActivityManagerService extends IActivityManager.Stub
     public void requestWifiBugReport(String shareTitle, String shareDescription) {
         requestBugReportWithDescription(shareTitle, shareDescription,
                 ActivityManager.BUGREPORT_OPTION_WIFI);
+    }
+
+    /**
+     * Takes an interactive bugreport with a progress notification
+     */
+    @Override
+    public void requestInteractiveBugReport() {
+        requestBugReportWithDescription(null, null, ActivityManager.BUGREPORT_OPTION_INTERACTIVE);
+    }
+
+    /**
+     * Takes an interactive bugreport with a progress notification. Also, shows the given title and
+     * description on the final share notification
+     */
+    @Override
+    public void requestInteractiveBugReportWithDescription(String shareTitle,
+            String shareDescription) {
+        requestBugReportWithDescription(shareTitle, shareDescription,
+                ActivityManager.BUGREPORT_OPTION_INTERACTIVE);
+    }
+
+    /**
+     * Takes a bugreport with minimal user interference
+     */
+    @Override
+    public void requestFullBugReport() {
+        requestBugReportWithDescription(null, null, ActivityManager.BUGREPORT_OPTION_FULL);
+    }
+
+    /**
+     * Takes a bugreport remotely
+     */
+    @Override
+    public void requestRemoteBugReport() {
+        requestBugReportWithDescription(null, null, ActivityManager.BUGREPORT_OPTION_REMOTE);
     }
 
     public void registerProcessObserver(IProcessObserver observer) {
@@ -9204,7 +9244,16 @@ public class ActivityManagerService extends IActivityManager.Stub
                 Integer.toString(currentUserId), currentUserId);
         mBatteryStatsService.noteEvent(BatteryStats.HistoryItem.EVENT_USER_FOREGROUND_START,
                 Integer.toString(currentUserId), currentUserId);
-        mSystemServiceManager.startUser(t, currentUserId);
+
+        // On Automotive, at this point the system user has already been started and unlocked,
+        // and some of the tasks we do here have already been done. So skip those in that case.
+        // TODO(b/132262830): this workdound shouldn't be necessary once we move the
+        // headless-user start logic to UserManager-land
+        final boolean bootingSystemUser = currentUserId == UserHandle.USER_SYSTEM;
+
+        if (bootingSystemUser) {
+            mSystemServiceManager.startUser(t, currentUserId);
+        }
 
         synchronized (this) {
             // Only start up encryption-aware persistent apps; once user is
@@ -9232,20 +9281,19 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 t.traceEnd();
             }
-            t.traceBegin("startHomeOnAllDisplays");
-            mAtmInternal.startHomeOnAllDisplays(currentUserId, "systemReady");
-            t.traceEnd();
+
+            if (bootingSystemUser) {
+                t.traceBegin("startHomeOnAllDisplays");
+                mAtmInternal.startHomeOnAllDisplays(currentUserId, "systemReady");
+                t.traceEnd();
+            }
 
             t.traceBegin("showSystemReadyErrorDialogs");
             mAtmInternal.showSystemReadyErrorDialogsIfNeeded();
             t.traceEnd();
 
-            // Some systems - like automotive - will explicitly unlock system user then switch
-            // to a secondary user. Hence, we don't want to send duplicate broadcasts for the
-            // system user here.
-            boolean sendSystemUserBroadcasts = currentUserId == UserHandle.USER_SYSTEM;
 
-            if (sendSystemUserBroadcasts) {
+            if (bootingSystemUser) {
                 t.traceBegin("sendUserStartBroadcast");
                 final int callingUid = Binder.getCallingUid();
                 final int callingPid = Binder.getCallingPid();
@@ -9286,7 +9334,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             mAtmInternal.resumeTopActivities(false /* scheduleIdle */);
             t.traceEnd();
 
-            if (sendSystemUserBroadcasts) {
+            if (bootingSystemUser) {
                 t.traceBegin("sendUserSwitchBroadcasts");
                 mUserController.sendUserSwitchBroadcasts(-1, currentUserId);
                 t.traceEnd();
@@ -13992,9 +14040,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         // Remove published content providers.
         for (int i = app.pubProviders.size() - 1; i >= 0; i--) {
             ContentProviderRecord cpr = app.pubProviders.valueAt(i);
-            final boolean always = app.bad || !allowRestart;
-            boolean inLaunching = removeDyingProviderLocked(app, cpr, always);
-            if ((inLaunching || always) && cpr.hasConnectionOrHandle()) {
+            final boolean alwaysRemove = app.bad || !allowRestart;
+            final boolean inLaunching = removeDyingProviderLocked(app, cpr, alwaysRemove);
+            if (!alwaysRemove && inLaunching && cpr.hasConnectionOrHandle()) {
                 // We left the provider in the launching list, need to
                 // restart it.
                 restart = true;
@@ -15295,7 +15343,12 @@ public class ActivityManagerService extends IActivityManager.Stub
                             final int uid = getUidFromIntent(intent);
                             if (uid >= 0) {
                                 mBatteryStatsService.removeUid(uid);
-                                mAppOpsService.uidRemoved(uid);
+                                if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) {
+                                    mAppOpsService.resetAllModes(UserHandle.getUserId(uid),
+                                            intent.getData().getSchemeSpecificPart());
+                                } else {
+                                    mAppOpsService.uidRemoved(uid);
+                                }
                             }
                             break;
                         case Intent.ACTION_EXTERNAL_APPLICATIONS_UNAVAILABLE:
@@ -15374,11 +15427,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                                     intent.getAction());
                             final String[] packageNames = intent.getStringArrayExtra(
                                     Intent.EXTRA_CHANGED_PACKAGE_LIST);
-                            final int userHandle = intent.getIntExtra(
+                            final int userIdExtra = intent.getIntExtra(
                                     Intent.EXTRA_USER_HANDLE, UserHandle.USER_NULL);
 
                             mAtmInternal.onPackagesSuspendedChanged(packageNames, suspended,
-                                    userHandle);
+                                    userIdExtra);
                             break;
                     }
                     break;
@@ -18102,7 +18155,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
-        public void killForegroundAppsForUser(int userHandle) {
+        public void killForegroundAppsForUser(@UserIdInt int userId) {
             synchronized (ActivityManagerService.this) {
                 final ArrayList<ProcessRecord> procs = new ArrayList<>();
                 final int NP = mProcessList.mProcessNames.getMap().size();
@@ -18117,7 +18170,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             continue;
                         }
                         if (app.removed
-                                || (app.userId == userHandle && app.hasForegroundActivities())) {
+                                || (app.userId == userId && app.hasForegroundActivities())) {
                             procs.add(app);
                         }
                     }

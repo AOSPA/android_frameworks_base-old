@@ -16,10 +16,15 @@
 
 package com.android.systemui.statusbar.notification.collection;
 
+import static com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_ALERTING;
+import static com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_PEOPLE;
+import static com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_SILENT;
+
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Person;
+import android.content.Context;
 import android.service.notification.NotificationListenerService.Ranking;
 import android.service.notification.NotificationListenerService.RankingMap;
 import android.service.notification.SnoozeCriterion;
@@ -30,6 +35,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.Dependency;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.notification.NotificationFilter;
+import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 
@@ -44,6 +50,7 @@ import java.util.Objects;
  * The list of currently displaying notifications.
  */
 public class NotificationData {
+    private static final String TAG = "NotificationData";
 
     private final NotificationFilter mNotificationFilter = Dependency.get(NotificationFilter.class);
 
@@ -64,6 +71,11 @@ public class NotificationData {
 
     private RankingMap mRankingMap;
     private final Ranking mTmpRanking = new Ranking();
+    private final boolean mUsePeopleFiltering;
+
+    public NotificationData(Context context) {
+        mUsePeopleFiltering = NotificationUtils.usePeopleFiltering(context);
+    }
 
     public void setHeadsUpManager(HeadsUpManager headsUpManager) {
         mHeadsUpManager = headsUpManager;
@@ -72,52 +84,25 @@ public class NotificationData {
     @VisibleForTesting
     protected final Comparator<NotificationEntry> mRankingComparator =
             new Comparator<NotificationEntry>() {
-        private final Ranking mRankingA = new Ranking();
-        private final Ranking mRankingB = new Ranking();
-
         @Override
         public int compare(NotificationEntry a, NotificationEntry b) {
             final StatusBarNotification na = a.notification;
             final StatusBarNotification nb = b.notification;
-            int aImportance = NotificationManager.IMPORTANCE_DEFAULT;
-            int bImportance = NotificationManager.IMPORTANCE_DEFAULT;
-            int aRank = 0;
-            int bRank = 0;
+            int aRank = getRank(a.key);
+            int bRank = getRank(b.key);
 
-            if (mRankingMap != null) {
-                // RankingMap as received from NoMan
-                getRanking(a.key, mRankingA);
-                getRanking(b.key, mRankingB);
-                aImportance = mRankingA.getImportance();
-                bImportance = mRankingB.getImportance();
-                aRank = mRankingA.getRank();
-                bRank = mRankingB.getRank();
-            }
+            boolean aMedia = isImportantMedia(a);
+            boolean bMedia = isImportantMedia(b);
 
-            String mediaNotification = getMediaManager().getMediaNotificationKey();
+            boolean aSystemMax = isSystemMax(a);
+            boolean bSystemMax = isSystemMax(b);
 
-            // IMPORTANCE_MIN media streams are allowed to drift to the bottom
-            final boolean aMedia = a.key.equals(mediaNotification)
-                    && aImportance > NotificationManager.IMPORTANCE_MIN;
-            final boolean bMedia = b.key.equals(mediaNotification)
-                    && bImportance > NotificationManager.IMPORTANCE_MIN;
+            boolean aHeadsUp = a.isRowHeadsUp();
+            boolean bHeadsUp = b.isRowHeadsUp();
 
-            boolean aSystemMax = aImportance >= NotificationManager.IMPORTANCE_HIGH
-                    && isSystemNotification(na);
-            boolean bSystemMax = bImportance >= NotificationManager.IMPORTANCE_HIGH
-                    && isSystemNotification(nb);
-
-
-            boolean aHeadsUp = a.getRow().isHeadsUp();
-            boolean bHeadsUp = b.getRow().isHeadsUp();
-
-            // HACK: This should really go elsewhere, but it's currently not straightforward to
-            // extract the comparison code and we're guaranteed to touch every element, so this is
-            // the best place to set the buckets for the moment.
-            a.setIsTopBucket(aHeadsUp || aMedia || aSystemMax || a.isHighPriority());
-            b.setIsTopBucket(bHeadsUp || bMedia || bSystemMax || b.isHighPriority());
-
-            if (aHeadsUp != bHeadsUp) {
+            if (mUsePeopleFiltering && a.hasAssociatedPeople() != b.hasAssociatedPeople()) {
+                return a.hasAssociatedPeople() ? -1 : 1;
+            } else if (aHeadsUp != bHeadsUp) {
                 return aHeadsUp ? -1 : 1;
             } else if (aHeadsUp) {
                 // Provide consistent ranking with headsUpManager
@@ -213,7 +198,7 @@ public class NotificationData {
             StatusBarNotification notification) {
         updateRanking(ranking);
         final StatusBarNotification oldNotification = entry.notification;
-        entry.notification = notification;
+        entry.setNotification(notification);
         mGroupManager.onEntryUpdated(entry, oldNotification);
     }
 
@@ -317,22 +302,6 @@ public class NotificationData {
         return Ranking.VISIBILITY_NO_OVERRIDE;
     }
 
-    public int getImportance(String key) {
-        if (mRankingMap != null) {
-            getRanking(key, mTmpRanking);
-            return mTmpRanking.getImportance();
-        }
-        return NotificationManager.IMPORTANCE_UNSPECIFIED;
-    }
-
-    public String getOverrideGroupKey(String key) {
-        if (mRankingMap != null) {
-            getRanking(key, mTmpRanking);
-            return mTmpRanking.getOverrideGroupKey();
-        }
-        return null;
-    }
-
     public List<SnoozeCriterion> getSnoozeCriteria(String key) {
         if (mRankingMap != null) {
             getRanking(key, mTmpRanking);
@@ -357,6 +326,22 @@ public class NotificationData {
         return 0;
     }
 
+    private boolean isImportantMedia(NotificationEntry e) {
+        int importance = e.ranking().getImportance();
+        boolean media = e.key.equals(getMediaManager().getMediaNotificationKey())
+                && importance > NotificationManager.IMPORTANCE_MIN;
+
+        return media;
+    }
+
+    private boolean isSystemMax(NotificationEntry e) {
+        int importance = e.ranking().getImportance();
+        boolean sys = importance  >= NotificationManager.IMPORTANCE_HIGH
+                && isSystemNotification(e.notification);
+
+        return sys;
+    }
+
     public boolean shouldHide(String key) {
         if (mRankingMap != null) {
             getRanking(key, mTmpRanking);
@@ -365,23 +350,25 @@ public class NotificationData {
         return false;
     }
 
-    private void updateRankingAndSort(RankingMap ranking) {
-        if (ranking != null) {
-            mRankingMap = ranking;
+    private void updateRankingAndSort(RankingMap rankingMap) {
+        if (rankingMap != null) {
+            mRankingMap = rankingMap;
             synchronized (mEntries) {
                 final int len = mEntries.size();
                 for (int i = 0; i < len; i++) {
                     NotificationEntry entry = mEntries.valueAt(i);
-                    if (!getRanking(entry.key, mTmpRanking)) {
+                    Ranking newRanking = new Ranking();
+                    if (!getRanking(entry.key, newRanking)) {
                         continue;
                     }
+                    entry.setRanking(newRanking);
+
                     final StatusBarNotification oldSbn = entry.notification.cloneLight();
-                    final String overrideGroupKey = getOverrideGroupKey(entry.key);
+                    final String overrideGroupKey = newRanking.getOverrideGroupKey();
                     if (!Objects.equals(oldSbn.getOverrideGroupKey(), overrideGroupKey)) {
                         entry.notification.setOverrideGroupKey(overrideGroupKey);
                         mGroupManager.onEntryUpdated(entry, oldSbn);
                     }
-                    entry.populateFromRanking(mTmpRanking);
                     entry.setIsHighPriority(isHighPriority(entry.notification));
                 }
             }
@@ -420,13 +407,37 @@ public class NotificationData {
             }
         }
 
-        if (mSortedAndFiltered.size() == 1) {
-            // HACK: We need the comparator to run on all children in order to set the
-            // isHighPriority field. If there is only one child, then the comparison won't be run,
-            // so we have to trigger it manually. Get rid of this code as soon as possible.
-            mRankingComparator.compare(mSortedAndFiltered.get(0), mSortedAndFiltered.get(0));
+        Collections.sort(mSortedAndFiltered, mRankingComparator);
+
+        int bucket = BUCKET_PEOPLE;
+        for (NotificationEntry e : mSortedAndFiltered) {
+            assignBucketForEntry(e);
+            if (e.getBucket() < bucket) {
+                android.util.Log.wtf(TAG, "Detected non-contiguous bucket!");
+            }
+            bucket = e.getBucket();
+        }
+    }
+
+    private void assignBucketForEntry(NotificationEntry e) {
+        boolean isHeadsUp = e.isRowHeadsUp();
+        boolean isMedia = isImportantMedia(e);
+        boolean isSystemMax = isSystemMax(e);
+
+        setBucket(e, isHeadsUp, isMedia, isSystemMax);
+    }
+
+    private void setBucket(
+            NotificationEntry e,
+            boolean isHeadsUp,
+            boolean isMedia,
+            boolean isSystemMax) {
+        if (mUsePeopleFiltering && e.hasAssociatedPeople()) {
+            e.setBucket(BUCKET_PEOPLE);
+        } else if (isHeadsUp || isMedia || isSystemMax || e.isHighPriority()) {
+            e.setBucket(BUCKET_ALERTING);
         } else {
-            Collections.sort(mSortedAndFiltered, mRankingComparator);
+            e.setBucket(BUCKET_SILENT);
         }
     }
 
@@ -469,6 +480,19 @@ public class NotificationData {
     private static boolean isSystemNotification(StatusBarNotification sbn) {
         String sbnPackage = sbn.getPackageName();
         return "android".equals(sbnPackage) || "com.android.systemui".equals(sbnPackage);
+    }
+
+    /**
+     * Get the current set of buckets for notification entries, as defined here
+     */
+    public static int[] getNotificationBuckets(Context context) {
+        if (NotificationUtils.usePeopleFiltering(context)) {
+            return new int[]{BUCKET_PEOPLE, BUCKET_ALERTING, BUCKET_SILENT};
+        } else if (NotificationUtils.useNewInterruptionModel(context)) {
+            return new int[]{BUCKET_ALERTING, BUCKET_SILENT};
+        } else {
+            return new int[]{BUCKET_ALERTING};
+        }
     }
 
     /**

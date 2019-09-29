@@ -18,6 +18,8 @@ package android.view;
 
 import static android.content.pm.ActivityInfo.COLOR_MODE_DEFAULT;
 import static android.view.WindowLayoutParamsProto.ALPHA;
+import static android.view.WindowLayoutParamsProto.APPEARANCE;
+import static android.view.WindowLayoutParamsProto.BEHAVIOR;
 import static android.view.WindowLayoutParamsProto.BUTTON_BRIGHTNESS;
 import static android.view.WindowLayoutParamsProto.COLOR_MODE;
 import static android.view.WindowLayoutParamsProto.FLAGS;
@@ -1473,6 +1475,9 @@ public interface WindowManager extends ViewManager {
          * <p>When this flag is enabled for a window, it automatically sets
          * the system UI visibility flags {@link View#SYSTEM_UI_FLAG_LAYOUT_STABLE} and
          * {@link View#SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN}.</p>
+         *
+         * <p>Note: For devices that support
+         * {@link android.content.pm.PackageManager#FEATURE_AUTOMOTIVE} this flag may be ignored.
          */
         public static final int FLAG_TRANSLUCENT_STATUS = 0x04000000;
 
@@ -1492,6 +1497,10 @@ public interface WindowManager extends ViewManager {
          * <p>When this flag is enabled for a window, it automatically sets
          * the system UI visibility flags {@link View#SYSTEM_UI_FLAG_LAYOUT_STABLE} and
          * {@link View#SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION}.</p>
+         *
+         * <p>Note: For devices that support
+         * {@link android.content.pm.PackageManager#FEATURE_AUTOMOTIVE} this flag can be disabled
+         * by the car manufacturers.
          */
         public static final int FLAG_TRANSLUCENT_NAVIGATION = 0x08000000;
 
@@ -2612,6 +2621,14 @@ public interface WindowManager extends ViewManager {
         @ActivityInfo.ColorMode
         private int mColorMode = COLOR_MODE_DEFAULT;
 
+        /**
+         * Carries the requests about {@link WindowInsetsController.Appearance} and
+         * {@link WindowInsetsController.Behavior} to the system windows which can produce insets.
+         *
+         * @hide
+         */
+        public final InsetsFlags insetsFlags = new InsetsFlags();
+
         public LayoutParams() {
             super(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
             type = TYPE_APPLICATION;
@@ -2774,6 +2791,8 @@ public interface WindowManager extends ViewManager {
             TextUtils.writeToParcel(accessibilityTitle, out, parcelableFlags);
             out.writeInt(mColorMode);
             out.writeLong(hideTimeoutMilliseconds);
+            out.writeInt(insetsFlags.appearance);
+            out.writeInt(insetsFlags.behavior);
         }
 
         public static final @android.annotation.NonNull Parcelable.Creator<LayoutParams> CREATOR
@@ -2830,6 +2849,8 @@ public interface WindowManager extends ViewManager {
             accessibilityTitle = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(in);
             mColorMode = in.readInt();
             hideTimeoutMilliseconds = in.readLong();
+            insetsFlags.appearance = in.readInt();
+            insetsFlags.behavior = in.readInt();
         }
 
         @SuppressWarnings({"PointlessBitwiseExpression"})
@@ -2876,7 +2897,7 @@ public interface WindowManager extends ViewManager {
         /** {@hide} */
         public static final int COLOR_MODE_CHANGED = 1 << 26;
         /** {@hide} */
-        public static final int EVERYTHING_CHANGED = 0xffffffff;
+        public static final int INSET_FLAGS_CHANGED = 1 << 27;
 
         // internal buffer to backup/restore parameters under compatibility mode.
         private int[] mCompatibilityParamsBackup = null;
@@ -3065,6 +3086,16 @@ public interface WindowManager extends ViewManager {
             // This can't change, it's only set at window creation time.
             hideTimeoutMilliseconds = o.hideTimeoutMilliseconds;
 
+            if (insetsFlags.appearance != o.insetsFlags.appearance) {
+                insetsFlags.appearance = o.insetsFlags.appearance;
+                changes |= INSET_FLAGS_CHANGED;
+            }
+
+            if (insetsFlags.behavior != o.insetsFlags.behavior) {
+                insetsFlags.behavior = o.insetsFlags.behavior;
+                changes |= INSET_FLAGS_CHANGED;
+            }
+
             return changes;
         }
 
@@ -3212,6 +3243,17 @@ public interface WindowManager extends ViewManager {
                 sb.append(prefix).append("  vsysui=").append(ViewDebug.flagsToString(
                         View.class, "mSystemUiVisibility", subtreeSystemUiVisibility));
             }
+            if (insetsFlags.appearance != 0) {
+                sb.append(System.lineSeparator());
+                sb.append(prefix).append("  apr=").append(ViewDebug.flagsToString(
+                        InsetsFlags.class, "appearance", insetsFlags.appearance));
+            }
+            if (insetsFlags.behavior != 0) {
+                sb.append(System.lineSeparator());
+                sb.append(prefix).append("  bhv=").append(ViewDebug.flagsToString(
+                        InsetsFlags.class, "behavior", insetsFlags.behavior));
+            }
+
             sb.append('}');
             return sb.toString();
         }
@@ -3247,6 +3289,8 @@ public interface WindowManager extends ViewManager {
             proto.write(PRIVATE_FLAGS, privateFlags);
             proto.write(SYSTEM_UI_VISIBILITY_FLAGS, systemUiVisibility);
             proto.write(SUBTREE_SYSTEM_UI_VISIBILITY_FLAGS, subtreeSystemUiVisibility);
+            proto.write(APPEARANCE, insetsFlags.appearance);
+            proto.write(BEHAVIOR, insetsFlags.behavior);
             proto.end(token);
         }
 

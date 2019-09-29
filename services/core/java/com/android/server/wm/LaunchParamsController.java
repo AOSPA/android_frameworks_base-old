@@ -133,7 +133,7 @@ class LaunchParamsController {
             return false;
         }
 
-        mService.mWindowManager.deferSurfaceLayout();
+        mService.deferWindowLayout();
 
         try {
             if (mTmpParams.hasPreferredDisplay()
@@ -152,7 +152,7 @@ class LaunchParamsController {
 
             if (task.getStack().inFreeformWindowingMode()) {
                 // Only set bounds if it's in freeform mode.
-                task.updateOverrideConfiguration(mTmpParams.mBounds);
+                task.setBounds(mTmpParams.mBounds);
                 return true;
             }
 
@@ -161,7 +161,7 @@ class LaunchParamsController {
             task.setLastNonFullscreenBounds(mTmpParams.mBounds);
             return false;
         } finally {
-            mService.mWindowManager.continueSurfaceLayout();
+            mService.continueWindowLayout();
         }
     }
 

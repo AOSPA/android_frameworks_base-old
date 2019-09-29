@@ -76,6 +76,7 @@ import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteException;
 import android.testing.DexmakerShareClassLoaderRule;
+import android.view.Display;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
@@ -110,6 +111,8 @@ public class AbstractAccessibilityServiceConnectionTest {
     private static final String VIEW_TEXT = "test_view_text";
     private static final int WINDOWID = 12;
     private static final int PIP_WINDOWID = 13;
+    private static final int WINDOWID_ONSECONDDISPLAY = 14;
+    private static final int SECONDARY_DISPLAY_ID = Display.DEFAULT_DISPLAY + 1;
     private static final int SERVICE_ID = 42;
     private static final int A11Y_SERVICE_CAPABILITY = CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT
             | CAPABILITY_CAN_REQUEST_TOUCH_EXPLORATION
@@ -134,6 +137,7 @@ public class AbstractAccessibilityServiceConnectionTest {
     private AbstractAccessibilityServiceConnection mServiceConnection;
     private MessageCapturingHandler mHandler = new MessageCapturingHandler(null);
     private final List<AccessibilityWindowInfo> mA11yWindowInfos = new ArrayList<>();
+    private final List<AccessibilityWindowInfo> mA11yWindowInfosOnSecondDisplay = new ArrayList<>();
     private Callable[] mFindA11yNodesFunctions;
     private Callable<Boolean> mPerformA11yAction;
 
@@ -176,13 +180,22 @@ public class AbstractAccessibilityServiceConnectionTest {
         when(mMockPackageManager.hasSystemFeature(FEATURE_FINGERPRINT)).thenReturn(true);
 
         // Fake a11yWindowInfo and remote a11y connection for tests.
-        addA11yWindowInfo(mA11yWindowInfos, WINDOWID, false);
-        addA11yWindowInfo(mA11yWindowInfos, PIP_WINDOWID, true);
-        when(mMockA11yWindowManager.getWindowListLocked()).thenReturn(mA11yWindowInfos);
+        addA11yWindowInfo(mA11yWindowInfos, WINDOWID, false, Display.DEFAULT_DISPLAY);
+        addA11yWindowInfo(mA11yWindowInfos, PIP_WINDOWID, true, Display.DEFAULT_DISPLAY);
+        addA11yWindowInfo(mA11yWindowInfosOnSecondDisplay, WINDOWID_ONSECONDDISPLAY, false,
+                SECONDARY_DISPLAY_ID);
+        when(mMockA11yWindowManager.getWindowListLocked(Display.DEFAULT_DISPLAY))
+                .thenReturn(mA11yWindowInfos);
         when(mMockA11yWindowManager.findA11yWindowInfoByIdLocked(WINDOWID))
                 .thenReturn(mA11yWindowInfos.get(0));
         when(mMockA11yWindowManager.findA11yWindowInfoByIdLocked(PIP_WINDOWID))
                 .thenReturn(mA11yWindowInfos.get(1));
+        when(mMockA11yWindowManager.getDisplayIdByUserIdAndWindowIdLocked(USER_ID,
+            WINDOWID_ONSECONDDISPLAY)).thenReturn(SECONDARY_DISPLAY_ID);
+        when(mMockA11yWindowManager.getWindowListLocked(SECONDARY_DISPLAY_ID))
+            .thenReturn(mA11yWindowInfosOnSecondDisplay);
+        when(mMockA11yWindowManager.findA11yWindowInfoByIdLocked(WINDOWID_ONSECONDDISPLAY))
+            .thenReturn(mA11yWindowInfosOnSecondDisplay.get(0));
         final RemoteAccessibilityConnection conn = getRemoteA11yConnection(
                 WINDOWID, mMockIA11yInteractionConnection, PACKAGE_NAME1);
         final RemoteAccessibilityConnection connPip = getRemoteA11yConnection(
@@ -289,8 +302,9 @@ public class AbstractAccessibilityServiceConnectionTest {
 
     @Test
     public void getWindows_notTrackingWindows_invokeOnClientChange() {
-        when(mMockA11yWindowManager.getWindowListLocked()).thenReturn(null);
-        when(mMockA11yWindowManager.isTrackingWindowsLocked()).thenReturn(false);
+        when(mMockA11yWindowManager.getWindowListLocked(Display.DEFAULT_DISPLAY)).thenReturn(null);
+        when(mMockA11yWindowManager.isTrackingWindowsLocked(Display.DEFAULT_DISPLAY))
+                .thenReturn(false);
 
         mServiceConnection.getWindows();
         verify(mMockSystemSupport).onClientChangeLocked(false);
@@ -315,11 +329,18 @@ public class AbstractAccessibilityServiceConnectionTest {
 
     @Test
     public void getWindow_notTrackingWindows_invokeOnClientChange() {
-        when(mMockA11yWindowManager.getWindowListLocked()).thenReturn(null);
-        when(mMockA11yWindowManager.isTrackingWindowsLocked()).thenReturn(false);
+        when(mMockA11yWindowManager.getWindowListLocked(Display.DEFAULT_DISPLAY)).thenReturn(null);
+        when(mMockA11yWindowManager.isTrackingWindowsLocked(Display.DEFAULT_DISPLAY))
+                .thenReturn(false);
 
         mServiceConnection.getWindow(WINDOWID);
         verify(mMockSystemSupport).onClientChangeLocked(false);
+    }
+
+    @Test
+    public void getWindow_onNonDefaultDisplay() {
+        assertThat(mServiceConnection.getWindow(WINDOWID_ONSECONDDISPLAY),
+                is(mA11yWindowInfosOnSecondDisplay.get(0)));
     }
 
     @Test
@@ -670,9 +691,10 @@ public class AbstractAccessibilityServiceConnectionTest {
     }
 
     private AccessibilityWindowInfo addA11yWindowInfo(List<AccessibilityWindowInfo> infos,
-            int windowId, boolean isPip) {
+            int windowId, boolean isPip, int displayId) {
         final AccessibilityWindowInfo info = AccessibilityWindowInfo.obtain();
         info.setId(windowId);
+        info.setDisplayId(displayId);
         info.setPictureInPicture(isPip);
         infos.add(info);
         return info;

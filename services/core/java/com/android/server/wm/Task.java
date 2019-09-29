@@ -85,8 +85,6 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
     private Rect mTmpRect = new Rect();
     // For handling display rotations.
     private Rect mTmpRect2 = new Rect();
-    // For retrieving dim bounds
-    private Rect mTmpRect3 = new Rect();
 
     // Resize mode of the task. See {@link ActivityInfo#resizeMode}
     private int mResizeMode;
@@ -613,6 +611,9 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
 
     @Override
     public SurfaceControl getAnimationLeashParent() {
+        if (!WindowManagerService.sHierarchicalAnimations) {
+            return super.getAnimationLeashParent();
+        }
         // Currently, only the recents animation will create animation leashes for tasks. In this
         // case, reparent the task to the home animation layer while it is being animated to allow
         // the home activity to reorder the app windows relative to its own.

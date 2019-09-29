@@ -32,7 +32,6 @@ import android.hardware.soundtrigger.SoundTrigger.KeyphraseRecognitionExtra;
 import android.hardware.soundtrigger.SoundTrigger.KeyphraseSoundModel;
 import android.hardware.soundtrigger.SoundTrigger.ModuleProperties;
 import android.hardware.soundtrigger.SoundTrigger.RecognitionConfig;
-import android.hardware.soundtrigger.SoundTrigger.RecognitionEvent;
 import android.media.AudioFormat;
 import android.os.AsyncTask;
 import android.os.Handler;

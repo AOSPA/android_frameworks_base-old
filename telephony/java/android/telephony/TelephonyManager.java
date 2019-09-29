@@ -67,6 +67,7 @@ import android.telephony.VisualVoicemailService.VisualVoicemailTask;
 import android.telephony.data.ApnSetting;
 import android.telephony.emergency.EmergencyNumber;
 import android.telephony.emergency.EmergencyNumber.EmergencyServiceCategories;
+import android.telephony.ims.ImsMmTelManager;
 import android.telephony.ims.aidl.IImsConfig;
 import android.telephony.ims.aidl.IImsMmTelFeature;
 import android.telephony.ims.aidl.IImsRcsFeature;
@@ -270,9 +271,6 @@ public class TelephonyManager {
     private SubscriptionManager mSubscriptionManager;
     private TelephonyScanManager mTelephonyScanManager;
 
-    private static String multiSimConfig =
-            SystemProperties.get(TelephonyProperties.PROPERTY_MULTI_SIM_CONFIG);
-
     /** Enum indicating multisim variants
      *  DSDS - Dual SIM Dual Standby
      *  DSDA - Dual SIM Dual Active
@@ -364,7 +362,6 @@ public class TelephonyManager {
         }
     }
 
-
     /**
      * Returns the number of phones available.
      * Returns 0 if none of voice, sms, data is not supported
@@ -395,6 +392,31 @@ public class TelephonyManager {
                 break;
         }
         return phoneCount;
+    }
+
+    /**
+     *
+     * Return how many phone / logical modem can be active simultaneously, in terms of device
+     * capability.
+     * For example, for a dual-SIM capable device, it always returns 2, even if only one logical
+     * modem / SIM is active (aka in single SIM mode).
+     *
+     * TODO: b/139642279 publicize and rename.
+     * @hide
+     */
+    public static int getMaxPhoneCount() {
+        // TODO: b/139642279 when turning on this feature, remove dependency of
+        // PROPERTY_REBOOT_REQUIRED_ON_MODEM_CHANGE and always return result based on
+        // PROPERTY_MAX_ACTIVE_MODEMS.
+        String rebootRequired = SystemProperties.get(
+                TelephonyProperties.PROPERTY_REBOOT_REQUIRED_ON_MODEM_CHANGE);
+        if (rebootRequired.equals("false")) {
+            // If no reboot is required, return max possible active modems.
+            return SystemProperties.getInt(
+                    TelephonyProperties.PROPERTY_MAX_ACTIVE_MODEMS, getDefault().getPhoneCount());
+        } else {
+            return getDefault().getPhoneCount();
+        }
     }
 
     /** {@hide} */
@@ -432,8 +454,7 @@ public class TelephonyManager {
     /** {@hide} */
     @UnsupportedAppUsage
     public boolean isMultiSimEnabled() {
-        return (multiSimConfig.equals("dsds") || multiSimConfig.equals("dsda") ||
-            multiSimConfig.equals("tsts"));
+        return getPhoneCount() > 1;
     }
 
     //
@@ -2832,6 +2853,55 @@ public class TelephonyManager {
         }
     }
 
+    /**
+     * Returns the bitmask for a given technology (network type)
+     * @param networkType for which bitmask is returned
+     * @return the network type bitmask
+     * {@hide}
+     */
+    public static @NetworkTypeBitMask long getBitMaskForNetworkType(@NetworkType int networkType) {
+        switch(networkType) {
+            case NETWORK_TYPE_GSM:
+                return NETWORK_TYPE_BITMASK_GSM;
+            case NETWORK_TYPE_GPRS:
+                return NETWORK_TYPE_BITMASK_GPRS;
+            case NETWORK_TYPE_EDGE:
+                return NETWORK_TYPE_BITMASK_EDGE;
+            case NETWORK_TYPE_CDMA:
+                return NETWORK_TYPE_BITMASK_CDMA;
+            case NETWORK_TYPE_1xRTT:
+                return NETWORK_TYPE_BITMASK_1xRTT;
+            case NETWORK_TYPE_EVDO_0:
+                return NETWORK_TYPE_BITMASK_EVDO_0;
+            case NETWORK_TYPE_EVDO_A:
+                return NETWORK_TYPE_BITMASK_EVDO_A;
+            case NETWORK_TYPE_EVDO_B:
+                return NETWORK_TYPE_BITMASK_EVDO_B;
+            case NETWORK_TYPE_EHRPD:
+                return NETWORK_TYPE_BITMASK_EHRPD;
+            case NETWORK_TYPE_HSUPA:
+                return NETWORK_TYPE_BITMASK_HSUPA;
+            case NETWORK_TYPE_HSDPA:
+                return NETWORK_TYPE_BITMASK_HSDPA;
+            case NETWORK_TYPE_HSPA:
+                return NETWORK_TYPE_BITMASK_HSPA;
+            case NETWORK_TYPE_HSPAP:
+                return NETWORK_TYPE_BITMASK_HSPAP;
+            case NETWORK_TYPE_UMTS:
+                return NETWORK_TYPE_BITMASK_UMTS;
+            case NETWORK_TYPE_TD_SCDMA:
+                return NETWORK_TYPE_BITMASK_TD_SCDMA;
+            case NETWORK_TYPE_LTE:
+                return NETWORK_TYPE_BITMASK_LTE;
+            case NETWORK_TYPE_LTE_CA:
+                return NETWORK_TYPE_BITMASK_LTE_CA;
+            case NETWORK_TYPE_NR:
+                return NETWORK_TYPE_BITMASK_NR;
+            default:
+                return NETWORK_TYPE_BITMASK_UNKNOWN;
+        }
+    }
+
     //
     //
     // SIM Card
@@ -3086,16 +3156,59 @@ public class TelephonyManager {
      */
     @SystemApi
     public int getSimCardState() {
-        int simCardState = getSimState();
-        switch (simCardState) {
+        int simState = getSimState();
+        return getSimCardStateFromSimState(simState);
+    }
+
+    /**
+     * Returns a constant indicating the state of the device SIM card in a physical slot.
+     *
+     * @param physicalSlotIndex physical slot index
+     *
+     * @see #SIM_STATE_UNKNOWN
+     * @see #SIM_STATE_ABSENT
+     * @see #SIM_STATE_CARD_IO_ERROR
+     * @see #SIM_STATE_CARD_RESTRICTED
+     * @see #SIM_STATE_PRESENT
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    public int getSimCardState(int physicalSlotIndex) {
+        int simState = getSimState(getLogicalSlotIndex(physicalSlotIndex));
+        return getSimCardStateFromSimState(simState);
+    }
+
+    /**
+     * Converts SIM state to SIM card state.
+     * @param simState
+     * @return SIM card state
+     */
+    private int getSimCardStateFromSimState(int simState) {
+        switch (simState) {
             case SIM_STATE_UNKNOWN:
             case SIM_STATE_ABSENT:
             case SIM_STATE_CARD_IO_ERROR:
             case SIM_STATE_CARD_RESTRICTED:
-                return simCardState;
+                return simState;
             default:
                 return SIM_STATE_PRESENT;
         }
+    }
+
+    /**
+     * Converts a physical slot index to logical slot index.
+     * @param physicalSlotIndex physical slot index
+     * @return logical slot index
+     */
+    private int getLogicalSlotIndex(int physicalSlotIndex) {
+        UiccSlotInfo[] slotInfos = getUiccSlotsInfo();
+        if (slotInfos != null && physicalSlotIndex >= 0 && physicalSlotIndex < slotInfos.length) {
+            return slotInfos[physicalSlotIndex].getLogicalSlotIdx();
+        }
+
+        return SubscriptionManager.INVALID_SIM_SLOT_INDEX;
     }
 
     /**
@@ -3113,8 +3226,41 @@ public class TelephonyManager {
      */
     @SystemApi
     public int getSimApplicationState() {
-        int simApplicationState = getSimStateIncludingLoaded();
-        switch (simApplicationState) {
+        int simState = getSimStateIncludingLoaded();
+        return getSimApplicationStateFromSimState(simState);
+    }
+
+    /**
+     * Returns a constant indicating the state of the card applications on the device SIM card in
+     * a physical slot.
+     *
+     * @param physicalSlotIndex physical slot index
+     *
+     * @see #SIM_STATE_UNKNOWN
+     * @see #SIM_STATE_PIN_REQUIRED
+     * @see #SIM_STATE_PUK_REQUIRED
+     * @see #SIM_STATE_NETWORK_LOCKED
+     * @see #SIM_STATE_NOT_READY
+     * @see #SIM_STATE_PERM_DISABLED
+     * @see #SIM_STATE_LOADED
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    public int getSimApplicationState(int physicalSlotIndex) {
+        int simState =
+                SubscriptionManager.getSimStateForSlotIndex(getLogicalSlotIndex(physicalSlotIndex));
+        return getSimApplicationStateFromSimState(simState);
+    }
+
+    /**
+     * Converts SIM state to SIM application state.
+     * @param simState
+     * @return SIM application state
+     */
+    private int getSimApplicationStateFromSimState(int simState) {
+        switch (simState) {
             case SIM_STATE_UNKNOWN:
             case SIM_STATE_ABSENT:
             case SIM_STATE_CARD_IO_ERROR:
@@ -3125,14 +3271,39 @@ public class TelephonyManager {
                 // NOT_READY to either LOCKED or LOADED.
                 return SIM_STATE_NOT_READY;
             default:
-                return simApplicationState;
+                return simState;
         }
     }
 
+
     /**
-     * Returns a constant indicating the state of the device SIM card in a slot.
+     * Returns true if the specified type of application (e.g. {@link #APPTYPE_CSIM} is present
+     * on the UICC card.
      *
-     * @param slotIndex
+     * Requires that the calling app has READ_PRIVILEGED_PHONE_STATE permission
+     *
+     * @param appType the uicc app type like {@link APPTYPE_CSIM}
+     * @return true if the specified type of application in UICC CARD or false if no uicc or error.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    public boolean isApplicationOnUicc(@UiccAppType int appType) {
+        try {
+            ITelephony service = getITelephony();
+            if (service != null) {
+                return service.isApplicationOnUicc(getSubId(), appType);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#isApplicationOnUicc", e);
+        }
+        return false;
+    }
+
+    /**
+     * Returns a constant indicating the state of the device SIM card in a logical slot.
+     *
+     * @param slotIndex logical slot index
      *
      * @see #SIM_STATE_UNKNOWN
      * @see #SIM_STATE_ABSENT
@@ -6481,11 +6652,7 @@ public class TelephonyManager {
     public int getSimCount() {
         // FIXME Need to get it from Telephony Dev Controller when that gets implemented!
         // and then this method shouldn't be used at all!
-        if(isMultiSimEnabled()) {
-            return getPhoneCount();
-        } else {
-            return 1;
-        }
+        return getPhoneCount();
     }
 
     /**
@@ -8511,7 +8678,12 @@ public class TelephonyManager {
         return -1;
     }
 
-    /** @hide */
+    /**
+     * @deprecated Use {@link android.telephony.ims.ImsMmTelManager#setVtSettingEnabled(boolean)}
+     * instead.
+     * @hide
+     */
+    @Deprecated
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public void enableVideoCalling(boolean enable) {
@@ -8524,7 +8696,14 @@ public class TelephonyManager {
         }
     }
 
-    /** @hide */
+    /**
+     * @deprecated Use {@link ImsMmTelManager#isVtSettingEnabled()} instead to check if the user
+     * has enabled the Video Calling setting, {@link ImsMmTelManager#isAvailable(int, int)} to
+     * determine if video calling is available, or {@link ImsMmTelManager#isCapable(int, int)} to
+     * determine if video calling is capable.
+     * @hide
+     */
+    @Deprecated
     @SystemApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE,
@@ -8644,6 +8823,7 @@ public class TelephonyManager {
      * @param subId Subscription ID
      * @return true if IMS status is registered, false if the IMS status is not registered or a
      * RemoteException occurred.
+     * Use {@link ImsMmTelManager.RegistrationCallback} instead.
      * @hide
      */
     public boolean isImsRegistered(int subId) {
@@ -8680,6 +8860,8 @@ public class TelephonyManager {
      * used during creation, the default subscription ID will be used.
      * @return true if Voice over LTE is available or false if it is unavailable or unknown.
      * @see SubscriptionManager#getDefaultSubscriptionId()
+     * <p>
+     * Use {@link ImsMmTelManager#isAvailable(int, int)} instead.
      * @hide
      */
     @UnsupportedAppUsage
@@ -8699,6 +8881,7 @@ public class TelephonyManager {
      * used during creation, the default subscription ID will be used. To query the
      * underlying technology that VT is available on, use {@link #getImsRegTechnologyForMmTel}.
      * @return true if VT is available, or false if it is unavailable or unknown.
+     * Use {@link ImsMmTelManager#isAvailable(int, int)} instead.
      * @hide
      */
     @UnsupportedAppUsage
@@ -8714,6 +8897,7 @@ public class TelephonyManager {
      * Returns the Status of Wi-Fi calling (Voice over WiFi) for the subscription ID specified.
      * @param subId the subscription ID.
      * @return true if VoWiFi is available, or false if it is unavailable or unknown.
+     * Use {@link ImsMmTelManager#isAvailable(int, int)} instead.
      * @hide
      */
     @UnsupportedAppUsage
@@ -8734,6 +8918,7 @@ public class TelephonyManager {
      *  - {@link ImsRegistrationImplBase#REGISTRATION_TECH_IWLAN} for IWLAN registration, or
      *  - {@link ImsRegistrationImplBase#REGISTRATION_TECH_NONE} if we are not registered or the
      *  result is unavailable.
+     *  Use {@link ImsMmTelManager.RegistrationCallback} instead.
      *  @hide
      */
     public @ImsRegistrationImplBase.ImsRegistrationTech int getImsRegTechnologyForMmTel() {

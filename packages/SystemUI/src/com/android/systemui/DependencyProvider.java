@@ -19,9 +19,11 @@ package com.android.systemui;
 import static com.android.systemui.Dependency.BG_HANDLER_NAME;
 import static com.android.systemui.Dependency.BG_LOOPER_NAME;
 import static com.android.systemui.Dependency.MAIN_HANDLER_NAME;
+import static com.android.systemui.Dependency.MAIN_LOOPER_NAME;
 import static com.android.systemui.Dependency.TIME_TICK_HANDLER_NAME;
 
 import android.annotation.Nullable;
+import android.app.AlarmManager;
 import android.app.INotificationManager;
 import android.content.Context;
 import android.hardware.SensorPrivacyManager;
@@ -87,6 +89,14 @@ public class DependencyProvider {
         return thread.getLooper();
     }
 
+    /** Main Looper */
+    @Singleton
+    @Provides
+    @Named(MAIN_LOOPER_NAME)
+    public Looper provideMainLooper() {
+        return Looper.getMainLooper();
+    }
+
     @Singleton
     @Provides
     @Named(BG_HANDLER_NAME)
@@ -97,8 +107,8 @@ public class DependencyProvider {
     @Singleton
     @Provides
     @Named(MAIN_HANDLER_NAME)
-    public Handler provideMainHandler() {
-        return new Handler(Looper.getMainLooper());
+    public Handler provideMainHandler(@Named(MAIN_LOOPER_NAME) Looper mainLooper) {
+        return new Handler(mainLooper);
     }
 
     @Singleton
@@ -220,5 +230,12 @@ public class DependencyProvider {
     public DeviceProvisionedController provideDeviceProvisionedController(Context context,
             @Named(MAIN_HANDLER_NAME) Handler mainHandler) {
         return new DeviceProvisionedControllerImpl(context, mainHandler);
+    }
+
+    /** */
+    @Singleton
+    @Provides
+    public AlarmManager provideAlarmManager(Context context) {
+        return context.getSystemService(AlarmManager.class);
     }
 }

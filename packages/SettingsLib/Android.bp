@@ -24,6 +24,8 @@ android_library {
         "SettingsLibProgressBar",
         "SettingsLibAdaptiveIcon",
         "SettingsLibRadioButtonPreference",
+        "WifiTrackerLib",
+        "SettingsLibDisplayDensityUtils",
     ],
 
     // ANDROIDMK TRANSLATION ERROR: unsupported assignment to LOCAL_SHARED_JAVA_LIBRARIES

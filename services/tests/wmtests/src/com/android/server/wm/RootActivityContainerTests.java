@@ -25,6 +25,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.content.pm.ActivityInfo.FLAG_ALWAYS_FOCUSABLE;
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.Display.TYPE_VIRTUAL;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
@@ -61,6 +62,7 @@ import android.content.res.Resources;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
 import android.util.Pair;
+import android.view.DisplayInfo;
 
 import androidx.test.filters.MediumTest;
 
@@ -69,6 +71,7 @@ import com.android.server.wm.ActivityStack.ActivityState;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -82,6 +85,7 @@ import java.util.List;
  */
 @MediumTest
 @Presubmit
+@RunWith(WindowTestRunner.class)
 public class RootActivityContainerTests extends ActivityTestsBase {
     private ActivityStack mFullscreenStack;
 
@@ -575,7 +579,7 @@ public class RootActivityContainerTests extends ActivityTestsBase {
     @Test
     public void testStartSecondaryHomeOnDisplayWithUserKeyLocked() {
         // Create secondary displays.
-        final TestActivityDisplay secondDisplay = spy(createNewActivityDisplay());
+        final TestActivityDisplay secondDisplay = createNewActivityDisplay();
         mRootActivityContainer.addChild(secondDisplay, POSITION_TOP);
 
         doReturn(true).when(secondDisplay).supportsSystemDecorations();
@@ -601,7 +605,7 @@ public class RootActivityContainerTests extends ActivityTestsBase {
     @Test
     public void testStartSecondaryHomeOnDisplayWithoutSysDecorations() {
         // Create secondary displays.
-        final TestActivityDisplay secondDisplay = spy(createNewActivityDisplay());
+        final TestActivityDisplay secondDisplay = createNewActivityDisplay();
         mRootActivityContainer.addChild(secondDisplay, POSITION_TOP);
         doReturn(false).when(secondDisplay).supportsSystemDecorations();
 
@@ -815,6 +819,41 @@ public class RootActivityContainerTests extends ActivityTestsBase {
         assertEquals(infoFake1.activityInfo.applicationInfo.packageName,
                 resolvedInfo.first.applicationInfo.packageName);
         assertEquals(infoFake1.activityInfo.name, resolvedInfo.first.name);
+    }
+
+    /**
+     * Test that {@link RootActivityContainer#getLaunchStack} with the real caller id will get the
+     * expected stack when requesting the activity launch on the secondary display.
+     */
+    @Test
+    public void testGetLaunchStackWithRealCallerId() {
+        // Create a non-system owned virtual display.
+        final DisplayInfo info = new DisplayInfo();
+        mSupervisor.mService.mContext.getDisplay().getDisplayInfo(info);
+        info.type = TYPE_VIRTUAL;
+        info.ownerUid = 100;
+        final TestActivityDisplay secondaryDisplay = TestActivityDisplay.create(mSupervisor, info);
+        mRootActivityContainer.addChild(secondaryDisplay, POSITION_TOP);
+
+        // Create an activity with specify the original launch pid / uid.
+        final ActivityRecord r = new ActivityBuilder(mService).setLaunchedFromPid(200)
+                .setLaunchedFromUid(200).build();
+
+        // Simulate ActivityStarter to find a launch stack for requesting the activity to launch
+        // on the secondary display with realCallerId.
+        final ActivityOptions options = ActivityOptions.makeBasic();
+        options.setLaunchDisplayId(secondaryDisplay.mDisplayId);
+        options.setLaunchWindowingMode(WINDOWING_MODE_FULLSCREEN);
+        doReturn(true).when(mSupervisor).canPlaceEntityOnDisplay(secondaryDisplay.mDisplayId,
+                300 /* test realCallerPid */, 300 /* test realCallerUid */, r.info);
+        final ActivityStack result = mRootActivityContainer.getLaunchStack(r, options,
+                null /* task */, true /* onTop */, null, 300 /* test realCallerPid */,
+                300 /* test realCallerUid */);
+
+        // Assert that the stack is returned as expected.
+        assertNotNull(result);
+        assertEquals("The display ID of the stack should same as secondary display ",
+                secondaryDisplay.mDisplayId, result.mDisplayId);
     }
 
     /**

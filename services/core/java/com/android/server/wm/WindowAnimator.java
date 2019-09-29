@@ -83,12 +83,13 @@ public class WindowAnimator {
     private final ArrayList<Runnable> mAfterPrepareSurfacesRunnables = new ArrayList<>();
     private boolean mInExecuteAfterPrepareSurfacesRunnables;
 
-    private final SurfaceControl.Transaction mTransaction = new SurfaceControl.Transaction();
+    private final SurfaceControl.Transaction mTransaction;
 
     WindowAnimator(final WindowManagerService service) {
         mService = service;
         mContext = service.mContext;
         mPolicy = service.mPolicy;
+        mTransaction = service.mTransactionFactory.get();
         AnimationThread.getHandler().runWithScissors(
                 () -> mChoreographer = Choreographer.getSfInstance(), 0 /* timeout */);
 
@@ -179,7 +180,6 @@ public class WindowAnimator {
                     // Update animations of all applications, including those
                     // associated with exiting/removed apps
                     dc.updateWindowsForAnimator();
-                    dc.updateBackgroundForAnimator();
                     dc.prepareSurfaces();
                 }
 
@@ -302,24 +302,6 @@ public class WindowAnimator {
             pw.print(prefix); pw.print("mBulkUpdateParams=0x");
                     pw.print(Integer.toHexString(mBulkUpdateParams));
                     pw.println(bulkUpdateParamsToString(mBulkUpdateParams));
-        }
-    }
-
-    int getPendingLayoutChanges(final int displayId) {
-        if (displayId < 0) {
-            return 0;
-        }
-        final DisplayContent displayContent = mService.mRoot.getDisplayContent(displayId);
-        return (displayContent != null) ? displayContent.pendingLayoutChanges : 0;
-    }
-
-    void setPendingLayoutChanges(final int displayId, final int changes) {
-        if (displayId < 0) {
-            return;
-        }
-        final DisplayContent displayContent = mService.mRoot.getDisplayContent(displayId);
-        if (displayContent != null) {
-            displayContent.pendingLayoutChanges |= changes;
         }
     }
 

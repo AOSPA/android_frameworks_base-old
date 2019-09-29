@@ -124,20 +124,17 @@ final class AccessibilityController {
                 return false;
             }
 
-            final Display display = dc.getDisplay();
             if (mWindowsForAccessibilityObserver.get(displayId) != null) {
+                final Display display = dc.getDisplay();
                 if (display.getType() == Display.TYPE_VIRTUAL && dc.getParentWindow() != null) {
                     // The window observer of this embedded display had been set from
-                    // window manager after setting its parent window
+                    // window manager after setting its parent window.
                     return true;
                 } else {
                     throw new IllegalStateException(
                             "Windows for accessibility callback of display "
                                     + displayId + " already set!");
                 }
-            }
-            if (display.getType() == Display.TYPE_OVERLAY) {
-                return false;
             }
             mWindowsForAccessibilityObserver.put(displayId,
                     new WindowsForAccessibilityObserver(mService, displayId, callback));
@@ -258,13 +255,19 @@ final class AccessibilityController {
         }
     }
 
-    public void onSomeWindowResizedOrMovedLocked(int displayId) {
+    /**
+     * Called when the location or the size of the window is changed. Moving the window to
+     * another display is also taken into consideration.
+     * @param displayIds the display ids of displays when the situation happens.
+     */
+    public void onSomeWindowResizedOrMovedLocked(int... displayIds) {
         // Not relevant for the display magnifier.
-
-        final WindowsForAccessibilityObserver windowsForA11yObserver =
-                mWindowsForAccessibilityObserver.get(displayId);
-        if (windowsForA11yObserver != null) {
-            windowsForA11yObserver.scheduleComputeChangedWindowsLocked();
+        for (int i = 0; i < displayIds.length; i++) {
+            final WindowsForAccessibilityObserver windowsForA11yObserver =
+                    mWindowsForAccessibilityObserver.get(displayIds[i]);
+            if (windowsForA11yObserver != null) {
+                windowsForA11yObserver.scheduleComputeChangedWindowsLocked();
+            }
         }
     }
 
@@ -287,9 +290,8 @@ final class AccessibilityController {
     }
 
     public boolean hasCallbacksLocked() {
-        // TODO: support multi-display for windows observer
         return (mDisplayMagnifiers.size() > 0
-                || mWindowsForAccessibilityObserver != null);
+                || mWindowsForAccessibilityObserver.size() > 0);
     }
 
     public void setForceShowMagnifiableBoundsLocked(int displayId, boolean show) {
@@ -812,7 +814,7 @@ final class AccessibilityController {
                 private final Paint mPaint = new Paint();
 
                 private final SurfaceControl mSurfaceControl;
-                private final Surface mSurface = new Surface();
+                private final Surface mSurface = mService.mSurfaceFactory.get();
 
                 private final AnimationController mAnimationController;
 
@@ -965,7 +967,7 @@ final class AccessibilityController {
                 }
 
                 public void releaseSurface() {
-                    mService.mTransactionFactory.make().remove(mSurfaceControl).apply();
+                    mService.mTransactionFactory.get().remove(mSurfaceControl).apply();
                     mSurface.release();
                 }
 
@@ -1104,13 +1106,9 @@ final class AccessibilityController {
 
         private final Point mTempPoint = new Point();
 
-        private final Rect mTempRect = new Rect();
-
         private final Region mTempRegion = new Region();
 
         private final Region mTempRegion1 = new Region();
-
-        private final Context mContext;
 
         private final WindowManagerService mService;
 
@@ -1125,7 +1123,6 @@ final class AccessibilityController {
         public WindowsForAccessibilityObserver(WindowManagerService windowManagerService,
                 int displayId,
                 WindowsForAccessibilityCallback callback) {
-            mContext = windowManagerService.mContext;
             mService = windowManagerService;
             mCallback = callback;
             mDisplayId = displayId;
@@ -1158,15 +1155,15 @@ final class AccessibilityController {
             }
 
             List<WindowInfo> windows = new ArrayList<>();
+            final int topFocusedDisplayId;
+            IBinder topFocusedWindowToken = null;
 
             synchronized (mService.mGlobalLock) {
-                // Do not send the windows if there is no current focus as
+                // Do not send the windows if there is no top focus as
                 // the window manager is still looking for where to put it.
                 // We will do the work when we get a focus change callback.
-                // TODO [Multi-Display] : only checks top focused window
-                if (!isCurrentFocusWindowOnDefaultDisplay()) {
-                    return;
-                }
+                final WindowState topFocusedWindowState = getTopFocusWindow();
+                if (topFocusedWindowState == null) return;
 
                 final DisplayContent dc = mService.mRoot.getDisplayContent(mDisplayId);
                 if (dc == null) {
@@ -1229,9 +1226,13 @@ final class AccessibilityController {
 
                 visibleWindows.clear();
                 addedWindows.clear();
-            }
 
-            mCallback.onWindowsForAccessibilityChanged(forceSend, windows);
+                // Gets the top focused display Id and window token for supporting multi-display.
+                topFocusedDisplayId = mService.mRoot.getTopFocusedDisplayContent().getDisplayId();
+                topFocusedWindowToken = topFocusedWindowState.mClient.asBinder();
+            }
+            mCallback.onWindowsForAccessibilityChanged(forceSend, topFocusedDisplayId,
+                    topFocusedWindowToken, windows);
 
             // Recycle the windows as we do not need them.
             clearAndRecycleWindows(windows);
@@ -1240,6 +1241,11 @@ final class AccessibilityController {
         private boolean windowMattersToAccessibility(WindowState windowState,
                 Region regionInScreen, Region unaccountedSpace,
                 HashSet<Integer> skipRemainingWindowsForTasks) {
+            final RecentsAnimationController controller = mService.getRecentsAnimationController();
+            if (controller != null && controller.shouldIgnoreForAccessibility(windowState)) {
+                return false;
+            }
+
             if (windowState.isFocused()) {
                 return true;
             }
@@ -1410,22 +1416,9 @@ final class AccessibilityController {
             }
             return displayParentWindow;
         }
-        // TODO [Multi-Display] : only checks top focused window
-        private boolean isCurrentFocusWindowOnDefaultDisplay() {
-            final WindowState focusedWindow =
-                    mService.mRoot.getTopFocusedDisplayContent().mCurrentFocus;
-            if (focusedWindow == null) {
-                return false;
-            }
 
-            final WindowState rootDisplayParentWindow = findRootDisplayParentWindow(focusedWindow);
-            if (!focusedWindow.isDefaultDisplay()
-                    && (rootDisplayParentWindow == null
-                    || !rootDisplayParentWindow.isDefaultDisplay())) {
-                return false;
-            }
-
-            return true;
+        private WindowState getTopFocusWindow() {
+            return mService.mRoot.getTopFocusedDisplayContent().mCurrentFocus;
         }
 
         private class MyHandler extends Handler {

@@ -42,6 +42,7 @@ import android.hardware.hdmi.HdmiHotplugEvent;
 import android.hardware.hdmi.HdmiPortInfo;
 import android.hardware.hdmi.IHdmiControlCallback;
 import android.hardware.hdmi.IHdmiControlService;
+import android.hardware.hdmi.IHdmiControlStatusChangeListener;
 import android.hardware.hdmi.IHdmiDeviceEventListener;
 import android.hardware.hdmi.IHdmiHotplugEventListener;
 import android.hardware.hdmi.IHdmiInputChangeListener;
@@ -252,6 +253,11 @@ public class HdmiControlService extends SystemService {
     // Type of logical devices hosted in the system. Stored in the unmodifiable list.
     private final List<Integer> mLocalDevices;
 
+    // List of records for HDMI control status change listener for death monitoring.
+    @GuardedBy("mLock")
+    private final ArrayList<HdmiControlStatusChangeListenerRecord>
+            mHdmiControlStatusChangeListenerRecords = new ArrayList<>();
+
     // List of records for hotplug event listener to handle the the caller killed in action.
     @GuardedBy("mLock")
     private final ArrayList<HotplugEventListenerRecord> mHotplugEventListenerRecords =
@@ -295,6 +301,11 @@ public class HdmiControlService extends SystemService {
 
     private final HdmiControlBroadcastReceiver
             mHdmiControlBroadcastReceiver = new HdmiControlBroadcastReceiver();
+
+    @Nullable
+    // Save callback when the device is still under logcial address allocation
+    // Invoke once new local device is ready.
+    private IHdmiControlCallback mDisplayStatusCallback = null;
 
     @Nullable
     private HdmiCecController mCecController;
@@ -576,6 +587,7 @@ public class HdmiControlService extends SystemService {
         }
         if (reason != -1) {
             invokeVendorCommandListenersOnControlStateChanged(true, reason);
+            announceHdmiControlStatusChange(true);
         }
     }
 
@@ -763,6 +775,11 @@ public class HdmiControlService extends SystemService {
                     // Address allocation completed for all devices. Notify each device.
                     if (allocatingDevices.size() == ++finished[0]) {
                         mAddressAllocated = true;
+                        // Reinvoke the saved display status callback once the local device is ready.
+                        if (mDisplayStatusCallback != null) {
+                            queryDisplayStatus(mDisplayStatusCallback);
+                            mDisplayStatusCallback = null;
+                        }
                         if (initiatedBy != INITIATED_BY_HOTPLUG) {
                             // In case of the hotplug we don't call onInitializeCecComplete()
                             // since we reallocate the logical address only.
@@ -1360,6 +1377,37 @@ public class HdmiControlService extends SystemService {
 
     // Record class that monitors the event of the caller of being killed. Used to clean up
     // the listener list and record list accordingly.
+    private final class HdmiControlStatusChangeListenerRecord implements IBinder.DeathRecipient {
+        private final IHdmiControlStatusChangeListener mListener;
+
+        HdmiControlStatusChangeListenerRecord(IHdmiControlStatusChangeListener listener) {
+            mListener = listener;
+        }
+
+        @Override
+        public void binderDied() {
+            synchronized (mLock) {
+                mHdmiControlStatusChangeListenerRecords.remove(this);
+            }
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (!(obj instanceof HdmiControlStatusChangeListenerRecord)) return false;
+            if (obj == this) return true;
+            HdmiControlStatusChangeListenerRecord other =
+                    (HdmiControlStatusChangeListenerRecord) obj;
+            return other.mListener == this.mListener;
+        }
+
+        @Override
+        public int hashCode() {
+            return mListener.hashCode();
+        }
+    }
+
+    // Record class that monitors the event of the caller of being killed. Used to clean up
+    // the listener list and record list accordingly.
     private final class HotplugEventListenerRecord implements IBinder.DeathRecipient {
         private final IHdmiHotplugEventListener mListener;
 
@@ -1682,6 +1730,20 @@ public class HdmiControlService extends SystemService {
                     HdmiControlService.this.queryDisplayStatus(callback);
                 }
             });
+        }
+
+        @Override
+        public void addHdmiControlStatusChangeListener(
+                final IHdmiControlStatusChangeListener listener) {
+            enforceAccessPermission();
+            HdmiControlService.this.addHdmiControlStatusChangeListener(listener);
+        }
+
+        @Override
+        public void removeHdmiControlStatusChangeListener(
+                final IHdmiControlStatusChangeListener listener) {
+            enforceAccessPermission();
+            HdmiControlService.this.removeHdmiControlStatusChangeListener(listener);
         }
 
         @Override
@@ -2192,6 +2254,13 @@ public class HdmiControlService extends SystemService {
     @ServiceThreadOnly
     private void queryDisplayStatus(final IHdmiControlCallback callback) {
         assertRunOnServiceThread();
+        if (!mAddressAllocated) {
+            mDisplayStatusCallback = callback;
+            Slog.d(TAG, "Local device is under address allocation. "
+                        + "Queue display callback for later process.");
+            return;
+        }
+
         HdmiCecLocalDevicePlayback source = playback();
         if (source == null) {
             Slog.w(TAG, "Local playback device not available");
@@ -2199,6 +2268,51 @@ public class HdmiControlService extends SystemService {
             return;
         }
         source.queryDisplayStatus(callback);
+    }
+
+    private void addHdmiControlStatusChangeListener(
+            final IHdmiControlStatusChangeListener listener) {
+        final HdmiControlStatusChangeListenerRecord record =
+                new HdmiControlStatusChangeListenerRecord(listener);
+        try {
+            listener.asBinder().linkToDeath(record, 0);
+        } catch (RemoteException e) {
+            Slog.w(TAG, "Listener already died");
+            return;
+        }
+        synchronized (mLock) {
+            mHdmiControlStatusChangeListenerRecords.add(record);
+        }
+
+        // Inform the listener of the initial state of each HDMI port by generating
+        // hotplug events.
+        runOnServiceThread(new Runnable() {
+            @Override
+            public void run() {
+                synchronized (mLock) {
+                    if (!mHdmiControlStatusChangeListenerRecords.contains(record)) return;
+                }
+
+                // Return the current status of mHdmiControlEnabled;
+                synchronized (mLock) {
+                    invokeHdmiControlStatusChangeListenerLocked(listener, mHdmiControlEnabled);
+                }
+            }
+        });
+    }
+
+    private void removeHdmiControlStatusChangeListener(
+            final IHdmiControlStatusChangeListener listener) {
+        synchronized (mLock) {
+            for (HdmiControlStatusChangeListenerRecord record :
+                    mHdmiControlStatusChangeListenerRecords) {
+                if (record.mListener.asBinder() == listener.asBinder()) {
+                    listener.asBinder().unlinkToDeath(record, 0);
+                    mHdmiControlStatusChangeListenerRecords.remove(record);
+                    break;
+                }
+            }
+        }
     }
 
     private void addHotplugEventListener(final IHdmiHotplugEventListener listener) {
@@ -2430,6 +2544,47 @@ public class HdmiControlService extends SystemService {
             listener.onReceived(event);
         } catch (RemoteException e) {
             Slog.e(TAG, "Failed to report hotplug event:" + event.toString(), e);
+        }
+    }
+
+    private void announceHdmiControlStatusChange(boolean isEnabled) {
+        assertRunOnServiceThread();
+        synchronized (mLock) {
+            for (HdmiControlStatusChangeListenerRecord record :
+                    mHdmiControlStatusChangeListenerRecords) {
+                invokeHdmiControlStatusChangeListenerLocked(record.mListener, isEnabled);
+            }
+        }
+    }
+
+    private void invokeHdmiControlStatusChangeListenerLocked(
+            IHdmiControlStatusChangeListener listener, boolean isEnabled) {
+        if (isEnabled) {
+            queryDisplayStatus(new IHdmiControlCallback.Stub() {
+                public void onComplete(int status) {
+                    boolean isAvailable = true;
+                    if (status == HdmiControlManager.POWER_STATUS_UNKNOWN
+                            || status == HdmiControlManager.RESULT_EXCEPTION
+                            || status == HdmiControlManager.RESULT_SOURCE_NOT_AVAILABLE) {
+                        isAvailable = false;
+                    }
+
+                    try {
+                        listener.onStatusChange(isEnabled, isAvailable);
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "Failed to report HdmiControlStatusChange: " + isEnabled
+                                + " isAvailable: " + isAvailable, e);
+                    }
+                }
+            });
+            return;
+        }
+
+        try {
+            listener.onStatusChange(isEnabled, false);
+        } catch (RemoteException e) {
+            Slog.e(TAG, "Failed to report HdmiControlStatusChange: " + isEnabled
+                    + " isAvailable: " + false, e);
         }
     }
 
@@ -2802,6 +2957,8 @@ public class HdmiControlService extends SystemService {
                 disableHdmiControlService();
             }
         });
+        announceHdmiControlStatusChange(enabled);
+
         return;
     }
 

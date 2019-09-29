@@ -71,7 +71,6 @@ import static com.android.server.wm.ActivityRecord.STARTING_WINDOW_SHOWN;
 import static com.android.server.wm.ActivityStack.REMOVE_TASK_MODE_MOVING;
 import static com.android.server.wm.ActivityStack.REMOVE_TASK_MODE_MOVING_TO_TOP;
 import static com.android.server.wm.ActivityStackSupervisor.ON_TOP;
-import static com.android.server.wm.ActivityStackSupervisor.PAUSE_IMMEDIATELY;
 import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ADD_REMOVE;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_LOCKTASK;
@@ -513,7 +512,7 @@ class TaskRecord extends ConfigurationContainer {
         if (!getWindowConfiguration().persistTaskBounds()) {
             // Reset current bounds for task whose bounds shouldn't be persisted so it uses
             // default configuration the next time it launches.
-            updateOverrideConfiguration(null);
+            setBounds(null);
         }
         mService.getTaskChangeNotificationController().notifyTaskRemoved(taskId);
     }
@@ -546,7 +545,7 @@ class TaskRecord extends ConfigurationContainer {
     }
 
     boolean resize(Rect bounds, int resizeMode, boolean preserveWindow, boolean deferResume) {
-        mService.mWindowManager.deferSurfaceLayout();
+        mService.deferWindowLayout();
 
         try {
             if (!isResizeable()) {
@@ -566,7 +565,7 @@ class TaskRecord extends ConfigurationContainer {
                 // Task doesn't exist in window manager yet (e.g. was restored from recents).
                 // All we can do for now is update the bounds so it can be used when the task is
                 // added to window manager.
-                updateOverrideConfiguration(bounds);
+                setBounds(bounds);
                 if (!inFreeformWindowingMode()) {
                     // re-restore the task so it can have the proper stack association.
                     mService.mStackSupervisor.restoreRecentTaskLocked(this, null, !ON_TOP);
@@ -585,7 +584,11 @@ class TaskRecord extends ConfigurationContainer {
 
             Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "am.resizeTask_" + taskId);
 
-            final boolean updatedConfig = updateOverrideConfiguration(bounds);
+            boolean updatedConfig = false;
+            mTmpConfig.setTo(getResolvedOverrideConfiguration());
+            if (setBounds(bounds) != BOUNDS_CHANGE_NONE) {
+                updatedConfig = !mTmpConfig.equals(getResolvedOverrideConfiguration());
+            }
             // This variable holds information whether the configuration didn't change in a significant
 
             // way and the activity was kept the way it was. If it's false, it means the activity
@@ -616,7 +619,7 @@ class TaskRecord extends ConfigurationContainer {
             Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
             return kept;
         } finally {
-            mService.mWindowManager.continueSurfaceLayout();
+            mService.continueWindowLayout();
         }
     }
 
@@ -702,7 +705,7 @@ class TaskRecord extends ConfigurationContainer {
                 && toStack.topRunningActivityLocked() != null) {
             // Pause the resumed activity on the target stack while re-parenting task on top of it.
             toStack.startPausingLocked(false /* userLeaving */, false /* uiSleeping */,
-                    null /* resuming */, false /* pauseImmediately */);
+                    null /* resuming */);
         }
 
         final int toStackWindowingMode = toStack.getWindowingMode();
@@ -722,7 +725,7 @@ class TaskRecord extends ConfigurationContainer {
             windowManager.setWillReplaceWindow(topActivity.appToken, animate);
         }
 
-        windowManager.deferSurfaceLayout();
+        mService.deferWindowLayout();
         boolean kept = true;
         try {
             final ActivityRecord r = topRunningActivityLocked();
@@ -806,7 +809,7 @@ class TaskRecord extends ConfigurationContainer {
                         !mightReplaceWindow, deferResume);
             }
         } finally {
-            windowManager.continueSurfaceLayout();
+            mService.continueWindowLayout();
         }
 
         if (mightReplaceWindow) {
@@ -1082,8 +1085,8 @@ class TaskRecord extends ConfigurationContainer {
 
         clearRootProcess();
 
-        // TODO: Use window container controller once tasks are better synced between AM and WM
-        mService.mWindowManager.notifyTaskRemovedFromRecents(taskId, userId);
+        mService.mWindowManager.mTaskSnapshotController.notifyTaskRemovedFromRecents(
+                taskId, userId);
     }
 
     void setTaskToAffiliateWith(TaskRecord taskToAffiliateWith) {
@@ -1405,8 +1408,7 @@ class TaskRecord extends ConfigurationContainer {
      * Completely remove all activities associated with an existing
      * task starting at a specified index.
      */
-    final void performClearTaskAtIndexLocked(int activityNdx, boolean pauseImmediately,
-            String reason) {
+    final void performClearTaskAtIndexLocked(int activityNdx, String reason) {
         int numActivities = mActivities.size();
         for ( ; activityNdx < numActivities; ++activityNdx) {
             final ActivityRecord r = mActivities.get(activityNdx);
@@ -1419,8 +1421,8 @@ class TaskRecord extends ConfigurationContainer {
                 mActivities.remove(activityNdx);
                 --activityNdx;
                 --numActivities;
-            } else if (r.finishIfPossible(Activity.RESULT_CANCELED,
-                    null /* resultData */, reason, false /* oomAdj */, pauseImmediately)
+            } else if (r.finishIfPossible(Activity.RESULT_CANCELED, null /* resultData */, reason,
+                    false /* oomAdj */)
                     == FINISH_RESULT_REMOVED) {
                 --activityNdx;
                 --numActivities;
@@ -1433,7 +1435,7 @@ class TaskRecord extends ConfigurationContainer {
      */
     void performClearTaskLocked() {
         mReuseTask = true;
-        performClearTaskAtIndexLocked(0, !PAUSE_IMMEDIATELY, "clear-task-all");
+        performClearTaskAtIndexLocked(0, "clear-task-all");
         mReuseTask = false;
     }
 
@@ -1501,9 +1503,9 @@ class TaskRecord extends ConfigurationContainer {
         return null;
     }
 
-    void removeTaskActivitiesLocked(boolean pauseImmediately, String reason) {
+    void removeTaskActivitiesLocked(String reason) {
         // Just remove the entire task.
-        performClearTaskAtIndexLocked(0, pauseImmediately, reason);
+        performClearTaskAtIndexLocked(0, reason);
     }
 
     String lockTaskAuthToString() {
@@ -1805,47 +1807,12 @@ class TaskRecord extends ConfigurationContainer {
         }
     }
 
-    /**
-     * Update task's override configuration based on the bounds.
-     * @param bounds The bounds of the task.
-     * @return True if the override configuration was updated.
-     */
-    boolean updateOverrideConfiguration(Rect bounds) {
-        return updateOverrideConfiguration(bounds, null /* insetBounds */);
-    }
-
     void setLastNonFullscreenBounds(Rect bounds) {
         if (mLastNonFullscreenBounds == null) {
             mLastNonFullscreenBounds = new Rect(bounds);
         } else {
             mLastNonFullscreenBounds.set(bounds);
         }
-    }
-
-    /**
-     * Update task's override configuration based on the bounds.
-     * @param bounds The bounds of the task.
-     * @param insetBounds The bounds used to calculate the system insets, which is used here to
-     *                    subtract the navigation bar/status bar size from the screen size reported
-     *                    to the application. See {@link IActivityTaskManager#resizeDockedStack}.
-     * @return True if the override configuration was updated.
-     */
-    boolean updateOverrideConfiguration(Rect bounds, @Nullable Rect insetBounds) {
-        final boolean hasSetDisplayedBounds = (insetBounds != null && !insetBounds.isEmpty());
-        if (hasSetDisplayedBounds) {
-            setDisplayedBounds(bounds);
-        } else {
-            setDisplayedBounds(null);
-        }
-        // "steady" bounds do not include any temporary offsets from animation or interaction.
-        Rect steadyBounds = hasSetDisplayedBounds ? insetBounds : bounds;
-        if (equivalentRequestedOverrideBounds(steadyBounds)) {
-            return false;
-        }
-
-        mTmpConfig.setTo(getResolvedOverrideConfiguration());
-        setBounds(steadyBounds);
-        return !mTmpConfig.equals(getResolvedOverrideConfiguration());
     }
 
     /**
@@ -2299,7 +2266,7 @@ class TaskRecord extends ConfigurationContainer {
 
     Rect updateOverrideConfigurationFromLaunchBounds() {
         final Rect bounds = getLaunchBounds();
-        updateOverrideConfiguration(bounds);
+        setBounds(bounds);
         if (bounds != null && !bounds.isEmpty()) {
             // TODO: Review if we actually want to do this - we are setting the launch bounds
             // directly here.
@@ -2324,12 +2291,12 @@ class TaskRecord extends ConfigurationContainer {
                 return;
             }
             if (mLastNonFullscreenBounds != null) {
-                updateOverrideConfiguration(mLastNonFullscreenBounds);
+                setBounds(mLastNonFullscreenBounds);
             } else {
                 mService.mStackSupervisor.getLaunchParamsController().layoutTask(this, null);
             }
         } else {
-            updateOverrideConfiguration(inStack.getRequestedOverrideBounds());
+            setBounds(inStack.getRequestedOverrideBounds());
         }
     }
 
