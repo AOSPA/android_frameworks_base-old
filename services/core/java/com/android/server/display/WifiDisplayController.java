@@ -99,7 +99,7 @@ final class WifiDisplayController implements DumpUtils.Dump {
     private final Handler mHandler;
     private final Listener mListener;
 
-    private final WifiP2pManager mWifiP2pManager;
+    private WifiP2pManager mWifiP2pManager;
     private Channel mWifiP2pChannel;
 
     private boolean mWifiP2pEnabled;
@@ -173,8 +173,6 @@ final class WifiDisplayController implements DumpUtils.Dump {
         mHandler = handler;
         mListener = listener;
 
-        mWifiP2pManager = (WifiP2pManager)context.getSystemService(Context.WIFI_P2P_SERVICE);
-
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION);
         intentFilter.addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION);
@@ -207,6 +205,18 @@ final class WifiDisplayController implements DumpUtils.Dump {
             }
         }
         return mWifiP2pChannel;
+    }
+
+    /**
+     * Used to lazily retrieve WifiP2pManager service.
+     */
+    private void retrieveWifiP2pManagerAndChannel() {
+        if (mWifiP2pManager == null) {
+            mWifiP2pManager = (WifiP2pManager)mContext.getSystemService(Context.WIFI_P2P_SERVICE);
+        }
+        if (mWifiP2pChannel == null && mWifiP2pManager != null) {
+            mWifiP2pChannel = mWifiP2pManager.initialize(mContext, mHandler.getLooper(), null);
+        }
     }
 
     private void updateSettings() {
@@ -915,6 +925,9 @@ final class WifiDisplayController implements DumpUtils.Dump {
 
     private void handleStateChanged(boolean enabled) {
         mWifiP2pEnabled = enabled;
+        if (enabled) {
+            retrieveWifiP2pManagerAndChannel();
+        }
         updateWfdEnableState();
     }
 

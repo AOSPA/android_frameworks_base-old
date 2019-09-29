@@ -217,7 +217,6 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
-import com.android.internal.os.RoSystemProperties;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.ConcurrentUtils;
@@ -232,7 +231,6 @@ import com.android.server.ServiceThread;
 import com.android.server.SystemConfig;
 
 import libcore.io.IoUtils;
-import libcore.util.EmptyArray;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlSerializer;
@@ -404,8 +402,10 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     private IConnectivityManager mConnManager;
     private PowerManagerInternal mPowerManagerInternal;
     private IDeviceIdleController mDeviceIdleController;
+
+    /** Current cached value of the current Battery Saver mode's setting for restrict background. */
     @GuardedBy("mUidRulesFirstLock")
-    private PowerSaveState mRestrictBackgroundPowerState;
+    private boolean mRestrictBackgroundLowPowerMode;
 
     // Store the status of restrict background before turning on battery saver.
     // Used to restore mRestrictBackground when battery saver is turned off.
@@ -540,7 +540,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     private final SparseArray<String> mSubIdToSubscriberId = new SparseArray<>();
     /** Set of all merged subscriberId as of last update */
     @GuardedBy("mNetworkPoliciesSecondLock")
-    private String[] mMergedSubscriberIds = EmptyArray.STRING;
+    private List<String[]> mMergedSubscriberIds = new ArrayList<>();
 
     /**
      * Indicates the uids restricted by admin from accessing metered data. It's a mapping from
@@ -772,11 +772,9 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
                     // Update the restrictBackground if battery saver is turned on
                     mRestrictBackgroundBeforeBsm = mLoadedRestrictBackground;
-                    mRestrictBackgroundPowerState = mPowerManagerInternal
-                            .getLowPowerState(ServiceType.DATA_SAVER);
-                    final boolean localRestrictBackground =
-                            mRestrictBackgroundPowerState.batterySaverEnabled;
-                    if (localRestrictBackground && !mLoadedRestrictBackground) {
+                    mRestrictBackgroundLowPowerMode = mPowerManagerInternal
+                            .getLowPowerState(ServiceType.DATA_SAVER).batterySaverEnabled;
+                    if (mRestrictBackgroundLowPowerMode && !mLoadedRestrictBackground) {
                         mLoadedRestrictBackground = true;
                     }
                     mPowerManagerInternal.registerLowPowerModeObserver(
@@ -1355,7 +1353,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
                 final Intent viewIntent = buildViewDataUsageIntent(res, policy.template);
                 // TODO: Resolve to single code path.
-                if (isHeadlessSystemUserBuild()) {
+                if (UserManager.isHeadlessSystemUserMode()) {
                     builder.setContentIntent(PendingIntent.getActivityAsUser(
                             mContext, 0, viewIntent, PendingIntent.FLAG_UPDATE_CURRENT,
                             /* options= */ null, UserHandle.CURRENT));
@@ -1383,7 +1381,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
                 final Intent intent = buildNetworkOverLimitIntent(res, policy.template);
                 // TODO: Resolve to single code path.
-                if (isHeadlessSystemUserBuild()) {
+                if (UserManager.isHeadlessSystemUserMode()) {
                     builder.setContentIntent(PendingIntent.getActivityAsUser(
                             mContext, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT,
                             /* options= */ null, UserHandle.CURRENT));
@@ -1414,7 +1412,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
                 final Intent intent = buildViewDataUsageIntent(res, policy.template);
                 // TODO: Resolve to single code path.
-                if (isHeadlessSystemUserBuild()) {
+                if (UserManager.isHeadlessSystemUserMode()) {
                     builder.setContentIntent(PendingIntent.getActivityAsUser(
                             mContext, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT,
                             /* options= */ null, UserHandle.CURRENT));
@@ -1441,7 +1439,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
                 final Intent viewIntent = buildViewDataUsageIntent(res, policy.template);
                 // TODO: Resolve to single code path.
-                if (isHeadlessSystemUserBuild()) {
+                if (UserManager.isHeadlessSystemUserMode()) {
                     builder.setContentIntent(PendingIntent.getActivityAsUser(
                             mContext, 0, viewIntent, PendingIntent.FLAG_UPDATE_CURRENT,
                             /* options= */ null, UserHandle.CURRENT));
@@ -1801,7 +1799,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         final SubscriptionManager sm = mContext.getSystemService(SubscriptionManager.class);
 
         final int[] subIds = ArrayUtils.defeatNullable(sm.getActiveSubscriptionIdList());
-        final String[] mergedSubscriberIds = ArrayUtils.defeatNullable(tm.getMergedSubscriberIds());
+        final List<String[]> mergedSubscriberIdsList = new ArrayList();
 
         final SparseArray<String> subIdToSubscriberId = new SparseArray<>(subIds.length);
         for (int subId : subIds) {
@@ -1811,6 +1809,10 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             } else {
                 Slog.wtf(TAG, "Missing subscriberId for subId " + subId);
             }
+
+            String[] mergedSubscriberId = ArrayUtils.defeatNullable(
+                    tm.createForSubscriptionId(subId).getMergedSubscriberIdsFromGroup());
+            mergedSubscriberIdsList.add(mergedSubscriberId);
         }
 
         synchronized (mNetworkPoliciesSecondLock) {
@@ -1820,7 +1822,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                         subIdToSubscriberId.valueAt(i));
             }
 
-            mMergedSubscriberIds = mergedSubscriberIds;
+            mMergedSubscriberIds = mergedSubscriberIdsList;
         }
 
         Trace.traceEnd(TRACE_TAG_NETWORK);
@@ -2897,7 +2899,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             sendRestrictBackgroundChangedMsg();
             mLogger.restrictBackgroundChanged(oldRestrictBackground, mRestrictBackground);
 
-            if (mRestrictBackgroundPowerState.globalBatterySaverEnabled) {
+            if (mRestrictBackgroundLowPowerMode) {
                 mRestrictBackgroundChangedInBsm = true;
             }
             synchronized (mNetworkPoliciesSecondLock) {
@@ -3373,8 +3375,10 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                 fout.decreaseIndent();
 
                 fout.println();
-                fout.println("Merged subscriptions: "
-                        + Arrays.toString(NetworkIdentity.scrubSubscriberId(mMergedSubscriberIds)));
+                for (String[] mergedSubscribers : mMergedSubscriberIds) {
+                    fout.println("Merged subscriptions: " + Arrays.toString(
+                            NetworkIdentity.scrubSubscriberId(mergedSubscribers)));
+                }
 
                 fout.println();
                 fout.println("Policy for UIDs:");
@@ -4902,17 +4906,21 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     @GuardedBy("mUidRulesFirstLock")
     @VisibleForTesting
     void updateRestrictBackgroundByLowPowerModeUL(final PowerSaveState result) {
-        mRestrictBackgroundPowerState = result;
+        if (mRestrictBackgroundLowPowerMode == result.batterySaverEnabled) {
+            // Nothing changed. Nothing to do.
+            return;
+        }
+        mRestrictBackgroundLowPowerMode = result.batterySaverEnabled;
 
-        boolean restrictBackground = result.batterySaverEnabled;
+        boolean restrictBackground = mRestrictBackgroundLowPowerMode;
         boolean shouldInvokeRestrictBackground;
-        // store the temporary mRestrictBackgroundChangedInBsm and update it at last
+        // store the temporary mRestrictBackgroundChangedInBsm and update it at the end.
         boolean localRestrictBgChangedInBsm = mRestrictBackgroundChangedInBsm;
 
-        if (result.globalBatterySaverEnabled) {
+        if (mRestrictBackgroundLowPowerMode) {
             // Try to turn on restrictBackground if (1) it is off and (2) batter saver need to
             // turn it on.
-            shouldInvokeRestrictBackground = !mRestrictBackground && result.batterySaverEnabled;
+            shouldInvokeRestrictBackground = !mRestrictBackground;
             mRestrictBackgroundBeforeBsm = mRestrictBackground;
             localRestrictBgChangedInBsm = false;
         } else {
@@ -5290,10 +5298,6 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     private static boolean getBooleanDefeatingNullable(@Nullable PersistableBundle bundle,
             String key, boolean defaultValue) {
         return (bundle != null) ? bundle.getBoolean(key, defaultValue) : defaultValue;
-    }
-
-    private static boolean isHeadlessSystemUserBuild() {
-        return RoSystemProperties.MULTIUSER_HEADLESS_SYSTEM_USER;
     }
 
     private class NotificationId {

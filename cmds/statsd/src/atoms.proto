@@ -56,6 +56,8 @@ import "frameworks/base/core/proto/android/telecomm/enums.proto";
 import "frameworks/base/core/proto/android/telephony/enums.proto";
 import "frameworks/base/core/proto/android/view/enums.proto";
 import "frameworks/base/core/proto/android/wifi/enums.proto";
+import "frameworks/base/core/proto/android/stats/textclassifier/textclassifier_enums.proto";
+import "frameworks/base/core/proto/android/stats/otaupdate/updateengine_enums.proto";
 
 /**
  * The master atom class. This message defines all of the available
@@ -319,6 +321,18 @@ message Atom {
             217 [(log_from_module) = "permissioncontroller"];
         PermissionAppsFragmentViewed permission_apps_fragment_viewed =
             218  [(log_from_module) = "permissioncontroller"];
+        TextSelectionEvent text_selection_event =
+            219  [(log_from_module) = "textclassifier"];
+        TextLinkifyEvent text_linkify_event =
+            220  [(log_from_module) = "textclassifier"];
+        ConversationActionsEvent conversation_actions_event =
+            221  [(log_from_module) = "textclassifier"];
+        LanguageDetectionEvent language_detection_event =
+            222  [(log_from_module) = "textclassifier"];
+        ExclusionRectStateChanged exclusion_rect_state_changed = 223;
+        BackGesture back_gesture_reported_reported = 224;
+        UpdateEngineUpdateAttemptReported update_engine_update_attempt_reported = 225;
+        UpdateEngineSuccessfulUpdateReported update_engine_successful_update_reported = 226;
     }
 
     // Pulled events will start at field 10000.
@@ -2500,6 +2514,41 @@ message PhoneStateChanged {
     optional State state = 1;
 }
 
+message BackGesture {
+    enum BackType {
+          DEFAULT_BACK_TYPE = 0;
+          COMPLETED = 1;
+          COMPLETED_REJECTED = 2; // successful because coming from rejected area
+          INCOMPLETE_EXCLUDED = 3; // would have been successful but in the exclusion area
+          INCOMPLETE = 4;
+    }
+    optional BackType type = 1;
+
+    optional int32 y_coordinate = 2; // y coordinate for ACTION_DOWN event
+    enum WindowHorizontalLocation {
+        DEFAULT_LOCATION = 0;
+        LEFT = 1;
+        RIGHT = 2;
+    }
+    optional WindowHorizontalLocation x_location = 3;
+}
+
+message ExclusionRectStateChanged {
+    optional string component_name = 1;    // if not available, simply packageName
+    optional int32 requested_height = 2;   // px
+    optional int32 rejected_height = 3;    // px
+
+    enum WindowHorizontalLocation {
+        DEFAULT_LOCATION = 0;
+        LEFT = 1;
+        RIGHT = 2;
+    }
+    optional WindowHorizontalLocation x_location = 4;
+    optional bool landscape = 5;
+    optional bool splitscreen = 6;
+    optional int32 duration_millis = 7;
+}
+
 message LauncherUIChanged {
     optional android.stats.launcher.LauncherAction action = 1;
     optional android.stats.launcher.LauncherState src_state = 2;
@@ -3291,6 +3340,8 @@ message BiometricErrorOccurred {
     optional int32 error_info_vendor = 7;
     // Dictates if this message should trigger additional debugging.
     optional bool debug = 8;
+    // Time spent during the authentication attempt.
+    optional int64 latency_millis = 9;
 }
 
 /**
@@ -5299,7 +5350,7 @@ message NetworkDnsEventReported {
     // Only valid for event_type = EVENT_RESNSEND.
     optional int32 res_nsend_flags = 5;
 
-    optional android.stats.dnsresolver.Transport network_type = 6;
+    optional android.stats.dnsresolver.NetworkType network_type = 6;
 
     // The DNS over TLS mode on a specific netId.
     optional android.stats.dnsresolver.PrivateDnsModes private_dns_modes = 7;
@@ -5307,6 +5358,9 @@ message NetworkDnsEventReported {
     // Additional pass-through fields opaque to statsd.
     // The DNS resolver Mainline module can add new fields here without requiring an OS update.
     optional android.stats.dnsresolver.DnsQueryEvents dns_query_events = 8 [(log_mode) = MODE_BYTES];
+
+    // The sample rate of DNS stats (to statsd) is 1/sampling_rate_denom.
+    optional int32 sampling_rate_denom = 9;
 }
 
 /**
@@ -6358,6 +6412,9 @@ message GpuStatsAppInfo {
 
     // CPU Vulkan implementation is in use.
     optional bool cpu_vulkan_in_use = 6;
+
+    // App is not doing pre-rotation correctly.
+    optional bool false_prerotation = 7;
 }
 
 /*
@@ -6781,4 +6838,216 @@ message PermissionAppsFragmentViewed {
         DENIED = 3;
     }
     optional Category category = 6;
+}
+
+/**
+ * Logs when there is a smart selection related event.
+ * See frameworks/base/core/java/android/view/textclassifier/TextClassifierEvent.java
+ * Logged from: TextClassifierEventLogger.java
+ */
+message TextSelectionEvent {
+    // A session ID.
+    optional string session_id = 1;
+
+    // Event type of this event.
+    optional android.stats.textclassifier.EventType event_type = 2;
+
+    // Name of the model that is involved in this event.
+    optional string model_name = 3;
+
+    // Type of widget that was involved in triggering this event.
+    optional android.stats.textclassifier.WidgetType widget_type = 4;
+
+    // Index of this event in a session.
+    optional int32 event_index = 5;
+
+    // Entity type that is involved.
+    optional string entity_type = 6;
+
+    // Relative word index of the start of the selection.
+    optional int32 relative_word_start_index = 7;
+
+    // Relative word (exclusive) index of the end of the selection.
+    optional int32 relative_word_end_index = 8;
+
+    // Relative word index of the start of the smart selection.
+    optional int32 relative_suggested_word_start_index = 9;
+
+    // Relative word (exclusive) index of the end of the smart selection.
+    optional int32 relative_suggested_word_end_index = 10;
+
+    // Name of source package.
+    optional string package_name = 11;
+}
+
+/**
+ * Logs when there is a smart linkify related event.
+ * See frameworks/base/core/java/android/view/textclassifier/TextClassifierEvent.java
+ * Logged from: TextClassifierEventLogger.java
+ */
+message TextLinkifyEvent {
+    // A session ID.
+    optional string session_id = 1;
+
+    // Event type of this event.
+    optional android.stats.textclassifier.EventType event_type = 2;
+
+    // Name of the model that is involved in this event.
+    optional string model_name = 3;
+
+    // Type of widget that was involved in triggering this event.
+    optional android.stats.textclassifier.WidgetType widget_type = 4;
+
+    // Index of this event in a session.
+    optional int32 event_index = 5;
+
+    // Entity type that is involved.
+    optional string entity_type = 6;
+
+    // Number of links detected.
+    optional int32 num_links = 7;
+
+    // The total length of all links.
+    optional int32 linked_text_length = 8;
+
+    // Length of input text.
+    optional int32 text_length = 9;
+
+    // Time spent on generating links in ms.
+    optional int64 latency_millis = 10;
+
+    // Name of source package.
+    optional string package_name = 11;
+}
+
+/**
+ * Logs when there is a conversation actions related event.
+ * See frameworks/base/core/java/android/view/textclassifier/TextClassifierEvent.java
+ * Logged from: TextClassifierEventLogger.java
+ */
+message ConversationActionsEvent {
+    // A session ID.
+    optional string session_id = 1;
+
+    // Event type of this event.
+    optional android.stats.textclassifier.EventType event_type = 2;
+
+    // Name of the model that is involved in this event.
+    optional string model_name = 3;
+
+    // Type of widget that was involved in triggering this event.
+    optional android.stats.textclassifier.WidgetType widget_type = 4;
+
+    // The first entity type that is involved.
+    optional string first_entity_type = 5;
+
+    // The second entity type that is involved.
+    optional string second_entity_type = 6;
+
+    // The third entity type that is involved.
+    optional string third_entity_type = 7;
+
+    // The score of the first entity type.
+    optional float score = 8;
+
+    // Name of source package.
+    optional string package_name = 9;
+}
+
+/**
+ * Logs when there is a language detection related event.
+ * See frameworks/base/core/java/android/view/textclassifier/TextClassifierEvent.java
+ * Logged from: TextClassifierEventLogger.java
+ */
+message LanguageDetectionEvent {
+    // A session ID.
+    optional string session_id = 1;
+
+    // Event type of this event.
+    optional android.stats.textclassifier.EventType event_type = 2;
+
+    // Name of the model that is involved in this event.
+    optional string model_name = 3;
+
+    // Type of widget that was involved in triggering this event.
+    optional android.stats.textclassifier.WidgetType widget_type = 4;
+
+    // Detected language.
+    optional string language_tag = 5;
+
+    // Score of the detected language.
+    optional float score = 6;
+
+    // Position of this action.
+    optional int32 action_index = 7;
+
+    // Name of source package.
+    optional string package_name = 8;
+}
+
+/**
+ * Information about an OTA update attempt by update_engine.
+ * Logged from platform/system/update_engine/metrics_reporter_android.cc
+ */
+message UpdateEngineUpdateAttemptReported {
+    // The number of attempts for the update engine to apply a given payload.
+    optional int32 attempt_number = 1;
+
+    optional android.stats.otaupdate.PayloadType payload_type = 2;
+
+    // The total time in minutes for the update engine to apply a given payload.
+    // The time is calculated by calling clock_gettime() / CLOCK_BOOTTIME; and
+    // it's increased when the system is sleeping.
+    optional int32 duration_boottime_in_minutes = 3;
+
+    // The total time in minutes for the update engine to apply a given payload.
+    // The time is calculated by calling clock_gettime() / CLOCK_MONOTONIC_RAW;
+    // and it's not increased when the system is sleeping.
+    optional int32 duration_monotonic_in_minutes = 4;
+
+    // The size of the payload in MiBs.
+    optional int32 payload_size_mib = 5;
+
+    // The attempt result reported by the update engine for an OTA update.
+    optional android.stats.otaupdate.AttemptResult attempt_result = 6;
+
+    // The error code reported by the update engine after an OTA update attempt
+    // on A/B devices.
+    optional android.stats.otaupdate.ErrorCode error_code = 7;
+
+    // The build fingerprint of the source system. The value is read from a
+    // system property when the device takes the update. e.g.
+    // Android/aosp_sailfish/sailfish:10/QP1A.190425.004/5507117:userdebug/test-keys
+    optional string source_fingerprint = 8;
+}
+
+/**
+ * Information about all the attempts the device make before finishing the
+ * successful update.
+ * Logged from platform/system/update_engine/metrics_reporter_android.cc
+ */
+message UpdateEngineSuccessfulUpdateReported {
+    // The number of attempts for the update engine to apply the payload for a
+    // successful update.
+    optional int32 attempt_count = 1;
+
+    optional android.stats.otaupdate.PayloadType payload_type = 2;
+
+    optional int32 payload_size_mib = 3;
+
+    // The total number of bytes downloaded by update_engine since the last
+    // successful update.
+    optional int32 total_bytes_downloaded_mib = 4;
+
+    // The ratio in percentage of the over-downloaded bytes compared to the
+    // total bytes needed to successfully install the update. e.g. 200 if we
+    // download 200MiB in total for a 100MiB package.
+    optional int32 download_overhead_percentage = 5;
+
+    // The total time in minutes for the update engine to apply the payload for a
+    // successful update.
+    optional int32 total_duration_minutes = 6;
+
+    // The number of reboot of the device during a successful update.
+    optional int32 reboot_count = 7;
 }

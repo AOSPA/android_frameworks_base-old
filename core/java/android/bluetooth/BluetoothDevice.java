@@ -1200,7 +1200,7 @@ public final class BluetoothDevice implements Parcelable {
      * @return the Bluetooth alias, or null if no alias or there was a problem
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(publicAlternatives = "Use {@link #getName()} instead.")
     public String getAlias() {
         final IBluetooth service = sService;
         if (service == null) {
@@ -1249,7 +1249,7 @@ public final class BluetoothDevice implements Parcelable {
      * @see #getAlias()
      * @see #getName()
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(publicAlternatives = "Use {@link #getName()} instead.")
     public String getAliasName() {
         String name = getAlias();
         if (name == null) {
@@ -2175,7 +2175,8 @@ public final class BluetoothDevice implements Parcelable {
      * permissions.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(publicAlternatives = "Use "
+            + "{@link #createInsecureRfcommSocketToServiceRecord} instead.")
     public BluetoothSocket createInsecureRfcommSocket(int port) throws IOException {
         if (!isBluetoothEnabled()) {
             Log.e(TAG, "Bluetooth is not enabled");

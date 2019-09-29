@@ -95,6 +95,7 @@
     <string name="notification_channel_voice_mail" msgid="3954099424160511919">"အသံမေးလ် မက်ဆေ့ဂျ်များ"</string>
     <string name="notification_channel_wfc" msgid="2130802501654254801">"Wi-Fi ခေါ်ဆိုမှု"</string>
     <string name="notification_channel_sim" msgid="4052095493875188564">"ဆင်းမ်ကဒ် အခြေအနေ"</string>
+    <string name="notification_channel_sim_high_prio" msgid="1787666807724243207">"အထူးဦးစားပေး ဆင်းမ်ကတ်အခြေအနေ"</string>
     <string name="peerTtyModeFull" msgid="6165351790010341421">"အခြားစက်မှ TTY မုဒ် FULL ပြုရန် တောင်းဆို၏"</string>
     <string name="peerTtyModeHco" msgid="5728602160669216784">"အခြားစက်မှ TTY မုဒ် HCO ပြုရန် တောင်းဆို၏"</string>
     <string name="peerTtyModeVco" msgid="1742404978686538049">"TTY မုဒ် VCO ပြုရန် အခြားစက်မှ တောင်းဆို၏"</string>
@@ -257,6 +258,7 @@
     <string name="notification_channel_car_mode" msgid="3553380307619874564">"ကားမုဒ်"</string>
     <string name="notification_channel_account" msgid="7577959168463122027">"အကောင့် အခြေအနေ"</string>
     <string name="notification_channel_developer" msgid="7579606426860206060">"ဆော့ဖ်ဝဲအင်ဂျင်နီယာ မက်ဆေ့ဂျ်များ"</string>
+    <string name="notification_channel_developer_important" msgid="5251192042281632002">"အရေးကြီး ဆော့ဖ်ဝဲအင်ဂျင်နီယာ မက်ဆေ့ဂျ်များ"</string>
     <string name="notification_channel_updates" msgid="4794517569035110397">"အပ်ဒိတ်များ"</string>
     <string name="notification_channel_network_status" msgid="5025648583129035447">"ကွန်ရက် အခြေအနေ"</string>
     <string name="notification_channel_network_alerts" msgid="2895141221414156525">"ကွန်ရက် သတိပေးချက်များ"</string>
@@ -567,7 +569,7 @@
     <string name="face_acquired_too_right" msgid="3667075962661863218">"ဖုန်းကို ဘယ်ဘက်သို့ရွှေ့ပါ။"</string>
     <string name="face_acquired_too_left" msgid="3148242963894703424">"ဖုန်းကို ညာဘက်သို့ ရွှေ့ပါ။"</string>
     <string name="face_acquired_poor_gaze" msgid="5606479370806754905">"သင့်စက်ပစ္စည်းကို တည့်တည့်ကြည့်ပါ။"</string>
-    <string name="face_acquired_not_detected" msgid="4885504661626728809">"သင့်မျက်နှာကို မမြင်ရပါ။ ဖုန်းကိုကြည့်ပါ။"</string>
+    <string name="face_acquired_not_detected" msgid="1879714205006680222">"မျက်နှာကို ဖုန်းရှေ့တွင် တည့်အောင်ထားပါ။"</string>
     <string name="face_acquired_too_much_motion" msgid="3149332171102108851">"လှုပ်လွန်းသည်။ ဖုန်းကို ငြိမ်ငြိမ်ကိုင်ပါ။"</string>
     <string name="face_acquired_recalibrate" msgid="8077949502893707539">"သင့်မျက်နှာကို ပြန်စာရင်းသွင်းပါ။"</string>
     <string name="face_acquired_too_different" msgid="7663983770123789694">"မျက်နှာ မမှတ်သားနိုင်တော့ပါ။ ထပ်စမ်းကြည့်ပါ။"</string>
@@ -576,7 +578,7 @@
     <string name="face_acquired_tilt_too_extreme" msgid="4019954263012496468">"ခေါင်းကို သိပ်မလှည့်ပါနှင့်။"</string>
     <string name="face_acquired_roll_too_extreme" msgid="6312973147689664409">"ခေါင်းကို သိပ်မလှည့်ပါနှင့်။"</string>
     <string name="face_acquired_obscured" msgid="5357207702967893283">"သင့်မျက်နှာကို ကွယ်နေသည့်အရာအားလုံး ဖယ်ပါ။"</string>
-    <string name="face_acquired_sensor_dirty" msgid="2535761002815565222">"မျက်နှာပြင်ထိပ်ရှိ အာရုံခံဆင်ဆာကို သန့်ရှင်းပါ။"</string>
+    <string name="face_acquired_sensor_dirty" msgid="7905138627046865579">"အနက်ရောင်ဘားအပါအဝင် ဖန်သားပြင်ထိပ်ကို သန့်ရှင်းရေး လုပ်ပါ"</string>
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="396883585636963908">"မျက်နှာကို အတည်ပြု၍ မရပါ။ ဟာ့ဒ်ဝဲ မရနိုင်ပါ။"</string>

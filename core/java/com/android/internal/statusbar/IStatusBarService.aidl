@@ -49,7 +49,7 @@ interface IStatusBarService
     @UnsupportedAppUsage
     void removeIcon(String slot);
     void setImeWindowStatus(int displayId, in IBinder token, int vis, int backDisposition,
-            boolean showImeSwitcher);
+            boolean showImeSwitcher, boolean isMultiClientImeEnabled);
     void expandSettingsPanel(String subPanel);
 
     // ---- Methods below are for use by the status bar policy services ----
@@ -101,7 +101,7 @@ interface IStatusBarService
 
     // Used to show the dialog when BiometricService starts authentication
     void showBiometricDialog(in Bundle bundle, IBiometricServiceReceiverInternal receiver, int type,
-            boolean requireConfirmation, int userId);
+            boolean requireConfirmation, int userId, String opPackageName);
     // Used to hide the dialog when a biometric is authenticated
     void onBiometricAuthenticated(boolean authenticated, String failureReason);
     // Used to set a temporary message, e.g. fingerprint not recognized, finger moved too fast, etc

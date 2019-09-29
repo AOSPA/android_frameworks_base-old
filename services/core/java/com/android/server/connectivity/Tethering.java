@@ -46,6 +46,7 @@ import static android.net.wifi.WifiManager.IFACE_IP_MODE_TETHERED;
 import static android.net.wifi.WifiManager.IFACE_IP_MODE_UNSPECIFIED;
 import static android.net.wifi.WifiManager.WIFI_AP_STATE_DISABLED;
 import static android.telephony.CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED;
+import static android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID;
 
 import static com.android.server.ConnectivityService.SHORT_ARG;
 
@@ -92,6 +93,8 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.UserManagerInternal;
 import android.os.UserManagerInternal.UserRestrictionsListener;
+import android.telephony.PhoneStateListener;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
@@ -100,7 +103,6 @@ import android.util.SparseArray;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
-import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.MessageUtils;
@@ -185,12 +187,13 @@ public class Tethering extends BaseNetworkObserver {
     // into a single coherent structure.
     private final HashSet<IpServer> mForwardedDownstreams;
     private final VersionedBroadcastListener mCarrierConfigChange;
-    private final VersionedBroadcastListener mDefaultSubscriptionChange;
     private final TetheringDependencies mDeps;
     private final EntitlementManager mEntitlementMgr;
     private final Handler mHandler;
     private final RemoteCallbackList<ITetheringEventCallback> mTetheringEventCallbacks =
             new RemoteCallbackList<>();
+    private final PhoneStateListener mPhoneStateListener;
+    private int mActiveDataSubId = INVALID_SUBSCRIPTION_ID;
 
     private volatile TetheringConfiguration mConfig;
     private InterfaceSet mCurrentUpstreamIfaceSet;
@@ -241,7 +244,6 @@ public class Tethering extends BaseNetworkObserver {
             stopTethering(downstream);
         });
         mEntitlementMgr.setTetheringConfigurationFetcher(() -> {
-            maybeDefaultDataSubChanged();
             return mConfig;
         });
 
@@ -253,22 +255,26 @@ public class Tethering extends BaseNetworkObserver {
                     mEntitlementMgr.reevaluateSimCardProvisioning(mConfig);
                 });
 
-        filter = new IntentFilter();
-        filter.addAction(TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED);
-        mDefaultSubscriptionChange = new VersionedBroadcastListener(
-                "DefaultSubscriptionChangeListener", mContext, mHandler, filter,
-                (Intent ignored) -> {
-                    mLog.log("OBSERVED default data subscription change");
-                    maybeDefaultDataSubChanged();
-                    // To avoid launch unexpected provisioning checks, ignore re-provisioning when
-                    // no CarrierConfig loaded yet. Assume reevaluateSimCardProvisioning() will be
-                    // triggered again when CarrierConfig is loaded.
-                    if (mEntitlementMgr.getCarrierConfig(mConfig) != null) {
-                        mEntitlementMgr.reevaluateSimCardProvisioning(mConfig);
-                    } else {
-                        mLog.log("IGNORED reevaluate provisioning due to no carrier config loaded");
-                    }
-                });
+        mPhoneStateListener = new PhoneStateListener(mLooper) {
+            @Override
+            public void onActiveDataSubscriptionIdChanged(int subId) {
+                mLog.log("OBSERVED active data subscription change, from " + mActiveDataSubId
+                        + " to " + subId);
+                if (subId == mActiveDataSubId) return;
+
+                mActiveDataSubId = subId;
+                updateConfiguration();
+                // To avoid launching unexpected provisioning checks, ignore re-provisioning when
+                // no CarrierConfig loaded yet. Assume reevaluateSimCardProvisioning() will be
+                // triggered again when CarrierConfig is loaded.
+                if (mEntitlementMgr.getCarrierConfig(mConfig) != null) {
+                    mEntitlementMgr.reevaluateSimCardProvisioning(mConfig);
+                } else {
+                    mLog.log("IGNORED reevaluate provisioning due to no carrier config loaded");
+                }
+            }
+        };
+
         mStateReceiver = new StateReceiver();
 
         // Load tethering configuration.
@@ -279,7 +285,8 @@ public class Tethering extends BaseNetworkObserver {
 
     private void startStateMachineUpdaters(Handler handler) {
         mCarrierConfigChange.startListening();
-        mDefaultSubscriptionChange.startListening();
+        TelephonyManager.from(mContext).listen(mPhoneStateListener,
+                PhoneStateListener.LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE);
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(UsbManager.ACTION_USB_STATE);
@@ -307,25 +314,15 @@ public class Tethering extends BaseNetworkObserver {
 
     // NOTE: This is always invoked on the mLooper thread.
     private void updateConfiguration() {
-        final int subId = mDeps.getDefaultDataSubscriptionId();
-        updateConfiguration(subId);
-    }
-
-    private void updateConfiguration(final int subId) {
-        mConfig = new TetheringConfiguration(mContext, mLog, subId);
+        mConfig = mDeps.generateTetheringConfiguration(mContext, mLog, mActiveDataSubId);
         mUpstreamNetworkMonitor.updateMobileRequiresDun(mConfig.isDunRequired);
     }
 
     private void maybeDunSettingChanged() {
-        final boolean isDunRequired = TetheringConfiguration.checkDunRequired(mContext);
+        final boolean isDunRequired = TetheringConfiguration.checkDunRequired(
+                mContext, mActiveDataSubId);
         if (isDunRequired == mConfig.isDunRequired) return;
         updateConfiguration();
-    }
-
-    private void maybeDefaultDataSubChanged() {
-        final int subId = mDeps.getDefaultDataSubscriptionId();
-        if (subId == mConfig.subId) return;
-        updateConfiguration(subId);
     }
 
     @Override
@@ -782,7 +779,6 @@ public class Tethering extends BaseNetworkObserver {
                     case WifiManager.WIFI_AP_STATE_FAILED:
                     default:
                         disableWifiIpServingLocked(ifname, curState);
-                        mEntitlementMgr.stopProvisioningIfNeeded(TETHERING_WIFI);
                         break;
                 }
             }
@@ -1326,11 +1322,15 @@ public class Tethering extends BaseNetworkObserver {
             mOffload.excludeDownstreamInterface(who.interfaceName());
             mForwardedDownstreams.remove(who);
 
-            // If this is a Wi-Fi interface, tell WifiManager of any errors.
+            // If this is a Wi-Fi interface, tell WifiManager of any errors
+            // or the inactive serving state.
             if (who.interfaceType() == TETHERING_WIFI) {
                 if (who.lastError() != TETHER_ERROR_NO_ERROR) {
                     getWifiManager().updateInterfaceIpState(
                             who.interfaceName(), IFACE_IP_MODE_CONFIGURATION_ERROR);
+                } else {
+                    getWifiManager().updateInterfaceIpState(
+                            who.interfaceName(), IFACE_IP_MODE_UNSPECIFIED);
                 }
             }
         }

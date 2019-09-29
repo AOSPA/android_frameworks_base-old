@@ -38,6 +38,7 @@ import android.app.ActivityManager;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
 import android.app.VrManager;
+import android.compat.IPlatformCompat;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
@@ -3067,7 +3068,7 @@ public abstract class Context {
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS)
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(trackingBug = 136728678)
     public boolean bindServiceAsUser(Intent service, ServiceConnection conn, int flags,
             Handler handler, UserHandle user) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
@@ -3197,6 +3198,7 @@ public abstract class Context {
             TELEPHONY_SERVICE,
             TELEPHONY_SUBSCRIPTION_SERVICE,
             CARRIER_CONFIG_SERVICE,
+            EUICC_SERVICE,
             TELECOM_SERVICE,
             CLIPBOARD_SERVICE,
             INPUT_METHOD_SERVICE,
@@ -3227,6 +3229,7 @@ public abstract class Context {
             ROLE_SERVICE,
             //@hide ROLE_CONTROLLER_SERVICE,
             CAMERA_SERVICE,
+            //@hide: PLATFORM_COMPAT_SERVICE,
             PRINT_SERVICE,
             CONSUMER_IR_SERVICE,
             //@hide: TRUST_SERVICE,
@@ -3387,6 +3390,8 @@ public abstract class Context {
      * @see android.telephony.SubscriptionManager
      * @see #CARRIER_CONFIG_SERVICE
      * @see android.telephony.CarrierConfigManager
+     * @see #EUICC_SERVICE
+     * @see android.telephony.euicc.EuiccManager
      * @see #INPUT_METHOD_SERVICE
      * @see android.view.inputmethod.InputMethodManager
      * @see #UI_MODE_SERVICE
@@ -3730,6 +3735,14 @@ public abstract class Context {
      * @see NetworkStackClient
      */
     public static final String NETWORK_STACK_SERVICE = "network_stack";
+
+    /**
+     * Use with {@link android.os.ServiceManager.getService()} to retrieve a
+     * {@link android.net.WifiStackClient} IBinder for communicating with the network stack
+     * @hide
+     * @see android.net.WifiStackClient
+     */
+    public static final String WIFI_STACK_SERVICE = "wifi_stack";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
@@ -4105,6 +4118,9 @@ public abstract class Context {
 
     /**
      * Official published name of the app prediction service.
+     *
+     * <p><b>NOTE: </b> this service is optional; callers of
+     * {@code Context.getSystemServiceName(APP_PREDICTION_SERVICE)} should check for {@code null}.
      *
      * @hide
      * @see #getSystemService(String)
@@ -4583,6 +4599,13 @@ public abstract class Context {
     public static final String STATS_MANAGER = "stats";
 
     /**
+     * Use with {@link android.os.ServiceManager.getService()} to retrieve a
+     * {@link IPlatformCompat} IBinder for communicating with the platform compat service.
+     * @hide
+     */
+    public static final String PLATFORM_COMPAT_SERVICE = "platform_compat";
+
+    /**
      * Service to capture a bugreport.
      * @see #getSystemService(String)
      * @see android.os.BugreportManager
@@ -4665,10 +4688,10 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve an
-     * {@link android.telephony.ims.RcsManager}.
+     * {@link android.telephony.ims.RcsMessageManager}.
      * @hide
      */
-    public static final String TELEPHONY_RCS_SERVICE = "ircs";
+    public static final String TELEPHONY_RCS_MESSAGE_SERVICE = "ircsmessage";
 
      /**
      * Use with {@link #getSystemService(String)} to retrieve an

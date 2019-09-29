@@ -24,6 +24,7 @@ applications that come with the platform
         <permission name="android.permission.PROVIDE_RESOLVER_RANKER_SERVICE" />
         <permission name="android.permission.MONITOR_DEFAULT_SMS_PACKAGE" />
         <permission name="android.permission.REQUEST_NOTIFICATION_ASSISTANT_SERVICE" />
+        <permission name="android.permission.INTERACT_ACROSS_USERS" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.apps.tag">
@@ -86,6 +87,7 @@ applications that come with the platform
     </privapp-permissions>
 
     <privapp-permissions package="com.android.mtp">
+        <permission name="android.permission.ACCESS_MTP"/>
         <permission name="android.permission.MANAGE_USB"/>
     </privapp-permissions>
 
@@ -151,6 +153,7 @@ applications that come with the platform
         <permission name="android.permission.SET_TIME"/>
         <permission name="android.permission.SET_TIME_ZONE"/>
         <permission name="android.permission.SHUTDOWN"/>
+        <permission name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"/>
         <permission name="android.permission.STATUS_BAR"/>
         <permission name="android.permission.STOP_APP_SWITCHES"/>
         <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
@@ -191,7 +194,6 @@ applications that come with the platform
     </privapp-permissions>
 
     <privapp-permissions package="com.android.providers.media">
-        <permission name="android.permission.ACCESS_MTP"/>
         <permission name="android.permission.INTERACT_ACROSS_USERS"/>
         <permission name="android.permission.MANAGE_USERS"/>
         <permission name="android.permission.USE_RESERVED_DISK"/>
@@ -268,6 +270,8 @@ applications that come with the platform
         <permission name="android.permission.INSTALL_PACKAGES"/>
         <!-- Needed for test only -->
         <permission name="android.permission.INTERACT_ACROSS_PROFILES"/>
+        <!-- Permission required to test onPermissionsChangedListener -->
+        <permission name="android.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS"/>
         <permission name="android.permission.INTERACT_ACROSS_USERS"/>
         <permission name="android.permission.LOCAL_MAC_ADDRESS"/>
         <permission name="android.permission.MANAGE_ACCESSIBILITY"/>
@@ -318,6 +322,8 @@ applications that come with the platform
         <permission name="android.permission.SET_WALLPAPER" />
         <permission name="android.permission.SET_WALLPAPER_COMPONENT" />
         <permission name="android.permission.REQUEST_NOTIFICATION_ASSISTANT_SERVICE" />
+        <!-- Permission required to test system only camera devices. -->
+        <permission name="android.permission.SYSTEM_CAMERA" />
         <!-- Permission required to test ExplicitHealthCheckServiceImpl. -->
         <permission name="android.permission.BIND_EXPLICIT_HEALTH_CHECK_SERVICE"/>
     </privapp-permissions>
@@ -347,4 +353,19 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_DYNAMIC_SYSTEM"/>
     </privapp-permissions>
 
+    <privapp-permissions package="com.android.server.wifistack">
+        <permission name="android.permission.CHANGE_CONFIGURATION"/>
+        <permission name="android.permission.CONNECTIVITY_INTERNAL"/>
+        <permission name="android.permission.DUMP"/>
+        <permission name="android.permission.INTERACT_ACROSS_USERS"/>
+        <permission name="android.permission.LOCAL_MAC_ADDRESS"/>
+        <permission name="android.permission.MANAGE_USERS"/>
+        <permission name="android.permission.PACKAGE_USAGE_STATS"/>
+        <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
+        <permission name="android.permission.REQUEST_NETWORK_SCORES"/>
+        <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
+        <permission name="android.permission.UPDATE_DEVICE_STATS"/>
+        <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
+        <permission name="android.permission.LOCATION_HARDWARE"/>
+    </privapp-permissions>
 </permissions>

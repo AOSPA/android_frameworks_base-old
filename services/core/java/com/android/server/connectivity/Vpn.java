@@ -95,7 +95,7 @@ import com.android.internal.net.VpnProfile;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.ArrayUtils;
 import com.android.server.ConnectivityService;
-import com.android.server.DeviceIdleController;
+import com.android.server.DeviceIdleInternal;
 import com.android.server.LocalServices;
 import com.android.server.net.BaseNetworkObserver;
 
@@ -616,8 +616,8 @@ public class Vpn {
         // a short time, so we can bootstrap the VPN service.
         final long oldId = Binder.clearCallingIdentity();
         try {
-            DeviceIdleController.LocalService idleController =
-                    LocalServices.getService(DeviceIdleController.LocalService.class);
+            DeviceIdleInternal idleController =
+                    LocalServices.getService(DeviceIdleInternal.class);
             idleController.addPowerSaveTempWhitelistApp(Process.myUid(), alwaysOnPackage,
                     VPN_LAUNCH_IDLE_WHITELIST_DURATION_MS, mUserHandle, false, "vpn");
 
@@ -963,10 +963,11 @@ public class Vpn {
         // VPN either provide a default route (IPv4 or IPv6 or both), or they are a split tunnel
         // that falls back to the default network, which by definition provides INTERNET (unless
         // there is no default network, in which case none of this matters in any sense).
-        // Also, it guarantees that when a VPN applies to an app, the VPN will always be reported
-        // as the network by getDefaultNetwork and registerDefaultNetworkCallback. This in turn
-        // protects the invariant that apps calling CM#bindProcessToNetwork(getDefaultNetwork())
-        // the same as if they use the default network.
+        // Also, always setting the INTERNET bit guarantees that when a VPN applies to an app,
+        // the VPN will always be reported as the network by getDefaultNetwork and callbacks
+        // registered with registerDefaultNetworkCallback. This in turn protects the invariant
+        // that an app calling ConnectivityManager#bindProcessToNetwork(getDefaultNetwork())
+        // behaves the same as when it uses the default network.
         mNetworkCapabilities.addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
 
         mNetworkInfo.setDetailedState(DetailedState.CONNECTING, null, null);

@@ -49,7 +49,6 @@ import static android.telephony.CarrierConfigManager.KEY_DATA_WARNING_THRESHOLD_
 import static android.telephony.CarrierConfigManager.KEY_MONTHLY_DATA_CYCLE_DAY_INT;
 import static android.telephony.SubscriptionPlan.BYTES_UNLIMITED;
 import static android.telephony.SubscriptionPlan.LIMIT_BEHAVIOR_DISABLED;
-import static android.text.format.Time.TIMEZONE_UTC;
 
 import static com.android.server.net.NetworkPolicyManagerInternal.QUOTA_TYPE_JOBS;
 import static com.android.server.net.NetworkPolicyManagerInternal.QUOTA_TYPE_MULTIPATH;
@@ -128,7 +127,6 @@ import android.telephony.SubscriptionPlan;
 import android.telephony.TelephonyManager;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.text.TextUtils;
-import android.text.format.Time;
 import android.util.DataUnit;
 import android.util.Log;
 import android.util.Pair;
@@ -141,7 +139,7 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.util.test.BroadcastInterceptingContext;
 import com.android.internal.util.test.BroadcastInterceptingContext.FutureIntent;
-import com.android.server.DeviceIdleController;
+import com.android.server.DeviceIdleInternal;
 import com.android.server.LocalServices;
 
 import com.google.common.util.concurrent.AbstractFuture;
@@ -184,6 +182,7 @@ import java.util.Calendar;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -213,6 +212,7 @@ public class NetworkPolicyManagerServiceTest {
      * Path on assets where files used by {@link NetPolicyXml} are located.
      */
     private static final String NETPOLICY_DIR = "NetworkPolicyManagerServiceTest/netpolicy";
+    private static final String TIMEZONE_UTC = "UTC";
 
     private BroadcastInterceptingContext mServiceContext;
     private File mPolicyDir;
@@ -293,7 +293,7 @@ public class NetworkPolicyManagerServiceTest {
     };
 
     private void registerLocalServices() {
-        addLocalServiceMock(DeviceIdleController.LocalService.class);
+        addLocalServiceMock(DeviceIdleInternal.class);
 
         final UsageStatsManagerInternal usageStats =
                 addLocalServiceMock(UsageStatsManagerInternal.class);
@@ -442,7 +442,7 @@ public class NetworkPolicyManagerServiceTest {
         // Added in registerLocalServices()
         LocalServices.removeServiceForTest(ActivityManagerInternal.class);
         LocalServices.removeServiceForTest(PowerManagerInternal.class);
-        LocalServices.removeServiceForTest(DeviceIdleController.LocalService.class);
+        LocalServices.removeServiceForTest(DeviceIdleInternal.class);
         LocalServices.removeServiceForTest(UsageStatsManagerInternal.class);
         LocalServices.removeServiceForTest(NetworkStatsManagerInternal.class);
     }
@@ -559,7 +559,25 @@ public class NetworkPolicyManagerServiceTest {
                 .build();
         mService.updateRestrictBackgroundByLowPowerModeUL(stateOff);
 
-        // RestrictBackground should be on, following its previous state
+        // RestrictBackground should be on, as before.
+        assertTrue(mService.getRestrictBackground());
+
+        stateOn = new PowerSaveState.Builder()
+                .setGlobalBatterySaverEnabled(true)
+                .setBatterySaverEnabled(true)
+                .build();
+        mService.updateRestrictBackgroundByLowPowerModeUL(stateOn);
+
+        // RestrictBackground should be on.
+        assertTrue(mService.getRestrictBackground());
+
+        stateOff = new PowerSaveState.Builder()
+                .setGlobalBatterySaverEnabled(false)
+                .setBatterySaverEnabled(false)
+                .build();
+        mService.updateRestrictBackgroundByLowPowerModeUL(stateOff);
+
+        // RestrictBackground should be on, as it was enabled manually before battery saver.
         assertTrue(mService.getRestrictBackground());
     }
 
@@ -585,6 +603,20 @@ public class NetworkPolicyManagerServiceTest {
 
         // RestrictBackground should be off, following its previous state
         assertFalse(mService.getRestrictBackground());
+
+        PowerSaveState stateOnRestrictOff = new PowerSaveState.Builder()
+                .setGlobalBatterySaverEnabled(true)
+                .setBatterySaverEnabled(false)
+                .build();
+
+        mService.updateRestrictBackgroundByLowPowerModeUL(stateOnRestrictOff);
+
+        assertFalse(mService.getRestrictBackground());
+
+        mService.updateRestrictBackgroundByLowPowerModeUL(stateOff);
+
+        // RestrictBackground should still be off.
+        assertFalse(mService.getRestrictBackground());
     }
 
     @Test
@@ -602,11 +634,49 @@ public class NetworkPolicyManagerServiceTest {
 
         // User turns off RestrictBackground manually
         setRestrictBackground(false);
-        PowerSaveState stateOff = new PowerSaveState.Builder().setBatterySaverEnabled(
-                false).build();
+        // RestrictBackground should be off because user changed it manually
+        assertFalse(mService.getRestrictBackground());
+
+        PowerSaveState stateOff = new PowerSaveState.Builder()
+                .setGlobalBatterySaverEnabled(false)
+                .setBatterySaverEnabled(false)
+                .build();
         mService.updateRestrictBackgroundByLowPowerModeUL(stateOff);
 
-        // RestrictBackground should be off because user changes it manually
+        // RestrictBackground should remain off.
+        assertFalse(mService.getRestrictBackground());
+    }
+
+    @Test
+    public void updateRestrictBackgroundByLowPowerMode_RestrictOnWithGlobalOff()
+            throws Exception {
+        setRestrictBackground(false);
+        PowerSaveState stateOn = new PowerSaveState.Builder()
+                .setGlobalBatterySaverEnabled(false)
+                .setBatterySaverEnabled(true)
+                .build();
+
+        mService.updateRestrictBackgroundByLowPowerModeUL(stateOn);
+
+        // RestrictBackground should be turned on because of battery saver.
+        assertTrue(mService.getRestrictBackground());
+
+        PowerSaveState stateRestrictOff = new PowerSaveState.Builder()
+                .setGlobalBatterySaverEnabled(true)
+                .setBatterySaverEnabled(false)
+                .build();
+        mService.updateRestrictBackgroundByLowPowerModeUL(stateRestrictOff);
+
+        // RestrictBackground should be off, returning to its state before battery saver's change.
+        assertFalse(mService.getRestrictBackground());
+
+        PowerSaveState stateOff = new PowerSaveState.Builder()
+                .setGlobalBatterySaverEnabled(false)
+                .setBatterySaverEnabled(false)
+                .build();
+        mService.updateRestrictBackgroundByLowPowerModeUL(stateOff);
+
+        // RestrictBackground should still be off, back in its pre-battery saver state.
         assertFalse(mService.getRestrictBackground());
     }
 
@@ -1796,7 +1866,7 @@ public class NetworkPolicyManagerServiceTest {
     private static NetworkPolicy buildFakeMobilePolicy(int cycleDay, long warningBytes,
             long limitBytes, boolean inferred) {
         final NetworkTemplate template = buildTemplateMobileAll(FAKE_SUBSCRIBER_ID);
-        return new NetworkPolicy(template, cycleDay, new Time().timezone, warningBytes,
+        return new NetworkPolicy(template, cycleDay, TimeZone.getDefault().getID(), warningBytes,
                 limitBytes, SNOOZE_NEVER, SNOOZE_NEVER, true, inferred);
     }
 

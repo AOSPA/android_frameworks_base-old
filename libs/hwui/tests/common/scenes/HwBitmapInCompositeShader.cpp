@@ -50,7 +50,7 @@ public:
             pixels[4000 + 4 * i + 3] = 255;
         }
         buffer->unlock();
-        sk_sp<Bitmap> hardwareBitmap(Bitmap::createFrom(buffer, kRGBA_8888_SkColorType,
+        sk_sp<Bitmap> hardwareBitmap(Bitmap::createFrom(buffer->toAHardwareBuffer(),
                                                         SkColorSpace::MakeSRGB()));
         sk_sp<SkShader> hardwareShader(createBitmapShader(*hardwareBitmap));
 
@@ -65,7 +65,7 @@ public:
         sk_sp<SkShader> compositeShader(
                 SkShaders::Blend(SkBlendMode::kDstATop, hardwareShader, gradientShader));
 
-        SkPaint paint;
+        Paint paint;
         paint.setShader(std::move(compositeShader));
         canvas.drawRoundRect(0, 0, 400, 200, 10.0f, 10.0f, paint);
     }

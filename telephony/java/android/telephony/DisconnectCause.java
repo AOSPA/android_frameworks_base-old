@@ -340,10 +340,19 @@ public final class DisconnectCause {
      */
     public static final int MEDIA_TIMEOUT = 77;
 
-    /** @hide */
-    public static final int QOS_UNAVAILABLE = 78;
-    /** @hide */
-    public static final int REQUESTED_FACILITY_NOT_SUBSCRIBED = 79;
+    /**
+     * Indicates that an emergency call cannot be placed over WFC because the service is not
+     * available in the current location.
+     * @hide
+     */
+    public static final int EMERGENCY_CALL_OVER_WFC_NOT_AVAILABLE = 78;
+
+    /**
+     * Indicates that WiFi calling service is not available in the current location.
+     * @hide
+     */
+    public static final int WFC_SERVICE_NOT_AVAILABLE_IN_THIS_LOCATION = 79;
+
     /** @hide */
     public static final int INCOMING_CALLS_BARRED_WITHIN_CUG = 80;
     /** @hide */
@@ -426,14 +435,18 @@ public final class DisconnectCause {
     public static final int REQUESTED_CIRCUIT_OR_CHANNEL_NOT_AVAILABLE = 119;
     /** @hide */
     public static final int RESOURCES_UNAVAILABLE_OR_UNSPECIFIED = 120;
+    /** @hide */
+    public static final int QOS_UNAVAILABLE = 121;
+    /** @hide */
+    public static final int REQUESTED_FACILITY_NOT_SUBSCRIBED = 122;
 
     /**
      * call failed due to LTE to 3G/2G handover not feasible
      * @hide
      */
-    public static final int HO_NOT_FEASIBLE = 121;
+    public static final int HO_NOT_FEASIBLE = 123;
     /** @hide */
-    public static final int NON_SELECTED_USER_CLEARING = 122;
+    public static final int NON_SELECTED_USER_CLEARING = 124;
 
     //*********************************************************************************************
     // When adding a disconnect type:
@@ -648,6 +661,10 @@ public final class DisconnectCause {
             return "OTASP_PROVISIONING_IN_PROCESS";
         case MEDIA_TIMEOUT:
             return "MEDIA_TIMEOUT";
+        case EMERGENCY_CALL_OVER_WFC_NOT_AVAILABLE:
+            return "EMERGENCY_CALL_OVER_WFC_NOT_AVAILABLE";
+        case WFC_SERVICE_NOT_AVAILABLE_IN_THIS_LOCATION:
+            return "WFC_SERVICE_NOT_AVAILABLE_IN_THIS_LOCATION";
         case NETWORK_OUT_OF_ORDER:
             return "NETWORK_OUT_OF_ORDER";
         case TEMPORARY_FAILURE:

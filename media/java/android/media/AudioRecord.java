@@ -1799,6 +1799,9 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
      * @hide
      */
     public int getPortId() {
+        if (mNativeRecorderInJavaObj == 0) {
+            return 0;
+        }
         return native_getPortId();
     }
 

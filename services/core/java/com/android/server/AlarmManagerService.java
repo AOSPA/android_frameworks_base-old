@@ -172,7 +172,7 @@ class AlarmManagerService extends SystemService {
     final LocalLog mLog = new LocalLog(TAG);
 
     AppOpsManager mAppOps;
-    DeviceIdleController.LocalService mLocalDeviceIdleController;
+    DeviceIdleInternal mLocalDeviceIdleController;
     private UsageStatsManagerInternal mUsageStatsManagerInternal;
 
     final Object mLock = new Object();
@@ -1594,7 +1594,7 @@ class AlarmManagerService extends SystemService {
                 mConstants.start(getContext().getContentResolver());
                 mAppOps = (AppOpsManager) getContext().getSystemService(Context.APP_OPS_SERVICE);
                 mLocalDeviceIdleController =
-                        LocalServices.getService(DeviceIdleController.LocalService.class);
+                        LocalServices.getService(DeviceIdleInternal.class);
                 mUsageStatsManagerInternal =
                         LocalServices.getService(UsageStatsManagerInternal.class);
                 mUsageStatsManagerInternal.addAppIdleStateChangeListener(new AppStandbyTracker());
@@ -2604,8 +2604,7 @@ class AlarmManagerService extends SystemService {
             mConstants.dumpProto(proto, AlarmManagerServiceDumpProto.SETTINGS);
 
             if (mAppStateTracker != null) {
-                mAppStateTracker.dumpProto(proto,
-                        AlarmManagerServiceDumpProto.FORCE_APP_STANDBY_TRACKER);
+                mAppStateTracker.dumpProto(proto, AlarmManagerServiceDumpProto.APP_STATE_TRACKER);
             }
 
             proto.write(AlarmManagerServiceDumpProto.IS_INTERACTIVE, mInteractive);

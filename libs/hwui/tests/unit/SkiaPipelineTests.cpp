@@ -23,12 +23,14 @@
 #include "AnimationContext.h"
 #include "DamageAccumulator.h"
 #include "IContextFactory.h"
+#include "hwui/Paint.h"
 #include "SkiaCanvas.h"
 #include "pipeline/skia/SkiaDisplayList.h"
 #include "pipeline/skia/SkiaOpenGLPipeline.h"
 #include "pipeline/skia/SkiaRecordingCanvas.h"
 #include "pipeline/skia/SkiaUtils.h"
 #include "renderthread/CanvasContext.h"
+#include "tests/common/TestContext.h"
 #include "tests/common/TestUtils.h"
 
 #include <gui/BufferItemConsumer.h>
@@ -95,7 +97,7 @@ RENDERTHREAD_SKIA_PIPELINE_TEST(SkiaPipeline, testOnPrepareTree) {
 RENDERTHREAD_SKIA_PIPELINE_TEST(SkiaPipeline, renderFrameCheckOpaque) {
     auto halfGreenNode = TestUtils::createSkiaNode(
             0, 0, 2, 2, [](RenderProperties& props, SkiaRecordingCanvas& bottomHalfGreenCanvas) {
-                SkPaint greenPaint;
+                Paint greenPaint;
                 greenPaint.setColor(SK_ColorGREEN);
                 greenPaint.setStyle(SkPaint::kFill_Style);
                 bottomHalfGreenCanvas.drawRect(0, 1, 2, 2, greenPaint);
@@ -293,7 +295,7 @@ RENDERTHREAD_SKIA_PIPELINE_TEST(SkiaPipeline, deferRenderNodeScene) {
     };
 
     std::vector<sp<RenderNode>> nodes;
-    SkPaint transparentPaint;
+    Paint transparentPaint;
     transparentPaint.setAlpha(128);
 
     // backdrop
@@ -424,17 +426,9 @@ RENDERTHREAD_SKIA_PIPELINE_TEST(SkiaPipeline, clip_replace) {
     EXPECT_EQ(1, surface->canvas()->mDrawCounter);
 }
 
-static sp<Surface> createDummySurface() {
-    sp<IGraphicBufferProducer> producer;
-    sp<IGraphicBufferConsumer> consumer;
-    BufferQueue::createBufferQueue(&producer, &consumer);
-    producer->setMaxDequeuedBufferCount(1);
-    producer->setAsyncMode(true);
-    return new Surface(producer);
-}
-
 RENDERTHREAD_SKIA_PIPELINE_TEST(SkiaPipeline, context_lost) {
-    auto surface = createDummySurface();
+    test::TestContext context;
+    auto surface = context.surface();
     auto pipeline = std::make_unique<SkiaOpenGLPipeline>(renderThread);
     EXPECT_FALSE(pipeline->isSurfaceReady());
     EXPECT_TRUE(pipeline->setSurface(surface.get(), SwapBehavior::kSwap_default, ColorMode::SRGB, 0));

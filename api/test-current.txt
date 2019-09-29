@@ -32,6 +32,14 @@ package android {
 
 }
 
+package android.accessibilityservice {
+
+  public final class AccessibilityGestureInfo implements android.os.Parcelable {
+    ctor public AccessibilityGestureInfo(int, int);
+  }
+
+}
+
 package android.animation {
 
   public class ValueAnimator extends android.animation.Animator {
@@ -54,6 +62,7 @@ package android.app {
     method @RequiresPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) public int getPackageImportance(String);
     method public long getTotalRam();
     method @RequiresPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) public int getUidImportance(int);
+    method public static boolean isHighEndGfx();
     method @RequiresPermission(android.Manifest.permission.PACKAGE_USAGE_STATS) public void removeOnUidImportanceListener(android.app.ActivityManager.OnUidImportanceListener);
     method public static void resumeAppSwitches() throws android.os.RemoteException;
     method @RequiresPermission(android.Manifest.permission.CHANGE_CONFIGURATION) public void scheduleApplicationInfoChanged(java.util.List<java.lang.String>, int);
@@ -318,10 +327,16 @@ package android.app {
   }
 
   public final class NotificationChannel implements android.os.Parcelable {
+    method public int getOriginalImportance();
+    method public boolean isBlockableSystem();
     method public boolean isImportanceLockedByCriticalDeviceFunction();
     method public boolean isImportanceLockedByOEM();
+    method public void setBlockableSystem(boolean);
+    method public void setDeleted(boolean);
+    method public void setFgServiceShown(boolean);
     method public void setImportanceLockedByCriticalDeviceFunction(boolean);
     method public void setImportanceLockedByOEM(boolean);
+    method public void setOriginalImportance(int);
   }
 
   public final class NotificationChannelGroup implements android.os.Parcelable {
@@ -604,10 +619,13 @@ package android.content {
     method public int describeContents();
     method public static android.content.AutofillOptions forWhitelistingItself();
     method public boolean isAugmentedAutofillEnabled(@NonNull android.content.Context);
+    method public boolean isAutofillDisabledLocked(@NonNull android.content.ComponentName);
     method public void writeToParcel(android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.content.AutofillOptions> CREATOR;
+    field public long appDisabledExpiration;
     field public boolean augmentedAutofillEnabled;
     field public final boolean compatModeEnabled;
+    field @Nullable public android.util.ArrayMap<java.lang.String,java.lang.Long> disabledActivities;
     field public final int loggingLevel;
     field @Nullable public android.util.ArraySet<android.content.ComponentName> whitelistedActivitiesForAugmentedAutofill;
   }
@@ -690,10 +708,12 @@ package android.content.pm {
     method public void setEnableRollback(boolean);
     method @RequiresPermission("android.permission.INSTALL_GRANT_RUNTIME_PERMISSIONS") public void setGrantedRuntimePermissions(String[]);
     method @RequiresPermission(android.Manifest.permission.INSTALL_PACKAGES) public void setInstallAsApex();
+    method public void setRequestDowngrade(boolean);
     method @RequiresPermission(android.Manifest.permission.INSTALL_PACKAGES) public void setStaged();
   }
 
   public abstract class PackageManager {
+    method @RequiresPermission("android.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS") public abstract void addOnPermissionsChangeListener(@NonNull android.content.pm.PackageManager.OnPermissionsChangedListener);
     method public abstract boolean arePermissionsIndividuallyControlled();
     method @Nullable @RequiresPermission("android.permission.INTERACT_ACROSS_USERS_FULL") public abstract String getDefaultBrowserPackageNameAsUser(int);
     method @Nullable public String getIncidentReportApproverPackageName();
@@ -707,6 +727,7 @@ package android.content.pm {
     method @NonNull public abstract String getSharedSystemSharedLibraryPackageName();
     method @Nullable public String getWellbeingPackageName();
     method @RequiresPermission("android.permission.GRANT_RUNTIME_PERMISSIONS") public abstract void grantRuntimePermission(@NonNull String, @NonNull String, @NonNull android.os.UserHandle);
+    method @RequiresPermission("android.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS") public abstract void removeOnPermissionsChangeListener(@NonNull android.content.pm.PackageManager.OnPermissionsChangedListener);
     method @RequiresPermission("android.permission.REVOKE_RUNTIME_PERMISSIONS") public abstract void revokeRuntimePermission(@NonNull String, @NonNull String, @NonNull android.os.UserHandle);
     method @RequiresPermission(anyOf={"android.permission.GRANT_RUNTIME_PERMISSIONS", "android.permission.REVOKE_RUNTIME_PERMISSIONS"}) public abstract void updatePermissionFlags(@NonNull String, @NonNull String, int, int, @NonNull android.os.UserHandle);
     field public static final String FEATURE_ADOPTABLE_STORAGE = "android.software.adoptable_storage";
@@ -727,6 +748,10 @@ package android.content.pm {
     field public static final int MATCH_KNOWN_PACKAGES = 4202496; // 0x402000
     field public static final String SYSTEM_SHARED_LIBRARY_SERVICES = "android.ext.services";
     field public static final String SYSTEM_SHARED_LIBRARY_SHARED = "android.ext.shared";
+  }
+
+  public static interface PackageManager.OnPermissionsChangedListener {
+    method public void onPermissionsChanged(int);
   }
 
   public class PermissionInfo extends android.content.pm.PackageItemInfo implements android.os.Parcelable {
@@ -789,6 +814,7 @@ package android.content.rollback {
   }
 
   public final class RollbackManager {
+    method @RequiresPermission(android.Manifest.permission.TEST_MANAGE_ROLLBACKS) public void blockRollbackManager(long);
     method @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_ROLLBACKS, android.Manifest.permission.TEST_MANAGE_ROLLBACKS}) public void commitRollback(int, @NonNull java.util.List<android.content.pm.VersionedPackage>, @NonNull android.content.IntentSender);
     method @RequiresPermission(android.Manifest.permission.TEST_MANAGE_ROLLBACKS) public void expireRollbackForPackage(@NonNull String);
     method @RequiresPermission(anyOf={android.Manifest.permission.MANAGE_ROLLBACKS, android.Manifest.permission.TEST_MANAGE_ROLLBACKS}) @NonNull public java.util.List<android.content.rollback.RollbackInfo> getAvailableRollbacks();
@@ -2325,6 +2351,7 @@ package android.provider {
     method public static android.net.Uri scanFile(android.content.Context, java.io.File);
     method public static android.net.Uri scanFileFromShell(android.content.Context, java.io.File);
     method public static void scanVolume(android.content.Context, java.io.File);
+    method public static void waitForIdle(android.content.Context);
   }
 
   public final class Settings {
@@ -2441,6 +2468,7 @@ package android.service.appprediction {
 package android.service.autofill {
 
   public abstract class AutofillFieldClassificationService extends android.app.Service {
+    ctor public AutofillFieldClassificationService();
     method public android.os.IBinder onBind(android.content.Intent);
     field public static final String REQUIRED_ALGORITHM_EDIT_DISTANCE = "EDIT_DISTANCE";
     field public static final String REQUIRED_ALGORITHM_EXACT_MATCH = "EXACT_MATCH";
@@ -2846,6 +2874,11 @@ package android.telephony {
     method @NonNull public android.telephony.NetworkRegistrationInfo.Builder setTransportType(int);
   }
 
+  public class PhoneNumberUtils {
+    method public static int getMinMatchForTest();
+    method public static void setMinMatchForTest(int);
+  }
+
   public class ServiceState implements android.os.Parcelable {
     method public void addNetworkRegistrationInfo(android.telephony.NetworkRegistrationInfo);
     method public void setCdmaSystemAndNetworkId(int, int);
@@ -3013,6 +3046,8 @@ package android.util {
     field public static final String PERSIST_PREFIX = "persist.sys.fflag.override.";
     field public static final String SCREENRECORD_LONG_PRESS = "settings_screenrecord_long_press";
     field public static final String SEAMLESS_TRANSFER = "settings_seamless_transfer";
+    field public static final String SETTINGS_WIFITRACKER2 = "settings_wifitracker2";
+    field public static final String USE_BUGREPORT_API = "settings_use_bugreport_api";
   }
 
   public class TimeUtils {
@@ -3477,11 +3512,6 @@ package android.view.inputmethod {
   public final class InputMethodManager {
     method public int getDisplayId();
     method public boolean isInputMethodPickerShown();
-  }
-
-  public class InputMethodSystemProperty {
-    ctor public InputMethodSystemProperty();
-    field public static final boolean MULTI_CLIENT_IME_ENABLED;
   }
 
 }

@@ -1,11 +1,6 @@
 // Signature format: 2.0
 package android.app {
 
-  public class Activity extends android.view.ContextThemeWrapper implements android.content.ComponentCallbacks2 android.view.KeyEvent.Callback android.view.LayoutInflater.Factory2 android.view.View.OnCreateContextMenuListener android.view.Window.Callback {
-    method @Deprecated public boolean enterPictureInPictureMode(@NonNull android.app.PictureInPictureArgs);
-    method @Deprecated public void setPictureInPictureArgs(@NonNull android.app.PictureInPictureArgs);
-  }
-
   public class ActivityManager {
     method @Deprecated public static int getMaxNumPictureInPictureActions();
   }
@@ -24,51 +19,6 @@ package android.app {
   public static class Notification.Builder {
     method @Deprecated public android.app.Notification.Builder setChannel(String);
     method @Deprecated public android.app.Notification.Builder setTimeout(long);
-  }
-
-  @Deprecated public final class PictureInPictureArgs implements android.os.Parcelable {
-    method public static android.app.PictureInPictureArgs convert(android.app.PictureInPictureParams);
-    method public static android.app.PictureInPictureParams convert(android.app.PictureInPictureArgs);
-    method public int describeContents();
-    method public void writeToParcel(android.os.Parcel, int);
-    field public static final int CONTENTS_FILE_DESCRIPTOR = 1; // 0x1
-    field @NonNull public static final android.os.Parcelable.Creator<android.app.PictureInPictureArgs> CREATOR;
-    field public static final int PARCELABLE_WRITE_RETURN_VALUE = 1; // 0x1
-  }
-
-  public static class PictureInPictureArgs.Builder {
-    ctor public PictureInPictureArgs.Builder();
-    method public android.app.PictureInPictureArgs build();
-    method public android.app.PictureInPictureArgs.Builder setActions(java.util.List<android.app.RemoteAction>);
-    method public android.app.PictureInPictureArgs.Builder setAspectRatio(android.util.Rational);
-    method public android.app.PictureInPictureArgs.Builder setSourceRectHint(android.graphics.Rect);
-  }
-
-}
-
-package android.app.admin {
-
-  public class DevicePolicyManager {
-    method @Deprecated @Nullable public android.os.UserHandle createAndInitializeUser(@NonNull android.content.ComponentName, String, String, @NonNull android.content.ComponentName, android.os.Bundle);
-    method @Deprecated @Nullable public android.os.UserHandle createUser(@NonNull android.content.ComponentName, String);
-  }
-
-}
-
-package android.app.job {
-
-  public class JobInfo implements android.os.Parcelable {
-    method @Deprecated public long getEstimatedNetworkBytes();
-  }
-
-  public static final class JobInfo.Builder {
-    method @Deprecated public android.app.job.JobInfo.Builder setEstimatedNetworkBytes(long);
-    method @Deprecated public android.app.job.JobInfo.Builder setIsPrefetch(boolean);
-  }
-
-  public final class JobWorkItem implements android.os.Parcelable {
-    ctor @Deprecated public JobWorkItem(android.content.Intent, long);
-    method @Deprecated public long getEstimatedNetworkBytes();
   }
 
 }
@@ -123,10 +73,6 @@ package android.app.usage {
 
 package android.content {
 
-  public class ClipData implements android.os.Parcelable {
-    method @Deprecated public void addItem(android.content.ClipData.Item, android.content.ContentResolver);
-  }
-
   public abstract class Context {
     method public abstract android.content.SharedPreferences getSharedPreferences(java.io.File, int);
     method public abstract java.io.File getSharedPreferencesPath(String);
@@ -145,24 +91,12 @@ package android.content {
 
 package android.content.pm {
 
-  public class ApplicationInfo extends android.content.pm.PackageItemInfo implements android.os.Parcelable {
-    field @Deprecated public String volumeUuid;
-  }
-
-  public class ComponentInfo extends android.content.pm.PackageItemInfo {
-    field @Deprecated public boolean encryptionAware;
-  }
-
   public class PackageInfo implements android.os.Parcelable {
     field public static final int REQUESTED_PERMISSION_REQUIRED = 1; // 0x1
   }
 
   public abstract class PackageManager {
     method public abstract boolean setInstantAppCookie(@Nullable byte[]);
-  }
-
-  public class ResolveInfo implements android.os.Parcelable {
-    field @Deprecated public boolean instantAppAvailable;
   }
 
   public final class SharedLibraryInfo implements android.os.Parcelable {
@@ -265,17 +199,8 @@ package android.graphics.drawable {
 
 package android.hardware {
 
-  public final class HardwareBuffer implements java.lang.AutoCloseable android.os.Parcelable {
-    method @Deprecated public void destroy();
-    method @Deprecated public boolean isDestroyed();
-  }
-
   public final class SensorDirectChannel implements java.nio.channels.Channel {
     method @Deprecated public boolean isValid();
-  }
-
-  public abstract class SensorManager {
-    method @Deprecated public int configureDirectChannel(android.hardware.SensorDirectChannel, android.hardware.Sensor, int);
   }
 
 }
@@ -283,7 +208,7 @@ package android.hardware {
 package android.icu.util {
 
   public class JapaneseCalendar extends android.icu.util.GregorianCalendar {
-    field public static final int CURRENT_ERA;
+    field @Deprecated public static final int CURRENT_ERA;
   }
 
 }
@@ -375,7 +300,6 @@ package android.os {
   public final class SystemClock {
     method @NonNull public static java.time.Clock elapsedRealtimeClock();
     method @NonNull public static java.time.Clock uptimeClock();
-    method @Deprecated @NonNull public static java.time.Clock uptimeMillisClock();
   }
 
   public class TestLooperManager {

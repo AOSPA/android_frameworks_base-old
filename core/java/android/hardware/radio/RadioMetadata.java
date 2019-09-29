@@ -26,6 +26,9 @@ import android.util.ArrayMap;
 import android.util.Log;
 import android.util.SparseArray;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -256,6 +259,24 @@ public final class RadioMetadata implements Parcelable {
     }
 
     private final Bundle mBundle;
+
+    // Lazily computed hash code based upon the contents of mBundle.
+    private Integer mHashCode;
+
+    @Override
+    public int hashCode() {
+        if (mHashCode == null) {
+            List<String> keys = new ArrayList<String>(mBundle.keySet());
+            keys.sort(null);
+            Object[] objs = new Object[2 * keys.size()];
+            for (int i = 0; i < keys.size(); i++) {
+                objs[2 * i] = keys.get(i);
+                objs[2 * i + 1] = mBundle.get(keys.get(i));
+            }
+            mHashCode = Arrays.hashCode(objs);
+        }
+        return mHashCode;
+    }
 
     @Override
     public boolean equals(Object obj) {
@@ -621,6 +642,8 @@ public final class RadioMetadata implements Parcelable {
         String key = getKeyFromNativeKey(nativeKey);
         try {
             putInt(mBundle, key, value);
+            // Invalidate mHashCode to force it to be recomputed.
+            mHashCode = null;
             return 0;
         } catch (IllegalArgumentException ex) {
             return -1;
@@ -634,6 +657,8 @@ public final class RadioMetadata implements Parcelable {
             return -1;
         }
         mBundle.putString(key, value);
+        // Invalidate mHashCode to force it to be recomputed.
+        mHashCode = null;
         return 0;
     }
 
@@ -648,6 +673,8 @@ public final class RadioMetadata implements Parcelable {
             bmp = BitmapFactory.decodeByteArray(value, 0, value.length);
             if (bmp != null) {
                 mBundle.putParcelable(key, bmp);
+                // Invalidate mHashCode to force it to be recomputed.
+                mHashCode = null;
                 return 0;
             }
         } catch (Exception e) {
@@ -663,6 +690,8 @@ public final class RadioMetadata implements Parcelable {
         }
         mBundle.putParcelable(key, new RadioMetadata.Clock(
             utcEpochSeconds, timezoneOffsetInMinutes));
+        // Invalidate mHashCode to force it to be recomputed.
+        mHashCode = null;
         return 0;
     }
 }

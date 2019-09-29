@@ -83,7 +83,6 @@ import android.view.test.InsetsModeSession;
 
 import androidx.test.filters.SmallTest;
 
-import com.android.dx.mockito.inline.extended.ExtendedMockito;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto;
 import com.android.server.wm.utils.WmDisplayCutout;
@@ -653,25 +652,27 @@ public class DisplayContentTests extends WindowTestsBase {
     @Test
     public void testOnDescendantOrientationRequestChanged() {
         final DisplayContent dc = createNewDisplay();
-        mWm.mAtmService.mRootActivityContainer = mock(RootActivityContainer.class);
+        dc.getDisplayRotation().setFixedToUserRotation(
+                DisplayRotation.FIXED_TO_USER_ROTATION_DISABLED);
         final int newOrientation = dc.getLastOrientation() == SCREEN_ORIENTATION_LANDSCAPE
                 ? SCREEN_ORIENTATION_PORTRAIT
                 : SCREEN_ORIENTATION_LANDSCAPE;
 
-        final WindowState window = createWindow(null /* parent */, TYPE_BASE_APPLICATION, dc, "w");
-        window.getTask().mTaskRecord = mock(TaskRecord.class, ExtendedMockito.RETURNS_DEEP_STUBS);
-        window.mAppToken.setOrientation(newOrientation);
+        final ActivityStack stack =
+                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootActivityContainer)
+                        .setDisplay(dc.mAcitvityDisplay).build();
+        final ActivityRecord activity = stack.topTask().getTopActivity();
 
-        ActivityRecord activityRecord = mock(ActivityRecord.class);
-
-        assertTrue("Display should rotate to handle orientation request by default.",
-                dc.onDescendantOrientationChanged(window.mToken.token, activityRecord));
+        activity.setRequestedOrientation(newOrientation);
 
         final ArgumentCaptor<Configuration> captor = ArgumentCaptor.forClass(Configuration.class);
-        verify(mWm.mAtmService).updateDisplayOverrideConfigurationLocked(captor.capture(),
-                same(activityRecord), anyBoolean(), eq(dc.getDisplayId()));
+        verify(dc.mAcitvityDisplay).updateDisplayOverrideConfigurationLocked(captor.capture(),
+                same(activity), anyBoolean(), same(null));
         final Configuration newDisplayConfig = captor.getValue();
-        assertEquals(Configuration.ORIENTATION_PORTRAIT, newDisplayConfig.orientation);
+        final int expectedOrientation = newOrientation == SCREEN_ORIENTATION_PORTRAIT
+                ? Configuration.ORIENTATION_PORTRAIT
+                : Configuration.ORIENTATION_LANDSCAPE;
+        assertEquals(expectedOrientation, newDisplayConfig.orientation);
     }
 
     @Test
@@ -679,22 +680,20 @@ public class DisplayContentTests extends WindowTestsBase {
         final DisplayContent dc = createNewDisplay();
         dc.getDisplayRotation().setFixedToUserRotation(
                 DisplayRotation.FIXED_TO_USER_ROTATION_ENABLED);
-        mWm.mAtmService.mRootActivityContainer = mock(RootActivityContainer.class);
         final int newOrientation = dc.getLastOrientation() == SCREEN_ORIENTATION_LANDSCAPE
                 ? SCREEN_ORIENTATION_PORTRAIT
                 : SCREEN_ORIENTATION_LANDSCAPE;
 
-        final WindowState window = createWindow(null /* parent */, TYPE_BASE_APPLICATION, dc, "w");
-        window.getTask().mTaskRecord = mock(TaskRecord.class, ExtendedMockito.RETURNS_DEEP_STUBS);
-        window.mAppToken.setOrientation(newOrientation);
+        final ActivityStack stack =
+                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootActivityContainer)
+                        .setDisplay(dc.mAcitvityDisplay).build();
+        final ActivityRecord activity = stack.topTask().getTopActivity();
 
-        ActivityRecord activityRecord = mock(ActivityRecord.class);
+        activity.setRequestedOrientation(newOrientation);
 
-        assertFalse("Display shouldn't rotate to handle orientation request if fixed to"
-                        + " user rotation.",
-                dc.onDescendantOrientationChanged(window.mToken.token, activityRecord));
-        verify(mWm.mAtmService, never()).updateDisplayOverrideConfigurationLocked(any(),
-                eq(activityRecord), anyBoolean(), eq(dc.getDisplayId()));
+        verify(dc.mAcitvityDisplay, never()).updateDisplayOverrideConfigurationLocked(any(),
+                eq(activity), anyBoolean(), same(null));
+        assertEquals(dc.getDisplayRotation().getUserRotation(), dc.getRotation());
     }
 
     @Test
@@ -756,7 +755,8 @@ public class DisplayContentTests extends WindowTestsBase {
         final ISystemGestureExclusionListener.Stub verifier =
                 new ISystemGestureExclusionListener.Stub() {
             @Override
-            public void onSystemGestureExclusionChanged(int displayId, Region actual) {
+            public void onSystemGestureExclusionChanged(int displayId, Region actual,
+                    Region unrestricted) {
                 Region expected = Region.obtain();
                 expected.set(10, 20, 30, 40);
                 assertEquals(expected, actual);
@@ -790,7 +790,14 @@ public class DisplayContentTests extends WindowTestsBase {
 
         final Region expected = Region.obtain();
         expected.set(20, 30, 40, 50);
-        assertEquals(expected, dc.calculateSystemGestureExclusion());
+        assertEquals(expected, calculateSystemGestureExclusion(dc));
+    }
+
+    private Region calculateSystemGestureExclusion(DisplayContent dc) {
+        Region out = Region.obtain();
+        Region unrestricted = Region.obtain();
+        dc.calculateSystemGestureExclusion(out, unrestricted);
+        return out;
     }
 
     @Test
@@ -814,7 +821,7 @@ public class DisplayContentTests extends WindowTestsBase {
         win2.setHasSurface(true);
 
         final Region expected = Region.obtain();
-        assertEquals(expected, dc.calculateSystemGestureExclusion());
+        assertEquals(expected, calculateSystemGestureExclusion(dc));
     }
 
     @Test
@@ -839,7 +846,7 @@ public class DisplayContentTests extends WindowTestsBase {
 
             final Region expected = Region.obtain();
             expected.set(dc.getBounds());
-            assertEquals(expected, dc.calculateSystemGestureExclusion());
+            assertEquals(expected, calculateSystemGestureExclusion(dc));
 
             win.setHasSurface(false);
         }

@@ -133,6 +133,7 @@ import android.util.SparseIntArray;
 import android.util.BoostFramework;
 import com.android.internal.app.procstats.ProcessStats;
 
+import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.content.ReferrerIntent;
@@ -262,7 +263,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     RecentTasks mRecentTasks;
 
     /** Helper class to abstract out logic for fetching the set of currently running tasks */
-    RunningTasks mRunningTasks;
+    private RunningTasks mRunningTasks;
 
     final ActivityStackSupervisorHandler mHandler;
     final Looper mLooper;
@@ -334,6 +335,12 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     /** Set to indicate whether to issue an onUserLeaving callback when a newly launched activity
      * is being brought in front of us. */
     boolean mUserLeaving = false;
+
+    /**
+     * The system chooser activity which worked as a delegate of
+     * {@link com.android.internal.app.ResolverActivity}.
+     */
+    private ComponentName mSystemChooserActivity;
 
     /**
      * We don't want to allow the device to go to sleep while in the process
@@ -450,7 +457,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         }
 
         mInitialized = true;
-        mRunningTasks = createRunningTasks();
+        setRunningTasks(new RunningTasks());
 
         mActivityMetricsLogger = new ActivityMetricsLogger(this, mService.mContext,
                 mHandler.getLooper());
@@ -482,14 +489,29 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         return mKeyguardController;
     }
 
+    ComponentName getSystemChooserActivity() {
+        if (mSystemChooserActivity == null) {
+            mSystemChooserActivity = ComponentName.unflattenFromString(
+                    mService.mContext.getResources().getString(R.string.config_chooserActivity));
+        }
+        return mSystemChooserActivity;
+    }
+
     void setRecentTasks(RecentTasks recentTasks) {
+        if (mRecentTasks != null) {
+            mRecentTasks.unregisterCallback(this);
+        }
         mRecentTasks = recentTasks;
         mRecentTasks.registerCallback(this);
     }
 
     @VisibleForTesting
-    RunningTasks createRunningTasks() {
-        return new RunningTasks();
+    void setRunningTasks(RunningTasks runningTasks) {
+        mRunningTasks = runningTasks;
+    }
+
+    RunningTasks getRunningTasks() {
+        return mRunningTasks;
     }
 
     /**
@@ -781,10 +803,10 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
             final int applicationInfoUid =
                     (r.info.applicationInfo != null) ? r.info.applicationInfo.uid : -1;
-            if ((r.mUserId != proc.mUserId) || (r.appInfo.uid != applicationInfoUid)) {
+            if ((r.mUserId != proc.mUserId) || (r.info.applicationInfo.uid != applicationInfoUid)) {
                 Slog.wtf(TAG,
                         "User ID for activity changing for " + r
-                                + " appInfo.uid=" + r.appInfo.uid
+                                + " appInfo.uid=" + r.info.applicationInfo.uid
                                 + " info.ai.uid=" + applicationInfoUid
                                 + " old=" + r.app + " new=" + proc);
             }
@@ -818,8 +840,9 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                     newIntents = r.newIntents;
                 }
                 if (DEBUG_SWITCH) Slog.v(TAG_SWITCH,
-                        "Launching: " + r + " icicle=" + r.icicle + " with results=" + results
-                                + " newIntents=" + newIntents + " andResume=" + andResume);
+                        "Launching: " + r + " savedState=" + r.getSavedState()
+                                + " with results=" + results + " newIntents=" + newIntents
+                                + " andResume=" + andResume);
                 EventLog.writeEvent(EventLogTags.AM_RESTART_ACTIVITY, r.mUserId,
                         System.identityHashCode(r), task.taskId, r.shortComponentName);
                 if (r.isActivityTypeHome()) {
@@ -841,7 +864,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                         proc.getConfiguration(), r.getMergedOverrideConfiguration());
                 r.setLastReportedConfiguration(mergedConfiguration);
 
-                logIfTransactionTooLarge(r.intent, r.icicle);
+                logIfTransactionTooLarge(r.intent, r.getSavedState());
 
 
                 // Create activity launch transaction.
@@ -856,7 +879,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                         mergedConfiguration.getGlobalConfiguration(),
                         mergedConfiguration.getOverrideConfiguration(), r.compat,
                         r.launchedFromPackage, task.voiceInteractor, proc.getReportedProcState(),
-                        r.icicle, r.persistentState, results, newIntents,
+                        r.getSavedState(), r.getPersistentSavedState(), results, newIntents,
                         dc.isNextTransitionForward(), proc.createProfilerInfoIfNeeded(),
                                 r.assistToken));
 
@@ -894,8 +917,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                     Slog.e(TAG, "Second failure launching "
                             + r.intent.getComponent().flattenToShortString() + ", giving up", e);
                     proc.appDied();
-                    stack.requestFinishActivityLocked(r.appToken, Activity.RESULT_CANCELED, null,
-                            "2nd-crash", false);
+                    r.finishIfPossible("2nd-crash", false /* oomAdj */);
                     return false;
                 }
 
@@ -1004,20 +1026,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             r.notifyUnknownVisibilityLaunched();
         }
 
-        try {
-            if (Trace.isTagEnabled(TRACE_TAG_ACTIVITY_MANAGER)) {
-                Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "dispatchingStartProcess:"
-                        + r.processName);
-            }
-            // Post message to start process to avoid possible deadlock of calling into AMS with the
-            // ATMS lock held.
-            final Message msg = PooledLambda.obtainMessage(
-                    ActivityManagerInternal::startProcess, mService.mAmInternal, r.processName,
-                    r.info.applicationInfo, knownToBeDead, "activity", r.intent.getComponent());
-            mService.mH.sendMessage(msg);
-        } finally {
-            Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
-        }
+        final boolean isTop = andResume && r.isTopRunningActivity();
+        mService.startProcessAsync(r, knownToBeDead, isTop, isTop ? "top-activity" : "activity");
     }
 
     boolean checkStartAnyActivityPermission(Intent intent, ActivityInfo aInfo, String resultWho,
@@ -1360,8 +1370,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             final ActivityStack stack = r.getActivityStack();
             if (stack != null) {
                 if (r.finishing) {
-                    stack.finishCurrentActivityLocked(r, ActivityStack.FINISH_IMMEDIATELY, false,
-                            "activityIdleInternalLocked");
+                    // TODO(b/137329632): Wait for idle of the right activity, not just any.
+                    r.destroyIfPossible("activityIdleInternalLocked");
                 } else {
                     stack.stopActivityLocked(r);
                 }
@@ -2079,9 +2089,9 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             if (mPerfHandle > 0)
                 mIsPerfBoostAcquired = true;
             // Start IOP
-            if (r.appInfo != null && r.appInfo.sourceDir != null) {
+            if (r.info.applicationInfo != null && r.info.applicationInfo.sourceDir != null) {
                 mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
-                       r.appInfo.sourceDir.substring(0, r.appInfo.sourceDir.lastIndexOf('/')));
+                       r.info.applicationInfo.sourceDir.substring(0, r.info.applicationInfo.sourceDir.lastIndexOf('/')));
             }
         }
     }
@@ -2150,7 +2160,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         r.mLaunchTaskBehind = false;
         mRecentTasks.add(task);
         mService.getTaskChangeNotificationController().notifyTaskStackChanged();
-        r.setVisibility(false);
+        stack.ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
 
         // When launching tasks behind, update the last active time of the top task after the new
         // task has been shown briefly
@@ -2540,7 +2550,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             return;
         }
         mService.getTaskChangeNotificationController().notifyActivityForcedResizable(
-                task.taskId, reason, topActivity.appInfo.packageName);
+                task.taskId, reason, topActivity.info.applicationInfo.packageName);
     }
 
     void activityRelaunchedLocked(IBinder token) {
@@ -2797,7 +2807,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         mWindowManager.deferSurfaceLayout();
         try {
             if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
-                mWindowManager.setDockedStackCreateState(
+                mWindowManager.setDockedStackCreateStateLocked(
                         activityOptions.getSplitScreenCreateMode(), null /* initialBounds */);
 
                 // Defer updating the stack in which recents is until the app transition is done, to
@@ -2876,7 +2886,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                     // receive input keys, so we should move the focused app to the home app so that
                     // window manager can correctly calculate the focus window that can receive
                     // input keys.
-                    display.moveHomeStackToFront(
+                    display.moveHomeActivityToTop(
                             "startActivityFromRecents: homeVisibleInSplitScreen");
 
                     // Immediately update the minimized docked stack mode, the upcoming animation

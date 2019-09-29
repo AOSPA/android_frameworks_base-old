@@ -86,7 +86,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.WorkSource;
 import android.provider.Settings;
-import android.text.format.Time;
+import android.text.format.TimeMigrationUtils;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Pair;
@@ -102,7 +102,7 @@ import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.function.QuadConsumer;
-import com.android.server.DeviceIdleController;
+import com.android.server.DeviceIdleInternal;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.accounts.AccountManagerService;
@@ -1533,7 +1533,13 @@ public class SyncManager {
                 }
             }
             if (duplicatesCount > 1) {
-                Slog.e(TAG, "FATAL ERROR! File a bug if you see this.");
+                Slog.wtf(TAG, "duplicates found when scheduling a sync operation: "
+                        + "owningUid=" + syncOperation.owningUid
+                        + "; owningPackage=" + syncOperation.owningPackage
+                        + "; source=" + syncOperation.syncSource
+                        + "; adapter=" + (syncOperation.target != null
+                                            ? syncOperation.target.provider
+                                            : "unknown"));
             }
 
             if (syncOperation != syncToRun) {
@@ -1628,8 +1634,8 @@ public class SyncManager {
 
         if (syncOperation.syncExemptionFlag
                 == ContentResolver.SYNC_EXEMPTION_PROMOTE_BUCKET_WITH_TEMP) {
-            DeviceIdleController.LocalService dic =
-                    LocalServices.getService(DeviceIdleController.LocalService.class);
+            DeviceIdleInternal dic =
+                    LocalServices.getService(DeviceIdleInternal.class);
             if (dic != null) {
                 dic.addPowerSaveTempWhitelistApp(Process.SYSTEM_UID,
                         syncOperation.owningPackage,
@@ -1987,9 +1993,7 @@ public class SyncManager {
         if (time == 0) {
             return "N/A";
         }
-        Time tobj = new Time();
-        tobj.set(time);
-        return tobj.format("%Y-%m-%d %H:%M:%S");
+        return TimeMigrationUtils.formatMillisWithFixedFormat(time);
     }
 
     private final static Comparator<SyncOperation> sOpDumpComparator = (op1, op2) -> {
@@ -2555,9 +2559,7 @@ public class SyncManager {
                     accountKey = "Unknown";
                 }
                 final long elapsedTime = item.elapsedTime;
-                final Time time = new Time();
                 final long eventTime = item.eventTime;
-                time.set(eventTime);
 
                 final String key = authorityName + "/" + accountKey;
                 final Long lastEventTime = lastTimeMap.get(key);
@@ -2622,9 +2624,7 @@ public class SyncManager {
                     authorityName = "Unknown";
                     accountKey = "Unknown";
                 }
-                final Time time = new Time();
                 final long eventTime = item.eventTime;
-                time.set(eventTime);
 
                 pw.printf("  #%-3d: %s %8s ",
                         i + 1,

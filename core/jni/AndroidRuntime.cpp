@@ -159,6 +159,7 @@ extern int register_android_graphics_text_MeasuredText(JNIEnv* env);
 extern int register_android_graphics_text_LineBreaker(JNIEnv *env);
 extern int register_android_view_DisplayEventReceiver(JNIEnv* env);
 extern int register_android_view_DisplayListCanvas(JNIEnv* env);
+extern int register_android_view_FrameMetricsObserver(JNIEnv* env);
 extern int register_android_view_InputApplicationHandle(JNIEnv* env);
 extern int register_android_view_InputWindowHandle(JNIEnv* env);
 extern int register_android_view_TextureLayer(JNIEnv* env);
@@ -227,7 +228,6 @@ extern int register_android_content_res_Configuration(JNIEnv* env);
 extern int register_android_animation_PropertyValuesHolder(JNIEnv *env);
 extern int register_android_security_Scrypt(JNIEnv *env);
 extern int register_com_android_internal_content_NativeLibraryHelper(JNIEnv *env);
-extern int register_com_android_internal_os_AtomicDirectory(JNIEnv *env);
 extern int register_com_android_internal_os_ClassLoaderFactory(JNIEnv* env);
 extern int register_com_android_internal_os_FuseAppLoop(JNIEnv* env);
 extern int register_com_android_internal_os_Zygote(JNIEnv *env);
@@ -633,7 +633,7 @@ bool AndroidRuntime::parseCompilerRuntimeOption(const char* property,
  *
  * Returns 0 on success.
  */
-int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
+int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool primary_zygote)
 {
     JavaVMInitArgs initArgs;
     char propBuf[PROPERTY_VALUE_MAX];
@@ -763,6 +763,10 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
     //addOption("-verbose:jni");
     addOption("-verbose:gc");
     //addOption("-verbose:class");
+
+    if (primary_zygote) {
+        addOption("-Xprimaryzygote");
+    }
 
     /*
      * The default starting and maximum size of the heap.  Larger
@@ -897,20 +901,16 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
         addOption("-Ximage-compiler-option");
         addOption("--compiler-filter=speed-profile");
     } else {
-        // Make sure there is a preloaded-classes file.
-        if (!hasFile("/system/etc/preloaded-classes")) {
-            ALOGE("Missing preloaded-classes file, /system/etc/preloaded-classes not found: %s\n",
-                  strerror(errno));
-            return -1;
-        }
-        addOption("-Ximage-compiler-option");
-        addOption("--image-classes=/system/etc/preloaded-classes");
+        ALOGE("Missing boot-image.prof file, /system/etc/boot-image.prof not found: %s\n",
+              strerror(errno));
+        return -1;
+    }
 
-        // If there is a dirty-image-objects file, push it.
-        if (hasFile("/system/etc/dirty-image-objects")) {
-            addOption("-Ximage-compiler-option");
-            addOption("--dirty-image-objects=/system/etc/dirty-image-objects");
-        }
+
+    // If there is a dirty-image-objects file, push it.
+    if (hasFile("/system/etc/dirty-image-objects")) {
+        addOption("-Ximage-compiler-option");
+        addOption("--dirty-image-objects=/system/etc/dirty-image-objects");
     }
 
     property_get("dalvik.vm.image-dex2oat-flags", dex2oatImageFlagsBuf, "");
@@ -1125,6 +1125,8 @@ void AndroidRuntime::start(const char* className, const Vector<String8>& options
             className != NULL ? className : "(unknown)", getuid());
 
     static const String8 startSystemServer("start-system-server");
+    // Whether this is the primary zygote, meaning the zygote which will fork system server.
+    bool primary_zygote = false;
 
     /*
      * 'startSystemServer == true' means runtime is obsolete and not run from
@@ -1132,6 +1134,7 @@ void AndroidRuntime::start(const char* className, const Vector<String8>& options
      */
     for (size_t i = 0; i < options.size(); ++i) {
         if (options[i] == startSystemServer) {
+            primary_zygote = true;
            /* track our progress through the boot sequence */
            const int LOG_BOOT_PROGRESS_START = 3000;
            LOG_EVENT_LONG(LOG_BOOT_PROGRESS_START,  ns2ms(systemTime(SYSTEM_TIME_MONOTONIC)));
@@ -1167,7 +1170,7 @@ void AndroidRuntime::start(const char* className, const Vector<String8>& options
     JniInvocation jni_invocation;
     jni_invocation.Init(NULL);
     JNIEnv* env;
-    if (startVm(&mJavaVM, &env, zygote) != 0) {
+    if (startVm(&mJavaVM, &env, zygote, primary_zygote) != 0) {
         return;
     }
     onVmCreated(env);
@@ -1251,6 +1254,10 @@ void AndroidRuntime::exit(int code)
 void AndroidRuntime::onVmCreated(JNIEnv* env)
 {
     // If AndroidRuntime had anything to do here, we'd have done it in 'start'.
+}
+
+/*static*/ JavaVM* AndroidRuntime::getJavaVM() {
+    return AndroidRuntime::mJavaVM;
 }
 
 /*
@@ -1460,6 +1467,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_view_RenderNode),
     REG_JNI(register_android_view_RenderNodeAnimator),
     REG_JNI(register_android_view_DisplayListCanvas),
+    REG_JNI(register_android_view_FrameMetricsObserver),
     REG_JNI(register_android_view_InputApplicationHandle),
     REG_JNI(register_android_view_InputWindowHandle),
     REG_JNI(register_android_view_TextureLayer),
@@ -1596,7 +1604,6 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_animation_PropertyValuesHolder),
     REG_JNI(register_android_security_Scrypt),
     REG_JNI(register_com_android_internal_content_NativeLibraryHelper),
-    REG_JNI(register_com_android_internal_os_AtomicDirectory),
     REG_JNI(register_com_android_internal_os_FuseAppLoop),
     REG_JNI(register_com_android_internal_app_ActivityTrigger),
 };

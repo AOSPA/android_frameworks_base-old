@@ -34,8 +34,6 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManagerInternal;
-import android.content.pm.PackageManagerInternal.PackagesProvider;
-import android.content.pm.PackageManagerInternal.SyncAdapterPackagesProvider;
 import android.content.pm.PermissionInfo;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
@@ -69,6 +67,8 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.XmlUtils;
 import com.android.server.LocalServices;
+import com.android.server.pm.permission.PermissionManagerServiceInternal.PackagesProvider;
+import com.android.server.pm.permission.PermissionManagerServiceInternal.SyncAdapterPackagesProvider;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -464,7 +464,7 @@ public final class DefaultPermissionGrantPolicy {
         // Media provider
         grantSystemFixedPermissionsToSystemPackage(
                 getDefaultProviderAuthorityPackage(MediaStore.AUTHORITY, userId), userId,
-                STORAGE_PERMISSIONS, PHONE_PERMISSIONS);
+                STORAGE_PERMISSIONS);
 
         // Downloads provider
         grantSystemFixedPermissionsToSystemPackage(
@@ -1170,6 +1170,11 @@ public final class DefaultPermissionGrantPolicy {
                 final int flags = mContext.getPackageManager().getPermissionFlags(
                         permission, pkg.packageName, user);
 
+                // If we are trying to grant as system fixed and already system fixed
+                // then the system can change the system fixed grant state.
+                final boolean changingGrantForSystemFixed = systemFixed
+                        && (flags & PackageManager.FLAG_PERMISSION_SYSTEM_FIXED) != 0;
+
                 // Certain flags imply that the permission's current state by the system or
                 // device/profile owner or the user. In these cases we do not want to clobber the
                 // current state.
@@ -1177,7 +1182,8 @@ public final class DefaultPermissionGrantPolicy {
                 // Unless the caller wants to override user choices. The override is
                 // to make sure we can grant the needed permission to the default
                 // sms and phone apps after the user chooses this in the UI.
-                if (!isFixedOrUserSet(flags) || ignoreSystemPackage) {
+                if (!isFixedOrUserSet(flags) || ignoreSystemPackage
+                        || changingGrantForSystemFixed) {
                     // Never clobber policy fixed permissions.
                     // We must allow the grant of a system-fixed permission because
                     // system-fixed is sticky, but the permission itself may be revoked.
@@ -1194,6 +1200,14 @@ public final class DefaultPermissionGrantPolicy {
                                 pkg.packageName,
                                 PackageManager.FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT,
                                 PackageManager.FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT, user);
+                    }
+
+                    // If the system tries to change a system fixed permission from one fixed
+                    // state to another we need to drop the fixed flag to allow the grant.
+                    if (changingGrantForSystemFixed) {
+                        mContext.getPackageManager().updatePermissionFlags(permission,
+                                pkg.packageName, flags,
+                                flags & ~PackageManager.FLAG_PERMISSION_SYSTEM_FIXED, user);
                     }
 
                     if (pm.checkPermission(permission, pkg.packageName)
@@ -1388,8 +1402,7 @@ public final class DefaultPermissionGrantPolicy {
         if (dir.isDirectory() && dir.canRead()) {
             Collections.addAll(ret, dir.listFiles());
         }
-        dir = new File(Environment.getProductServicesDirectory(),
-                "etc/default-permissions");
+        dir = new File(Environment.getSystemExtDirectory(), "etc/default-permissions");
         if (dir.isDirectory() && dir.canRead()) {
             Collections.addAll(ret, dir.listFiles());
         }

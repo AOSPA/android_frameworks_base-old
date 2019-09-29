@@ -29,6 +29,7 @@ import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
 import android.app.AppGlobals;
+import android.app.BroadcastOptions;
 import android.app.IActivityController;
 import android.app.IActivityManager;
 import android.app.IActivityTaskManager;
@@ -78,7 +79,6 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.text.TextUtils;
-import android.text.format.Time;
 import android.util.ArrayMap;
 import android.util.DebugUtils;
 import android.util.DisplayMetrics;
@@ -88,6 +88,7 @@ import android.view.Display;
 import com.android.internal.util.HexDump;
 import com.android.internal.util.MemInfoReader;
 import com.android.internal.util.Preconditions;
+import com.android.server.compat.CompatConfig;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -96,12 +97,16 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.URISyntaxException;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -114,9 +119,13 @@ import javax.microedition.khronos.egl.EGLSurface;
 
 final class ActivityManagerShellCommand extends ShellCommand {
     public static final String NO_CLASS_ERROR_CODE = "Error type 3";
+
     private static final String SHELL_PACKAGE_NAME = "com.android.shell";
 
     private static final int USER_OPERATION_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+
+    private static final DateTimeFormatter LOG_NAME_TIME_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss", Locale.ROOT);
 
     // IPC interface to activity manager -- don't need to do additional security checks.
     final IActivityManager mInterface;
@@ -148,6 +157,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
     private int mTaskId;
     private boolean mIsTaskOverlay;
     private boolean mIsLockTask;
+    private BroadcastOptions mBroadcastOptions;
 
     final boolean mDumping;
 
@@ -288,6 +298,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runNoHomeScreen(pw);
                 case "wait-for-broadcast-idle":
                     return runWaitForBroadcastIdle(pw);
+                case "compat":
+                    return runCompat(pw);
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -313,6 +325,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         mTaskId = INVALID_TASK_ID;
         mIsTaskOverlay = false;
         mIsLockTask = false;
+        mBroadcastOptions = null;
 
         return Intent.parseCommandArgs(this, new Intent.CommandOptionHandler() {
             @Override
@@ -371,6 +384,11 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     mIsTaskOverlay = true;
                 } else if (opt.equals("--lock-task")) {
                     mIsLockTask = true;
+                } else if (opt.equals("--allow-background-activity-starts")) {
+                    if (mBroadcastOptions == null) {
+                        mBroadcastOptions = BroadcastOptions.makeBasic();
+                    }
+                    mBroadcastOptions.setBackgroundActivityStartsAllowed(true);
                 } else {
                     return false;
                 }
@@ -510,12 +528,12 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 options.setLockTaskEnabled(true);
             }
             if (mWaitOption) {
-                result = mInternal.startActivityAndWait(null, null, intent, mimeType,
+                result = mInternal.startActivityAndWait(null, SHELL_PACKAGE_NAME, intent, mimeType,
                         null, null, 0, mStartFlags, profilerInfo,
                         options != null ? options.toBundle() : null, mUserId);
                 res = result.result;
             } else {
-                res = mInternal.startActivityAsUser(null, null, intent, mimeType,
+                res = mInternal.startActivityAsUser(null, SHELL_PACKAGE_NAME, intent, mimeType,
                         null, null, 0, mStartFlags, profilerInfo,
                         options != null ? options.toBundle() : null, mUserId);
             }
@@ -717,8 +735,9 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 : new String[] {mReceiverPermission};
         pw.println("Broadcasting: " + intent);
         pw.flush();
+        Bundle bundle = mBroadcastOptions == null ? null : mBroadcastOptions.toBundle();
         mInterface.broadcastIntent(null, intent, null, receiver, 0, null, null, requiredPermissions,
-                android.app.AppOpsManager.OP_NONE, null, true, false, mUserId);
+                android.app.AppOpsManager.OP_NONE, bundle, true, false, mUserId);
         receiver.waitForFinish();
         return 0;
     }
@@ -910,9 +929,9 @@ final class ActivityManagerShellCommand extends ShellCommand {
         String process = getNextArgRequired();
         String heapFile = getNextArg();
         if (heapFile == null) {
-            final Time t = new Time();
-            t.set(System.currentTimeMillis());
-            heapFile = "/data/local/tmp/heapdump-" + t.format("%Y%m%d-%H%M%S") + ".prof";
+            LocalDateTime localDateTime = LocalDateTime.now(Clock.systemDefaultZone());
+            String logNameTimeString = LOG_NAME_TIME_FORMATTER.format(localDateTime);
+            heapFile = "/data/local/tmp/heapdump-" + logNameTimeString + ".prof";
         }
         pw.println("File: " + heapFile);
         pw.flush();
@@ -2865,6 +2884,50 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    private int runCompat(PrintWriter pw) {
+        final CompatConfig config = CompatConfig.get();
+        String toggleValue = getNextArgRequired();
+        long changeId;
+        String changeIdString = getNextArgRequired();
+        try {
+            changeId = Long.parseLong(changeIdString);
+        } catch (NumberFormatException e) {
+            changeId = config.lookupChangeId(changeIdString);
+        }
+        if (changeId == -1) {
+            pw.println("Unknown or invalid change: '" + changeIdString + "'.");
+        }
+        String packageName = getNextArgRequired();
+        switch(toggleValue) {
+            case "enable":
+                if (!config.addOverride(changeId, packageName, true)) {
+                    pw.println("Warning! Change " + changeId + " is not known yet. Enabling it"
+                            + " could have no effect.");
+                }
+                pw.println("Enabled change " + changeId + " for " + packageName + ".");
+                return 0;
+            case "disable":
+                if (!config.addOverride(changeId, packageName, false)) {
+                    pw.println("Warning! Change " + changeId + " is not known yet. Disabling it"
+                            + " could have no effect.");
+                }
+                pw.println("Disabled change " + changeId + " for " + packageName + ".");
+                return 0;
+            case "reset":
+                if (config.removeOverride(changeId, packageName)) {
+                    pw.println("Reset change " + changeId + " for " + packageName
+                            + " to default value.");
+                } else {
+                    pw.println("No override exists for changeId " + changeId + ".");
+                }
+                return 0;
+            default:
+                pw.println("Invalid toggle value: '" + toggleValue + "'.");
+        }
+        return -1;
+    }
+
+
     private Resources getResources(PrintWriter pw) throws RemoteException {
         // system resources does not contain all the device configuration, construct it manually.
         Configuration config = mInterface.getConfiguration();
@@ -2967,6 +3030,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      --user <USER_ID> | all | current: Specify which user to send to; if not");
             pw.println("          specified then send to all users.");
             pw.println("      --receiver-permission <PERMISSION>: Require receiver to hold permission.");
+            pw.println("      --allow-background-activity-starts: The receiver may start activities");
+            pw.println("          even if in the background.");
             pw.println("  instrument [-r] [-e <NAME> <VALUE>] [-p <FILE>] [-w]");
             pw.println("          [--user <USER_ID> | current] [--no-hidden-api-checks]");
             pw.println("          [--no-isolated-storage]");
@@ -3170,6 +3235,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      without restarting any processes.");
             pw.println("  write");
             pw.println("      Write all pending state to storage.");
+            pw.println("  compat enable|disable|reset <CHANGE_ID|CHANGE_NAME> <PACKAGE_NAME>");
+            pw.println("      Toggles a change either by id or by name for <PACKAGE_NAME>.");
             pw.println();
             Intent.printIntentArgsHelp(pw, "");
         }

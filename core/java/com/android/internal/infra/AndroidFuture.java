@@ -33,6 +33,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.function.pooled.PooledLambda;
 
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
@@ -114,6 +115,20 @@ public class AndroidFuture<T> extends CompletableFuture<T> implements Parcelable
         }
     }
 
+    /**
+     * Create a completed future with the given value.
+     *
+     * @param value the value for the completed future
+     * @param <U> the type of the value
+     * @return the completed future
+     */
+    @NonNull
+    public static <U> AndroidFuture<U> completedFuture(U value) {
+        AndroidFuture<U> future = new AndroidFuture<>();
+        future.complete(value);
+        return future;
+    }
+
     @Override
     public boolean complete(@Nullable T value) {
         boolean changed = super.complete(value);
@@ -129,7 +144,23 @@ public class AndroidFuture<T> extends CompletableFuture<T> implements Parcelable
         if (changed) {
             onCompleted(null, ex);
         }
-        return super.completeExceptionally(ex);
+        return changed;
+    }
+
+    @Override
+    public boolean cancel(boolean mayInterruptIfRunning) {
+        boolean changed = super.cancel(mayInterruptIfRunning);
+        if (changed) {
+            try {
+                get();
+                throw new IllegalStateException("Expected CancellationException");
+            } catch (CancellationException ex) {
+                onCompleted(null, ex);
+            } catch (Throwable e) {
+                throw new IllegalStateException("Expected CancellationException", e);
+            }
+        }
+        return changed;
     }
 
     @CallSuper

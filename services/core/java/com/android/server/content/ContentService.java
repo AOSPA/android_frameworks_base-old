@@ -40,7 +40,6 @@ import android.content.SyncInfo;
 import android.content.SyncRequest;
 import android.content.SyncStatusInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageManagerInternal;
 import android.content.pm.ProviderInfo;
 import android.database.IContentObserver;
 import android.database.sqlite.SQLiteException;
@@ -71,6 +70,7 @@ import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.pm.permission.PermissionManagerServiceInternal;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -280,15 +280,11 @@ public final class ContentService extends IContentService.Stub {
 
         // Let the package manager query for the sync adapters for a given authority
         // as we grant default permissions to sync adapters for specific authorities.
-        PackageManagerInternal packageManagerInternal = LocalServices.getService(
-                PackageManagerInternal.class);
-        packageManagerInternal.setSyncAdapterPackagesprovider(
-                new PackageManagerInternal.SyncAdapterPackagesProvider() {
-                    @Override
-                    public String[] getPackages(String authority, int userId) {
-                        return getSyncAdapterPackagesForAuthorityAsUser(authority, userId);
-                    }
-                });
+        final PermissionManagerServiceInternal permissionManagerInternal =
+                LocalServices.getService(PermissionManagerServiceInternal.class);
+        permissionManagerInternal.setSyncAdapterPackagesProvider((authority, userId) -> {
+            return getSyncAdapterPackagesForAuthorityAsUser(authority, userId);
+        });
 
         final IntentFilter packageFilter = new IntentFilter();
         packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -465,7 +461,7 @@ public final class ContentService extends IContentService.Stub {
             }
 
             synchronized (mCache) {
-                final String providerPackageName = getProviderPackageName(uri);
+                final String providerPackageName = getProviderPackageName(uri, userHandle);
                 invalidateCacheLocked(userHandle, providerPackageName, uri);
             }
         } finally {
@@ -1149,9 +1145,9 @@ public final class ContentService extends IContentService.Stub {
         }
     }
 
-    private @Nullable String getProviderPackageName(Uri uri) {
-        final ProviderInfo pi = mContext.getPackageManager()
-                .resolveContentProvider(uri.getAuthority(), 0);
+    private @Nullable String getProviderPackageName(Uri uri, int userId) {
+        final ProviderInfo pi = mContext.getPackageManager().resolveContentProviderAsUser(
+                uri.getAuthority(), 0, userId);
         return (pi != null) ? pi.packageName : null;
     }
 
@@ -1204,7 +1200,7 @@ public final class ContentService extends IContentService.Stub {
         mContext.getSystemService(AppOpsManager.class).checkPackage(Binder.getCallingUid(),
                 packageName);
 
-        final String providerPackageName = getProviderPackageName(key);
+        final String providerPackageName = getProviderPackageName(key, userId);
         final Pair<String, Uri> fullKey = Pair.create(packageName, key);
 
         synchronized (mCache) {
@@ -1226,7 +1222,7 @@ public final class ContentService extends IContentService.Stub {
         mContext.getSystemService(AppOpsManager.class).checkPackage(Binder.getCallingUid(),
                 packageName);
 
-        final String providerPackageName = getProviderPackageName(key);
+        final String providerPackageName = getProviderPackageName(key, userId);
         final Pair<String, Uri> fullKey = Pair.create(packageName, key);
 
         synchronized (mCache) {

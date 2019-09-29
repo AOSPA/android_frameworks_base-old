@@ -103,7 +103,11 @@ public abstract class InputEventReceiver {
             nativeDispose(mReceiverPtr);
             mReceiverPtr = 0;
         }
-        mInputChannel = null;
+
+        if (mInputChannel != null) {
+            mInputChannel.dispose();
+            mInputChannel = null;
+        }
         mMessageQueue = null;
     }
 

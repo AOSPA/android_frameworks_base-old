@@ -41,7 +41,6 @@
 #include <utils/Looper.h>
 #include <utils/threads.h>
 #include <utils/Trace.h>
-#include <utils/SortedVector.h>
 
 #include <binder/IServiceManager.h>
 
@@ -166,6 +165,7 @@ static void loadSystemIconAsSpriteWithPointerIcon(JNIEnv* env, jobject contextOb
             outPointerIcon->bitmap.readPixels(bitmapCopy->info(), bitmapCopy->getPixels(),
                     bitmapCopy->rowBytes(), 0, 0);
         }
+        outSpriteIcon->style = outPointerIcon->style;
         outSpriteIcon->hotSpotX = outPointerIcon->hotSpotX;
         outSpriteIcon->hotSpotY = outPointerIcon->hotSpotY;
     }
@@ -307,7 +307,7 @@ private:
         wp<PointerController> pointerController;
 
         // Input devices to be disabled
-        SortedVector<int32_t> disabledInputDevices;
+        std::set<int32_t> disabledInputDevices;
 
         // Associated Pointer controller display.
         int32_t pointerDisplayId;
@@ -826,18 +826,19 @@ void NativeInputManager::setInputWindows(JNIEnv* env, jobjectArray windowHandleO
         }
     }
 
-    uint32_t changes = 0;
+    bool pointerGesturesEnabledChanged = false;
     { // acquire lock
         AutoMutex _l(mLock);
 
         if (mLocked.pointerGesturesEnabled != newPointerGesturesEnabled) {
             mLocked.pointerGesturesEnabled = newPointerGesturesEnabled;
-            changes |= InputReaderConfiguration::CHANGE_POINTER_GESTURE_ENABLEMENT;
+            pointerGesturesEnabledChanged = true;
         }
     } // release lock
 
-    if (changes) {
-        mInputManager->getReader()->requestRefreshConfiguration(changes);
+    if (pointerGesturesEnabledChanged) {
+        mInputManager->getReader()->requestRefreshConfiguration(
+                InputReaderConfiguration::CHANGE_POINTER_GESTURE_ENABLEMENT);
     }
 }
 
@@ -897,13 +898,13 @@ void NativeInputManager::setInputDeviceEnabled(uint32_t deviceId, bool enabled) 
     { // acquire lock
         AutoMutex _l(mLock);
 
-        ssize_t index = mLocked.disabledInputDevices.indexOf(deviceId);
-        bool currentlyEnabled = index < 0;
+        auto it = mLocked.disabledInputDevices.find(deviceId);
+        bool currentlyEnabled = it == mLocked.disabledInputDevices.end();
         if (!enabled && currentlyEnabled) {
-            mLocked.disabledInputDevices.add(deviceId);
+            mLocked.disabledInputDevices.insert(deviceId);
         }
         if (enabled && !currentlyEnabled) {
-            mLocked.disabledInputDevices.remove(deviceId);
+            mLocked.disabledInputDevices.erase(deviceId);
         }
     } // release lock
 
@@ -1252,7 +1253,8 @@ void NativeInputManager::loadPointerIcon(SpriteIcon* icon, int32_t displayId) {
     status_t status = android_view_PointerIcon_load(env, pointerIconObj.get(),
             displayContext.get(), &pointerIcon);
     if (!status && !pointerIcon.isNullIcon()) {
-        *icon = SpriteIcon(pointerIcon.bitmap, pointerIcon.hotSpotX, pointerIcon.hotSpotY);
+        *icon = SpriteIcon(
+                pointerIcon.bitmap, pointerIcon.style, pointerIcon.hotSpotX, pointerIcon.hotSpotY);
     } else {
         *icon = SpriteIcon();
     }
@@ -1293,10 +1295,12 @@ void NativeInputManager::loadAdditionalMouseResources(std::map<int32_t, SpriteIc
                     milliseconds_to_nanoseconds(pointerIcon.durationPerFrame);
             animationData.animationFrames.reserve(numFrames);
             animationData.animationFrames.push_back(SpriteIcon(
-                    pointerIcon.bitmap, pointerIcon.hotSpotX, pointerIcon.hotSpotY));
+                    pointerIcon.bitmap, pointerIcon.style,
+                    pointerIcon.hotSpotX, pointerIcon.hotSpotY));
             for (size_t i = 0; i < numFrames - 1; ++i) {
               animationData.animationFrames.push_back(SpriteIcon(
-                      pointerIcon.bitmapFrames[i], pointerIcon.hotSpotX, pointerIcon.hotSpotY));
+                      pointerIcon.bitmapFrames[i], pointerIcon.style,
+                      pointerIcon.hotSpotX, pointerIcon.hotSpotY));
             }
         }
     }
@@ -1711,6 +1715,7 @@ static void nativeSetCustomPointerIcon(JNIEnv* env, jclass /* clazz */,
         pointerIcon.bitmap.readPixels(spriteInfo, spriteIcon.bitmap.getPixels(),
                 spriteIcon.bitmap.rowBytes(), 0, 0);
     }
+    spriteIcon.style = pointerIcon.style;
     spriteIcon.hotSpotX = pointerIcon.hotSpotX;
     spriteIcon.hotSpotY = pointerIcon.hotSpotY;
     im->setCustomPointerIcon(spriteIcon);

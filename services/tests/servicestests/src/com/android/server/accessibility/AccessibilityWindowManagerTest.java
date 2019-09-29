@@ -33,6 +33,8 @@ import static org.junit.Assert.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,6 +44,7 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.util.SparseArray;
+import android.view.Display;
 import android.view.IWindow;
 import android.view.WindowInfo;
 import android.view.accessibility.AccessibilityEvent;
@@ -51,6 +54,7 @@ import android.view.accessibility.IAccessibilityInteractionConnection;
 
 import com.android.server.accessibility.AccessibilityWindowManager.RemoteAccessibilityConnection;
 import com.android.server.wm.WindowManagerInternal;
+import com.android.server.wm.WindowManagerInternal.WindowsForAccessibilityCallback;
 
 import org.hamcrest.Description;
 import org.hamcrest.TypeSafeMatcher;
@@ -70,10 +74,17 @@ import java.util.List;
  */
 public class AccessibilityWindowManagerTest {
     private static final String PACKAGE_NAME = "com.android.server.accessibility";
+    private static final boolean FORCE_SEND = true;
+    private static final boolean SEND_ON_WINDOW_CHANGES = false;
     private static final int USER_SYSTEM_ID = UserHandle.USER_SYSTEM;
+    private static final int USER_PROFILE = 11;
+    private static final int USER_PROFILE_PARENT = 1;
+    // TO-DO [Multi-Display] : change the display count to 2
+    private static final int DISPLAY_COUNT = 1;
     private static final int NUM_GLOBAL_WINDOWS = 4;
     private static final int NUM_APP_WINDOWS = 4;
-    private static final int NUM_OF_WINDOWS = NUM_GLOBAL_WINDOWS + NUM_APP_WINDOWS;
+    private static final int NUM_OF_WINDOWS = (NUM_GLOBAL_WINDOWS + NUM_APP_WINDOWS)
+            * DISPLAY_COUNT;
     private static final int DEFAULT_FOCUSED_INDEX = 1;
     private static final int SCREEN_WIDTH = 1080;
     private static final int SCREEN_HEIGHT = 1920;
@@ -82,7 +93,13 @@ public class AccessibilityWindowManagerTest {
 
     // List of window token, mapping from windowId -> window token.
     private final SparseArray<IWindow> mA11yWindowTokens = new SparseArray<>();
-    private final ArrayList<WindowInfo> mWindowInfos = new ArrayList<>();
+    // List of window info lists, mapping from displayId -> window info lists.
+    private final SparseArray<ArrayList<WindowInfo>> mWindowInfos =
+            new SparseArray<>();
+    // List of callback, mapping from displayId -> callback.
+    private final SparseArray<WindowsForAccessibilityCallback> mCallbackOfWindows =
+            new SparseArray<>();
+
     private final MessageCapturingHandler mHandler = new MessageCapturingHandler(null);
 
     @Mock private WindowManagerInternal mMockWindowManagerInternal;
@@ -95,6 +112,8 @@ public class AccessibilityWindowManagerTest {
         MockitoAnnotations.initMocks(this);
         when(mMockA11yUserManager.getCurrentUserIdLocked()).thenReturn(USER_SYSTEM_ID);
         when(mMockA11ySecurityPolicy.resolveCallingUserIdEnforcingPermissionsLocked(
+                USER_PROFILE)).thenReturn(USER_PROFILE_PARENT);
+        when(mMockA11ySecurityPolicy.resolveCallingUserIdEnforcingPermissionsLocked(
                 USER_SYSTEM_ID)).thenReturn(USER_SYSTEM_ID);
         when(mMockA11ySecurityPolicy.resolveValidReportedPackageLocked(
                 anyString(), anyInt(), anyInt())).thenReturn(PACKAGE_NAME);
@@ -105,29 +124,14 @@ public class AccessibilityWindowManagerTest {
                 mMockA11ySecurityPolicy,
                 mMockA11yUserManager);
 
-        // Add RemoteAccessibilityConnection into AccessibilityWindowManager, and copy
-        // mock window token into mA11yWindowTokens. Also, preparing WindowInfo mWindowInfos
-        // for the test.
-        int layer = 0;
-        for (int i = 0; i < NUM_GLOBAL_WINDOWS; i++) {
-            final IWindow token = addAccessibilityInteractionConnection(true);
-            addWindowInfo(token, layer++);
-
+        for (int i = 0; i < DISPLAY_COUNT; i++) {
+            when(mMockWindowManagerInternal.setWindowsForAccessibilityCallback(eq(i), any()))
+                    .thenReturn(true);
+            startTrackingPerDisplay(i);
         }
-        for (int i = 0; i < NUM_APP_WINDOWS; i++) {
-            final IWindow token = addAccessibilityInteractionConnection(false);
-            addWindowInfo(token, layer++);
-        }
-        // setup default focus
-        mWindowInfos.get(DEFAULT_FOCUSED_INDEX).focused = true;
-        // Turn on windows tracking, and update window info
-        mA11yWindowManager.startTrackingWindows();
-        mA11yWindowManager.onWindowsForAccessibilityChanged(mWindowInfos);
-        assertEquals(mA11yWindowManager.getWindowListLocked().size(),
-                mWindowInfos.size());
 
         // AccessibilityEventSender is invoked during onWindowsForAccessibilityChanged.
-        // Reset it for mockito verify of further test case.
+        // Resets it for mockito verify of further test case.
         Mockito.reset(mMockA11yEventSender);
     }
 
@@ -138,9 +142,12 @@ public class AccessibilityWindowManagerTest {
 
     @Test
     public void startTrackingWindows_shouldEnableWindowManagerCallback() {
-        // AccessibilityWindowManager#startTrackingWindows already invoked in setup
+        // AccessibilityWindowManager#startTrackingWindows already invoked in setup.
         assertTrue(mA11yWindowManager.isTrackingWindowsLocked());
-        verify(mMockWindowManagerInternal).setWindowsForAccessibilityCallback(any());
+        final WindowsForAccessibilityCallback callbacks =
+                mCallbackOfWindows.get(Display.DEFAULT_DISPLAY);
+        verify(mMockWindowManagerInternal).setWindowsForAccessibilityCallback(
+                eq(Display.DEFAULT_DISPLAY), eq(callbacks));
     }
 
     @Test
@@ -150,7 +157,9 @@ public class AccessibilityWindowManagerTest {
 
         mA11yWindowManager.stopTrackingWindows();
         assertFalse(mA11yWindowManager.isTrackingWindowsLocked());
-        verify(mMockWindowManagerInternal).setWindowsForAccessibilityCallback(any());
+        verify(mMockWindowManagerInternal).setWindowsForAccessibilityCallback(
+                eq(Display.DEFAULT_DISPLAY), isNull());
+
     }
 
     @Test
@@ -169,42 +178,103 @@ public class AccessibilityWindowManagerTest {
     @Test
     public void onWindowsChanged_duringTouchInteractAndFocusChange_shouldChangeActiveWindow() {
         final int activeWindowId = mA11yWindowManager.getActiveWindowId(USER_SYSTEM_ID);
-        WindowInfo focuedWindowInfo = mWindowInfos.get(DEFAULT_FOCUSED_INDEX);
+        WindowInfo focusedWindowInfo =
+                mWindowInfos.get(Display.DEFAULT_DISPLAY).get(DEFAULT_FOCUSED_INDEX);
         assertEquals(activeWindowId, mA11yWindowManager.findWindowIdLocked(
-                USER_SYSTEM_ID, focuedWindowInfo.token));
+                USER_SYSTEM_ID, focusedWindowInfo.token));
 
-        focuedWindowInfo.focused = false;
-        focuedWindowInfo = mWindowInfos.get(DEFAULT_FOCUSED_INDEX + 1);
-        focuedWindowInfo.focused = true;
+        focusedWindowInfo.focused = false;
+        focusedWindowInfo =
+                mWindowInfos.get(Display.DEFAULT_DISPLAY).get(DEFAULT_FOCUSED_INDEX + 1);
+        focusedWindowInfo.focused = true;
 
         mA11yWindowManager.onTouchInteractionStart();
-        mA11yWindowManager.onWindowsForAccessibilityChanged(mWindowInfos);
+        setTopFocusedWindowAndDisplay(Display.DEFAULT_DISPLAY, DEFAULT_FOCUSED_INDEX + 1);
+        onWindowsForAccessibilityChanged(Display.DEFAULT_DISPLAY, SEND_ON_WINDOW_CHANGES);
+
         assertNotEquals(activeWindowId, mA11yWindowManager.getActiveWindowId(USER_SYSTEM_ID));
     }
 
     @Test
     public void onWindowsChanged_shouldReportCorrectLayer() {
-        // AccessibilityWindowManager#onWindowsForAccessibilityChanged already invoked in setup
-        List<AccessibilityWindowInfo> a11yWindows = mA11yWindowManager.getWindowListLocked();
+        // AccessibilityWindowManager#onWindowsForAccessibilityChanged already invoked in setup.
+        List<AccessibilityWindowInfo> a11yWindows =
+                mA11yWindowManager.getWindowListLocked();
         for (int i = 0; i < a11yWindows.size(); i++) {
             final AccessibilityWindowInfo a11yWindow = a11yWindows.get(i);
-            final WindowInfo windowInfo = mWindowInfos.get(i);
-            assertThat(mWindowInfos.size() - windowInfo.layer - 1,
+            final WindowInfo windowInfo = mWindowInfos.get(Display.DEFAULT_DISPLAY).get(i);
+            assertThat(mWindowInfos.get(Display.DEFAULT_DISPLAY).size() - windowInfo.layer - 1,
                     is(a11yWindow.getLayer()));
         }
     }
 
     @Test
     public void onWindowsChanged_shouldReportCorrectOrder() {
-        // AccessibilityWindowManager#onWindowsForAccessibilityChanged already invoked in setup
-        List<AccessibilityWindowInfo> a11yWindows = mA11yWindowManager.getWindowListLocked();
+        // AccessibilityWindowManager#onWindowsForAccessibilityChanged already invoked in setup.
+        List<AccessibilityWindowInfo> a11yWindows =
+                mA11yWindowManager.getWindowListLocked();
         for (int i = 0; i < a11yWindows.size(); i++) {
             final AccessibilityWindowInfo a11yWindow = a11yWindows.get(i);
             final IBinder windowToken = mA11yWindowManager
                     .getWindowTokenForUserAndWindowIdLocked(USER_SYSTEM_ID, a11yWindow.getId());
-            final WindowInfo windowInfo = mWindowInfos.get(i);
+            final WindowInfo windowInfo = mWindowInfos.get(Display.DEFAULT_DISPLAY).get(i);
             assertThat(windowToken, is(windowInfo.token));
         }
+    }
+
+    @Test
+    public void onWindowsChangedAndForceSend_shouldUpdateWindows() {
+        final WindowInfo windowInfo = mWindowInfos.get(Display.DEFAULT_DISPLAY).get(0);
+        final int correctLayer =
+                mA11yWindowManager.getWindowListLocked().get(0).getLayer();
+        windowInfo.layer += 1;
+
+        onWindowsForAccessibilityChanged(Display.DEFAULT_DISPLAY, FORCE_SEND);
+        assertNotEquals(correctLayer,
+                mA11yWindowManager.getWindowListLocked().get(0).getLayer());
+    }
+
+    @Test
+    public void onWindowsChangedNoForceSend_layerChanged_shouldNotUpdateWindows() {
+        final WindowInfo windowInfo = mWindowInfos.get(Display.DEFAULT_DISPLAY).get(0);
+        final int correctLayer =
+                mA11yWindowManager.getWindowListLocked().get(0).getLayer();
+        windowInfo.layer += 1;
+
+        onWindowsForAccessibilityChanged(Display.DEFAULT_DISPLAY, SEND_ON_WINDOW_CHANGES);
+        assertEquals(correctLayer,
+                mA11yWindowManager.getWindowListLocked().get(0).getLayer());
+    }
+
+    @Test
+    public void onWindowsChangedNoForceSend_windowChanged_shouldUpdateWindows()
+            throws RemoteException {
+        final AccessibilityWindowInfo oldWindow =
+                mA11yWindowManager.getWindowListLocked().get(0);
+        final IWindow token = addAccessibilityInteractionConnection(Display.DEFAULT_DISPLAY,
+                true, USER_SYSTEM_ID);
+        final WindowInfo windowInfo = WindowInfo.obtain();
+        windowInfo.type = AccessibilityWindowInfo.TYPE_APPLICATION;
+        windowInfo.token = token.asBinder();
+        windowInfo.layer = 0;
+        windowInfo.regionInScreen.set(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        mWindowInfos.get(Display.DEFAULT_DISPLAY).set(0, windowInfo);
+
+        onWindowsForAccessibilityChanged(Display.DEFAULT_DISPLAY, SEND_ON_WINDOW_CHANGES);
+        assertNotEquals(oldWindow,
+                mA11yWindowManager.getWindowListLocked().get(0));
+    }
+
+    @Test
+    public void onWindowsChangedNoForceSend_focusChanged_shouldUpdateWindows() {
+        final WindowInfo focusedWindowInfo =
+                mWindowInfos.get(Display.DEFAULT_DISPLAY).get(DEFAULT_FOCUSED_INDEX);
+        final WindowInfo windowInfo = mWindowInfos.get(Display.DEFAULT_DISPLAY).get(0);
+        focusedWindowInfo.focused = false;
+        windowInfo.focused = true;
+
+        onWindowsForAccessibilityChanged(Display.DEFAULT_DISPLAY, SEND_ON_WINDOW_CHANGES);
+        assertTrue(mA11yWindowManager.getWindowListLocked().get(0).isFocused());
     }
 
     @Test
@@ -234,7 +304,8 @@ public class AccessibilityWindowManagerTest {
 
     @Test
     public void getWindowTokenForUserAndWindowId_shouldNotNull() {
-        final List<AccessibilityWindowInfo> windows = mA11yWindowManager.getWindowListLocked();
+        final List<AccessibilityWindowInfo> windows =
+                mA11yWindowManager.getWindowListLocked();
         for (int i = 0; i < windows.size(); i++) {
             final int windowId = windows.get(i).getId();
 
@@ -245,7 +316,8 @@ public class AccessibilityWindowManagerTest {
 
     @Test
     public void findWindowId() {
-        final List<AccessibilityWindowInfo> windows = mA11yWindowManager.getWindowListLocked();
+        final List<AccessibilityWindowInfo> windows =
+                mA11yWindowManager.getWindowListLocked();
         for (int i = 0; i < windows.size(); i++) {
             final int windowId = windows.get(i).getId();
             final IBinder windowToken = mA11yWindowManager.getWindowTokenForUserAndWindowIdLocked(
@@ -257,72 +329,84 @@ public class AccessibilityWindowManagerTest {
     }
 
     @Test
-    public void computePartialInteractiveRegionForWindow_wholeWindowVisible_returnWholeRegion() {
+    public void computePartialInteractiveRegionForWindow_wholeVisible_returnWholeRegion() {
         // Updates top 2 z-order WindowInfo are whole visible.
-        WindowInfo windowInfo = mWindowInfos.get(0);
-        windowInfo.boundsInScreen.set(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
-        windowInfo = mWindowInfos.get(1);
-        windowInfo.boundsInScreen.set(0, SCREEN_HEIGHT / 2,
+        WindowInfo windowInfo = mWindowInfos.get(Display.DEFAULT_DISPLAY).get(0);
+        windowInfo.regionInScreen.set(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
+        windowInfo = mWindowInfos.get(Display.DEFAULT_DISPLAY).get(1);
+        windowInfo.regionInScreen.set(0, SCREEN_HEIGHT / 2,
                 SCREEN_WIDTH, SCREEN_HEIGHT);
-        mA11yWindowManager.onWindowsForAccessibilityChanged(mWindowInfos);
+        onWindowsForAccessibilityChanged(Display.DEFAULT_DISPLAY, SEND_ON_WINDOW_CHANGES);
 
-        final List<AccessibilityWindowInfo> a11yWindows = mA11yWindowManager.getWindowListLocked();
+        final List<AccessibilityWindowInfo> a11yWindows =
+                mA11yWindowManager.getWindowListLocked();
         final Region outBounds = new Region();
         int windowId = a11yWindows.get(0).getId();
 
-        mA11yWindowManager.computePartialInteractiveRegionForWindowLocked(
-                windowId, outBounds);
+        mA11yWindowManager.computePartialInteractiveRegionForWindowLocked(windowId, outBounds);
         assertThat(outBounds.getBounds().width(), is(SCREEN_WIDTH));
         assertThat(outBounds.getBounds().height(), is(SCREEN_HEIGHT / 2));
 
         windowId = a11yWindows.get(1).getId();
 
-        mA11yWindowManager.computePartialInteractiveRegionForWindowLocked(
-                windowId, outBounds);
+        mA11yWindowManager.computePartialInteractiveRegionForWindowLocked(windowId, outBounds);
         assertThat(outBounds.getBounds().width(), is(SCREEN_WIDTH));
         assertThat(outBounds.getBounds().height(), is(SCREEN_HEIGHT / 2));
     }
 
     @Test
-    public void computePartialInteractiveRegionForWindow_halfWindowVisible_returnHalfRegion() {
-        // Updates z-order #1 WindowInfo is half visible
-        WindowInfo windowInfo = mWindowInfos.get(0);
-        windowInfo.boundsInScreen.set(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
-        windowInfo = mWindowInfos.get(1);
-        windowInfo.boundsInScreen.set(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+    public void computePartialInteractiveRegionForWindow_halfVisible_returnHalfRegion() {
+        // Updates z-order #1 WindowInfo is half visible.
+        WindowInfo windowInfo = mWindowInfos.get(Display.DEFAULT_DISPLAY).get(0);
+        windowInfo.regionInScreen.set(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT / 2);
 
-        mA11yWindowManager.onWindowsForAccessibilityChanged(mWindowInfos);
-        final List<AccessibilityWindowInfo> a11yWindows = mA11yWindowManager.getWindowListLocked();
+        onWindowsForAccessibilityChanged(Display.DEFAULT_DISPLAY, SEND_ON_WINDOW_CHANGES);
+        final List<AccessibilityWindowInfo> a11yWindows =
+                mA11yWindowManager.getWindowListLocked();
         final Region outBounds = new Region();
         int windowId = a11yWindows.get(1).getId();
 
-        mA11yWindowManager.computePartialInteractiveRegionForWindowLocked(
-                windowId, outBounds);
+        mA11yWindowManager.computePartialInteractiveRegionForWindowLocked(windowId, outBounds);
         assertThat(outBounds.getBounds().width(), is(SCREEN_WIDTH));
         assertThat(outBounds.getBounds().height(), is(SCREEN_HEIGHT / 2));
     }
 
     @Test
-    public void computePartialInteractiveRegionForWindow_windowNotVisible_returnEmptyRegion() {
-        // Updates z-order #1 WindowInfo is not visible
-        WindowInfo windowInfo = mWindowInfos.get(0);
-        windowInfo.boundsInScreen.set(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-        windowInfo = mWindowInfos.get(1);
-        windowInfo.boundsInScreen.set(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-        mA11yWindowManager.onWindowsForAccessibilityChanged(mWindowInfos);
-
-        final List<AccessibilityWindowInfo> a11yWindows = mA11yWindowManager.getWindowListLocked();
+    public void computePartialInteractiveRegionForWindow_notVisible_returnEmptyRegion() {
+        // Since z-order #0 WindowInfo is full screen, z-order #1 WindowInfo should be invisible.
+        final List<AccessibilityWindowInfo> a11yWindows =
+                mA11yWindowManager.getWindowListLocked();
         final Region outBounds = new Region();
         int windowId = a11yWindows.get(1).getId();
 
-        mA11yWindowManager.computePartialInteractiveRegionForWindowLocked(
-                windowId, outBounds);
+        mA11yWindowManager.computePartialInteractiveRegionForWindowLocked(windowId, outBounds);
         assertTrue(outBounds.getBounds().isEmpty());
     }
 
     @Test
+    public void computePartialInteractiveRegionForWindow_partialVisible_returnVisibleRegion() {
+        // Updates z-order #0 WindowInfo to have two interact-able areas.
+        Region region = new Region(0, 0, SCREEN_WIDTH, 200);
+        region.op(0, SCREEN_HEIGHT - 200, SCREEN_WIDTH, SCREEN_HEIGHT, Region.Op.UNION);
+        WindowInfo windowInfo = mWindowInfos.get(Display.DEFAULT_DISPLAY).get(0);
+        windowInfo.regionInScreen.set(region);
+        onWindowsForAccessibilityChanged(Display.DEFAULT_DISPLAY, SEND_ON_WINDOW_CHANGES);
+
+        final List<AccessibilityWindowInfo> a11yWindows =
+                mA11yWindowManager.getWindowListLocked();
+        final Region outBounds = new Region();
+        int windowId = a11yWindows.get(1).getId();
+
+        mA11yWindowManager.computePartialInteractiveRegionForWindowLocked(windowId, outBounds);
+        assertFalse(outBounds.getBounds().isEmpty());
+        assertThat(outBounds.getBounds().width(), is(SCREEN_WIDTH));
+        assertThat(outBounds.getBounds().height(), is(SCREEN_HEIGHT - 400));
+    }
+
+    @Test
     public void updateActiveAndA11yFocusedWindow_windowStateChangedEvent_noTracking_shouldUpdate() {
-        final IBinder eventWindowToken = mWindowInfos.get(DEFAULT_FOCUSED_INDEX + 1).token;
+        final IBinder eventWindowToken =
+                mWindowInfos.get(Display.DEFAULT_DISPLAY).get(DEFAULT_FOCUSED_INDEX + 1).token;
         final int eventWindowId = mA11yWindowManager.findWindowIdLocked(
                 USER_SYSTEM_ID, eventWindowToken);
         when(mMockWindowManagerInternal.getFocusedWindowToken())
@@ -342,7 +426,8 @@ public class AccessibilityWindowManagerTest {
 
     @Test
     public void updateActiveAndA11yFocusedWindow_hoverEvent_touchInteract_shouldSetActiveWindow() {
-        final int eventWindowId = getWindowIdFromWindowInfos(DEFAULT_FOCUSED_INDEX + 1);
+        final int eventWindowId = getWindowIdFromWindowInfosForDisplay(Display.DEFAULT_DISPLAY,
+                DEFAULT_FOCUSED_INDEX + 1);
         final int currentActiveWindowId = mA11yWindowManager.getActiveWindowId(USER_SYSTEM_ID);
         assertThat(currentActiveWindowId, is(not(eventWindowId)));
 
@@ -368,7 +453,8 @@ public class AccessibilityWindowManagerTest {
 
     @Test
     public void updateActiveAndA11yFocusedWindow_a11yFocusEvent_shouldUpdateA11yFocus() {
-        final int eventWindowId = getWindowIdFromWindowInfos(DEFAULT_FOCUSED_INDEX);
+        final int eventWindowId = getWindowIdFromWindowInfosForDisplay(Display.DEFAULT_DISPLAY,
+                DEFAULT_FOCUSED_INDEX);
         final int currentA11yFocusedWindowId = mA11yWindowManager.getFocusedWindowId(
                 AccessibilityNodeInfo.FOCUS_ACCESSIBILITY);
         assertThat(currentA11yFocusedWindowId, is(not(eventWindowId)));
@@ -397,7 +483,8 @@ public class AccessibilityWindowManagerTest {
 
     @Test
     public void updateActiveAndA11yFocusedWindow_clearA11yFocusEvent_shouldClearA11yFocus() {
-        final int eventWindowId = getWindowIdFromWindowInfos(DEFAULT_FOCUSED_INDEX);
+        final int eventWindowId = getWindowIdFromWindowInfosForDisplay(Display.DEFAULT_DISPLAY,
+                DEFAULT_FOCUSED_INDEX);
         final int currentA11yFocusedWindowId = mA11yWindowManager.getFocusedWindowId(
                 AccessibilityNodeInfo.FOCUS_ACCESSIBILITY);
         assertThat(currentA11yFocusedWindowId, is(not(eventWindowId)));
@@ -422,7 +509,8 @@ public class AccessibilityWindowManagerTest {
 
     @Test
     public void onTouchInteractionEnd_shouldRollbackActiveWindow() {
-        final int eventWindowId = getWindowIdFromWindowInfos(DEFAULT_FOCUSED_INDEX + 1);
+        final int eventWindowId = getWindowIdFromWindowInfosForDisplay(Display.DEFAULT_DISPLAY,
+                DEFAULT_FOCUSED_INDEX + 1);
         final int currentActiveWindowId = mA11yWindowManager.getActiveWindowId(USER_SYSTEM_ID);
         assertThat(currentActiveWindowId, is(not(eventWindowId)));
 
@@ -453,12 +541,14 @@ public class AccessibilityWindowManagerTest {
     @Test
     public void onTouchInteractionEnd_noServiceInteractiveWindow_shouldClearA11yFocus()
             throws RemoteException {
-        final IBinder defaultFocusWinToken = mWindowInfos.get(DEFAULT_FOCUSED_INDEX).token;
+        final IBinder defaultFocusWinToken =
+                mWindowInfos.get(Display.DEFAULT_DISPLAY).get(DEFAULT_FOCUSED_INDEX).token;
         final int defaultFocusWindowId = mA11yWindowManager.findWindowIdLocked(
                 USER_SYSTEM_ID, defaultFocusWinToken);
         when(mMockWindowManagerInternal.getFocusedWindowToken())
                 .thenReturn(defaultFocusWinToken);
-        final int newFocusWindowId = getWindowIdFromWindowInfos(DEFAULT_FOCUSED_INDEX + 1);
+        final int newFocusWindowId = getWindowIdFromWindowInfosForDisplay(Display.DEFAULT_DISPLAY,
+                DEFAULT_FOCUSED_INDEX + 1);
         final IAccessibilityInteractionConnection mockNewFocusConnection =
                 mA11yWindowManager.getConnectionLocked(
                         USER_SYSTEM_ID, newFocusWindowId).getRemote();
@@ -496,29 +586,85 @@ public class AccessibilityWindowManagerTest {
 
     @Test
     public void getPictureInPictureWindow_shouldNotNull() {
-        assertNull(mA11yWindowManager.getPictureInPictureWindow());
-        mWindowInfos.get(1).inPictureInPicture = true;
-        mA11yWindowManager.onWindowsForAccessibilityChanged(mWindowInfos);
+        assertNull(mA11yWindowManager.getPictureInPictureWindowLocked());
+        mWindowInfos.get(Display.DEFAULT_DISPLAY).get(1).inPictureInPicture = true;
+        onWindowsForAccessibilityChanged(Display.DEFAULT_DISPLAY, SEND_ON_WINDOW_CHANGES);
 
-        assertNotNull(mA11yWindowManager.getPictureInPictureWindow());
+        assertNotNull(mA11yWindowManager.getPictureInPictureWindowLocked());
     }
 
     @Test
     public void notifyOutsideTouch() throws RemoteException {
-        final int targetWindowId = getWindowIdFromWindowInfos(1);
-        final int outsideWindowId = getWindowIdFromWindowInfos(0);
+        final int targetWindowId =
+                getWindowIdFromWindowInfosForDisplay(Display.DEFAULT_DISPLAY, 1);
+        final int outsideWindowId =
+                getWindowIdFromWindowInfosForDisplay(Display.DEFAULT_DISPLAY, 0);
         final IAccessibilityInteractionConnection mockRemoteConnection =
                 mA11yWindowManager.getConnectionLocked(
                         USER_SYSTEM_ID, outsideWindowId).getRemote();
-        mWindowInfos.get(0).hasFlagWatchOutsideTouch = true;
-        mA11yWindowManager.onWindowsForAccessibilityChanged(mWindowInfos);
+        mWindowInfos.get(Display.DEFAULT_DISPLAY).get(0).hasFlagWatchOutsideTouch = true;
+        onWindowsForAccessibilityChanged(Display.DEFAULT_DISPLAY, SEND_ON_WINDOW_CHANGES);
 
         mA11yWindowManager.notifyOutsideTouch(USER_SYSTEM_ID, targetWindowId);
         verify(mockRemoteConnection).notifyOutsideTouch();
     }
 
-    private IWindow addAccessibilityInteractionConnection(boolean bGlobal)
+    @Test
+    public void addAccessibilityInteractionConnection_profileUser_findInParentUser()
             throws RemoteException {
+        final IWindow token = addAccessibilityInteractionConnection(Display.DEFAULT_DISPLAY,
+                false, USER_PROFILE);
+        final int windowId = mA11yWindowManager.findWindowIdLocked(
+                USER_PROFILE_PARENT, token.asBinder());
+        assertTrue(windowId >= 0);
+    }
+
+    private void startTrackingPerDisplay(int displayId) throws RemoteException {
+        ArrayList<WindowInfo> windowInfosForDisplay = new ArrayList<>();
+        // Adds RemoteAccessibilityConnection into AccessibilityWindowManager, and copy
+        // mock window token into mA11yWindowTokens. Also, preparing WindowInfo mWindowInfos
+        // for the test.
+        int layer = 0;
+        for (int i = 0; i < NUM_GLOBAL_WINDOWS; i++) {
+            final IWindow token = addAccessibilityInteractionConnection(displayId,
+                    true, USER_SYSTEM_ID);
+            addWindowInfo(windowInfosForDisplay, token, layer++);
+
+        }
+        for (int i = 0; i < NUM_APP_WINDOWS; i++) {
+            final IWindow token = addAccessibilityInteractionConnection(displayId,
+                    false, USER_SYSTEM_ID);
+            addWindowInfo(windowInfosForDisplay, token, layer++);
+        }
+        // Setups default focus.
+        windowInfosForDisplay.get(DEFAULT_FOCUSED_INDEX).focused = true;
+        // Turns on windows tracking, and update window info.
+        mA11yWindowManager.startTrackingWindows();
+        // Puts window lists into array.
+        mWindowInfos.put(displayId, windowInfosForDisplay);
+        // Sets the default display as the top focused display.
+        if (displayId == Display.DEFAULT_DISPLAY) {
+            setTopFocusedWindowAndDisplay(displayId, DEFAULT_FOCUSED_INDEX);
+        }
+        // Invokes callback for sending window lists to A11y framework.
+        onWindowsForAccessibilityChanged(displayId, FORCE_SEND);
+
+        assertEquals(mA11yWindowManager.getWindowListLocked().size(),
+                windowInfosForDisplay.size());
+    }
+
+    private WindowsForAccessibilityCallback getWindowsForAccessibilityCallbacks(int displayId) {
+        ArgumentCaptor<WindowsForAccessibilityCallback> windowsForAccessibilityCallbacksCaptor =
+                ArgumentCaptor.forClass(
+                        WindowManagerInternal.WindowsForAccessibilityCallback.class);
+        verify(mMockWindowManagerInternal)
+                .setWindowsForAccessibilityCallback(eq(displayId),
+                        windowsForAccessibilityCallbacksCaptor.capture());
+        return windowsForAccessibilityCallbacksCaptor.getValue();
+    }
+
+    private IWindow addAccessibilityInteractionConnection(int displayId, boolean bGlobal,
+            int userId) throws RemoteException {
         final IWindow mockWindowToken = Mockito.mock(IWindow.class);
         final IAccessibilityInteractionConnection mockA11yConnection = Mockito.mock(
                 IAccessibilityInteractionConnection.class);
@@ -526,28 +672,49 @@ public class AccessibilityWindowManagerTest {
         final IBinder mockWindowBinder = Mockito.mock(IBinder.class);
         when(mockA11yConnection.asBinder()).thenReturn(mockConnectionBinder);
         when(mockWindowToken.asBinder()).thenReturn(mockWindowBinder);
-        when(mMockA11ySecurityPolicy.isCallerInteractingAcrossUsers(USER_SYSTEM_ID))
+        when(mMockA11ySecurityPolicy.isCallerInteractingAcrossUsers(userId))
                 .thenReturn(bGlobal);
+        when(mMockWindowManagerInternal.getDisplayIdForWindow(mockWindowToken.asBinder()))
+                .thenReturn(displayId);
 
         int windowId = mA11yWindowManager.addAccessibilityInteractionConnection(
-                mockWindowToken, mockA11yConnection, PACKAGE_NAME, USER_SYSTEM_ID);
+                mockWindowToken, mockA11yConnection, PACKAGE_NAME, userId);
         mA11yWindowTokens.put(windowId, mockWindowToken);
         return mockWindowToken;
     }
 
-    private void addWindowInfo(IWindow windowToken, int layer) {
+    private void addWindowInfo(ArrayList<WindowInfo> windowInfos, IWindow windowToken, int layer) {
         final WindowInfo windowInfo = WindowInfo.obtain();
         windowInfo.type = AccessibilityWindowInfo.TYPE_APPLICATION;
         windowInfo.token = windowToken.asBinder();
         windowInfo.layer = layer;
-        windowInfo.boundsInScreen.set(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-        mWindowInfos.add(windowInfo);
+        windowInfo.regionInScreen.set(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        windowInfos.add(windowInfo);
     }
 
-    private int getWindowIdFromWindowInfos(int index) {
-        final IBinder windowToken = mWindowInfos.get(index).token;
+    private int getWindowIdFromWindowInfosForDisplay(int displayId, int index) {
+        final IBinder windowToken = mWindowInfos.get(displayId).get(index).token;
         return mA11yWindowManager.findWindowIdLocked(
                 USER_SYSTEM_ID, windowToken);
+    }
+
+    private void setTopFocusedWindowAndDisplay(int displayId, int index) {
+        // Sets the top focus window.
+        final IBinder eventWindowToken = mWindowInfos.get(displayId).get(index).token;
+        when(mMockWindowManagerInternal.getFocusedWindowToken())
+                .thenReturn(eventWindowToken);
+        // Sets the top focused display.
+        when(mMockWindowManagerInternal.getDisplayIdForWindow(eventWindowToken))
+                .thenReturn(displayId);
+    }
+
+    private void onWindowsForAccessibilityChanged(int displayId, boolean forceSend) {
+        WindowsForAccessibilityCallback callbacks = mCallbackOfWindows.get(displayId);
+        if (callbacks == null) {
+            callbacks = getWindowsForAccessibilityCallbacks(displayId);
+            mCallbackOfWindows.put(displayId, callbacks);
+        }
+        callbacks.onWindowsForAccessibilityChanged(forceSend, mWindowInfos.get(displayId));
     }
 
     static class WindowIdMatcher extends TypeSafeMatcher<AccessibilityEvent> {

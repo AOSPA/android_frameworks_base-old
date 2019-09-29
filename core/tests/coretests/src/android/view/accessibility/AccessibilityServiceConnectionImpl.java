@@ -21,6 +21,7 @@ import android.accessibilityservice.IAccessibilityServiceConnection;
 import android.content.pm.ParceledListSlice;
 import android.graphics.Region;
 import android.os.Bundle;
+import android.os.IBinder;
 
 import java.util.List;
 
@@ -131,7 +132,13 @@ public class AccessibilityServiceConnectionImpl extends IAccessibilityServiceCon
 
     public void sendGesture(int sequence, ParceledListSlice gestureSteps) {}
 
+    public void dispatchGesture(int sequence, ParceledListSlice gestureSteps, int displayId) {}
+
     public boolean isFingerprintGestureDetectionAvailable() {
         return false;
+    }
+
+    public IBinder getOverlayWindowToken(int displayId) {
+        return null;
     }
 }

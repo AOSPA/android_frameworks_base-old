@@ -18,7 +18,6 @@ package com.android.server.wm;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_RECENTS_ANIMATIONS;
 
 import android.graphics.GraphicBuffer;
-import android.graphics.Rect;
 import android.util.Slog;
 import android.view.Surface;
 import android.view.SurfaceControl;
@@ -28,7 +27,7 @@ import android.view.SurfaceSession;
  * Class used by {@link RecentsAnimationController} to create a surface control with taking
  * screenshot of task when canceling recents animation.
  *
- * @see {@link RecentsAnimationController#cancelOnNextTransitionStart}
+ * @see {@link RecentsAnimationController#setCancelOnNextTransitionStart}
  */
 class TaskScreenshotAnimatable implements SurfaceAnimator.Animatable {
     private static final String TAG = "TaskScreenshotAnim";
@@ -37,21 +36,7 @@ class TaskScreenshotAnimatable implements SurfaceAnimator.Animatable {
     private int mWidth;
     private int mHeight;
 
-    public static TaskScreenshotAnimatable create(Task task) {
-        return new TaskScreenshotAnimatable(task, getBufferFromTask(task));
-    }
-
-    private static SurfaceControl.ScreenshotGraphicBuffer getBufferFromTask(Task task) {
-        if (task == null) {
-            return null;
-        }
-        final Rect tmpRect = task.getBounds();
-        tmpRect.offset(0, 0);
-        return SurfaceControl.captureLayers(
-                task.getSurfaceControl().getHandle(), tmpRect, 1f);
-    }
-
-    private TaskScreenshotAnimatable(Task task,
+    TaskScreenshotAnimatable(Task task,
             SurfaceControl.ScreenshotGraphicBuffer screenshotBuffer) {
         GraphicBuffer buffer = screenshotBuffer == null
                 ? null : screenshotBuffer.getGraphicBuffer();
@@ -69,7 +54,7 @@ class TaskScreenshotAnimatable implements SurfaceAnimator.Animatable {
         if (buffer != null) {
             final Surface surface = new Surface();
             surface.copyFrom(mSurfaceControl);
-            surface.attachAndQueueBuffer(buffer);
+            surface.attachAndQueueBufferWithColorSpace(buffer, screenshotBuffer.getColorSpace());
             surface.release();
         }
         getPendingTransaction().show(mSurfaceControl);

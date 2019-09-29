@@ -7082,6 +7082,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Return whether this view has an attached OnLongClickListener.  Returns
+     * true if there is a listener, false if there is none.
+     */
+    public boolean hasOnLongClickListeners() {
+        ListenerInfo li = mListenerInfo;
+        return (li != null && li.mOnLongClickListener != null);
+    }
+
+    /**
      * Register a callback to be invoked when this view is context clicked. If the view is not
      * context clickable, it becomes context clickable.
      *
@@ -8279,6 +8288,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         event.setPackageName(getContext().getPackageName());
         event.setEnabled(isEnabled());
         event.setContentDescription(mContentDescription);
+        event.setScrollX(getScrollX());
+        event.setScrollY(getScrollY());
 
         switch (event.getEventType()) {
             case AccessibilityEvent.TYPE_VIEW_FOCUSED: {
@@ -8490,7 +8501,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * </ul>
      *
      * <p>It's also recommended to set the following properties - the more properties the structure
-     * has, the higher the changes of an {@link android.service.autofill.AutofillService} properly
+     * has, the higher the chances of an {@link android.service.autofill.AutofillService} properly
      * using the structure:
      *
      * <ul>
@@ -9502,6 +9513,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         mPrivateFlags4 |= PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED;
         mPrivateFlags4 &= ~PFLAG4_NOTIFIED_CONTENT_CAPTURE_DISAPPEARED;
     }
+
+    /** @hide */
+    protected boolean getNotifiedContentCaptureAppeared() {
+        return (mPrivateFlags4 & PFLAG4_NOTIFIED_CONTENT_CAPTURE_APPEARED) != 0;
+    }
+
 
     /**
      * Sets the (optional) {@link ContentCaptureSession} associated with this view.
@@ -11056,6 +11073,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * an edge swipe or dragging a <code>SeekBar</code> thumb.</p>
      *
      * <p>Do not modify the provided list after this method is called.</p>
+     *
+     * <p>Note: the system will put a limit of <code>200dp</code> on the vertical extent of the
+     * exclusions it takes into account. The limit does not apply while the navigation
+     * bar is {@link #SYSTEM_UI_FLAG_IMMERSIVE_STICKY stickily} hidden, nor to the
+     * {@link android.inputmethodservice.InputMethodService input method} and
+     * {@link Intent#CATEGORY_HOME home activity}.
+     * </p>
      *
      * @param rects A list of precision gesture regions that this view needs to function correctly
      */
@@ -13362,10 +13386,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         if ((mPrivateFlags2 & PFLAG2_SUBTREE_ACCESSIBILITY_STATE_CHANGED) == 0) {
             mPrivateFlags2 |= PFLAG2_SUBTREE_ACCESSIBILITY_STATE_CHANGED;
-            if (mParent != null) {
+            if (mParent != null && mParent instanceof View) {
                 try {
                     mParent.notifySubtreeAccessibilityStateChanged(
-                            this, this, AccessibilityEvent.CONTENT_CHANGE_TYPE_SUBTREE);
+                            this, (View) mParent, AccessibilityEvent.CONTENT_CHANGE_TYPE_SUBTREE);
                 } catch (AbstractMethodError e) {
                     Log.e(VIEW_LOG_TAG, mParent.getClass().getSimpleName() +
                             " does not fully implement ViewParent", e);
@@ -15589,7 +15613,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     void setFlags(int flags, int mask) {
-        final boolean accessibilityEnabled = AccessibilityManager.getInstance(mContext).isEnabled();
+        final boolean accessibilityEnabled =
+                AccessibilityManager.getInstance(mContext).isEnabled();
         final boolean oldIncludeForAccessibility = accessibilityEnabled && includeForAccessibility();
 
         int old = mViewFlags;
@@ -15804,14 +15829,19 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (accessibilityEnabled) {
             // If we're an accessibility pane and the visibility changed, we already have sent
             // a state change, so we really don't need to report other changes.
-            // Accessibility Services aren't concerned with changes between GONE and INVISIBLE.
-            boolean visibilityChanged = !isAccessibilityPane() && ((changed & VISIBILITY_MASK) != 0)
-                    && ((old & VISIBILITY_MASK) == VISIBLE || newVisibility == VISIBLE);
-            if (oldIncludeForAccessibility != includeForAccessibility() || visibilityChanged) {
-                notifySubtreeAccessibilityStateChangedIfNeeded();
-            } else if ((changed & ENABLED_MASK) != 0 || (changed & FOCUSABLE) != 0
+            if (isAccessibilityPane()) {
+                changed &= ~VISIBILITY_MASK;
+            }
+            if ((changed & FOCUSABLE) != 0 || (changed & VISIBILITY_MASK) != 0
                     || (changed & CLICKABLE) != 0 || (changed & LONG_CLICKABLE) != 0
                     || (changed & CONTEXT_CLICKABLE) != 0) {
+                if (oldIncludeForAccessibility != includeForAccessibility()) {
+                    notifySubtreeAccessibilityStateChangedIfNeeded();
+                } else {
+                    notifyViewAccessibilityStateChangedIfNeeded(
+                            AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
+                }
+            } else if ((changed & ENABLED_MASK) != 0) {
                 notifyViewAccessibilityStateChangedIfNeeded(
                         AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
             }

@@ -344,12 +344,32 @@ public final class DeviceConfig {
         @TestApi
         String KEY_SYSTEM_GESTURES_EXCLUDED_BY_PRE_Q_STICKY_IMMERSIVE =
                 "system_gestures_excluded_by_pre_q_sticky_immersive";
+
+        /**
+         * The minimum duration between gesture exclusion logging for a given window in
+         * milliseconds.
+         *
+         * Events that happen in-between will be silently dropped.
+         *
+         * A non-positive value disables logging.
+         *
+         * @see android.provider.DeviceConfig#NAMESPACE_WINDOW_MANAGER
+         * @hide
+         */
+        String KEY_SYSTEM_GESTURE_EXCLUSION_LOG_DEBOUNCE_MILLIS =
+                "system_gesture_exclusion_log_debounce_millis";
+
+        /**
+         * Key for controlling which packages are explicitly blocked from running at refresh rates
+         * higher than 90hz.
+         *
+         * @see android.provider.DeviceConfig#NAMESPACE_WINDOW_MANAGER
+         * @hide
+         */
+        String KEY_HIGH_REFRESH_RATE_BLACKLIST = "high_refresh_rate_blacklist";
     }
 
     private static final Object sLock = new Object();
-    @GuardedBy("sLock")
-    private static ArrayMap<OnPropertyChangedListener, Pair<String, Executor>> sSingleListeners =
-            new ArrayMap<>();
     @GuardedBy("sLock")
     private static ArrayMap<OnPropertiesChangedListener, Pair<String, Executor>> sListeners =
             new ArrayMap<>();
@@ -549,48 +569,6 @@ public final class DeviceConfig {
      * This listener will be called whenever properties in the specified namespace change. Callbacks
      * will be made on the specified executor. Future calls to this method with the same listener
      * will replace the old namespace and executor. Remove the listener entirely by calling
-     * {@link #removeOnPropertyChangedListener(OnPropertyChangedListener)}.
-     *
-     * @param namespace                 The namespace containing properties to monitor.
-     * @param executor                  The executor which will be used to run callbacks.
-     * @param onPropertyChangedListener The listener to add.
-     * @hide
-     * @see #removeOnPropertyChangedListener(OnPropertyChangedListener)
-     * @removed
-     */
-    @SystemApi
-    @TestApi
-    @RequiresPermission(READ_DEVICE_CONFIG)
-    public static void addOnPropertyChangedListener(
-            @NonNull String namespace,
-            @NonNull @CallbackExecutor Executor executor,
-            @NonNull OnPropertyChangedListener onPropertyChangedListener) {
-        enforceReadPermission(ActivityThread.currentApplication().getApplicationContext(),
-                namespace);
-        synchronized (sLock) {
-            Pair<String, Executor> oldNamespace = sSingleListeners.get(onPropertyChangedListener);
-            if (oldNamespace == null) {
-                // Brand new listener, add it to the list.
-                sSingleListeners.put(onPropertyChangedListener, new Pair<>(namespace, executor));
-                incrementNamespace(namespace);
-            } else if (namespace.equals(oldNamespace.first)) {
-                // Listener is already registered for this namespace, update executor just in case.
-                sSingleListeners.put(onPropertyChangedListener, new Pair<>(namespace, executor));
-            } else {
-                // Update this listener from an old namespace to the new one.
-                decrementNamespace(sSingleListeners.get(onPropertyChangedListener).first);
-                sSingleListeners.put(onPropertyChangedListener, new Pair<>(namespace, executor));
-                incrementNamespace(namespace);
-            }
-        }
-    }
-
-    /**
-     * Add a listener for property changes.
-     * <p>
-     * This listener will be called whenever properties in the specified namespace change. Callbacks
-     * will be made on the specified executor. Future calls to this method with the same listener
-     * will replace the old namespace and executor. Remove the listener entirely by calling
      * {@link #removeOnPropertiesChangedListener(OnPropertiesChangedListener)}.
      *
      * @param namespace                   The namespace containing properties to monitor.
@@ -622,28 +600,6 @@ public final class DeviceConfig {
                 decrementNamespace(sListeners.get(onPropertiesChangedListener).first);
                 sListeners.put(onPropertiesChangedListener, new Pair<>(namespace, executor));
                 incrementNamespace(namespace);
-            }
-        }
-    }
-
-    /**
-     * Remove a listener for property changes. The listener will receive no further notification of
-     * property changes.
-     *
-     * @param onPropertyChangedListener The listener to remove.
-     * @hide
-     * @see #addOnPropertyChangedListener(String, Executor, OnPropertyChangedListener)
-     * @removed
-     */
-    @SystemApi
-    @TestApi
-    public static void removeOnPropertyChangedListener(
-            @NonNull OnPropertyChangedListener onPropertyChangedListener) {
-        Preconditions.checkNotNull(onPropertyChangedListener);
-        synchronized (sLock) {
-            if (sSingleListeners.containsKey(onPropertyChangedListener)) {
-                decrementNamespace(sSingleListeners.get(onPropertyChangedListener).first);
-                sSingleListeners.remove(onPropertyChangedListener);
             }
         }
     }
@@ -748,38 +704,18 @@ public final class DeviceConfig {
             return;
         }
         synchronized (sLock) {
-            // OnPropertiesChangedListeners
             for (int i = 0; i < sListeners.size(); i++) {
                 if (namespace.equals(sListeners.valueAt(i).first)) {
-                    final int j = i;
-                    sListeners.valueAt(i).second.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            Map<String, String> propertyMap = new HashMap(1);
-                            propertyMap.put(name, value);
-                            sListeners.keyAt(j)
-                                    .onPropertiesChanged(new Properties(namespace, propertyMap));
-                        }
-
-                    });
-                }
-            }
-            // OnPropertyChangedListeners
-            for (int i = 0; i < sSingleListeners.size(); i++) {
-                if (namespace.equals(sSingleListeners.valueAt(i).first)) {
-                    final int j = i;
-                    sSingleListeners.valueAt(i).second.execute(new Runnable() {
-                        @Override
-                        public void run() {
-                            sSingleListeners.keyAt(j).onPropertyChanged(namespace, name, value);
-                        }
-
+                    final OnPropertiesChangedListener listener = sListeners.keyAt(i);
+                    sListeners.valueAt(i).second.execute(() -> {
+                        Map<String, String> propertyMap = new ArrayMap<>(1);
+                        propertyMap.put(name, value);
+                        listener.onPropertiesChanged(new Properties(namespace, propertyMap));
                     });
                 }
             }
         }
     }
-
 
     /**
      * Enforces READ_DEVICE_CONFIG permission if namespace is not one of public namespaces.
@@ -793,29 +729,6 @@ public final class DeviceConfig {
                         + READ_DEVICE_CONFIG);
             }
         }
-    }
-
-
-    /**
-     * Interface for monitoring single property changes.
-     * <p>
-     * Override {@link #onPropertyChanged(String, String, String)} to handle callbacks for changes.
-     *
-     * @hide
-     * @removed
-     */
-    @SystemApi
-    @TestApi
-    public interface OnPropertyChangedListener {
-        /**
-         * Called when a property has changed.
-         *
-         * @param namespace The namespace containing the property which has changed.
-         * @param name      The name of the property which has changed.
-         * @param value     The new value of the property which has changed.
-         */
-        void onPropertyChanged(@NonNull String namespace, @NonNull String name,
-                @Nullable String value);
     }
 
     /**

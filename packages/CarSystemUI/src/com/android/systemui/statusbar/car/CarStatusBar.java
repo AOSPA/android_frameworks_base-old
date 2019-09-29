@@ -26,11 +26,16 @@ import android.car.Car;
 import android.car.drivingstate.CarDrivingStateEvent;
 import android.car.drivingstate.CarUxRestrictionsManager;
 import android.car.hardware.power.CarPowerManager.CarPowerStateListener;
+import android.car.trust.CarTrustAgentEnrollmentManager;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.inputmethodservice.InputMethodService;
+import android.os.IBinder;
 import android.util.Log;
+import android.view.Display;
 import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -61,9 +66,9 @@ import com.android.systemui.Prefs;
 import com.android.systemui.R;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.classifier.FalsingLog;
-import com.android.systemui.classifier.FalsingManagerFactory;
 import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.keyguard.ScreenLifecycle;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.qs.QS;
 import com.android.systemui.qs.car.CarQSFragment;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
@@ -85,8 +90,7 @@ import java.util.Map;
 /**
  * A status bar (and navigation bar) tailored for the automotive use case.
  */
-public class CarStatusBar extends StatusBar implements
-        CarBatteryController.BatteryViewHandler {
+public class CarStatusBar extends StatusBar implements CarBatteryController.BatteryViewHandler {
     private static final String TAG = "CarStatusBar";
     // used to calculate how fast to open or close the window
     private static final float DEFAULT_FLING_VELOCITY = 0;
@@ -167,6 +171,9 @@ public class CarStatusBar extends StatusBar implements
     private boolean mIsSwipingVerticallyToClose;
     // Whether heads-up notifications should be shown when shade is open.
     private boolean mEnableHeadsUpNotificationWhenNotificationShadeOpen;
+    // If the nav bar should be hidden when the soft keyboard is visible.
+    private boolean mHideNavBarForKeyboard;
+    private boolean mBottomNavBarVisible;
 
     private final CarPowerStateListener mCarPowerStateListener =
             (int state) -> {
@@ -188,6 +195,17 @@ public class CarStatusBar extends StatusBar implements
         // builds the nav bar
         mDeviceProvisionedController = Dependency.get(DeviceProvisionedController.class);
         mDeviceIsProvisioned = mDeviceProvisionedController.isDeviceProvisioned();
+
+        // Keyboard related setup, before nav bars are created.
+        mHideNavBarForKeyboard = mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_automotiveHideNavBarForKeyboard);
+        mBottomNavBarVisible = false;
+
+        // Need to initialize screen lifecycle before calling super.start - before switcher is
+        // created.
+        mScreenLifecycle = Dependency.get(ScreenLifecycle.class);
+        mScreenLifecycle.addObserver(mScreenObserver);
+
         super.start();
         mTaskStackListener = new TaskStackListenerImpl();
         mActivityManagerWrapper = ActivityManagerWrapper.getInstance();
@@ -234,9 +252,6 @@ public class CarStatusBar extends StatusBar implements
         mPowerManagerHelper.connectToCarService();
 
         mSwitchToGuestTimer = new SwitchToGuestTimer(mContext);
-
-        mScreenLifecycle = Dependency.get(ScreenLifecycle.class);
-        mScreenLifecycle.addObserver(mScreenObserver);
     }
 
     /**
@@ -425,14 +440,13 @@ public class CarStatusBar extends StatusBar implements
                 }
         );
 
-        mNotificationClickHandlerFactory = new NotificationClickHandlerFactory(
-                mBarService,
-                launchResult -> {
-                    if (launchResult == ActivityManager.START_TASK_TO_FRONT
-                            || launchResult == ActivityManager.START_SUCCESS) {
-                        animateCollapsePanels();
-                    }
-                });
+        mNotificationClickHandlerFactory = new NotificationClickHandlerFactory(mBarService);
+        mNotificationClickHandlerFactory.registerClickListener((launchResult, alertEntry) -> {
+            if (launchResult == ActivityManager.START_TASK_TO_FRONT
+                    || launchResult == ActivityManager.START_SUCCESS) {
+                animateCollapsePanels();
+            }
+        });
         Car car = Car.createCar(mContext);
         CarUxRestrictionsManager carUxRestrictionsManager = (CarUxRestrictionsManager)
                 car.getCarManager(Car.CAR_UX_RESTRICTION_SERVICE);
@@ -638,13 +652,14 @@ public class CarStatusBar extends StatusBar implements
         }
 
         Rect rect = mNotificationView.getClipBounds();
-        if (rect != null) {
+        if (rect != null && rect.bottom != to) {
             float from = rect.bottom;
             animate(from, to, velocity, isClosing);
             return;
         }
 
-        // We will only be here if the shade is being opened programmatically.
+        // We will only be here if the shade is being opened programmatically or via button when
+        // height of the layout was not calculated.
         ViewTreeObserver notificationTreeObserver = mNotificationView.getViewTreeObserver();
         notificationTreeObserver.addOnGlobalLayoutListener(
                 new ViewTreeObserver.OnGlobalLayoutListener() {
@@ -682,11 +697,11 @@ public class CarStatusBar extends StatusBar implements
                     mStatusBarWindowController.setPanelVisible(false);
                     mNotificationView.setVisibility(View.INVISIBLE);
                     mNotificationView.setClipBounds(null);
-                    mNotificationViewController.setIsInForeground(false);
+                    mNotificationViewController.onVisibilityChanged(false);
                     // let the status bar know that the panel is closed
                     setPanelExpanded(false);
                 } else {
-                    mNotificationViewController.setIsInForeground(true);
+                    mNotificationViewController.onVisibilityChanged(true);
                     // let the status bar know that the panel is open
                     mNotificationView.setVisibleNotificationsAsSeen();
                     setPanelExpanded(true);
@@ -717,6 +732,13 @@ public class CarStatusBar extends StatusBar implements
         buildNavBarWindows();
         buildNavBarContent();
         attachNavBarWindows();
+
+        // Try setting up the initial state of the nav bar if applicable.
+        if (result != null) {
+            setImeWindowStatus(Display.DEFAULT_DISPLAY, result.mImeToken,
+                    result.mImeWindowVis, result.mImeBackDisposition,
+                    result.mShowImeSwitcher);
+        }
 
         // There has been a car customized nav bar on the default display, so just create nav bars
         // on external displays.
@@ -756,21 +778,32 @@ public class CarStatusBar extends StatusBar implements
 
     }
 
-    private void attachNavBarWindows() {
-
-        if (mShowBottom) {
-            WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-                    LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT,
-                    WindowManager.LayoutParams.TYPE_NAVIGATION_BAR,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                            | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
-                            | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH,
-                    PixelFormat.TRANSLUCENT);
-            lp.setTitle("CarNavigationBar");
-            lp.windowAnimations = 0;
-            mWindowManager.addView(mNavigationBarWindow, lp);
+    /**
+     * We register for soft keyboard visibility events such that we can hide the navigation bar
+     * giving more screen space to the IME. Note: this is optional and controlled by
+     * {@code com.android.internal.R.bool.config_automotiveHideNavBarForKeyboard}.
+     */
+    @Override
+    public void setImeWindowStatus(int displayId, IBinder token, int vis, int backDisposition,
+            boolean showImeSwitcher) {
+        if (!mHideNavBarForKeyboard) {
+            return;
         }
+
+        if (mContext.getDisplay().getDisplayId() != displayId) {
+            return;
+        }
+
+        boolean isKeyboardVisible = (vis & InputMethodService.IME_VISIBLE) != 0;
+        if (!isKeyboardVisible) {
+            attachBottomNavBarWindow();
+        } else {
+            detachBottomNavBarWindow();
+        }
+    }
+
+    private void attachNavBarWindows() {
+        attachBottomNavBarWindow();
 
         if (mShowLeft) {
             int width = mContext.getResources().getDimensionPixelSize(
@@ -806,7 +839,49 @@ public class CarStatusBar extends StatusBar implements
             rightlp.gravity = Gravity.RIGHT;
             mWindowManager.addView(mRightNavigationBarWindow, rightlp);
         }
+    }
 
+    /**
+     * Attaches the bottom nav bar window. Can be extended to modify the specific behavior of
+     * attaching the bottom nav bar.
+     */
+    protected void attachBottomNavBarWindow() {
+        if (!mShowBottom) {
+            return;
+        }
+
+        if (mBottomNavBarVisible) {
+            return;
+        }
+        mBottomNavBarVisible = true;
+
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_NAVIGATION_BAR,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                        | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
+                        | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH,
+                PixelFormat.TRANSLUCENT);
+        lp.setTitle("CarNavigationBar");
+        lp.windowAnimations = 0;
+        mWindowManager.addView(mNavigationBarWindow, lp);
+    }
+
+    /**
+     * Detaches the bottom nav bar window. Can be extended to modify the specific behavior of
+     * detaching the bottom nav bar.
+     */
+    protected void detachBottomNavBarWindow() {
+        if (!mShowBottom) {
+            return;
+        }
+
+        if (!mBottomNavBarVisible) {
+            return;
+        }
+        mBottomNavBarVisible = false;
+        mWindowManager.removeView(mNavigationBarWindow);
     }
 
     private void buildBottomBar(int layout) {
@@ -877,7 +952,7 @@ public class CarStatusBar extends StatusBar implements
             KeyguardUpdateMonitor.getInstance(mContext).dump(fd, pw, args);
         }
 
-        FalsingManagerFactory.getInstance(mContext).dump(pw);
+        Dependency.get(FalsingManager.class).dump(pw);
         FalsingLog.dump(pw);
 
         pw.println("SharedPreferences:");
@@ -956,8 +1031,12 @@ public class CarStatusBar extends StatusBar implements
         UserSwitcherController userSwitcherController =
                 Dependency.get(UserSwitcherController.class);
         if (userSwitcherController.useFullscreenUserSwitcher()) {
+            Car car = Car.createCar(mContext);
+            CarTrustAgentEnrollmentManager enrollmentManager = (CarTrustAgentEnrollmentManager) car
+                    .getCarManager(Car.CAR_TRUST_AGENT_ENROLLMENT_SERVICE);
             mFullscreenUserSwitcher = new FullscreenUserSwitcher(this,
-                    mStatusBarWindow.findViewById(R.id.fullscreen_user_switcher_stub), mContext);
+                    mStatusBarWindow.findViewById(R.id.fullscreen_user_switcher_stub),
+                    enrollmentManager, mContext);
         } else {
             super.createUserSwitcher();
         }
@@ -1072,9 +1151,25 @@ public class CarStatusBar extends StatusBar implements
             // shade is visible to the user. When the notification shade is completely open then
             // alpha value will be 1.
             float alpha = (float) height / mNotificationView.getHeight();
-            Drawable background = mNotificationView.getBackground();
+            Drawable background = mNotificationView.getBackground().mutate();
 
             background.setAlpha((int) (alpha * 255));
+            mNotificationView.setBackground(background);
+        }
+    }
+
+    @Override
+    public void onConfigChanged(Configuration newConfig) {
+        super.onConfigChanged(newConfig);
+
+        int uiModeNightMask = (newConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK);
+
+        boolean dayNightModeChanged = uiModeNightMask == Configuration.UI_MODE_NIGHT_YES
+                || uiModeNightMask == Configuration.UI_MODE_NIGHT_NO;
+
+        if (dayNightModeChanged) {
+            mNotificationView.setBackgroundColor(
+                    mContext.getColor(R.color.notification_shade_background_color));
         }
     }
 
@@ -1231,13 +1326,6 @@ public class CarStatusBar extends StatusBar implements
             calculatePercentageFromBottom(event2.getRawY());
             setNotificationViewClipBounds((int) event2.getRawY());
             return true;
-        }
-
-        @Override
-        public void onLongPress(MotionEvent e) {
-            mClosingVelocity = DEFAULT_FLING_VELOCITY;
-            close();
-            super.onLongPress(e);
         }
     }
 

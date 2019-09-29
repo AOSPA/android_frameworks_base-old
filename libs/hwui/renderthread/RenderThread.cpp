@@ -31,10 +31,6 @@
 #include "utils/TimeUtils.h"
 #include "utils/TraceUtils.h"
 
-#ifdef HWUI_GLES_WRAP_ENABLED
-#include "debug/GlesDriver.h"
-#endif
-
 #include <GrContextOptions.h>
 #include <gl/GrGLInterface.h>
 
@@ -107,7 +103,7 @@ public:
                                            [this]() { mRenderThread->drainDisplayEventQueue(); });
     }
 
-    virtual nsecs_t latestVsyncEvent() override { return systemTime(CLOCK_MONOTONIC); }
+    virtual nsecs_t latestVsyncEvent() override { return systemTime(SYSTEM_TIME_MONOTONIC); }
 
 private:
     RenderThread* mRenderThread;
@@ -156,7 +152,9 @@ void RenderThread::initializeDisplayEventReceiver() {
     LOG_ALWAYS_FATAL_IF(mVsyncSource, "Initializing a second DisplayEventReceiver?");
 
     if (!Properties::isolatedProcess) {
-        auto receiver = std::make_unique<DisplayEventReceiver>();
+        auto receiver = std::make_unique<DisplayEventReceiver>(
+            ISurfaceComposer::eVsyncSourceApp,
+            ISurfaceComposer::eConfigChangedDispatch);
         status_t status = receiver->initCheck();
         LOG_ALWAYS_FATAL_IF(status != NO_ERROR,
                             "Initialization of DisplayEventReceiver "
@@ -197,12 +195,7 @@ void RenderThread::requireGlContext() {
     }
     mEglManager->initialize();
 
-#ifdef HWUI_GLES_WRAP_ENABLED
-    debug::GlesDriver* driver = debug::GlesDriver::get();
-    sk_sp<const GrGLInterface> glInterface(driver->getSkiaInterface());
-#else
     sk_sp<const GrGLInterface> glInterface(GrGLCreateNativeInterface());
-#endif
     LOG_ALWAYS_FATAL_IF(!glInterface.get());
 
     GrContextOptions options;

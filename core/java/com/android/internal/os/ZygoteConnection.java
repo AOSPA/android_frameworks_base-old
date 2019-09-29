@@ -140,6 +140,11 @@ class ZygoteConnection {
 
         ZygoteArguments parsedArgs = new ZygoteArguments(args);
 
+        if (parsedArgs.mBootCompleted) {
+            handleBootCompleted();
+            return null;
+        }
+
         if (parsedArgs.mAbiListQuery) {
             handleAbiListQuery();
             return null;
@@ -252,7 +257,8 @@ class ZygoteConnection {
         pid = Zygote.forkAndSpecialize(parsedArgs.mUid, parsedArgs.mGid, parsedArgs.mGids,
                 parsedArgs.mRuntimeFlags, rlimits, parsedArgs.mMountExternal, parsedArgs.mSeInfo,
                 parsedArgs.mNiceName, fdsToClose, fdsToIgnore, parsedArgs.mStartChildZygote,
-                parsedArgs.mInstructionSet, parsedArgs.mAppDataDir, parsedArgs.mTargetSdkVersion);
+                parsedArgs.mInstructionSet, parsedArgs.mAppDataDir, parsedArgs.mTargetSdkVersion,
+                parsedArgs.mIsTopApp);
 
         try {
             if (pid == 0) {
@@ -299,6 +305,10 @@ class ZygoteConnection {
         }
     }
 
+    private void handleBootCompleted() {
+        VMRuntime.bootCompleted();
+    }
+
     /**
      * Preloads resources if the zygote is in lazily preload mode. Writes the result of the
      * preload operation; {@code 0} when a preload was initiated due to this request and {@code 1}
@@ -331,7 +341,7 @@ class ZygoteConnection {
             if (zygoteServer.isUsapPoolEnabled()) {
                 Runnable fpResult =
                         zygoteServer.fillUsapPool(
-                                new int[]{mSocket.getFileDescriptor().getInt$()});
+                                new int[]{mSocket.getFileDescriptor().getInt$()}, false);
 
                 if (fpResult != null) {
                     zygoteServer.setForkChild();

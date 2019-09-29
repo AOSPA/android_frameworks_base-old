@@ -918,6 +918,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private boolean mTextSetFromXmlOrResourceId = false;
     // Resource id used to set the text.
     private @StringRes int mTextId = Resources.ID_NULL;
+    // Resource id used to set the hint.
+    private @StringRes int mHintId = Resources.ID_NULL;
     //
     // End of autofill-related attributes
 
@@ -1210,6 +1212,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     break;
 
                 case com.android.internal.R.styleable.TextView_hint:
+                    mHintId = a.getResourceId(attr, Resources.ID_NULL);
                     hint = a.getText(attr);
                     break;
 
@@ -6446,6 +6449,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     @android.view.RemotableViewMethod
     public final void setHint(@StringRes int resid) {
+        mHintId = resid;
         setHint(getContext().getResources().getText(resid));
     }
 
@@ -10586,7 +10590,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         // notifyAppeared was not sent.
 
         // ContentCapture
-        if (isLaidOut() && isImportantForContentCapture() && isTextEditable()) {
+        if (isLaidOut() && isImportantForContentCapture() && getNotifiedContentCaptureAppeared()) {
             final ContentCaptureManager cm = mContext.getSystemService(ContentCaptureManager.class);
             if (cm != null && cm.isContentCaptureEnabled()) {
                 final ContentCaptureSession session = getContentCaptureSession();
@@ -11283,6 +11287,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     @Nullable
+    final TextClassificationManager getTextClassificationManagerForUser() {
+        return getServiceManagerForUser(
+                getContext().getPackageName(), TextClassificationManager.class);
+    }
+
+    @Nullable
     final <T> T getServiceManagerForUser(String packageName, Class<T> managerClazz) {
         if (mTextOperationUser == null) {
             return getContext().getSystemService(managerClazz);
@@ -11592,6 +11602,16 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 structure.setMaxTextLength(maxLength);
             }
         }
+        if (mHintId != Resources.ID_NULL) {
+            try {
+                structure.setHintIdEntry(getResources().getResourceEntryName(mHintId));
+            } catch (Resources.NotFoundException e) {
+                if (android.view.autofill.Helper.sVerbose) {
+                    Log.v(LOG_TAG, "onProvideAutofillStructure(): cannot set name for hint id "
+                            + mHintId + ": " + e.getMessage());
+                }
+            }
+        }
         structure.setHint(getHint());
         structure.setInputType(getInputType());
     }
@@ -11742,6 +11762,20 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         if (!isSingleLine()) {
             info.setMultiLine(true);
+        }
+
+        // A view should not be exposed as clickable/long-clickable to a service because of a
+        // LinkMovementMethod.
+        if ((info.isClickable() || info.isLongClickable())
+                && mMovement instanceof LinkMovementMethod) {
+            if (!hasOnClickListeners()) {
+                info.setClickable(false);
+                info.removeAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK);
+            }
+            if (!hasOnLongClickListeners()) {
+                info.setLongClickable(false);
+                info.removeAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_LONG_CLICK);
+            }
         }
     }
 
@@ -12383,8 +12417,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     @NonNull
     public TextClassifier getTextClassifier() {
         if (mTextClassifier == null) {
-            final TextClassificationManager tcm =
-                    mContext.getSystemService(TextClassificationManager.class);
+            final TextClassificationManager tcm = getTextClassificationManagerForUser();
             if (tcm != null) {
                 return tcm.getTextClassifier();
             }
@@ -12400,8 +12433,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     @NonNull
     TextClassifier getTextClassificationSession() {
         if (mTextClassificationSession == null || mTextClassificationSession.isDestroyed()) {
-            final TextClassificationManager tcm =
-                    mContext.getSystemService(TextClassificationManager.class);
+            final TextClassificationManager tcm = getTextClassificationManagerForUser();
             if (tcm != null) {
                 final String widgetType;
                 if (isTextEditable()) {

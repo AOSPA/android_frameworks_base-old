@@ -441,6 +441,11 @@ public class BaseWifiService extends IWifiManager.Stub {
     }
 
     @Override
+    public List<WifiNetworkSuggestion> getNetworkSuggestions(String packageName) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public String[] getFactoryMacAddresses() {
         throw new UnsupportedOperationException();
     }

@@ -94,7 +94,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
-import android.os.PowerManager;
 import android.os.RemoteException;
 import android.platform.test.annotations.Presubmit;
 import android.util.Pair;
@@ -121,6 +120,7 @@ import com.android.server.testing.shadows.ShadowApplicationPackageManager;
 import com.android.server.testing.shadows.ShadowBackupDataInput;
 import com.android.server.testing.shadows.ShadowBackupDataOutput;
 import com.android.server.testing.shadows.ShadowEventLog;
+import com.android.server.testing.shadows.ShadowSystemServiceRegistry;
 
 import com.google.common.truth.IterableSubject;
 
@@ -164,10 +164,11 @@ import java.util.stream.Stream;
             ShadowBackupDataInput.class,
             ShadowBackupDataOutput.class,
             ShadowEventLog.class,
-            ShadowQueuedWork.class
+            ShadowQueuedWork.class,
+            ShadowSystemServiceRegistry.class
         })
 @Presubmit
-public class KeyValueBackupTaskTest {
+public class KeyValueBackupTaskTest  {
     private static final PackageData PACKAGE_1 = keyValuePackage(1);
     private static final PackageData PACKAGE_2 = keyValuePackage(2);
     private static final String BACKUP_AGENT_SHARED_PREFS_SYNCHRONIZER_CLASS =
@@ -184,7 +185,7 @@ public class KeyValueBackupTaskTest {
     private TransportData mTransport;
     private ShadowLooper mShadowBackupLooper;
     private Handler mBackupHandler;
-    private PowerManager.WakeLock mWakeLock;
+    private UserBackupManagerService.BackupWakeLock mWakeLock;
     private KeyValueBackupReporter mReporter;
     private PackageManager mPackageManager;
     private ShadowPackageManager mShadowPackageManager;

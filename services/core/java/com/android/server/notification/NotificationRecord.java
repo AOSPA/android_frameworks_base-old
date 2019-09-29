@@ -34,11 +34,8 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManagerInternal;
-import android.content.res.Resources;
 import android.graphics.Bitmap;
-import android.graphics.drawable.Icon;
 import android.media.AudioAttributes;
 import android.media.AudioSystem;
 import android.metrics.LogMaker;
@@ -453,16 +450,11 @@ public final class NotificationRecord {
 
     void dump(PrintWriter pw, String prefix, Context baseContext, boolean redact) {
         final Notification notification = sbn.getNotification();
-        final Icon icon = notification.getSmallIcon();
-        String iconStr = String.valueOf(icon);
-        if (icon != null && icon.getType() == Icon.TYPE_RESOURCE) {
-            iconStr += " / " + idDebugString(baseContext, icon.getResPackage(), icon.getResId());
-        }
         pw.println(prefix + this);
         prefix = prefix + "  ";
         pw.println(prefix + "uid=" + sbn.getUid() + " userId=" + sbn.getUserId());
         pw.println(prefix + "opPkg=" + sbn.getOpPkg());
-        pw.println(prefix + "icon=" + iconStr);
+        pw.println(prefix + "icon=" + notification.getSmallIcon());
         pw.println(prefix + "flags=0x" + Integer.toHexString(notification.flags));
         pw.println(prefix + "pri=" + notification.priority);
         pw.println(prefix + "key=" + sbn.getKey());
@@ -592,37 +584,15 @@ public final class NotificationRecord {
         pw.println(prefix + "mAdjustments=" + mAdjustments);
     }
 
-
-    static String idDebugString(Context baseContext, String packageName, int id) {
-        Context c;
-
-        if (packageName != null) {
-            try {
-                c = baseContext.createPackageContext(packageName, 0);
-            } catch (NameNotFoundException e) {
-                c = baseContext;
-            }
-        } else {
-            c = baseContext;
-        }
-
-        Resources r = c.getResources();
-        try {
-            return r.getResourceName(id);
-        } catch (Resources.NotFoundException e) {
-            return "<name unknown>";
-        }
-    }
-
     @Override
     public final String toString() {
         return String.format(
                 "NotificationRecord(0x%08x: pkg=%s user=%s id=%d tag=%s importance=%d key=%s" +
-                        "appImportanceLocked=%s: %s)",
+                        ": %s)",
                 System.identityHashCode(this),
                 this.sbn.getPackageName(), this.sbn.getUser(), this.sbn.getId(),
                 this.sbn.getTag(), this.mImportance, this.sbn.getKey(),
-                mIsAppImportanceLocked, this.sbn.getNotification());
+                this.sbn.getNotification());
     }
 
     public boolean hasAdjustment(String key) {

@@ -248,7 +248,8 @@ public class KeyguardPatternView extends LinearLayout implements KeyguardSecurit
 
     @Override
     public boolean disallowInterceptTouch(MotionEvent event) {
-        return mLockPatternScreenBounds.contains((int) event.getRawX(), (int) event.getRawY());
+        return !mLockPatternView.isEmpty()
+                || mLockPatternScreenBounds.contains((int) event.getRawX(), (int) event.getRawY());
     }
 
     /** TODO: hook this up */
@@ -273,6 +274,7 @@ public class KeyguardPatternView extends LinearLayout implements KeyguardSecurit
         @Override
         public void onPatternCellAdded(List<LockPatternView.Cell> pattern) {
             mCallback.userActivity();
+            mCallback.onUserInput();
         }
 
         @Override
@@ -335,6 +337,7 @@ public class KeyguardPatternView extends LinearLayout implements KeyguardSecurit
                     });
             if (pattern.size() > MIN_PATTERN_BEFORE_POKE_WAKELOCK) {
                 mCallback.userActivity();
+                mCallback.onUserInput();
             }
         }
 

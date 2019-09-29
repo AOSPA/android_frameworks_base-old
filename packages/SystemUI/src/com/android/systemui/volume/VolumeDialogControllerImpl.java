@@ -43,6 +43,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.UserHandle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.Settings;
@@ -243,8 +244,11 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         pw.print("  mState: "); pw.println(mState.toString(4));
         pw.print("  mShowDndTile: "); pw.println(mShowDndTile);
         pw.print("  mHasVibrator: "); pw.println(mHasVibrator);
-        pw.print("  mRemoteStreams: "); pw.println(mMediaSessionsCallbacksW.mRemoteStreams
-                .values());
+        synchronized (mMediaSessionsCallbacksW.mRemoteStreams) {
+            pw.print("  mRemoteStreams: ");
+            pw.println(mMediaSessionsCallbacksW.mRemoteStreams
+                    .values());
+        }
         pw.print("  mShowA11yStream: "); pw.println(mShowA11yStream);
         pw.println();
         mMediaSessions.dump(pw);
@@ -272,14 +276,14 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     }
 
     public boolean areCaptionsEnabled() {
-        int currentValue = Settings.Secure.getInt(mContext.getContentResolver(),
-                Settings.Secure.ODI_CAPTIONS_ENABLED, 0);
+        int currentValue = Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                Settings.Secure.ODI_CAPTIONS_ENABLED, 0, UserHandle.USER_CURRENT);
         return currentValue == 1;
     }
 
     public void setCaptionsEnabled(boolean isEnabled) {
-        Settings.Secure.putInt(mContext.getContentResolver(),
-                Settings.Secure.ODI_CAPTIONS_ENABLED, isEnabled ? 1 : 0);
+        Settings.Secure.putIntForUser(mContext.getContentResolver(),
+                Settings.Secure.ODI_CAPTIONS_ENABLED, isEnabled ? 1 : 0, UserHandle.USER_CURRENT);
     }
 
     @Override
@@ -1075,7 +1079,10 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         @Override
         public void onRemoteUpdate(Token token, String name, PlaybackInfo pi) {
             addStream(token, "onRemoteUpdate");
-            final int stream = mRemoteStreams.get(token);
+            int stream = 0;
+            synchronized (mRemoteStreams) {
+                 stream = mRemoteStreams.get(token);
+            }
             boolean changed = mState.states.indexOfKey(stream) < 0;
             final StreamState ss = streamStateW(stream);
             ss.dynamic = true;
@@ -1100,7 +1107,10 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         @Override
         public void onRemoteVolumeChanged(Token token, int flags) {
             addStream(token, "onRemoteVolumeChanged");
-            final int stream = mRemoteStreams.get(token);
+            int stream = 0;
+            synchronized (mRemoteStreams) {
+                stream = mRemoteStreams.get(token);
+            }
             final boolean showUI = shouldShowUI(flags);
             boolean changed = updateActiveStreamW(stream);
             if (showUI) {
@@ -1116,12 +1126,15 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
 
         @Override
         public void onRemoteRemoved(Token token) {
-            if (!mRemoteStreams.containsKey(token)) {
-                if (D.BUG) Log.d(TAG, "onRemoteRemoved: stream doesn't exist, "
-                        + "aborting remote removed for token:" +  token.toString());
-                return;
+            int stream = 0;
+            synchronized (mRemoteStreams) {
+                if (!mRemoteStreams.containsKey(token)) {
+                    if (D.BUG) Log.d(TAG, "onRemoteRemoved: stream doesn't exist, "
+                            + "aborting remote removed for token:" +  token.toString());
+                    return;
+                }
+                stream = mRemoteStreams.get(token);
             }
-            final int stream = mRemoteStreams.get(token);
             mState.states.remove(stream);
             if (mState.activeStream == stream) {
                 updateActiveStreamW(-1);
@@ -1139,20 +1152,24 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         }
 
         private Token findToken(int stream) {
-            for (Map.Entry<Token, Integer> entry : mRemoteStreams.entrySet()) {
-                if (entry.getValue().equals(stream)) {
-                    return entry.getKey();
+            synchronized (mRemoteStreams) {
+                for (Map.Entry<Token, Integer> entry : mRemoteStreams.entrySet()) {
+                    if (entry.getValue().equals(stream)) {
+                        return entry.getKey();
+                    }
                 }
             }
             return null;
         }
 
         private void addStream(Token token, String triggeringMethod) {
-            if (!mRemoteStreams.containsKey(token)) {
-                mRemoteStreams.put(token, mNextStream);
-                if (D.BUG) Log.d(TAG, triggeringMethod + ": added stream " +  mNextStream
-                        + " from token + "+ token.toString());
-                mNextStream++;
+            synchronized (mRemoteStreams) {
+                if (!mRemoteStreams.containsKey(token)) {
+                    mRemoteStreams.put(token, mNextStream);
+                    if (D.BUG) Log.d(TAG, triggeringMethod + ": added stream " + mNextStream
+                            + " from token + " + token.toString());
+                    mNextStream++;
+                }
             }
         }
     }

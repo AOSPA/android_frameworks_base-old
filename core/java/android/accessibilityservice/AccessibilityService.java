@@ -309,7 +309,7 @@ public abstract class AccessibilityService extends Service {
      * Name under which an AccessibilityService component publishes information
      * about itself. This meta-data must reference an XML resource containing an
      * <code>&lt;{@link android.R.styleable#AccessibilityService accessibility-service}&gt;</code>
-     * tag. This is a a sample XML file configuring an accessibility service:
+     * tag. This is a sample XML file configuring an accessibility service:
      * <pre> &lt;accessibility-service
      *     android:accessibilityEventTypes="typeViewClicked|typeViewFocused"
      *     android:packageNames="foo.bar, foo.baz"
@@ -381,7 +381,8 @@ public abstract class AccessibilityService extends Service {
         void onInterrupt();
         void onServiceConnected();
         void init(int connectionId, IBinder windowToken);
-        boolean onGesture(int gestureId);
+        /** The detected gesture information for different displays */
+        boolean onGesture(AccessibilityGestureInfo gestureInfo);
         boolean onKeyEvent(KeyEvent event);
         /** Magnification changed callbacks for different displays */
         void onMagnificationChanged(int displayId, @NonNull Region region,
@@ -390,7 +391,8 @@ public abstract class AccessibilityService extends Service {
         void onPerformGestureResult(int sequence, boolean completedSuccessfully);
         void onFingerprintCapturingGesturesChanged(boolean active);
         void onFingerprintGesture(int gesture);
-        void onAccessibilityButtonClicked();
+        /** Accessbility button clicked callbacks for different displays */
+        void onAccessibilityButtonClicked(int displayId);
         void onAccessibilityButtonAvailabilityChanged(boolean available);
     }
 
@@ -458,7 +460,8 @@ public abstract class AccessibilityService extends Service {
     private final SparseArray<MagnificationController> mMagnificationControllers =
             new SparseArray<>(0);
     private SoftKeyboardController mSoftKeyboardController;
-    private AccessibilityButtonController mAccessibilityButtonController;
+    private final SparseArray<AccessibilityButtonController> mAccessibilityButtonControllers =
+            new SparseArray<>(0);
 
     private int mGestureStatusCallbackSequence;
 
@@ -514,17 +517,18 @@ public abstract class AccessibilityService extends Service {
     }
 
     /**
-     * Called by the system when the user performs a specific gesture on the
-     * touch screen.
+     * Called by {@link #onGesture(AccessibilityGestureInfo)} when the user performs a specific
+     * gesture on the default display.
      *
      * <strong>Note:</strong> To receive gestures an accessibility service must
      * request that the device is in touch exploration mode by setting the
-     * {@link android.accessibilityservice.AccessibilityServiceInfo#FLAG_REQUEST_TOUCH_EXPLORATION_MODE}
+     * {@link AccessibilityServiceInfo#FLAG_REQUEST_TOUCH_EXPLORATION_MODE}
      * flag.
      *
      * @param gestureId The unique id of the performed gesture.
      *
      * @return Whether the gesture was handled.
+     * @deprecated Override {@link #onGesture(AccessibilityGestureInfo)} instead.
      *
      * @see #GESTURE_SWIPE_UP
      * @see #GESTURE_SWIPE_UP_AND_LEFT
@@ -543,7 +547,32 @@ public abstract class AccessibilityService extends Service {
      * @see #GESTURE_SWIPE_RIGHT_AND_LEFT
      * @see #GESTURE_SWIPE_RIGHT_AND_DOWN
      */
+    @Deprecated
     protected boolean onGesture(int gestureId) {
+        return false;
+    }
+
+    /**
+     * Called by the system when the user performs a specific gesture on the
+     * specific touch screen.
+     *<p>
+     * <strong>Note:</strong> To receive gestures an accessibility service must
+     * request that the device is in touch exploration mode by setting the
+     * {@link AccessibilityServiceInfo#FLAG_REQUEST_TOUCH_EXPLORATION_MODE}
+     * flag.
+     *<p>
+     * <strong>Note:</strong> The default implementation calls {@link #onGesture(int)} when the
+     * touch screen is default display.
+     *
+     * @param gestureInfo The information of gesture.
+     *
+     * @return Whether the gesture was handled.
+     *
+     */
+    public boolean onGesture(@NonNull AccessibilityGestureInfo gestureInfo) {
+        if (gestureInfo.getDisplayId() == Display.DEFAULT_DISPLAY) {
+            onGesture(gestureInfo.getGestureId());
+        }
         return false;
     }
 
@@ -641,6 +670,32 @@ public abstract class AccessibilityService extends Service {
             } catch (RemoteException re) {
                 throw new RuntimeException(re);
             }
+        }
+    }
+
+    @Override
+    public Context createDisplayContext(Display display) {
+        final Context context = super.createDisplayContext(display);
+        final int displayId = display.getDisplayId();
+        setDefaultTokenInternal(context, displayId);
+        return context;
+    }
+
+    private void setDefaultTokenInternal(Context context, int displayId) {
+        final WindowManagerImpl wm = (WindowManagerImpl) context.getSystemService(WINDOW_SERVICE);
+        final IAccessibilityServiceConnection connection =
+                AccessibilityInteractionClient.getInstance().getConnection(mConnectionId);
+        IBinder token = null;
+        if (connection != null) {
+            synchronized (mLock) {
+                try {
+                    token = connection.getOverlayWindowToken(displayId);
+                } catch (RemoteException re) {
+                    Log.w(LOG_TAG, "Failed to get window token", re);
+                    re.rethrowFromSystemServer();
+                }
+            }
+            wm.setDefaultToken(token);
         }
     }
 
@@ -751,8 +806,8 @@ public abstract class AccessibilityService extends Service {
                             callback, handler);
                     mGestureStatusCallbackInfos.put(mGestureStatusCallbackSequence, callbackInfo);
                 }
-                connection.sendGesture(mGestureStatusCallbackSequence,
-                        new ParceledListSlice<>(steps));
+                connection.dispatchGesture(mGestureStatusCallbackSequence,
+                        new ParceledListSlice<>(steps), gesture.getDisplayId());
             }
         } catch (RemoteException re) {
             throw new RuntimeException(re);
@@ -1468,17 +1523,40 @@ public abstract class AccessibilityService extends Service {
      */
     @NonNull
     public final AccessibilityButtonController getAccessibilityButtonController() {
+        return getAccessibilityButtonController(Display.DEFAULT_DISPLAY);
+    }
+
+    /**
+     * Returns the controller of specified logical display for the accessibility button within the
+     * system's navigation area. This instance may be used to query the accessibility button's
+     * state and register listeners for interactions with and state changes for the accessibility
+     * button when {@link AccessibilityServiceInfo#FLAG_REQUEST_ACCESSIBILITY_BUTTON} is set.
+     * <p>
+     * <strong>Note:</strong> Not all devices are capable of displaying the accessibility button
+     * within a navigation area, and as such, use of this class should be considered only as an
+     * optional feature or shortcut on supported device implementations.
+     * </p>
+     *
+     * @param displayId The logic display id, use {@link Display#DEFAULT_DISPLAY} for default
+     *                  display.
+     * @return the accessibility button controller for this {@link AccessibilityService}
+     */
+    @NonNull
+    public final AccessibilityButtonController getAccessibilityButtonController(int displayId) {
         synchronized (mLock) {
-            if (mAccessibilityButtonController == null) {
-                mAccessibilityButtonController = new AccessibilityButtonController(
+            AccessibilityButtonController controller = mAccessibilityButtonControllers.get(
+                    displayId);
+            if (controller == null) {
+                controller = new AccessibilityButtonController(
                         AccessibilityInteractionClient.getInstance().getConnection(mConnectionId));
+                mAccessibilityButtonControllers.put(displayId, controller);
             }
-            return mAccessibilityButtonController;
+            return controller;
         }
     }
 
-    private void onAccessibilityButtonClicked() {
-        getAccessibilityButtonController().dispatchAccessibilityButtonClicked();
+    private void onAccessibilityButtonClicked(int displayId) {
+        getAccessibilityButtonController(displayId).dispatchAccessibilityButtonClicked();
     }
 
     private void onAccessibilityButtonAvailabilityChanged(boolean available) {
@@ -1647,8 +1725,8 @@ public abstract class AccessibilityService extends Service {
             }
 
             @Override
-            public boolean onGesture(int gestureId) {
-                return AccessibilityService.this.onGesture(gestureId);
+            public boolean onGesture(AccessibilityGestureInfo gestureInfo) {
+                return AccessibilityService.this.onGesture(gestureInfo);
             }
 
             @Override
@@ -1684,8 +1762,8 @@ public abstract class AccessibilityService extends Service {
             }
 
             @Override
-            public void onAccessibilityButtonClicked() {
-                AccessibilityService.this.onAccessibilityButtonClicked();
+            public void onAccessibilityButtonClicked(int displayId) {
+                AccessibilityService.this.onAccessibilityButtonClicked(displayId);
             }
 
             @Override
@@ -1747,8 +1825,9 @@ public abstract class AccessibilityService extends Service {
             mCaller.sendMessage(message);
         }
 
-        public void onGesture(int gestureId) {
-            Message message = mCaller.obtainMessageI(DO_ON_GESTURE, gestureId);
+        @Override
+        public void onGesture(AccessibilityGestureInfo gestureInfo) {
+            Message message = mCaller.obtainMessageO(DO_ON_GESTURE, gestureInfo);
             mCaller.sendMessage(message);
         }
 
@@ -1798,8 +1877,10 @@ public abstract class AccessibilityService extends Service {
             mCaller.sendMessage(mCaller.obtainMessageI(DO_ON_FINGERPRINT_GESTURE, gesture));
         }
 
-        public void onAccessibilityButtonClicked() {
-            final Message message = mCaller.obtainMessage(DO_ACCESSIBILITY_BUTTON_CLICKED);
+        /** Accessibility button clicked callbacks for different displays */
+        public void onAccessibilityButtonClicked(int displayId) {
+            final Message message = mCaller.obtainMessageI(DO_ACCESSIBILITY_BUTTON_CLICKED,
+                    displayId);
             mCaller.sendMessage(message);
         }
 
@@ -1861,8 +1942,7 @@ public abstract class AccessibilityService extends Service {
 
                 case DO_ON_GESTURE: {
                     if (mConnectionId != AccessibilityInteractionClient.NO_ID) {
-                        final int gestureId = message.arg1;
-                        mCallback.onGesture(gestureId);
+                        mCallback.onGesture((AccessibilityGestureInfo) message.obj);
                     }
                 } return;
 
@@ -1934,7 +2014,7 @@ public abstract class AccessibilityService extends Service {
 
                 case (DO_ACCESSIBILITY_BUTTON_CLICKED): {
                     if (mConnectionId != AccessibilityInteractionClient.NO_ID) {
-                        mCallback.onAccessibilityButtonClicked();
+                        mCallback.onAccessibilityButtonClicked(message.arg1);
                     }
                 } return;
 

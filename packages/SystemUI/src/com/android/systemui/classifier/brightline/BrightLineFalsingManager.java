@@ -16,14 +16,21 @@
 
 package com.android.systemui.classifier.brightline;
 
+import static com.android.systemui.classifier.FalsingManagerImpl.FALSING_REMAIN_LOCKED;
+import static com.android.systemui.classifier.FalsingManagerImpl.FALSING_SUCCESS;
+
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.hardware.biometrics.BiometricSourceType;
 import android.net.Uri;
 import android.util.Log;
 import android.view.MotionEvent;
 
+import com.android.internal.logging.MetricsLogger;
+import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.systemui.classifier.Classifier;
 import com.android.systemui.plugins.FalsingManager;
 
@@ -43,7 +50,13 @@ public class BrightLineFalsingManager implements FalsingManager {
 
     private final SensorManager mSensorManager;
     private final FalsingDataProvider mDataProvider;
+    private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private boolean mSessionStarted;
+    private MetricsLogger mMetricsLogger;
+    private int mIsFalseTouchCalls;
+    private boolean mShowingAod;
+    private boolean mScreenOn;
+    private boolean mJustUnlockedWithFace;
 
     private final ExecutorService mBackgroundExecutor = Executors.newSingleThreadExecutor();
 
@@ -60,10 +73,28 @@ public class BrightLineFalsingManager implements FalsingManager {
         }
     };
 
-    public BrightLineFalsingManager(FalsingDataProvider falsingDataProvider,
-            SensorManager sensorManager) {
+    private final KeyguardUpdateMonitorCallback mKeyguardUpdateCallback =
+            new KeyguardUpdateMonitorCallback() {
+                @Override
+                public void onBiometricAuthenticated(int userId,
+                        BiometricSourceType biometricSourceType) {
+                    if (userId == KeyguardUpdateMonitor.getCurrentUser()
+                            && biometricSourceType == BiometricSourceType.FACE) {
+                        mJustUnlockedWithFace = true;
+                    }
+                }
+            };
+
+    public BrightLineFalsingManager(
+            FalsingDataProvider falsingDataProvider,
+            SensorManager sensorManager,
+            KeyguardUpdateMonitor keyguardUpdateMonitor) {
+        mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mDataProvider = falsingDataProvider;
         mSensorManager = sensorManager;
+        mKeyguardUpdateMonitor.registerCallback(mKeyguardUpdateCallback);
+
+        mMetricsLogger = new MetricsLogger();
         mClassifiers = new ArrayList<>();
         DistanceClassifier distanceClassifier = new DistanceClassifier(mDataProvider);
         ProximityClassifier proximityClassifier = new ProximityClassifier(distanceClassifier,
@@ -98,9 +129,10 @@ public class BrightLineFalsingManager implements FalsingManager {
     }
 
     private void sessionStart() {
-        if (!mSessionStarted) {
+        if (!mSessionStarted && !mShowingAod && mScreenOn) {
             logDebug("Starting Session");
             mSessionStarted = true;
+            mJustUnlockedWithFace = false;
             registerSensors();
             mClassifiers.forEach(FalsingClassifier::onSessionStarted);
         }
@@ -113,6 +145,10 @@ public class BrightLineFalsingManager implements FalsingManager {
             unregisterSensors();
             mDataProvider.onSessionEnd();
             mClassifiers.forEach(FalsingClassifier::onSessionEnded);
+            if (mIsFalseTouchCalls != 0) {
+                mMetricsLogger.histogram(FALSING_REMAIN_LOCKED, mIsFalseTouchCalls);
+                mIsFalseTouchCalls = 0;
+            }
         }
     }
 
@@ -128,7 +164,7 @@ public class BrightLineFalsingManager implements FalsingManager {
 
     @Override
     public boolean isFalseTouch() {
-        boolean r = mClassifiers.stream().anyMatch(falsingClassifier -> {
+        boolean r = !mJustUnlockedWithFace && mClassifiers.stream().anyMatch(falsingClassifier -> {
             boolean result = falsingClassifier.isFalseTouch();
             if (result) {
                 logInfo(falsingClassifier.getClass().getName() + ": true");
@@ -159,6 +195,11 @@ public class BrightLineFalsingManager implements FalsingManager {
 
     @Override
     public void onSucccessfulUnlock() {
+        if (mIsFalseTouchCalls != 0) {
+            mMetricsLogger.histogram(FALSING_SUCCESS, mIsFalseTouchCalls);
+            mIsFalseTouchCalls = 0;
+        }
+        sessionEnd();
     }
 
     @Override
@@ -167,6 +208,7 @@ public class BrightLineFalsingManager implements FalsingManager {
 
     @Override
     public void setShowingAod(boolean showingAod) {
+        mShowingAod = showingAod;
         if (showingAod) {
             sessionEnd();
         } else {
@@ -251,7 +293,7 @@ public class BrightLineFalsingManager implements FalsingManager {
 
     @Override
     public void onScreenOnFromTouch() {
-        sessionStart();
+        onScreenTurningOn();
     }
 
     @Override
@@ -273,11 +315,13 @@ public class BrightLineFalsingManager implements FalsingManager {
 
     @Override
     public void onScreenTurningOn() {
+        mScreenOn = true;
         sessionStart();
     }
 
     @Override
     public void onScreenOff() {
+        mScreenOn = false;
         sessionEnd();
     }
 
@@ -314,6 +358,7 @@ public class BrightLineFalsingManager implements FalsingManager {
     @Override
     public void cleanup() {
         unregisterSensors();
+        mKeyguardUpdateMonitor.removeCallback(mKeyguardUpdateCallback);
     }
 
     static void logDebug(String msg) {

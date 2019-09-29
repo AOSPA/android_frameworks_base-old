@@ -20,9 +20,10 @@ import static android.app.ActivityTaskManager.INVALID_STACK_ID;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.MODE_DEFAULT;
 import static android.app.AppOpsManager.OP_NONE;
+import static android.app.WindowConfiguration.isSplitScreenWindowingMode;
+import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.os.PowerManager.DRAW_WAKE_LOCK;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
-import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.SurfaceControl.Transaction;
 import static android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
 import static android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
@@ -80,6 +81,7 @@ import static com.android.server.policy.WindowManagerPolicy.TRANSIT_ENTER;
 import static com.android.server.policy.WindowManagerPolicy.TRANSIT_EXIT;
 import static com.android.server.policy.WindowManagerPolicy.TRANSIT_PREVIEW_DONE;
 import static com.android.server.wm.AnimationSpecProto.MOVE;
+import static com.android.server.wm.DisplayContent.logsGestureExclusionRestrictions;
 import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
 import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_FREEFORM;
 import static com.android.server.wm.IdentifierProto.HASH_CODE;
@@ -174,6 +176,7 @@ import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.MergedConfiguration;
 import android.util.Slog;
+import android.util.StatsLog;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
@@ -226,6 +229,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     // The thickness of a window resize handle outside the window bounds on the free form workspace
     // to capture touch events in that area.
     static final int RESIZE_HANDLE_WIDTH_IN_DP = 30;
+
+    static final int EXCLUSION_LEFT = 0;
+    static final int EXCLUSION_RIGHT = 1;
 
     final WindowManagerPolicy mPolicy;
     final Context mContext;
@@ -396,6 +402,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * Coordinates are relative to the window's position.
      */
     private final List<Rect> mExclusionRects = new ArrayList<>();
+
+    // 0 = left, 1 = right
+    private final int[] mLastRequestedExclusionHeight = {0, 0};
+    private final int[] mLastGrantedExclusionHeight = {0, 0};
+    private final long[] mLastExclusionLogUptimeMillis = {0, 0};
+
+    private boolean mLastShownChangedReported;
 
     // If a window showing a wallpaper: the requested offset for the
     // wallpaper; if a wallpaper window: the currently applied offset.
@@ -677,6 +690,20 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 (mSystemUiVisibility & immersiveStickyFlags) == immersiveStickyFlags;
         return immersiveSticky && mWmService.mSystemGestureExcludedByPreQStickyImmersive
                 && mAppToken != null && mAppToken.mTargetSdk < Build.VERSION_CODES.Q;
+    }
+
+    void setLastExclusionHeights(int side, int requested, int granted) {
+        boolean changed = mLastGrantedExclusionHeight[side] != granted
+                || mLastRequestedExclusionHeight[side] != requested;
+
+        if (changed) {
+            if (mLastShownChangedReported) {
+                logExclusionRestrictions(side);
+            }
+
+            mLastGrantedExclusionHeight[side] = granted;
+            mLastRequestedExclusionHeight[side] = requested;
+        }
     }
 
     interface PowerManagerWrapper {
@@ -1633,7 +1660,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 || !mRelayoutCalled
                 || (atoken == null && mToken.isHidden())
                 || (atoken != null && atoken.hiddenRequested)
-                || isParentWindowHidden()
+                || isParentWindowGoneForLayout()
                 || (mAnimatingExit && !isAnimatingLw())
                 || mDestroying;
     }
@@ -1802,11 +1829,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             startMoveAnimation(left, top);
         }
 
-        // TODO (multidisplay): Accessibility supported only for the default display and
-        // embedded displays
-        if (mWmService.mAccessibilityController != null && (getDisplayId() == DEFAULT_DISPLAY
-                || getDisplayContent().getParentWindow() != null)) {
-            mWmService.mAccessibilityController.onSomeWindowResizedOrMovedLocked();
+        if (mWmService.mAccessibilityController != null) {
+            mWmService.mAccessibilityController.onSomeWindowResizedOrMovedLocked(getDisplayId());
         }
         updateLocationInParentDisplayIfNeeded();
 
@@ -2105,6 +2129,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return false;
         }
 
+        final TaskStack stack = getStack();
+        if (stack != null && stack.shouldIgnoreInput()) {
+            // Ignore when the stack shouldn't receive input event.
+            // (i.e. the minimized stack in split screen mode.)
+            return false;
+        }
+
         final int fl = mAttrs.flags & (FLAG_NOT_FOCUSABLE | FLAG_ALT_FOCUSABLE_IM);
         final int type = mAttrs.type;
 
@@ -2386,10 +2417,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     void prepareWindowToDisplayDuringRelayout(boolean wasVisible) {
         // We need to turn on screen regardless of visibility.
-        boolean hasTurnScreenOnFlag = (mAttrs.flags & FLAG_TURN_SCREEN_ON) != 0;
+        final boolean hasTurnScreenOnFlag = (mAttrs.flags & FLAG_TURN_SCREEN_ON) != 0
+                || (mAppToken != null && mAppToken.mActivityRecord.canTurnScreenOn());
 
         // The screen will turn on if the following conditions are met
-        // 1. The window has the flag FLAG_TURN_SCREEN_ON
+        // 1. The window has the flag FLAG_TURN_SCREEN_ON or ActivityRecord#canTurnScreenOn.
         // 2. The WMS allows theater mode.
         // 3. No AWT or the AWT allows the screen to be turned on. This should only be true once
         // per resume to prevent the screen getting getting turned on for each relayout. Set
@@ -2403,7 +2435,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             boolean allowTheaterMode = mWmService.mAllowTheaterModeWakeFromLayout
                     || Settings.Global.getInt(mWmService.mContext.getContentResolver(),
                             Settings.Global.THEATER_MODE_ON, 0) == 0;
-            boolean canTurnScreenOn = mAppToken == null || mAppToken.canTurnScreenOn();
+            boolean canTurnScreenOn = mAppToken == null || mAppToken.currentLaunchCanTurnScreenOn();
 
             if (allowTheaterMode && canTurnScreenOn && !mPowerManagerWrapper.isInteractive()) {
                 if (DEBUG_VISIBILITY || DEBUG_POWER) {
@@ -2414,7 +2446,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             }
 
             if (mAppToken != null) {
-                mAppToken.setCanTurnScreenOn(false);
+                mAppToken.setCurrentLaunchCanTurnScreenOn(false);
             }
         }
 
@@ -2957,6 +2989,49 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mAnimatingExit = false;
     }
 
+    void onSurfaceShownChanged(boolean shown) {
+        if (mLastShownChangedReported == shown) {
+            return;
+        }
+        mLastShownChangedReported = shown;
+
+        if (shown) {
+            initExclusionRestrictions();
+        } else {
+            logExclusionRestrictions(EXCLUSION_LEFT);
+            logExclusionRestrictions(EXCLUSION_RIGHT);
+        }
+    }
+
+    private void logExclusionRestrictions(int side) {
+        if (!logsGestureExclusionRestrictions(this)
+                || SystemClock.uptimeMillis() < mLastExclusionLogUptimeMillis[side]
+                + mWmService.mSystemGestureExclusionLogDebounceTimeoutMillis) {
+            // Drop the log if we have just logged; this is okay, because what we would have logged
+            // was true only for a short duration.
+            return;
+        }
+
+        final long now = SystemClock.uptimeMillis();
+        final long duration = now - mLastExclusionLogUptimeMillis[side];
+        mLastExclusionLogUptimeMillis[side] = now;
+
+        final int requested = mLastRequestedExclusionHeight[side];
+        final int granted = mLastGrantedExclusionHeight[side];
+
+        StatsLog.write(StatsLog.EXCLUSION_RECT_STATE_CHANGED,
+                mAttrs.packageName, requested, requested - granted /* rejected */,
+                side + 1 /* Sides are 1-indexed in atoms.proto */,
+                (getConfiguration().orientation == ORIENTATION_LANDSCAPE),
+                isSplitScreenWindowingMode(getWindowingMode()), (int) duration);
+    }
+
+    private void initExclusionRestrictions() {
+        final long now = SystemClock.uptimeMillis();
+        mLastExclusionLogUptimeMillis[EXCLUSION_LEFT] = now;
+        mLastExclusionLogUptimeMillis[EXCLUSION_RIGHT] = now;
+    }
+
     @Override
     public boolean isDefaultDisplay() {
         final DisplayContent displayContent = getDisplayContent();
@@ -3188,12 +3263,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                         outsets, reportDraw, mergedConfiguration, reportOrientation, displayId,
                         displayCutout);
             }
-
-            // TODO (multidisplay): Accessibility supported only for the default display and
-            // embedded displays
-            if (mWmService.mAccessibilityController != null && (getDisplayId() == DEFAULT_DISPLAY
-                    || getDisplayContent().getParentWindow() != null)) {
-                mWmService.mAccessibilityController.onSomeWindowResizedOrMovedLocked();
+            if (mWmService.mAccessibilityController != null) {
+                mWmService.mAccessibilityController.onSomeWindowResizedOrMovedLocked(
+                        getDisplayId());
             }
             updateLocationInParentDisplayIfNeeded();
 
@@ -3840,6 +3912,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return parent != null && parent.mHidden;
     }
 
+    private boolean isParentWindowGoneForLayout() {
+        final WindowState parent = getParentWindow();
+        return parent != null && parent.isGoneForLayoutLw();
+    }
+
     void setWillReplaceWindow(boolean animate) {
         for (int i = mChildren.size() - 1; i >= 0; i--) {
             final WindowState c = mChildren.get(i);
@@ -4042,6 +4119,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     WindowInfo getWindowInfo() {
         WindowInfo windowInfo = WindowInfo.obtain();
+        windowInfo.displayId = getDisplayId();
         windowInfo.type = mAttrs.type;
         windowInfo.layer = mLayer;
         windowInfo.token = mClient.asBinder();
@@ -4287,12 +4365,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (isSelfAnimating()) {
             return;
         }
-
-        // TODO (multidisplay): Accessibility supported only for the default display and
-        // embedded displays
-        if (mWmService.mAccessibilityController != null && (getDisplayId() == DEFAULT_DISPLAY
-                || getDisplayContent().getParentWindow() != null)) {
-            mWmService.mAccessibilityController.onSomeWindowResizedOrMovedLocked();
+        if (mWmService.mAccessibilityController != null) {
+            mWmService.mAccessibilityController.onSomeWindowResizedOrMovedLocked(getDisplayId());
         }
 
         if (!isSelfOrAncestorWindowAnimatingExit()) {
@@ -4941,7 +5015,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             if (surfaceInsetsChanging() && mWinAnimator.hasSurface()) {
                 mLastSurfaceInsets.set(mAttrs.surfaceInsets);
                 t.deferTransactionUntil(mSurfaceControl,
-                        mWinAnimator.mSurfaceController.mSurfaceControl.getHandle(),
+                        mWinAnimator.mSurfaceController.mSurfaceControl,
                         getFrameNumber());
             }
         }
@@ -5051,9 +5125,17 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // relative layering of multiple APPLICATION_MEDIA/OVERLAY has never
             // been defined and so we can use static layers and leave it that way.
             if (w.mAttrs.type == TYPE_APPLICATION_MEDIA) {
-                w.assignLayer(t, -2);
+                if (mWinAnimator.hasSurface()) {
+                    w.assignRelativeLayer(t, mWinAnimator.mSurfaceController.mSurfaceControl, -2);
+                } else {
+                    w.assignLayer(t, -2);
+                }
             } else if (w.mAttrs.type == TYPE_APPLICATION_MEDIA_OVERLAY) {
-                w.assignLayer(t, -1);
+                if (mWinAnimator.hasSurface()) {
+                    w.assignRelativeLayer(t, mWinAnimator.mSurfaceController.mSurfaceControl, -1);
+                } else {
+                    w.assignLayer(t, -1);
+                }
             } else {
                 w.assignLayer(t, layer);
             }

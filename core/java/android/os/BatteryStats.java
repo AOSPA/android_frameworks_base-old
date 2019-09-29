@@ -21,7 +21,6 @@ import static android.app.ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCAT
 
 import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityManager;
-import android.app.job.JobParameters;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.server.ServerProtoEnums;
@@ -45,6 +44,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.location.gnssmetrics.GnssMetrics;
 import com.android.internal.os.BatterySipper;
 import com.android.internal.os.BatteryStatsHelper;
+import com.android.internal.util.Preconditions;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -56,6 +56,7 @@ import java.util.Formatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * A class providing access to battery usage statistics, including information on
@@ -64,6 +65,10 @@ import java.util.Map;
  * @hide
  */
 public abstract class BatteryStats implements Parcelable {
+
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+    public BatteryStats() {}
+
     private static final String TAG = "BatteryStats";
 
     private static final boolean LOCAL_LOGV = false;
@@ -403,9 +408,46 @@ public abstract class BatteryStats implements Parcelable {
     };
 
     /**
+     * "Job stop reason codes" from the job scheduler subsystem, which we can't refer to from this
+     * class, so we initialize it from the job scheduler side at runtime using
+     * {@link #setJobStopReasons}.
+     */
+    private static int[] sJobStopReasonCodes = {0};
+
+    /**
+     * A function that converts the "job stop reason codes" to their names.
+     *
+     * Similarly to {@link #sJobStopReasonCodes} it's initialized by the job scheduler subsystem
+     * using {@link #setJobStopReasons}.
+     */
+    private static Function<Integer, String> sJobStopReasonNameConverter = (x) -> "unknown";
+
+    /**
+     * Set by the job scheduler subsystem to "push" job stop reasons, and a function that returns
+     * the "name" of each code. We do it this way to remove a build time dependency from this
+     * class to the job scheduler framework code.
+     *
+     * Note the passed array will be used as-is, without copying. The caller must not change
+     * the array it passed to it.
+     *
+     * @hide
+     */
+    public static void setJobStopReasons(int[] reasonCodes,
+            Function<Integer, String> jobStopReasonNameConverter) {
+        Preconditions.checkArgument(reasonCodes.length > 0);
+        Preconditions.checkArgument(jobStopReasonNameConverter != null);
+
+        sJobStopReasonCodes = reasonCodes;
+        sJobStopReasonNameConverter = jobStopReasonNameConverter;
+    }
+
+    /**
      * State for keeping track of counting information.
      */
     public static abstract class Counter {
+
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+        public Counter() {}
 
         /**
          * Returns the count associated with this Counter for the
@@ -515,6 +557,9 @@ public abstract class BatteryStats implements Parcelable {
      * State for keeping track of timing information.
      */
     public static abstract class Timer {
+
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+        public Timer() {}
 
         /**
          * Returns the count associated with this Timer for the
@@ -671,6 +716,9 @@ public abstract class BatteryStats implements Parcelable {
          * The statistics associated with a particular wake lock.
          */
         public static abstract class Wakelock {
+            @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+            public Wakelock() {}
+
             @UnsupportedAppUsage
             public abstract Timer getWakeTime(int type);
         }
@@ -948,6 +996,10 @@ public abstract class BatteryStats implements Parcelable {
         public abstract void getDeferredJobsLineLocked(StringBuilder sb, int which);
 
         public static abstract class Sensor {
+
+            @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+            public Sensor() {}
+
             /*
              * FIXME: it's not correct to use this magic value because it
              * could clash with a sensor handle (which are defined by
@@ -977,6 +1029,9 @@ public abstract class BatteryStats implements Parcelable {
          * The statistics associated with a particular process.
          */
         public static abstract class Proc {
+
+            @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+            public Proc() {}
 
             public static class ExcessivePower {
                 public static final int TYPE_WAKE = 1;
@@ -1052,6 +1107,9 @@ public abstract class BatteryStats implements Parcelable {
          * The statistics associated with a particular package.
          */
         public static abstract class Pkg {
+
+            @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+            public Pkg() {}
 
             /**
              * Returns information about all wakeup alarms that have been triggered for this
@@ -1554,7 +1612,11 @@ public abstract class BatteryStats implements Parcelable {
         }
     }
 
-    public final static class HistoryItem implements Parcelable {
+    /**
+     * Battery history record.
+     */
+    public static final class HistoryItem {
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
         public HistoryItem next;
 
         // The time of this event in milliseconds, as per SystemClock.elapsedRealtime().
@@ -1789,14 +1851,8 @@ public abstract class BatteryStats implements Parcelable {
         public HistoryItem() {
         }
 
-        public HistoryItem(long time, Parcel src) {
-            this.time = time;
-            numReadInts = 2;
+        public HistoryItem(Parcel src) {
             readFromParcel(src);
-        }
-
-        public int describeContents() {
-            return 0;
         }
 
         public void writeToParcel(Parcel dest, int flags) {
@@ -1835,6 +1891,7 @@ public abstract class BatteryStats implements Parcelable {
 
         public void readFromParcel(Parcel src) {
             int start = src.dataPosition();
+            time = src.readLong();
             int bat = src.readInt();
             cmd = (byte)(bat&0xff);
             batteryLevel = (byte)((bat>>8)&0xff);
@@ -1877,6 +1934,7 @@ public abstract class BatteryStats implements Parcelable {
             numReadInts += (src.dataPosition()-start)/4;
         }
 
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
         public void clear() {
             time = 0;
             cmd = CMD_NULL;
@@ -1897,12 +1955,14 @@ public abstract class BatteryStats implements Parcelable {
             eventTag = null;
         }
 
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
         public void setTo(HistoryItem o) {
             time = o.time;
             cmd = o.cmd;
             setToCommon(o);
         }
 
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
         public void setTo(long time, byte cmd, HistoryItem o) {
             this.time = time;
             this.cmd = cmd;
@@ -1958,6 +2018,7 @@ public abstract class BatteryStats implements Parcelable {
                     && currentTime == o.currentTime;
         }
 
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
         public boolean same(HistoryItem o) {
             if (!sameNonEvent(o) || eventCode != o.eventCode) {
                 return false;
@@ -2340,6 +2401,7 @@ public abstract class BatteryStats implements Parcelable {
      *
      * {@hide}
      */
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public abstract long getMobileRadioActiveTime(long elapsedRealtimeUs, int which);
 
     /**
@@ -2700,6 +2762,7 @@ public abstract class BatteryStats implements Parcelable {
     public static final int NETWORK_WIFI_BG_TX_DATA = 9;
     public static final int NUM_NETWORK_ACTIVITY_TYPES = NETWORK_WIFI_BG_TX_DATA + 1;
 
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public abstract long getNetworkActivityBytes(int type, int which);
     public abstract long getNetworkActivityPackets(int type, int which);
 
@@ -4232,17 +4295,18 @@ public abstract class BatteryStats implements Parcelable {
                 }
             }
 
+            final Object[] jobCompletionArgs = new Object[sJobStopReasonCodes.length + 1];
+
             final ArrayMap<String, SparseIntArray> completions = u.getJobCompletionStats();
             for (int ic=completions.size()-1; ic>=0; ic--) {
                 SparseIntArray types = completions.valueAt(ic);
                 if (types != null) {
-                    dumpLine(pw, uid, category, JOB_COMPLETION_DATA,
-                            "\"" + completions.keyAt(ic) + "\"",
-                            types.get(JobParameters.REASON_CANCELED, 0),
-                            types.get(JobParameters.REASON_CONSTRAINTS_NOT_SATISFIED, 0),
-                            types.get(JobParameters.REASON_PREEMPT, 0),
-                            types.get(JobParameters.REASON_TIMEOUT, 0),
-                            types.get(JobParameters.REASON_DEVICE_IDLE, 0));
+                    jobCompletionArgs[0] = "\"" + completions.keyAt(ic) + "\"";
+                    for (int i = 0; i < sJobStopReasonCodes.length; i++) {
+                        jobCompletionArgs[i + 1] = types.get(sJobStopReasonCodes[i], 0);
+                    }
+
+                    dumpLine(pw, uid, category, JOB_COMPLETION_DATA, jobCompletionArgs);
                 }
             }
 
@@ -5859,7 +5923,7 @@ public abstract class BatteryStats implements Parcelable {
                     pw.print(":");
                     for (int it=0; it<types.size(); it++) {
                         pw.print(" ");
-                        pw.print(JobParameters.getReasonName(types.keyAt(it)));
+                        pw.print(sJobStopReasonNameConverter.apply(types.keyAt(it)));
                         pw.print("(");
                         pw.print(types.valueAt(it));
                         pw.print("x)");
@@ -7450,13 +7514,6 @@ public abstract class BatteryStats implements Parcelable {
 
             // Job completion (JOB_COMPLETION_DATA)
             final ArrayMap<String, SparseIntArray> completions = u.getJobCompletionStats();
-            final int[] reasons = new int[]{
-                JobParameters.REASON_CANCELED,
-                JobParameters.REASON_CONSTRAINTS_NOT_SATISFIED,
-                JobParameters.REASON_PREEMPT,
-                JobParameters.REASON_TIMEOUT,
-                JobParameters.REASON_DEVICE_IDLE,
-            };
             for (int ic = 0; ic < completions.size(); ++ic) {
                 SparseIntArray types = completions.valueAt(ic);
                 if (types != null) {
@@ -7464,7 +7521,7 @@ public abstract class BatteryStats implements Parcelable {
 
                     proto.write(UidProto.JobCompletion.NAME, completions.keyAt(ic));
 
-                    for (int r : reasons) {
+                    for (int r : sJobStopReasonCodes) {
                         long rToken = proto.start(UidProto.JobCompletion.REASON_COUNT);
                         proto.write(UidProto.JobCompletion.ReasonCount.NAME, r);
                         proto.write(UidProto.JobCompletion.ReasonCount.COUNT, types.get(r, 0));

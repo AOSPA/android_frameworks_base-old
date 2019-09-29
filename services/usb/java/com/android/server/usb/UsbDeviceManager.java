@@ -912,6 +912,8 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
                     if (!mScreenLocked && mScreenUnlockedFunctions != UsbManager.FUNCTION_NONE) {
                         // If the screen is unlocked, also set current functions.
                         setScreenUnlockedFunctions();
+                    } else {
+                        setEnabledFunctions(UsbManager.FUNCTION_NONE, false);
                     }
                     break;
                 case MSG_UPDATE_SCREEN_LOCK:
@@ -1199,7 +1201,8 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
                             intent, 0, null, UserHandle.CURRENT);
 
                     Notification notification =
-                            new Notification.Builder(mContext, SystemNotificationChannels.DEVELOPER)
+                            new Notification.Builder(mContext,
+                                    SystemNotificationChannels.DEVELOPER_IMPORTANT)
                                     .setSmallIcon(com.android.internal.R.drawable.stat_sys_adb)
                                     .setWhen(0)
                                     .setOngoing(true)

@@ -774,7 +774,7 @@ public final class Settings {
                 | ApplicationInfo.PRIVATE_FLAG_OEM
                 | ApplicationInfo.PRIVATE_FLAG_VENDOR
                 | ApplicationInfo.PRIVATE_FLAG_PRODUCT
-                | ApplicationInfo.PRIVATE_FLAG_PRODUCT_SERVICES
+                | ApplicationInfo.PRIVATE_FLAG_SYSTEM_EXT
                 | ApplicationInfo.PRIVATE_FLAG_ODM);
         pkgSetting.pkgFlags |= pkgFlags & ApplicationInfo.FLAG_SYSTEM;
         pkgSetting.pkgPrivateFlags |=
@@ -786,7 +786,7 @@ public final class Settings {
         pkgSetting.pkgPrivateFlags |=
                 pkgPrivateFlags & ApplicationInfo.PRIVATE_FLAG_PRODUCT;
         pkgSetting.pkgPrivateFlags |=
-                pkgPrivateFlags & ApplicationInfo.PRIVATE_FLAG_PRODUCT_SERVICES;
+                pkgPrivateFlags & ApplicationInfo.PRIVATE_FLAG_SYSTEM_EXT;
         pkgSetting.pkgPrivateFlags |=
                 pkgPrivateFlags & ApplicationInfo.PRIVATE_FLAG_ODM;
         pkgSetting.primaryCpuAbiString = primaryCpuAbi;
@@ -4020,7 +4020,7 @@ public final class Settings {
         String[] seinfos;
         int[] targetSdkVersions;
         int packagesCount;
-        synchronized (mPackages) {
+        synchronized (mLock) {
             Collection<PackageSetting> packages = mPackages.values();
             packagesCount = packages.size();
             volumeUuids = new String[packagesCount];
@@ -4064,7 +4064,7 @@ public final class Settings {
                 Slog.w(TAG, "Failed to prepare app data", e);
             }
         }
-        synchronized (mPackages) {
+        synchronized (mLock) {
             applyDefaultPreferredAppsLPw(userHandle);
         }
     }
@@ -4413,7 +4413,7 @@ public final class Settings {
             ApplicationInfo.PRIVATE_FLAG_STATIC_SHARED_LIBRARY, "STATIC_SHARED_LIBRARY",
             ApplicationInfo.PRIVATE_FLAG_VENDOR, "VENDOR",
             ApplicationInfo.PRIVATE_FLAG_PRODUCT, "PRODUCT",
-            ApplicationInfo.PRIVATE_FLAG_PRODUCT_SERVICES, "PRODUCT_SERVICES",
+            ApplicationInfo.PRIVATE_FLAG_SYSTEM_EXT, "SYSTEM_EXT",
             ApplicationInfo.PRIVATE_FLAG_VIRTUAL_PRELOAD, "VIRTUAL_PRELOAD",
             ApplicationInfo.PRIVATE_FLAG_ODM, "ODM",
     };
@@ -4569,6 +4569,13 @@ public final class Settings {
             if (ps.pkg.applicationInfo.privateFlags != 0) {
                 pw.print(prefix); pw.print("  privateFlags="); printFlags(pw,
                         ps.pkg.applicationInfo.privateFlags, PRIVATE_FLAG_DUMP_SPEC); pw.println();
+            }
+            pw.print(prefix); pw.print("  forceQueryable="); pw.println(ps.pkg.mForceQueryable);
+            if (ps.pkg.mQueriesPackages != null) {
+                pw.append(prefix).append("  queriesPackages=").println(ps.pkg.mQueriesPackages);
+            }
+            if (ps.pkg.mQueriesIntents != null) {
+                pw.append(prefix).append("  queriesIntents=").println(ps.pkg.mQueriesIntents);
             }
             pw.print(prefix); pw.print("  dataDir="); pw.println(ps.pkg.applicationInfo.dataDir);
             pw.print(prefix); pw.print("  supportsScreens=[");

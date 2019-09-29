@@ -19,7 +19,6 @@
 
 #include "../Properties.h"
 #include "AnimationContext.h"
-#include "EglManager.h"
 #include "Frame.h"
 #include "LayerUpdateQueue.h"
 #include "Properties.h"
@@ -33,8 +32,6 @@
 #include "utils/TimeUtils.h"
 #include "utils/TraceUtils.h"
 
-#include <cutils/properties.h>
-#include <private/hwui/DrawGlInfo.h>
 #include <strings.h>
 
 #include <fcntl.h>
@@ -148,7 +145,9 @@ void CanvasContext::setSurface(sp<Surface>&& surface) {
 
     if (surface) {
         mNativeSurface = new ReliableSurface{std::move(surface)};
-        mNativeSurface->setDequeueTimeout(1000_ms);
+        // TODO: Fix error handling & re-shorten timeout
+        mNativeSurface->setDequeueTimeout(4000_ms);
+        mNativeSurface->enableFrameTimestamps(true);
     } else {
         mNativeSurface = nullptr;
     }
@@ -296,6 +295,7 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
     // just keep using the previous frame's structure instead
     if (!wasSkipped(mCurrentFrameInfo)) {
         mCurrentFrameInfo = mJankTracker.startFrame();
+        mLast4FrameInfos.next().first = mCurrentFrameInfo;
     }
     mCurrentFrameInfo->importUiThreadInfo(uiFrameInfo);
     mCurrentFrameInfo->set(FrameInfoIndex::SyncQueued) = syncQueued;
@@ -447,25 +447,43 @@ void CanvasContext::draw() {
                                       mContentDrawBounds, mOpaque, mLightInfo, mRenderNodes,
                                       &(profiler()));
 
-    int64_t frameCompleteNr = mFrameCompleteCallbacks.size() ? getFrameNumber() : -1;
+    int64_t frameCompleteNr = getFrameNumber();
 
     waitOnFences();
 
     bool requireSwap = false;
+    int error = OK;
     bool didSwap =
             mRenderPipeline->swapBuffers(frame, drew, windowDirty, mCurrentFrameInfo, &requireSwap);
 
     mIsDirty = false;
 
     if (requireSwap) {
-        if (!didSwap) {  // some error happened
+        bool didDraw = true;
+        // Handle any swapchain errors
+        error = mNativeSurface->getAndClearError();
+        if (error == TIMED_OUT) {
+            // Try again
+            mRenderThread.postFrameCallback(this);
+            // But since this frame didn't happen, we need to mark full damage in the swap
+            // history
+            didDraw = false;
+
+        } else if (error != OK || !didSwap) {
+            // Unknown error, abandon the surface
             setSurface(nullptr);
+            didDraw = false;
         }
+
         SwapHistory& swap = mSwapHistory.next();
-        swap.damage = windowDirty;
-        swap.swapCompletedTime = systemTime(CLOCK_MONOTONIC);
+        if (didDraw) {
+            swap.damage = windowDirty;
+        } else {
+            swap.damage = SkRect::MakeWH(INT_MAX, INT_MAX);
+        }
+        swap.swapCompletedTime = systemTime(SYSTEM_TIME_MONOTONIC);
         swap.vsyncTime = mRenderThread.timeLord().latestVsync();
-        if (mNativeSurface.get()) {
+        if (didDraw) {
             int durationUs;
             nsecs_t dequeueStart = mNativeSurface->getLastDequeueStartTime();
             if (dequeueStart < mCurrentFrameInfo->get(FrameInfoIndex::SyncStart)) {
@@ -484,11 +502,13 @@ void CanvasContext::draw() {
         }
         mCurrentFrameInfo->set(FrameInfoIndex::DequeueBufferDuration) = swap.dequeueDuration;
         mCurrentFrameInfo->set(FrameInfoIndex::QueueBufferDuration) = swap.queueDuration;
+        mLast4FrameInfos[-1].second = frameCompleteNr;
         mHaveNewSurface = false;
         mFrameNumber = -1;
     } else {
         mCurrentFrameInfo->set(FrameInfoIndex::DequeueBufferDuration) = 0;
         mCurrentFrameInfo->set(FrameInfoIndex::QueueBufferDuration) = 0;
+        mLast4FrameInfos[-1].second = -1;
     }
 
     // TODO: Use a fence for real completion?
@@ -521,6 +541,19 @@ void CanvasContext::draw() {
         mFrameMetricsReporter->reportFrameMetrics(mCurrentFrameInfo->data());
     }
 
+    if (mLast4FrameInfos.size() == mLast4FrameInfos.capacity()) {
+        // By looking 4 frames back, we guarantee all SF stats are available. There are at
+        // most 3 buffers in BufferQueue. Surface object keeps stats for the last 8 frames.
+        FrameInfo* forthBehind = mLast4FrameInfos.front().first;
+        int64_t composedFrameId = mLast4FrameInfos.front().second;
+        nsecs_t acquireTime = -1;
+        mNativeSurface->getFrameTimestamps(composedFrameId, nullptr, &acquireTime, nullptr, nullptr,
+            nullptr, nullptr, nullptr, nullptr, nullptr);
+        // Ignore default -1, NATIVE_WINDOW_TIMESTAMP_INVALID and NATIVE_WINDOW_TIMESTAMP_PENDING
+        forthBehind->set(FrameInfoIndex::GpuCompleted) = acquireTime > 0 ? acquireTime : -1;
+        mJankTracker.finishGpuDraw(*forthBehind);
+    }
+
     GpuMemoryTracker::onFrameCompleted();
 }
 
@@ -549,7 +582,7 @@ void CanvasContext::prepareAndDraw(RenderNode* node) {
     UiFrameInfoBuilder(frameInfo).addFlag(FrameInfoFlags::RTAnimation).setVsync(vsync, vsync);
 
     TreeInfo info(TreeInfo::MODE_RT_ONLY, *this);
-    prepareTree(info, frameInfo, systemTime(CLOCK_MONOTONIC), node);
+    prepareTree(info, frameInfo, systemTime(SYSTEM_TIME_MONOTONIC), node);
     if (info.out.canDrawThisFrame) {
         draw();
     } else {

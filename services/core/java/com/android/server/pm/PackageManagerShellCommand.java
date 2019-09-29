@@ -87,6 +87,7 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.StorageManager;
+import android.permission.IPermissionManager;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.text.TextUtils;
@@ -129,8 +130,10 @@ class PackageManagerShellCommand extends ShellCommand {
     private static final String STDIN_PATH = "-";
     /** Path where ART profiles snapshots are dumped for the shell user */
     private final static String ART_PROFILE_SNAPSHOT_DEBUG_LOCATION = "/data/misc/profman/";
+    private static final int DEFAULT_WAIT_MS = 60 * 1000;
 
     final IPackageManager mInterface;
+    final IPermissionManager mPermissionManager;
     final private WeakHashMap<String, Resources> mResourceCache =
             new WeakHashMap<String, Resources>();
     int mTargetUser;
@@ -138,8 +141,10 @@ class PackageManagerShellCommand extends ShellCommand {
     boolean mComponents;
     int mQueryFlags;
 
-    PackageManagerShellCommand(PackageManagerService service) {
+    PackageManagerShellCommand(
+            PackageManagerService service, IPermissionManager permissionManager) {
         mInterface = service;
+        mPermissionManager = permissionManager;
     }
 
     @Override
@@ -785,7 +790,8 @@ class PackageManagerShellCommand extends ShellCommand {
 
     private int runListPermissionGroups() throws RemoteException {
         final PrintWriter pw = getOutPrintWriter();
-        final List<PermissionGroupInfo> pgs = mInterface.getAllPermissionGroups(0).getList();
+        final List<PermissionGroupInfo> pgs =
+                mPermissionManager.getAllPermissionGroups(0).getList();
 
         final int count = pgs.size();
         for (int p = 0; p < count ; p++) {
@@ -832,7 +838,7 @@ class PackageManagerShellCommand extends ShellCommand {
         final ArrayList<String> groupList = new ArrayList<String>();
         if (groups) {
             final List<PermissionGroupInfo> infos =
-                    mInterface.getAllPermissionGroups(0 /*flags*/).getList();
+                    mPermissionManager.getAllPermissionGroups(0 /*flags*/).getList();
             final int count = infos.size();
             for (int i = 0; i < count; i++) {
                 groupList.add(infos.get(i).name);
@@ -1078,6 +1084,45 @@ class PackageManagerShellCommand extends ShellCommand {
                 return 1;
             }
             abandonSession = false;
+
+            if (!params.sessionParams.isStaged || !params.waitForStagedSessionReady) {
+                pw.println("Success");
+                return 0;
+            }
+
+            long timeoutMs = params.timeoutMs <= 0
+                    ? DEFAULT_WAIT_MS
+                    : params.timeoutMs;
+            PackageInstaller.SessionInfo si = mInterface.getPackageInstaller()
+                    .getSessionInfo(sessionId);
+            long currentTime = System.currentTimeMillis();
+            long endTime = currentTime + timeoutMs;
+            // Using a loop instead of BroadcastReceiver since we can receive session update
+            // broadcast only if packageInstallerName is "android". We can't always force
+            // "android" as packageIntallerName, e.g, rollback auto implies
+            // "-i com.android.shell".
+            while (currentTime < endTime) {
+                if (si != null
+                        && (si.isStagedSessionReady() || si.isStagedSessionFailed())) {
+                    break;
+                }
+                SystemClock.sleep(Math.min(endTime - currentTime, 100));
+                currentTime = System.currentTimeMillis();
+                si = mInterface.getPackageInstaller().getSessionInfo(sessionId);
+            }
+            if (si == null) {
+                pw.println("Failure [failed to retrieve SessionInfo]");
+                return 1;
+            }
+            if (!si.isStagedSessionReady() && !si.isStagedSessionFailed()) {
+                pw.println("Failure [timed out after " + timeoutMs + " ms]");
+                return 1;
+            }
+            if (!si.isStagedSessionReady()) {
+                pw.println("Error [" + si.getStagedSessionErrorCode() + "] ["
+                        + si.getStagedSessionErrorMessage() + "]");
+                return 1;
+            }
             pw.println("Success");
             return 0;
         } finally {
@@ -1952,15 +1997,15 @@ class PackageManagerShellCommand extends ShellCommand {
         }
 
         if (grant) {
-            mInterface.grantRuntimePermission(pkg, perm, userId);
+            mPermissionManager.grantRuntimePermission(pkg, perm, userId);
         } else {
-            mInterface.revokeRuntimePermission(pkg, perm, userId);
+            mPermissionManager.revokeRuntimePermission(pkg, perm, userId);
         }
         return 0;
     }
 
     private int runResetPermissions() throws RemoteException {
-        mInterface.resetRuntimePermissions();
+        mPermissionManager.resetRuntimePermissions();
         return 0;
     }
 
@@ -1975,7 +2020,7 @@ class PackageManagerShellCommand extends ShellCommand {
             getErrPrintWriter().println("Error: no enforcement specified");
             return 1;
         }
-        mInterface.setPermissionEnforced(permission, Boolean.parseBoolean(enforcedRaw));
+        mPermissionManager.setPermissionEnforced(permission, Boolean.parseBoolean(enforcedRaw));
         return 0;
     }
 
@@ -1997,10 +2042,10 @@ class PackageManagerShellCommand extends ShellCommand {
         }
     }
 
-    private boolean isProductServicesApp(String pkg) {
+    private boolean isSystemExtApp(String pkg) {
         try {
             final PackageInfo info = mInterface.getPackageInfo(pkg, 0, UserHandle.USER_SYSTEM);
-            return info != null && info.applicationInfo.isProductServices();
+            return info != null && info.applicationInfo.isSystemExt();
         } catch (RemoteException e) {
             return false;
         }
@@ -2018,9 +2063,9 @@ class PackageManagerShellCommand extends ShellCommand {
             privAppPermissions = SystemConfig.getInstance().getVendorPrivAppPermissions(pkg);
         } else if (isProductApp(pkg)) {
             privAppPermissions = SystemConfig.getInstance().getProductPrivAppPermissions(pkg);
-        } else if (isProductServicesApp(pkg)) {
+        } else if (isSystemExtApp(pkg)) {
             privAppPermissions = SystemConfig.getInstance()
-                    .getProductServicesPrivAppPermissions(pkg);
+                    .getSystemExtPrivAppPermissions(pkg);
         } else {
             privAppPermissions = SystemConfig.getInstance().getPrivAppPermissions(pkg);
         }
@@ -2042,9 +2087,9 @@ class PackageManagerShellCommand extends ShellCommand {
             privAppPermissions = SystemConfig.getInstance().getVendorPrivAppDenyPermissions(pkg);
         } else if (isProductApp(pkg)) {
             privAppPermissions = SystemConfig.getInstance().getProductPrivAppDenyPermissions(pkg);
-        } else if (isProductServicesApp(pkg)) {
+        } else if (isSystemExtApp(pkg)) {
             privAppPermissions = SystemConfig.getInstance()
-                    .getProductServicesPrivAppDenyPermissions(pkg);
+                    .getSystemExtPrivAppDenyPermissions(pkg);
         } else {
             privAppPermissions = SystemConfig.getInstance().getPrivAppDenyPermissions(pkg);
         }
@@ -2368,6 +2413,8 @@ class PackageManagerShellCommand extends ShellCommand {
         SessionParams sessionParams;
         String installerPackageName;
         int userId = UserHandle.USER_ALL;
+        boolean waitForStagedSessionReady = false;
+        long timeoutMs = DEFAULT_WAIT_MS;
     }
 
     private InstallParams makeInstallParams() {
@@ -2492,6 +2539,14 @@ class PackageManagerShellCommand extends ShellCommand {
                         params.installerPackageName = "com.android.shell";
                     }
                     sessionParams.installFlags |= PackageManager.INSTALL_ENABLE_ROLLBACK;
+                    break;
+                case "--wait":
+                    params.waitForStagedSessionReady = true;
+                    try {
+                        params.timeoutMs = Long.parseLong(peekNextArg());
+                        getNextArg();
+                    } catch (NumberFormatException ignore) {
+                    }
                     break;
                 default:
                     throw new IllegalArgumentException("Unknown option " + opt);
@@ -2883,8 +2938,8 @@ class PackageManagerShellCommand extends ShellCommand {
                 }
                 prefix = "  ";
             }
-            List<PermissionInfo> ps =
-                    mInterface.queryPermissionsByGroup(groupList.get(i), 0 /*flags*/).getList();
+            List<PermissionInfo> ps = mPermissionManager
+                    .queryPermissionsByGroup(groupList.get(i), 0 /*flags*/).getList();
             final int count = ps.size();
             boolean first = true;
             for (int p = 0 ; p < count ; p++) {
@@ -3048,7 +3103,8 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("       [--referrer URI] [--abi ABI_NAME] [--force-sdk]");
         pw.println("       [--preload] [--instantapp] [--full] [--dont-kill]");
         pw.println("       [--enable-rollback]");
-        pw.println("       [--force-uuid internal|UUID] [--pkg PACKAGE] [-S BYTES] [--apex]");
+        pw.println("       [--force-uuid internal|UUID] [--pkg PACKAGE] [-S BYTES]");
+        pw.println("       [--apex] [--wait TIMEOUT]");
         pw.println("       [PATH|-]");
         pw.println("    Install an application.  Must provide the apk data to install, either as a");
         pw.println("    file path or '-' to read from stdin.  Options are:");
@@ -3078,6 +3134,9 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("          3=device setup, 4=user request");
         pw.println("      --force-uuid: force install on to disk volume with given UUID");
         pw.println("      --apex: install an .apex file, not an .apk");
+        pw.println("      --wait: when performing staged install, wait TIMEOUT milliseconds");
+        pw.println("          for pre-reboot verification to complete. If TIMEOUT is not");
+        pw.println("          specified it will wait for " + DEFAULT_WAIT_MS + " milliseconds.");
         pw.println("");
         pw.println("  install-create [-lrtsfdg] [-i PACKAGE] [--user USER_ID|all|current]");
         pw.println("       [-p INHERIT_PACKAGE] [--install-location 0/1/2]");

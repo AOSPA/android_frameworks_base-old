@@ -101,6 +101,8 @@
     <uses-permission android:name="android.permission.REVOKE_RUNTIME_PERMISSIONS" />
     <uses-permission android:name="android.permission.INSTALL_GRANT_RUNTIME_PERMISSIONS" />
     <uses-permission android:name="android.permission.WHITELIST_RESTRICTED_PERMISSIONS" />
+    <!-- Permission required to test onPermissionsChangedListener -->
+    <uses-permission android:name="android.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS" />
     <uses-permission android:name="android.permission.SET_KEYBOARD_LAYOUT" />
     <uses-permission android:name="android.permission.GET_DETAILED_TASKS" />
     <uses-permission android:name="android.permission.SET_SCREEN_COMPATIBILITY" />
@@ -121,7 +123,6 @@
     <uses-permission android:name="android.permission.BIND_APPWIDGET" />
     <uses-permission android:name="android.permission.UPDATE_APP_OPS_STATS" />
     <uses-permission android:name="android.permission.MODIFY_APPWIDGET_BIND_PERMISSIONS"/>
-    <uses-permission android:name="android.permission.INSTALL_GRANT_RUNTIME_PERMISSIONS" />
     <uses-permission android:name="android.permission.CHANGE_APP_IDLE_STATE" />
     <uses-permission android:name="android.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST" />
     <uses-permission android:name="android.permission.MOUNT_UNMOUNT_FILESYSTEMS" />
@@ -168,6 +169,9 @@
     <uses-permission android:name="android.permission.MANAGE_SENSORS" />
     <uses-permission android:name="android.permission.MANAGE_AUDIO_POLICY" />
     <uses-permission android:name="android.permission.MANAGE_CAMERA" />
+    <!-- Permissions needed to test system only camera devices -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.SYSTEM_CAMERA" />
     <!-- Permission needed to enable/disable Bluetooth/Wifi -->
     <uses-permission android:name="android.permission.MANAGE_BLUETOOTH_WHEN_WIRELESS_CONSENT_REQUIRED" />
     <uses-permission android:name="android.permission.MANAGE_WIFI_WHEN_WIRELESS_CONSENT_REQUIRED" />
@@ -252,6 +256,14 @@
             android:permission="android.permission.DUMP">
             <intent-filter>
                 <action android:name="com.android.internal.intent.action.REMOTE_BUGREPORT_FINISHED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".BugreportRequestedReceiver"
+            android:permission="android.permission.TRIGGER_SHELL_BUGREPORT">
+            <intent-filter>
+                <action android:name="com.android.internal.intent.action.BUGREPORT_REQUESTED" />
             </intent-filter>
         </receiver>
 

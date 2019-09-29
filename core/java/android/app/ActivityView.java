@@ -120,7 +120,10 @@ public class ActivityView extends ViewGroup {
 
         mActivityTaskManager = ActivityTaskManager.getService();
         mSurfaceView = new SurfaceView(context);
-        mSurfaceView.setAlpha(0f);
+        // Since ActivityView#getAlpha has been overridden, we should use parent class's alpha
+        // as master to synchronize surface view's alpha value.
+        mSurfaceView.setAlpha(super.getAlpha());
+        mSurfaceView.setUseAlpha();
         mSurfaceCallback = new SurfaceCallback();
         mSurfaceView.getHolder().addCallback(mSurfaceCallback);
         addView(mSurfaceView);
@@ -347,9 +350,20 @@ public class ActivityView extends ViewGroup {
         mSurfaceView.layout(0 /* left */, 0 /* top */, r - l /* right */, b - t /* bottom */);
     }
 
+    /**
+     * Sets the alpha value when the content of {@link SurfaceView} needs to show or hide.
+     * <p>Note: The surface view may ignore the alpha value in some cases. Refer to
+     * {@link SurfaceView#setAlpha} for more details.
+     *
+     * @param alpha The opacity of the view.
+     */
     @Override
     public void setAlpha(float alpha) {
-        mSurfaceView.setAlpha(alpha);
+        super.setAlpha(alpha);
+
+        if (mSurfaceView != null) {
+            mSurfaceView.setAlpha(alpha);
+        }
     }
 
     @Override
@@ -385,9 +399,15 @@ public class ActivityView extends ViewGroup {
 
                 // Also report this geometry information to InputMethodManagerService.
                 // TODO(b/115693908): Unify this logic into the above WMS-based one.
+                // TODO(b/138175283): Address the location update when the host of this view is
+                //  moving.
                 final Matrix matrix = new Matrix();
+                final int[] locationOnScreen = new int[2];
+                getLocationOnScreen(locationOnScreen);
+                final int dx = locationOnScreen[0];
+                final int dy = locationOnScreen[1];
                 matrix.set(getMatrix());
-                matrix.postTranslate(x, y);
+                matrix.postTranslate(dx, dy);
                 mContext.getSystemService(InputMethodManager.class)
                         .reportActivityView(displayId, matrix);
             }

@@ -22,6 +22,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ConfigurationInfo;
@@ -43,13 +44,14 @@ import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
-import libcore.io.IoUtils;
-
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
@@ -62,13 +64,16 @@ import java.util.Set;
 @RunWith(AndroidJUnit4.class)
 @MediumTest
 public class PackageParserTest {
+    @Rule
+    public TemporaryFolder mTemporaryFolder = new TemporaryFolder();
+
     private File mTmpDir;
     private static final File FRAMEWORK = new File("/system/framework/framework-res.apk");
 
     @Before
-    public void setUp() {
+    public void setUp() throws IOException {
         // Create a new temporary directory for each of our tests.
-        mTmpDir = IoUtils.createTemporaryDirectory("PackageParserTest");
+        mTmpDir = mTemporaryFolder.newFolder("PackageParserTest");
     }
 
     @Test
@@ -553,6 +558,9 @@ public class PackageParserTest {
         pkg.mRequiredForAllUsers = true;
         pkg.visibleToInstantApps = true;
         pkg.use32bitAbi = true;
+        pkg.mForceQueryable = true;
+        pkg.mQueriesPackages = new ArrayList<>(Arrays.asList("foo27"));
+        pkg.mQueriesIntents = new ArrayList<>(Arrays.asList(new Intent("foo28")));
     }
 
     private static void assertAllFieldsExist(PackageParser.Package pkg) throws Exception {

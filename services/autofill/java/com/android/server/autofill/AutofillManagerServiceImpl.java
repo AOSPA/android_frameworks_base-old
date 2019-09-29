@@ -769,6 +769,19 @@ final class AutofillManagerServiceImpl
     }
 
     /**
+     * Updates the last fill response when a dataset is shown.
+     */
+    void logDatasetShown(int sessionId, @Nullable Bundle clientState) {
+        synchronized (mLock) {
+            if (isValidEventLocked("logDatasetShown", sessionId)) {
+                mEventHistory.addEvent(
+                        new Event(Event.TYPE_DATASETS_SHOWN, null, clientState, null, null, null,
+                                null, null, null, null, null));
+            }
+        }
+    }
+
+    /**
      * Updates the last fill response when an autofill context is committed.
      */
     @GuardedBy("mLock")
@@ -967,12 +980,12 @@ final class AutofillManagerServiceImpl
             for (int i = 0; i < size; i++) {
                 final String packageName = mDisabledApps.keyAt(i);
                 final long expiration = mDisabledApps.valueAt(i);
-                 builder.append(prefix).append(prefix)
-                     .append(i).append(". ").append(packageName).append(": ");
-                 TimeUtils.formatDuration((expiration - now), builder);
-                 builder.append('\n');
-             }
-             pw.println(builder);
+                builder.append(prefix).append(prefix)
+                        .append(i).append(". ").append(packageName).append(": ");
+                TimeUtils.formatDuration((expiration - now), builder);
+                builder.append('\n');
+            }
+            pw.println(builder);
         }
 
         pw.print(prefix); pw.print("Disabled activities: ");
@@ -987,12 +1000,12 @@ final class AutofillManagerServiceImpl
             for (int i = 0; i < size; i++) {
                 final ComponentName component = mDisabledActivities.keyAt(i);
                 final long expiration = mDisabledActivities.valueAt(i);
-                 builder.append(prefix).append(prefix)
-                     .append(i).append(". ").append(component).append(": ");
-                 TimeUtils.formatDuration((expiration - now), builder);
-                 builder.append('\n');
-             }
-             pw.println(builder);
+                builder.append(prefix).append(prefix)
+                        .append(i).append(". ").append(component).append(": ");
+                TimeUtils.formatDuration((expiration - now), builder);
+                builder.append('\n');
+            }
+            pw.println(builder);
         }
 
         final int size = mSessions.size();
@@ -1403,6 +1416,36 @@ final class AutofillManagerServiceImpl
             }
             mMetricsLogger.write(log);
         }
+    }
+
+    // Called by AutofillManagerService
+    long getAppDisabledExpirationLocked(@NonNull String packageName) {
+        if (mDisabledApps == null) {
+            return 0;
+        }
+        final Long expiration = mDisabledApps.get(packageName);
+        return expiration != null ? expiration : 0;
+    }
+
+    // Called by AutofillManagerService
+    @Nullable
+    ArrayMap<String, Long> getAppDisabledActivitiesLocked(@NonNull String packageName) {
+        if (mDisabledActivities != null) {
+            final int size = mDisabledActivities.size();
+            ArrayMap<String, Long> disabledList = null;
+            for (int i = 0; i < size; i++) {
+                final ComponentName component = mDisabledActivities.keyAt(i);
+                if (packageName.equals(component.getPackageName())) {
+                    if (disabledList == null) {
+                        disabledList = new ArrayMap<>();
+                    }
+                    final long expiration = mDisabledActivities.valueAt(i);
+                    disabledList.put(component.flattenToShortString(), expiration);
+                }
+            }
+            return disabledList;
+        }
+        return null;
     }
 
     /**

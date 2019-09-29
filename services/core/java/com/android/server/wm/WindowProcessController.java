@@ -27,6 +27,7 @@ import static com.android.server.wm.ActivityStack.ActivityState.INITIALIZING;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSED;
 import static com.android.server.wm.ActivityStack.ActivityState.PAUSING;
 import static com.android.server.wm.ActivityStack.ActivityState.RESUMED;
+import static com.android.server.wm.ActivityStack.ActivityState.STARTED;
 import static com.android.server.wm.ActivityStack.ActivityState.STOPPING;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_CONFIGURATION;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_RELEASE;
@@ -40,7 +41,6 @@ import static com.android.server.wm.ActivityTaskManagerService.KEY_DISPATCHING_T
 import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_NONE;
 
 import android.annotation.NonNull;
-import android.app.Activity;
 import android.app.ActivityThread;
 import android.app.IApplicationThread;
 import android.app.ProfilerInfo;
@@ -49,6 +49,7 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.res.Configuration;
+import android.os.Build;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.SystemClock;
@@ -56,6 +57,7 @@ import android.util.ArraySet;
 import android.util.Log;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
+import android.view.IRemoteAnimationRunner;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.HeavyWeightSwitcherActivity;
@@ -159,6 +161,8 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     // Thread currently set for VR scheduling
     int mVrThreadTid;
 
+    boolean mIsImeProcess;
+
     // all activities running in the process
     private final ArrayList<ActivityRecord> mActivities = new ArrayList<>();
     // any tasks this process had run root activities in
@@ -175,6 +179,12 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
     private final Configuration mLastReportedConfiguration;
     // Registered display id as a listener to override config change
     private int mDisplayId;
+
+    /** Whether our process is currently running a {@link RecentsAnimation} */
+    private boolean mRunningRecentsAnimation;
+
+    /** Whether our process is currently running a {@link IRemoteAnimationRunner} */
+    private boolean mRunningRemoteAnimation;
 
     public WindowProcessController(ActivityTaskManagerService atm, ApplicationInfo info,
             String name, int uid, int userId, Object owner, WindowProcessListener listener) {
@@ -565,7 +575,8 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
      * activities are allowed to be resumed per process.
      * @return {@code true} if the activity is allowed to be resumed by compatibility
      * restrictions, which the activity was the topmost visible activity in process or the app is
-     * targeting after Q.
+     * targeting after Q. Note that non-focusable activity, in picture-in-picture mode for instance,
+     * does not count as a topmost activity.
      */
     boolean updateTopResumingActivityInProcessIfNeeded(@NonNull ActivityRecord activity) {
         if (mInfo.targetSdkVersion >= Q || mPreQTopResumedActivity == activity) {
@@ -581,9 +592,13 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         boolean canUpdate = false;
         final ActivityDisplay topDisplay =
                 mPreQTopResumedActivity != null ? mPreQTopResumedActivity.getDisplay() : null;
-        // Update the topmost activity if current top activity was not on any display or no
-        // longer visible.
-        if (topDisplay == null || !mPreQTopResumedActivity.visible) {
+        // Update the topmost activity if current top activity is
+        // - not on any display OR
+        // - no longer visible OR
+        // - not focusable (in PiP mode for instance)
+        if (topDisplay == null
+                || !mPreQTopResumedActivity.visible
+                || !mPreQTopResumedActivity.isFocusable()) {
             canUpdate = true;
         }
 
@@ -628,8 +643,7 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         for (int i = 0; i < activities.size(); i++) {
             final ActivityRecord r = activities.get(i);
             if (!r.finishing && r.isInStackLocked()) {
-                r.getActivityStack().finishActivityLocked(r, Activity.RESULT_CANCELED,
-                        null, "finish-heavy", true);
+                r.finishIfPossible("finish-heavy", true /* oomAdj */);
             }
         }
     }
@@ -731,10 +745,10 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
                 if (DEBUG_RELEASE) Slog.d(TAG_RELEASE, "Abort release; already destroying: " + r);
                 return null;
             }
-            // Don't consider any activies that are currently not in a state where they
+            // Don't consider any activities that are currently not in a state where they
             // can be destroyed.
-            if (r.visible || !r.stopped || !r.haveState
-                    || r.isState(RESUMED, PAUSING, PAUSED, STOPPING)) {
+            if (r.visible || !r.stopped || !r.hasSavedState()
+                    || r.isState(STARTED, RESUMED, PAUSING, PAUSED, STOPPING)) {
                 if (DEBUG_RELEASE) Slog.d(TAG_RELEASE, "Not releasing in-use activity: " + r);
                 continue;
             }
@@ -948,15 +962,30 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         final Configuration config = getConfiguration();
         if (mLastReportedConfiguration.diff(config) == 0) {
             // Nothing changed.
+            if (Build.IS_DEBUGGABLE && mIsImeProcess) {
+                // TODO (b/135719017): Temporary log for debugging IME service.
+                Slog.w(TAG_CONFIGURATION, "Current config: " + config
+                        + " unchanged for IME proc " + mName);
+            }
             return;
         }
 
         try {
             if (mThread == null) {
+                if (Build.IS_DEBUGGABLE && mIsImeProcess) {
+                    // TODO (b/135719017): Temporary log for debugging IME service.
+                    Slog.w(TAG_CONFIGURATION, "Unable to send config for IME proc " + mName
+                            + ": no app thread");
+                }
                 return;
             }
             if (DEBUG_CONFIGURATION) {
                 Slog.v(TAG_CONFIGURATION, "Sending to proc " + mName
+                        + " new config " + config);
+            }
+            if (Build.IS_DEBUGGABLE && mIsImeProcess) {
+                // TODO (b/135719017): Temporary log for debugging IME service.
+                Slog.v(TAG_CONFIGURATION, "Sending to IME proc " + mName
                         + " new config " + config);
             }
             config.seq = mAtm.increaseConfigurationSeqLocked();
@@ -1072,6 +1101,30 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         synchronized (mAtm.mGlobalLockWithoutBoost) {
             return this == mAtm.mPreviousProcess;
         }
+    }
+
+    void setRunningRecentsAnimation(boolean running) {
+        if (mRunningRecentsAnimation == running) {
+            return;
+        }
+        mRunningRecentsAnimation = running;
+        updateRunningRemoteOrRecentsAnimation();
+    }
+
+    void setRunningRemoteAnimation(boolean running) {
+        if (mRunningRemoteAnimation == running) {
+            return;
+        }
+        mRunningRemoteAnimation = running;
+        updateRunningRemoteOrRecentsAnimation();
+    }
+
+    private void updateRunningRemoteOrRecentsAnimation() {
+
+        // Posting on handler so WM lock isn't held when we call into AM.
+        mAtm.mH.sendMessage(PooledLambda.obtainMessage(
+                WindowProcessListener::setRunningRemoteAnimation, mListener,
+                mRunningRecentsAnimation || mRunningRemoteAnimation));
     }
 
     @Override

@@ -18,6 +18,7 @@ cc_defaults {
     tidy_checks: [
         "modernize-*",
         "-modernize-avoid-c-arrays",
+        "-modernize-use-trailing-return-type",
         "android-*",
         "misc-*",
         "readability-*",
@@ -222,4 +223,5 @@ filegroup {
     srcs: [
         "idmap2d/aidl/android/os/IIdmap2.aidl",
     ],
+    path: "idmap2d/aidl",
 }

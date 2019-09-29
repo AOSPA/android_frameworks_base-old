@@ -23,8 +23,6 @@ import android.app.admin.DevicePolicyManager;
 import android.app.admin.IDevicePolicyManager;
 import android.app.contentsuggestions.ContentSuggestionsManager;
 import android.app.contentsuggestions.IContentSuggestionsManager;
-import android.app.job.IJobScheduler;
-import android.app.job.JobScheduler;
 import android.app.prediction.AppPredictionManager;
 import android.app.role.RoleControllerManager;
 import android.app.role.RoleManager;
@@ -114,7 +112,6 @@ import android.net.lowpan.ILowpanManager;
 import android.net.lowpan.LowpanManager;
 import android.net.nsd.INsdManager;
 import android.net.nsd.NsdManager;
-import android.net.wifi.IWifiManager;
 import android.net.wifi.IWifiScanner;
 import android.net.wifi.RttManager;
 import android.net.wifi.WifiManager;
@@ -172,7 +169,7 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.euicc.EuiccCardManager;
 import android.telephony.euicc.EuiccManager;
-import android.telephony.ims.RcsManager;
+import android.telephony.ims.RcsMessageManager;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
@@ -198,12 +195,15 @@ import com.android.internal.os.IDropBoxManagerService;
 import com.android.internal.policy.PhoneLayoutInflater;
 
 import java.util.Map;
+import java.util.function.Function;
 
 /**
  * Manages all of the system services that can be returned by {@link Context#getSystemService}.
  * Used by {@link ContextImpl}.
+ *
+ * @hide
  */
-final class SystemServiceRegistry {
+public final class SystemServiceRegistry {
     private static final String TAG = "SystemServiceRegistry";
 
     // Service registry information.
@@ -614,11 +614,11 @@ final class SystemServiceRegistry {
                 return new SubscriptionManager(ctx.getOuterContext());
             }});
 
-        registerService(Context.TELEPHONY_RCS_SERVICE, RcsManager.class,
-                new CachedServiceFetcher<RcsManager>() {
+        registerService(Context.TELEPHONY_RCS_MESSAGE_SERVICE, RcsMessageManager.class,
+                new CachedServiceFetcher<RcsMessageManager>() {
                     @Override
-                    public RcsManager createService(ContextImpl ctx) {
-                        return new RcsManager(ctx.getOuterContext());
+                    public RcsMessageManager createService(ContextImpl ctx) {
+                        return new RcsMessageManager(ctx.getOuterContext());
                     }
                 });
 
@@ -694,11 +694,22 @@ final class SystemServiceRegistry {
             @Override
             public WallpaperManager createService(ContextImpl ctx)
                     throws ServiceNotFoundException {
-                final IBinder b;
-                if (ctx.getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.P) {
-                    b = ServiceManager.getServiceOrThrow(Context.WALLPAPER_SERVICE);
-                } else {
-                    b = ServiceManager.getService(Context.WALLPAPER_SERVICE);
+                final IBinder b = ServiceManager.getService(Context.WALLPAPER_SERVICE);
+                if (b == null) {
+                    // There are 2 reason service can be null:
+                    // 1.Device doesn't support it - that's fine
+                    // 2.App is running on instant mode - should fail
+                    final boolean enabled = Resources.getSystem()
+                            .getBoolean(com.android.internal.R.bool.config_enableWallpaperService);
+                    if (!enabled) {
+                        // Life moves on...
+                        return DisabledWallpaperManager.getInstance();
+                    }
+                    if (ctx.getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.P) {
+                        // Instant app
+                        throw new ServiceNotFoundException(Context.WALLPAPER_SERVICE);
+                    }
+                    // Bad state - WallpaperManager methods will throw exception
                 }
                 IWallpaperManager service = IWallpaperManager.Stub.asInterface(b);
                 return new WallpaperManager(service, ctx.getOuterContext(),
@@ -718,10 +729,8 @@ final class SystemServiceRegistry {
         registerService(Context.WIFI_SERVICE, WifiManager.class,
                 new CachedServiceFetcher<WifiManager>() {
             @Override
-            public WifiManager createService(ContextImpl ctx) throws ServiceNotFoundException {
-                IBinder b = ServiceManager.getServiceOrThrow(Context.WIFI_SERVICE);
-                IWifiManager service = IWifiManager.Stub.asInterface(b);
-                return new WifiManager(ctx.getOuterContext(), service,
+            public WifiManager createService(ContextImpl ctx) {
+                return new WifiManager(ctx.getOuterContext(),
                         ConnectivityThread.getInstanceLooper());
             }});
 
@@ -979,14 +988,6 @@ final class SystemServiceRegistry {
                 return new NetworkStatsManager(ctx.getOuterContext());
             }});
 
-        registerService(Context.JOB_SCHEDULER_SERVICE, JobScheduler.class,
-                new StaticServiceFetcher<JobScheduler>() {
-            @Override
-            public JobScheduler createService() throws ServiceNotFoundException {
-                IBinder b = ServiceManager.getServiceOrThrow(Context.JOB_SCHEDULER_SERVICE);
-                return new JobSchedulerImpl(IJobScheduler.Stub.asInterface(b));
-            }});
-
         registerService(Context.PERSISTENT_DATA_BLOCK_SERVICE, PersistentDataBlockManager.class,
                 new StaticServiceFetcher<PersistentDataBlockManager>() {
             @Override
@@ -1162,7 +1163,8 @@ final class SystemServiceRegistry {
             @Override
             public AppPredictionManager createService(ContextImpl ctx)
                     throws ServiceNotFoundException {
-                return new AppPredictionManager(ctx);
+                IBinder b = ServiceManager.getService(Context.APP_PREDICTION_SERVICE);
+                return b == null ? null : new AppPredictionManager(ctx);
             }
         });
 
@@ -1321,6 +1323,22 @@ final class SystemServiceRegistry {
             ServiceFetcher<T> serviceFetcher) {
         SYSTEM_SERVICE_NAMES.put(serviceClass, serviceName);
         SYSTEM_SERVICE_FETCHERS.put(serviceName, serviceFetcher);
+    }
+
+    /**
+     * APEX modules will use it to register their service wrapper.
+     *
+     * @hide
+     */
+    public static <T> void registerStaticService(String serviceName, Class<T> serviceClass,
+            Function<IBinder, T> serviceFetcher) {
+        registerService(serviceName, serviceClass,
+                new StaticServiceFetcher<T>() {
+                    @Override
+                    public T createService() throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getServiceOrThrow(serviceName);
+                        return serviceFetcher.apply(b);
+                    }});
     }
 
     /**
