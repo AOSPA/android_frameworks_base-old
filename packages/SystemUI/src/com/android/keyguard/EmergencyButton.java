@@ -43,6 +43,7 @@ import com.android.internal.telephony.IccCardConstants.State;
 import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.Dependency;
+import com.android.systemui.R;
 import com.android.systemui.util.EmergencyDialerConstants;
 
 /**
