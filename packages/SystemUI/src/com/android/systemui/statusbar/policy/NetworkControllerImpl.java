@@ -1159,7 +1159,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
             config.showRsrpSignalLevelforLTE =
                     res.getBoolean(R.bool.config_showRsrpSignalLevelforLTE);
             config.hideNoInternetState = res.getBoolean(R.bool.config_hideNoInternetState);
-            config.showVolteIcon = res.getBoolean(R.bool.config_display_volte);
 
             CarrierConfigManager configMgr = (CarrierConfigManager)
                     context.getSystemService(Context.CARRIER_CONFIG_SERVICE);
@@ -1172,6 +1171,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
                         CarrierConfigManager.KEY_ALWAYS_SHOW_DATA_RAT_ICON_BOOL);
                 config.show4gForLte = b.getBoolean(
                         CarrierConfigManager.KEY_SHOW_4G_FOR_LTE_DATA_ICON_BOOL);
+		config.showVolteIcon = b.getBoolean(
+			CarrierConfigManager.KEY_SHOW_HD_OR_NOT);
                 config.hideLtePlus = b.getBoolean(
                         CarrierConfigManager.KEY_HIDE_LTE_PLUS_DATA_ICON_BOOL);
                 config.patternOfCarrierSpecificDataIcon = b.getString(
