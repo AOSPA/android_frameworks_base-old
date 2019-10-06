@@ -2536,9 +2536,6 @@ public final class BluetoothAdapter {
         } else if (profile == BluetoothProfile.PAN) {
             BluetoothPan pan = new BluetoothPan(context, listener);
             return true;
-        } else if (profile == BluetoothProfile.DUN) {
-            BluetoothDun dun = new BluetoothDun(context, listener);
-            return true;
         } else if (profile == BluetoothProfile.HEALTH) {
             Log.e(TAG, "getProfileProxy(): BluetoothHealth is deprecated");
             return false;
@@ -2610,10 +2607,6 @@ public final class BluetoothAdapter {
             case BluetoothProfile.PAN:
                 BluetoothPan pan = (BluetoothPan) proxy;
                 pan.close();
-                break;
-            case BluetoothProfile.DUN:
-                BluetoothDun dun = (BluetoothDun)proxy;
-                dun.close();
                 break;
             case BluetoothProfile.GATT:
                 BluetoothGatt gatt = (BluetoothGatt) proxy;
