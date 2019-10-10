@@ -1489,6 +1489,11 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     public void setQsExpanded(boolean expanded) {
+        if (expanded) {
+            mStackScroller.hideDismissAnimate(true);
+        } else if (mStackScroller.hasActiveClearableNotifications()) {
+            mStackScroller.showDismissAnimate(true);
+        }
         mStatusBarWindowController.setQsExpanded(expanded);
         mNotificationPanel.setStatusAccessibilityImportance(expanded
                 ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
@@ -3411,6 +3416,9 @@ public class StatusBar extends SystemUI implements DemoMode,
         mPresenter.updateMediaMetaData(false, mState != StatusBarState.KEYGUARD);
         updateKeyguardState();
         Trace.endSection();
+        if (mState == 1) {
+            mStackScroller.hideDismissAnimate(true);
+        }
     }
 
     @Override

@@ -137,6 +137,7 @@ import com.android.systemui.statusbar.phone.NotificationPanelView;
 import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.phone.StatusBarWindowView;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.ConfigurationController.ConfigurationListener;
 import com.android.systemui.statusbar.policy.HeadsUpUtil;
@@ -190,6 +191,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     private boolean mHighPriorityBeforeSpeedBump;
     private final boolean mAllowLongPress;
     private boolean mDismissRtl;
+
+    private final StatusBarWindowView mStatusBarWindow;
+    // Statusbar clear all button
+    private View mDismissAllButton;
+    private boolean mDismissShow = false;
 
     private float mExpandedHeight;
     private int mOwnScrollY;
@@ -644,6 +650,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
     public void onDensityOrFontScaleChanged() {
         reinflateViews();
+        updateDismissAllButton();
     }
 
     private void reinflateViews() {
@@ -676,13 +683,68 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     @VisibleForTesting
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
     public void updateFooter() {
-        boolean showDismissView = mClearAllEnabled && hasActiveClearableNotifications(ROWS_ALL);
+        boolean showDismissView = mClearAllEnabled && hasActiveClearableNotifications(ROWS_ALL) && mNotificationPanel.isFullyExpanded();
         boolean showFooterView = (showDismissView ||
                 mEntryManager.getNotificationData().getActiveNotifications().size() != 0)
                 && mStatusBarState != StatusBarState.KEYGUARD
                 && !mRemoteInputManager.getController().isRemoteInputActive();
 
-        updateFooterView(showFooterView, showDismissView);
+        updateFooterView(showFooterView, false);
+        if (showDismissView) {
+            showDismissAnimate(true);
+            return;
+        }
+        hideDismissAnimate(true);
+    }
+
+    private void updateDismissAllButton() {
+        if (mDismissAllButton != null) {
+            Resources resources = mContext.getResources();
+            FrameLayout.LayoutParams layoutParams = (FrameLayout.LayoutParams) mDismissAllButton.getLayoutParams();
+            layoutParams.width = resources.getDimensionPixelSize(R.dimen.dismiss_all_button_width);
+            layoutParams.height = resources.getDimensionPixelSize(R.dimen.dismiss_all_button_height);
+            layoutParams.bottomMargin = resources.getDimensionPixelSize(R.dimen.dismiss_all_button_margin_bottom);
+            mDismissAllButton.setElevation(resources.getDimension(R.dimen.dismiss_all_button_elevation));
+            ((ImageView) mDismissAllButton).setImageResource(R.drawable.recents_dismiss_all_icon);
+        }
+    }
+
+    public void showDismissAnimate(boolean showDismissView) {
+        if (mStatusBarState != 1 && !mNotificationPanel.isQsExpanded()) {
+            if (!showDismissView) {
+                mDismissShow = true;
+                mDismissAllButton.clearAnimation();
+                mDismissAllButton.setVisibility(View.VISIBLE);
+            } else if (!mDismissShow) {
+                mDismissShow = true;
+                Animation loadAnimation = AnimationUtils.loadAnimation(mContext, R.anim.dismiss_all_show);
+                mDismissAllButton.setVisibility(View.VISIBLE);
+                mDismissAllButton.startAnimation(loadAnimation);
+            }
+        }
+    }
+
+    public void hideDismissAnimate(boolean showDismissView) {
+        if (!showDismissView) {
+            mDismissShow = false;
+            mDismissAllButton.clearAnimation();
+            mDismissAllButton.setVisibility(View.GONE);
+        } else if (mDismissShow) {
+            mDismissShow = false;
+            Animation loadAnimation = AnimationUtils.loadAnimation(mContext, R.anim.dismiss_all_hide);
+            loadAnimation.setAnimationListener(new Animation.AnimationListener() {
+                public void onAnimationRepeat(Animation animation) {
+                }
+
+                public void onAnimationStart(Animation animation) {
+                }
+
+                public void onAnimationEnd(Animation animation) {
+                    mDismissAllButton.setVisibility(View.GONE);
+                }
+            });
+            mDismissAllButton.startAnimation(loadAnimation);
+        }
     }
 
     /**
@@ -5624,6 +5686,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         });
         footerView.setManageButtonClickListener(this::manageNotifications);
         setFooterView(footerView);
+        mDismissAllButton = mStatusBarWindow.findViewById(R.id.clear_notifications);
+        mDismissAllButton.setOnClickListener(v -> {
+            mMetricsLogger.action(MetricsEvent.ACTION_DISMISS_ALL_NOTES);
+            clearNotifications(ROWS_ALL, true /* closeShade */);
+        });
     }
 
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
