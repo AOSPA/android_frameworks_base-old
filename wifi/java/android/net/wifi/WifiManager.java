@@ -536,6 +536,21 @@ public class WifiManager {
      */
     public static final String EXTRA_WIFI_AP_FAILURE_REASON = "wifi_ap_error_code";
     /**
+     * The look up key for a string that gives additonal info about EXTRA_WIFI_AP_FAILURE_REASON
+     * currently support no_5ghz_support
+     * @see #WIFI_AP_FAILURE_DESC_NO_5GHZ_SUPPORT
+     *
+     * @hide
+     */
+    public static final String EXTRA_WIFI_AP_FAILURE_DESCRIPTION = "wifi_ap_error_description";
+    /**
+     *  If Wi-Fi AP start failed with SAP_START_FAILURE_NO_CHANNEL reason code and has this
+     *  description means that no supported channel exists on 5G band
+     *
+     *  @hide
+     */
+    public static final String WIFI_AP_FAILURE_DESC_NO_5GHZ_SUPPORT = "wifi_ap_error_no_5g_support";
+    /**
      * The previous Wi-Fi state.
      *
      * @see #EXTRA_WIFI_AP_STATE
@@ -1196,6 +1211,16 @@ public class WifiManager {
     @GuardedBy("mLock")
     private LocalOnlyHotspotObserverProxy mLOHSObserverProxy;
 
+    /* Wi-Fi generation codes */
+    /** @hide */
+    public static final int WIFI_GENERATION_DEFAULT = 0;
+    /** @hide */
+    public static final int WIFI_GENERATION_4 = 4;
+    /** @hide */
+    public static final int WIFI_GENERATION_5 = 5;
+    /** @hide */
+    public static final int WIFI_GENERATION_6 = 6;
+
     /**
      * Create a new WifiManager instance.
      * Applications will almost always want to use
@@ -1493,6 +1518,20 @@ public class WifiManager {
           }
       }
 
+     /**
+      * Get SoftAp Wi-Fi generation.
+      *
+      * @return Wi-Fi generation if SoftAp enabled or -1.
+      *
+      * @hide no intent to publish
+      */
+      public int getSoftApWifiGeneration() {
+          try {
+              return mService.getSoftApWifiGeneration();
+          } catch (RemoteException e) {
+              throw e.rethrowFromSystemServer();
+          }
+      }
 
     /**
      * Internal method for doing the RPC that creates a new network description
