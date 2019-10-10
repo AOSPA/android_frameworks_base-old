@@ -204,6 +204,7 @@ public class PhoneStatusBarView extends PanelBar {
         // Close the status bar in the next frame so we can show the end of the animation.
         post(mHideExpandedRunnable);
         mIsFullyOpenedPanel = false;
+        mBar.getNotificationScrollLayout().hideDismissAnimate(false);
     }
 
     public void removePendingHideExpandedRunnables() {
@@ -217,6 +218,9 @@ public class PhoneStatusBarView extends PanelBar {
             mPanel.sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
         }
         mIsFullyOpenedPanel = true;
+        if (mBar.getNotificationScrollLayout().hasActiveClearableNotifications(0)) {
+            mBar.getNotificationScrollLayout().showDismissAnimate(true);
+        }
     }
 
     @Override

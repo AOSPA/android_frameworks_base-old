@@ -208,6 +208,7 @@ import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
+import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 import com.android.systemui.statusbar.phone.UnlockMethodCache.OnUnlockMethodChangedListener;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.BatteryController.BatteryStateChangeCallback;
@@ -1489,6 +1490,11 @@ public class StatusBar extends SystemUI implements DemoMode,
     }
 
     public void setQsExpanded(boolean expanded) {
+        if (expanded) {
+            mStackScroller.hideDismissAnimate(true);
+        } else if (mStackScroller.hasActiveClearableNotifications(0)) {
+            mStackScroller.showDismissAnimate(true);
+        }
         mStatusBarWindowController.setQsExpanded(expanded);
         mNotificationPanel.setStatusAccessibilityImportance(expanded
                 ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
@@ -1599,7 +1605,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         }
     }
 
-    public ViewGroup getNotificationScrollLayout() {
+    public NotificationStackScrollLayout getNotificationScrollLayout() {
         return mStackScroller;
     }
 
@@ -3411,6 +3417,9 @@ public class StatusBar extends SystemUI implements DemoMode,
         mPresenter.updateMediaMetaData(false, mState != StatusBarState.KEYGUARD);
         updateKeyguardState();
         Trace.endSection();
+        if (mState == 1) {
+            mStackScroller.hideDismissAnimate(true);
+        }
     }
 
     @Override
@@ -4114,7 +4123,7 @@ public class StatusBar extends SystemUI implements DemoMode,
     protected IStatusBarService mBarService;
 
     // all notifications
-    protected ViewGroup mStackScroller;
+    protected NotificationStackScrollLayout mStackScroller;
 
     protected NotificationGroupManager mGroupManager;
 
