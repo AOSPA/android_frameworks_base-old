@@ -29,6 +29,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioManager;
+import android.net.wifi.WifiManager;
 import android.os.Handler;
 import android.os.RemoteException;
 import android.os.UserHandle;
@@ -142,6 +143,7 @@ public class PhoneStatusBarPolicy
 
     private BluetoothController mBluetooth;
     private AlarmManager.AlarmClockInfo mNextAlarm;
+    private WifiManager mWifiManager;
 
     public PhoneStatusBarPolicy(Context context, StatusBarIconController iconController) {
         mContext = context;
@@ -192,10 +194,7 @@ public class PhoneStatusBarPolicy
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_REMOVED);
         mContext.registerReceiver(mIntentReceiver, filter, null, mHandler);
 
-        boolean isIeee80211acSupported =
-            mContext.getResources().getBoolean(com.android.internal.R.bool.config_wifi_softap_ieee80211ac_supported);
-        boolean isIeee80211axSupported =
-            mContext.getResources().getBoolean(com.android.internal.R.bool.config_wifi_softap_ieee80211ax_supported);
+        mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
 
         // listen for user / profile change.
         try {
@@ -228,16 +227,7 @@ public class PhoneStatusBarPolicy
         mIconController.setIconVisibility(mSlotCast, false);
 
         // hotspot
-        if (isIeee80211axSupported) {
-            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_6_hotspot,
-                mContext.getString(R.string.accessibility_status_bar_hotspot));
-        } else if (isIeee80211acSupported) {
-            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_5_hotspot,
-                mContext.getString(R.string.accessibility_status_bar_hotspot));
-        } else {
-            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
-                mContext.getString(R.string.accessibility_status_bar_hotspot));
-        }
+        updateHotspotIcon();
         mIconController.setIconVisibility(mSlotHotspot, mHotspot.isHotspotEnabled());
 
         // managed profile
@@ -594,6 +584,7 @@ public class PhoneStatusBarPolicy
     private final HotspotController.Callback mHotspotCallback = new HotspotController.Callback() {
         @Override
         public void onHotspotChanged(boolean enabled, int numDevices) {
+            updateHotspotIcon();
             mIconController.setIconVisibility(mSlotHotspot, enabled);
         }
     };
@@ -778,4 +769,22 @@ public class PhoneStatusBarPolicy
             mIconController.setIconVisibility(mSlotCast, false);
         }
     };
+
+    private void updateHotspotIcon() {
+        int generation = mWifiManager.getSoftApWifiGeneration();
+        if (generation == WifiManager.WIFI_GENERATION_6) {
+            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_6_hotspot,
+                mContext.getString(R.string.accessibility_status_bar_hotspot));
+        } else if (generation == WifiManager.WIFI_GENERATION_5) {
+            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_5_hotspot,
+                mContext.getString(R.string.accessibility_status_bar_hotspot));
+        } else if (generation == WifiManager.WIFI_GENERATION_4) {
+            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_4_hotspot,
+                mContext.getString(R.string.accessibility_status_bar_hotspot));
+        } else {
+            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
+                mContext.getString(R.string.accessibility_status_bar_hotspot));
+        }
+    }
+
 }
