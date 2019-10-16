@@ -91,7 +91,6 @@ public class KeyguardIndicationController implements StateListener,
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private ViewGroup mIndicationArea;
     private KeyguardIndicationTextView mTextView;
-    private KeyguardIndicationTextView mDisclosure;
     private final UserManager mUserManager;
     private final IBatteryStats mBatteryInfo;
     private final SettableWakeLock mWakeLock;
@@ -140,7 +139,7 @@ public class KeyguardIndicationController implements StateListener,
                 Dependency.get(AccessibilityController.class),
                 UnlockMethodCache.getInstance(context),
                 Dependency.get(StatusBarStateController.class),
-                KeyguardUpdateMonitor.getInstance(context));
+                Dependency.get(KeyguardUpdateMonitor.class));
     }
 
     /**
@@ -178,7 +177,6 @@ public class KeyguardIndicationController implements StateListener,
         mDevicePolicyManager = (DevicePolicyManager) context.getSystemService(
                 Context.DEVICE_POLICY_SERVICE);
         setIndicationArea(indicationArea);
-        updateDisclosure();
 
         mKeyguardUpdateMonitor.registerCallback(getKeyguardCallback());
         mKeyguardUpdateMonitor.registerCallback(mTickReceiver);
@@ -191,7 +189,6 @@ public class KeyguardIndicationController implements StateListener,
         mTextView = indicationArea.findViewById(R.id.keyguard_indication_text);
         mInitialTextColorState = mTextView != null ?
                 mTextView.getTextColors() : ColorStateList.valueOf(Color.WHITE);
-        mDisclosure = indicationArea.findViewById(R.id.keyguard_indication_enterprise_disclosure);
         updateIndication(false /* animate */);
     }
 
@@ -227,26 +224,6 @@ public class KeyguardIndicationController implements StateListener,
             mUpdateMonitorCallback = new BaseKeyguardCallback();
         }
         return mUpdateMonitorCallback;
-    }
-
-    private void updateDisclosure() {
-        if (mDevicePolicyManager == null) {
-            return;
-        }
-
-        if (!mDozing && mDevicePolicyManager.isDeviceManaged()) {
-            final CharSequence organizationName =
-                    mDevicePolicyManager.getDeviceOwnerOrganizationName();
-            if (organizationName != null) {
-                mDisclosure.switchIndication(mContext.getResources().getString(
-                        R.string.do_disclosure_with_name, organizationName));
-            } else {
-                mDisclosure.switchIndication(R.string.do_disclosure_generic);
-            }
-            mDisclosure.setVisibility(View.VISIBLE);
-        } else {
-            mDisclosure.setVisibility(View.GONE);
-        }
     }
 
     public void setVisible(boolean visible) {
@@ -381,7 +358,7 @@ public class KeyguardIndicationController implements StateListener,
             int userId = KeyguardUpdateMonitor.getCurrentUser();
             String trustGrantedIndication = getTrustGrantedIndication();
             String trustManagedIndication = getTrustManagedIndication();
-            if (!mUserManager.isUserUnlocked(userId)) {
+            if (!mKeyguardUpdateMonitor.isUserUnlocked(userId)) {
                 mTextView.switchIndication(com.android.internal.R.string.lockscreen_storage_locked);
                 mTextView.setTextColor(mInitialTextColorState);
             } else if (!TextUtils.isEmpty(mTransientIndication)) {
@@ -577,7 +554,6 @@ public class KeyguardIndicationController implements StateListener,
         }
         mDozing = dozing;
         updateIndication(false);
-        updateDisclosure();
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
@@ -637,20 +613,12 @@ public class KeyguardIndicationController implements StateListener,
         }
 
         @Override
-        public void onKeyguardVisibilityChanged(boolean showing) {
-            if (showing) {
-                updateDisclosure();
-            }
-        }
-
-        @Override
         public void onBiometricHelp(int msgId, String helpString,
                 BiometricSourceType biometricSourceType) {
-            KeyguardUpdateMonitor updateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
+            KeyguardUpdateMonitor updateMonitor = Dependency.get(KeyguardUpdateMonitor.class);
             if (!updateMonitor.isUnlockingWithBiometricAllowed()) {
                 return;
             }
-            animatePadlockError();
             boolean showSwipeToUnlock =
                     msgId == KeyguardUpdateMonitor.BIOMETRIC_HELP_FACE_NOT_RECOGNIZED;
             if (mStatusBarKeyguardViewManager.isBouncerShowing()) {
@@ -671,7 +639,7 @@ public class KeyguardIndicationController implements StateListener,
         @Override
         public void onBiometricError(int msgId, String errString,
                 BiometricSourceType biometricSourceType) {
-            KeyguardUpdateMonitor updateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
+            KeyguardUpdateMonitor updateMonitor = Dependency.get(KeyguardUpdateMonitor.class);
             if (shouldSuppressBiometricError(msgId, biometricSourceType, updateMonitor)) {
                 return;
             }
@@ -750,6 +718,13 @@ public class KeyguardIndicationController implements StateListener,
         public void onBiometricAuthenticated(int userId, BiometricSourceType biometricSourceType) {
             super.onBiometricAuthenticated(userId, biometricSourceType);
             mHandler.sendEmptyMessage(MSG_HIDE_TRANSIENT);
+        }
+
+        @Override
+        public void onUserSwitchComplete(int userId) {
+            if (mVisible) {
+                updateIndication(false);
+            }
         }
 
         @Override

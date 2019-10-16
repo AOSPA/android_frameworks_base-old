@@ -22,13 +22,14 @@
 #include <android_runtime/AndroidRuntime.h>
 #include <utils/threads.h>
 
-#include <android/graphics/Region.h>
+#include <android/graphics/region.h>
 #include <gui/SurfaceControl.h>
 #include <ui/Region.h>
 
 #include "android_hardware_input_InputWindowHandle.h"
 #include "android_hardware_input_InputApplicationHandle.h"
 #include "android_util_Binder.h"
+#include <binder/IPCThreadState.h>
 
 namespace android {
 
@@ -80,6 +81,12 @@ NativeInputWindowHandle::NativeInputWindowHandle(jweak objWeak) :
 NativeInputWindowHandle::~NativeInputWindowHandle() {
     JNIEnv* env = AndroidRuntime::getJNIEnv();
     env->DeleteWeakGlobalRef(mObjWeak);
+
+    // Clear the weak reference to the layer handle and flush any binder ref count operations so we
+    // do not hold on to any binder references.
+    // TODO(b/139697085) remove this after it can be flushed automatically
+    mInfo.touchableRegionCropHandle.clear();
+    IPCThreadState::self()->flushCommands();
 }
 
 jobject NativeInputWindowHandle::getInputWindowHandleObjLocalRef(JNIEnv* env) {
@@ -128,10 +135,9 @@ bool NativeInputWindowHandle::updateInfo() {
     jobject regionObj = env->GetObjectField(obj,
             gInputWindowHandleClassInfo.touchableRegion);
     if (regionObj) {
-        SkRegion* region = android_graphics_Region_getSkRegion(env, regionObj);
-        for (SkRegion::Iterator it(*region); !it.done(); it.next()) {
-            const SkIRect& rect = it.rect();
-            mInfo.addTouchableRegion(Rect(rect.fLeft, rect.fTop, rect.fRight, rect.fBottom));
+        for (graphics::RegionIterator it(env, regionObj); !it.isDone(); it.next()) {
+            ARect rect = it.getRect();
+            mInfo.addTouchableRegion(Rect(rect.left, rect.top, rect.right, rect.bottom));
         }
         env->DeleteLocalRef(regionObj);
     }

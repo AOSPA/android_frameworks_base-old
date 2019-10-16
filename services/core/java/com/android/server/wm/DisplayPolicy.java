@@ -58,10 +58,6 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_INHERIT_TRANS
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_SCREEN_DECOR;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_KEYGUARD;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_STATUS_FORCE_SHOW_NAVIGATION;
-import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_CROSSFADE;
-import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT;
-import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_ROTATE;
-import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLESS;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST;
@@ -108,7 +104,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_SCREEN_ON;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
-import static com.android.server.wm.WindowManagerService.localLOGV;
 
 import android.Manifest.permission;
 import android.annotation.NonNull;
@@ -271,7 +266,6 @@ public class DisplayPolicy {
     private volatile boolean mNavigationBarCanMove;
     private volatile boolean mNavigationBarLetsThroughTaps;
     private volatile boolean mNavigationBarAlwaysShowOnSideGesture;
-    private volatile boolean mAllowSeamlessRotationDespiteNavBarMoving;
 
     // Written by vr manager thread, only read in this class.
     private volatile boolean mPersistentVrModeEnabled;
@@ -355,7 +349,6 @@ public class DisplayPolicy {
 
     private static final Rect sTmpDisplayCutoutSafeExceptMaybeBarsRect = new Rect();
     private static final Rect sTmpRect = new Rect();
-    private static final Rect sTmpDockedFrame = new Rect();
     private static final Rect sTmpNavFrame = new Rect();
     private static final Rect sTmpLastParentFrame = new Rect();
 
@@ -1143,6 +1136,14 @@ public class DisplayPolicy {
                 displayFrames.mDisplayCutoutSafe.top);
     }
 
+    WindowState getStatusBar() {
+        return mStatusBar;
+    }
+
+    WindowState getNavigationBar() {
+        return mNavigationBar;
+    }
+
     /**
      * Control the animation to run when a window's state changes.  Return a
      * non-0 number to force the animation to a specific resource ID, or 0
@@ -1256,81 +1257,6 @@ public class DisplayPolicy {
             return R.anim.fade_out;
         } else {
             return 0;
-        }
-    }
-
-    /**
-     * Determine the animation to run for a rotation transition based on the
-     * top fullscreen windows {@link WindowManager.LayoutParams#rotationAnimation}
-     * and whether it is currently fullscreen and frontmost.
-     *
-     * @param anim The exiting animation resource id is stored in anim[0], the
-     * entering animation resource id is stored in anim[1].
-     */
-    public void selectRotationAnimationLw(int anim[]) {
-        // If the screen is off or non-interactive, force a jumpcut.
-        final boolean forceJumpcut = !mScreenOnFully || !mService.mPolicy.okToAnimate();
-        if (DEBUG_ANIM) Slog.i(TAG, "selectRotationAnimation mTopFullscreen="
-                + mTopFullscreenOpaqueWindowState + " rotationAnimation="
-                + (mTopFullscreenOpaqueWindowState == null
-                ? "0" : mTopFullscreenOpaqueWindowState.getAttrs().rotationAnimation)
-                + " forceJumpcut=" + forceJumpcut);
-        if (forceJumpcut) {
-            anim[0] = R.anim.rotation_animation_jump_exit;
-            anim[1] = R.anim.rotation_animation_enter;
-            return;
-        }
-        if (mTopFullscreenOpaqueWindowState != null) {
-            int animationHint = mTopFullscreenOpaqueWindowState.getRotationAnimationHint();
-            if (animationHint < 0 && mTopIsFullscreen) {
-                animationHint = mTopFullscreenOpaqueWindowState.getAttrs().rotationAnimation;
-            }
-            switch (animationHint) {
-                case ROTATION_ANIMATION_CROSSFADE:
-                case ROTATION_ANIMATION_SEAMLESS: // Crossfade is fallback for seamless.
-                    anim[0] = R.anim.rotation_animation_xfade_exit;
-                    anim[1] = R.anim.rotation_animation_enter;
-                    break;
-                case ROTATION_ANIMATION_JUMPCUT:
-                    anim[0] = R.anim.rotation_animation_jump_exit;
-                    anim[1] = R.anim.rotation_animation_enter;
-                    break;
-                case ROTATION_ANIMATION_ROTATE:
-                default:
-                    anim[0] = anim[1] = 0;
-                    break;
-            }
-        } else {
-            anim[0] = anim[1] = 0;
-        }
-    }
-
-    /**
-     * Validate whether the current top fullscreen has specified the same
-     * {@link WindowManager.LayoutParams#rotationAnimation} value as that
-     * being passed in from the previous top fullscreen window.
-     *
-     * @param exitAnimId exiting resource id from the previous window.
-     * @param enterAnimId entering resource id from the previous window.
-     * @param forceDefault For rotation animations only, if true ignore the
-     * animation values and just return false.
-     * @return true if the previous values are still valid, false if they
-     * should be replaced with the default.
-     */
-    public boolean validateRotationAnimationLw(int exitAnimId, int enterAnimId,
-            boolean forceDefault) {
-        switch (exitAnimId) {
-            case R.anim.rotation_animation_xfade_exit:
-            case R.anim.rotation_animation_jump_exit:
-                // These are the only cases that matter.
-                if (forceDefault) {
-                    return false;
-                }
-                int anim[] = new int[2];
-                selectRotationAnimationLw(anim);
-                return (exitAnimId == anim[0] && enterAnimId == anim[1]);
-            default:
-                return true;
         }
     }
 
@@ -2497,6 +2423,14 @@ public class DisplayPolicy {
         displayFrames.mVoiceContent.bottom = Math.min(displayFrames.mVoiceContent.bottom, top);
     }
 
+    WindowState getTopFullscreenOpaqueWindow() {
+        return mTopFullscreenOpaqueWindowState;
+    }
+
+    boolean isTopLayoutFullscreen() {
+        return mTopIsFullscreen;
+    }
+
     /**
      * Called following layout of all windows before each window has policy applied.
      */
@@ -2770,7 +2704,7 @@ public class DisplayPolicy {
         }
         final int fl = PolicyControl.getWindowFlags(null,
                 mTopFullscreenOpaqueWindowState.getAttrs());
-        if (localLOGV) {
+        if (WindowManagerDebugConfig.DEBUG) {
             Slog.d(TAG, "frame: " + mTopFullscreenOpaqueWindowState.getFrameLw());
             Slog.d(TAG, "attr: " + mTopFullscreenOpaqueWindowState.getAttrs()
                     + " lp.flags=0x" + Integer.toHexString(fl));
@@ -2882,8 +2816,7 @@ public class DisplayPolicy {
         mNavigationBarCanMove =
                 mDisplayContent.mBaseDisplayWidth != mDisplayContent.mBaseDisplayHeight
                         && res.getBoolean(R.bool.config_navBarCanMove);
-        mAllowSeamlessRotationDespiteNavBarMoving =
-                res.getBoolean(R.bool.config_allowSeamlessRotationDespiteNavBarMoving);
+        mDisplayContent.getDisplayRotation().updateUserDependentConfiguration(res);
     }
 
     /**
@@ -3290,8 +3223,7 @@ public class DisplayPolicy {
             return 0;
         }
 
-        mDisplayContent.getInsetsStateController().onBarControllingWindowChanged(
-                mTopFullscreenOpaqueWindowState);
+        mDisplayContent.getInsetsPolicy().updateBarControlTarget(win);
 
         int tmpVisibility = PolicyControl.getSystemUiVisibility(win, null)
                 & ~mResettingSystemUiFlags
@@ -3671,45 +3603,6 @@ public class DisplayPolicy {
         return (systemUiFlags & disableNavigationBar) == disableNavigationBar;
     }
 
-    boolean shouldRotateSeamlessly(DisplayRotation displayRotation, int oldRotation,
-            int newRotation) {
-        // For the upside down rotation we don't rotate seamlessly as the navigation
-        // bar moves position.
-        // Note most apps (using orientation:sensor or user as opposed to fullSensor)
-        // will not enter the reverse portrait orientation, so actually the
-        // orientation won't change at all.
-        if (oldRotation == displayRotation.getUpsideDownRotation()
-                || newRotation == displayRotation.getUpsideDownRotation()) {
-            return false;
-        }
-        // If the navigation bar can't change sides, then it will
-        // jump when we change orientations and we don't rotate
-        // seamlessly - unless that is allowed, eg. with gesture
-        // navigation where the navbar is low-profile enough that this isn't very noticeable.
-        if (!navigationBarCanMove() && !mAllowSeamlessRotationDespiteNavBarMoving) {
-            return false;
-        }
-
-        final WindowState w = mTopFullscreenOpaqueWindowState;
-        if (w == null || w != mFocusedWindow) {
-            return false;
-        }
-        // If the bounds of activity window is different from its parent, then reject to be seamless
-        // because the window position may change after rotation that will look like a sudden jump.
-        if (w.mAppToken != null && !w.mAppToken.matchParentBounds()) {
-            return false;
-        }
-
-        // We only enable seamless rotation if the top window has requested
-        // it and is in the fullscreen opaque state. Seamless rotation
-        // requires freezing various Surface states and won't work well
-        // with animations, so we disable it in the animation case for now.
-        if (!w.isAnimatingLw() && w.getAttrs().rotationAnimation == ROTATION_ANIMATION_SEAMLESS) {
-            return true;
-        }
-        return false;
-    }
-
     private final Runnable mHiddenNavPanic = new Runnable() {
         @Override
         public void run() {
@@ -3765,7 +3658,8 @@ public class DisplayPolicy {
         if (mScreenshotHelper != null) {
             mScreenshotHelper.takeScreenshot(screenshotType,
                     mStatusBar != null && mStatusBar.isVisibleLw(),
-                    mNavigationBar != null && mNavigationBar.isVisibleLw(), mHandler);
+                    mNavigationBar != null && mNavigationBar.isVisibleLw(),
+                    mHandler, null /* completionConsumer */);
         }
     }
 
@@ -3774,7 +3668,7 @@ public class DisplayPolicy {
     }
 
     void dump(String prefix, PrintWriter pw) {
-        pw.print(prefix); pw.print("DisplayPolicy");
+        pw.print(prefix); pw.println("DisplayPolicy");
         prefix += "  ";
         pw.print(prefix);
         pw.print("mCarDockEnablesAccelerometer="); pw.print(mCarDockEnablesAccelerometer);
@@ -3833,12 +3727,12 @@ public class DisplayPolicy {
             pw.print(prefix); pw.print("mForcingShowNavBarLayer=");
             pw.println(mForcingShowNavBarLayer);
         }
-        pw.print(prefix); pw.print("mTopIsFullscreen="); pw.print(mTopIsFullscreen);
+        pw.print(prefix); pw.print("mTopIsFullscreen="); pw.println(mTopIsFullscreen);
         pw.print(prefix); pw.print("mForceStatusBar="); pw.print(mForceStatusBar);
         pw.print(" mForceStatusBarFromKeyguard="); pw.println(mForceStatusBarFromKeyguard);
-        pw.print(" mForceShowSystemBarsFromExternal=");
-        pw.println(mForceShowSystemBarsFromExternal);
-        pw.print(prefix); pw.print("mAllowLockscreenWhenOn="); pw.println(mAllowLockscreenWhenOn);
+        pw.print(prefix); pw.print("mForceShowSystemBarsFromExternal=");
+        pw.print(mForceShowSystemBarsFromExternal);
+        pw.print(" mAllowLockscreenWhenOn="); pw.println(mAllowLockscreenWhenOn);
         mStatusBarController.dump(pw, prefix);
         mNavigationBarController.dump(pw, prefix);
 
@@ -3897,6 +3791,20 @@ public class DisplayPolicy {
         final WindowManager wm = mContext.getSystemService(WindowManager.class);
         wm.removeView(mPointerLocationView);
         mPointerLocationView = null;
+    }
+
+    /**
+     * Check if the window could be excluded from checking if the display has content.
+     *
+     * @param w WindowState to check if should be excluded.
+     * @return True if the window type is PointerLocation which is excluded.
+     */
+    boolean isWindowExcludedFromContent(WindowState w) {
+        if (w != null && mPointerLocationView != null) {
+            return w.mClient == mPointerLocationView.getWindowToken();
+        }
+
+        return false;
     }
 
     @VisibleForTesting

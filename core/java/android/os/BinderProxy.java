@@ -18,6 +18,7 @@ package android.os;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.AppOpsManager;
 import android.util.Log;
 import android.util.SparseIntArray;
 
@@ -496,7 +497,7 @@ public final class BinderProxy implements IBinder {
 
         if (transactListener != null) {
             final int origWorkSourceUid = Binder.getCallingWorkSourceUid();
-            session = transactListener.onTransactStarted(this, code);
+            session = transactListener.onTransactStarted(this, code, flags);
 
             // Allow the listener to update the work source uid. We need to update the request
             // header if the uid is updated.
@@ -506,9 +507,18 @@ public final class BinderProxy implements IBinder {
             }
         }
 
+        final AppOpsManager.PausedNotedAppOpsCollection prevCollection =
+                AppOpsManager.pauseNotedAppOpsCollection();
+
+        if ((flags & FLAG_ONEWAY) == 0 && AppOpsManager.isCollectingNotedAppOps()) {
+            flags |= FLAG_COLLECT_NOTED_APP_OPS;
+        }
+
         try {
             return transactNative(code, data, reply, flags);
         } finally {
+            AppOpsManager.resumeNotedAppOpsCollection(prevCollection);
+
             if (transactListener != null) {
                 transactListener.onTransactEnded(session);
             }

@@ -24,6 +24,7 @@ import android.database.ContentObserver;
 import android.net.NetworkCapabilities;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
 import android.provider.Settings.Global;
 import android.telephony.CellSignalStrengthNr;
 import android.telephony.ims.ImsMmTelManager;
@@ -69,6 +70,10 @@ import java.util.regex.Pattern;
 
 public class MobileSignalController extends SignalController<
         MobileSignalController.MobileState, MobileSignalController.MobileIconGroup> {
+
+    // The message to display Nr5G icon gracfully by CarrierConfig timeout
+    private static final int MSG_DISPLAY_GRACE = 1;
+
     private final TelephonyManager mPhone;
     private final SubscriptionDefaults mDefaults;
     private final String mNetworkNameDefault;
@@ -92,8 +97,11 @@ public class MobileSignalController extends SignalController<
     private SignalStrength mSignalStrength;
     private MobileIconGroup mDefaultIcons;
     private Config mConfig;
+    private final Handler mDisplayGraceHandler;
     @VisibleForTesting
     boolean mInflateSignalStrengths = false;
+    @VisibleForTesting
+    boolean mIsShowingIconGracefully = false;
     // Some specific carriers have 5GE network which is special LTE CA network.
     private static final int NETWORK_TYPE_LTE_CA_5GE = TelephonyManager.MAX_NETWORK_TYPE + 1;
 
@@ -165,6 +173,16 @@ public class MobileSignalController extends SignalController<
             @Override
             public void onChange(boolean selfChange) {
                 updateTelephony();
+            }
+        };
+
+        mDisplayGraceHandler = new Handler(receiverLooper) {
+            @Override
+            public void handleMessage(Message msg) {
+                if (msg.what == MSG_DISPLAY_GRACE) {
+                    mIsShowingIconGracefully = false;
+                    updateTelephony();
+                }
             }
         };
     }
@@ -334,7 +352,8 @@ public class MobileSignalController extends SignalController<
 
             boolean dataDisabled = mCurrentState.userSetup
                     && (mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED
-                    || mCurrentState.iconGroup == TelephonyIcons.NOT_DEFAULT_DATA);
+                    || (mCurrentState.iconGroup == TelephonyIcons.NOT_DEFAULT_DATA
+                            && mCurrentState.defaultDataOff));
             boolean noInternet = mCurrentState.inetCondition == 0;
             boolean cutOut = dataDisabled || noInternet;
             if (mConfig.hideNoInternetState) {
@@ -425,15 +444,15 @@ public class MobileSignalController extends SignalController<
     @Override
     public void notifyListeners(SignalCallback callback) {
         MobileIconGroup icons = getIcons();
-        final boolean dataDisabled = (mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED
-                || mCurrentState.iconGroup == TelephonyIcons.NOT_DEFAULT_DATA)
-                && mCurrentState.userSetup;
 
         String contentDescription = getStringIfExists(getContentDescription());
         String dataContentDescription = getStringIfExists(icons.mDataContentDescription);
         if (mCurrentState.inetCondition == 0) {
             dataContentDescription = mContext.getString(R.string.data_connection_no_internet);
         }
+        final boolean dataDisabled = (mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED
+                || (mCurrentState.iconGroup == TelephonyIcons.NOT_DEFAULT_DATA))
+                && mCurrentState.userSetup;
 
         // Show icon in QS when we are connected or data is disabled.
         boolean showDataIcon = mCurrentState.dataConnected || dataDisabled;
@@ -622,6 +641,7 @@ public class MobileSignalController extends SignalController<
             Log.d(mTag, "updateTelephonySignalStrength: hasService=" +
                     Utils.isInService(mServiceState) + " ss=" + mSignalStrength);
         }
+        checkDefaultData();
         mCurrentState.connected = Utils.isInService(mServiceState)
                 && mSignalStrength != null;
         if (mCurrentState.connected) {
@@ -656,6 +676,10 @@ public class MobileSignalController extends SignalController<
         // When the device is camped on a 5G Non-Standalone network, the data network type is still
         // LTE. In this case, we first check which 5G icon should be shown.
         MobileIconGroup nr5GIconGroup = getNr5GIconGroup();
+        if (mConfig.nrIconDisplayGracePeriodMs > 0) {
+            nr5GIconGroup = adjustNr5GIconGroupByDisplayGraceTime(nr5GIconGroup);
+        }
+
         if (nr5GIconGroup != null) {
             mCurrentState.iconGroup = nr5GIconGroup;
         } else if (mNetworkToIconLookup.indexOfKey(mDataNetType) >= 0) {
@@ -742,6 +766,23 @@ public class MobileSignalController extends SignalController<
         notifyListenersIfNecessary();
     }
 
+    /**
+     * If we are controlling the NOT_DEFAULT_DATA icon, check the status of the other one
+     */
+    private void checkDefaultData() {
+        if (mCurrentState.iconGroup != TelephonyIcons.NOT_DEFAULT_DATA) {
+            mCurrentState.defaultDataOff = false;
+            return;
+        }
+
+        mCurrentState.defaultDataOff = mNetworkController.isDataControllerDisabled();
+    }
+
+    void onMobileDataChanged() {
+        checkDefaultData();
+        notifyListenersIfNecessary();
+    }
+
     private MobileIconGroup getNr5GIconGroup() {
         if (mServiceState == null) return null;
 
@@ -778,7 +819,47 @@ public class MobileSignalController extends SignalController<
         return null;
     }
 
-    private boolean isDataDisabled() {
+    /**
+     * The function to adjust MobileIconGroup depend on CarrierConfig's time
+     * nextIconGroup == null imply next state could be 2G/3G/4G/4G+
+     * nextIconGroup != null imply next state will be 5G/5G+
+     * Flag : mIsShowingIconGracefully
+     * ---------------------------------------------------------------------------------
+     * |   Last state   |  Current state  | Flag |       Action                        |
+     * ---------------------------------------------------------------------------------
+     * |     5G/5G+     | 2G/3G/4G/4G+    | true | return previous IconGroup           |
+     * |     5G/5G+     |     5G/5G+      | true | Bypass                              |
+     * |  2G/3G/4G/4G+  |     5G/5G+      | true | Bypass                              |
+     * |  2G/3G/4G/4G+  | 2G/3G/4G/4G+    | true | Bypass                              |
+     * |  SS.connected  | SS.disconnect   |  T|F | Reset timer                         |
+     * |NETWORK_TYPE_LTE|!NETWORK_TYPE_LTE|  T|F | Reset timer                         |
+     * |     5G/5G+     | 2G/3G/4G/4G+    | false| Bypass                              |
+     * |     5G/5G+     |     5G/5G+      | false| Bypass                              |
+     * |  2G/3G/4G/4G+  |     5G/5G+      | false| SendMessageDelay(time), flag->true  |
+     * |  2G/3G/4G/4G+  | 2G/3G/4G/4G+    | false| Bypass                              |
+     * ---------------------------------------------------------------------------------
+     */
+    private MobileIconGroup adjustNr5GIconGroupByDisplayGraceTime(
+            MobileIconGroup candidateIconGroup) {
+        if (mIsShowingIconGracefully && candidateIconGroup == null) {
+            candidateIconGroup = (MobileIconGroup) mCurrentState.iconGroup;
+        } else if (!mIsShowingIconGracefully && candidateIconGroup != null
+                && mLastState.iconGroup != candidateIconGroup) {
+            mDisplayGraceHandler.sendMessageDelayed(
+                    mDisplayGraceHandler.obtainMessage(MSG_DISPLAY_GRACE),
+                    mConfig.nrIconDisplayGracePeriodMs);
+            mIsShowingIconGracefully = true;
+        } else if (!mCurrentState.connected || mDataState == TelephonyManager.DATA_DISCONNECTED
+                || candidateIconGroup == null) {
+            mDisplayGraceHandler.removeMessages(MSG_DISPLAY_GRACE);
+            mIsShowingIconGracefully = false;
+            candidateIconGroup = null;
+        }
+
+        return candidateIconGroup;
+    }
+
+    boolean isDataDisabled() {
         return !mPhone.isDataCapable();
     }
 
@@ -897,6 +978,7 @@ public class MobileSignalController extends SignalController<
         pw.println("  mDataNetType=" + mDataNetType + ",");
         pw.println("  mInflateSignalStrengths=" + mInflateSignalStrengths + ",");
         pw.println("  isDataDisabled=" + isDataDisabled() + ",");
+        pw.println("  mIsShowingIconGracefully=" + mIsShowingIconGracefully + ",");
         pw.println("  mFiveGState=" + mFiveGState + ",");
     }
 
@@ -1093,6 +1175,7 @@ public class MobileSignalController extends SignalController<
         boolean isDefault;
         boolean userSetup;
         boolean roaming;
+        boolean defaultDataOff;  // Tracks the on/off state of the defaultDataSubscription
         boolean imsRegistered;
         boolean voiceCapable;
         boolean videoCapable;
@@ -1112,6 +1195,7 @@ public class MobileSignalController extends SignalController<
             carrierNetworkChangeMode = state.carrierNetworkChangeMode;
             userSetup = state.userSetup;
             roaming = state.roaming;
+            defaultDataOff = state.defaultDataOff;
             imsRegistered = state.imsRegistered;
             voiceCapable = state.voiceCapable;
             videoCapable = state.videoCapable;
@@ -1132,6 +1216,7 @@ public class MobileSignalController extends SignalController<
             builder.append("carrierNetworkChangeMode=").append(carrierNetworkChangeMode)
                     .append(',');
             builder.append("userSetup=").append(userSetup).append(',');
+            builder.append("defaultDataOff=").append(defaultDataOff);
             builder.append("imsRegistered=").append(imsRegistered).append(',');
             builder.append("voiceCapable=").append(voiceCapable).append(',');
             builder.append("videoCapable=").append(videoCapable);
@@ -1150,6 +1235,7 @@ public class MobileSignalController extends SignalController<
                     && ((MobileState) o).userSetup == userSetup
                     && ((MobileState) o).isDefault == isDefault
                     && ((MobileState) o).roaming == roaming
+                    && ((MobileState) o).defaultDataOff == defaultDataOff
                     && ((MobileState) o).imsRegistered == imsRegistered
                     && ((MobileState) o).voiceCapable == voiceCapable
                     && ((MobileState) o).videoCapable == videoCapable;

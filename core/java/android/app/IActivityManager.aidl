@@ -287,7 +287,8 @@ interface IActivityManager {
     void handleApplicationStrictModeViolation(in IBinder app, int penaltyMask,
             in StrictMode.ViolationInfo crashInfo);
     boolean isTopActivityImmersive();
-    void crashApplication(int uid, int initialPid, in String packageName, int userId, in String message);
+    void crashApplication(int uid, int initialPid, in String packageName, int userId,
+            in String message, boolean force);
     @UnsupportedAppUsage
     String getProviderMimeType(in Uri uri, int userId);
     // Cause the specified process to dump the specified heap.
@@ -350,11 +351,13 @@ interface IActivityManager {
     // Request a heap dump for the system server.
     void requestSystemServerHeapDump();
 
-    // Deprecated - This method is only used by a few internal components and it will soon be
-    // replaced by a proper bug report API (which will be restricted to a few, pre-defined apps).
+    // Deprecated - This method is only used by a few internal components and it will soon start
+    // using bug report API (which will be restricted to a few, pre-defined apps).
     // No new code should be calling it.
     @UnsupportedAppUsage
     void requestBugReport(int bugreportType);
+    void requestBugReportWithDescription(in @nullable String shareTitle,
+                in @nullable String shareDescription, int bugreportType);
 
     /**
      *  Takes a telephony bug report and notifies the user with the title and description
@@ -369,7 +372,7 @@ interface IActivityManager {
     void requestTelephonyBugReport(in String shareTitle, in String shareDescription);
 
     /**
-     *  Deprecated - This method is only used by Wifi, and it will soon be replaced by a proper
+     *  Deprecated - This method is only used by Wifi, and it will soon start using
      *  bug report API.
      *
      *  Takes a minimal bugreport of Wifi-related state.
@@ -381,6 +384,12 @@ interface IActivityManager {
      *          parameters cannot be encoding to an UTF-8 charset.
      */
     void requestWifiBugReport(in String shareTitle, in String shareDescription);
+    void requestInteractiveBugReportWithDescription(in String shareTitle,
+            in String shareDescription);
+
+    void requestInteractiveBugReport();
+    void requestFullBugReport();
+    void requestRemoteBugReport();
 
     @UnsupportedAppUsage
     Intent getIntentForIntentSender(in IIntentSender sender);
@@ -397,23 +406,6 @@ interface IActivityManager {
     List<ActivityManager.StackInfo> getAllStackInfos();
     @UnsupportedAppUsage
     void moveTaskToStack(int taskId, int stackId, boolean toTop);
-    /**
-     * Resizes the input stack id to the given bounds.
-     *
-     * @param stackId Id of the stack to resize.
-     * @param bounds Bounds to resize the stack to or {@code null} for fullscreen.
-     * @param allowResizeInDockedMode True if the resize should be allowed when the docked stack is
-     *                                active.
-     * @param preserveWindows True if the windows of activities contained in the stack should be
-     *                        preserved.
-     * @param animate True if the stack resize should be animated.
-     * @param animationDuration The duration of the resize animation in milliseconds or -1 if the
-     *                          default animation duration should be used.
-     * @throws RemoteException
-     */
-    @UnsupportedAppUsage
-    void resizeStack(int stackId, in Rect bounds, boolean allowResizeInDockedMode,
-            boolean preserveWindows, boolean animate, int animationDuration);
     void setFocusedStack(int stackId);
     ActivityManager.StackInfo getFocusedStackInfo();
     @UnsupportedAppUsage

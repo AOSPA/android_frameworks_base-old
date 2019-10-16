@@ -42,6 +42,7 @@ import static android.content.pm.PackageManager.PERMISSION_DENIED;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.graphics.Rect.copyOrNull;
 import static android.os.PowerManager.PARTIAL_WAKE_LOCK;
+import static android.os.Process.INVALID_UID;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
@@ -211,10 +212,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
     // Used to indicate that a task is removed it should also be removed from recents.
     static final boolean REMOVE_FROM_RECENTS = true;
-
-    // Used to indicate that pausing an activity should occur immediately without waiting for
-    // the activity callback indicating that it has completed pausing
-    static final boolean PAUSE_IMMEDIATELY = true;
 
     /** True if the docked stack is currently being resized. */
     private boolean mDockedStackResizing;
@@ -1052,9 +1049,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         if (componentRestriction == ACTIVITY_RESTRICTION_PERMISSION
                 || actionRestriction == ACTIVITY_RESTRICTION_PERMISSION) {
             if (resultRecord != null) {
-                resultStack.sendActivityResultLocked(-1,
-                        resultRecord, resultWho, requestCode,
-                        Activity.RESULT_CANCELED, null);
+                resultRecord.sendResult(INVALID_UID, resultWho, requestCode,
+                        Activity.RESULT_CANCELED, null /* data */);
             }
             final String msg;
             if (actionRestriction == ACTIVITY_RESTRICTION_PERMISSION) {
@@ -1373,7 +1369,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                     // TODO(b/137329632): Wait for idle of the right activity, not just any.
                     r.destroyIfPossible("activityIdleInternalLocked");
                 } else {
-                    stack.stopActivityLocked(r);
+                    r.stopIfPossible();
                 }
             }
         }
@@ -1384,7 +1380,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             r = finishes.get(i);
             final ActivityStack stack = r.getActivityStack();
             if (stack != null) {
-                activityRemoved |= stack.destroyActivityLocked(r, true, "finish-idle");
+                activityRemoved |= r.destroyImmediately(true /* removeFromApp */, "finish-idle");
             }
         }
 
@@ -1436,7 +1432,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         boolean reparented = false;
         if (task.isResizeable() && canUseActivityOptionsLaunchBounds(options)) {
             final Rect bounds = options.getLaunchBounds();
-            task.updateOverrideConfiguration(bounds);
+            task.setBounds(bounds);
 
             ActivityStack stack =
                     mRootActivityContainer.getLaunchStack(null, options, task, ON_TOP);
@@ -1450,10 +1446,9 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 // task.reparent() should already placed the task on top,
                 // still need moveTaskToFrontLocked() below for any transition settings.
             }
-            if (stack.resizeStackWithLaunchBounds()) {
-                mRootActivityContainer.resizeStack(stack, bounds, null /* tempTaskBounds */,
-                        null /* tempTaskInsetBounds */, !PRESERVE_WINDOWS,
-                        true /* allowResizeInDockedMode */, !DEFER_RESUME);
+            if (stack.shouldResizeStackWithLaunchBounds()) {
+                stack.resize(bounds, null /* tempTaskBounds */, null /* tempTaskInsetBounds */,
+                        !PRESERVE_WINDOWS, !DEFER_RESUME);
             } else {
                 // WM resizeTask must be done after the task is moved to the correct stack,
                 // because Task's setBounds() also updates dim layer's bounds, but that has
@@ -1534,7 +1529,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     private void moveTasksToFullscreenStackInSurfaceTransaction(ActivityStack fromStack,
             int toDisplayId, boolean onTop) {
 
-        mWindowManager.deferSurfaceLayout();
+        mService.deferWindowLayout();
         try {
             final int windowingMode = fromStack.getWindowingMode();
             final boolean inPinnedWindowingMode = windowingMode == WINDOWING_MODE_PINNED;
@@ -1600,7 +1595,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             mRootActivityContainer.resumeFocusedStacksTopActivities();
         } finally {
             mAllowDockedStackResize = true;
-            mWindowManager.continueSurfaceLayout();
+            mService.continueWindowLayout();
         }
     }
 
@@ -1669,12 +1664,13 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         }
 
         Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "am.resizeDockedStack");
-        mWindowManager.deferSurfaceLayout();
+        mService.deferWindowLayout();
         try {
             // Don't allow re-entry while resizing. E.g. due to docked stack detaching.
             mAllowDockedStackResize = false;
             ActivityRecord r = stack.topRunningActivityLocked();
-            stack.resize(dockedBounds, tempDockedTaskBounds, tempDockedTaskInsetBounds);
+            stack.resize(dockedBounds, tempDockedTaskBounds, tempDockedTaskInsetBounds,
+                    !PRESERVE_WINDOWS, DEFER_RESUME);
 
             // TODO: Checking for isAttached might not be needed as if the user passes in null
             // dockedBounds then they want the docked stack to be dismissed.
@@ -1712,11 +1708,19 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                             tempRect /* outStackBounds */,
                             otherTaskRect /* outTempTaskBounds */);
 
-                    mRootActivityContainer.resizeStack(current,
-                            !tempRect.isEmpty() ? tempRect : null,
+                    if (tempRect.isEmpty()) {
+                        // If this scenario is hit, it means something is not working right.
+                        // Empty/null bounds implies fullscreen. In the event that this stack
+                        // *should* be fullscreen, its mode should be set explicitly in a form
+                        // of setWindowingMode so that other parts of the system are updated
+                        // properly.
+                        throw new IllegalArgumentException("Trying to set null bounds on a"
+                                + " non-fullscreen stack");
+                    }
+
+                    current.resize(tempRect,
                             !otherTaskRect.isEmpty() ? otherTaskRect : tempOtherTaskBounds,
-                            tempOtherTaskInsetBounds, preserveWindows,
-                            true /* allowResizeInDockedMode */, deferResume);
+                            tempOtherTaskInsetBounds, preserveWindows, deferResume);
                 }
             }
             if (!deferResume) {
@@ -1724,7 +1728,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             }
         } finally {
             mAllowDockedStackResize = true;
-            mWindowManager.continueSurfaceLayout();
+            mService.continueWindowLayout();
             Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
         }
     }
@@ -1748,9 +1752,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         }
 
         Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "am.resizePinnedStack");
-        mWindowManager.deferSurfaceLayout();
+        mService.deferWindowLayout();
         try {
-            ActivityRecord r = stack.topRunningActivityLocked();
             Rect insetBounds = null;
             if (tempPinnedTaskBounds != null && stack.isAnimatingBoundsToFullscreen()) {
                 // Use 0,0 as the position for the inset rect because we are headed for fullscreen.
@@ -1766,10 +1769,10 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 // transitioning it from fullscreen into a floating state.
                 stack.onPipAnimationEndResize();
             }
-            stack.resize(pinnedBounds, tempPinnedTaskBounds, insetBounds);
-            stack.ensureVisibleActivitiesConfigurationLocked(r, false);
+            stack.resize(pinnedBounds, tempPinnedTaskBounds, insetBounds, !PRESERVE_WINDOWS,
+                    !DEFER_RESUME);
         } finally {
-            mWindowManager.continueSurfaceLayout();
+            mService.continueWindowLayout();
             Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
         }
     }
@@ -1812,30 +1815,19 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     }
 
     /**
-     * See {@link #removeTaskByIdLocked(int, boolean, boolean, boolean)}
-     */
-    boolean removeTaskByIdLocked(int taskId, boolean killProcess, boolean removeFromRecents,
-            String reason) {
-        return removeTaskByIdLocked(taskId, killProcess, removeFromRecents, !PAUSE_IMMEDIATELY,
-                reason);
-    }
-
-    /**
      * Removes the task with the specified task id.
      *
      * @param taskId Identifier of the task to be removed.
      * @param killProcess Kill any process associated with the task if possible.
      * @param removeFromRecents Whether to also remove the task from recents.
-     * @param pauseImmediately Pauses all task activities immediately without waiting for the
-     *                         pause-complete callback from the activity.
      * @return Returns true if the given task was found and removed.
      */
     boolean removeTaskByIdLocked(int taskId, boolean killProcess, boolean removeFromRecents,
-            boolean pauseImmediately, String reason) {
+            String reason) {
         final TaskRecord tr =
                 mRootActivityContainer.anyTaskForId(taskId, MATCH_TASK_IN_STACKS_OR_RECENT_TASKS);
         if (tr != null) {
-            tr.removeTaskActivitiesLocked(pauseImmediately, reason);
+            tr.removeTaskActivitiesLocked(reason);
             cleanUpRemovedTaskLocked(tr, killProcess, removeFromRecents);
             mService.getLockTaskController().clearLockedTask(tr);
             if (tr.isPersistable) {
@@ -1968,7 +1960,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             // Task was trimmed from the recent tasks list -- remove the active task record as well
             // since the user won't really be able to go back to it
             removeTaskByIdLocked(task.taskId, killProcess, false /* removeFromRecents */,
-                    !PAUSE_IMMEDIATELY, "recent-task-trimmed");
+                    "recent-task-trimmed");
         }
         task.removedFromRecents();
     }
@@ -2554,17 +2546,15 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     }
 
     void activityRelaunchedLocked(IBinder token) {
-        mWindowManager.notifyAppRelaunchingFinished(token);
         final ActivityRecord r = ActivityRecord.isInStackLocked(token);
         if (r != null) {
+            if (r.mAppWindowToken != null) {
+                r.mAppWindowToken.finishRelaunching();
+            }
             if (r.getActivityStack().shouldSleepOrShutDownActivities()) {
                 r.setSleeping(true, true);
             }
         }
-    }
-
-    void activityRelaunchingLocked(ActivityRecord r) {
-        mWindowManager.notifyAppRelaunching(r.appToken);
     }
 
     void logStackState() {
@@ -2804,7 +2794,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                     + taskId + " can't be launch in the home/recents stack.");
         }
 
-        mWindowManager.deferSurfaceLayout();
+        mService.deferWindowLayout();
         try {
             if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
                 mWindowManager.setDockedStackCreateStateLocked(
@@ -2895,7 +2885,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                     mWindowManager.checkSplitScreenMinimizedChanged(false /* animate */);
                 }
             }
-            mWindowManager.continueSurfaceLayout();
+            mService.continueWindowLayout();
         }
     }
 

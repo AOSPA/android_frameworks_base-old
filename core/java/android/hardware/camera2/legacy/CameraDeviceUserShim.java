@@ -129,7 +129,7 @@ public class CameraDeviceUserShim implements ICameraDeviceUser {
         public CameraLooper(int cameraId) {
             mCameraId = cameraId;
 
-            mThread = new Thread(this);
+            mThread = new Thread(this, "LegacyCameraLooper");
             mThread.start();
         }
 
@@ -764,6 +764,28 @@ public class CameraDeviceUserShim implements ICameraDeviceUser {
         }
 
         // LEGACY doesn't support actual teardown, so just a no-op
+    }
+
+    @Override
+    public void setCameraAudioRestriction(int mode) {
+        if (mLegacyDevice.isClosed()) {
+            String err = "Cannot set camera audio restriction, device has been closed.";
+            Log.e(TAG, err);
+            throw new ServiceSpecificException(ICameraService.ERROR_DISCONNECTED, err);
+        }
+
+        mLegacyDevice.setAudioRestriction(mode);
+    }
+
+    @Override
+    public int getGlobalAudioRestriction() {
+        if (mLegacyDevice.isClosed()) {
+            String err = "Cannot set camera audio restriction, device has been closed.";
+            Log.e(TAG, err);
+            throw new ServiceSpecificException(ICameraService.ERROR_DISCONNECTED, err);
+        }
+
+        return mLegacyDevice.getAudioRestriction();
     }
 
     @Override

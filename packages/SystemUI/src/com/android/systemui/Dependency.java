@@ -15,8 +15,8 @@
 package com.android.systemui;
 
 import android.annotation.Nullable;
+import android.app.AlarmManager;
 import android.app.INotificationManager;
-import android.content.Context;
 import android.content.res.Configuration;
 import android.hardware.SensorPrivacyManager;
 import android.hardware.display.NightDisplayListener;
@@ -30,6 +30,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.Preconditions;
+import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.clock.ClockManager;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
 import com.android.systemui.appops.AppOpsController;
@@ -41,6 +42,7 @@ import com.android.systemui.dock.DockManager;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
+import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.plugins.FalsingManager;
@@ -109,14 +111,13 @@ import com.android.systemui.statusbar.policy.UserSwitcherController;
 import com.android.systemui.statusbar.policy.ZenModeController;
 import com.android.systemui.tuner.TunablePadding.TunablePaddingService;
 import com.android.systemui.tuner.TunerService;
-import com.android.systemui.util.AsyncSensorManager;
 import com.android.systemui.util.leak.GarbageMonitor;
 import com.android.systemui.util.leak.LeakDetector;
 import com.android.systemui.util.leak.LeakReporter;
+import com.android.systemui.util.sensors.AsyncSensorManager;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
-import java.util.HashMap;
 import java.util.function.Consumer;
 
 import javax.inject.Inject;
@@ -140,8 +141,11 @@ import dagger.Subcomponent;
  * they have no clients they should not have any registered resources like bound
  * services, registered receivers, etc.
  */
-public class Dependency extends SystemUI {
-    private static final String TAG = "Dependency";
+public class Dependency {
+    /**
+     * Key for getting a the main looper.
+     */
+    public static final String MAIN_LOOPER_NAME = "main_looper";
 
     /**
      * Key for getting a background Looper for background work.
@@ -175,6 +179,10 @@ public class Dependency extends SystemUI {
      * Key for getting a background Looper for background work.
      */
     public static final DependencyKey<Looper> BG_LOOPER = new DependencyKey<>(BG_LOOPER_NAME);
+    /**
+     * Key for getting a mainer Looper.
+     */
+    public static final DependencyKey<Looper> MAIN_LOOPER = new DependencyKey<>(MAIN_LOOPER_NAME);
     /**
      * Key for getting a background Handler for background work.
      */
@@ -214,6 +222,7 @@ public class Dependency extends SystemUI {
     @Inject Lazy<UserSwitcherController> mUserSwitcherController;
     @Inject Lazy<UserInfoController> mUserInfoController;
     @Inject Lazy<KeyguardMonitor> mKeyguardMonitor;
+    @Inject Lazy<KeyguardUpdateMonitor> mKeyguardUpdateMonitor;
     @Inject Lazy<BatteryController> mBatteryController;
     @Inject Lazy<NightDisplayListener> mNightDisplayListener;
     @Inject Lazy<ManagedProfileController> mManagedProfileController;
@@ -290,6 +299,7 @@ public class Dependency extends SystemUI {
     @Inject Lazy<PrivacyItemController> mPrivacyItemController;
     @Inject @Named(BG_LOOPER_NAME) Lazy<Looper> mBgLooper;
     @Inject @Named(BG_HANDLER_NAME) Lazy<Handler> mBgHandler;
+    @Inject @Named(MAIN_LOOPER_NAME) Lazy<Looper> mMainLooper;
     @Inject @Named(MAIN_HANDLER_NAME) Lazy<Handler> mMainHandler;
     @Inject @Named(TIME_TICK_HANDLER_NAME) Lazy<Handler> mTimeTickHandler;
     @Nullable
@@ -304,18 +314,23 @@ public class Dependency extends SystemUI {
     @Inject Lazy<ChannelEditorDialogController> mChannelEditorDialogController;
     @Inject Lazy<INotificationManager> mINotificationManager;
     @Inject Lazy<FalsingManager> mFalsingManager;
+    @Inject Lazy<SysUiState> mSysUiStateFlagsContainer;
+    @Inject Lazy<AlarmManager> mAlarmManager;
 
     @Inject
     public Dependency() {
     }
 
-    @Override
-    public void start() {
+    /**
+     * Initialize Depenency.
+     */
+    protected void start() {
         // TODO: Think about ways to push these creation rules out of Dependency to cut down
         // on imports.
         mProviders.put(TIME_TICK_HANDLER, mTimeTickHandler::get);
         mProviders.put(BG_LOOPER, mBgLooper::get);
         mProviders.put(BG_HANDLER, mBgHandler::get);
+        mProviders.put(MAIN_LOOPER, mMainLooper::get);
         mProviders.put(MAIN_HANDLER, mMainHandler::get);
         mProviders.put(ActivityStarter.class, mActivityStarter::get);
         mProviders.put(ActivityStarterDelegate.class, mActivityStarterDelegate::get);
@@ -341,6 +356,8 @@ public class Dependency extends SystemUI {
         mProviders.put(FlashlightController.class, mFlashlightController::get);
 
         mProviders.put(KeyguardMonitor.class, mKeyguardMonitor::get);
+
+        mProviders.put(KeyguardUpdateMonitor.class, mKeyguardUpdateMonitor::get);
 
         mProviders.put(UserSwitcherController.class, mUserSwitcherController::get);
 
@@ -482,6 +499,8 @@ public class Dependency extends SystemUI {
         mProviders.put(ChannelEditorDialogController.class, mChannelEditorDialogController::get);
         mProviders.put(INotificationManager.class, mINotificationManager::get);
         mProviders.put(FalsingManager.class, mFalsingManager::get);
+        mProviders.put(SysUiState.class, mSysUiStateFlagsContainer::get);
+        mProviders.put(AlarmManager.class, mAlarmManager::get);
 
         // TODO(b/118592525): to support multi-display , we start to add something which is
         //                    per-display, while others may be global. I think it's time to add
@@ -492,10 +511,14 @@ public class Dependency extends SystemUI {
         sDependency = this;
     }
 
-    @Override
-    public synchronized void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        super.dump(fd, pw, args);
+    static void staticDump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        sDependency.dump(fd, pw, args);
+    }
 
+    /**
+     * {@see SystemUI.dump}
+     */
+    public synchronized void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         // Make sure that the DumpController gets added to mDependencies, as they are only added
         // with Dependency#get.
         getDependency(DumpController.class);
@@ -516,9 +539,11 @@ public class Dependency extends SystemUI {
                 .forEach(o -> ((Dumpable) o).dump(fd, pw, args));
     }
 
-    @Override
+    protected static void staticOnConfigurationChanged(Configuration newConfig) {
+        sDependency.onConfigurationChanged(newConfig);
+    }
+
     protected synchronized void onConfigurationChanged(Configuration newConfig) {
-        super.onConfigurationChanged(newConfig);
         mDependencies.values().stream().filter(obj -> obj instanceof ConfigurationChangedReceiver)
                 .forEach(o -> ((ConfigurationChangedReceiver) o).onConfigurationChanged(newConfig));
     }
@@ -572,20 +597,6 @@ public class Dependency extends SystemUI {
     }
 
     /**
-     * Used in separate processes (like tuner settings) to init the dependencies.
-     */
-    public static void initDependencies(Context context) {
-        if (sDependency != null) return;
-        Dependency d = new Dependency();
-        SystemUIFactory.getInstance().getRootComponent()
-                .createDependency()
-                .createSystemUI(d);
-        d.mContext = context;
-        d.mComponents = new HashMap<>();
-        d.start();
-    }
-
-    /**
      * Used in separate process teardown to ensure the context isn't leaked.
      *
      * TODO: Remove once PreferenceFragment doesn't reference getActivity()
@@ -635,16 +646,5 @@ public class Dependency extends SystemUI {
     @Subcomponent
     public interface DependencyInjector {
         void createSystemUI(Dependency dependency);
-    }
-
-    public static class DependencyCreator implements Injector {
-        @Override
-        public SystemUI apply(Context context) {
-            Dependency dependency = new Dependency();
-            SystemUIFactory.getInstance().getRootComponent()
-                    .createDependency()
-                    .createSystemUI(dependency);
-            return dependency;
-        }
     }
 }

@@ -19,10 +19,6 @@ package com.android.systemui.classifier.brightline;
 import static com.android.systemui.classifier.FalsingManagerImpl.FALSING_REMAIN_LOCKED;
 import static com.android.systemui.classifier.FalsingManagerImpl.FALSING_SUCCESS;
 
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
 import android.hardware.biometrics.BiometricSourceType;
 import android.net.Uri;
 import android.util.Log;
@@ -33,12 +29,13 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.systemui.classifier.Classifier;
 import com.android.systemui.plugins.FalsingManager;
+import com.android.systemui.util.DeviceConfigProxy;
+import com.android.systemui.util.sensors.ProximitySensor;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.Locale;
 
 /**
  * FalsingManager designed to make clear why a touch was rejected.
@@ -46,11 +43,11 @@ import java.util.concurrent.Executors;
 public class BrightLineFalsingManager implements FalsingManager {
 
     static final boolean DEBUG = false;
-    private static final String TAG = "FalsingManagerPlugin";
+    private static final String TAG = "FalsingManager";
 
-    private final SensorManager mSensorManager;
     private final FalsingDataProvider mDataProvider;
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    private final ProximitySensor mProximitySensor;
     private boolean mSessionStarted;
     private MetricsLogger mMetricsLogger;
     private int mIsFalseTouchCalls;
@@ -58,20 +55,9 @@ public class BrightLineFalsingManager implements FalsingManager {
     private boolean mScreenOn;
     private boolean mJustUnlockedWithFace;
 
-    private final ExecutorService mBackgroundExecutor = Executors.newSingleThreadExecutor();
-
     private final List<FalsingClassifier> mClassifiers;
 
-    private SensorEventListener mSensorEventListener = new SensorEventListener() {
-        @Override
-        public synchronized void onSensorChanged(SensorEvent event) {
-            onSensorEvent(event);
-        }
-
-        @Override
-        public void onAccuracyChanged(Sensor sensor, int accuracy) {
-        }
-    };
+    private ProximitySensor.ProximitySensorListener mSensorEventListener = this::onProximityEvent;
 
     private final KeyguardUpdateMonitorCallback mKeyguardUpdateCallback =
             new KeyguardUpdateMonitorCallback() {
@@ -87,45 +73,35 @@ public class BrightLineFalsingManager implements FalsingManager {
 
     public BrightLineFalsingManager(
             FalsingDataProvider falsingDataProvider,
-            SensorManager sensorManager,
-            KeyguardUpdateMonitor keyguardUpdateMonitor) {
+            KeyguardUpdateMonitor keyguardUpdateMonitor,
+            ProximitySensor proximitySensor,
+            DeviceConfigProxy deviceConfigProxy) {
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mDataProvider = falsingDataProvider;
-        mSensorManager = sensorManager;
+        mProximitySensor = proximitySensor;
         mKeyguardUpdateMonitor.registerCallback(mKeyguardUpdateCallback);
 
         mMetricsLogger = new MetricsLogger();
         mClassifiers = new ArrayList<>();
-        DistanceClassifier distanceClassifier = new DistanceClassifier(mDataProvider);
-        ProximityClassifier proximityClassifier = new ProximityClassifier(distanceClassifier,
-                mDataProvider);
+        DistanceClassifier distanceClassifier =
+                new DistanceClassifier(mDataProvider, deviceConfigProxy);
+        ProximityClassifier proximityClassifier =
+                new ProximityClassifier(distanceClassifier, mDataProvider, deviceConfigProxy);
         mClassifiers.add(new PointerCountClassifier(mDataProvider));
         mClassifiers.add(new TypeClassifier(mDataProvider));
-        mClassifiers.add(new DiagonalClassifier(mDataProvider));
+        mClassifiers.add(new DiagonalClassifier(mDataProvider, deviceConfigProxy));
         mClassifiers.add(distanceClassifier);
         mClassifiers.add(proximityClassifier);
-        mClassifiers.add(new ZigZagClassifier(mDataProvider));
+        mClassifiers.add(new ZigZagClassifier(mDataProvider, deviceConfigProxy));
     }
 
     private void registerSensors() {
-        Sensor s = mSensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
-        if (s != null) {
-            // This can be expensive, and doesn't need to happen on the main thread.
-            mBackgroundExecutor.submit(() -> {
-                logDebug("registering sensor listener");
-                mSensorManager.registerListener(
-                        mSensorEventListener, s, SensorManager.SENSOR_DELAY_GAME);
-            });
-        }
+        mProximitySensor.register(mSensorEventListener);
     }
 
 
     private void unregisterSensors() {
-        // This can be expensive, and doesn't need to happen on the main thread.
-        mBackgroundExecutor.submit(() -> {
-            logDebug("unregistering sensor listener");
-            mSensorManager.unregisterListener(mSensorEventListener);
-        });
+        mProximitySensor.unregister(mSensorEventListener);
     }
 
     private void sessionStart() {
@@ -167,7 +143,15 @@ public class BrightLineFalsingManager implements FalsingManager {
         boolean r = !mJustUnlockedWithFace && mClassifiers.stream().anyMatch(falsingClassifier -> {
             boolean result = falsingClassifier.isFalseTouch();
             if (result) {
-                logInfo(falsingClassifier.getClass().getName() + ": true");
+                logInfo(String.format(
+                        (Locale) null,
+                        "{classifier=%s, interactionType=%d}",
+                        falsingClassifier.getClass().getName(),
+                        mDataProvider.getInteractionType()));
+                String reason = falsingClassifier.getReason();
+                if (reason != null) {
+                    logInfo(reason);
+                }
             } else {
                 logDebug(falsingClassifier.getClass().getName() + ": false");
             }
@@ -187,10 +171,10 @@ public class BrightLineFalsingManager implements FalsingManager {
         mClassifiers.forEach((classifier) -> classifier.onTouchEvent(motionEvent));
     }
 
-    private void onSensorEvent(SensorEvent sensorEvent) {
+    private void onProximityEvent(ProximitySensor.ProximityEvent proximityEvent) {
         // TODO: some of these classifiers might allow us to abort early, meaning we don't have to
         // make these calls.
-        mClassifiers.forEach((classifier) -> classifier.onSensorEvent(sensorEvent));
+        mClassifiers.forEach((classifier) -> classifier.onProximityEvent(proximityEvent));
     }
 
     @Override

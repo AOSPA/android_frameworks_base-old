@@ -326,14 +326,11 @@ import java.io.PrintWriter;
     // never called by system components
     /*package*/ void setBluetoothScoOnByApp(boolean on) {
         synchronized (mDeviceStateLock) {
-            if (on)
-                mForcedUseForCommExt = AudioSystem.FORCE_BT_SCO;
-            else if (mForcedUseForCommExt == AudioSystem.FORCE_BT_SCO)
-                mForcedUseForCommExt = AudioSystem.FORCE_NONE;
             if (AudioService.DEBUG_SCO) {
                 Log.i(TAG, "In setBluetoothScoOnByApp(), mForcedUseForCommExt: " +
                       mForcedUseForCommExt);
             }
+            mForcedUseForCommExt = on ? AudioSystem.FORCE_BT_SCO : AudioSystem.FORCE_NONE;
         }
     }
 

@@ -16,6 +16,8 @@
 
 package com.android.systemui;
 
+import android.app.Service;
+
 import com.android.systemui.doze.DozeService;
 
 import dagger.Binds;
@@ -24,18 +26,12 @@ import dagger.multibindings.ClassKey;
 import dagger.multibindings.IntoMap;
 
 /**
- * Services and Activities that are injectable should go here.
+ * Services that are injectable should go here.
  */
 @Module
 public abstract class ServiceBinder {
-
-    @Binds
-    public abstract ContextComponentHelper bindComponentHelper(
-            ContextComponentResolver componentHelper);
-
     @Binds
     @IntoMap
     @ClassKey(DozeService.class)
-    public abstract Object bindDozeService(DozeService service);
-
+    public abstract Service bindDozeService(DozeService service);
 }

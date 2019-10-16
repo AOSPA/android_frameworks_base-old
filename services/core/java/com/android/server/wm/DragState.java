@@ -140,7 +140,7 @@ class DragState {
         mFlags = flags;
         mLocalWin = localWin;
         mNotifiedWindows = new ArrayList<WindowState>();
-        mTransaction = service.mTransactionFactory.make();
+        mTransaction = service.mTransactionFactory.get();
     }
 
     boolean isClosing() {
@@ -305,7 +305,7 @@ class DragState {
             if (DEBUG_ORIENTATION) {
                 Slog.d(TAG_WM, "Pausing rotation during drag");
             }
-            mDisplayContent.pauseRotationLocked();
+            mDisplayContent.getDisplayRotation().pause();
         }
 
         void tearDown() {
@@ -324,7 +324,7 @@ class DragState {
             if (DEBUG_ORIENTATION) {
                 Slog.d(TAG_WM, "Resuming rotation after drag");
             }
-            mDisplayContent.resumeRotationLocked();
+            mDisplayContent.getDisplayRotation().resume();
         }
     }
 
@@ -695,7 +695,8 @@ class DragState {
             implements ValueAnimator.AnimatorUpdateListener, Animator.AnimatorListener {
         @Override
         public void onAnimationUpdate(ValueAnimator animation) {
-            try (final SurfaceControl.Transaction transaction = new SurfaceControl.Transaction()) {
+            try (SurfaceControl.Transaction transaction =
+                         mService.mTransactionFactory.get()) {
                 transaction.setPosition(
                         mSurfaceControl,
                         (float) animation.getAnimatedValue(ANIMATED_PROPERTY_X),

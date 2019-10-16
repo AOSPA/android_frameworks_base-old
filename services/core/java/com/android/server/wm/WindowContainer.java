@@ -139,7 +139,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     WindowContainer(WindowManagerService wms) {
         mWmService = wms;
-        mPendingTransaction = wms.mTransactionFactory.make();
+        mPendingTransaction = wms.mTransactionFactory.get();
         mSurfaceAnimator = new SurfaceAnimator(this, this::onAnimationFinished, wms);
     }
 
@@ -892,6 +892,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     void forAllAppWindows(Consumer<AppWindowToken> callback) {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             mChildren.get(i).forAllAppWindows(callback);
+        }
+    }
+
+    void forAllWallpaperWindows(Consumer<WallpaperWindowToken> callback) {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            mChildren.get(i).forAllWallpaperWindows(callback);
         }
     }
 

@@ -42,6 +42,7 @@ import com.android.internal.graphics.ColorUtils;
 import com.android.internal.telephony.IccCardConstants;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
+import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.dock.DockManager;
@@ -104,6 +105,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
     private boolean mShowingLaunchAffordance;
     private boolean mKeyguardJustShown;
     private boolean mUpdatePending;
+    private boolean mBouncerPreHideAnimation;
 
     private final KeyguardMonitor.Callback mKeyguardMonitorCallback =
             new KeyguardMonitor.Callback() {
@@ -124,9 +126,12 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
 
                 @Override
                 public void onKeyguardFadingAwayChanged() {
-                    if (!mKeyguardMonitor.isKeyguardFadingAway() && mBlockUpdates) {
-                        mBlockUpdates = false;
-                        update(true /* force */);
+                    if (!mKeyguardMonitor.isKeyguardFadingAway()) {
+                        mBouncerPreHideAnimation = false;
+                        if (mBlockUpdates) {
+                            mBlockUpdates = false;
+                            update(true /* force */);
+                        }
                     }
                 }
             };
@@ -182,7 +187,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
         super(context, attrs);
         mContext = context;
         mUnlockMethodCache = UnlockMethodCache.getInstance(context);
-        mKeyguardUpdateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
+        mKeyguardUpdateMonitor = Dependency.get(KeyguardUpdateMonitor.class);
         mAccessibilityController = accessibilityController;
         mConfigurationController = configurationController;
         mStatusBarStateController = statusBarStateController;
@@ -463,6 +468,14 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
         }
     }
 
+    /**
+     * Animate padlock opening when bouncer challenge is solved.
+     */
+    public void onBouncerPreHideAnimation() {
+        mBouncerPreHideAnimation = true;
+        update();
+    }
+
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({ERROR, UNLOCK, LOCK, SCANNING})
     @interface LockAnimIndex {}
@@ -509,8 +522,8 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
     }
 
     private int getState() {
-        KeyguardUpdateMonitor updateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
-        if ((mUnlockMethodCache.canSkipBouncer() || !mKeyguardShowing
+        KeyguardUpdateMonitor updateMonitor = Dependency.get(KeyguardUpdateMonitor.class);
+        if ((mUnlockMethodCache.canSkipBouncer() || !mKeyguardShowing || mBouncerPreHideAnimation
                 || mKeyguardMonitor.isKeyguardGoingAway()) && !mSimLocked) {
             return STATE_LOCK_OPEN;
         } else if (mTransientBiometricsError) {
@@ -604,7 +617,7 @@ public class LockIcon extends KeyguardAffordanceView implements OnUserInfoChange
      */
     public void onScrimVisibilityChanged(@ScrimVisibility int scrimsVisible) {
         if (mWakeAndUnlockRunning
-                && scrimsVisible == ScrimController.VISIBILITY_FULLY_TRANSPARENT) {
+                && scrimsVisible == ScrimController.TRANSPARENT) {
             mWakeAndUnlockRunning = false;
             update();
         }

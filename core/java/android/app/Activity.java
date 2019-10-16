@@ -146,6 +146,7 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -944,6 +945,10 @@ public class Activity extends ContextThemeWrapper
 
     /** @hide */
     boolean mEnterAnimationComplete;
+
+    /** Track last dispatched multi-window and PiP mode to client, internal debug purpose **/
+    private Boolean mLastDispatchedIsInMultiWindowMode;
+    private Boolean mLastDispatchedIsInPictureInPictureMode;
 
     private static native String getDlWarning();
 
@@ -3646,6 +3651,22 @@ public class Activity extends ContextThemeWrapper
         return false;
     }
 
+    private static final class RequestFinishCallback extends IRequestFinishCallback.Stub {
+        private final WeakReference<Activity> mActivityRef;
+
+        RequestFinishCallback(WeakReference<Activity> activityRef) {
+            mActivityRef = activityRef;
+        }
+
+        @Override
+        public void requestFinish() {
+            Activity activity = mActivityRef.get();
+            if (activity != null) {
+                activity.mHandler.post(activity::finishAfterTransition);
+            }
+        }
+    }
+
     /**
      * Called when the activity has detected the user's press of the back
      * key.  The default implementation simply finishes the current activity,
@@ -3671,11 +3692,7 @@ public class Activity extends ContextThemeWrapper
             // while at the root of the task. This call allows ActivityTaskManager
             // to intercept or defer finishing.
             ActivityTaskManager.getService().onBackPressedOnTaskRoot(mToken,
-                    new IRequestFinishCallback.Stub() {
-                        public void requestFinish() {
-                            mHandler.post(() -> finishAfterTransition());
-                        }
-                    });
+                    new RequestFinishCallback(new WeakReference<>(this)));
         } catch (RemoteException e) {
             finishAfterTransition();
         }
@@ -4341,7 +4358,9 @@ public class Activity extends ContextThemeWrapper
      * The default implementation simply calls onNavigateUp() on this activity (the parent).
      *
      * @param child The activity making the call.
+     * @deprecated Use {@link #onNavigateUp()} instead.
      */
+    @Deprecated
     public boolean onNavigateUpFromChild(Activity child) {
         return onNavigateUp();
     }
@@ -5768,7 +5787,10 @@ public class Activity extends ContextThemeWrapper
      *
      * @see #startActivity
      * @see #startActivityForResult
+     * @deprecated Use {@code androidx.fragment.app.FragmentActivity#startActivityFromFragment(
+     * androidx.fragment.app.Fragment,Intent,int)}
      */
+    @Deprecated
     public void startActivityFromChild(@NonNull Activity child, @RequiresPermission Intent intent,
             int requestCode) {
         startActivityFromChild(child, intent, requestCode, null);
@@ -5792,7 +5814,10 @@ public class Activity extends ContextThemeWrapper
      *
      * @see #startActivity
      * @see #startActivityForResult
+     * @deprecated Use {@code androidx.fragment.app.FragmentActivity#startActivityFromFragment(
+     * androidx.fragment.app.Fragment,Intent,int,Bundle)}
      */
+    @Deprecated
     public void startActivityFromChild(@NonNull Activity child, @RequiresPermission Intent intent,
             int requestCode, @Nullable Bundle options) {
         options = transferSpringboardActivityOptions(options);
@@ -5821,8 +5846,8 @@ public class Activity extends ContextThemeWrapper
      * @see Fragment#startActivity
      * @see Fragment#startActivityForResult
      *
-     * @deprecated Use {@link android.support.v4.app.FragmentActivity#startActivityFromFragment(
-     * android.support.v4.app.Fragment,Intent,int)}
+     * @deprecated Use {@code androidx.fragment.app.FragmentActivity#startActivityFromFragment(
+     * androidx.fragment.app.Fragment,Intent,int)}
      */
     @Deprecated
     public void startActivityFromFragment(@NonNull Fragment fragment,
@@ -5850,8 +5875,8 @@ public class Activity extends ContextThemeWrapper
      * @see Fragment#startActivity
      * @see Fragment#startActivityForResult
      *
-     * @deprecated Use {@link android.support.v4.app.FragmentActivity#startActivityFromFragment(
-     * android.support.v4.app.Fragment,Intent,int,Bundle)}
+     * @deprecated Use {@code androidx.fragment.app.FragmentActivity#startActivityFromFragment(
+     * androidx.fragment.app.Fragment,Intent,int,Bundle)}
      */
     @Deprecated
     public void startActivityFromFragment(@NonNull Fragment fragment,
@@ -5859,10 +5884,7 @@ public class Activity extends ContextThemeWrapper
         startActivityForResult(fragment.mWho, intent, requestCode, options);
     }
 
-    /**
-     * @hide
-     */
-    public void startActivityAsUserFromFragment(@NonNull Fragment fragment,
+    private void startActivityAsUserFromFragment(@NonNull Fragment fragment,
             @RequiresPermission Intent intent, int requestCode, @Nullable Bundle options,
             UserHandle user) {
         startActivityForResultAsUser(intent, fragment.mWho, requestCode, options, user);
@@ -5903,7 +5925,10 @@ public class Activity extends ContextThemeWrapper
     /**
      * Same as calling {@link #startIntentSenderFromChild(Activity, IntentSender,
      * int, Intent, int, int, int, Bundle)} with no options.
+     * @deprecated Use {@link #startIntentSenderForResult(IntentSender, int, Intent, int, int, int)}
+     * instead.
      */
+    @Deprecated
     public void startIntentSenderFromChild(Activity child, IntentSender intent,
             int requestCode, Intent fillInIntent, int flagsMask, int flagsValues,
             int extraFlags)
@@ -5917,7 +5942,11 @@ public class Activity extends ContextThemeWrapper
      * taking a IntentSender; see
      * {@link #startIntentSenderForResult(IntentSender, int, Intent, int, int, int)}
      * for more information.
+     * @deprecated Use
+     * {@link #startIntentSenderForResult(IntentSender, int, Intent, int, int, int, Bundle)}
+     * instead.
      */
+    @Deprecated
     public void startIntentSenderFromChild(Activity child, IntentSender intent,
             int requestCode, Intent fillInIntent, int flagsMask, int flagsValues,
             int extraFlags, @Nullable Bundle options)
@@ -5927,17 +5956,15 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
-     * Like {@link #startIntentSenderFromChild}, but taking a Fragment; see
+     * Like {@link #startIntentSender}, but taking a Fragment; see
      * {@link #startIntentSenderForResult(IntentSender, int, Intent, int, int, int)}
      * for more information.
-     *
-     * @hide
      */
-    public void startIntentSenderFromChildFragment(Fragment child, IntentSender intent,
+    private void startIntentSenderFromFragment(Fragment fragment, IntentSender intent,
             int requestCode, Intent fillInIntent, int flagsMask, int flagsValues,
-            int extraFlags, @Nullable Bundle options)
+            @Nullable Bundle options)
             throws IntentSender.SendIntentException {
-        startIntentSenderForResultInner(intent, child.mWho, requestCode, fillInIntent,
+        startIntentSenderForResultInner(intent, fragment.mWho, requestCode, fillInIntent,
                 flagsMask, flagsValues, options);
     }
 
@@ -6279,7 +6306,9 @@ public class Activity extends ContextThemeWrapper
      * @param child The activity making the call.
      *
      * @see #finish
+     * @deprecated Use {@link #finish()} instead.
      */
+    @Deprecated
     public void finishFromChild(Activity child) {
         finish();
     }
@@ -6326,7 +6355,9 @@ public class Activity extends ContextThemeWrapper
      * @param child The activity making the call.
      * @param requestCode Request code that had been used to start the
      *                    activity.
+     * @deprecated Use {@link #finishActivity(int)} instead.
      */
+    @Deprecated
     public void finishActivityFromChild(@NonNull Activity child, int requestCode) {
         try {
             ActivityTaskManager.getService()
@@ -6976,6 +7007,10 @@ public class Activity extends ContextThemeWrapper
                 writer.print(mResumed); writer.print(" mStopped=");
                 writer.print(mStopped); writer.print(" mFinished=");
                 writer.println(mFinished);
+        writer.print(innerPrefix); writer.print("mLastDispatchedIsInMultiWindowMode=");
+                writer.print(mLastDispatchedIsInMultiWindowMode);
+                writer.print(" mLastDispatchedIsInPictureInPictureMode=");
+                writer.println(mLastDispatchedIsInPictureInPictureMode);
         writer.print(innerPrefix); writer.print("mChangingConfigurations=");
                 writer.println(mChangingConfigurations);
         writer.print(innerPrefix); writer.print("mCurrentConfig=");
@@ -7569,7 +7604,9 @@ public class Activity extends ContextThemeWrapper
      * @return true if up navigation successfully reached the activity indicated by upIntent and
      *         upIntent was delivered to it. false if an instance of the indicated activity could
      *         not be found and this activity was simply finished normally.
+     * @deprecated Use {@link #navigateUpTo(Intent)} instead.
      */
+    @Deprecated
     public boolean navigateUpToFromChild(Activity child, Intent upIntent) {
         return navigateUpTo(upIntent);
     }
@@ -8055,6 +8092,7 @@ public class Activity extends ContextThemeWrapper
         if (mWindow != null) {
             mWindow.onMultiWindowModeChanged();
         }
+        mLastDispatchedIsInMultiWindowMode = isInMultiWindowMode;
         onMultiWindowModeChanged(isInMultiWindowMode, newConfig);
     }
 
@@ -8067,6 +8105,7 @@ public class Activity extends ContextThemeWrapper
         if (mWindow != null) {
             mWindow.onPictureInPictureModeChanged(isInPictureInPictureMode);
         }
+        mLastDispatchedIsInPictureInPictureMode = isInPictureInPictureMode;
         onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
     }
 
@@ -8623,8 +8662,8 @@ public class Activity extends ContextThemeWrapper
                 startIntentSenderForResultInner(intent, fragment.mWho, requestCode, fillInIntent,
                         flagsMask, flagsValues, options);
             } else if (options != null) {
-                mParent.startIntentSenderFromChildFragment(fragment, intent, requestCode,
-                        fillInIntent, flagsMask, flagsValues, extraFlags, options);
+                mParent.startIntentSenderFromFragment(fragment, intent, requestCode,
+                        fillInIntent, flagsMask, flagsValues, options);
             }
         }
 

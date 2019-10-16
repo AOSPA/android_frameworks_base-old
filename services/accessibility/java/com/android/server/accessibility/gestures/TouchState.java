@@ -18,6 +18,8 @@ package com.android.server.accessibility.gestures;
 
 import static android.view.MotionEvent.INVALID_POINTER_ID;
 
+import static com.android.server.accessibility.gestures.TouchExplorer.DEBUG;
+
 import android.annotation.IntDef;
 import android.util.Slog;
 import android.view.MotionEvent;
@@ -29,60 +31,56 @@ import android.view.accessibility.AccessibilityEvent;
  * dispatch.
  */
 public class TouchState {
-
-    private static final boolean DEBUG = false;
     private static final String LOG_TAG = "TouchState";
     // Pointer-related constants
     // This constant captures the current implementation detail that
     // pointer IDs are between 0 and 31 inclusive (subject to change).
     // (See MAX_POINTER_ID in frameworks/base/include/ui/Input.h)
-    private static final int MAX_POINTER_COUNT = 32;
+    static final int MAX_POINTER_COUNT = 32;
     // Constant referring to the ids bits of all pointers.
     public static final int ALL_POINTER_ID_BITS = 0xFFFFFFFF;
 
     // States that the touch explorer can be in.
-    public static final int STATE_TOUCH_EXPLORING = 0x00000001;
-    public static final int STATE_DRAGGING = 0x00000002;
-    public static final int STATE_DELEGATING = 0x00000003;
-    public static final int STATE_GESTURE_DETECTING = 0x00000004;
+    // In the clear state the user is not touching the screen.
+    public static final int STATE_CLEAR = 0;
+    // The user is touching the screen and we are trying to figure out their intent.
+    // This state gets its name from the TYPE_TOUCH_INTERACTION start and end accessibility events.
+    public static final int STATE_TOUCH_INTERACTING = 1;
+    // The user is explicitly exploring the screen.
+    public static final int STATE_TOUCH_EXPLORING = 2;
+    // the user is dragging with two fingers.
+    public static final int STATE_DRAGGING = 3;
+    // The user is performing some other two finger gesture which we pass through to the view
+    // hierarchy as a one-finger gesture e.g. two-finger scrolling.
+    public static final int STATE_DELEGATING = 4;
+    // The user is performing something that might be a gesture.
+    public static final int STATE_GESTURE_DETECTING = 5;
 
-    @IntDef({STATE_TOUCH_EXPLORING, STATE_DRAGGING, STATE_DELEGATING, STATE_GESTURE_DETECTING})
+    @IntDef({
+        STATE_CLEAR,
+        STATE_TOUCH_INTERACTING,
+        STATE_TOUCH_EXPLORING,
+        STATE_DRAGGING,
+        STATE_DELEGATING,
+        STATE_GESTURE_DETECTING
+    })
     public @interface State {}
 
     // The current state of the touch explorer.
-    private int mState = STATE_TOUCH_EXPLORING;
-    // Whether touch exploration is in progress.
-    // TODO: Add separate states to represent  intend detection and actual touch exploration so that
-    // only one variable describes the state.
-    private boolean mTouchExplorationInProgress;
+    private int mState = STATE_CLEAR;
     // Helper class to track received pointers.
     // Todo: collapse or hide this class so multiple classes don't modify it.
     private final ReceivedPointerTracker mReceivedPointerTracker;
-    // Helper class to track injected pointers.
-    // Todo: collapse or hide this class so multiple classes don't modify it.
-    private final InjectedPointerTracker mInjectedPointerTracker;
 
     public TouchState() {
         mReceivedPointerTracker = new ReceivedPointerTracker();
-        mInjectedPointerTracker = new InjectedPointerTracker();
     }
 
     /** Clears the internal shared state. */
     public void clear() {
-        mState = STATE_TOUCH_EXPLORING;
-        mTouchExplorationInProgress = false;
+        setState(STATE_CLEAR);
         // Reset the pointer trackers.
         mReceivedPointerTracker.clear();
-        mInjectedPointerTracker.clear();
-    }
-
-    /**
-     * Updates the state in response to a hover event dispatched by TouchExplorer.
-     *
-     * @param event The event sent from TouchExplorer.
-     */
-    public void onInjectedMotionEvent(MotionEvent event) {
-        mInjectedPointerTracker.onMotionEvent(event);
     }
 
     /**
@@ -94,18 +92,33 @@ public class TouchState {
         mReceivedPointerTracker.onMotionEvent(rawEvent);
     }
 
-    /**
-     * Updates the state in response to an accessibility event being sent from TouchExplorer.
-     *
-     * @param type The event type.
-     */
     public void onInjectedAccessibilityEvent(int type) {
+        // The below state transitions go here because the related events are often sent on a
+        // delay.
+        // This allows state to accurately reflect the state in the moment.
+        // TODO: replaced the delayed event senders with delayed state transitions
+        // so that state transitions trigger events rather than events triggering state
+        // transitions.
         switch (type) {
+            case AccessibilityEvent.TYPE_TOUCH_INTERACTION_START:
+                startTouchInteracting();
+                break;
+            case AccessibilityEvent.TYPE_TOUCH_INTERACTION_END:
+                clear();
+                break;
             case AccessibilityEvent.TYPE_TOUCH_EXPLORATION_GESTURE_START:
-                mTouchExplorationInProgress = true;
+                startTouchExploring();
                 break;
             case AccessibilityEvent.TYPE_TOUCH_EXPLORATION_GESTURE_END:
-                mTouchExplorationInProgress = false;
+                startTouchInteracting();
+                break;
+            case AccessibilityEvent.TYPE_GESTURE_DETECTION_START:
+                startGestureDetecting();
+                break;
+            case AccessibilityEvent.TYPE_GESTURE_DETECTION_END:
+                startTouchInteracting();
+                break;
+            default:
                 break;
         }
     }
@@ -117,6 +130,7 @@ public class TouchState {
 
     /** Transitions to a new state. */
     public void setState(@State int state) {
+        if (mState == state) return;
         if (DEBUG) {
             Slog.i(LOG_TAG, getStateSymbolicName(mState) + "->" + getStateSymbolicName(state));
         }
@@ -159,26 +173,32 @@ public class TouchState {
         setState(STATE_DRAGGING);
     }
 
-    public boolean isTouchExplorationInProgress() {
-        return mTouchExplorationInProgress;
+    public boolean isTouchInteracting() {
+        return mState == STATE_TOUCH_INTERACTING;
     }
 
-    public void setTouchExplorationInProgress(boolean touchExplorationInProgress) {
-        mTouchExplorationInProgress = touchExplorationInProgress;
+    /**
+     * Transitions to the touch interacting state, where we attempt to figure out what the user is
+     * doing.
+     */
+    public void startTouchInteracting() {
+        setState(STATE_TOUCH_INTERACTING);
     }
 
+    public boolean isClear() {
+        return mState == STATE_CLEAR;
+    }
     /** Returns a string representation of the current state. */
     public String toString() {
-        return "TouchState { "
-                + "mState: "
-                + getStateSymbolicName(mState)
-                + ", mTouchExplorationInProgress"
-                + mTouchExplorationInProgress
-                + " }";
+        return "TouchState { " + "mState: " + getStateSymbolicName(mState) + " }";
     }
     /** Returns a string representation of the specified state. */
     public static String getStateSymbolicName(int state) {
         switch (state) {
+            case STATE_CLEAR:
+                return "STATE_CLEAR";
+            case STATE_TOUCH_INTERACTING:
+                return "STATE_TOUCH_INTERACTING";
             case STATE_TOUCH_EXPLORING:
                 return "STATE_TOUCH_EXPLORING";
             case STATE_DRAGGING:
@@ -192,117 +212,10 @@ public class TouchState {
         }
     }
 
-    public InjectedPointerTracker getInjectedPointerTracker() {
-        return mInjectedPointerTracker;
-    }
-
     public ReceivedPointerTracker getReceivedPointerTracker() {
         return mReceivedPointerTracker;
     }
 
-    /** This class tracks the up/down state of each pointer. It does not track movement. */
-    class InjectedPointerTracker {
-        private static final String LOG_TAG_INJECTED_POINTER_TRACKER = "InjectedPointerTracker";
-
-        // Keep track of which pointers sent to the system are down.
-        private int mInjectedPointersDown;
-
-        // The time of the last injected down.
-        private long mLastInjectedDownEventTime;
-
-        // The last injected hover event.
-        private MotionEvent mLastInjectedHoverEvent;
-
-        /**
-         * Processes an injected {@link MotionEvent} event.
-         *
-         * @param event The event to process.
-         */
-        public void onMotionEvent(MotionEvent event) {
-            final int action = event.getActionMasked();
-            final int pointerId = event.getPointerId(event.getActionIndex());
-            final int pointerFlag = (1 << pointerId);
-            switch (action) {
-                case MotionEvent.ACTION_DOWN:
-                case MotionEvent.ACTION_POINTER_DOWN:
-                    mInjectedPointersDown |= pointerFlag;
-                    mLastInjectedDownEventTime = event.getDownTime();
-                    break;
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_POINTER_UP:
-                    mInjectedPointersDown &= ~pointerFlag;
-                    if (mInjectedPointersDown == 0) {
-                        mLastInjectedDownEventTime = 0;
-                    }
-                    break;
-                case MotionEvent.ACTION_HOVER_ENTER:
-                case MotionEvent.ACTION_HOVER_MOVE:
-                case MotionEvent.ACTION_HOVER_EXIT:
-                    if (mLastInjectedHoverEvent != null) {
-                        mLastInjectedHoverEvent.recycle();
-                    }
-                    mLastInjectedHoverEvent = MotionEvent.obtain(event);
-                    break;
-            }
-            if (DEBUG) {
-                Slog.i(LOG_TAG_INJECTED_POINTER_TRACKER, "Injected pointer:\n" + toString());
-            }
-        }
-
-        /** Clears the internals state. */
-        public void clear() {
-            mInjectedPointersDown = 0;
-        }
-
-        /** @return The time of the last injected down event. */
-        public long getLastInjectedDownEventTime() {
-            return mLastInjectedDownEventTime;
-        }
-
-        /** @return The number of down pointers injected to the view hierarchy. */
-        public int getInjectedPointerDownCount() {
-            return Integer.bitCount(mInjectedPointersDown);
-        }
-
-        /** @return The bits of the injected pointers that are down. */
-        public int getInjectedPointersDown() {
-            return mInjectedPointersDown;
-        }
-
-        /**
-         * Whether an injected pointer is down.
-         *
-         * @param pointerId The unique pointer id.
-         * @return True if the pointer is down.
-         */
-        public boolean isInjectedPointerDown(int pointerId) {
-            final int pointerFlag = (1 << pointerId);
-            return (mInjectedPointersDown & pointerFlag) != 0;
-        }
-
-        /** @return The the last injected hover event. */
-        public MotionEvent getLastInjectedHoverEvent() {
-            return mLastInjectedHoverEvent;
-        }
-
-        @Override
-        public String toString() {
-            StringBuilder builder = new StringBuilder();
-            builder.append("=========================");
-            builder.append("\nDown pointers #");
-            builder.append(Integer.bitCount(mInjectedPointersDown));
-            builder.append(" [ ");
-            for (int i = 0; i < MAX_POINTER_COUNT; i++) {
-                if ((mInjectedPointersDown & i) != 0) {
-                    builder.append(i);
-                    builder.append(" ");
-                }
-            }
-            builder.append("]");
-            builder.append("\n=========================");
-            return builder.toString();
-        }
-    }
     /** This class tracks where and when a pointer went down. It does not track its movement. */
     class ReceivedPointerTracker {
         private static final String LOG_TAG_RECEIVED_POINTER_TRACKER = "ReceivedPointerTracker";

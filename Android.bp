@@ -26,140 +26,233 @@
 // READ ME: ########################################################
 
 filegroup {
-    name: "framework-defaults-java-srcs",
+    name: "framework-core-sources",
     srcs: [
-        // java sources under this directory
         "core/java/**/*.java",
+        "core/java/**/*.aidl",
+    ],
+    path: "core/java",
+}
+
+filegroup {
+    name: "framework-drm-sources",
+    srcs: [
         "drm/java/**/*.java",
+    ],
+    path: "drm/java",
+}
+
+filegroup {
+    name: "framework-graphics-sources",
+    srcs: [
         "graphics/java/**/*.java",
+        "graphics/java/**/*.aidl",
+    ],
+    path: "graphics/java",
+}
+
+filegroup {
+    name: "framework-keystore-sources",
+    srcs: [
         "keystore/java/**/*.java",
+        "keystore/java/**/*.aidl",
+    ],
+    path: "keystore/java",
+}
+
+filegroup {
+    name: "framework-location-sources",
+    srcs: [
         "location/java/**/*.java",
+        "location/java/**/*.aidl",
+    ],
+    path: "location/java",
+}
+
+filegroup {
+    name: "framework-lowpan-sources",
+    srcs: [
         "lowpan/java/**/*.java",
+        "lowpan/java/**/*.aidl",
+    ],
+    path: "lowpan/java",
+}
+
+filegroup {
+    name: "framework-media-sources",
+    srcs: [
         "media/java/**/*.java",
+        "media/java/**/*.aidl",
+    ],
+    path: "media/java",
+}
+
+filegroup {
+    name: "framework-mca-effect-sources",
+    srcs: [
         "media/mca/effect/java/**/*.java",
+    ],
+    path: "media/mca/effect/java",
+}
+
+filegroup {
+    name: "framework-mca-filterfw-sources",
+    srcs: [
         "media/mca/filterfw/java/**/*.java",
+    ],
+    path: "media/mca/filterfw/java",
+}
+
+filegroup {
+    name: "framework-mca-filterpacks-sources",
+    srcs: [
         "media/mca/filterpacks/java/**/*.java",
+    ],
+    path: "media/mca/filterpacks/java",
+}
+
+filegroup {
+    name: "framework-opengl-sources",
+    srcs: [
         "opengl/java/**/*.java",
+    ],
+    path: "opengl/java",
+}
+
+filegroup {
+    name: "framework-rs-sources",
+    srcs: [
         "rs/java/**/*.java",
+    ],
+    path: "rs/java",
+}
+
+filegroup {
+    name: "framework-sax-sources",
+    srcs: [
         "sax/java/**/*.java",
+    ],
+    path: "sax/java",
+}
+
+filegroup {
+    name: "framework-telecomm-sources",
+    srcs: [
         "telecomm/java/**/*.java",
+        "telecomm/java/**/*.aidl",
+    ],
+    path: "telecomm/java",
+}
+
+filegroup {
+    name: "framework-telephony-sources",
+    srcs: [
         "telephony/java/**/*.java",
+        "telephony/java/**/*.aidl",
+    ],
+    path: "telephony/java",
+}
+
+filegroup {
+    name: "framework-wifi-sources",
+    srcs: [
         "wifi/java/**/*.java",
+        "wifi/java/**/*.aidl",
+    ],
+    path: "wifi/java",
+}
+
+filegroup {
+    name: "framework-non-updatable-sources",
+    srcs: [
+        // Java/AIDL sources under frameworks/base
+        ":framework-core-sources",
+        ":framework-drm-sources",
+        ":framework-graphics-sources",
+        ":framework-keystore-sources",
+        ":framework-location-sources",
+        ":framework-lowpan-sources",
+        ":framework-media-sources",
+        ":framework-mca-effect-sources",
+        ":framework-mca-filterfw-sources",
+        ":framework-mca-filterpacks-sources",
+        ":framework-opengl-sources",
+        ":framework-rs-sources",
+        ":framework-sax-sources",
+        ":framework-telecomm-sources",
+        ":framework-telephony-sources",
+        ":framework-wifi-sources",
+        ":PacProcessor-aidl-sources",
+        ":ProxyHandler-aidl-sources",
+
+        // AIDL sources from external directories
+        ":dumpstate_aidl",
+        ":framework_native_aidl",
+        ":gatekeeper_aidl",
+        ":gsiservice_aidl",
+        ":incidentcompanion_aidl",
+        ":installd_aidl",
+        ":keystore_aidl",
+        ":libaudioclient_aidl",
+        ":libbinder_aidl",
+        ":libbluetooth-binder-aidl",
+        ":libcamera_client_aidl",
+        ":libcamera_client_framework_aidl",
+        ":libupdate_engine_aidl",
+        ":storaged_aidl",
+        ":vold_aidl",
+
+        // For the generated R.java and Manifest.java
+        ":framework-res{.aapt.srcjar}",
+
+        // etc.
+        ":framework-javastream-protos",
+        ":framework-statslog-gen",
     ],
 }
 
-// TODO(b/70046217): make these as filegroups where the base directory for aidl files
-// is given as 'path'. Eliminate the need for aidl_local_include_dirs.
-framework_srcs = [
-    // aidl under this directory
-    // b/70046217#comment15 These MUST come after all java srcs.
-    // TODO(b/70046217) remove the above requirement
-    "core/java/**/*.aidl",
-    "graphics/java/**/*.aidl",
-    "keystore/java/**/*.aidl",
-    "location/java/**/*.aidl",
-    "lowpan/java/**/*.aidl",
-    "media/java/**/*.aidl",
-    "packages/services/PacProcessor/**/*.aidl",
-    "packages/services/Proxy/**/*.aidl",
-    "telecomm/java/**/*.aidl",
-    "telephony/java/**/*.aidl",
-    "wifi/java/**/*.aidl",
-
-    // aidl from external directories
-    ":dumpstate_aidl",
-    ":gatekeeper_aidl",
-    ":gsiservice_aidl",
-    ":incidentcompanion_aidl",
-    ":installd_aidl",
-    ":keystore_aidl",
-    ":libaudioclient_aidl",
-    ":libbinder_aidl",
-    ":libbluetooth-binder-aidl",
-    ":libcamera_client_aidl",
-    ":libcamera_client_framework_aidl",
-    ":libupdate_engine_aidl",
-    ":storaged_aidl",
-    ":vold_aidl",
-
-    // etc.
-    "core/java/**/*.logtags",
-    ":framework-javastream-protos",
-    ":framework-statslog-gen",
-]
-
-framework_aidl_local_include_dirs = [
-    "core/java",
-    "drm/java",
-    "graphics/java",
-    "keystore/java",
-    "location/java",
-    "lowpan/java",
-    "media/java",
-    "media/apex/java",
-    "media/mca/effect/java",
-    "media/mca/filterfw/java",
-    "media/mca/filterpacks/java",
-    "opengl/java",
-    "rs/java",
-    "sax/java",
-    "telecomm/java",
-    "telephony/java",
-    "wifi/java",
-]
-
-framework_aidl_external_include_dirs = [
-    "frameworks/av/camera/aidl",
-    "frameworks/av/media/libaudioclient/aidl",
-    "frameworks/native/aidl/binder",
-    "frameworks/native/aidl/gui",
-    "frameworks/native/cmds/dumpstate/binder",
-    "frameworks/native/libs/incidentcompanion/binder",
-    "system/bt/binder",
-    "system/core/gatekeeperd/binder",
-    "system/core/storaged/binder",
-    "system/gsid/aidl",
-    "system/security/keystore/binder",
-    "system/update_engine/binder_bindings",
-    "system/vold/binder",
-]
+filegroup {
+    name: "framework-all-sources",
+    srcs: [
+        ":framework-non-updatable-sources",
+        ":updatable-media-srcs",
+    ],
+}
 
 java_defaults {
     name: "framework-aidl-export-defaults",
-
     aidl: {
-        export_include_dirs: framework_aidl_local_include_dirs,
+        export_include_dirs: [
+            "core/java",
+            "drm/java",
+            "graphics/java",
+            "keystore/java",
+            "location/java",
+            "lowpan/java",
+            "media/java",
+            "media/apex/java",
+            "media/mca/effect/java",
+            "media/mca/filterfw/java",
+            "media/mca/filterpacks/java",
+            "opengl/java",
+            "rs/java",
+            "sax/java",
+            "telecomm/java",
+            "telephony/java",
+            "wifi/java",
+        ],
     },
+
+    required: [
+        // TODO: remove gps_debug when the build system propagates "required" properly.
+        "gps_debug.conf",
+    ],
 }
 
-java_defaults {
-    name: "framework-defaults",
-    defaults: ["framework-aidl-export-defaults"],
-    installable: true,
-
-    srcs: [
-        ":framework-defaults-java-srcs",
-    ] + framework_srcs,
-
-    aidl: {
-        local_include_dirs: framework_aidl_local_include_dirs,
-        include_dirs: framework_aidl_external_include_dirs,
-        generate_get_transaction_name: true,
-    },
-
-    exclude_srcs: [
-        // See comment on framework-atb-backward-compatibility module below
-        "core/java/android/content/pm/AndroidTestBaseUpdater.java",
-    ],
-
-    sdk_version: "core_platform",
-    libs: [
-        "ext",
-        "updatable_media_stubs",
-    ],
-
-    jarjar_rules: ":framework-jarjar-rules",
-
+// Collection of classes that are generated from non-Java files that are not listed in
+// framework_srcs. These have no or very limited dependency to the framework.
+java_library {
+    name: "framework-internal-utils",
     static_libs: [
         "apex_aidl_interface-java",
         "suspend_control_aidl_interface-java",
@@ -194,11 +287,35 @@ java_defaults {
         "com.android.sysprop.apex",
         "PlatformProperties",
     ],
+    sdk_version: "core_platform",
+    installable: false,
+}
 
-    required: [
-        // TODO: remove gps_debug when the build system propagates "required" properly.
-        "gps_debug.conf",
+java_defaults {
+    name: "framework-defaults",
+    defaults: ["framework-aidl-export-defaults"],
+    installable: true,
+
+    aidl: {
+        generate_get_transaction_name: true,
+    },
+
+    srcs: ["core/java/**/*.logtags"],
+
+    exclude_srcs: [
+        // See comment on framework-atb-backward-compatibility module below
+        "core/java/android/content/pm/AndroidTestBaseUpdater.java",
     ],
+
+    sdk_version: "core_platform",
+    libs: [
+        "ext",
+        "updatable_media_stubs",
+    ],
+
+    jarjar_rules: ":framework-jarjar-rules",
+
+    static_libs: ["framework-internal-utils"],
 
     dxflags: [
         "--core-library",
@@ -247,6 +364,7 @@ filegroup {
 java_library {
     name: "framework-minus-apex",
     defaults: ["framework-defaults"],
+    srcs: [":framework-non-updatable-sources"],
     javac_shard_size: 150,
 }
 
@@ -267,8 +385,16 @@ java_library {
 }
 
 java_library {
+    name: "framework-all",
+    defaults: ["framework-defaults"],
+    srcs: [":framework-all-sources"],
+    installable: false,
+}
+
+java_library {
     name: "framework-annotation-proc",
     defaults: ["framework-defaults"],
+    srcs: [":framework-all-sources"],
     installable: false,
     plugins: [
         "unsupportedappusage-annotation-processor",
@@ -278,7 +404,6 @@ java_library {
 
 platform_compat_config {
     name: "framework-platform-compat-config",
-    prefix: "framework",
     src: ":framework-annotation-proc",
 }
 
@@ -391,7 +516,6 @@ java_library {
     sdk_version: "core_platform",
     static_libs: [
         "libphonenumber-platform",
-        "nist-sip",
         "tagsoup",
         "rappor",
         "libtextclassifier-java",
@@ -664,7 +788,7 @@ python_binary_host {
     ],
 }
 
-// TODO: Don't rely on this list once droiddoc can take a list of packages to document
+// TODO: Don't rely on this list by switching package.html into package-info.java
 frameworks_base_subdirs = [
     "core/java",
     "graphics/java",
@@ -682,13 +806,6 @@ frameworks_base_subdirs = [
     "lowpan/java",
     "keystore/java",
     "rs/java",
-]
-
-packages_to_document = [
-    "android",
-    "javax/microedition/khronos",
-    "org/apache/http/conn",
-    "org/apache/http/params",
 ]
 
 // Make the api/current.txt file available for use by modules in other
@@ -780,21 +897,31 @@ metalava_framework_docs_args += " --replace-documentation " +
     // replacement (with $1, $2 backreferences to the regex groups)
     "'$$1https://docs.oracle.com/javase/8/docs/$$2\">' "
 
+packages_to_document = [
+    "android",
+    "java",
+    "javax",
+    "org.apache.http",
+    "org.json",
+    "org.w3c.dom",
+    "org.xml.sax",
+    "org.xmlpull",
+]
+
 stubs_defaults {
     name: "framework-doc-stubs-default",
     srcs: [
+        ":framework-non-updatable-sources",
+        "core/java/**/*.logtags",
         "test-base/src/**/*.java",
         ":opt-telephony-srcs",
         ":opt-net-voip-srcs",
         ":core_public_api_files",
-        ":updatable-media-srcs-without-aidls",
+        ":updatable-media-srcs",
         "test-mock/src/**/*.java",
         "test-runner/src/**/*.java",
         ":jobscheduler-framework-source",
     ],
-    srcs_lib: "framework-minus-apex",
-    srcs_lib_whitelist_dirs: frameworks_base_subdirs,
-    srcs_lib_whitelist_pkgs: packages_to_document,
     libs: framework_docs_only_libs,
     local_sourcepaths: frameworks_base_subdirs,
     create_doc_stubs: true,
@@ -841,18 +968,23 @@ doc_defaults {
     create_stubs: false,
 }
 
+doc_defaults {
+    name: "framework-dokka-docs-default",
+    create_stubs: false,
+}
+
 stubs_defaults {
     name: "metalava-api-stubs-default",
     srcs: [
+        ":framework-non-updatable-sources",
+        "core/java/**/*.logtags",
         ":opt-telephony-srcs",
         ":opt-net-voip-srcs",
         ":core_public_api_files",
-        ":updatable-media-srcs-without-aidls",
+        ":updatable-media-srcs",
         ":jobscheduler-framework-source",
     ],
-    srcs_lib: "framework-minus-apex",
-    srcs_lib_whitelist_dirs: frameworks_base_subdirs,
-    srcs_lib_whitelist_pkgs: packages_to_document,
+    libs: ["framework-internal-utils"],
     local_sourcepaths: frameworks_base_subdirs,
     installable: false,
     annotations_enabled: true,
@@ -866,6 +998,8 @@ stubs_defaults {
         "sdk-dir",
         "api-versions-jars-dir",
     ],
+    sdk_version: "core_platform",
+    filter_packages: packages_to_document,
 }
 
 droidstubs {
@@ -1015,7 +1149,7 @@ droiddoc {
 }
 
 droiddoc {
-    name: "ds-docs",
+    name: "ds-docs-java",
     defaults: ["framework-docs-default"],
     srcs: [
         ":framework-doc-stubs",
@@ -1042,6 +1176,58 @@ droiddoc {
         " -samplegroup Views " +
         " -samplegroup Wearable -devsite -samplesdir development/samples/browseable ",
 }
+
+droiddoc {
+    name: "ds-docs-kt",
+    defaults: ["framework-dokka-docs-default"],
+    srcs: [
+        ":framework-doc-stubs",
+    ],
+    args: "-noJdkLink -links https://kotlinlang.org/api/latest/jvm/stdlib/^external/dokka/package-list " +
+    "-noStdlibLink",
+    proofread_file: "ds-dokka-proofread.txt",
+    dokka_enabled: true,
+}
+
+java_genrule {
+    name: "ds-docs",
+    tools: [
+        "zip2zip",
+        "merge_zips",
+    ],
+    srcs: [
+        ":ds-docs-java{.docs.zip}",
+        ":ds-docs-kt{.docs.zip}",
+    ],
+    out: ["ds-docs.zip"],
+    dist: {
+        targets: ["docs"],
+    },
+    cmd: "$(location zip2zip) -i $(location :ds-docs-kt{.docs.zip}) -o $(genDir)/ds-docs-kt-moved.zip **/*:en/reference/kotlin && " +
+         "$(location merge_zips) $(out) $(location :ds-docs-java{.docs.zip}) $(genDir)/ds-docs-kt-moved.zip",
+}
+
+java_genrule {
+    name: "ds-docs-switched",
+    tools: [
+        "switcher4",
+        "soong_zip",
+    ],
+    srcs: [
+        ":ds-docs-java{.docs.zip}",
+        ":ds-docs-kt{.docs.zip}",
+    ],
+    out: ["ds-docs-switched.zip"],
+    dist: {
+        targets: ["docs"],
+    },
+    cmd: "unzip $(location :ds-docs-java{.docs.zip}) -d $(genDir) && " +
+         "unzip $(location :ds-docs-kt{.docs.zip}) -d $(genDir)/en/reference/kotlin && " +
+         "SWITCHER=$$(cd $$(dirname $(location switcher4)) && pwd)/$$(basename $(location switcher4)) && " +
+         "(cd $(genDir)/en/reference && $$SWITCHER --work platform) && " +
+         "$(location soong_zip) -o $(out) -C $(genDir) -D $(genDir)",
+}
+
 
 droiddoc {
     name: "ds-static-docs",
@@ -1173,11 +1359,11 @@ droidstubs {
     name: "hiddenapi-mappings",
     defaults: ["metalava-api-stubs-default"],
     srcs: [
-        ":framework-defaults-java-srcs",
         ":non_openjdk_java_files",
         ":openjdk_java_files",
         ":opt-telephony-common-srcs",
     ],
+
     arg_files: [
         "core/res/AndroidManifest.xml",
     ],
@@ -1312,9 +1498,7 @@ filegroup {
 // annotations to private apis
 aidl_mapping {
     name: "framework-aidl-mappings",
-    srcs: framework_srcs,
-    local_include_dirs: framework_aidl_local_include_dirs,
-    include_dirs: framework_aidl_external_include_dirs,
+    srcs: [":framework-all-sources"],
     output: "framework-aidl-mappings.txt",
 }
 

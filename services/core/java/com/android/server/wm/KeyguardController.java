@@ -71,7 +71,6 @@ class KeyguardController {
     private boolean mAodShowing;
     private boolean mKeyguardGoingAway;
     private boolean mDismissalRequested;
-    private int[] mSecondaryDisplayIdsShowing;
     private int mBeforeUnoccludeTransit;
     private int mVisibilityTransactionDepth;
     private final SparseArray<KeyguardDisplayState> mDisplayStates = new SparseArray<>();
@@ -182,7 +181,7 @@ class KeyguardController {
             return;
         }
         Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "keyguardGoingAway");
-        mWindowManager.deferSurfaceLayout();
+        mService.deferWindowLayout();
         try {
             setKeyguardGoingAway(true);
             EventLog.writeEvent(EventLogTags.AM_SET_KEYGUARD_SHOWN,
@@ -204,7 +203,7 @@ class KeyguardController {
             mWindowManager.executeAppTransition();
         } finally {
             Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "keyguardGoingAway: surfaceLayout");
-            mWindowManager.continueSurfaceLayout();
+            mService.continueWindowLayout();
             Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
 
             Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
@@ -328,9 +327,9 @@ class KeyguardController {
             return;
         }
 
-        mWindowManager.onKeyguardOccludedChanged(isDisplayOccluded(DEFAULT_DISPLAY));
+        mWindowManager.mPolicy.onKeyguardOccludedChangedLw(isDisplayOccluded(DEFAULT_DISPLAY));
         if (isKeyguardLocked()) {
-            mWindowManager.deferSurfaceLayout();
+            mService.deferWindowLayout();
             try {
                 mRootActivityContainer.getDefaultDisplay().mDisplayContent
                         .prepareAppTransition(resolveOccludeTransit(),
@@ -340,7 +339,7 @@ class KeyguardController {
                 mRootActivityContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
                 mWindowManager.executeAppTransition();
             } finally {
-                mWindowManager.continueSurfaceLayout();
+                mService.continueWindowLayout();
             }
         }
         dismissDockedStackIfNeeded();
@@ -381,7 +380,7 @@ class KeyguardController {
      * @return true if Keyguard can be currently dismissed without entering credentials.
      */
     boolean canDismissKeyguard() {
-        return mWindowManager.isKeyguardTrusted()
+        return mWindowManager.mPolicy.isKeyguardTrustedLw()
                 || !mWindowManager.isKeyguardSecure(mService.getCurrentUserId());
     }
 
@@ -516,7 +515,8 @@ class KeyguardController {
             }
             // TODO(b/123372519): isShowingDream can only works on default display.
             if (mDisplayId == DEFAULT_DISPLAY) {
-                mOccluded |= controller.mWindowManager.isShowingDream();
+                mOccluded |= mService.mRootActivityContainer.getDefaultDisplay().mDisplayContent
+                        .getDisplayPolicy().isShowingDreamLw();
             }
 
             if (lastOccluded != mOccluded) {

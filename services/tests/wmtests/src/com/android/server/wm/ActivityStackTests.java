@@ -25,7 +25,9 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
+import static android.content.pm.ActivityInfo.FLAG_RESUME_WHILE_PAUSING;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
@@ -233,7 +235,7 @@ public class ActivityStackTests extends ActivityTestsBase {
         final ActivityRecord r = new ActivityBuilder(mService).setTask(mTask).build();
         r.info.flags |= ActivityInfo.FLAG_NO_HISTORY;
         mStack.moveToFront("testStopActivityWithDestroy");
-        mStack.stopActivityLocked(r);
+        r.stopIfPossible();
         // Mostly testing to make sure there is a crash in the call part, so if we get here we are
         // good-to-go!
     }
@@ -879,7 +881,7 @@ public class ActivityStackTests extends ActivityTestsBase {
         final ActivityRecord overlayActivity = new ActivityBuilder(mService).setTask(mTask)
                 .setComponent(new ComponentName("package.overlay", ".OverlayActivity")).build();
         // If the task only remains overlay activity, the task should also be removed.
-        // See {@link ActivityStack#removeActivityFromHistoryLocked}.
+        // See {@link ActivityStack#removeFromHistory}.
         overlayActivity.mTaskOverlay = true;
 
         // The activity without an app means it will be removed immediately.
@@ -976,6 +978,19 @@ public class ActivityStackTests extends ActivityTestsBase {
 
         assertThat(mTask.mActivities).isEmpty();
         assertThat(mStack.getAllTasks()).isEmpty();
+    }
+
+    @Test
+    public void testCompletePauseOnResumeWhilePausingActivity() {
+        final ActivityRecord bottomActivity = new ActivityBuilder(mService).setTask(mTask).build();
+        doReturn(true).when(bottomActivity).attachedToProcess();
+        mStack.mPausingActivity = null;
+        mStack.mResumedActivity = bottomActivity;
+        final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
+        topActivity.info.flags |= FLAG_RESUME_WHILE_PAUSING;
+
+        mStack.startPausingLocked(false /* userLeaving */, false /* uiSleeping */, topActivity);
+        verify(mStack).completePauseLocked(anyBoolean(), eq(topActivity));
     }
 
     @Test
@@ -1120,6 +1135,22 @@ public class ActivityStackTests extends ActivityTestsBase {
         final ActivityRecord newR = new ActivityBuilder(mService).build();
         final ActivityRecord result = mStack.resetTaskIfNeededLocked(taskTop, newR);
         assertThat(result).isEqualTo(taskTop);
+    }
+
+    @Test
+    public void testNonTopVisibleActivityNotResume() {
+        final ActivityRecord nonTopVisibleActivity =
+                new ActivityBuilder(mService).setTask(mTask).build();
+        new ActivityBuilder(mService).setTask(mTask).build();
+        doReturn(false).when(nonTopVisibleActivity).attachedToProcess();
+        doReturn(true).when(nonTopVisibleActivity).shouldBeVisibleIgnoringKeyguard(anyBoolean());
+        doNothing().when(mSupervisor).startSpecificActivityLocked(any(), anyBoolean(),
+                anyBoolean());
+
+        mStack.ensureActivitiesVisibleLocked(null /* starting */, 0 /* configChanges */,
+                false /* preserveWindows */);
+        verify(mSupervisor).startSpecificActivityLocked(any(), eq(false) /* andResume */,
+                anyBoolean());
     }
 
     private void verifyShouldSleepActivities(boolean focusedStack,

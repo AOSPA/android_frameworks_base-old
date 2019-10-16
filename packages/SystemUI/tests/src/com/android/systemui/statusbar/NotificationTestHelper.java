@@ -20,6 +20,8 @@ import static android.app.Notification.FLAG_BUBBLE;
 import static android.app.NotificationManager.IMPORTANCE_DEFAULT;
 import static android.app.NotificationManager.IMPORTANCE_HIGH;
 
+import static com.android.systemui.statusbar.NotificationEntryHelper.modifyRanking;
+
 import static org.mockito.Mockito.mock;
 
 import android.annotation.Nullable;
@@ -40,7 +42,6 @@ import android.widget.RemoteViews;
 
 import androidx.test.InstrumentationRegistry;
 
-import com.android.systemui.R;
 import com.android.systemui.bubbles.BubblesTestActivity;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
@@ -50,7 +51,7 @@ import com.android.systemui.statusbar.notification.row.NotificationContentInflat
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
-import com.android.systemui.statusbar.policy.HeadsUpManager;
+import com.android.systemui.tests.R;
 
 /**
  * A helper class to create {@link ExpandableNotificationRow} (for both individual and group
@@ -188,7 +189,9 @@ public class NotificationTestHelper {
         n.flags |= FLAG_BUBBLE;
         ExpandableNotificationRow row = generateRow(n, pkg, UID, USER_HANDLE,
                 0 /* extraInflationFlags */, IMPORTANCE_HIGH);
-        row.getEntry().canBubble = true;
+        modifyRanking(row.getEntry())
+                .setCanBubble(true)
+                .build();
         return row;
     }
 
@@ -296,23 +299,28 @@ public class NotificationTestHelper {
         row.setGroupManager(mGroupManager);
         row.setHeadsUpManager(mHeadsUpManager);
         row.setAboveShelfChangedListener(aboveShelf -> {});
-        StatusBarNotification sbn = new StatusBarNotification(
-                pkg,
-                pkg,
-                mId++,
-                null /* tag */,
-                uid,
-                2000 /* initialPid */,
-                notification,
-                userHandle,
-                null /* overrideGroupKey */,
-                System.currentTimeMillis());
-        NotificationEntry entry = new NotificationEntry(sbn);
+
+        final NotificationChannel channel =
+                new NotificationChannel(
+                        notification.getChannelId(),
+                        notification.getChannelId(),
+                        importance);
+        channel.setBlockableSystem(true);
+
+        NotificationEntry entry = new NotificationEntryBuilder()
+                .setPkg(pkg)
+                .setOpPkg(pkg)
+                .setId(mId++)
+                .setUid(uid)
+                .setInitialPid(2000)
+                .setNotification(notification)
+                .setUser(userHandle)
+                .setPostTime(System.currentTimeMillis())
+                .setChannel(channel)
+                .build();
+
         entry.setRow(row);
-        entry.createIcons(mContext, sbn);
-        entry.channel = new NotificationChannel(
-                notification.getChannelId(), notification.getChannelId(), importance);
-        entry.channel.setBlockableSystem(true);
+        entry.createIcons(mContext, entry.sbn());
         row.setEntry(entry);
         row.getNotificationInflater().addInflationFlags(extraInflationFlags);
         NotificationContentInflaterTest.runThenWaitForInflation(

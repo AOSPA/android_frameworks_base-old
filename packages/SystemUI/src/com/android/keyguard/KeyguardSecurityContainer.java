@@ -15,6 +15,8 @@
  */
 package com.android.keyguard;
 
+import static com.android.systemui.DejankUtils.whitelistIpcs;
+
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.admin.DevicePolicyManager;
@@ -45,6 +47,7 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
 import com.android.systemui.Dependency;
+import com.android.systemui.R;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.statusbar.phone.UnlockMethodCache;
 import com.android.systemui.util.InjectionInflationController;
@@ -127,7 +130,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         super(context, attrs, defStyle);
         mSecurityModel = new KeyguardSecurityModel(context);
         mLockPatternUtils = new LockPatternUtils(context);
-        mUpdateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
+        mUpdateMonitor = Dependency.get(KeyguardUpdateMonitor.class);
         mSpringAnimation = new SpringAnimation(this, DynamicAnimation.Y);
         mInjectionInflationController =  new InjectionInflationController(
             SystemUIFactory.getInstance().getRootComponent());
@@ -467,8 +470,8 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
      * @param turningOff true if the device is being turned off
      */
     void showPrimarySecurityScreen(boolean turningOff) {
-        SecurityMode securityMode = mSecurityModel.getSecurityMode(
-                KeyguardUpdateMonitor.getCurrentUser());
+        SecurityMode securityMode = whitelistIpcs(() -> mSecurityModel.getSecurityMode(
+                KeyguardUpdateMonitor.getCurrentUser()));
         if (DEBUG) Log.v(TAG, "showPrimarySecurityScreen(turningOff=" + turningOff + ")");
         showSecurityScreen(securityMode);
     }

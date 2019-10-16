@@ -24,6 +24,7 @@ import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.isSystemAlertWindowType;
 
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TASK_POSITIONING;
 import static com.android.server.wm.WindowManagerDebugConfig.SHOW_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
@@ -40,6 +41,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.Trace;
 import android.os.UserHandle;
+import android.util.ArraySet;
 import android.util.MergedConfiguration;
 import android.util.Slog;
 import android.view.DisplayCutout;
@@ -57,9 +59,7 @@ import com.android.internal.os.logging.MetricsLoggerWrapper;
 import com.android.server.wm.WindowManagerService.H;
 
 import java.io.PrintWriter;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.BiConsumer;
 
 /**
@@ -75,9 +75,9 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     SurfaceSession mSurfaceSession;
     private int mNumWindow = 0;
     // Set of visible application overlay window surfaces connected to this session.
-    private final Set<WindowSurfaceController> mAppOverlaySurfaces = new HashSet<>();
+    private final ArraySet<WindowSurfaceController> mAppOverlaySurfaces = new ArraySet<>();
     // Set of visible alert window surfaces connected to this session.
-    private final Set<WindowSurfaceController> mAlertWindowSurfaces = new HashSet<>();
+    private final ArraySet<WindowSurfaceController> mAlertWindowSurfaces = new ArraySet<>();
     private final DragDropController mDragDropController;
     final boolean mCanAddInternalSystemWindow;
     final boolean mCanHideNonSystemOverlayWindows;
@@ -228,8 +228,7 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     @Override
     public void finishDrawing(IWindow window,
             @Nullable SurfaceControl.Transaction postDrawTransaction) {
-        if (WindowManagerService.localLOGV) Slog.v(
-            TAG_WM, "IWindow finishDrawing called for " + window);
+        if (DEBUG) Slog.v(TAG_WM, "IWindow finishDrawing called for " + window);
         mService.finishDrawingWindow(this, window, postDrawTransaction);
     }
 
@@ -475,8 +474,9 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
         mPackageName = packageName;
         mRelayoutTag = "relayoutWindow: " + mPackageName;
         if (mSurfaceSession == null) {
-            if (WindowManagerService.localLOGV) Slog.v(
-                TAG_WM, "First window added to " + this + ", creating SurfaceSession");
+            if (DEBUG) {
+                Slog.v(TAG_WM, "First window added to " + this + ", creating SurfaceSession");
+            }
             mSurfaceSession = new SurfaceSession();
             if (SHOW_TRANSACTIONS) Slog.i(
                     TAG_WM, "  NEW SURFACE SESSION " + mSurfaceSession);
@@ -566,8 +566,10 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
             return;
         }
 
-        if (WindowManagerService.localLOGV) Slog.v(TAG_WM, "Last window removed from " + this
-                + ", destroying " + mSurfaceSession);
+        if (DEBUG) {
+            Slog.v(TAG_WM, "Last window removed from " + this
+                    + ", destroying " + mSurfaceSession);
+        }
         if (SHOW_TRANSACTIONS) Slog.i(TAG_WM, "  KILL SURFACE SESSION " + mSurfaceSession);
         try {
             mSurfaceSession.kill();
@@ -609,8 +611,15 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
         return mStringName;
     }
 
-    boolean hasAlertWindowSurfaces() {
-        return !mAlertWindowSurfaces.isEmpty();
+    /** @return {@code true} if there is an alert window surface on the given display. */
+    boolean hasAlertWindowSurfaces(DisplayContent displayContent) {
+        for (int i = mAlertWindowSurfaces.size() - 1; i >= 0; i--) {
+            final WindowSurfaceController surfaceController = mAlertWindowSurfaces.valueAt(i);
+            if (surfaceController.mAnimator.mWin.getDisplayContent() == displayContent) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public void blessInputSurface(int displayId, SurfaceControl surface,

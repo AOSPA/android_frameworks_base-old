@@ -224,7 +224,7 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
             mVisualStabilityManager.setUpWithPresenter(this);
             mGutsManager.setUpWithPresenter(this,
                     notifListContainer, mCheckSaveListener, mOnSettingsClickListener);
-            // ForegroundServiceControllerListener adds its listener in its constructor
+            // ForegroundServiceNotificationListener adds its listener in its constructor
             // but we need to request it here in order for it to be instantiated.
             // TODO: figure out how to do this correctly once Dependency.get() is gone.
             Dependency.get(ForegroundServiceNotificationListener.class);
@@ -240,7 +240,7 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
     public void onDensityOrFontScaleChanged() {
         MessagingMessage.dropCache();
         MessagingGroup.dropCache();
-        if (!KeyguardUpdateMonitor.getInstance(mContext).isSwitchingUser()) {
+        if (!Dependency.get(KeyguardUpdateMonitor.class).isSwitchingUser()) {
             updateNotificationsOnDensityOrFontScaleChanged();
         } else {
             mReinflateNotificationsOnUserSwitched = true;
@@ -249,7 +249,7 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
 
     @Override
     public void onUiModeChanged() {
-        if (!KeyguardUpdateMonitor.getInstance(mContext).isSwitchingUser()) {
+        if (!Dependency.get(KeyguardUpdateMonitor.class).isSwitchingUser()) {
             updateNotificationOnUiModeChanged();
         } else {
             mDispatchUiModeChangeOnUserSwitched = true;

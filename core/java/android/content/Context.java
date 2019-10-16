@@ -38,7 +38,6 @@ import android.app.ActivityManager;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
 import android.app.VrManager;
-import android.compat.IPlatformCompat;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
@@ -73,6 +72,8 @@ import android.view.WindowManager;
 import android.view.autofill.AutofillManager.AutofillClient;
 import android.view.contentcapture.ContentCaptureManager.ContentCaptureClient;
 import android.view.textclassifier.TextClassificationManager;
+
+import com.android.internal.compat.IPlatformCompat;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -853,11 +854,16 @@ public abstract class Context {
      * to any callers for the same name, meaning they will see each other's
      * edits as soon as they are made.
      *
-     * This method is thead-safe.
+     * <p>This method is thread-safe.
      *
-     * @param name Desired preferences file. If a preferences file by this name
-     * does not exist, it will be created when you retrieve an
-     * editor (SharedPreferences.edit()) and then commit changes (Editor.commit()).
+     * <p>If the preferences directory does not already exist, it will be created when this method
+     * is called.
+     *
+     * <p>If a preferences file by this name does not exist, it will be created when you retrieve an
+     * editor ({@link SharedPreferences#edit()}) and then commit changes ({@link
+     * SharedPreferences.Editor#commit()} or {@link SharedPreferences.Editor#apply()}).
+     *
+     * @param name Desired preferences file.
      * @param mode Operating mode.
      *
      * @return The single {@link SharedPreferences} instance that can be used
@@ -4190,6 +4196,7 @@ public abstract class Context {
      * @see #getSystemService(String)
      * @hide
      */
+    @TestApi
     public static final String DEVICE_IDLE_CONTROLLER = "deviceidle";
 
     /**

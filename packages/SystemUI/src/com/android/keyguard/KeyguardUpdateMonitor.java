@@ -18,6 +18,8 @@ package com.android.keyguard;
 
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
+import static android.content.Intent.ACTION_USER_REMOVED;
+import static android.content.Intent.ACTION_USER_STOPPED;
 import static android.content.Intent.ACTION_USER_UNLOCKED;
 import static android.os.BatteryManager.BATTERY_HEALTH_UNKNOWN;
 import static android.os.BatteryManager.BATTERY_STATUS_FULL;
@@ -36,13 +38,14 @@ import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STR
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_LOCKOUT;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_TIMEOUT;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_USER_LOCKDOWN;
+import static com.android.systemui.DejankUtils.whitelistIpcs;
+import static com.android.systemui.Dependency.MAIN_LOOPER_NAME;
 
 import android.annotation.AnyThread;
 import android.annotation.MainThread;
 import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
 import android.app.AlarmManager;
-import android.app.Instrumentation;
 import android.app.PendingIntent;
 import android.app.UserSwitchObserver;
 import android.app.admin.DevicePolicyManager;
@@ -93,9 +96,9 @@ import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.IccCardConstants.State;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.TelephonyIntents;
-import com.android.internal.util.Preconditions;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.settingslib.WirelessUtils;
+import com.android.systemui.R;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.TaskStackChangeListener;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
@@ -111,6 +114,9 @@ import java.util.List;
 import java.util.Map.Entry;
 import java.util.TimeZone;
 import java.util.function.Consumer;
+
+import javax.inject.Inject;
+import javax.inject.Named;
 
 /**
  * Watches for updates that may be interesting to the keyguard, and provides
@@ -161,6 +167,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private static final int MSG_DEVICE_POLICY_MANAGER_STATE_CHANGED = 337;
     private static final int MSG_TELEPHONY_CAPABLE = 338;
     private static final int MSG_TIMEZONE_UPDATE = 339;
+    private static final int MSG_USER_STOPPED = 340;
+    private static final int MSG_USER_REMOVED = 341;
 
     /** Biometric authentication state: Not listening. */
     private static final int BIOMETRIC_STATE_STOPPED = 0;
@@ -208,8 +216,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             throw e.rethrowFromSystemServer();
         }
     }
-
-    private static KeyguardUpdateMonitor sInstance;
 
     private final Context mContext;
     private final boolean mIsPrimaryUser;
@@ -287,113 +293,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         }
     };
 
-    private final Handler mHandler = new Handler(Looper.getMainLooper()) {
-        @Override
-        public void handleMessage(Message msg) {
-            switch (msg.what) {
-                case MSG_TIME_UPDATE:
-                    handleTimeUpdate();
-                    break;
-                case MSG_TIMEZONE_UPDATE:
-                    handleTimeZoneUpdate((String) msg.obj);
-                    break;
-                case MSG_BATTERY_UPDATE:
-                    handleBatteryUpdate((BatteryStatus) msg.obj);
-                    break;
-                case MSG_SIM_STATE_CHANGE:
-                    handleSimStateChange(msg.arg1, msg.arg2, (State) msg.obj);
-                    break;
-                case MSG_RINGER_MODE_CHANGED:
-                    handleRingerModeChange(msg.arg1);
-                    break;
-                case MSG_PHONE_STATE_CHANGED:
-                    handlePhoneStateChanged((String) msg.obj);
-                    break;
-                case MSG_DEVICE_PROVISIONED:
-                    handleDeviceProvisioned();
-                    break;
-                case MSG_DPM_STATE_CHANGED:
-                    handleDevicePolicyManagerStateChanged();
-                    break;
-                case MSG_USER_SWITCHING:
-                    handleUserSwitching(msg.arg1, (IRemoteCallback) msg.obj);
-                    break;
-                case MSG_USER_SWITCH_COMPLETE:
-                    handleUserSwitchComplete(msg.arg1);
-                    break;
-                case MSG_KEYGUARD_RESET:
-                    handleKeyguardReset();
-                    break;
-                case MSG_KEYGUARD_BOUNCER_CHANGED:
-                    handleKeyguardBouncerChanged(msg.arg1);
-                    break;
-                case MSG_BOOT_COMPLETED:
-                    handleBootCompleted();
-                    break;
-                case MSG_USER_INFO_CHANGED:
-                    handleUserInfoChanged(msg.arg1);
-                    break;
-                case MSG_REPORT_EMERGENCY_CALL_ACTION:
-                    handleReportEmergencyCallAction();
-                    break;
-                case MSG_STARTED_GOING_TO_SLEEP:
-                    handleStartedGoingToSleep(msg.arg1);
-                    break;
-                case MSG_FINISHED_GOING_TO_SLEEP:
-                    handleFinishedGoingToSleep(msg.arg1);
-                    break;
-                case MSG_STARTED_WAKING_UP:
-                    Trace.beginSection("KeyguardUpdateMonitor#handler MSG_STARTED_WAKING_UP");
-                    handleStartedWakingUp();
-                    Trace.endSection();
-                    break;
-                case MSG_FACE_UNLOCK_STATE_CHANGED:
-                    Trace.beginSection(
-                            "KeyguardUpdateMonitor#handler MSG_FACE_UNLOCK_STATE_CHANGED");
-                    handleFaceUnlockStateChanged(msg.arg1 != 0, msg.arg2);
-                    Trace.endSection();
-                    break;
-                case MSG_SIM_SUBSCRIPTION_INFO_CHANGED:
-                    handleSimSubscriptionInfoChanged();
-                    break;
-                case MSG_AIRPLANE_MODE_CHANGED:
-                    handleAirplaneModeChanged();
-                    break;
-                case MSG_SERVICE_STATE_CHANGE:
-                    handleServiceStateChange(msg.arg1, (ServiceState) msg.obj);
-                    break;
-                case MSG_SCREEN_TURNED_ON:
-                    handleScreenTurnedOn();
-                    break;
-                case MSG_SCREEN_TURNED_OFF:
-                    Trace.beginSection("KeyguardUpdateMonitor#handler MSG_SCREEN_TURNED_ON");
-                    handleScreenTurnedOff();
-                    Trace.endSection();
-                    break;
-                case MSG_DREAMING_STATE_CHANGED:
-                    handleDreamingStateChanged(msg.arg1);
-                    break;
-                case MSG_USER_UNLOCKED:
-                    handleUserUnlocked();
-                    break;
-                case MSG_ASSISTANT_STACK_CHANGED:
-                    setAssistantVisible((boolean) msg.obj);
-                    break;
-                case MSG_BIOMETRIC_AUTHENTICATION_CONTINUE:
-                    updateBiometricListeningState();
-                    break;
-                case MSG_DEVICE_POLICY_MANAGER_STATE_CHANGED:
-                    updateLogoutEnabled();
-                    break;
-                case MSG_TELEPHONY_CAPABLE:
-                    updateTelephonyCapable((boolean) msg.obj);
-                    break;
-                default:
-                    super.handleMessage(msg);
-                    break;
-            }
-        }
-    };
+    private final Handler mHandler;
 
     private SparseBooleanArray mFaceSettingEnabledForUser = new SparseBooleanArray();
     private BiometricManager mBiometricManager;
@@ -426,6 +326,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 }
             };
 
+    private SparseBooleanArray mUserIsUnlocked = new SparseBooleanArray();
     private SparseBooleanArray mUserHasTrust = new SparseBooleanArray();
     private SparseBooleanArray mUserTrustIsManaged = new SparseBooleanArray();
     private SparseBooleanArray mUserFingerprintAuthenticated = new SparseBooleanArray();
@@ -434,7 +335,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
 
     private static int sCurrentUser;
     private Runnable mUpdateBiometricListeningState = this::updateBiometricListeningState;
-    private static boolean sDisableHandlerCheckForTesting;
 
     public synchronized static void setCurrentUser(int currentUser) {
         sCurrentUser = currentUser;
@@ -997,9 +897,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private boolean isFaceDisabled(int userId) {
         final DevicePolicyManager dpm =
                 (DevicePolicyManager) mContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
-        return dpm != null && (dpm.getKeyguardDisabledFeatures(null, userId)
+        // TODO(b/140035044)
+        return whitelistIpcs(() -> dpm != null && (dpm.getKeyguardDisabledFeatures(null, userId)
                 & DevicePolicyManager.KEYGUARD_DISABLE_FACE) != 0
-                || isSimPinSecure();
+                || isSimPinSecure());
     }
 
 
@@ -1205,7 +1106,14 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                     .equals(action)) {
                 mHandler.sendEmptyMessage(MSG_DPM_STATE_CHANGED);
             } else if (ACTION_USER_UNLOCKED.equals(action)) {
-                mHandler.sendEmptyMessage(MSG_USER_UNLOCKED);
+                mHandler.sendMessage(mHandler.obtainMessage(MSG_USER_UNLOCKED,
+                        getSendingUserId(), 0));
+            } else if (ACTION_USER_STOPPED.equals(action)) {
+                mHandler.sendMessage(mHandler.obtainMessage(MSG_USER_STOPPED,
+                        intent.getIntExtra(Intent.EXTRA_USER_HANDLE, -1), 0));
+            } else if (ACTION_USER_REMOVED.equals(action)) {
+                mHandler.sendMessage(mHandler.obtainMessage(MSG_USER_REMOVED,
+                        intent.getIntExtra(Intent.EXTRA_USER_HANDLE, -1), 0));
             }
         }
     };
@@ -1466,13 +1374,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         }
     }
 
-    public static KeyguardUpdateMonitor getInstance(Context context) {
-        if (sInstance == null) {
-            sInstance = new KeyguardUpdateMonitor(context);
-        }
-        return sInstance;
-    }
-
     protected void handleStartedWakingUp() {
         Trace.beginSection("KeyguardUpdateMonitor#handleStartedWakingUp");
         checkIsHandlerThread();
@@ -1556,8 +1457,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         }
     }
 
-    private void handleUserUnlocked() {
+    private void handleUserUnlocked(int userId) {
         checkIsHandlerThread();
+        mUserIsUnlocked.put(userId, true);
         mNeedsSlowUnlockTransition = resolveNeedsSlowUnlockTransition();
         for (int i = 0; i < mCallbacks.size(); i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
@@ -1567,12 +1469,137 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         }
     }
 
+    private void handleUserStopped(int userId) {
+        checkIsHandlerThread();
+        mUserIsUnlocked.put(userId, mUserManager.isUserUnlocked(userId));
+    }
+
+    private void handleUserRemoved(int userId) {
+        checkIsHandlerThread();
+        mUserIsUnlocked.delete(userId);
+    }
+
     @VisibleForTesting
-    protected KeyguardUpdateMonitor(Context context) {
+    @Inject
+    protected KeyguardUpdateMonitor(Context context, @Named(MAIN_LOOPER_NAME) Looper mainLooper) {
         mContext = context;
         mSubscriptionManager = SubscriptionManager.from(context);
         mDeviceProvisioned = isDeviceProvisionedInSettingsDb();
         mStrongAuthTracker = new StrongAuthTracker(context, this::notifyStrongAuthStateChanged);
+
+        mHandler = new Handler(mainLooper) {
+            @Override
+            public void handleMessage(Message msg) {
+                switch (msg.what) {
+                    case MSG_TIME_UPDATE:
+                        handleTimeUpdate();
+                        break;
+                    case MSG_TIMEZONE_UPDATE:
+                        handleTimeZoneUpdate((String) msg.obj);
+                        break;
+                    case MSG_BATTERY_UPDATE:
+                        handleBatteryUpdate((BatteryStatus) msg.obj);
+                        break;
+                    case MSG_SIM_STATE_CHANGE:
+                        handleSimStateChange(msg.arg1, msg.arg2, (State) msg.obj);
+                        break;
+                    case MSG_RINGER_MODE_CHANGED:
+                        handleRingerModeChange(msg.arg1);
+                        break;
+                    case MSG_PHONE_STATE_CHANGED:
+                        handlePhoneStateChanged((String) msg.obj);
+                        break;
+                    case MSG_DEVICE_PROVISIONED:
+                        handleDeviceProvisioned();
+                        break;
+                    case MSG_DPM_STATE_CHANGED:
+                        handleDevicePolicyManagerStateChanged();
+                        break;
+                    case MSG_USER_SWITCHING:
+                        handleUserSwitching(msg.arg1, (IRemoteCallback) msg.obj);
+                        break;
+                    case MSG_USER_SWITCH_COMPLETE:
+                        handleUserSwitchComplete(msg.arg1);
+                        break;
+                    case MSG_KEYGUARD_RESET:
+                        handleKeyguardReset();
+                        break;
+                    case MSG_KEYGUARD_BOUNCER_CHANGED:
+                        handleKeyguardBouncerChanged(msg.arg1);
+                        break;
+                    case MSG_BOOT_COMPLETED:
+                        handleBootCompleted();
+                        break;
+                    case MSG_USER_INFO_CHANGED:
+                        handleUserInfoChanged(msg.arg1);
+                        break;
+                    case MSG_REPORT_EMERGENCY_CALL_ACTION:
+                        handleReportEmergencyCallAction();
+                        break;
+                    case MSG_STARTED_GOING_TO_SLEEP:
+                        handleStartedGoingToSleep(msg.arg1);
+                        break;
+                    case MSG_FINISHED_GOING_TO_SLEEP:
+                        handleFinishedGoingToSleep(msg.arg1);
+                        break;
+                    case MSG_STARTED_WAKING_UP:
+                        Trace.beginSection("KeyguardUpdateMonitor#handler MSG_STARTED_WAKING_UP");
+                        handleStartedWakingUp();
+                        Trace.endSection();
+                        break;
+                    case MSG_FACE_UNLOCK_STATE_CHANGED:
+                        Trace.beginSection(
+                                "KeyguardUpdateMonitor#handler MSG_FACE_UNLOCK_STATE_CHANGED");
+                        handleFaceUnlockStateChanged(msg.arg1 != 0, msg.arg2);
+                        Trace.endSection();
+                        break;
+                    case MSG_SIM_SUBSCRIPTION_INFO_CHANGED:
+                        handleSimSubscriptionInfoChanged();
+                        break;
+                    case MSG_AIRPLANE_MODE_CHANGED:
+                        handleAirplaneModeChanged();
+                        break;
+                    case MSG_SERVICE_STATE_CHANGE:
+                        handleServiceStateChange(msg.arg1, (ServiceState) msg.obj);
+                        break;
+                    case MSG_SCREEN_TURNED_ON:
+                        handleScreenTurnedOn();
+                        break;
+                    case MSG_SCREEN_TURNED_OFF:
+                        Trace.beginSection("KeyguardUpdateMonitor#handler MSG_SCREEN_TURNED_ON");
+                        handleScreenTurnedOff();
+                        Trace.endSection();
+                        break;
+                    case MSG_DREAMING_STATE_CHANGED:
+                        handleDreamingStateChanged(msg.arg1);
+                        break;
+                    case MSG_USER_UNLOCKED:
+                        handleUserUnlocked(msg.arg1);
+                        break;
+                    case MSG_USER_STOPPED:
+                        handleUserStopped(msg.arg1);
+                        break;
+                    case MSG_USER_REMOVED:
+                        handleUserRemoved(msg.arg1);
+                        break;
+                    case MSG_ASSISTANT_STACK_CHANGED:
+                        setAssistantVisible((boolean) msg.obj);
+                        break;
+                    case MSG_BIOMETRIC_AUTHENTICATION_CONTINUE:
+                        updateBiometricListeningState();
+                        break;
+                    case MSG_DEVICE_POLICY_MANAGER_STATE_CHANGED:
+                        updateLogoutEnabled();
+                        break;
+                    case MSG_TELEPHONY_CAPABLE:
+                        updateTelephonyCapable((boolean) msg.obj);
+                        break;
+                    default:
+                        super.handleMessage(msg);
+                        break;
+                }
+            }
+        };
 
         // Since device can't be un-provisioned, we only need to register a content observer
         // to update mDeviceProvisioned when we are...
@@ -1610,6 +1637,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         allUserFilter.addAction(ACTION_FACE_UNLOCK_STOPPED);
         allUserFilter.addAction(DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
         allUserFilter.addAction(ACTION_USER_UNLOCKED);
+        allUserFilter.addAction(ACTION_USER_STOPPED);
+        allUserFilter.addAction(ACTION_USER_REMOVED);
         context.registerReceiverAsUser(mBroadcastAllReceiver, UserHandle.ALL, allUserFilter,
                 null, mHandler);
 
@@ -1664,6 +1693,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         ActivityManagerWrapper.getInstance().registerTaskStackListener(mTaskStackListener);
         mUserManager = context.getSystemService(UserManager.class);
         mIsPrimaryUser = mUserManager.isPrimaryUser();
+        int user = ActivityManager.getCurrentUser();
+        mUserIsUnlocked.put(user, mUserManager.isUserUnlocked(user));
         mDevicePolicyManager = context.getSystemService(DevicePolicyManager.class);
         mLogoutEnabled = mDevicePolicyManager.isLogoutEnabled();
         updateAirplaneModeState();
@@ -1704,6 +1735,19 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         } else if (!runningOrRestarting && shouldListenForFingerprint) {
             startListeningForFingerprint();
         }
+    }
+
+    /**
+     * If a user is encrypted or not.
+     * This is NOT related to the lock screen being visible or not.
+     *
+     * @param userId The user.
+     * @return {@code true} when encrypted.
+     * @see UserManager#isUserUnlocked()
+     * @see Intent#ACTION_USER_UNLOCKED
+     */
+    public boolean isUserUnlocked(int userId) {
+        return mUserIsUnlocked.get(userId);
     }
 
     /**
@@ -1775,7 +1819,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         return shouldListen;
     }
 
-    private boolean shouldListenForFace() {
+    /**
+     * If face auth is allows to scan on this exact moment.
+     */
+    public boolean shouldListenForFace() {
         final boolean awakeKeyguard = mKeyguardIsVisible && mDeviceInteractive && !mGoingToSleep;
         final int user = getCurrentUser();
         final int strongAuth = mStrongAuthTracker.getStrongAuthForUser(user);
@@ -1814,8 +1861,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
      */
     public void onLockIconPressed() {
         mLockIconPressed = true;
-        mUserFaceAuthenticated.put(getCurrentUser(), false);
+        final int userId = getCurrentUser();
+        mUserFaceAuthenticated.put(userId, false);
         updateFaceListeningState();
+        mStrongAuthTracker.onStrongAuthRequiredChanged(userId);
     }
 
     private void startListeningForFingerprint() {
@@ -1882,9 +1931,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
      * If face hardware is available, user has enrolled and enabled auth via setting.
      */
     public boolean isFaceAuthEnabledForUser(int userId) {
-        return mFaceManager != null && mFaceManager.isHardwareDetected()
+        // TODO(b/140034352)
+        return whitelistIpcs(() -> mFaceManager != null && mFaceManager.isHardwareDetected()
                 && mFaceManager.hasEnrolledTemplates(userId)
-                && mFaceSettingEnabledForUser.get(userId);
+                && mFaceSettingEnabledForUser.get(userId));
     }
 
     private void stopListeningForFingerprint() {
@@ -2302,7 +2352,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     private boolean resolveNeedsSlowUnlockTransition() {
-        if (mUserManager.isUserUnlocked(getCurrentUser())) {
+        if (isUserUnlocked(getCurrentUser())) {
             return false;
         }
         Intent homeIntent = new Intent(Intent.ACTION_MAIN)
@@ -2741,33 +2791,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     private void checkIsHandlerThread() {
-        if (sDisableHandlerCheckForTesting) {
-            return;
-        }
         if (!mHandler.getLooper().isCurrentThread()) {
             Log.wtf(TAG, "must call on mHandler's thread "
                     + mHandler.getLooper().getThread() + ", not " + Thread.currentThread());
         }
-    }
-
-    /**
-     * Turn off the handler check for testing.
-     *
-     * This is necessary because currently tests are not too careful about which thread they call
-     * into this class on.
-     *
-     * Note that this must be called before scheduling any work involving KeyguardUpdateMonitor
-     * instances.
-     *
-     * TODO: fix the tests and remove this.
-     */
-    @VisibleForTesting
-    public static void disableHandlerCheckForTesting(Instrumentation instrumentation) {
-        Preconditions.checkNotNull(instrumentation, "Must only call this method in tests!");
-        // Don't need synchronization here *if* the callers follow the contract and call this only
-        // before scheduling work for KeyguardUpdateMonitor on other threads, because the scheduling
-        // of that work forces a happens-before relationship.
-        sDisableHandlerCheckForTesting = true;
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {

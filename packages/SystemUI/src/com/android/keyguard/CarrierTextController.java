@@ -19,6 +19,8 @@ package com.android.keyguard;
 import static android.telephony.PhoneStateListener.LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE;
 import static android.telephony.PhoneStateListener.LISTEN_NONE;
 
+import static com.android.systemui.DejankUtils.whitelistIpcs;
+
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -33,18 +35,19 @@ import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.settingslib.WirelessUtils;
 import com.android.systemui.Dependency;
+import com.android.systemui.R;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.statusbar.policy.FiveGServiceClient;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
 
 import java.util.List;
 import java.util.Objects;
-
-import androidx.annotation.VisibleForTesting;
 
 /**
  * Controller that generates text including the carrier names and/or the status of all the SIM
@@ -223,9 +226,10 @@ public class CarrierTextController {
                 .getSystemService(Context.TELEPHONY_SERVICE));
         if (callback != null) {
             mCarrierTextCallback = callback;
-            if (ConnectivityManager.from(mContext).isNetworkSupported(
-                    ConnectivityManager.TYPE_MOBILE)) {
-                mKeyguardUpdateMonitor = KeyguardUpdateMonitor.getInstance(mContext);
+            // TODO(b/140034799)
+            if (whitelistIpcs(() -> ConnectivityManager.from(mContext).isNetworkSupported(
+                    ConnectivityManager.TYPE_MOBILE))) {
+                mKeyguardUpdateMonitor = Dependency.get(KeyguardUpdateMonitor.class);
                 mKeyguardUpdateMonitor.registerCallback(mCallback);
                 mWakefulnessLifecycle.addObserver(mWakefulnessObserver);
                 telephonyManager.listen(mPhoneStateListener,
@@ -305,7 +309,9 @@ public class CarrierTextController {
                 }
             }
         }
-        if (allSimsMissing) {
+        // Only create "No SIM card" if no cards with CarrierName && no wifi when some sim is READY
+        // This condition will also be true always when numSubs == 0
+        if (allSimsMissing && !anySimReadyAndInService) {
             if (numSubs != 0) {
                 // Shows "No SIM card | Emergency calls only" on devices that are voice-capable.
                 // This depends on mPlmn containing the text "Emergency calls only" when the radio
@@ -494,7 +500,7 @@ public class CarrierTextController {
         }
 
         final boolean missingAndNotProvisioned =
-                !KeyguardUpdateMonitor.getInstance(mContext).isDeviceProvisioned()
+                !Dependency.get(KeyguardUpdateMonitor.class).isDeviceProvisioned()
                         && (simState == IccCardConstants.State.ABSENT
                         || simState == IccCardConstants.State.PERM_DISABLED);
 

@@ -14,6 +14,9 @@
 
 package com.android.systemui.plugins.qs;
 
+import static java.lang.annotation.RetentionPolicy.SOURCE;
+
+import android.annotation.IntDef;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.metrics.LogMaker;
@@ -25,6 +28,7 @@ import com.android.systemui.plugins.qs.QSTile.Callback;
 import com.android.systemui.plugins.qs.QSTile.Icon;
 import com.android.systemui.plugins.qs.QSTile.State;
 
+import java.lang.annotation.Retention;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -64,6 +68,14 @@ public interface QSTile {
 
     void destroy();
 
+    /**
+      * return true if the tile supports detail views, and not
+      * only boolean states
+      */
+    default boolean supportsDetailView() {
+        return false;
+    }
+
     CharSequence getTileLabel();
 
     State getState();
@@ -71,6 +83,17 @@ public interface QSTile {
     default LogMaker populate(LogMaker logMaker) {
         return logMaker;
     }
+
+    @Retention(SOURCE)
+    @IntDef({COLOR_TILE_ACCENT, COLOR_TILE_RED, COLOR_TILE_BLUE, COLOR_TILE_YELLOW,
+            COLOR_TILE_GREEN})
+    @interface ColorTile {}
+    int COLOR_TILE_ACCENT = 0;
+    int COLOR_TILE_RED = 1;
+    int COLOR_TILE_BLUE = 2;
+    int COLOR_TILE_YELLOW = 3;
+    int COLOR_TILE_GREEN = 4;
+    default void setColor(@ColorTile int color) {}
 
     @ProvidesInterface(version = Callback.VERSION)
     public interface Callback {
@@ -118,6 +141,7 @@ public interface QSTile {
         public SlashState slash;
         public boolean handlesLongClick = true;
         public boolean showRippleEffect = true;
+        public int colorActive = -1;
 
         public boolean copyTo(State other) {
             if (other == null) throw new IllegalArgumentException();
@@ -137,7 +161,8 @@ public interface QSTile {
                     || !Objects.equals(other.dualTarget, dualTarget)
                     || !Objects.equals(other.slash, slash)
                     || !Objects.equals(other.handlesLongClick, handlesLongClick)
-                    || !Objects.equals(other.showRippleEffect, showRippleEffect);
+                    || !Objects.equals(other.showRippleEffect, showRippleEffect)
+                    || !Objects.equals(other.colorActive, colorActive);
             other.icon = icon;
             other.iconSupplier = iconSupplier;
             other.label = label;
@@ -152,6 +177,7 @@ public interface QSTile {
             other.slash = slash != null ? slash.copy() : null;
             other.handlesLongClick = handlesLongClick;
             other.showRippleEffect = showRippleEffect;
+            other.colorActive = colorActive;
             return changed;
         }
 
