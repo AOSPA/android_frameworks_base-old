@@ -94,9 +94,11 @@ import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.ArraySet;
 import android.util.PrintWriterPrinter;
+import android.util.SparseArray;
 
 import com.android.internal.content.PackageHelper;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.LocalServices;
 import com.android.server.SystemConfig;
 
@@ -274,7 +276,7 @@ class PackageManagerShellCommand extends ShellCommand {
                 case "get-harmful-app-warning":
                     return runGetHarmfulAppWarning();
                 case "get-stagedsessions":
-                    return getStagedSessions();
+                    return runListStagedSessions();
                 case "uninstall-system-updates":
                     return uninstallSystemUpdates();
                 case "rollback-app":
@@ -342,28 +344,6 @@ class PackageManagerShellCommand extends ShellCommand {
         } catch (RemoteException e) {
             pw.println("Failure [" + e.getClass().getName() + " - " + e.getMessage() + "]");
             return -1;
-        }
-        return 1;
-    }
-
-    private int getStagedSessions() {
-        final PrintWriter pw = getOutPrintWriter();
-        try {
-            List<SessionInfo> stagedSessionsList =
-                    mInterface.getPackageInstaller().getStagedSessions().getList();
-            for (SessionInfo session: stagedSessionsList) {
-                pw.println("appPackageName = " + session.getAppPackageName()
-                        + "; sessionId = " + session.getSessionId()
-                        + "; isStaged = " + session.isStaged()
-                        + "; isStagedSessionReady = " + session.isStagedSessionReady()
-                        + "; isStagedSessionApplied = " + session.isStagedSessionApplied()
-                        + "; isStagedSessionFailed = " + session.isStagedSessionFailed() + ";");
-            }
-        } catch (RemoteException e) {
-            pw.println("Failure ["
-                    + e.getClass().getName() + " - "
-                    + e.getMessage() + "]");
-            return 0;
         }
         return 1;
     }
@@ -540,6 +520,8 @@ class PackageManagerShellCommand extends ShellCommand {
                 return runListPermissionGroups();
             case "permissions":
                 return runListPermissions();
+            case "staged-sessions":
+                return runListStagedSessions();
             case "users":
                 ServiceManager.getService("user").shellCommand(
                         getInFileDescriptor(), getOutFileDescriptor(), getErrFileDescriptor(),
@@ -875,6 +857,103 @@ class PackageManagerShellCommand extends ShellCommand {
                     -10000, 10000);
         }
         return 0;
+    }
+
+    private static class SessionDump {
+        boolean onlyParent; // Show parent sessions only
+        boolean onlyReady; // Show only staged sessions that are in ready state
+        boolean onlySessionId; // Show sessionId only
+    }
+
+    // Returns true if the provided flag is a session flag and given SessionDump was updated
+    private boolean setSessionFlag(String flag, SessionDump sessionDump) {
+        switch (flag) {
+            case "--only-parent":
+                sessionDump.onlyParent = true;
+                break;
+            case "--only-ready":
+                sessionDump.onlyReady = true;
+                break;
+            case "--only-sessionid":
+                sessionDump.onlySessionId = true;
+                break;
+            default:
+                return false;
+        }
+        return true;
+    }
+
+    private int runListStagedSessions() {
+        final IndentingPrintWriter pw = new IndentingPrintWriter(
+                getOutPrintWriter(), /* singleIndent */ "  ", /* wrapLength */ 120);
+
+        SessionDump sessionDump = new SessionDump();
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            if (!setSessionFlag(opt, sessionDump)) {
+                pw.println("Error: Unknown option: " + opt);
+                return -1;
+            }
+        }
+
+        try {
+            List<SessionInfo> stagedSessions =
+                    mInterface.getPackageInstaller().getStagedSessions().getList();
+            printSessionList(pw, stagedSessions, sessionDump);
+        } catch (RemoteException e) {
+            pw.println("Failure ["
+                    + e.getClass().getName() + " - "
+                    + e.getMessage() + "]");
+            return -1;
+        }
+        return 1;
+    }
+
+    private void printSessionList(IndentingPrintWriter pw, List<SessionInfo> stagedSessions,
+            SessionDump sessionDump) {
+        final SparseArray<SessionInfo> sessionById = new SparseArray<>(stagedSessions.size());
+        for (SessionInfo session : stagedSessions) {
+            sessionById.put(session.getSessionId(), session);
+        }
+        for (SessionInfo session: stagedSessions) {
+            if (sessionDump.onlyReady && !session.isStagedSessionReady()) {
+                continue;
+            }
+            if (session.getParentSessionId() != SessionInfo.INVALID_ID) {
+                continue;
+            }
+            printSession(pw, session, sessionDump);
+            if (session.isMultiPackage() && !sessionDump.onlyParent) {
+                pw.increaseIndent();
+                final int[] childIds = session.getChildSessionIds();
+                for (int i = 0; i < childIds.length; i++) {
+                    final SessionInfo childSession = sessionById.get(childIds[i]);
+                    if (childSession == null) {
+                        if (sessionDump.onlySessionId) {
+                            pw.println(childIds[i]);
+                        } else {
+                            pw.println("sessionId = " + childIds[i] + "; not found");
+                        }
+                    } else {
+                        printSession(pw, childSession, sessionDump);
+                    }
+                }
+                pw.decreaseIndent();
+            }
+        }
+    }
+
+    private static void printSession(PrintWriter pw, SessionInfo session, SessionDump sessionDump) {
+        if (sessionDump.onlySessionId) {
+            pw.println(session.getSessionId());
+            return;
+        }
+        pw.println("sessionId = " + session.getSessionId()
+                + "; appPackageName = " + session.getAppPackageName()
+                + "; isStaged = " + session.isStaged()
+                + "; isReady = " + session.isStagedSessionReady()
+                + "; isApplied = " + session.isStagedSessionApplied()
+                + "; isFailed = " + session.isStagedSessionFailed() + ";");
     }
 
     private Intent parseIntentAndUser() throws URISyntaxException {
@@ -3081,6 +3160,12 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("      -d: only list dangerous permissions");
         pw.println("      -u: list only the permissions users will see");
         pw.println("");
+        pw.println("  list staged-sessions [--only-ready] [--only-sessionid] [--only-parent]");
+        pw.println("    Displays list of all staged sessions on device.");
+        pw.println("      --only-ready: show only staged sessions that are ready");
+        pw.println("      --only-sessionid: show only sessionId of each session");
+        pw.println("      --only-parent: hide all children sessions");
+        pw.println("");
         pw.println("  resolve-activity [--brief] [--components] [--query-flags FLAGS]");
         pw.println("       [--user USER_ID] INTENT");
         pw.println("    Prints the activity that resolves to the given INTENT.");
@@ -3097,7 +3182,7 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("       [--user USER_ID] INTENT");
         pw.println("    Prints all broadcast receivers that can handle the given INTENT.");
         pw.println("");
-        pw.println("  install [-lrtsfdgw] [-i PACKAGE] [--user USER_ID|all|current]");
+        pw.println("  install [-rtsfdgw] [-i PACKAGE] [--user USER_ID|all|current]");
         pw.println("       [-p INHERIT_PACKAGE] [--install-location 0/1/2]");
         pw.println("       [--install-reason 0/1/2/3/4] [--originating-uri URI]");
         pw.println("       [--referrer URI] [--abi ABI_NAME] [--force-sdk]");
@@ -3108,7 +3193,6 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("       [PATH|-]");
         pw.println("    Install an application.  Must provide the apk data to install, either as a");
         pw.println("    file path or '-' to read from stdin.  Options are:");
-        pw.println("      -l: forward lock application");
         pw.println("      -R: disallow replacement of existing application");
         pw.println("      -t: allow test packages");
         pw.println("      -i: specify package name of installer owning the app");
@@ -3319,7 +3403,7 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("  uninstall-system-updates");
         pw.println("    Remove updates to all system applications and fall back to their /system " +
                 "version.");
-        pw.println();
+        pw.println("");
         pw.println("  get-moduleinfo [--all | --installed] [module-name]");
         pw.println("    Displays module info. If module-name is specified only that info is shown");
         pw.println("    By default, without any argument only installed modules are shown.");

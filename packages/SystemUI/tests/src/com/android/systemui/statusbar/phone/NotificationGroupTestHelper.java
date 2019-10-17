@@ -24,9 +24,9 @@ import android.app.ActivityManager;
 import android.app.Notification;
 import android.content.Context;
 import android.os.UserHandle;
-import android.service.notification.StatusBarNotification;
 
 import com.android.systemui.R;
+import com.android.systemui.statusbar.NotificationEntryBuilder;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 
@@ -45,11 +45,15 @@ public final class NotificationGroupTestHelper {
     }
 
     public NotificationEntry createSummaryNotification() {
-        return createSummaryNotification(Notification.GROUP_ALERT_ALL);
+        return createSummaryNotification(Notification.GROUP_ALERT_ALL, mId++);
     }
 
     public NotificationEntry createSummaryNotification(int groupAlertBehavior) {
-        return createEntry(true, groupAlertBehavior);
+        return createSummaryNotification(groupAlertBehavior, mId++);
+    }
+
+    public NotificationEntry createSummaryNotification(int groupAlertBehavior, int id) {
+        return createEntry(id, true, groupAlertBehavior);
     }
 
     public NotificationEntry createChildNotification() {
@@ -57,10 +61,14 @@ public final class NotificationGroupTestHelper {
     }
 
     public NotificationEntry createChildNotification(int groupAlertBehavior) {
-        return createEntry(false, groupAlertBehavior);
+        return createEntry(mId++, false, groupAlertBehavior);
     }
 
-    public NotificationEntry createEntry(boolean isSummary, int groupAlertBehavior) {
+    public NotificationEntry createChildNotification(int groupAlertBehavior, int id) {
+        return createEntry(id, false, groupAlertBehavior);
+    }
+
+    public NotificationEntry createEntry(int id, boolean isSummary, int groupAlertBehavior) {
         Notification notif = new Notification.Builder(mContext, TEST_CHANNEL_ID)
                 .setContentTitle("Title")
                 .setSmallIcon(R.drawable.ic_person)
@@ -68,22 +76,18 @@ public final class NotificationGroupTestHelper {
                 .setGroupSummary(isSummary)
                 .setGroup(TEST_GROUP_ID)
                 .build();
-        StatusBarNotification sbn = new StatusBarNotification(
-                TEST_PACKAGE_NAME /* pkg */,
-                TEST_PACKAGE_NAME,
-                mId++,
-                null /* tag */,
-                0, /* uid */
-                0 /* initialPid */,
-                notif,
-                new UserHandle(ActivityManager.getCurrentUser()),
-                null /* overrideGroupKey */,
-                0 /* postTime */);
-        NotificationEntry entry = new NotificationEntry(sbn);
+        NotificationEntry entry = new NotificationEntryBuilder()
+                .setPkg(TEST_PACKAGE_NAME)
+                .setOpPkg(TEST_PACKAGE_NAME)
+                .setId(id)
+                .setNotification(notif)
+                .setUser(new UserHandle(ActivityManager.getCurrentUser()))
+                .build();
+
         ExpandableNotificationRow row = mock(ExpandableNotificationRow.class);
         entry.setRow(row);
         when(row.getEntry()).thenReturn(entry);
-        when(row.getStatusBarNotification()).thenReturn(sbn);
+        when(row.getStatusBarNotification()).thenReturn(entry.sbn());
         when(row.isInflationFlagSet(anyInt())).thenReturn(true);
         return entry;
     }

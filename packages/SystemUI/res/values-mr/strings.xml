@@ -119,12 +119,13 @@
     <string name="cancel" msgid="6442560571259935130">"रद्द करा"</string>
     <string name="biometric_dialog_confirm" msgid="6468457350041712674">"खात्री करा"</string>
     <string name="biometric_dialog_try_again" msgid="1900185172633183201">"पुन्हा प्रयत्न करा"</string>
-    <string name="biometric_dialog_empty_space_description" msgid="7997936968009073717">"प्रदेशाचे नाव रिक्त आहे, ऑथेंटिकेशन रद्द करण्यासाठी टॅप करा"</string>
+    <string name="biometric_dialog_empty_space_description" msgid="6337699671577692511">"ऑथेंटिकेशन रद्द करण्यासाठी टॅप करा"</string>
     <string name="biometric_dialog_face_icon_description_idle" msgid="4497694707475970790">"कृपया पुन्हा प्रयत्न करा"</string>
     <string name="biometric_dialog_face_icon_description_authenticating" msgid="4512727754496228488">"तुमचा चेहरा शोधत आहे"</string>
     <string name="biometric_dialog_face_icon_description_authenticated" msgid="595380451325425259">"चेहरा ऑथेंटिकेशन केलेला आहे"</string>
     <string name="biometric_dialog_face_icon_description_confirmed" msgid="2003141400387093967">"निश्चित केले"</string>
     <string name="biometric_dialog_tap_confirm" msgid="4540715260292022404">"पूर्ण करण्यासाठी खात्री करा वर टॅप करा"</string>
+    <string name="biometric_dialog_authenticated" msgid="5918352844999713693">"ऑथेंटिकेशन केलेले"</string>
     <string name="fingerprint_dialog_touch_sensor" msgid="8511557690663181761">"फिंगरप्रिंट सेन्सरला स्पर्श करा"</string>
     <string name="accessibility_fingerprint_dialog_fingerprint_icon" msgid="3125122495414253226">"फिंगरप्रिंट आयकन"</string>
     <string name="face_dialog_looking_for_face" msgid="7049276266074494689">"तुमच्यासाठी शोधत आहे…"</string>
@@ -401,6 +402,7 @@
     <string name="speed_bump_explanation" msgid="1288875699658819755">"खाली कमी तातडीच्या सूचना"</string>
     <string name="notification_tap_again" msgid="7590196980943943842">"उघडण्यासाठी पुन्हा टॅप करा"</string>
     <string name="keyguard_unlock" msgid="6035822649218712063">"उघडण्यासाठी वर स्वाइप करा"</string>
+    <string name="keyguard_retry" msgid="5221600879614948709">"पुन्हा प्रयत्न करण्यासाठी वर स्‍वाइप करा"</string>
     <string name="do_disclosure_generic" msgid="5615898451805157556">"हे डिव्हाइस तुमची संस्था व्यवस्थापित करते"</string>
     <string name="do_disclosure_with_name" msgid="5640615509915445501">"हे डिव्हाइस <xliff:g id="ORGANIZATION_NAME">%s</xliff:g> ने व्यवस्थापित केले आहे"</string>
     <string name="phone_hint" msgid="4872890986869209950">"फोनसाठी चिन्हावरून स्वाइप करा"</string>
@@ -544,6 +546,7 @@
     <string name="screen_pinning_description_recents_invisible_accessible" msgid="6134833683151189507">"तुम्ही अनपिन करेपर्यंत हे त्यास दृश्यामध्ये ठेवते. अनपिन करण्यासाठी होमला स्पर्श करा आणि धरून ठेवा."</string>
     <string name="screen_pinning_toast" msgid="2266705122951934150">"हा स्क्रीन अनपिन करण्यासाठी, मागे आणि अवलोकन बटणांना स्पर्श करून धरून ठेवा"</string>
     <string name="screen_pinning_toast_recents_invisible" msgid="8252402309499161281">"हा स्क्रीन अनपिन करण्यासाठी, मागे आणि होम बटणांना स्पर्श करून धरून ठेवा"</string>
+    <string name="screen_pinning_toast_gesture_nav" msgid="5070548776081664958">"हा स्क्रीन अनपिन करण्यासाठी, वर स्‍वाइप करा आणि धरून ठेवा"</string>
     <string name="screen_pinning_positive" msgid="3783985798366751226">"समजले"</string>
     <string name="screen_pinning_negative" msgid="3741602308343880268">"नाही, नको"</string>
     <string name="screen_pinning_start" msgid="1022122128489278317">"स्क्रीन पिन केला"</string>

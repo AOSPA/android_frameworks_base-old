@@ -18,7 +18,7 @@ package com.android.server.location;
 
 import android.content.Context;
 import android.location.Location;
-import android.location.LocationProvider;
+import android.os.Binder;
 import android.os.Bundle;
 import android.os.WorkSource;
 
@@ -81,7 +81,12 @@ public abstract class AbstractLocationProvider {
      * any thread.
      */
     protected void setEnabled(boolean enabled) {
-        mLocationProviderManager.onSetEnabled(enabled);
+        long identity = Binder.clearCallingIdentity();
+        try {
+            mLocationProviderManager.onSetEnabled(enabled);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     /**
@@ -89,21 +94,36 @@ public abstract class AbstractLocationProvider {
      * any thread.
      */
     protected void setProperties(ProviderProperties properties) {
-        mLocationProviderManager.onSetProperties(properties);
+        long identity = Binder.clearCallingIdentity();
+        try {
+            mLocationProviderManager.onSetProperties(properties);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     /**
      * Call this method to report a new location. May be called from any thread.
      */
     protected void reportLocation(Location location) {
-        mLocationProviderManager.onReportLocation(location);
+        long identity = Binder.clearCallingIdentity();
+        try {
+            mLocationProviderManager.onReportLocation(location);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     /**
      * Call this method to report a new location. May be called from any thread.
      */
     protected void reportLocation(List<Location> locations) {
-        mLocationProviderManager.onReportLocation(locations);
+        long identity = Binder.clearCallingIdentity();
+        try {
+            mLocationProviderManager.onReportLocation(locations);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     /**
@@ -132,26 +152,4 @@ public abstract class AbstractLocationProvider {
      * thread.
      */
     public abstract void dump(FileDescriptor fd, PrintWriter pw, String[] args);
-
-    /**
-     * Invoked by the location service to retrieve the current status of the provider. May be
-     * invoked from any thread.
-     *
-     * @deprecated Will be removed in a future release.
-     */
-    @Deprecated
-    public int getStatus(Bundle extras) {
-        return LocationProvider.AVAILABLE;
-    }
-
-    /**
-     * Invoked by the location service to retrieve the last update time of the status of the
-     * provider. May be invoked from any thread.
-     *
-     * @deprecated Will be removed in a future release.
-     */
-    @Deprecated
-    public long getStatusUpdateTime() {
-        return 0;
-    }
 }

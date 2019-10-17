@@ -1126,6 +1126,41 @@ static void android_hardware_Camera_enableFocusMoveCallback(JNIEnv *env, jobject
     }
 }
 
+static void android_hardware_Camera_setAudioRestriction(
+        JNIEnv *env, jobject thiz, jint mode)
+{
+    ALOGV("setAudioRestriction");
+    sp<Camera> camera = get_native_camera(env, thiz, NULL);
+    if (camera == 0) {
+        jniThrowRuntimeException(env, "camera has been disconnected");
+        return;
+    }
+
+    int32_t ret = camera->setAudioRestriction(mode);
+    if (ret < 0) {
+        jniThrowRuntimeException(env, "Illegal argument or low-level eror");
+        return;
+    }
+}
+
+static int32_t android_hardware_Camera_getAudioRestriction(
+        JNIEnv *env, jobject thiz)
+{
+    ALOGV("getAudioRestriction");
+    sp<Camera> camera = get_native_camera(env, thiz, NULL);
+    if (camera == 0) {
+        jniThrowRuntimeException(env, "camera has been disconnected");
+        return -1;
+    }
+
+    int32_t ret = camera->getGlobalAudioRestriction();
+    if (ret < 0) {
+        jniThrowRuntimeException(env, "Illegal argument or low-level eror");
+        return -1;
+    }
+    return ret;
+}
+
 //-------------------------------------------------
 
 static const JNINativeMethod camMethods[] = {
@@ -1222,6 +1257,12 @@ static const JNINativeMethod camMethods[] = {
   { "enableFocusMoveCallback",
     "(I)V",
     (void *)android_hardware_Camera_enableFocusMoveCallback},
+  { "setAudioRestriction",
+    "(I)V",
+    (void *)android_hardware_Camera_setAudioRestriction},
+  { "getAudioRestriction",
+    "()I",
+    (void *)android_hardware_Camera_getAudioRestriction},
 };
 
 struct field {

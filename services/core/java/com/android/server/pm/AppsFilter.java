@@ -16,13 +16,18 @@
 
 package com.android.server.pm;
 
+import static android.content.pm.PackageParser.Component;
+import static android.content.pm.PackageParser.IntentInfo;
 import static android.provider.DeviceConfig.NAMESPACE_PACKAGE_MANAGER_SERVICE;
 
 import android.Manifest;
 import android.annotation.Nullable;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageParser;
+import android.content.pm.ProviderInfo;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Process;
 import android.os.RemoteException;
@@ -34,10 +39,12 @@ import android.util.Slog;
 import android.util.SparseArray;
 
 import com.android.internal.R;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.FgThread;
 import com.android.server.compat.PlatformCompat;
 
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -49,19 +56,16 @@ import java.util.Set;
  * The entity responsible for filtering visibility between apps based on declarations in their
  * manifests.
  */
-class AppsFilter {
+@VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+public class AppsFilter {
 
     private static final String TAG = PackageManagerService.TAG;
-
-    // Forces filtering logic to run for debug purposes.
-    // STOPSHIP (b/136675067): should be false after development is complete
-    private static final boolean DEBUG_RUN_WHEN_DISABLED = true;
 
     // Logs all filtering instead of enforcing
     private static final boolean DEBUG_ALLOW_ALL = false;
 
     @SuppressWarnings("ConstantExpression")
-    private static final boolean DEBUG_LOGGING = false | DEBUG_RUN_WHEN_DISABLED | DEBUG_ALLOW_ALL;
+    private static final boolean DEBUG_LOGGING = false | DEBUG_ALLOW_ALL;
 
     /**
      * This contains a list of packages that are implicitly queryable because another app explicitly
@@ -122,15 +126,13 @@ class AppsFilter {
 
         /** @return true if the feature is enabled for the given package. */
         boolean packageIsEnabled(PackageParser.Package pkg);
+
     }
 
     private static class FeatureConfigImpl implements FeatureConfig {
         private static final String FILTERING_ENABLED_NAME = "package_query_filtering_enabled";
-
-        // STOPSHIP(patb): set this to true if we plan to launch this in R
-        private static final boolean DEFAULT_ENABLED_STATE = false;
         private final PackageManagerService.Injector mInjector;
-        private volatile boolean mFeatureEnabled = DEFAULT_ENABLED_STATE;
+        private volatile boolean mFeatureEnabled = true;
 
         private FeatureConfigImpl(PackageManagerService.Injector injector) {
             mInjector = injector;
@@ -140,13 +142,13 @@ class AppsFilter {
         public void onSystemReady() {
             mFeatureEnabled = DeviceConfig.getBoolean(
                     NAMESPACE_PACKAGE_MANAGER_SERVICE, FILTERING_ENABLED_NAME,
-                    DEFAULT_ENABLED_STATE);
+                    true);
             DeviceConfig.addOnPropertiesChangedListener(
                     NAMESPACE_PACKAGE_MANAGER_SERVICE, FgThread.getExecutor(),
                     properties -> {
                         synchronized (FeatureConfigImpl.this) {
                             mFeatureEnabled = properties.getBoolean(
-                                    FILTERING_ENABLED_NAME, DEFAULT_ENABLED_STATE);
+                                    FILTERING_ENABLED_NAME, true);
                         }
                     });
         }
@@ -200,12 +202,38 @@ class AppsFilter {
             return false;
         }
         for (Intent intent : querying.mQueriesIntents) {
-            for (PackageParser.Activity activity : potentialTarget.activities) {
-                if (activity.intents != null) {
-                    for (PackageParser.ActivityIntentInfo filter : activity.intents) {
-                        if (matches(intent, filter)) {
-                            return true;
-                        }
+            if (matches(intent, potentialTarget.providers, potentialTarget.activities,
+                    potentialTarget.services, potentialTarget.receivers)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean matches(Intent intent,
+            ArrayList<PackageParser.Provider> providerList,
+            ArrayList<? extends Component<? extends IntentInfo>>... componentLists) {
+        for (int p = providerList.size() - 1; p >= 0; p--) {
+            PackageParser.Provider provider = providerList.get(p);
+            final ProviderInfo providerInfo = provider.info;
+            final Uri data = intent.getData();
+            if ("content".equalsIgnoreCase(intent.getScheme())
+                    && data != null
+                    && providerInfo.authority.equalsIgnoreCase(data.getAuthority())) {
+                return true;
+            }
+        }
+
+        for (int l = componentLists.length - 1; l >= 0; l--) {
+            ArrayList<? extends Component<? extends IntentInfo>> components = componentLists[l];
+            for (int c = components.size() - 1; c >= 0; c--) {
+                Component<? extends IntentInfo> component = components.get(c);
+                ArrayList<? extends IntentInfo> intents = component.intents;
+                for (int i = intents.size() - 1; i >= 0; i--) {
+                    IntentFilter intentFilter = intents.get(i);
+                    if (intentFilter.match(intent.getAction(), intent.getType(), intent.getScheme(),
+                            intent.getData(), intent.getCategories(), "AppsFilter") > 0) {
+                        return true;
                     }
                 }
             }
@@ -213,32 +241,26 @@ class AppsFilter {
         return false;
     }
 
-    /** Returns true if the given intent matches the given filter. */
-    private static boolean matches(Intent intent, PackageParser.ActivityIntentInfo filter) {
-        return filter.match(intent.getAction(), intent.getType(), intent.getScheme(),
-                intent.getData(), intent.getCategories(), "AppsFilter") > 0;
-    }
-
     /**
-     * Marks that a package initiated an interaction with another package, granting visibility of
-     * the prior from the former.
+     * Grants access based on an interaction between a calling and target package, granting
+     * visibility of the caller from the target.
      *
-     * @param initiatingPackage the package initiating the interaction
+     * @param callingPackage    the package initiating the interaction
      * @param targetPackage     the package being interacted with and thus gaining visibility of the
      *                          initiating package.
      * @param userId            the user in which this interaction was taking place
      */
-    private void markAppInteraction(
-            PackageSetting initiatingPackage, PackageSetting targetPackage, int userId) {
+    public void grantImplicitAccess(
+            String callingPackage, String targetPackage, int userId) {
         HashMap<String, Set<String>> currentUser = mImplicitlyQueryable.get(userId);
         if (currentUser == null) {
             currentUser = new HashMap<>();
             mImplicitlyQueryable.put(userId, currentUser);
         }
-        if (!currentUser.containsKey(targetPackage.pkg.packageName)) {
-            currentUser.put(targetPackage.pkg.packageName, new HashSet<>());
+        if (!currentUser.containsKey(targetPackage)) {
+            currentUser.put(targetPackage, new HashSet<>());
         }
-        currentUser.get(targetPackage.pkg.packageName).add(initiatingPackage.pkg.packageName);
+        currentUser.get(targetPackage).add(callingPackage);
     }
 
     public void onSystemReady() {
@@ -327,10 +349,16 @@ class AppsFilter {
     public boolean shouldFilterApplication(int callingUid, @Nullable SettingBase callingSetting,
             PackageSetting targetPkgSetting, int userId) {
         final boolean featureEnabled = mFeatureConfig.isGloballyEnabled();
-        if (!featureEnabled && !DEBUG_RUN_WHEN_DISABLED) {
+        if (!featureEnabled) {
+            if (DEBUG_LOGGING) {
+                Slog.d(TAG, "filtering disabled; skipped");
+            }
             return false;
         }
         if (callingUid < Process.FIRST_APPLICATION_UID) {
+            if (DEBUG_LOGGING) {
+                Slog.d(TAG, "filtering skipped; " + callingUid + " is system");
+            }
             return false;
         }
         if (callingSetting == null) {
@@ -342,8 +370,6 @@ class AppsFilter {
             callingPkgSetting = (PackageSetting) callingSetting;
             if (!shouldFilterApplicationInternal(callingPkgSetting, targetPkgSetting,
                     userId)) {
-                // TODO: actually base this on a start / launch (not just a query)
-                markAppInteraction(callingPkgSetting, targetPkgSetting, userId);
                 return false;
             }
         } else if (callingSetting instanceof SharedUserSetting) {
@@ -354,8 +380,6 @@ class AppsFilter {
                     final PackageSetting packageSetting = packageSettings.valueAt(i);
                     if (!shouldFilterApplicationInternal(packageSetting, targetPkgSetting,
                             userId)) {
-                        // TODO: actually base this on a start / launch (not just a query)
-                        markAppInteraction(packageSetting, targetPkgSetting, userId);
                         return false;
                     }
                     if (callingPkgSetting == null && packageSetting.pkg != null) {
@@ -371,22 +395,12 @@ class AppsFilter {
                 return true;
             }
         }
-        if (!featureEnabled) {
-            return false;
+
+        if (DEBUG_LOGGING) {
+            log(callingPkgSetting, targetPkgSetting,
+                    DEBUG_ALLOW_ALL ? "ALLOWED" : "BLOCKED");
         }
-        if (mFeatureConfig.packageIsEnabled(callingPkgSetting.pkg)) {
-            if (DEBUG_LOGGING) {
-                Slog.d(TAG, "interaction: " + callingPkgSetting.name + " -> "
-                        + targetPkgSetting.name + (DEBUG_ALLOW_ALL ? " ALLOWED" : "BLOCKED"));
-            }
-            return !DEBUG_ALLOW_ALL;
-        } else {
-            if (DEBUG_LOGGING) {
-                Slog.d(TAG, "interaction: " + callingPkgSetting.name + " -> "
-                        + targetPkgSetting.name + " DISABLED");
-            }
-            return false;
-        }
+        return !DEBUG_ALLOW_ALL;
     }
 
     private boolean shouldFilterApplicationInternal(
@@ -394,41 +408,74 @@ class AppsFilter {
         final String callingName = callingPkgSetting.pkg.packageName;
         final PackageParser.Package targetPkg = targetPkgSetting.pkg;
 
+        if (!mFeatureConfig.packageIsEnabled(callingPkgSetting.pkg)) {
+            if (DEBUG_LOGGING) {
+                log(callingPkgSetting, targetPkgSetting, "DISABLED");
+            }
+            return false;
+        }
         // This package isn't technically installed and won't be written to settings, so we can
         // treat it as filtered until it's available again.
         if (targetPkg == null) {
+            if (DEBUG_LOGGING) {
+                Slog.wtf(TAG, "shouldFilterApplication: " + "targetPkg is null");
+            }
             return true;
         }
         final String targetName = targetPkg.packageName;
         if (callingPkgSetting.pkg.applicationInfo.targetSdkVersion < Build.VERSION_CODES.R) {
+            if (DEBUG_LOGGING) {
+                log(callingPkgSetting, targetPkgSetting, "caller pre-R");
+            }
             return false;
         }
         if (isImplicitlyQueryableSystemApp(targetPkgSetting)) {
+            if (DEBUG_LOGGING) {
+                log(callingPkgSetting, targetPkgSetting, "implicitly queryable sys");
+            }
             return false;
         }
         if (targetPkg.mForceQueryable) {
+            if (DEBUG_LOGGING) {
+                log(callingPkgSetting, targetPkgSetting, "manifest forceQueryable");
+            }
             return false;
         }
         if (mForceQueryable.contains(targetName)) {
+            if (DEBUG_LOGGING) {
+                log(callingPkgSetting, targetPkgSetting, "whitelist forceQueryable");
+            }
             return false;
         }
         if (mQueriesViaPackage.containsKey(callingName)
                 && mQueriesViaPackage.get(callingName).contains(
                 targetName)) {
             // the calling package has explicitly declared the target package; allow
+            if (DEBUG_LOGGING) {
+                log(callingPkgSetting, targetPkgSetting, "queries package");
+            }
             return false;
         } else if (mQueriesViaIntent.containsKey(callingName)
                 && mQueriesViaIntent.get(callingName).contains(targetName)) {
+            if (DEBUG_LOGGING) {
+                log(callingPkgSetting, targetPkgSetting, "queries intent");
+            }
             return false;
         }
         if (mImplicitlyQueryable.get(userId) != null
                 && mImplicitlyQueryable.get(userId).containsKey(callingName)
                 && mImplicitlyQueryable.get(userId).get(callingName).contains(targetName)) {
+            if (DEBUG_LOGGING) {
+                log(callingPkgSetting, targetPkgSetting, "implicitly queryable for user");
+            }
             return false;
         }
         if (callingPkgSetting.pkg.instrumentation.size() > 0) {
             for (int i = 0, max = callingPkgSetting.pkg.instrumentation.size(); i < max; i++) {
                 if (callingPkgSetting.pkg.instrumentation.get(i).info.targetPackage == targetName) {
+                    if (DEBUG_LOGGING) {
+                        log(callingPkgSetting, targetPkgSetting, "instrumentation");
+                    }
                     return false;
                 }
             }
@@ -437,12 +484,22 @@ class AppsFilter {
             if (mPermissionManager.checkPermission(
                     Manifest.permission.QUERY_ALL_PACKAGES, callingName, userId)
                     == PackageManager.PERMISSION_GRANTED) {
+                if (DEBUG_LOGGING) {
+                    log(callingPkgSetting, targetPkgSetting, "permission");
+                }
                 return false;
             }
         } catch (RemoteException e) {
             return true;
         }
         return true;
+    }
+
+    private static void log(PackageSetting callingPkgSetting, PackageSetting targetPkgSetting,
+            String description) {
+        Slog.wtf(TAG,
+                "interaction: " + callingPkgSetting.name + " -> " + targetPkgSetting.name + " "
+                        + description);
     }
 
     private boolean isImplicitlyQueryableSystemApp(PackageSetting targetPkgSetting) {
@@ -467,7 +524,9 @@ class AppsFilter {
         for (int user : users) {
             pw.append("    User ").append(Integer.toString(user)).println(":");
             final HashMap<String, Set<String>> queryMapForUser = mImplicitlyQueryable.get(user);
-            dumpQueriesMap(pw, filteringPackageName, queryMapForUser, "      ");
+            if (queryMapForUser != null) {
+                dumpQueriesMap(pw, filteringPackageName, queryMapForUser, "      ");
+            }
         }
     }
 

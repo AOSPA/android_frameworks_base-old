@@ -4356,6 +4356,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private Insets mLayoutInsets;
 
     /**
+     * Briefly describes the state of the view and is primarily used for accessibility support.
+     */
+    private CharSequence mStateDescription;
+
+    /**
      * Briefly describes the view and is primarily used for accessibility support.
      */
     private CharSequence mContentDescription;
@@ -5125,6 +5130,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @Nullable
     private ContentCaptureSession mContentCaptureSession;
 
+    /**
+     * Whether {@link ContentCaptureSession} is cached, resets on {@link #invalidate()}.
+     */
+    private boolean mContentCaptureSessionCached;
+
     @LayoutRes
     private int mSourceLayoutId = ID_NULL;
 
@@ -5136,11 +5146,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     @StyleRes
     private int mExplicitStyle;
-
-    /**
-     * Cached reference to the {@link ContentCaptureSession}, is reset on {@link #invalidate()}.
-     */
-    private ContentCaptureSession mCachedContentCaptureSession;
 
     /**
      * Simple constructor to use when creating a view from code.
@@ -9560,18 +9565,21 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     @Nullable
     public final ContentCaptureSession getContentCaptureSession() {
-        if (mCachedContentCaptureSession != null) {
-            return mCachedContentCaptureSession;
+        if (mContentCaptureSessionCached) {
+            return mContentCaptureSession;
         }
 
-        mCachedContentCaptureSession = getAndCacheContentCaptureSession();
-        return mCachedContentCaptureSession;
+        mContentCaptureSession = getAndCacheContentCaptureSession();
+        mContentCaptureSessionCached = true;
+        return mContentCaptureSession;
     }
 
     @Nullable
     private ContentCaptureSession getAndCacheContentCaptureSession() {
         // First try the session explicitly set by setContentCaptureSession()
-        if (mContentCaptureSession != null) return mContentCaptureSession;
+        if (mContentCaptureSession != null) {
+            return mContentCaptureSession;
+        }
 
         // Then the session explicitly set in an ancestor
         ContentCaptureSession session = null;
@@ -9922,6 +9930,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         info.setImportantForAccessibility(isImportantForAccessibility());
         info.setPackageName(mContext.getPackageName());
         info.setClassName(getAccessibilityClassName());
+        info.setStateDescription(getStateDescription());
         info.setContentDescription(getContentDescription());
 
         info.setEnabled(isEnabled());
@@ -10294,6 +10303,22 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Returns the {@link View}'s state description.
+     * <p>
+     * <strong>Note:</strong> Do not override this method, as it will have no
+     * effect on the state description presented to accessibility services.
+     * You must call {@link #setStateDescription(CharSequence)} to modify the
+     * state description.
+     *
+     * @return the state description
+     * @see #setStateDescription(CharSequence)
+     */
+    @ViewDebug.ExportedProperty(category = "accessibility")
+    public final @Nullable CharSequence getStateDescription() {
+        return mStateDescription;
+    }
+
+    /**
      * Returns the {@link View}'s content description.
      * <p>
      * <strong>Note:</strong> Do not override this method, as it will have no
@@ -10309,6 +10334,36 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @InspectableProperty
     public CharSequence getContentDescription() {
         return mContentDescription;
+    }
+
+    /**
+     * Sets the {@link View}'s state description.
+     * <p>
+     * A state description briefly describes the states of the view and is primarily used
+     * for accessibility support to determine how the states of a view should be presented to
+     * the user. It is a supplement to the boolean states (for example, checked/unchecked) and
+     * it is used for customized state description (for example, "wifi, connected, three bars").
+     * State description changes frequently while content description should change less often.
+     *
+     * @param stateDescription The state description.
+     * @see #getStateDescription()
+     */
+    @RemotableViewMethod
+    public void setStateDescription(@Nullable CharSequence stateDescription) {
+        if (mStateDescription == null) {
+            if (stateDescription == null) {
+                return;
+            }
+        } else if (mStateDescription.equals(stateDescription)) {
+            return;
+        }
+        mStateDescription = stateDescription;
+        if (!TextUtils.isEmpty(stateDescription)
+                && getImportantForAccessibility() == IMPORTANT_FOR_ACCESSIBILITY_AUTO) {
+            setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
+        }
+        notifyViewAccessibilityStateChangedIfNeeded(
+                AccessibilityEvent.CONTENT_CHANGE_TYPE_STATE_DESCRIPTION);
     }
 
     /**
@@ -13386,10 +13441,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         if ((mPrivateFlags2 & PFLAG2_SUBTREE_ACCESSIBILITY_STATE_CHANGED) == 0) {
             mPrivateFlags2 |= PFLAG2_SUBTREE_ACCESSIBILITY_STATE_CHANGED;
-            if (mParent != null && mParent instanceof View) {
+            if (mParent != null) {
                 try {
                     mParent.notifySubtreeAccessibilityStateChanged(
-                            this, (View) mParent, AccessibilityEvent.CONTENT_CHANGE_TYPE_SUBTREE);
+                            this, this, AccessibilityEvent.CONTENT_CHANGE_TYPE_SUBTREE);
                 } catch (AbstractMethodError e) {
                     Log.e(VIEW_LOG_TAG, mParent.getClass().getSimpleName() +
                             " does not fully implement ViewParent", e);
@@ -14325,6 +14380,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * @return true if this view and all ancestors are visible as of the last
+     * {@link #onVisibilityAggregated(boolean)} call.
+     */
+    boolean isAggregatedVisible() {
+        return (mPrivateFlags3 & PFLAG3_AGGREGATED_VISIBLE) != 0;
+    }
+
+    /**
      * Internal dispatching method for {@link #onVisibilityAggregated}. Overridden by
      * ViewGroup. Intended to only be called when {@link #isAttachedToWindow()},
      * {@link #getWindowVisibility()} is {@link #VISIBLE} and this view's parent {@link #isShown()}.
@@ -14352,7 +14415,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @CallSuper
     public void onVisibilityAggregated(boolean isVisible) {
         // Update our internal visibility tracking so we can detect changes
-        boolean oldVisible = (mPrivateFlags3 & PFLAG3_AGGREGATED_VISIBLE) != 0;
+        boolean oldVisible = isAggregatedVisible();
         mPrivateFlags3 = isVisible ? (mPrivateFlags3 | PFLAG3_AGGREGATED_VISIBLE)
                 : (mPrivateFlags3 & ~PFLAG3_AGGREGATED_VISIBLE);
         if (isVisible && mAttachInfo != null) {
@@ -14404,6 +14467,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         notifyAppearedOrDisappearedForContentCaptureIfNeeded(isVisible);
+        if (!getSystemGestureExclusionRects().isEmpty() && isVisible != oldVisible) {
+            postUpdateSystemGestureExclusionRects();
+        }
     }
 
     /**
@@ -18087,7 +18153,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         // Reset content capture caches
         mPrivateFlags4 &= ~PFLAG4_CONTENT_CAPTURE_IMPORTANCE_MASK;
-        mCachedContentCaptureSession = null;
+        mContentCaptureSessionCached = false;
 
         if ((mPrivateFlags & (PFLAG_DRAWN | PFLAG_HAS_BOUNDS)) == (PFLAG_DRAWN | PFLAG_HAS_BOUNDS)
                 || (invalidateCache && (mPrivateFlags & PFLAG_DRAWING_CACHE_VALID) == PFLAG_DRAWING_CACHE_VALID)

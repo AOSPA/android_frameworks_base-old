@@ -110,7 +110,7 @@ public class NotificationFilter {
             return true;
         }
 
-        if (entry.suspended) {
+        if (entry.isSuspended()) {
             return true;
         }
 
@@ -133,11 +133,6 @@ public class NotificationFilter {
                 }
             }
         }
-
-        if (entry.isBubble() && !entry.showInShadeWhenBubble()) {
-            return true;
-        }
-
         return false;
     }
 

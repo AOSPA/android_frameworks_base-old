@@ -16,33 +16,65 @@
 
 package com.android.systemui;
 
+import android.app.Activity;
+import android.app.Service;
+
 import java.util.Map;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
+import javax.inject.Singleton;
 
 /**
  * Used during Service and Activity instantiation to make them injectable.
  */
+@Singleton
 public class ContextComponentResolver implements ContextComponentHelper {
-    private final Map<Class<?>, Provider<Object>> mCreators;
+    private final Map<Class<?>, Provider<Activity>> mActivityCreators;
+    private final Map<Class<?>, Provider<Service>> mServiceCreators;
+    private final Map<Class<?>, Provider<SystemUI>> mSystemUICreators;
 
     @Inject
-    ContextComponentResolver(Map<Class<?>, Provider<Object>> creators) {
-        mCreators = creators;
+    ContextComponentResolver(
+            Map<Class<?>, Provider<Activity>> activityCreators,
+            Map<Class<?>, Provider<Service>> serviceCreators,
+            Map<Class<?>, Provider<SystemUI>> systemUICreators) {
+        mActivityCreators = activityCreators;
+        mServiceCreators = serviceCreators;
+        mSystemUICreators = systemUICreators;
     }
 
     /**
-     * Looks up the class name to see if Dagger has an instance of it.
+     * Looks up the Activity class name to see if Dagger has an instance of it.
      */
     @Override
-    public <T> T resolve(String className) {
-        for (Map.Entry<Class<?>, Provider<Object>> p : mCreators.entrySet()) {
-            if (p.getKey().getName().equals(className)) {
-                return (T) p.getValue().get();
-            }
-        }
+    public Activity resolveActivity(String className) {
+        return resolve(className, mActivityCreators);
+    }
 
-        return null;
+    /**
+     * Looks up the Service class name to see if Dagger has an instance of it.
+     */
+    @Override
+    public Service resolveService(String className) {
+        return resolve(className, mServiceCreators);
+    }
+
+    /**
+     * Looks up the SystemUI class name to see if Dagger has an instance of it.
+     */
+    @Override
+    public SystemUI resolveSystemUI(String className) {
+        return resolve(className, mSystemUICreators);
+    }
+
+    private <T> T resolve(String className, Map<Class<?>, Provider<T>> creators) {
+        try {
+            Class<?> clazz = Class.forName(className);
+            Provider<T> provider = creators.get(clazz);
+            return provider == null ? null : provider.get();
+        } catch (ClassNotFoundException e) {
+            return null;
+        }
     }
 }

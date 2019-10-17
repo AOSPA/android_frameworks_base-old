@@ -38,6 +38,7 @@ import android.sysprop.ApexProperties;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.IndentingPrintWriter;
 
 import java.io.File;
@@ -260,7 +261,9 @@ abstract class ApexManager {
             mContext.registerReceiver(new BroadcastReceiver() {
                 @Override
                 public void onReceive(Context context, Intent intent) {
-                    populateAllPackagesCacheIfNeeded();
+                    // Post populateAllPackagesCacheIfNeeded to a background thread, since it's
+                    // expensive to run it in broadcast handler thread.
+                    BackgroundThread.getHandler().post(() -> populateAllPackagesCacheIfNeeded());
                     mContext.unregisterReceiver(this);
                 }
             }, new IntentFilter(Intent.ACTION_BOOT_COMPLETED));

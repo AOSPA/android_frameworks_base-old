@@ -184,6 +184,7 @@ import android.util.Log;
 import android.util.SparseArray;
 
 import androidx.test.InstrumentationRegistry;
+import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
@@ -2259,9 +2260,8 @@ public class ConnectivityServiceTest {
         // If user accepted partial connectivity network before,
         // NetworkMonitor#setAcceptPartialConnectivity() will be called in
         // ConnectivityService#updateNetworkInfo().
-        waitForIdle();
-        verify(mWiFiNetworkAgent.mNetworkMonitor, times(1)).setAcceptPartialConnectivity();
         callback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
+        verify(mWiFiNetworkAgent.mNetworkMonitor, times(1)).setAcceptPartialConnectivity();
         callback.expectCallback(CallbackRecord.LOSING, mCellNetworkAgent);
         nc = callback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
         assertFalse(nc.hasCapability(NET_CAPABILITY_PARTIAL_CONNECTIVITY));
@@ -2281,9 +2281,8 @@ public class ConnectivityServiceTest {
         // If user accepted partial connectivity network before,
         // NetworkMonitor#setAcceptPartialConnectivity() will be called in
         // ConnectivityService#updateNetworkInfo().
-        waitForIdle();
-        verify(mWiFiNetworkAgent.mNetworkMonitor, times(1)).setAcceptPartialConnectivity();
         callback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
+        verify(mWiFiNetworkAgent.mNetworkMonitor, times(1)).setAcceptPartialConnectivity();
         callback.expectCallback(CallbackRecord.LOSING, mCellNetworkAgent);
         assertEquals(mWiFiNetworkAgent.getNetwork(), mCm.getActiveNetwork());
         callback.expectCapabilitiesWith(NET_CAPABILITY_PARTIAL_CONNECTIVITY, mWiFiNetworkAgent);
@@ -2306,9 +2305,8 @@ public class ConnectivityServiceTest {
         // valid, because ConnectivityService calls setAcceptPartialConnectivity before it calls
         // notifyNetworkConnected.
         mWiFiNetworkAgent.connectWithPartialValidConnectivity();
-        waitForIdle();
-        verify(mWiFiNetworkAgent.mNetworkMonitor, times(1)).setAcceptPartialConnectivity();
         callback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
+        verify(mWiFiNetworkAgent.mNetworkMonitor, times(1)).setAcceptPartialConnectivity();
         callback.expectCallback(CallbackRecord.LOSING, mCellNetworkAgent);
         callback.expectCapabilitiesWith(
                 NET_CAPABILITY_PARTIAL_CONNECTIVITY | NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
@@ -3633,6 +3631,7 @@ public class ConnectivityServiceTest {
     }
 
     @Test
+    @FlakyTest(bugId = 140305589)
     public void testPacketKeepalives() throws Exception {
         InetAddress myIPv4 = InetAddress.getByName("192.0.2.129");
         InetAddress notMyIPv4 = InetAddress.getByName("192.0.2.35");
@@ -5692,26 +5691,40 @@ public class ConnectivityServiceTest {
         String[] values = tcpBufferSizes.split(",");
         String rmemValues = String.join(" ", values[0], values[1], values[2]);
         String wmemValues = String.join(" ", values[3], values[4], values[5]);
-        waitForIdle();
         verify(mMockNetd, atLeastOnce()).setTcpRWmemorySize(rmemValues, wmemValues);
         reset(mMockNetd);
     }
 
     @Test
+    @FlakyTest(bugId = 140305678)
     public void testTcpBufferReset() throws Exception {
         final String testTcpBufferSizes = "1,2,3,4,5,6";
+        final NetworkRequest networkRequest = new NetworkRequest.Builder()
+                .addTransportType(TRANSPORT_CELLULAR)
+                .addCapability(NET_CAPABILITY_INTERNET)
+                .build();
+        final TestNetworkCallback networkCallback = new TestNetworkCallback();
+        mCm.registerNetworkCallback(networkRequest, networkCallback);
 
         mCellNetworkAgent = new TestNetworkAgentWrapper(TRANSPORT_CELLULAR);
         reset(mMockNetd);
         // Switching default network updates TCP buffer sizes.
         mCellNetworkAgent.connect(false);
+        networkCallback.expectAvailableCallbacksUnvalidated(mCellNetworkAgent);
         verifyTcpBufferSizeChange(ConnectivityService.DEFAULT_TCP_BUFFER_SIZES);
 
         // Change link Properties should have updated tcp buffer size.
         LinkProperties lp = new LinkProperties();
         lp.setTcpBufferSizes(testTcpBufferSizes);
         mCellNetworkAgent.sendLinkProperties(lp);
+        networkCallback.expectCallback(CallbackRecord.LINK_PROPERTIES_CHANGED, mCellNetworkAgent);
         verifyTcpBufferSizeChange(testTcpBufferSizes);
+
+        // Clean up.
+        mCellNetworkAgent.disconnect();
+        networkCallback.expectCallback(CallbackRecord.LOST, mCellNetworkAgent);
+        networkCallback.assertNoCallback();
+        mCm.unregisterNetworkCallback(networkCallback);
     }
 
     @Test

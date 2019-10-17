@@ -235,6 +235,14 @@ public interface TelephonyProperties
             "persist.radio.display_opportunistic_carrier";
 
     /**
+     * How many logical modems can be active simultaneously. For example, if a device is dual-SIM
+     * capable but currently only one SIM slot and one logical modem is active, this value is still
+     * two.
+     * Type: int
+     */
+    static final String PROPERTY_MAX_ACTIVE_MODEMS = "ro.telephony.max.active.modems";
+
+    /**
      * Used when Presence app sends Dial intent with specific schema
      * If true: skip schema parsing and use Tel schema
      * If false: parse schema

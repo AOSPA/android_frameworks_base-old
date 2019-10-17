@@ -27,7 +27,7 @@ import static com.android.internal.util.FunctionalUtils.ignoreRemoteException;
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
 
 import android.Manifest;
-import android.accessibilityservice.AccessibilityGestureInfo;
+import android.accessibilityservice.AccessibilityGestureEvent;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.accessibilityservice.IAccessibilityServiceClient;
@@ -272,9 +272,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         mSecurityPolicy = new AccessibilitySecurityPolicy(mContext, this);
         mMainHandler = new MainHandler(mContext.getMainLooper());
         mGlobalActionPerformer = new GlobalActionPerformer(mContext, mWindowManagerService);
-        mA11yDisplayListener = new AccessibilityDisplayListener(mContext, mMainHandler);
         mA11yWindowManager = new AccessibilityWindowManager(mLock, mMainHandler,
                 mWindowManagerService, this, mSecurityPolicy, this);
+        mA11yDisplayListener = new AccessibilityDisplayListener(mContext, mMainHandler);
         mSecurityPolicy.setAccessibilityWindowManager(mA11yWindowManager);
 
         registerBroadcastReceivers();
@@ -580,11 +580,24 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             // Make sure clients receiving this event will be able to get the
             // current state of the windows as the window manager may be delaying
             // the computation for performance reasons.
-            // TODO [Multi-Display] : using correct display Id to replace DEFAULT_DISPLAY
-            if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
-                    && mA11yWindowManager.isTrackingWindowsLocked()) {
-                WindowManagerInternal wm = LocalServices.getService(WindowManagerInternal.class);
-                wm.computeWindowsForAccessibility(Display.DEFAULT_DISPLAY);
+            boolean shouldComputeWindows = false;
+            int displayId = Display.INVALID_DISPLAY;
+            synchronized (mLock) {
+                final int windowId = event.getWindowId();
+                if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                        && windowId != AccessibilityWindowInfo.UNDEFINED_WINDOW_ID) {
+                    displayId = mA11yWindowManager.getDisplayIdByUserIdAndWindowIdLocked(
+                            mCurrentUserId, windowId);
+                }
+                if (displayId != Display.INVALID_DISPLAY
+                        && mA11yWindowManager.isTrackingWindowsLocked(displayId)) {
+                    shouldComputeWindows = true;
+                }
+            }
+            if (shouldComputeWindows) {
+                final WindowManagerInternal wm = LocalServices.getService(
+                        WindowManagerInternal.class);
+                wm.computeWindowsForAccessibility(displayId);
             }
             synchronized (mLock) {
                 notifyAccessibilityServicesDelayedLocked(event, false);
@@ -815,12 +828,17 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         }
     }
 
-
-    public boolean onGesture(AccessibilityGestureInfo gestureInfo) {
+    /**
+     * Called when a gesture is detected on a display.
+     *
+     * @param gestureEvent the detail of the gesture.
+     * @return true if the event is handled.
+     */
+    public boolean onGesture(AccessibilityGestureEvent gestureEvent) {
         synchronized (mLock) {
-            boolean handled = notifyGestureLocked(gestureInfo, false);
+            boolean handled = notifyGestureLocked(gestureEvent, false);
             if (!handled) {
-                handled = notifyGestureLocked(gestureInfo, true);
+                handled = notifyGestureLocked(gestureEvent, true);
             }
             return handled;
         }
@@ -1015,7 +1033,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         }
     }
 
-    private boolean notifyGestureLocked(AccessibilityGestureInfo gestureInfo, boolean isDefault) {
+    private boolean notifyGestureLocked(AccessibilityGestureEvent gestureEvent, boolean isDefault) {
         // TODO: Now we are giving the gestures to the last enabled
         //       service that can handle them which is the last one
         //       in our list since we write the last enabled as the
@@ -1029,7 +1047,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         for (int i = state.mBoundServices.size() - 1; i >= 0; i--) {
             AccessibilityServiceConnection service = state.mBoundServices.get(i);
             if (service.mRequestTouchExplorationMode && service.mIsDefault == isDefault) {
-                service.notifyGesture(gestureInfo);
+                service.notifyGesture(gestureEvent);
                 return true;
             }
         }
@@ -1656,10 +1674,18 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             }
         }
 
-        if (observingWindows) {
-            mA11yWindowManager.startTrackingWindows();
-        } else {
-            mA11yWindowManager.stopTrackingWindows();
+        // Gets all valid displays and start tracking windows of each display if there is at least
+        // one bound service that can retrieve window content.
+        final ArrayList<Display> displays = getValidDisplayList();
+        for (int i = 0; i < displays.size(); i++) {
+            final Display display = displays.get(i);
+            if (display != null) {
+                if (observingWindows) {
+                    mA11yWindowManager.startTrackingWindows(display.getDisplayId());
+                } else {
+                    mA11yWindowManager.stopTrackingWindows(display.getDisplayId());
+                }
+            }
         }
     }
 
@@ -2179,6 +2205,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         }
         synchronized(mLock) {
             final UserState userState = getUserStateLocked(mCurrentUserId);
+            if (userState.mServiceToEnableWithShortcut == null) {
+                return null;
+            }
             return userState.mServiceToEnableWithShortcut.flattenToString();
         }
     }
@@ -2559,6 +2588,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     }
                 }
                 updateMagnificationLocked(userState);
+                updateWindowsForAccessibilityCallbackLocked(userState);
             }
         }
 
@@ -2586,6 +2616,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             if (mMagnificationController != null) {
                 mMagnificationController.onDisplayRemoved(displayId);
             }
+            mA11yWindowManager.stopTrackingWindows(displayId);
         }
 
         @Override

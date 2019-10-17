@@ -51,8 +51,11 @@ class InsetsSourceProvider {
     private final @NonNull InsetsSource mSource;
     private final DisplayContent mDisplayContent;
     private final InsetsStateController mStateController;
+    private final InsetsSourceControl mFakeControl;
     private @Nullable InsetsSourceControl mControl;
-    private @Nullable WindowState mControllingWin;
+    private @Nullable InsetsControlTarget mControlTarget;
+    private @Nullable InsetsControlTarget mFakeControlTarget;
+
     private @Nullable ControlAdapter mAdapter;
     private WindowState mWin;
     private TriConsumer<DisplayFrames, WindowState, Rect> mFrameProvider;
@@ -73,6 +76,8 @@ class InsetsSourceProvider {
         mSource = source;
         mDisplayContent = displayContent;
         mStateController = stateController;
+        mFakeControl = new InsetsSourceControl(source.getType(), null /* leash */,
+                new Point());
 
         final int type = source.getType();
         if (type == TYPE_TOP_BAR || type == TYPE_NAVIGATION_BAR) {
@@ -106,6 +111,11 @@ class InsetsSourceProvider {
             @Nullable TriConsumer<DisplayFrames, WindowState, Rect> frameProvider) {
         if (mWin != null) {
             mWin.setInsetProvider(null);
+            // The window may be animating such that we can hand out the leash to the control
+            // target. Revoke the leash by cancelling the animation to correct the state.
+            // TODO: Ideally, we should wait for the animation to finish so previous window can
+            // animate-out as new one animates-in.
+            mWin.cancelAnimation();
         }
         mWin = win;
         mFrameProvider = frameProvider;
@@ -114,8 +124,8 @@ class InsetsSourceProvider {
             mSource.setFrame(new Rect());
         } else {
             mWin.setInsetProvider(this);
-            if (mControllingWin != null) {
-                updateControlForTarget(mControllingWin, true /* force */);
+            if (mControlTarget != null) {
+                updateControlForTarget(mControlTarget, true /* force */);
             }
         }
     }
@@ -138,19 +148,29 @@ class InsetsSourceProvider {
         if (mControl != null) {
             final Rect frame = mWin.getWindowFrames().mFrame;
             if (mControl.setSurfacePosition(frame.left, frame.top)) {
-                mStateController.notifyControlChanged(mControllingWin);
+                mStateController.notifyControlChanged(mControlTarget);
             }
         }
         setServerVisible(mWin.wouldBeVisibleIfPolicyIgnored() && mWin.isVisibleByPolicy()
                 && !mWin.mGivenInsetsPending);
     }
 
-    void updateControlForTarget(@Nullable WindowState target, boolean force) {
-        if (mWin == null) {
-            mControllingWin = target;
+    /**
+     * @see InsetsStateController#onControlFakeTargetChanged(int, InsetsControlTarget)
+     */
+    void updateControlForFakeTarget(@Nullable InsetsControlTarget fakeTarget) {
+        if (fakeTarget == mFakeControlTarget) {
             return;
         }
-        if (target == mControllingWin && !force) {
+        mFakeControlTarget = fakeTarget;
+    }
+
+    void updateControlForTarget(@Nullable InsetsControlTarget target, boolean force) {
+        if (mWin == null) {
+            mControlTarget = target;
+            return;
+        }
+        if (target == mControlTarget && !force) {
             return;
         }
         if (target == null) {
@@ -162,13 +182,13 @@ class InsetsSourceProvider {
         setClientVisible(InsetsState.getDefaultVisibility(mSource.getType()));
         mWin.startAnimation(mDisplayContent.getPendingTransaction(), mAdapter,
                 !mClientVisible /* hidden */);
-        mControllingWin = target;
+        mControlTarget = target;
         mControl = new InsetsSourceControl(mSource.getType(), mAdapter.mCapturedLeash,
                 new Point(mWin.getWindowFrames().mFrame.left, mWin.getWindowFrames().mFrame.top));
     }
 
     boolean onInsetsModified(WindowState caller, InsetsSource modifiedSource) {
-        if (mControllingWin != caller || modifiedSource.isVisible() == mClientVisible) {
+        if (mControlTarget != caller || modifiedSource.isVisible() == mClientVisible) {
             return false;
         }
         setClientVisible(modifiedSource.isVisible());
@@ -194,8 +214,14 @@ class InsetsSourceProvider {
         mSource.setVisible(mServerVisible && mClientVisible);
     }
 
-    InsetsSourceControl getControl() {
-        return mControl;
+    InsetsSourceControl getControl(InsetsControlTarget target) {
+        if (target == mControlTarget) {
+            return mControl;
+        }
+        if (target == mFakeControlTarget) {
+            return mFakeControl;
+        }
+        return null;
     }
 
     boolean isClientVisible() {
@@ -212,11 +238,6 @@ class InsetsSourceProvider {
         }
 
         @Override
-        public int getBackgroundColor() {
-            return 0;
-        }
-
-        @Override
         public void startAnimation(SurfaceControl animationLeash, Transaction t,
                 OnAnimationFinishedCallback finishCallback) {
             mCapturedLeash = animationLeash;
@@ -227,10 +248,10 @@ class InsetsSourceProvider {
         @Override
         public void onAnimationCancelled(SurfaceControl animationLeash) {
             if (mAdapter == this) {
-                mStateController.notifyControlRevoked(mControllingWin, InsetsSourceProvider.this);
+                mStateController.notifyControlRevoked(mControlTarget, InsetsSourceProvider.this);
                 setClientVisible(InsetsState.getDefaultVisibility(mSource.getType()));
                 mControl = null;
-                mControllingWin = null;
+                mControlTarget = null;
                 mAdapter = null;
             }
         }
@@ -252,5 +273,5 @@ class InsetsSourceProvider {
         @Override
         public void writeToProto(ProtoOutputStream proto) {
         }
-    };
+    }
 }

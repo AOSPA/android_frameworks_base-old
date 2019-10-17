@@ -17,6 +17,9 @@ package com.android.systemui.statusbar;
 
 import static android.app.admin.DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED;
 
+import static com.android.systemui.DejankUtils.whitelistIpcs;
+import static com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_SILENT;
+
 import android.app.ActivityManager;
 import android.app.KeyguardManager;
 import android.app.Notification;
@@ -58,10 +61,14 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
 /**
  * Handles keeping track of the current user, profiles, and various things related to hiding
  * contents, redacting notifications, and the lockscreen.
  */
+@Singleton
 public class NotificationLockscreenUserManagerImpl implements
         Dumpable, NotificationLockscreenUserManager, StateListener {
     private static final String TAG = "LockscreenUserManager";
@@ -171,6 +178,7 @@ public class NotificationLockscreenUserManagerImpl implements
         return mEntryManager;
     }
 
+    @Inject
     public NotificationLockscreenUserManagerImpl(Context context) {
         mContext = context;
         mDevicePolicyManager = (DevicePolicyManager) mContext.getSystemService(
@@ -274,7 +282,7 @@ public class NotificationLockscreenUserManagerImpl implements
         if (userId == UserHandle.USER_ALL) {
             userId = mCurrentUserId;
         }
-        return KeyguardUpdateMonitor.getInstance(mContext).isUserInLockdown(userId);
+        return Dependency.get(KeyguardUpdateMonitor.class).isUserInLockdown(userId);
     }
 
     /**
@@ -309,7 +317,7 @@ public class NotificationLockscreenUserManagerImpl implements
         boolean exceedsPriorityThreshold;
         if (NotificationUtils.useNewInterruptionModel(mContext)
                 && hideSilentNotificationsOnLockscreen()) {
-            exceedsPriorityThreshold = entry.isTopBucket();
+            exceedsPriorityThreshold = entry.getBucket() != BUCKET_SILENT;
         } else {
             exceedsPriorityThreshold =
                     !getEntryManager().getNotificationData().isAmbient(entry.key);
@@ -318,8 +326,9 @@ public class NotificationLockscreenUserManagerImpl implements
     }
 
     private boolean hideSilentNotificationsOnLockscreen() {
-        return Settings.Secure.getInt(mContext.getContentResolver(),
-                Settings.Secure.LOCK_SCREEN_SHOW_SILENT_NOTIFICATIONS, 1) == 0;
+        // TODO(b/140058091)
+        return whitelistIpcs(() -> Settings.Secure.getInt(mContext.getContentResolver(),
+                Settings.Secure.LOCK_SCREEN_SHOW_SILENT_NOTIFICATIONS, 1) == 0);
     }
 
     private void setShowLockscreenNotifications(boolean show) {
@@ -510,8 +519,9 @@ public class NotificationLockscreenUserManagerImpl implements
         for (int i = currentProfiles.size() - 1; i >= 0; i--) {
             final int userId = currentProfiles.valueAt(i).id;
             boolean isProfilePublic = devicePublic;
-            boolean needsSeparateChallenge = mLockPatternUtils.isSeparateProfileChallengeEnabled(
-                    userId);
+            // TODO(b/140058091)
+            boolean needsSeparateChallenge = whitelistIpcs(() ->
+                    mLockPatternUtils.isSeparateProfileChallengeEnabled(userId));
             if (!devicePublic && userId != getCurrentUserId()
                     && needsSeparateChallenge && isSecure(userId)) {
                 // Keyguard.isDeviceLocked is updated asynchronously, assume that all profiles

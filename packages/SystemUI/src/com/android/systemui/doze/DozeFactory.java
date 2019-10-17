@@ -29,11 +29,11 @@ import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.SystemUIApplication;
 import com.android.systemui.dock.DockManager;
-import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.statusbar.phone.BiometricUnlockController;
 import com.android.systemui.statusbar.phone.DozeParameters;
-import com.android.systemui.util.AsyncSensorManager;
+import com.android.systemui.util.sensors.AsyncSensorManager;
 import com.android.systemui.util.wakelock.DelayedWakeLock;
 import com.android.systemui.util.wakelock.WakeLock;
 
@@ -45,7 +45,7 @@ public class DozeFactory {
     /** Creates a DozeMachine with its parts for {@code dozeService}. */
     public DozeMachine assembleMachine(DozeService dozeService, FalsingManager falsingManager) {
         Context context = dozeService;
-        SensorManager sensorManager = Dependency.get(AsyncSensorManager.class);
+        AsyncSensorManager sensorManager = Dependency.get(AsyncSensorManager.class);
         AlarmManager alarmManager = context.getSystemService(AlarmManager.class);
         DockManager dockManager = Dependency.get(DockManager.class);
         WakefulnessLifecycle wakefulnessLifecycle = Dependency.get(WakefulnessLifecycle.class);
@@ -91,7 +91,7 @@ public class DozeFactory {
                 params.getPolicy());
     }
 
-    private DozeTriggers createDozeTriggers(Context context, SensorManager sensorManager,
+    private DozeTriggers createDozeTriggers(Context context, AsyncSensorManager sensorManager,
             DozeHost host, AlarmManager alarmManager, AmbientDisplayConfiguration config,
             DozeParameters params, Handler handler, WakeLock wakeLock, DozeMachine machine,
             DockManager dockManager) {
@@ -104,7 +104,7 @@ public class DozeFactory {
             DozeMachine machine, Handler handler, AlarmManager alarmManager,
             DozeParameters params) {
         return new DozeUi(context, alarmManager, machine, wakeLock, host, handler, params,
-                KeyguardUpdateMonitor.getInstance(context));
+                Dependency.get(KeyguardUpdateMonitor.class));
     }
 
     public static DozeHost getHost(DozeService service) {

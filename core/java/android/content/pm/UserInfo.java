@@ -57,7 +57,7 @@ public class UserInfo implements Parcelable {
 
     /**
      * Primary user. Only one user can have this flag set. It identifies the first human user
-     * on a device.
+     * on a device. This flag is not supported in headless system user mode.
      */
     @UnsupportedAppUsage
     public static final int FLAG_PRIMARY = 0x00000001;
@@ -325,6 +325,14 @@ public class UserInfo implements Parcelable {
         // used and parsed by TestDevice. In other words, if you change it, you'd have to change
         // TestDevice, TestDeviceTest, and possibly others....
         return "UserInfo{" + id + ":" + name + ":" + Integer.toHexString(flags) + "}";
+    }
+
+    /** @hide */
+    public String toFullString() {
+        return "UserInfo[id=" + id
+                + ", name=" + name
+                + ", flags=" + flagsToString(flags)
+                + "]";
     }
 
     /** @hide */

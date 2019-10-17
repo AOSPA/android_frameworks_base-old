@@ -16,11 +16,16 @@
 
 package com.android.systemui;
 
+import static com.android.systemui.Dependency.ALLOW_NOTIFICATION_LONG_PRESS_NAME;
+
+import android.content.ContentProvider;
+
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.util.InjectionInflationController;
 import com.android.systemui.util.leak.GarbageMonitor;
 
+import javax.inject.Named;
 import javax.inject.Singleton;
 
 import dagger.Component;
@@ -29,9 +34,20 @@ import dagger.Component;
  * Root component for Dagger injection.
  */
 @Singleton
-@Component(modules = {SystemUIFactory.class, DependencyProvider.class, DependencyBinder.class,
-        ServiceBinder.class, SystemUIFactory.ContextHolder.class})
+@Component(modules = {
+        DependencyProvider.class,
+        DependencyBinder.class,
+        SystemUIFactory.ContextHolder.class,
+        SystemUIModule.class,
+        SystemUIDefaultModule.class})
 public interface SystemUIRootComponent {
+
+    /**
+     * Creates a GarbageMonitor.
+     */
+    @Singleton
+    ContextComponentHelper getContextComponentHelper();
+
     /**
      * Main dependency providing module.
      */
@@ -56,13 +72,24 @@ public interface SystemUIRootComponent {
     InjectionInflationController.ViewCreator createViewCreator();
 
     /**
-     * Creatse a GarbageMonitor.
+     * Creates a GarbageMonitor.
      */
     @Singleton
     GarbageMonitor createGarbageMonitor();
 
     /**
-     * Injects into the supplied argument.
+     * Whether notification long press is allowed.
+     */
+    @Named(ALLOW_NOTIFICATION_LONG_PRESS_NAME)
+    boolean allowNotificationLongPressName();
+
+    /**
+     * Member injection into the supplied argument.
      */
     void inject(SystemUIAppComponentFactory factory);
+
+    /**
+     * Member injection into the supplied argument.
+     */
+    void inject(ContentProvider contentProvider);
 }

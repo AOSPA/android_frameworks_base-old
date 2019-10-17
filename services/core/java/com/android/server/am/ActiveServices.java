@@ -865,6 +865,15 @@ public final class ActiveServices {
         }
     }
 
+    void killMisbehavingService(ServiceRecord r,
+            int appUid, int appPid, String localPackageName) {
+        synchronized (mAm) {
+            stopServiceLocked(r);
+            mAm.crashApplication(appUid, appPid, localPackageName, -1,
+                    "Bad notification for startForeground", true /*force*/);
+        }
+    }
+
     IBinder peekServiceLocked(Intent service, String resolvedType, String callingPackage) {
         ServiceLookupResult r = retrieveServiceLocked(service, null, resolvedType, callingPackage,
                 Binder.getCallingPid(), Binder.getCallingUid(),
@@ -1775,8 +1784,8 @@ public final class ActiveServices {
                     s.instanceName, s.processName);
             // Once the apps have become associated, if one of them is caller is ephemeral
             // the target app should now be able to see the calling app
-            mAm.grantEphemeralAccessLocked(callerApp.userId, service,
-                    UserHandle.getAppId(s.appInfo.uid), UserHandle.getAppId(callerApp.uid));
+            mAm.grantImplicitAccess(callerApp.userId, service,
+                    UserHandle.getAppId(callerApp.uid), UserHandle.getAppId(s.appInfo.uid));
 
             AppBindRecord b = s.retrieveAppBindingLocked(service, callerApp);
             ConnectionRecord c = new ConnectionRecord(b, activity,
@@ -2401,9 +2410,8 @@ public final class ActiveServices {
         return true;
     }
 
+    /** @return {@code true} if the restart is scheduled. */
     private final boolean scheduleServiceRestartLocked(ServiceRecord r, boolean allowCancel) {
-        boolean canceled = false;
-
         if (mAm.mAtmInternal.isShuttingDown()) {
             Slog.w(TAG, "Not scheduling restart of crashed service " + r.shortInstanceName
                     + " - system is shutting down");
@@ -2420,10 +2428,12 @@ public final class ActiveServices {
 
         final long now = SystemClock.uptimeMillis();
 
+        final String reason;
         if ((r.serviceInfo.applicationInfo.flags
                 &ApplicationInfo.FLAG_PERSISTENT) == 0) {
             long minDuration = mAm.mConstants.SERVICE_RESTART_DURATION;
             long resetTime = mAm.mConstants.SERVICE_RESET_RUN_DURATION;
+            boolean canceled = false;
 
             // Any delivered but not yet finished starts should be put back
             // on the pending list.
@@ -2456,6 +2466,17 @@ public final class ActiveServices {
                     }
                 }
                 r.deliveredStarts.clear();
+            }
+
+            if (allowCancel) {
+                final boolean shouldStop = r.canStopIfKilled(canceled);
+                if (shouldStop && !r.hasAutoCreateConnections()) {
+                    // Nothing to restart.
+                    return false;
+                }
+                reason = (r.startRequested && !shouldStop) ? "start-requested" : "connection";
+            } else {
+                reason = "always";
             }
 
             r.totalRestartCount++;
@@ -2524,6 +2545,7 @@ public final class ActiveServices {
             r.restartCount = 0;
             r.restartDelay = 0;
             r.nextRestartTime = now;
+            reason = "persistent";
         }
 
         if (!mRestartingServices.contains(r)) {
@@ -2538,7 +2560,7 @@ public final class ActiveServices {
         mAm.mHandler.postAtTime(r.restarter, r.nextRestartTime);
         r.nextRestartTime = SystemClock.uptimeMillis() + r.restartDelay;
         Slog.w(TAG, "Scheduling restart of crashed service "
-                + r.shortInstanceName + " in " + r.restartDelay + "ms");
+                + r.shortInstanceName + " in " + r.restartDelay + "ms for " + reason);
 
         if (SERVICE_RESCHEDULE && DEBUG_DELAYED_SERVICE) {
             for (int i=mRestartingServices.size()-1; i>=0; i--) {
@@ -2551,7 +2573,7 @@ public final class ActiveServices {
         EventLog.writeEvent(EventLogTags.AM_SCHEDULE_SERVICE_RESTART,
                 r.userId, r.shortInstanceName, r.restartDelay);
 
-        return canceled;
+        return true;
     }
 
     final void performServiceRestartLocked(ServiceRecord r) {
@@ -2944,8 +2966,9 @@ public final class ActiveServices {
                 mAm.mUgmInternal.grantUriPermissionUncheckedFromIntent(si.neededGrants,
                         si.getUriPermissionsLocked());
             }
-            mAm.grantEphemeralAccessLocked(r.userId, si.intent, UserHandle.getAppId(r.appInfo.uid),
-                    UserHandle.getAppId(si.callingId));
+            mAm.grantImplicitAccess(r.userId, si.intent, UserHandle.getAppId(si.callingId),
+                    UserHandle.getAppId(r.appInfo.uid)
+            );
             bumpServiceExecutingLocked(r, execInFg, "start");
             if (!oomAdjusted) {
                 oomAdjusted = true;
@@ -3842,22 +3865,21 @@ public final class ActiveServices {
                     || !mAm.mUserController.isUserRunning(sr.userId, 0)) {
                 bringDownServiceLocked(sr);
             } else {
-                boolean canceled = scheduleServiceRestartLocked(sr, true);
+                final boolean scheduled = scheduleServiceRestartLocked(sr, true /* allowCancel */);
 
                 // Should the service remain running?  Note that in the
                 // extreme case of so many attempts to deliver a command
                 // that it failed we also will stop it here.
-                if (sr.startRequested && (sr.stopIfKilled || canceled)) {
-                    if (sr.pendingStarts.size() == 0) {
-                        sr.startRequested = false;
-                        if (sr.tracker != null) {
-                            sr.tracker.setStarted(false, mAm.mProcessStats.getMemFactorLocked(),
-                                    SystemClock.uptimeMillis());
-                        }
-                        if (!sr.hasAutoCreateConnections()) {
-                            // Whoops, no reason to restart!
-                            bringDownServiceLocked(sr);
-                        }
+                if (!scheduled) {
+                    bringDownServiceLocked(sr);
+                } else if (sr.canStopIfKilled(false /* isStartCanceled */)) {
+                    // Update to stopped state because the explicit start is gone. The service is
+                    // scheduled to restart for other reason (e.g. connections) so we don't bring
+                    // down it.
+                    sr.startRequested = false;
+                    if (sr.tracker != null) {
+                        sr.tracker.setStarted(false, mAm.mProcessStats.getMemFactorLocked(),
+                                SystemClock.uptimeMillis());
                     }
                 }
             }
@@ -4109,7 +4131,7 @@ public final class ActiveServices {
     void serviceForegroundCrash(ProcessRecord app, CharSequence serviceRecord) {
         mAm.crashApplication(app.uid, app.pid, app.info.packageName, app.userId,
                 "Context.startForegroundService() did not then call Service.startForeground(): "
-                    + serviceRecord);
+                    + serviceRecord, false /*force*/);
     }
 
     void scheduleServiceTimeoutLocked(ProcessRecord proc) {

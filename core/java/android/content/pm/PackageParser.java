@@ -57,6 +57,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageParserCacheHelper.ReadHelper;
 import android.content.pm.PackageParserCacheHelper.WriteHelper;
+import android.content.pm.permission.SplitPermissionInfoParcelable;
 import android.content.pm.split.DefaultSplitAssetLoader;
 import android.content.pm.split.SplitAssetDependencyLoader;
 import android.content.pm.split.SplitAssetLoader;
@@ -79,7 +80,6 @@ import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.storage.StorageManager;
-import android.permission.PermissionManager;
 import android.system.ErrnoException;
 import android.system.OsConstants;
 import android.system.StructStat;
@@ -2528,11 +2528,17 @@ public class PackageParser {
             Slog.i(TAG, newPermsMsg.toString());
         }
 
+        List<SplitPermissionInfoParcelable> splitPermissions;
 
-        final int NS = PermissionManager.SPLIT_PERMISSIONS.size();
-        for (int is=0; is<NS; is++) {
-            final PermissionManager.SplitPermissionInfo spi =
-                    PermissionManager.SPLIT_PERMISSIONS.get(is);
+        try {
+            splitPermissions = ActivityThread.getPermissionManager().getSplitPermissions();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+
+        final int listSize = splitPermissions.size();
+        for (int is = 0; is < listSize; is++) {
+            final SplitPermissionInfoParcelable spi = splitPermissions.get(is);
             if (pkg.applicationInfo.targetSdkVersion >= spi.getTargetSdk()
                     || !pkg.requestedPermissions.contains(spi.getSplitPermission())) {
                 continue;
@@ -4064,32 +4070,54 @@ public class PackageParser {
                         intentInfo, outError)) {
                     return false;
                 }
-                Intent intent = new Intent();
-                if (intentInfo.countActions() != 1) {
-                    outError[0] = "intent tags must contain exactly one action.";
-                    return false;
-                }
-                intent.setAction(intentInfo.getAction(0));
-                for (int i = 0, max = intentInfo.countCategories(); i < max; i++) {
-                    intent.addCategory(intentInfo.getCategory(i));
-                }
+
                 Uri data = null;
                 String dataType = null;
-                if (intentInfo.countDataTypes() > 1) {
+                String host = "";
+                final int numActions = intentInfo.countActions();
+                final int numSchemes = intentInfo.countDataSchemes();
+                final int numTypes = intentInfo.countDataTypes();
+                final int numHosts = intentInfo.getHosts().length;
+                if ((numSchemes == 0 && numTypes == 0 && numActions == 0)) {
+                    outError[0] = "intent tags must contain either an action or data.";
+                    return false;
+                }
+                if (numActions > 1) {
+                    outError[0] = "intent tag may have at most one action.";
+                    return false;
+                }
+                if (numTypes > 1) {
                     outError[0] = "intent tag may have at most one data type.";
                     return false;
                 }
-                if (intentInfo.countDataSchemes() > 1) {
+                if (numSchemes > 1) {
                     outError[0] = "intent tag may have at most one data scheme.";
                     return false;
                 }
-                if (intentInfo.countDataTypes() == 1) {
-                    data = Uri.fromParts(intentInfo.getDataType(0), "", null);
+                if (numHosts > 1) {
+                    outError[0] = "intent tag may have at most one data host.";
+                    return false;
                 }
-                if (intentInfo.countDataSchemes() == 1) {
-                    dataType = intentInfo.getDataScheme(0);
+                Intent intent = new Intent();
+                for (int i = 0, max = intentInfo.countCategories(); i < max; i++) {
+                    intent.addCategory(intentInfo.getCategory(i));
+                }
+                if (numHosts == 1) {
+                    host = intentInfo.getHosts()[0];
+                }
+                if (numSchemes == 1) {
+                    data = new Uri.Builder()
+                            .scheme(intentInfo.getDataScheme(0))
+                            .authority(host)
+                            .build();
+                }
+                if (numTypes == 1) {
+                    dataType = intentInfo.getDataType(0);
                 }
                 intent.setDataAndType(data, dataType);
+                if (numActions == 1) {
+                    intent.setAction(intentInfo.getAction(0));
+                }
                 owner.mQueriesIntents = ArrayUtils.add(owner.mQueriesIntents, intent);
             } else if (parser.getName().equals("package")) {
                 final TypedArray sa = res.obtainAttributes(parser,
@@ -8501,5 +8529,4 @@ public class PackageParser {
             this.error = error;
         }
     }
-
 }

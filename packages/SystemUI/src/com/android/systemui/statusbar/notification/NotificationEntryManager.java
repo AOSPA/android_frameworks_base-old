@@ -54,11 +54,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
 /**
  * NotificationEntryManager is responsible for the adding, removing, and updating of notifications.
  * It also handles tasks such as their inflation and their interaction with other
  * Notification.*Manager objects.
  */
+@Singleton
 public class NotificationEntryManager implements
         Dumpable,
         NotificationContentInflater.InflationCallback,
@@ -118,8 +122,9 @@ public class NotificationEntryManager implements
         }
     }
 
+    @Inject
     public NotificationEntryManager(Context context) {
-        mNotificationData = new NotificationData();
+        mNotificationData = new NotificationData(context);
     }
 
     /** Adds a {@link NotificationEntryListener}. */
@@ -276,10 +281,24 @@ public class NotificationEntryManager implements
         }
 
         final NotificationEntry entry = mNotificationData.get(key);
-
-        abortExistingInflation(key);
-
         boolean lifetimeExtended = false;
+
+        // Notification was canceled before it got inflated
+        if (entry == null) {
+            NotificationEntry pendingEntry = mPendingNotifications.get(key);
+            if (pendingEntry != null) {
+                for (NotificationLifetimeExtender extender : mNotificationLifetimeExtenders) {
+                    if (extender.shouldExtendLifetimeForPendingNotification(pendingEntry)) {
+                        extendLifetime(pendingEntry, extender);
+                        lifetimeExtended = true;
+                    }
+                }
+            }
+        }
+
+        if (!lifetimeExtended) {
+            abortExistingInflation(key);
+        }
 
         if (entry != null) {
             // If a manager needs to keep the notification around for whatever reason, we
@@ -466,7 +485,7 @@ public class NotificationEntryManager implements
             NotificationUiAdjustment adjustment =
                     NotificationUiAdjustment.extractFromNotificationEntry(entry);
             oldAdjustments.put(entry.key, adjustment);
-            oldImportances.put(entry.key, entry.importance);
+            oldImportances.put(entry.key, entry.getImportance());
         }
 
         // Populate notification entries from the new rankings.
@@ -494,10 +513,10 @@ public class NotificationEntryManager implements
         if (rankingMap == null) {
             return;
         }
-        NotificationListenerService.Ranking tmpRanking = new NotificationListenerService.Ranking();
+        NotificationListenerService.Ranking ranking = new NotificationListenerService.Ranking();
         for (NotificationEntry pendingNotification : mPendingNotifications.values()) {
-            rankingMap.getRanking(pendingNotification.key, tmpRanking);
-            pendingNotification.populateFromRanking(tmpRanking);
+            rankingMap.getRanking(pendingNotification.key, ranking);
+            pendingNotification.setRanking(ranking);
         }
     }
 

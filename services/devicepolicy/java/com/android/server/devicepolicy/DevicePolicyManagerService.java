@@ -248,6 +248,7 @@ import com.android.internal.util.Preconditions;
 import com.android.internal.util.StatLogger;
 import com.android.internal.util.XmlUtils;
 import com.android.internal.widget.LockPatternUtils;
+import com.android.internal.widget.LockSettingsInternal;
 import com.android.server.LocalServices;
 import com.android.server.LockGuard;
 import com.android.server.SystemServerInitThreadPool;
@@ -500,6 +501,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     final UsageStatsManagerInternal mUsageStatsManagerInternal;
     final TelephonyManager mTelephonyManager;
     private final LockPatternUtils mLockPatternUtils;
+    private final LockSettingsInternal mLockSettingsInternal;
     private final DeviceAdminServiceController mDeviceAdminServiceController;
     private final OverlayPackagesProvider mOverlayPackagesProvider;
 
@@ -739,7 +741,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     final SparseArray<DevicePolicyData> mUserData = new SparseArray<>();
 
     @GuardedBy("getLockObject()")
-    final SparseArray<PasswordMetrics> mUserPasswordMetrics = new SparseArray<>();
 
     final Handler mHandler;
     final Handler mBackgroundHandler;
@@ -1112,142 +1113,107 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             info.writePoliciesToXml(out);
             out.endTag(null, TAG_POLICIES);
             if (minimumPasswordMetrics.quality != PASSWORD_QUALITY_UNSPECIFIED) {
-                out.startTag(null, TAG_PASSWORD_QUALITY);
-                out.attribute(null, ATTR_VALUE, Integer.toString(minimumPasswordMetrics.quality));
-                out.endTag(null, TAG_PASSWORD_QUALITY);
+                writeAttributeValueToXml(
+                        out, TAG_PASSWORD_QUALITY, minimumPasswordMetrics.quality);
                 if (minimumPasswordMetrics.length != DEF_MINIMUM_PASSWORD_LENGTH) {
-                    out.startTag(null, TAG_MIN_PASSWORD_LENGTH);
-                    out.attribute(
-                            null, ATTR_VALUE, Integer.toString(minimumPasswordMetrics.length));
-                    out.endTag(null, TAG_MIN_PASSWORD_LENGTH);
-                }
-                if(passwordHistoryLength != DEF_PASSWORD_HISTORY_LENGTH) {
-                    out.startTag(null, TAG_PASSWORD_HISTORY_LENGTH);
-                    out.attribute(null, ATTR_VALUE, Integer.toString(passwordHistoryLength));
-                    out.endTag(null, TAG_PASSWORD_HISTORY_LENGTH);
+                    writeAttributeValueToXml(
+                            out, TAG_MIN_PASSWORD_LENGTH, minimumPasswordMetrics.length);
                 }
                 if (minimumPasswordMetrics.upperCase != DEF_MINIMUM_PASSWORD_UPPER_CASE) {
-                    out.startTag(null, TAG_MIN_PASSWORD_UPPERCASE);
-                    out.attribute(
-                            null, ATTR_VALUE, Integer.toString(minimumPasswordMetrics.upperCase));
-                    out.endTag(null, TAG_MIN_PASSWORD_UPPERCASE);
+                    writeAttributeValueToXml(
+                            out, TAG_MIN_PASSWORD_UPPERCASE, minimumPasswordMetrics.upperCase);
                 }
                 if (minimumPasswordMetrics.lowerCase != DEF_MINIMUM_PASSWORD_LOWER_CASE) {
-                    out.startTag(null, TAG_MIN_PASSWORD_LOWERCASE);
-                    out.attribute(
-                            null, ATTR_VALUE, Integer.toString(minimumPasswordMetrics.lowerCase));
-                    out.endTag(null, TAG_MIN_PASSWORD_LOWERCASE);
+                    writeAttributeValueToXml(
+                            out, TAG_MIN_PASSWORD_LOWERCASE, minimumPasswordMetrics.lowerCase);
                 }
                 if (minimumPasswordMetrics.letters != DEF_MINIMUM_PASSWORD_LETTERS) {
-                    out.startTag(null, TAG_MIN_PASSWORD_LETTERS);
-                    out.attribute(
-                            null, ATTR_VALUE, Integer.toString(minimumPasswordMetrics.letters));
-                    out.endTag(null, TAG_MIN_PASSWORD_LETTERS);
+                    writeAttributeValueToXml(
+                            out, TAG_MIN_PASSWORD_LETTERS, minimumPasswordMetrics.letters);
                 }
                 if (minimumPasswordMetrics.numeric != DEF_MINIMUM_PASSWORD_NUMERIC) {
-                    out.startTag(null, TAG_MIN_PASSWORD_NUMERIC);
-                    out.attribute(
-                            null, ATTR_VALUE, Integer.toString(minimumPasswordMetrics.numeric));
-                    out.endTag(null, TAG_MIN_PASSWORD_NUMERIC);
+                    writeAttributeValueToXml(
+                            out, TAG_MIN_PASSWORD_NUMERIC, minimumPasswordMetrics.numeric);
                 }
                 if (minimumPasswordMetrics.symbols != DEF_MINIMUM_PASSWORD_SYMBOLS) {
-                    out.startTag(null, TAG_MIN_PASSWORD_SYMBOLS);
-                    out.attribute(
-                            null, ATTR_VALUE, Integer.toString(minimumPasswordMetrics.symbols));
-                    out.endTag(null, TAG_MIN_PASSWORD_SYMBOLS);
+                    writeAttributeValueToXml(
+                            out, TAG_MIN_PASSWORD_SYMBOLS, minimumPasswordMetrics.symbols);
                 }
                 if (minimumPasswordMetrics.nonLetter > DEF_MINIMUM_PASSWORD_NON_LETTER) {
-                    out.startTag(null, TAG_MIN_PASSWORD_NONLETTER);
-                    out.attribute(
-                            null, ATTR_VALUE, Integer.toString(minimumPasswordMetrics.nonLetter));
-                    out.endTag(null, TAG_MIN_PASSWORD_NONLETTER);
+                    writeAttributeValueToXml(
+                            out, TAG_MIN_PASSWORD_NONLETTER, minimumPasswordMetrics.nonLetter);
                 }
+            }
+            if (passwordHistoryLength != DEF_PASSWORD_HISTORY_LENGTH) {
+                writeAttributeValueToXml(
+                        out, TAG_PASSWORD_HISTORY_LENGTH, passwordHistoryLength);
             }
             if (maximumTimeToUnlock != DEF_MAXIMUM_TIME_TO_UNLOCK) {
-                out.startTag(null, TAG_MAX_TIME_TO_UNLOCK);
-                out.attribute(null, ATTR_VALUE, Long.toString(maximumTimeToUnlock));
-                out.endTag(null, TAG_MAX_TIME_TO_UNLOCK);
+                writeAttributeValueToXml(
+                        out, TAG_MAX_TIME_TO_UNLOCK, maximumTimeToUnlock);
             }
             if (strongAuthUnlockTimeout != DevicePolicyManager.DEFAULT_STRONG_AUTH_TIMEOUT_MS) {
-                out.startTag(null, TAG_STRONG_AUTH_UNLOCK_TIMEOUT);
-                out.attribute(null, ATTR_VALUE, Long.toString(strongAuthUnlockTimeout));
-                out.endTag(null, TAG_STRONG_AUTH_UNLOCK_TIMEOUT);
+                writeAttributeValueToXml(
+                        out, TAG_STRONG_AUTH_UNLOCK_TIMEOUT, strongAuthUnlockTimeout);
             }
             if (maximumFailedPasswordsForWipe != DEF_MAXIMUM_FAILED_PASSWORDS_FOR_WIPE) {
-                out.startTag(null, TAG_MAX_FAILED_PASSWORD_WIPE);
-                out.attribute(null, ATTR_VALUE, Integer.toString(maximumFailedPasswordsForWipe));
-                out.endTag(null, TAG_MAX_FAILED_PASSWORD_WIPE);
+                writeAttributeValueToXml(
+                        out, TAG_MAX_FAILED_PASSWORD_WIPE, maximumFailedPasswordsForWipe);
             }
             if (specifiesGlobalProxy) {
-                out.startTag(null, TAG_SPECIFIES_GLOBAL_PROXY);
-                out.attribute(null, ATTR_VALUE, Boolean.toString(specifiesGlobalProxy));
-                out.endTag(null, TAG_SPECIFIES_GLOBAL_PROXY);
+                writeAttributeValueToXml(
+                        out, TAG_SPECIFIES_GLOBAL_PROXY, specifiesGlobalProxy);
                 if (globalProxySpec != null) {
-                    out.startTag(null, TAG_GLOBAL_PROXY_SPEC);
-                    out.attribute(null, ATTR_VALUE, globalProxySpec);
-                    out.endTag(null, TAG_GLOBAL_PROXY_SPEC);
+                    writeAttributeValueToXml(out, TAG_GLOBAL_PROXY_SPEC, globalProxySpec);
                 }
                 if (globalProxyExclusionList != null) {
-                    out.startTag(null, TAG_GLOBAL_PROXY_EXCLUSION_LIST);
-                    out.attribute(null, ATTR_VALUE, globalProxyExclusionList);
-                    out.endTag(null, TAG_GLOBAL_PROXY_EXCLUSION_LIST);
+                    writeAttributeValueToXml(
+                            out, TAG_GLOBAL_PROXY_EXCLUSION_LIST, globalProxyExclusionList);
                 }
             }
             if (passwordExpirationTimeout != DEF_PASSWORD_EXPIRATION_TIMEOUT) {
-                out.startTag(null, TAG_PASSWORD_EXPIRATION_TIMEOUT);
-                out.attribute(null, ATTR_VALUE, Long.toString(passwordExpirationTimeout));
-                out.endTag(null, TAG_PASSWORD_EXPIRATION_TIMEOUT);
+                writeAttributeValueToXml(
+                        out, TAG_PASSWORD_EXPIRATION_TIMEOUT, passwordExpirationTimeout);
             }
             if (passwordExpirationDate != DEF_PASSWORD_EXPIRATION_DATE) {
-                out.startTag(null, TAG_PASSWORD_EXPIRATION_DATE);
-                out.attribute(null, ATTR_VALUE, Long.toString(passwordExpirationDate));
-                out.endTag(null, TAG_PASSWORD_EXPIRATION_DATE);
+                writeAttributeValueToXml(
+                        out, TAG_PASSWORD_EXPIRATION_DATE, passwordExpirationDate);
             }
             if (encryptionRequested) {
-                out.startTag(null, TAG_ENCRYPTION_REQUESTED);
-                out.attribute(null, ATTR_VALUE, Boolean.toString(encryptionRequested));
-                out.endTag(null, TAG_ENCRYPTION_REQUESTED);
+                writeAttributeValueToXml(
+                        out, TAG_ENCRYPTION_REQUESTED, encryptionRequested);
             }
             if (testOnlyAdmin) {
-                out.startTag(null, TAG_TEST_ONLY_ADMIN);
-                out.attribute(null, ATTR_VALUE, Boolean.toString(testOnlyAdmin));
-                out.endTag(null, TAG_TEST_ONLY_ADMIN);
+                writeAttributeValueToXml(
+                        out, TAG_TEST_ONLY_ADMIN, testOnlyAdmin);
             }
             if (disableCamera) {
-                out.startTag(null, TAG_DISABLE_CAMERA);
-                out.attribute(null, ATTR_VALUE, Boolean.toString(disableCamera));
-                out.endTag(null, TAG_DISABLE_CAMERA);
+                writeAttributeValueToXml(
+                        out, TAG_DISABLE_CAMERA, disableCamera);
             }
             if (disableCallerId) {
-                out.startTag(null, TAG_DISABLE_CALLER_ID);
-                out.attribute(null, ATTR_VALUE, Boolean.toString(disableCallerId));
-                out.endTag(null, TAG_DISABLE_CALLER_ID);
+                writeAttributeValueToXml(
+                        out, TAG_DISABLE_CALLER_ID, disableCallerId);
             }
             if (disableContactsSearch) {
-                out.startTag(null, TAG_DISABLE_CONTACTS_SEARCH);
-                out.attribute(null, ATTR_VALUE, Boolean.toString(disableContactsSearch));
-                out.endTag(null, TAG_DISABLE_CONTACTS_SEARCH);
+                writeAttributeValueToXml(
+                        out, TAG_DISABLE_CONTACTS_SEARCH, disableContactsSearch);
             }
             if (!disableBluetoothContactSharing) {
-                out.startTag(null, TAG_DISABLE_BLUETOOTH_CONTACT_SHARING);
-                out.attribute(null, ATTR_VALUE,
-                        Boolean.toString(disableBluetoothContactSharing));
-                out.endTag(null, TAG_DISABLE_BLUETOOTH_CONTACT_SHARING);
+                writeAttributeValueToXml(
+                        out, TAG_DISABLE_BLUETOOTH_CONTACT_SHARING, disableBluetoothContactSharing);
             }
             if (disableScreenCapture) {
-                out.startTag(null, TAG_DISABLE_SCREEN_CAPTURE);
-                out.attribute(null, ATTR_VALUE, Boolean.toString(disableScreenCapture));
-                out.endTag(null, TAG_DISABLE_SCREEN_CAPTURE);
+                writeAttributeValueToXml(
+                        out, TAG_DISABLE_SCREEN_CAPTURE, disableScreenCapture);
             }
             if (requireAutoTime) {
-                out.startTag(null, TAG_REQUIRE_AUTO_TIME);
-                out.attribute(null, ATTR_VALUE, Boolean.toString(requireAutoTime));
-                out.endTag(null, TAG_REQUIRE_AUTO_TIME);
+                writeAttributeValueToXml(
+                        out, TAG_REQUIRE_AUTO_TIME, requireAutoTime);
             }
             if (forceEphemeralUsers) {
-                out.startTag(null, TAG_FORCE_EPHEMERAL_USERS);
-                out.attribute(null, ATTR_VALUE, Boolean.toString(forceEphemeralUsers));
-                out.endTag(null, TAG_FORCE_EPHEMERAL_USERS);
+                writeAttributeValueToXml(
+                        out, TAG_FORCE_EPHEMERAL_USERS, forceEphemeralUsers);
             }
             if (isNetworkLoggingEnabled) {
                 out.startTag(null, TAG_IS_NETWORK_LOGGING_ENABLED);
@@ -1259,15 +1225,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 out.endTag(null, TAG_IS_NETWORK_LOGGING_ENABLED);
             }
             if (disabledKeyguardFeatures != DEF_KEYGUARD_FEATURES_DISABLED) {
-                out.startTag(null, TAG_DISABLE_KEYGUARD_FEATURES);
-                out.attribute(null, ATTR_VALUE, Integer.toString(disabledKeyguardFeatures));
-                out.endTag(null, TAG_DISABLE_KEYGUARD_FEATURES);
+                writeAttributeValueToXml(
+                        out, TAG_DISABLE_KEYGUARD_FEATURES, disabledKeyguardFeatures);
             }
             if (!accountTypesWithManagementDisabled.isEmpty()) {
-                out.startTag(null, TAG_DISABLE_ACCOUNT_MANAGEMENT);
                 writeAttributeValuesToXml(
-                        out, TAG_ACCOUNT_TYPE, accountTypesWithManagementDisabled);
-                out.endTag(null,  TAG_DISABLE_ACCOUNT_MANAGEMENT);
+                        out, TAG_DISABLE_ACCOUNT_MANAGEMENT, TAG_ACCOUNT_TYPE,
+                        accountTypesWithManagementDisabled);
             }
             if (!trustAgentInfos.isEmpty()) {
                 Set<Entry<String, TrustAgentInfo>> set = trustAgentInfos.entrySet();
@@ -1290,9 +1254,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 out.endTag(null, TAG_MANAGE_TRUST_AGENT_FEATURES);
             }
             if (crossProfileWidgetProviders != null && !crossProfileWidgetProviders.isEmpty()) {
-                out.startTag(null, TAG_CROSS_PROFILE_WIDGET_PROVIDERS);
-                writeAttributeValuesToXml(out, TAG_PROVIDER, crossProfileWidgetProviders);
-                out.endTag(null, TAG_CROSS_PROFILE_WIDGET_PROVIDERS);
+                writeAttributeValuesToXml(
+                        out, TAG_CROSS_PROFILE_WIDGET_PROVIDERS, TAG_PROVIDER,
+                        crossProfileWidgetProviders);
             }
             writePackageListToXml(out, TAG_PERMITTED_ACCESSIBILITY_SERVICES,
                     permittedAccessiblityServices);
@@ -1306,20 +1270,15 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                         out, userRestrictions, TAG_USER_RESTRICTIONS);
             }
             if (!defaultEnabledRestrictionsAlreadySet.isEmpty()) {
-                out.startTag(null, TAG_DEFAULT_ENABLED_USER_RESTRICTIONS);
-                writeAttributeValuesToXml(
-                        out, TAG_RESTRICTION, defaultEnabledRestrictionsAlreadySet);
-                out.endTag(null, TAG_DEFAULT_ENABLED_USER_RESTRICTIONS);
+                writeAttributeValuesToXml(out, TAG_DEFAULT_ENABLED_USER_RESTRICTIONS,
+                        TAG_RESTRICTION,
+                        defaultEnabledRestrictionsAlreadySet);
             }
             if (!TextUtils.isEmpty(shortSupportMessage)) {
-                out.startTag(null, TAG_SHORT_SUPPORT_MESSAGE);
-                out.text(shortSupportMessage.toString());
-                out.endTag(null, TAG_SHORT_SUPPORT_MESSAGE);
+                writeTextToXml(out, TAG_SHORT_SUPPORT_MESSAGE, shortSupportMessage.toString());
             }
             if (!TextUtils.isEmpty(longSupportMessage)) {
-                out.startTag(null, TAG_LONG_SUPPORT_MESSAGE);
-                out.text(longSupportMessage.toString());
-                out.endTag(null, TAG_LONG_SUPPORT_MESSAGE);
+                writeTextToXml(out, TAG_LONG_SUPPORT_MESSAGE, longSupportMessage.toString());
             }
             if (parentAdmin != null) {
                 out.startTag(null, TAG_PARENT_ADMIN);
@@ -1327,29 +1286,20 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 out.endTag(null, TAG_PARENT_ADMIN);
             }
             if (organizationColor != DEF_ORGANIZATION_COLOR) {
-                out.startTag(null, TAG_ORGANIZATION_COLOR);
-                out.attribute(null, ATTR_VALUE, Integer.toString(organizationColor));
-                out.endTag(null, TAG_ORGANIZATION_COLOR);
+                writeAttributeValueToXml(out, TAG_ORGANIZATION_COLOR, organizationColor);
             }
             if (organizationName != null) {
-                out.startTag(null, TAG_ORGANIZATION_NAME);
-                out.text(organizationName);
-                out.endTag(null, TAG_ORGANIZATION_NAME);
+                writeTextToXml(out, TAG_ORGANIZATION_NAME, organizationName);
             }
             if (isLogoutEnabled) {
-                out.startTag(null, TAG_IS_LOGOUT_ENABLED);
-                out.attribute(null, ATTR_VALUE, Boolean.toString(isLogoutEnabled));
-                out.endTag(null, TAG_IS_LOGOUT_ENABLED);
+                writeAttributeValueToXml(
+                        out, TAG_IS_LOGOUT_ENABLED, isLogoutEnabled);
             }
             if (startUserSessionMessage != null) {
-                out.startTag(null, TAG_START_USER_SESSION_MESSAGE);
-                out.text(startUserSessionMessage);
-                out.endTag(null, TAG_START_USER_SESSION_MESSAGE);
+                writeTextToXml(out, TAG_START_USER_SESSION_MESSAGE, startUserSessionMessage);
             }
             if (endUserSessionMessage != null) {
-                out.startTag(null, TAG_END_USER_SESSION_MESSAGE);
-                out.text(endUserSessionMessage);
-                out.endTag(null, TAG_END_USER_SESSION_MESSAGE);
+                writeTextToXml(out, TAG_END_USER_SESSION_MESSAGE, endUserSessionMessage);
             }
             if (mCrossProfileCalendarPackages == null) {
                 out.startTag(null, TAG_CROSS_PROFILE_CALENDAR_PACKAGES_NULL);
@@ -1360,25 +1310,58 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             }
         }
 
+        void writeTextToXml(XmlSerializer out, String tag, String text) throws IOException {
+            out.startTag(null, tag);
+            out.text(text);
+            out.endTag(null, tag);
+        }
+
         void writePackageListToXml(XmlSerializer out, String outerTag,
                 List<String> packageList)
                 throws IllegalArgumentException, IllegalStateException, IOException {
             if (packageList == null) {
                 return;
             }
-
-            out.startTag(null, outerTag);
-            writeAttributeValuesToXml(out, TAG_PACKAGE_LIST_ITEM, packageList);
-            out.endTag(null, outerTag);
+            writeAttributeValuesToXml(out, outerTag, TAG_PACKAGE_LIST_ITEM, packageList);
         }
 
-        void writeAttributeValuesToXml(XmlSerializer out, String tag,
+        void writeAttributeValueToXml(XmlSerializer out, String tag, String value)
+                throws IOException {
+            out.startTag(null, tag);
+            out.attribute(null, ATTR_VALUE, value);
+            out.endTag(null, tag);
+        }
+
+        void writeAttributeValueToXml(XmlSerializer out, String tag, int value)
+                throws IOException {
+            out.startTag(null, tag);
+            out.attribute(null, ATTR_VALUE, Integer.toString(value));
+            out.endTag(null, tag);
+        }
+
+        void writeAttributeValueToXml(XmlSerializer out, String tag, long value)
+                throws IOException {
+            out.startTag(null, tag);
+            out.attribute(null, ATTR_VALUE, Long.toString(value));
+            out.endTag(null, tag);
+        }
+
+        void writeAttributeValueToXml(XmlSerializer out, String tag, boolean value)
+                throws IOException {
+            out.startTag(null, tag);
+            out.attribute(null, ATTR_VALUE, Boolean.toString(value));
+            out.endTag(null, tag);
+        }
+
+        void writeAttributeValuesToXml(XmlSerializer out, String outerTag, String innerTag,
                 @NonNull Collection<String> values) throws IOException {
+            out.startTag(null, outerTag);
             for (String value : values) {
-                out.startTag(null, tag);
+                out.startTag(null, innerTag);
                 out.attribute(null, ATTR_VALUE, value);
-                out.endTag(null, tag);
+                out.endTag(null, innerTag);
             }
+            out.endTag(null, outerTag);
         }
 
         void readFromXml(XmlPullParser parser, boolean shouldOverridePolicies)
@@ -1994,6 +1977,14 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             return IAudioService.Stub.asInterface(ServiceManager.getService(Context.AUDIO_SERVICE));
         }
 
+        LockSettingsInternal getLockSettingsInternal() {
+            return LocalServices.getService(LockSettingsInternal.class);
+        }
+
+        boolean hasUserSetupCompleted(DevicePolicyData userData) {
+            return userData.mUserSetupComplete;
+        }
+
         boolean isBuildDebuggable() {
             return Build.IS_DEBUGGABLE;
         }
@@ -2233,7 +2224,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
         mLocalService = new LocalService();
         mLockPatternUtils = injector.newLockPatternUtils();
-
+        mLockSettingsInternal = injector.getLockSettingsInternal();
         // TODO: why does SecurityLogMonitor need to be created even when mHasFeature == false?
         mSecurityLogMonitor = new SecurityLogMonitor(this);
 
@@ -2309,17 +2300,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
     /**
-     * Provides PasswordMetrics object corresponding to the given user.
-     * @param userHandle the user for whom to provide metrics.
-     * @return the user password metrics, or {@code null} if none have been associated with
-     * the user yet (for example, if the device has booted but not been unlocked).
-     */
-    @GuardedBy("getLockObject()")
-    PasswordMetrics getUserPasswordMetricsLocked(int userHandle) {
-        return mUserPasswordMetrics.get(userHandle);
-    }
-
-    /**
      * Creates and loads the policy data from xml for data that is shared between
      * various profiles of a user. In contrast to {@link #getUserData(int)}
      * it allows access to data of users other than the calling user.
@@ -2352,9 +2332,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             DevicePolicyData policy = mUserData.get(userHandle);
             if (policy != null) {
                 mUserData.remove(userHandle);
-            }
-            if (mUserPasswordMetrics.get(userHandle) != null) {
-                mUserPasswordMetrics.remove(userHandle);
             }
 
             File policyFile = new File(mInjector.environmentGetUserSystemDirectory(userHandle),
@@ -4183,15 +4160,16 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     private void updatePasswordValidityCheckpointLocked(int userHandle, boolean parent) {
         final int credentialOwner = getCredentialOwner(userHandle, parent);
         DevicePolicyData policy = getUserData(credentialOwner);
-        PasswordMetrics metrics = getUserPasswordMetricsLocked(credentialOwner);
-        if (metrics == null) {
-            metrics = new PasswordMetrics();
+        PasswordMetrics metrics = mLockSettingsInternal.getUserPasswordMetrics(credentialOwner);
+        // Update the checkpoint only if the user's password metrics is known
+        if (metrics != null) {
+            final boolean newCheckpoint = isPasswordSufficientForUserWithoutCheckpointLocked(
+                    metrics, userHandle, parent);
+            if (newCheckpoint != policy.mPasswordValidAtLastCheckpoint) {
+                policy.mPasswordValidAtLastCheckpoint = newCheckpoint;
+                saveSettingsLocked(credentialOwner);
+            }
         }
-        policy.mPasswordValidAtLastCheckpoint =
-                isPasswordSufficientForUserWithoutCheckpointLocked(
-                        metrics, userHandle, parent);
-
-        saveSettingsLocked(credentialOwner);
     }
 
     /**
@@ -4766,7 +4744,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             getActiveAdminForCallerLocked(null, DeviceAdminInfo.USES_POLICY_LIMIT_PASSWORD, parent);
             int credentialOwner = getCredentialOwner(userHandle, parent);
             DevicePolicyData policy = getUserDataUnchecked(credentialOwner);
-            PasswordMetrics metrics = getUserPasswordMetricsLocked(credentialOwner);
+            PasswordMetrics metrics = mLockSettingsInternal.getUserPasswordMetrics(credentialOwner);
             return isActivePasswordSufficientForUserLocked(
                     policy.mPasswordValidAtLastCheckpoint, metrics, userHandle, parent);
         }
@@ -4796,15 +4774,15 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             enforceUserUnlocked(targetUser, false);
             int credentialOwner = getCredentialOwner(userHandle, false);
             DevicePolicyData policy = getUserDataUnchecked(credentialOwner);
-            PasswordMetrics metrics = getUserPasswordMetricsLocked(credentialOwner);
+            PasswordMetrics metrics = mLockSettingsInternal.getUserPasswordMetrics(credentialOwner);
             return isActivePasswordSufficientForUserLocked(
                     policy.mPasswordValidAtLastCheckpoint, metrics, targetUser, false);
         }
     }
 
     private boolean isActivePasswordSufficientForUserLocked(
-            boolean passwordValidAtLastCheckpoint, PasswordMetrics metrics, int userHandle,
-            boolean parent) {
+            boolean passwordValidAtLastCheckpoint, @Nullable PasswordMetrics metrics,
+            int userHandle, boolean parent) {
         if (!mInjector.storageManagerIsFileBasedEncryptionEnabled() && (metrics == null)) {
             // Before user enters their password for the first time after a reboot, return the
             // value of this flag, which tells us whether the password was valid the last time
@@ -4815,9 +4793,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
 
         if (metrics == null) {
-            // This could happen if the user never had a password set, for example, so
-            // setActivePasswordState has never been called for it.
-            metrics = new PasswordMetrics();
+            // Called on a FBE device when the user password exists but its metrics is unknown.
+            // This shouldn't happen since we enforce the user to be unlocked (which would result
+            // in the metrics known to the framework on a FBE device) at all call sites.
+            throw new IllegalStateException("isActivePasswordSufficient called on FBE-locked user");
         }
 
         return isPasswordSufficientForUserWithoutCheckpointLocked(metrics, userHandle, parent);
@@ -4829,7 +4808,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
      * {@code userId} (or its parent, if {@code parent} is set to {@code true}).
      */
     private boolean isPasswordSufficientForUserWithoutCheckpointLocked(
-            PasswordMetrics metrics, @UserIdInt int userId, boolean parent) {
+            @NonNull PasswordMetrics metrics, @UserIdInt int userId, boolean parent) {
         final int requiredQuality = getPasswordQuality(null, userId, parent);
 
         if (requiredQuality >= PASSWORD_QUALITY_NUMERIC
@@ -4867,7 +4846,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
         synchronized (getLockObject()) {
             int targetUserId = getCredentialOwner(callingUserId, /* parent= */ false);
-            PasswordMetrics metrics = getUserPasswordMetricsLocked(targetUserId);
+            PasswordMetrics metrics = mLockSettingsInternal.getUserPasswordMetrics(targetUserId);
             return metrics == null ? PASSWORD_COMPLEXITY_NONE : metrics.determineComplexity();
         }
     }
@@ -5666,7 +5645,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     KeyChain.bindAsUser(mContext, UserHandle.getUserHandleForUid(callingUid));
             try {
                 IKeyChainService keyChain = keyChainConnection.getService();
-                if (!keyChain.installKeyPair(privKey, cert, chain, alias)) {
+                if (!keyChain.installKeyPair(privKey, cert, chain, alias, KeyStore.UID_SELF)) {
                     return false;
                 }
                 if (requestAccess) {
@@ -6704,31 +6683,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     result.sendResult(getResultExtras(false));
                 }
             }, null, Activity.RESULT_OK, null, null);
-        }
-    }
-
-    /**
-     * Notify DPMS regarding the metric of the current password. This happens when the user changes
-     * the password, but also when the user just unlocks the keyguard. In comparison,
-     * reportPasswordChanged() is only called when the user changes the password.
-     */
-    @Override
-    public void setActivePasswordState(PasswordMetrics metrics, int userHandle) {
-        if (!mLockPatternUtils.hasSecureLockScreen()) {
-            return;
-        }
-        enforceFullCrossUsersPermission(userHandle);
-        mContext.enforceCallingOrSelfPermission(
-                android.Manifest.permission.BIND_DEVICE_ADMIN, null);
-
-        // If the managed profile doesn't have a separate password, set the metrics to default
-        if (isManagedProfile(userHandle) && !isSeparateProfileChallengeEnabled(userHandle)) {
-            metrics = new PasswordMetrics();
-        }
-
-        validateQualityConstant(metrics.quality);
-        synchronized (getLockObject()) {
-            mUserPasswordMetrics.put(userHandle, metrics);
         }
     }
 
@@ -8303,7 +8257,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         if (!mHasFeature) {
             return true;
         }
-        return getUserData(userHandle).mUserSetupComplete;
+        return mInjector.hasUserSetupCompleted(getUserData(userHandle));
     }
 
     private boolean hasPaired(int userHandle) {

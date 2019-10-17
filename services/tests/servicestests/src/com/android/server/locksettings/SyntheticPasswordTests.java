@@ -341,6 +341,10 @@ public class SyntheticPasswordTests extends BaseLockSettingsServiceTests {
         final byte[] pattern = "123654".getBytes();
         final byte[] token = "some-high-entropy-secure-token".getBytes();
         initializeCredentialUnderSP(password, PRIMARY_USER_ID);
+        // Disregard any reportPasswordChanged() invocations as part of credential setup.
+        flushHandlerTasks();
+        reset(mDevicePolicyManager);
+
         final byte[] storageKey = mStorageManager.getUserUnlockToken(PRIMARY_USER_ID);
 
         assertFalse(mService.hasPendingEscrowToken(PRIMARY_USER_ID));
@@ -360,7 +364,8 @@ public class SyntheticPasswordTests extends BaseLockSettingsServiceTests {
         flushHandlerTasks();
         final PasswordMetrics metric = PasswordMetrics.computeForCredential(
                 LockPatternUtils.CREDENTIAL_TYPE_PATTERN, pattern);
-        verify(mDevicePolicyManager).setActivePasswordState(metric, PRIMARY_USER_ID);
+        assertEquals(metric, mService.getUserPasswordMetrics(PRIMARY_USER_ID));
+        verify(mDevicePolicyManager).reportPasswordChanged(PRIMARY_USER_ID);
 
         assertEquals(VerifyCredentialResponse.RESPONSE_OK, mService.verifyCredential(
                 pattern, LockPatternUtils.CREDENTIAL_TYPE_PATTERN, 0, PRIMARY_USER_ID)

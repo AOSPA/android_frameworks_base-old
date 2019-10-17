@@ -53,6 +53,7 @@ import android.os.ParcelUuid;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.telephony.TelephonyManager.NetworkType;
 import android.telephony.euicc.EuiccManager;
 import android.telephony.ims.ImsMmTelManager;
 import android.util.DisplayMetrics;
@@ -2290,14 +2291,19 @@ public class SubscriptionManager {
     }
 
     /**
-     * Returns the resources associated with Subscription.
+     * Returns the {@link Resources} from the given {@link Context} for the MCC/MNC associated with
+     * the subscription. If the subscription ID is invalid, the base resources are returned instead.
+     *
+     * Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
+     *
      * @param context Context object
-     * @param subId Subscription Id of Subscription who's resources are required
+     * @param subId Subscription Id of Subscription whose resources are required
      * @return Resources associated with Subscription.
      * @hide
      */
-    @UnsupportedAppUsage
-    public static Resources getResourcesForSubId(Context context, int subId) {
+    @NonNull
+    @SystemApi
+    public static Resources getResourcesForSubId(@NonNull Context context, int subId) {
         return getResourcesForSubId(context, subId, false);
     }
 
@@ -2454,10 +2460,51 @@ public class SubscriptionManager {
      */
     public void setSubscriptionOverrideUnmetered(int subId, boolean overrideUnmetered,
             @DurationMillisLong long timeoutMillis) {
+        setSubscriptionOverrideUnmetered(subId, null, overrideUnmetered, timeoutMillis);
+    }
+
+    /**
+     * Temporarily override the billing relationship between a carrier and
+     * a specific subscriber to be considered unmetered for the given network
+     * types. This will be reflected to apps via
+     * {@link NetworkCapabilities#NET_CAPABILITY_NOT_METERED}.
+     * This method is only accessible to the following narrow set of apps:
+     * <ul>
+     * <li>The carrier app for this subscriberId, as determined by
+     * {@link TelephonyManager#hasCarrierPrivileges()}.
+     * <li>The carrier app explicitly delegated access through
+     * {@link CarrierConfigManager#KEY_CONFIG_PLANS_PACKAGE_OVERRIDE_STRING}.
+     * </ul>
+     *
+     * @param subId the subscriber this override applies to.
+     * @param networkTypes all network types to set an override for. A null
+     *            network type means to apply the override to all network types.
+     *            Any unspecified network types will default to metered.
+     * @param overrideUnmetered set if the billing relationship should be
+     *            considered unmetered.
+     * @param timeoutMillis the timeout after which the requested override will
+     *            be automatically cleared, or {@code 0} to leave in the
+     *            requested state until explicitly cleared, or the next reboot,
+     *            whichever happens first.
+     * @throws SecurityException if the caller doesn't meet the requirements
+     *            outlined above.
+     * {@hide}
+     */
+    public void setSubscriptionOverrideUnmetered(int subId,
+            @Nullable @NetworkType int[] networkTypes, boolean overrideUnmetered,
+            @DurationMillisLong long timeoutMillis) {
         try {
+            long networkTypeMask = 0;
+            if (networkTypes != null) {
+                for (int networkType : networkTypes) {
+                    networkTypeMask |= TelephonyManager.getBitMaskForNetworkType(networkType);
+                }
+            } else {
+                networkTypeMask = ~0;
+            }
             final int overrideValue = overrideUnmetered ? OVERRIDE_UNMETERED : 0;
             getNetworkPolicy().setSubscriptionOverride(subId, OVERRIDE_UNMETERED, overrideValue,
-                    timeoutMillis, mContext.getOpPackageName());
+                    networkTypeMask, timeoutMillis, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2489,10 +2536,52 @@ public class SubscriptionManager {
      */
     public void setSubscriptionOverrideCongested(int subId, boolean overrideCongested,
             @DurationMillisLong long timeoutMillis) {
+        setSubscriptionOverrideCongested(subId, null, overrideCongested, timeoutMillis);
+    }
+
+    /**
+     * Temporarily override the billing relationship plan between a carrier and
+     * a specific subscriber to be considered congested. This will cause the
+     * device to delay certain network requests when possible, such as developer
+     * jobs that are willing to run in a flexible time window.
+     * <p>
+     * This method is only accessible to the following narrow set of apps:
+     * <ul>
+     * <li>The carrier app for this subscriberId, as determined by
+     * {@link TelephonyManager#hasCarrierPrivileges()}.
+     * <li>The carrier app explicitly delegated access through
+     * {@link CarrierConfigManager#KEY_CONFIG_PLANS_PACKAGE_OVERRIDE_STRING}.
+     * </ul>
+     *
+     * @param subId the subscriber this override applies to.
+     * @param networkTypes all network types to set an override for. A null
+     *            network type means to apply the override to all network types.
+     *            Any unspecified network types will default to not congested.
+     * @param overrideCongested set if the subscription should be considered
+     *            congested.
+     * @param timeoutMillis the timeout after which the requested override will
+     *            be automatically cleared, or {@code 0} to leave in the
+     *            requested state until explicitly cleared, or the next reboot,
+     *            whichever happens first.
+     * @throws SecurityException if the caller doesn't meet the requirements
+     *             outlined above.
+     * @hide
+     */
+    public void setSubscriptionOverrideCongested(int subId,
+            @Nullable @NetworkType int[] networkTypes, boolean overrideCongested,
+            @DurationMillisLong long timeoutMillis) {
         try {
+            long networkTypeMask = 0;
+            if (networkTypes != null) {
+                for (int networkType : networkTypes) {
+                    networkTypeMask |= TelephonyManager.getBitMaskForNetworkType(networkType);
+                }
+            } else {
+                networkTypeMask = ~0;
+            }
             final int overrideValue = overrideCongested ? OVERRIDE_CONGESTED : 0;
             getNetworkPolicy().setSubscriptionOverride(subId, OVERRIDE_CONGESTED, overrideValue,
-                    timeoutMillis, mContext.getOpPackageName());
+                    networkTypeMask, timeoutMillis, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2588,7 +2677,6 @@ public class SubscriptionManager {
      *
      * @param info The subscription to check.
      * @return whether the app is authorized to manage this subscription per its metadata.
-     * @throws IllegalArgumentException if this subscription is not embedded.
      */
     public boolean canManageSubscription(SubscriptionInfo info) {
         return canManageSubscription(info, mContext.getPackageName());
@@ -2604,22 +2692,20 @@ public class SubscriptionManager {
      * @param info The subscription to check.
      * @param packageName Package name of the app to check.
      * @return whether the app is authorized to manage this subscription per its access rules.
-     * @throws IllegalArgumentException if this subscription is not embedded.
      * @hide
      */
     public boolean canManageSubscription(SubscriptionInfo info, String packageName) {
-        if (!info.isEmbedded()) {
-            throw new IllegalArgumentException("Not an embedded subscription");
-        }
-        if (info.getAllAccessRules() == null) {
+        if (info == null || info.getAllAccessRules() == null) {
             return false;
         }
         PackageManager packageManager = mContext.getPackageManager();
         PackageInfo packageInfo;
         try {
-            packageInfo = packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES);
+            packageInfo = packageManager.getPackageInfo(packageName,
+                PackageManager.GET_SIGNING_CERTIFICATES);
         } catch (PackageManager.NameNotFoundException e) {
-            throw new IllegalArgumentException("Unknown package: " + packageName, e);
+            logd("Unknown package: " + packageName);
+            return false;
         }
         for (UiccAccessRule rule : info.getAllAccessRules()) {
             if (rule.getCarrierPrivilegeStatus(packageInfo)
@@ -2857,8 +2943,7 @@ public class SubscriptionManager {
      *
      * @throws SecurityException if the caller doesn't meet the requirements
      *             outlined above.
-     * @throws IllegalArgumentException if the some subscriptions in the list doesn't exist,
-     *             or the groupUuid doesn't exist.
+     * @throws IllegalArgumentException if the some subscriptions in the list doesn't exist.
      * @throws IllegalStateException if Telephony service is in bad state.
      *
      * @param subIdList list of subId that need adding into the group
@@ -3012,7 +3097,7 @@ public class SubscriptionManager {
         // to the caller.
         boolean hasCarrierPrivilegePermission = TelephonyManager.from(mContext)
                 .hasCarrierPrivileges(info.getSubscriptionId())
-                || (info.isEmbedded() && canManageSubscription(info));
+                || canManageSubscription(info);
         return hasCarrierPrivilegePermission;
     }
 

@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.phone;
 
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
 
+import static com.android.systemui.DejankUtils.whitelistIpcs;
 import static com.android.systemui.statusbar.NotificationRemoteInputManager.ENABLE_REMOTE_INPUT;
 
 import android.app.ActivityManager;
@@ -39,9 +40,9 @@ import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.keyguard.R;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
+import com.android.systemui.R;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
@@ -222,7 +223,7 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
         }
 
         final boolean scrimsOccludingWallpaper =
-                state.scrimsVisibility == ScrimController.VISIBILITY_FULLY_OPAQUE;
+                state.scrimsVisibility == ScrimController.OPAQUE;
         final boolean keyguardOrAod = state.keyguardShowing
                 || (state.dozing && mDozeParameters.getAlwaysOn());
         if (keyguardOrAod && !state.backdropShowing && !scrimsOccludingWallpaper) {
@@ -308,7 +309,7 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
         return !state.forceCollapsed && (state.isKeyguardShowingAndNotOccluded()
                 || state.panelVisible || state.keyguardFadingAway || state.bouncerShowing
                 || state.headsUpShowing || state.bubblesShowing
-                || state.scrimsVisibility != ScrimController.VISIBILITY_FULLY_TRANSPARENT);
+                || state.scrimsVisibility != ScrimController.TRANSPARENT);
     }
 
     private void applyFitsSystemWindows(State state) {
@@ -370,12 +371,14 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
             mWindowManager.updateViewLayout(mStatusBarView, mLp);
         }
         if (mHasTopUi != mHasTopUiChanged) {
-            try {
-                mActivityManager.setHasTopUi(mHasTopUiChanged);
-            } catch (RemoteException e) {
-                Log.e(TAG, "Failed to call setHasTopUi", e);
-            }
-            mHasTopUi = mHasTopUiChanged;
+            whitelistIpcs(() -> {
+                try {
+                    mActivityManager.setHasTopUi(mHasTopUiChanged);
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Failed to call setHasTopUi", e);
+                }
+                mHasTopUi = mHasTopUiChanged;
+            });
         }
         notifyStateChangedCallbacks();
     }

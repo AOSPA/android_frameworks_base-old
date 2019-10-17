@@ -18,6 +18,7 @@ package android.net.wifi;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.UnsupportedAppUsage;
 import android.content.pm.PackageManager;
@@ -547,6 +548,12 @@ public class WifiConfiguration implements Parcelable {
      * string otherwise.
      */
     public String preSharedKey;
+
+    /**
+     * Optional SAE Password Id for use with WPA3-SAE. It is an ASCII string.
+     * @hide
+     */
+    public @Nullable String saePasswordId;
 
     /**
      * Four WEP keys. For each of the four values, provide either an ASCII
@@ -1079,6 +1086,13 @@ public class WifiConfiguration implements Parcelable {
      */
     @NonNull
     private MacAddress mRandomizedMacAddress;
+
+    /**
+     * @hide
+     * The wall clock time of when |mRandomizedMacAddress| last changed.
+     * Used to determine when we should re-randomize in aggressive mode.
+     */
+    public long randomizedMacLastModifiedTimeMs = 0;
 
     /**
      * @hide
@@ -1989,6 +2003,8 @@ public class WifiConfiguration implements Parcelable {
         }
         sbuf.append(" macRandomizationSetting: ").append(macRandomizationSetting).append("\n");
         sbuf.append(" mRandomizedMacAddress: ").append(mRandomizedMacAddress).append("\n");
+        sbuf.append(" randomizedMacLastModifiedTimeMs: ").append(randomizedMacLastModifiedTimeMs)
+                .append("\n");
         sbuf.append(" KeyMgmt:");
         for (int k = 0; k < this.allowedKeyManagement.size(); k++) {
             if (this.allowedKeyManagement.get(k)) {
@@ -2075,6 +2091,9 @@ public class WifiConfiguration implements Parcelable {
         if (this.preSharedKey != null) {
             sbuf.append('*');
         }
+
+        sbuf.append('\n').append(" SAE Password Id: ");
+        sbuf.append(this.saePasswordId);
 
         sbuf.append("\nEnterprise config:\n");
         sbuf.append(enterpriseConfig);
@@ -2463,6 +2482,7 @@ public class WifiConfiguration implements Parcelable {
             providerFriendlyName = source.providerFriendlyName;
             isHomeProviderNetwork = source.isHomeProviderNetwork;
             preSharedKey = source.preSharedKey;
+            saePasswordId = source.saePasswordId;
 
             mNetworkSelectionStatus.copy(source.getNetworkSelectionStatus());
             apBand = source.apBand;
@@ -2534,6 +2554,7 @@ public class WifiConfiguration implements Parcelable {
             dppCsign = source.dppCsign;
 
             macRandomizationSetting = source.macRandomizationSetting;
+            randomizedMacLastModifiedTimeMs = source.randomizedMacLastModifiedTimeMs;
             requirePMF = source.requirePMF;
             updateIdentifier = source.updateIdentifier;
             oweTransIfaceName = source.oweTransIfaceName;
@@ -2559,6 +2580,7 @@ public class WifiConfiguration implements Parcelable {
             dest.writeLong(roamingConsortiumId);
         }
         dest.writeString(preSharedKey);
+        dest.writeString(saePasswordId);
         for (String wepKey : wepKeys) {
             dest.writeString(wepKey);
         }
@@ -2613,6 +2635,7 @@ public class WifiConfiguration implements Parcelable {
         dest.writeString(dppCsign);
         dest.writeInt(macRandomizationSetting);
         dest.writeInt(osu ? 1 : 0);
+        dest.writeLong(randomizedMacLastModifiedTimeMs);
         dest.writeString(oweTransIfaceName);
     }
 
@@ -2639,6 +2662,7 @@ public class WifiConfiguration implements Parcelable {
                     config.roamingConsortiumIds[i] = in.readLong();
                 }
                 config.preSharedKey = in.readString();
+                config.saePasswordId = in.readString();
                 for (int i = 0; i < config.wepKeys.length; i++) {
                     config.wepKeys[i] = in.readString();
                 }
@@ -2692,6 +2716,7 @@ public class WifiConfiguration implements Parcelable {
                 config.dppCsign = in.readString();
                 config.macRandomizationSetting = in.readInt();
                 config.osu = in.readInt() != 0;
+                config.randomizedMacLastModifiedTimeMs = in.readLong();
                 config.oweTransIfaceName = in.readString();
                 return config;
             }
@@ -2714,6 +2739,7 @@ public class WifiConfiguration implements Parcelable {
         out.writeInt(apBand);
         out.writeInt(apChannel);
         BackupUtils.writeString(out, preSharedKey);
+        BackupUtils.writeString(out, saePasswordId);
         out.writeInt(getAuthType());
         out.writeBoolean(hiddenSSID);
         return baos.toByteArray();
@@ -2737,6 +2763,7 @@ public class WifiConfiguration implements Parcelable {
         config.apBand = in.readInt();
         config.apChannel = in.readInt();
         config.preSharedKey = BackupUtils.readString(in);
+        config.saePasswordId = BackupUtils.readString(in);
         config.allowedKeyManagement.set(in.readInt());
         if (version >= 3) {
             config.hiddenSSID = in.readBoolean();

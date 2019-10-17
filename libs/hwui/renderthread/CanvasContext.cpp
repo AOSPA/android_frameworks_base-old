@@ -15,7 +15,17 @@
  */
 
 #include "CanvasContext.h"
+
 #include <GpuMemoryTracker.h>
+#include <apex/window.h>
+#include <fcntl.h>
+#include <strings.h>
+#include <sys/stat.h>
+
+#include <algorithm>
+#include <cstdint>
+#include <cstdlib>
+#include <functional>
 
 #include "../Properties.h"
 #include "AnimationContext.h"
@@ -31,16 +41,6 @@
 #include "utils/GLUtils.h"
 #include "utils/TimeUtils.h"
 #include "utils/TraceUtils.h"
-
-#include <strings.h>
-
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <algorithm>
-
-#include <cstdint>
-#include <cstdlib>
-#include <functional>
 
 #define TRIM_MEMORY_COMPLETE 80
 #define TRIM_MEMORY_UI_HIDDEN 20
@@ -146,7 +146,7 @@ void CanvasContext::setSurface(sp<Surface>&& surface) {
     if (surface) {
         mNativeSurface = new ReliableSurface{std::move(surface)};
         // TODO: Fix error handling & re-shorten timeout
-        mNativeSurface->setDequeueTimeout(4000_ms);
+        ANativeWindow_setDequeueTimeout(mNativeSurface.get(), 4000_ms);
         mNativeSurface->enableFrameTimestamps(true);
     } else {
         mNativeSurface = nullptr;
@@ -484,18 +484,16 @@ void CanvasContext::draw() {
         swap.swapCompletedTime = systemTime(SYSTEM_TIME_MONOTONIC);
         swap.vsyncTime = mRenderThread.timeLord().latestVsync();
         if (didDraw) {
-            int durationUs;
-            nsecs_t dequeueStart = mNativeSurface->getLastDequeueStartTime();
+            nsecs_t dequeueStart = ANativeWindow_getLastDequeueStartTime(mNativeSurface.get());
             if (dequeueStart < mCurrentFrameInfo->get(FrameInfoIndex::SyncStart)) {
                 // Ignoring dequeue duration as it happened prior to frame render start
                 // and thus is not part of the frame.
                 swap.dequeueDuration = 0;
             } else {
-                mNativeSurface->query(NATIVE_WINDOW_LAST_DEQUEUE_DURATION, &durationUs);
-                swap.dequeueDuration = us2ns(durationUs);
+                swap.dequeueDuration =
+                        us2ns(ANativeWindow_getLastDequeueDuration(mNativeSurface.get()));
             }
-            mNativeSurface->query(NATIVE_WINDOW_LAST_QUEUE_DURATION, &durationUs);
-            swap.queueDuration = us2ns(durationUs);
+            swap.queueDuration = us2ns(ANativeWindow_getLastQueueDuration(mNativeSurface.get()));
         } else {
             swap.dequeueDuration = 0;
             swap.queueDuration = 0;
@@ -726,7 +724,7 @@ SkRect CanvasContext::computeDirtyRect(const Frame& frame, SkRect* dirty) {
         // New surface needs a full draw
         dirty->setEmpty();
     } else {
-        if (!dirty->isEmpty() && !dirty->intersect(0, 0, frame.width(), frame.height())) {
+        if (!dirty->isEmpty() && !dirty->intersect(SkRect::MakeIWH(frame.width(), frame.height()))) {
             ALOGW("Dirty " RECT_STRING " doesn't intersect with 0 0 %d %d ?", SK_RECT_ARGS(*dirty),
                   frame.width(), frame.height());
             dirty->setEmpty();
@@ -735,7 +733,7 @@ SkRect CanvasContext::computeDirtyRect(const Frame& frame, SkRect* dirty) {
     }
 
     if (dirty->isEmpty()) {
-        dirty->set(0, 0, frame.width(), frame.height());
+        dirty->setIWH(frame.width(), frame.height());
     }
 
     // At this point dirty is the area of the window to update. However,
@@ -751,7 +749,7 @@ SkRect CanvasContext::computeDirtyRect(const Frame& frame, SkRect* dirty) {
         if (frame.bufferAge() > (int)mSwapHistory.size()) {
             // We don't have enough history to handle this old of a buffer
             // Just do a full-draw
-            dirty->set(0, 0, frame.width(), frame.height());
+            dirty->setIWH(frame.width(), frame.height());
         } else {
             // At this point we haven't yet added the latest frame
             // to the damage history (happens below)

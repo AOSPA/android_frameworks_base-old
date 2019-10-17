@@ -84,6 +84,7 @@ import com.android.server.wm.utils.MockTracker;
 import org.junit.Ignore;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
 /**
  * Tests for the {@link ActivityStarter} class.
@@ -93,6 +94,7 @@ import org.junit.Test;
  */
 @SmallTest
 @Presubmit
+@RunWith(WindowTestRunner.class)
 public class ActivityStarterTests extends ActivityTestsBase {
     private ActivityStarter mStarter;
     private ActivityStartController mController;
@@ -146,8 +148,8 @@ public class ActivityStarterTests extends ActivityTestsBase {
         assertThat((Object) task2.getStack()).isInstanceOf(ActivityStack.class);
         mStarter.updateBounds(task2, bounds);
 
-        verify(mService, times(1)).resizeStack(eq(task2.getStack().mStackId),
-                eq(bounds), anyBoolean(), anyBoolean(), anyBoolean(), anyInt());
+        verify(mService, times(1)).animateResizePinnedStack(eq(task2.getStack().mStackId),
+                eq(bounds), anyInt());
 
         // In the case of no animation, the stack and task bounds should be set immediately.
         if (!ANIMATE) {
@@ -353,7 +355,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
             doReturn(stack).when(mRootActivityContainer)
                     .getLaunchStack(any(), any(), any(), anyBoolean());
             doReturn(stack).when(mRootActivityContainer)
-                    .getLaunchStack(any(), any(), any(), anyBoolean(), any());
+                    .getLaunchStack(any(), any(), any(), anyBoolean(), any(), anyInt(), anyInt());
         }
 
         // Set up mock package manager internal and make sure no unmocked methods are called
@@ -365,7 +367,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
 
         // Never review permissions
         doReturn(false).when(mockPackageManager).isPermissionsReviewRequired(any(), anyInt());
-        doNothing().when(mockPackageManager).grantEphemeralAccess(
+        doNothing().when(mockPackageManager).grantImplicitAccess(
                 anyInt(), any(), anyInt(), anyInt());
 
         final Intent intent = new Intent();

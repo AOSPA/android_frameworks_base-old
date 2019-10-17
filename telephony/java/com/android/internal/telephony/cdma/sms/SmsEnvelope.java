@@ -40,6 +40,9 @@ public final class SmsEnvelope {
     static public final int TELESERVICE_SCPT              = 0x1006;
     static public final int TELESERVICE_CT_WAP            = 0xFDEA;
 
+    /** Carriers specific Teleservice IDs. */
+    public static final int TELESERVICE_FDEA_WAP = 0xFDEA; // 65002
+
     /**
      * The following are defined as extensions to the standard teleservices
      */

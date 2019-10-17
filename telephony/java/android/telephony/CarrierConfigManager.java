@@ -108,6 +108,19 @@ public class CarrierConfigManager {
             "call_forwarding_visibility_bool";
 
     /**
+     * Boolean indicating if carrier supports call forwarding option "When unreachable".
+     *
+     * {@code true}: Call forwarding option "When unreachable" is supported.
+     * {@code false}: Call forwarding option "When unreachable" is not supported. Option will be
+     * greyed out in the UI.
+     *
+     * By default this value is true.
+     * @hide
+     */
+    public static final String KEY_CALL_FORWARDING_WHEN_UNREACHABLE_SUPPORTED_BOOL =
+            "call_forwarding_when_unreachable_supported_bool";
+
+    /**
      * Boolean indicating if the "Caller ID" item is visible in the Additional Settings menu.
      * true means visible. false means gone.
      * @hide
@@ -1409,6 +1422,13 @@ public class CarrierConfigManager {
      */
     public static final String KEY_READ_ONLY_APN_FIELDS_STRING_ARRAY =
             "read_only_apn_fields_string_array";
+
+    /**
+     * Default value of APN types field if not specified by user when adding/modifying an APN.
+     * @hide
+     */
+    public static final String KEY_APN_SETTINGS_DEFAULT_APN_TYPES_STRING_ARRAY =
+            "apn_settings_default_apn_types_string_array";
 
     /**
      * Boolean indicating if intent for emergency call state changes should be broadcast
@@ -2811,6 +2831,21 @@ public class CarrierConfigManager {
             "opportunistic_network_data_switch_exit_hysteresis_time_long";
 
     /**
+     * Controls whether to do ping test before switching data to opportunistic network.
+     * This carrier config is used to disable this feature.
+     * @hide
+     */
+    public static final String KEY_PING_TEST_BEFORE_DATA_SWITCH_BOOL =
+            "ping_test_before_data_switch_bool";
+
+    /**
+     * Controls time in milli seconds until DcTracker reevaluates 5G connection state.
+     * @hide
+     */
+    public static final String KEY_5G_WATCHDOG_TIME_MS_LONG =
+            "5g_watchdog_time_long";
+
+    /**
      * Indicates zero or more emergency number prefix(es), because some carrier requires
      * if users dial an emergency number address with a specific prefix, the combination of the
      * prefix and the address is also a valid emergency number to dial. For example, an emergency
@@ -3256,6 +3291,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CALL_BARRING_SUPPORTS_PASSWORD_CHANGE_BOOL, true);
         sDefaults.putBoolean(KEY_CALL_BARRING_SUPPORTS_DEACTIVATE_ALL_BOOL, true);
         sDefaults.putBoolean(KEY_CALL_FORWARDING_VISIBILITY_BOOL, true);
+        sDefaults.putBoolean(KEY_CALL_FORWARDING_WHEN_UNREACHABLE_SUPPORTED_BOOL, true);
         sDefaults.putBoolean(KEY_ADDITIONAL_SETTINGS_CALLER_ID_VISIBILITY_BOOL, true);
         sDefaults.putBoolean(KEY_ADDITIONAL_SETTINGS_CALL_WAITING_VISIBILITY_BOOL, true);
         sDefaults.putBoolean(KEY_IGNORE_SIM_NETWORK_LOCKED_EVENTS_BOOL, false);
@@ -3303,6 +3339,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_ALLOW_ADDING_APNS_BOOL, true);
         sDefaults.putStringArray(KEY_READ_ONLY_APN_TYPES_STRING_ARRAY, new String[] {"dun"});
         sDefaults.putStringArray(KEY_READ_ONLY_APN_FIELDS_STRING_ARRAY, null);
+        sDefaults.putStringArray(KEY_APN_SETTINGS_DEFAULT_APN_TYPES_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_BROADCAST_EMERGENCY_CALL_STATE_CHANGES_BOOL, false);
         sDefaults.putBoolean(KEY_ALWAYS_SHOW_EMERGENCY_ALERT_ONOFF_BOOL, false);
         sDefaults.putBoolean(KEY_DISABLE_SEVERE_WHEN_EXTREME_DISABLED_BOOL, true);
@@ -3588,6 +3625,9 @@ public class CarrierConfigManager {
         sDefaults.putLong(KEY_OPPORTUNISTIC_NETWORK_DATA_SWITCH_HYSTERESIS_TIME_LONG, 10000);
         /* Default value is 3 seconds. */
         sDefaults.putLong(KEY_OPPORTUNISTIC_NETWORK_DATA_SWITCH_EXIT_HYSTERESIS_TIME_LONG, 3000);
+        sDefaults.putBoolean(KEY_PING_TEST_BEFORE_DATA_SWITCH_BOOL, true);
+        /* Default value is 1 hour. */
+        sDefaults.putLong(KEY_5G_WATCHDOG_TIME_MS_LONG, 3600000);
         sDefaults.putAll(Gps.getDefaults());
         sDefaults.putAll(Wifi.getDefaults());
         sDefaults.putIntArray(KEY_CDMA_ENHANCED_ROAMING_INDICATOR_FOR_HOME_NETWORK_INT_ARRAY,
@@ -3822,7 +3862,7 @@ public class CarrierConfigManager {
      * @see #getConfigForSubId
      */
     @Nullable
-    public PersistableBundle getConfigByComponentForSubId(String prefix, int subId) {
+    public PersistableBundle getConfigByComponentForSubId(@NonNull String prefix, int subId) {
         PersistableBundle configs = getConfigForSubId(subId);
 
         if (configs == null) {

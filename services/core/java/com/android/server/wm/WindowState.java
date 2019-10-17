@@ -90,6 +90,7 @@ import static com.android.server.wm.IdentifierProto.USER_ID;
 import static com.android.server.wm.MoveAnimationSpecProto.DURATION_MS;
 import static com.android.server.wm.MoveAnimationSpecProto.FROM;
 import static com.android.server.wm.MoveAnimationSpecProto.TO;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ADD_REMOVE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_APP_TRANSITIONS;
@@ -115,7 +116,6 @@ import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_REMOVING_FOCUS;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_PLACE_SURFACES;
 import static com.android.server.wm.WindowManagerService.WINDOWS_FREEZING_SCREENS_TIMEOUT;
-import static com.android.server.wm.WindowManagerService.localLOGV;
 import static com.android.server.wm.WindowStateAnimator.COMMIT_DRAW_PENDING;
 import static com.android.server.wm.WindowStateAnimator.DRAW_PENDING;
 import static com.android.server.wm.WindowStateAnimator.HAS_DRAWN;
@@ -217,7 +217,8 @@ import java.util.List;
 import java.util.function.Predicate;
 
 /** A window in the window manager. */
-class WindowState extends WindowContainer<WindowState> implements WindowManagerPolicy.WindowState {
+class WindowState extends WindowContainer<WindowState> implements WindowManagerPolicy.WindowState,
+        InsetsControlTarget {
     static final String TAG = TAG_WITH_CLASS_NAME ? "WindowState" : TAG_WM;
 
     // The minimal size of a window within the usable area of the freeform stack.
@@ -519,11 +520,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     /** When true this window can be displayed on screens owther than mOwnerUid's */
     private boolean mShowToOwnerOnly;
 
-    // Whether the window was visible when we set the app to invisible last time. WM uses
-    // this as a hint to restore the surface (if available) for early animation next time
-    // the app is brought visible.
-    private boolean mWasVisibleBeforeClientHidden;
-
     // This window will be replaced due to relaunch. This allows window manager
     // to differentiate between simple removal of a window and replacement. In the latter case it
     // will preserve the old window until the new one is drawn.
@@ -652,7 +648,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (mForceSeamlesslyRotate || requested) {
             mPendingSeamlessRotate = new SeamlessRotator(oldRotation, rotation, getDisplayInfo());
             mPendingSeamlessRotate.unrotate(transaction, this);
-            mWmService.markForSeamlessRotation(this, true);
+            getDisplayContent().getDisplayRotation().markForSeamlessRotation(this,
+                    true /* seamlesslyRotated */);
         }
     }
 
@@ -661,7 +658,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mPendingSeamlessRotate.finish(this, timeout);
             mFinishSeamlessRotateFrameNumber = getFrameNumber();
             mPendingSeamlessRotate = null;
-            mWmService.markForSeamlessRotation(this, false);
+            getDisplayContent().getDisplayRotation().markForSeamlessRotation(this,
+                    false /* seamlesslyRotated */);
         }
     }
 
@@ -752,9 +750,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mSeq = seq;
         mPowerManagerWrapper = powerManagerWrapper;
         mForceSeamlesslyRotate = token.mRoundedCornerOverlay;
-        if (localLOGV) Slog.v(
-            TAG, "Window " + this + " client=" + c.asBinder()
-            + " token=" + token + " (" + mAttrs.token + ")" + " params=" + a);
+        if (DEBUG) {
+            Slog.v(TAG, "Window " + this + " client=" + c.asBinder()
+                            + " token=" + token + " (" + mAttrs.token + ")" + " params=" + a);
+        }
         try {
             c.asBinder().linkToDeath(deathRecipient, 0);
         } catch (RemoteException e) {
@@ -822,7 +821,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     void attach() {
-        if (localLOGV) Slog.v(TAG, "Attaching " + this + " token=" + mToken);
+        if (DEBUG) Slog.v(TAG, "Attaching " + this + " token=" + mToken);
         mSession.windowAddedLocked(mAttrs.packageName);
     }
 
@@ -1122,13 +1121,14 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             }
         }
 
-        if (DEBUG_LAYOUT || localLOGV) Slog.v(TAG,
-                "Resolving (mRequestedWidth="
-                + mRequestedWidth + ", mRequestedheight="
-                + mRequestedHeight + ") to" + " (pw=" + pw + ", ph=" + ph
-                + "): frame=" + mWindowFrames.mFrame.toShortString()
-                + " " + mWindowFrames.getInsetsInfo()
-                + " " + mAttrs.getTitle());
+        if (DEBUG_LAYOUT || DEBUG) {
+            Slog.v(TAG, "Resolving (mRequestedWidth="
+                            + mRequestedWidth + ", mRequestedheight="
+                            + mRequestedHeight + ") to" + " (pw=" + pw + ", ph=" + ph
+                            + "): frame=" + mWindowFrames.mFrame.toShortString()
+                            + " " + mWindowFrames.getInsetsInfo()
+                            + " " + mAttrs.getTitle());
+        }
     }
 
     // TODO: Look into whether this override is still necessary.
@@ -1277,9 +1277,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final boolean dragResizingChanged = isDragResizeChanged()
                 && !isDragResizingChangeReported();
 
-        if (localLOGV) Slog.v(TAG_WM, "Resizing " + this + ": configChanged=" + configChanged
-                + " dragResizingChanged=" + dragResizingChanged
-                + " last=" + mWindowFrames.mLastFrame + " frame=" + mWindowFrames.mFrame);
+        if (DEBUG) {
+            Slog.v(TAG_WM, "Resizing " + this + ": configChanged=" + configChanged
+                    + " dragResizingChanged=" + dragResizingChanged
+                    + " last=" + mWindowFrames.mLastFrame + " frame=" + mWindowFrames.mFrame);
+        }
 
         // We update mLastFrame always rather than in the conditional with the last inset
         // variables, because mFrameSizeChanged only tracks the width and height changing.
@@ -1976,11 +1978,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (startingWindow && DEBUG_STARTING_WINDOW) Slog.d(TAG_WM,
                 "Starting window removed " + this);
 
-        if (localLOGV || DEBUG_FOCUS || DEBUG_FOCUS_LIGHT && isFocused())
+        if (DEBUG || DEBUG_FOCUS || DEBUG_FOCUS_LIGHT && isFocused()) {
             Slog.v(TAG_WM, "Remove " + this + " client="
-                        + Integer.toHexString(System.identityHashCode(mClient.asBinder()))
-                        + ", surfaceController=" + mWinAnimator.mSurfaceController + " Callers="
-                        + Debug.getCallers(5));
+                    + Integer.toHexString(System.identityHashCode(mClient.asBinder()))
+                    + ", surfaceController=" + mWinAnimator.mSurfaceController + " Callers="
+                    + Debug.getCallers(5));
+        }
 
         final long origId = Binder.clearCallingIdentity();
 
@@ -2004,8 +2007,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
             // Visibility of the removed window. Will be used later to update orientation later on.
             boolean wasVisible = false;
-
-            final int displayId = getDisplayId();
 
             // First, see if we need to run an animation. If we do, we have to hold off on removing the
             // window until the animation is done. If the display is frozen, just remove immediately,
@@ -2086,7 +2087,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // So just update orientation if needed.
             if (wasVisible) {
                 final DisplayContent displayContent = getDisplayContent();
-                if (displayContent.updateOrientationFromAppTokens()) {
+                if (displayContent.updateOrientation()) {
                     displayContent.sendNewConfiguration();
                 }
             }
@@ -3327,7 +3328,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
     }
 
-    void notifyInsetsControlChanged() {
+    @Override
+    public void notifyInsetsControlChanged() {
         final InsetsStateController stateController =
                 getDisplayContent().getInsetsStateController();
         try {
@@ -4373,8 +4375,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return;
         }
 
-        if (localLOGV || DEBUG_ADD_REMOVE) Slog.v(TAG,
-                "Exit animation finished in " + this + ": remove=" + mRemoveOnExit);
+        if (DEBUG || DEBUG_ADD_REMOVE) {
+            Slog.v(TAG, "Exit animation finished in " + this + ": remove=" + mRemoveOnExit);
+        }
 
         mDestroying = true;
 

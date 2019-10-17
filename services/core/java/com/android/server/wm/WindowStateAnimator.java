@@ -27,6 +27,7 @@ import static android.view.WindowManager.TRANSIT_NONE;
 
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_ANIM;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT_REPEATS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ORIENTATION;
@@ -159,7 +160,7 @@ class WindowStateAnimator {
      * window is first added or shown, cleared when the callback has been made. */
     boolean mEnteringAnimation;
 
-    private final SurfaceControl.Transaction mTmpTransaction = new SurfaceControl.Transaction();
+    private final SurfaceControl.Transaction mTmpTransaction;
 
     /** The pixel format of the underlying SurfaceControl */
     int mSurfaceFormat;
@@ -246,6 +247,7 @@ class WindowStateAnimator {
         final WindowManagerService service = win.mWmService;
 
         mService = service;
+        mTmpTransaction = service.mTransactionFactory.get();
         mAnimator = service.mAnimator;
         mPolicy = service.mPolicy;
         mContext = service.mContext;
@@ -269,20 +271,17 @@ class WindowStateAnimator {
         if (mAttrType == LayoutParams.TYPE_STATUS_BAR && mWin.isVisibleByPolicy()) {
             // Upon completion of a not-visible to visible status bar animation a relayout is
             // required.
-            if (displayContent != null) {
-                displayContent.setLayoutNeeded();
-            }
+            displayContent.setLayoutNeeded();
         }
         mWin.onExitAnimationDone();
-        final int displayId = mWin.getDisplayId();
-        int pendingLayoutChanges = FINISH_LAYOUT_REDO_ANIM;
+        displayContent.pendingLayoutChanges |= FINISH_LAYOUT_REDO_ANIM;
         if (displayContent.mWallpaperController.isWallpaperTarget(mWin)) {
-            pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
+            displayContent.pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
         }
-        mAnimator.setPendingLayoutChanges(displayId, pendingLayoutChanges);
-        if (DEBUG_LAYOUT_REPEATS)
+        if (DEBUG_LAYOUT_REPEATS) {
             mService.mWindowPlacerLocked.debugLayoutRepeats(
-                    "WindowStateAnimator", mAnimator.getPendingLayoutChanges(displayId));
+                    "WindowStateAnimator", displayContent.pendingLayoutChanges);
+        }
 
         if (mWin.mAppToken != null) {
             mWin.mAppToken.updateReportedVisibilityLocked();
@@ -427,10 +426,6 @@ class WindowStateAnimator {
         }
     }
 
-    private int getLayerStack() {
-        return mWin.getDisplayContent().getDisplay().getLayerStack();
-    }
-
     void resetDrawState() {
         mDrawState = DRAW_PENDING;
 
@@ -539,8 +534,10 @@ class WindowStateAnimator {
             return null;
         }
 
-        if (WindowManagerService.localLOGV) Slog.v(TAG, "Got surface: " + mSurfaceController
-                + ", set left=" + w.getFrameLw().left + " top=" + w.getFrameLw().top);
+        if (DEBUG) {
+            Slog.v(TAG, "Got surface: " + mSurfaceController
+                    + ", set left=" + w.getFrameLw().left + " top=" + w.getFrameLw().top);
+        }
 
         if (SHOW_LIGHT_TRANSACTIONS) {
             Slog.i(TAG, ">>> OPEN TRANSACTION createSurfaceLocked");
@@ -551,7 +548,7 @@ class WindowStateAnimator {
 
         mLastHidden = true;
 
-        if (WindowManagerService.localLOGV) Slog.v(TAG, "Created surface " + this);
+        if (DEBUG) Slog.v(TAG, "Created surface " + this);
         return mSurfaceController;
     }
 
@@ -744,11 +741,11 @@ class WindowStateAnimator {
                 mShownAlpha *= screenRotationAnimation.getEnterTransformation().getAlpha();
             }
 
-            if ((DEBUG_ANIM || WindowManagerService.localLOGV)
-                    && (mShownAlpha == 1.0 || mShownAlpha == 0.0)) Slog.v(
-                    TAG, "computeShownFrameLocked: Animating " + this + " mAlpha=" + mAlpha
-                    + " screen=" + (screenAnimation ?
-                            screenRotationAnimation.getEnterTransformation().getAlpha() : "null"));
+            if ((DEBUG_ANIM || DEBUG) && (mShownAlpha == 1.0 || mShownAlpha == 0.0)) {
+                Slog.v(TAG, "computeShownFrameLocked: Animating " + this + " mAlpha=" + mAlpha
+                                + " screen=" + (screenAnimation
+                        ? screenRotationAnimation.getEnterTransformation().getAlpha() : "null"));
+            }
             return;
         } else if (mIsWallpaper && mService.mRoot.mWallpaperActionPending) {
             return;
@@ -761,9 +758,10 @@ class WindowStateAnimator {
             return;
         }
 
-        if (WindowManagerService.localLOGV) Slog.v(
-                TAG, "computeShownFrameLocked: " + this +
-                " not attached, mAlpha=" + mAlpha);
+        if (DEBUG) {
+            Slog.v(TAG, "computeShownFrameLocked: " + this
+                    + " not attached, mAlpha=" + mAlpha);
+        }
 
         mShownAlpha = mAlpha;
         mHaveMatrix = false;
@@ -1049,7 +1047,7 @@ class WindowStateAnimator {
         // to prevent further updates until buffer latch.
         // We also need to freeze the Surface geometry until a buffer
         // comes in at the new size (normally position and crop are unfrozen).
-        // setGeometryAppliesWithResizeInTransaction accomplishes this for us.
+        // deferTransactionUntil accomplishes this for us.
         if (wasForceScaled && !mForceScaleUntilResize) {
             mSurfaceController.deferTransactionUntil(mSurfaceController.mSurfaceControl,
                     mWin.getFrameNumber());
@@ -1067,8 +1065,7 @@ class WindowStateAnimator {
 
         if (mSurfaceResized) {
             mReportSurfaceResized = true;
-            mAnimator.setPendingLayoutChanges(w.getDisplayId(),
-                    FINISH_LAYOUT_REDO_WALLPAPER);
+            mWin.getDisplayContent().pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
         }
     }
 
@@ -1163,16 +1160,16 @@ class WindowStateAnimator {
                         if (mIsWallpaper) {
                             w.dispatchWallpaperVisibility(true);
                         }
-                        if (!w.getDisplayContent().getLastHasContent()) {
+                        final DisplayContent displayContent = w.getDisplayContent();
+                        if (!displayContent.getLastHasContent()) {
                             // This draw means the difference between unique content and mirroring.
                             // Run another pass through performLayout to set mHasContent in the
                             // LogicalDisplay.
-                            mAnimator.setPendingLayoutChanges(w.getDisplayId(),
-                                    FINISH_LAYOUT_REDO_ANIM);
+                            displayContent.pendingLayoutChanges |= FINISH_LAYOUT_REDO_ANIM;
                             if (DEBUG_LAYOUT_REPEATS) {
                                 mService.mWindowPlacerLocked.debugLayoutRepeats(
                                         "showSurfaceRobustlyLocked " + w,
-                                        mAnimator.getPendingLayoutChanges(w.getDisplayId()));
+                                        displayContent.pendingLayoutChanges);
                             }
                         }
                     } else {

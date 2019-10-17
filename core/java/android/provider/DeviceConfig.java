@@ -136,6 +136,15 @@ public final class DeviceConfig {
     public static final String NAMESPACE_DEX_BOOT = "dex_boot";
 
     /**
+     * Namespace for display manager related features. The names to access the properties in this
+     * namespace should be defined in {@link android.hardware.display.DisplayManager}.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_DISPLAY_MANAGER = "display_manager";
+
+    /**
      * Namespace for all Game Driver features.
      *
      * @hide
@@ -358,15 +367,6 @@ public final class DeviceConfig {
          */
         String KEY_SYSTEM_GESTURE_EXCLUSION_LOG_DEBOUNCE_MILLIS =
                 "system_gesture_exclusion_log_debounce_millis";
-
-        /**
-         * Key for controlling which packages are explicitly blocked from running at refresh rates
-         * higher than 90hz.
-         *
-         * @see android.provider.DeviceConfig#NAMESPACE_WINDOW_MANAGER
-         * @hide
-         */
-        String KEY_HIGH_REFRESH_RATE_BLACKLIST = "high_refresh_rate_blacklist";
     }
 
     private static final Object sLock = new Object();
@@ -766,8 +766,9 @@ public final class DeviceConfig {
          *
          * @param namespace The namespace these properties belong to.
          * @param keyValueMap A map between property names and property values.
+         * @hide
          */
-        Properties(@NonNull String namespace, @Nullable Map<String, String> keyValueMap) {
+        public Properties(@NonNull String namespace, @Nullable Map<String, String> keyValueMap) {
             Preconditions.checkNotNull(namespace);
             mNamespace = namespace;
             mMap = new HashMap();

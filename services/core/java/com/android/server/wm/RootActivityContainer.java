@@ -27,12 +27,10 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN_OR_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
-import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_INSTANCE;
 import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_TASK;
-import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManager.TRANSIT_SHOW_SINGLE_TASK_DISPLAY;
@@ -93,7 +91,6 @@ import android.os.FactoryTest;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.SystemClock;
-import android.os.Trace;
 import android.os.UserHandle;
 import android.os.storage.StorageManager;
 import android.provider.Settings;
@@ -195,6 +192,9 @@ public class RootActivityContainer extends ConfigurationContainer
 
     /** Set when a power hint has started, but not ended. */
     private boolean mPowerHintSent;
+
+    /** Used to keep ensureActivitiesVisible() from being entered recursively. */
+    private boolean mInEnsureActivitiesVisible = false;
 
     // The default minimal size that will be used if the activity doesn't specify its minimal size.
     // It will be calculated when the default display gets added.
@@ -636,7 +636,7 @@ public class RootActivityContainer extends ConfigurationContainer
         final DisplayContent displayContent = mRootWindowContainer.getDisplayContent(displayId);
         Configuration config = null;
         if (displayContent != null) {
-            config = displayContent.updateOrientationFromAppTokens(
+            config = displayContent.updateOrientation(
                     getDisplayOverrideConfiguration(displayId),
                     starting != null && starting.mayFreezeScreenLocked(starting.app)
                             ? starting.appToken : null,
@@ -808,8 +808,14 @@ public class RootActivityContainer extends ConfigurationContainer
      */
     void ensureActivitiesVisible(ActivityRecord starting, int configChanges,
             boolean preserveWindows, boolean notifyClients) {
-        mStackSupervisor.getKeyguardController().beginActivityVisibilityUpdate();
+        if (mInEnsureActivitiesVisible) {
+            // Don't do recursive work.
+            return;
+        }
+        mInEnsureActivitiesVisible = true;
+
         try {
+            mStackSupervisor.getKeyguardController().beginActivityVisibilityUpdate();
             // First the front stacks. In case any are not fullscreen and are in front of home.
             for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
                 final ActivityDisplay display = mActivityDisplays.get(displayNdx);
@@ -818,6 +824,7 @@ public class RootActivityContainer extends ConfigurationContainer
             }
         } finally {
             mStackSupervisor.getKeyguardController().endActivityVisibilityUpdate();
+            mInEnsureActivitiesVisible = false;
         }
     }
 
@@ -878,48 +885,6 @@ public class RootActivityContainer extends ConfigurationContainer
         if (userId != mCurrentUser) {
             mUserStackInFront.put(userId, stack != null ? stack.getStackId()
                     : getDefaultDisplay().getHomeStack().mStackId);
-        }
-    }
-
-    void resizeStack(ActivityStack stack, Rect bounds, Rect tempTaskBounds,
-            Rect tempTaskInsetBounds, boolean preserveWindows, boolean allowResizeInDockedMode,
-            boolean deferResume) {
-
-        if (stack.inSplitScreenPrimaryWindowingMode()) {
-            mStackSupervisor.resizeDockedStackLocked(bounds, tempTaskBounds,
-                    tempTaskInsetBounds, null, null, preserveWindows, deferResume);
-            return;
-        }
-
-        final boolean splitScreenActive = getDefaultDisplay().hasSplitScreenPrimaryStack();
-        if (!allowResizeInDockedMode
-                && !stack.getWindowConfiguration().tasksAreFloating() && splitScreenActive) {
-            // If the docked stack exists, don't resize non-floating stacks independently of the
-            // size computed from the docked stack size (otherwise they will be out of sync)
-            return;
-        }
-
-        Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "am.resizeStack_" + stack.mStackId);
-        mWindowManager.deferSurfaceLayout();
-        try {
-            if (stack.affectedBySplitScreenResize()) {
-                if (bounds == null && stack.inSplitScreenWindowingMode()) {
-                    // null bounds = fullscreen windowing mode...at least for now.
-                    stack.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
-                } else if (splitScreenActive) {
-                    // If we are in split-screen mode and this stack support split-screen, then
-                    // it should be split-screen secondary mode. i.e. adjacent to the docked stack.
-                    stack.setWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
-                }
-            }
-            stack.resize(bounds, tempTaskBounds, tempTaskInsetBounds);
-            if (!deferResume) {
-                stack.ensureVisibleActivitiesConfigurationLocked(
-                        stack.topRunningActivityLocked(), preserveWindows);
-            }
-        } finally {
-            mWindowManager.continueSurfaceLayout();
-            Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
         }
     }
 
@@ -990,8 +955,7 @@ public class RootActivityContainer extends ConfigurationContainer
 
     void moveActivityToPinnedStack(ActivityRecord r, Rect sourceHintBounds, float aspectRatio,
             String reason) {
-
-        mWindowManager.deferSurfaceLayout();
+        mService.deferWindowLayout();
 
         final ActivityDisplay display = r.getActivityStack().getDisplay();
         ActivityStack stack = display.getPinnedStack();
@@ -1005,18 +969,13 @@ public class RootActivityContainer extends ConfigurationContainer
         // Need to make sure the pinned stack exist so we can resize it below...
         stack = display.getOrCreateStack(WINDOWING_MODE_PINNED, r.getActivityType(), ON_TOP);
 
-        // Calculate the target bounds here before the task is reparented back into pinned windowing
-        // mode (which will reset the saved bounds)
-        final Rect destBounds = stack.getDefaultPictureInPictureBounds(aspectRatio);
-
         try {
             final TaskRecord task = r.getTaskRecord();
             // Resize the pinned stack to match the current size of the task the activity we are
             // going to be moving is currently contained in. We do this to have the right starting
             // animation bounds for the pinned stack to the desired bounds the caller wants.
-            resizeStack(stack, task.getRequestedOverrideBounds(), null /* tempTaskBounds */,
-                    null /* tempTaskInsetBounds */, !PRESERVE_WINDOWS,
-                    true /* allowResizeInDockedMode */, !DEFER_RESUME);
+            stack.resize(task.getRequestedOverrideBounds(), null /* tempTaskBounds */,
+                    null /* tempTaskInsetBounds */, !PRESERVE_WINDOWS, !DEFER_RESUME);
 
             if (task.mActivities.size() == 1) {
                 // Defer resume until below, and do not schedule PiP changes until we animate below
@@ -1045,12 +1004,17 @@ public class RootActivityContainer extends ConfigurationContainer
             // to the pinned stack
             r.supportsEnterPipOnTaskSwitch = false;
         } finally {
-            mWindowManager.continueSurfaceLayout();
+            mService.continueWindowLayout();
         }
 
-        stack.animateResizePinnedStack(sourceHintBounds, destBounds, -1 /* animationDuration */,
-                true /* fromFullscreen */);
+        // Notify the pinned stack controller to prepare the PiP animation, expect callback
+        // delivered from SystemUI to WM to start the animation.
+        final PinnedStackController pinnedStackController =
+                display.mDisplayContent.getPinnedStackController();
+        pinnedStackController.prepareAnimation(sourceHintBounds, aspectRatio,
+                null /* stackBounds */);
 
+        // TODO: revisit the following statement after the animation is moved from WM to SysUI.
         // Update the visibility of all activities after the they have been reparented to the new
         // stack.  This MUST run after the animation above is scheduled to ensure that the windows
         // drawn signal is scheduled after the bounds animation start call on the bounds animator
@@ -1661,7 +1625,8 @@ public class RootActivityContainer extends ConfigurationContainer
 
     <T extends ActivityStack> T getLaunchStack(@Nullable ActivityRecord r,
             @Nullable ActivityOptions options, @Nullable TaskRecord candidateTask, boolean onTop) {
-        return getLaunchStack(r, options, candidateTask, onTop, null /* launchParams */);
+        return getLaunchStack(r, options, candidateTask, onTop, null /* launchParams */,
+                -1 /* no realCallingPid */, -1 /* no realCallingUid */);
     }
 
     /**
@@ -1670,13 +1635,16 @@ public class RootActivityContainer extends ConfigurationContainer
      * @param r The activity we are trying to launch. Can be null.
      * @param options The activity options used to the launch. Can be null.
      * @param candidateTask The possible task the activity might be launched in. Can be null.
-     * @params launchParams The resolved launch params to use.
+     * @param launchParams The resolved launch params to use.
+     * @param realCallingPid The pid from {@link ActivityStarter#setRealCallingPid}
+     * @param realCallingUid The uid from {@link ActivityStarter#setRealCallingUid}
      *
      * @return The stack to use for the launch or INVALID_STACK_ID.
      */
     <T extends ActivityStack> T getLaunchStack(@Nullable ActivityRecord r,
             @Nullable ActivityOptions options, @Nullable TaskRecord candidateTask, boolean onTop,
-            @Nullable LaunchParamsController.LaunchParams launchParams) {
+            @Nullable LaunchParamsController.LaunchParams launchParams, int realCallingPid,
+            int realCallingUid) {
         int taskId = INVALID_TASK_ID;
         int displayId = INVALID_DISPLAY;
         //Rect bounds = null;
@@ -1707,7 +1675,15 @@ public class RootActivityContainer extends ConfigurationContainer
         if (launchParams != null && launchParams.mPreferredDisplayId != INVALID_DISPLAY) {
             displayId = launchParams.mPreferredDisplayId;
         }
-        if (displayId != INVALID_DISPLAY && canLaunchOnDisplay(r, displayId)) {
+        final boolean canLaunchOnDisplayFromStartRequest =
+                realCallingPid != 0 && realCallingUid > 0 && r != null
+                        && mStackSupervisor.canPlaceEntityOnDisplay(displayId, realCallingPid,
+                        realCallingUid, r.info);
+        // Checking if the activity's launch caller, or the realCallerId of the activity from
+        // start request (i.e. entity that invokes PendingIntent) is allowed to launch on the
+        // display.
+        if (displayId != INVALID_DISPLAY && (canLaunchOnDisplay(r, displayId)
+                || canLaunchOnDisplayFromStartRequest)) {
             if (r != null) {
                 stack = (T) getValidLaunchStackOnDisplay(displayId, r, candidateTask, options,
                         launchParams);
@@ -2106,7 +2082,7 @@ public class RootActivityContainer extends ConfigurationContainer
      * @param userId user handle for the locked managed profile.
      */
     void lockAllProfileTasks(@UserIdInt int userId) {
-        mWindowManager.deferSurfaceLayout();
+        mService.deferWindowLayout();
         try {
             for (int displayNdx = mActivityDisplays.size() - 1; displayNdx >= 0; --displayNdx) {
                 final ActivityDisplay display = mActivityDisplays.get(displayNdx);
@@ -2127,7 +2103,7 @@ public class RootActivityContainer extends ConfigurationContainer
                 }
             }
         } finally {
-            mWindowManager.continueSurfaceLayout();
+            mService.continueWindowLayout();
         }
     }
 
@@ -2260,9 +2236,9 @@ public class RootActivityContainer extends ConfigurationContainer
     void getRunningTasks(int maxNum, List<ActivityManager.RunningTaskInfo> list,
             @WindowConfiguration.ActivityType int ignoreActivityType,
             @WindowConfiguration.WindowingMode int ignoreWindowingMode, int callingUid,
-            boolean allowed) {
+            boolean allowed, boolean crossUser, ArraySet<Integer> profileIds) {
         mStackSupervisor.getRunningTasks().getTasks(maxNum, list, ignoreActivityType,
-                ignoreWindowingMode, mActivityDisplays, callingUid, allowed);
+                ignoreWindowingMode, mActivityDisplays, callingUid, allowed, crossUser, profileIds);
     }
 
     void sendPowerHintForLaunchStartIfNeeded(boolean forceSend, ActivityRecord targetActivity) {
