@@ -59,9 +59,6 @@ public class WifiSignalController extends
                 connectivityManager, this::handleStatusUpdated);
         mWifiTracker.setListening(true);
         mHasMobileData = hasMobileData;
-        if (wifiManager != null) {
-            wifiManager.registerTrafficStateCallback(new WifiTrafficStateCallback(), null);
-        }
 
         mDefaultWifiIconGroup = new IconGroup(
                 "Wi-Fi Icons",
