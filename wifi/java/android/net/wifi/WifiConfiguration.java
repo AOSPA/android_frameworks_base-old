@@ -1166,6 +1166,14 @@ public class WifiConfiguration implements Parcelable {
      */
     public String dppCsign;
 
+    /**
+     * @hide
+     * Wifi Identity to identify on which interface this configuration is allowed.
+     * it should take one of WifiManager.STA_SHARED/STA_PRIMARY/STA_SECONDARY.
+     * default value: WifiManager.STA_SHARED.
+     */
+    public int staId;
+
     /** @hide
      * Boost given to RSSI on a home network for the purpose of calculating the score
      * This adds stickiness to home networks, as defined by:
@@ -1879,6 +1887,7 @@ public class WifiConfiguration implements Parcelable {
         dppNetAccessKeyExpiry = -1;
         dppCsign = null;
         oweTransIfaceName = null;
+        staId = WifiManager.STA_SHARED;
     }
 
     /**
@@ -2141,6 +2150,7 @@ public class WifiConfiguration implements Parcelable {
 
         sbuf.append("ShareThisAp: ").append(this.shareThisAp);
         sbuf.append('\n');
+        sbuf.append("wifi id: ").append(this.staId).append("\n");
         return sbuf.toString();
     }
 
@@ -2543,6 +2553,7 @@ public class WifiConfiguration implements Parcelable {
             requirePMF = source.requirePMF;
             updateIdentifier = source.updateIdentifier;
             oweTransIfaceName = source.oweTransIfaceName;
+            staId = source.staId;
         }
     }
 
@@ -2620,6 +2631,7 @@ public class WifiConfiguration implements Parcelable {
         dest.writeInt(macRandomizationSetting);
         dest.writeInt(osu ? 1 : 0);
         dest.writeString(oweTransIfaceName);
+        dest.writeInt(staId);
     }
 
     /** Implement the Parcelable interface {@hide} */
@@ -2699,6 +2711,7 @@ public class WifiConfiguration implements Parcelable {
                 config.macRandomizationSetting = in.readInt();
                 config.osu = in.readInt() != 0;
                 config.oweTransIfaceName = in.readString();
+                config.staId = in.readInt();
                 return config;
             }
 
