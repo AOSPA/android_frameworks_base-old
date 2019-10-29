@@ -34,4 +34,7 @@
     <string name="global_restart_recovery_message">Restarting to recovery\u2026</string><!-- Can be used in SysUIReboot -->
     <string name="global_restart_bootloader">Bootloader</string>
     <string name="global_restart_bootloader_message">Restarting to bootloader\u2026</string><!-- Can be used in SysUIReboot -->
+
+    <!-- Pocket Lock --> 
+    <string name="pocket_lock_message_long_press">Press and hold power button to unlock</string>
 </resources>
