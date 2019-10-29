@@ -32,4 +32,14 @@
     <!-- Fingerprint from stock ROM -->
     <java-symbol type="string" name="stock_fingerprint" />
 
+    <!-- Pocket Lock -->
+    <java-symbol type="layout" name="pocket_lock_view" />
+
+    <!-- Pocket bridge -->
+    <java-symbol type="string" name="config_pocketBridgeSysfsInpocket" />
+    <java-symbol type="bool" name="config_pocketModeSupported" />
+
+    <!-- Pocket Service -->
+    <java-symbol type="string" name="config_pocketJudgeVendorSensorName" />
+
 </resources>
