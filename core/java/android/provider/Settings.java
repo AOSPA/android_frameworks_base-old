@@ -4636,6 +4636,18 @@ public final class Settings {
                 BOOLEAN_VALIDATOR;
 
         /**
+         * Whether allowing pocket service to register sensors and dispatch informations.
+         *   0 = disabled
+         *   1 = enabled
+         * @author Carlo Savignano
+         * @hide
+         */
+        public static final String POCKET_JUDGE = "pocket_judge";
+
+        /** @hide */
+        public static final Validator POCKET_JUDGE_VALIDATOR = BOOLEAN_VALIDATOR;
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
@@ -4819,7 +4831,6 @@ public final class Settings {
             PRIVATE_SETTINGS.add(EGG_MODE);
             PRIVATE_SETTINGS.add(SHOW_BATTERY_PERCENT);
             PRIVATE_SETTINGS.add(DISPLAY_COLOR_MODE);
-
             PRIVATE_SETTINGS.add(GESTURES_ENABLED);
             PRIVATE_SETTINGS.add(GESTURE_DOUBLE_TAP);
             PRIVATE_SETTINGS.add(GESTURE_DRAW_V);
@@ -4835,6 +4846,7 @@ public final class Settings {
             PRIVATE_SETTINGS.add(GESTURE_ONE_FINGER_SWIPE_DOWN);
             PRIVATE_SETTINGS.add(GESTURE_ONE_FINGER_SWIPE_LEFT);
             PRIVATE_SETTINGS.add(INCALL_FEEDBACK_VIBRATE);
+            PRIVATE_SETTINGS.add(POCKET_JUDGE);
         }
 
         /**
@@ -4929,6 +4941,7 @@ public final class Settings {
             VALIDATORS.put(SHOW_BATTERY_PERCENT, SHOW_BATTERY_PERCENT_VALIDATOR);
             VALIDATORS.put(NOTIFICATION_LIGHT_PULSE, BOOLEAN_VALIDATOR);
             VALIDATORS.put(INCALL_FEEDBACK_VIBRATE, INCALL_FEEDBACK_VIBRATE_VALIDATOR);
+            VALIDATORS.put(POCKET_JUDGE, POCKET_JUDGE_VALIDATOR);
         }
 
         /**
