@@ -186,9 +186,8 @@ public class PhoneStatusBarPolicy
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_AVAILABLE);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_REMOVED);
+        filter.addAction(Intent.ACTION_BOOT_COMPLETED);
         mContext.registerReceiver(mIntentReceiver, filter, null, mHandler);
-
-        mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
 
         // listen for user / profile change.
         try {
@@ -219,10 +218,6 @@ public class PhoneStatusBarPolicy
         // cast
         mIconController.setIcon(mSlotCast, R.drawable.stat_sys_cast, null);
         mIconController.setIconVisibility(mSlotCast, false);
-
-        // hotspot
-        updateHotspotIcon();
-        mIconController.setIconVisibility(mSlotHotspot, mHotspot.isHotspotEnabled());
 
         // managed profile
         mIconController.setIcon(mSlotManagedProfile, R.drawable.stat_sys_managed_profile_status,
@@ -685,6 +680,9 @@ public class PhoneStatusBarPolicy
                 case AudioManager.ACTION_HEADSET_PLUG:
                     updateHeadsetPlug(intent);
                     break;
+                case Intent.ACTION_BOOT_COMPLETED:
+                    handleBootCompleted();
+                    break;
             }
         }
     };
@@ -714,4 +712,10 @@ public class PhoneStatusBarPolicy
         }
     }
 
+    private void handleBootCompleted() {
+        mWifiManager = (WifiManager) mContext.getSystemService(Context.WIFI_SERVICE);
+        // hotspot
+        updateHotspotIcon();
+        mIconController.setIconVisibility(mSlotHotspot, mHotspot.isHotspotEnabled());
+    }
 }
