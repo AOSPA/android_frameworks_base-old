@@ -106,18 +106,18 @@
     <string-array name="bt_hci_snoop_log_entries">
         <item>Disabled</item>
         <item>Enabled Filtered</item>
+        <item>Enabled</item>
         <item>Enabled Headers Filtered</item>
         <item>Enabled Media Pkts Filtered</item>
-        <item>Enabled</item>
     </string-array>
 
     <!-- Values for Bluetooth HCI Snoop Logging -->
     <string-array name="bt_hci_snoop_log_values" translatable="false">
         <item>disabled</item>
         <item>filtered</item>
+        <item>full</item>
         <item>snoopheadersfiltered</item>
         <item>mediapktsfiltered</item>
-        <item>full</item>
     </string-array>
 
     <!-- Titles for Bluetooth AVRCP Versions -->
@@ -161,6 +161,7 @@
         <item>5</item>
         <item>6</item>
         <item>7</item>
+        <item>8</item>
     </string-array>
 
     <!-- Summaries for Bluetooth Audio Codec selection preference. [CHAR LIMIT=50]-->
