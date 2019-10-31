@@ -2175,6 +2175,61 @@ public final class BluetoothAdapter {
     }
 
     /**
+     * Enable/disable clock sync protocol
+     *
+     * @param enable 0 - disable, 1 -enable
+     * @param mode 0x00 - GPIO sync, 0x01 - VSC sync
+     * @param adv_interval advertising interval, 0xA0 ~ 0x4000
+     * @param channel BIT0: channel 37, BIT1: channel 38, BIT2: channel 39
+     * @param jitter 0~8, 0 - random jitter, other - (jitter-1)*1.25
+     * @param offset -32768~32767us, timing between sync pulse and advert
+     * @return true or false
+     *
+     */
+    @RequiresPermission(Manifest.permission.BLUETOOTH)
+    public boolean setClockSyncConfig(boolean enable, int mode, int adv_interval,
+        int channel, int jitter, int offset) {
+        if (getState() != STATE_ON) {
+            return false;
+        }
+        try {
+            mServiceLock.readLock().lock();
+            if (mService != null) {
+                return mService.setClockSyncConfig(enable, mode, adv_interval,
+                    channel, jitter, offset);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "", e);
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+        return false;
+    }
+
+    /**
+     * Start clock sync protocol
+     * @return true or false
+     *
+     */
+    @RequiresPermission(Manifest.permission.BLUETOOTH)
+    public boolean startClockSync() {
+        if (getState() != STATE_ON) {
+            return false;
+        }
+        try {
+            mServiceLock.readLock().lock();
+            if (mService != null) {
+                return mService.startClockSync();
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "", e);
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+        return false;
+    }
+
+    /**
      * Create a listening, secure RFCOMM Bluetooth socket.
      * <p>A remote device connecting to this socket will be authenticated and
      * communication on this socket will be encrypted.
