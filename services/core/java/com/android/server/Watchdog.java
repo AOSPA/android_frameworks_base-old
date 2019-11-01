@@ -505,7 +505,7 @@ public class Watchdog extends Thread {
         }
     }
 
-    static ArrayList<Integer> getInterestingNativePids() {
+    public static ArrayList<Integer> getInterestingNativePids() {
         ArrayList<Integer> pids = getInterestingHalPids();
 
         int[] nativePids = Process.getPidsForCommands(NATIVE_STACKS_OF_INTEREST);
