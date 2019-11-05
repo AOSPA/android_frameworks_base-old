@@ -1023,7 +1023,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         }
 
         if (DBG) {
-            Slog.d(TAG, "disable(): mBluetooth = " + mBluetooth + " mBinding = " + mBinding);
+            Slog.d(TAG, "disable(" + packageName + "): mBluetooth = "
+                    + mBluetooth + " mBinding = " + mBinding);
         }
 
         synchronized (mReceiver) {
