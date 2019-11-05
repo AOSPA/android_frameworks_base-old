@@ -340,7 +340,7 @@ message Atom {
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10064
+    // Next: 10065
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000;
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001;
@@ -378,7 +378,6 @@ message Atom {
         PowerProfile power_profile = 10033;
         ProcStatsPkgProc proc_stats_pkg_proc = 10034;
         ProcessCpuTime process_cpu_time = 10035;
-        NativeProcessMemoryState native_process_memory_state = 10036;
         CpuTimePerThreadFreq cpu_time_per_thread_freq = 10037;
         OnDevicePowerMeasurement on_device_power_measurement = 10038;
         DeviceCalculatedPowerUse device_calculated_power_use = 10039;
@@ -406,11 +405,14 @@ message Atom {
         ProcessSystemIonHeapSize process_system_ion_heap_size = 10061;
         SurfaceflingerStatsGlobalInfo surfaceflinger_stats_global_info = 10062;
         SurfaceflingerStatsLayerInfo surfaceflinger_stats_layer_info = 10063;
+        ProcessMemorySnapshot process_memory_snapshot = 10064;
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
     // Field numbers 100,000 - 199,999 are reserved for non-AOSP (e.g. OEMs) to use.
     // Field numbers 200,000 and above are reserved for future use; do not use them at all.
+
+    reserved 10036;
 }
 
 /**
@@ -3069,9 +3071,9 @@ message PictureInPictureStateChanged {
  *     services/core/java/com/android/server/wm/Session.java
  */
 message OverlayStateChanged {
-    optional int32 uid = 1 [(is_uid) = true];
+    optional int32 uid = 1 [(state_field_option).option = PRIMARY, (is_uid) = true];
 
-    optional string package_name = 2;
+    optional string package_name = 2 [(state_field_option).option = PRIMARY];
 
     optional bool using_alert_window = 3;
 
@@ -3079,7 +3081,7 @@ message OverlayStateChanged {
         ENTERED = 1;
         EXITED = 2;
     }
-    optional State state = 4;
+    optional State state = 4 [(state_field_option).option = EXCLUSIVE];
 }
 
 /*
@@ -4018,8 +4020,8 @@ message ProcessMemoryState {
     optional int64 page_major_fault = 5;
 
     // RSS
-    // Value is read from /proc/PID/status. Or from memory.stat, field
-    // total_rss if per-app memory cgroups are enabled.
+    // Value is read from memory.stat, field total_rss if per-app memory
+    // cgroups are enabled. Otherwise, value from /proc/pid/stat.
     optional int64 rss_in_bytes = 6;
 
     // CACHE
@@ -4029,56 +4031,17 @@ message ProcessMemoryState {
 
     // SWAP
     // Value is read from memory.stat, field total_swap if per-app memory
-    // cgroups are enabled. Otherwise, VmSwap from /proc/PID/status.
+    // cgroups are enabled. Otherwise, 0.
     optional int64 swap_in_bytes = 8;
 
-    // Deprecated: use ProcessMemoryHighWaterMark atom instead. Always 0.
+    // Deprecated: use ProcessMemoryHighWaterMark atom instead. Always -1.
     optional int64 rss_high_watermark_in_bytes = 9 [deprecated = true];
 
-    // Elapsed real time when the process started.
-    // Value is read from /proc/PID/stat, field 22. 0 if read from per-app memory cgroups.
-    optional int64 start_time_nanos = 10;
+    // Deprecated: use ProcessMemorySnapshot atom instead. Always -1.
+    optional int64 start_time_nanos = 10 [deprecated = true];
 
-    // Anonymous page size plus swap size. Values are read from /proc/PID/status.
-    optional int32 anon_rss_and_swap_in_kilobytes = 11;
-}
-
-/*
- * Logs the memory stats for a native process (from procfs).
- *
- * Pulled from StatsCompanionService for selected native processes.
- */
-message NativeProcessMemoryState {
-    // The uid if available. -1 means not available.
-    optional int32 uid = 1 [(is_uid) = true];
-
-    // The process name.
-    // Value read from /proc/PID/cmdline.
-    optional string process_name = 2;
-
-    // # of page-faults
-    optional int64 page_fault = 3;
-
-    // # of major page-faults
-    optional int64 page_major_fault = 4;
-
-    // RSS
-    // Value read from /proc/PID/status.
-    optional int64 rss_in_bytes = 5;
-
-    // Deprecated: use ProcessMemoryHighWaterMark atom instead. Always 0.
-    optional int64 rss_high_watermark_in_bytes = 6 [deprecated = true];
-
-    // Elapsed real time when the process started.
-    // Value is read from /proc/PID/stat, field 22.
-    optional int64 start_time_nanos = 7;
-
-    // SWAP
-    // Value read from /proc/PID/status, field VmSwap.
-    optional int64 swap_in_bytes = 8;
-
-    // Anonymous page size plus swap size. Values are read from /proc/PID/status.
-    optional int32 anon_rss_and_swap_in_kilobytes = 9;
+    // Deprecated: use ProcessMemorySnapshot atom instead. Always -1.
+    optional int32 anon_rss_and_swap_in_kilobytes = 11 [deprecated = true];
 }
 
 /*
@@ -4105,6 +4068,46 @@ message ProcessMemoryHighWaterMark {
     // RSS high-water mark. Peak RSS usage of the process. Read from the VmHWM field in
     // /proc/PID/status.
     optional int32 rss_high_water_mark_in_kilobytes = 4;
+}
+
+/*
+ * Logs the memory stats for a process.
+ *
+ * Pulled from StatsCompanionService for all managed processes (from ActivityManagerService)
+ * and for selected native processes.
+ */
+message ProcessMemorySnapshot {
+    // The uid if available. -1 means not available.
+    optional int32 uid = 1 [(is_uid) = true];
+
+    // The process name.
+    // Usually package name or process cmdline.
+    // Provided by ActivityManagerService or read from /proc/PID/cmdline.
+    optional string process_name = 2;
+
+    // The pid of the process.
+    // Allows to disambiguate instances of the process.
+    optional int32 pid = 3;
+
+    // The current OOM score adjustment value.
+    // Read from ProcessRecord for managed processes.
+    // Placeholder -1001 (OOM_SCORE_ADJ_MIN - 1, outside of allowed range) for native ones.
+    optional int32 oom_score_adj = 4;
+
+    // The current RSS of the process.
+    // VmRSS from /proc/pid/status.
+    optional int32 rss_in_kilobytes = 5;
+
+    // The current anon RSS of the process.
+    // RssAnon from /proc/pid/status.
+    optional int32 anon_rss_in_kilobytes = 6;
+
+    // The current swap size of the process.
+    // VmSwap from /proc/pid/status.
+    optional int32 swap_in_kilobytes = 7;
+
+    // The sum of rss_in_kilobytes and swap_in_kilobytes.
+    optional int32 anon_rss_and_swap_in_kilobytes = 8;
 }
 
 /*
@@ -5757,6 +5760,8 @@ message PermissionGrantRequestResultReported {
         AUTO_DENIED = 8;
         // permission request was ignored because permission is restricted
         IGNORED_RESTRICTED_PERMISSION = 9;
+        // one time permission was granted by user action
+        USER_GRANTED_ONE_TIME = 10;
     }
     // The result of the permission grant
     optional Result result = 6;

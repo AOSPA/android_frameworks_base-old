@@ -311,7 +311,7 @@
     <string name="debug_layout" msgid="5981361776594526155">"Erakutsi diseinu-mugak"</string>
     <string name="debug_layout_summary" msgid="2001775315258637682">"Erakutsi kliparen mugak, marjinak, etab."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Behartu eskuin-ezker norabidea"</string>
-    <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Behartu pantaila-diseinuaren norabidea eskuin-ezker izatera eskualdeko ezarpen guztiekin"</string>
+    <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Behartu pantaila-diseinuaren norabidea eskuin-ezker izatera lurraldeko ezarpen guztiekin"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Behartu 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Gaitu 4x MSAA, OpenGL ES 2.0 aplikazioetan"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Araztu angeluzuzenak ez diren klip-eragiketak"</string>
@@ -402,8 +402,8 @@
     <string name="power_remaining_duration_shutdown_imminent" product="tablet" msgid="7466484148515796216">"Baliteke tableta laster itzaltzea (<xliff:g id="LEVEL">%1$s</xliff:g>)"</string>
     <string name="power_remaining_duration_shutdown_imminent" product="device" msgid="603933521600231649">"Baliteke gailua laster itzaltzea (<xliff:g id="LEVEL">%1$s</xliff:g>)"</string>
     <string name="power_charging" msgid="1779532561355864267">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
-    <string name="power_remaining_charging_duration_only" msgid="1421102457410268886">"<xliff:g id="TIME">%1$s</xliff:g> falta dira guztiz kargatu arte"</string>
-    <string name="power_charging_duration" msgid="4676999980973411875">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g> guztiz kargatu arte"</string>
+    <string name="power_remaining_charging_duration_only" msgid="6672239353042034265">"<xliff:g id="TIME">%1$s</xliff:g> guztiz kargatu arte"</string>
+    <string name="power_charging_duration" msgid="5850751284103249125">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g> guztiz kargatu arte"</string>
     <string name="battery_info_status_unknown" msgid="196130600938058547">"Ezezaguna"</string>
     <string name="battery_info_status_charging" msgid="1705179948350365604">"Kargatzen"</string>
     <string name="battery_info_status_charging_lower" msgid="8689770213898117994">"kargatzen"</string>

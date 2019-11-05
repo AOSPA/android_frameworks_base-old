@@ -259,6 +259,10 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         // Don't hold mSessions lock when calling restoreSession, since it might trigger an APK
         // atomic install which needs to query sessions, which requires lock on mSessions.
         for (PackageInstallerSession session : stagedSessionsToRestore) {
+            if (mPm.isDeviceUpgrading() && !session.isStagedAndInTerminalState()) {
+                session.setStagedSessionFailed(SessionInfo.STAGED_SESSION_ACTIVATION_FAILED,
+                        "Build fingerprint has changed");
+            }
             mStagingManager.restoreSession(session);
         }
         // Broadcasts are not sent while we restore sessions on boot, since no processes would be
@@ -479,15 +483,24 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             throw new SecurityException("User restriction prevents installing");
         }
 
+        String requestedInstallerPackageName = params.installerPackageName != null
+                ? params.installerPackageName : installerPackageName;
+
         if ((callingUid == Process.SHELL_UID) || (callingUid == Process.ROOT_UID)) {
             params.installFlags |= PackageManager.INSTALL_FROM_ADB;
 
         } else {
+            if (callingUid != Process.SYSTEM_UID) {
+                // The supplied installerPackageName must always belong to the calling app.
+                mAppOps.checkPackage(callingUid, installerPackageName);
+            }
             // Only apps with INSTALL_PACKAGES are allowed to set an installer that is not the
             // caller.
-            if (mContext.checkCallingOrSelfPermission(Manifest.permission.INSTALL_PACKAGES) !=
-                    PackageManager.PERMISSION_GRANTED) {
-                mAppOps.checkPackage(callingUid, installerPackageName);
+            if (!requestedInstallerPackageName.equals(installerPackageName)) {
+                if (mContext.checkCallingOrSelfPermission(Manifest.permission.INSTALL_PACKAGES)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    mAppOps.checkPackage(callingUid, requestedInstallerPackageName);
+                }
             }
 
             params.installFlags &= ~PackageManager.INSTALL_FROM_ADB;
@@ -611,11 +624,13 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                 stageCid = buildExternalStageCid(sessionId);
             }
         }
+        InstallSource installSource = InstallSource.create(installerPackageName,
+                requestedInstallerPackageName);
         session = new PackageInstallerSession(mInternalCallback, mContext, mPm, this,
-                mInstallThread.getLooper(), mStagingManager, sessionId, userId,
-                installerPackageName, callingUid, params, createdMillis, stageDir, stageCid, false,
-                false, false, null, SessionInfo.INVALID_ID, false, false, false,
-                SessionInfo.STAGED_SESSION_NO_ERROR, "");
+                mInstallThread.getLooper(), mStagingManager, sessionId, userId, callingUid,
+                installSource, params, createdMillis,
+                stageDir, stageCid, false, false, false, null, SessionInfo.INVALID_ID,
+                false, false, false, SessionInfo.STAGED_SESSION_NO_ERROR, "");
 
         synchronized (mSessions) {
             mSessions.put(sessionId, session);

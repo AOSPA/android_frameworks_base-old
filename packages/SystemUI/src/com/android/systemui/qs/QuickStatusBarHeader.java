@@ -257,10 +257,6 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         mNextAlarmTextView.setSelected(true);
 
         mPermissionsHubEnabled = PrivacyItemControllerKt.isPermissionsHubEnabled();
-        // Change the ignored slots when DeviceConfig flag changes
-        DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_PRIVACY,
-                mContext.getMainExecutor(), mPropertiesListener);
-
     }
 
     private List<String> getIgnoredIconSlots() {
@@ -396,9 +392,15 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         mSystemIconsView.setLayoutParams(mSystemIconsView.getLayoutParams());
 
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) getLayoutParams();
+
+        int flag = Settings.System.getInt(mContext.getContentResolver(), "qs_media_player", 0);
         if (mQsDisabled) {
             lp.height = resources.getDimensionPixelSize(
                     com.android.internal.R.dimen.quick_qs_offset_height);
+        } else if (flag == 1) {
+            lp.height = Math.max(getMinimumHeight(),
+                    resources.getDimensionPixelSize(
+                            com.android.internal.R.dimen.quick_qs_total_height_with_media));
         } else {
             lp.height = Math.max(getMinimumHeight(),
                     resources.getDimensionPixelSize(
@@ -489,6 +491,9 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         super.onAttachedToWindow();
         mStatusBarIconController.addIconGroup(mIconManager);
         requestApplyInsets();
+        // Change the ignored slots when DeviceConfig flag changes
+        DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_PRIVACY,
+                mContext.getMainExecutor(), mPropertiesListener);
     }
 
     @Override
@@ -527,6 +532,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     public void onDetachedFromWindow() {
         setListening(false);
         mStatusBarIconController.removeIconGroup(mIconManager);
+        DeviceConfig.removeOnPropertiesChangedListener(mPropertiesListener);
         super.onDetachedFromWindow();
     }
 

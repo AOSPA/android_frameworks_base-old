@@ -26,13 +26,12 @@ import android.os.UserHandle
 import android.util.Log
 import android.util.SparseArray
 import com.android.internal.annotations.VisibleForTesting
-import com.android.systemui.Dependency.BG_LOOPER_NAME
-import com.android.systemui.Dependency.MAIN_HANDLER_NAME
 import com.android.systemui.Dumpable
+import com.android.systemui.dagger.qualifiers.BgLooper
+import com.android.systemui.dagger.qualifiers.MainHandler
 import java.io.FileDescriptor
 import java.io.PrintWriter
 import javax.inject.Inject
-import javax.inject.Named
 import javax.inject.Singleton
 
 data class ReceiverData(
@@ -61,8 +60,8 @@ private const val DEBUG = false
 @Singleton
 open class BroadcastDispatcher @Inject constructor (
     private val context: Context,
-    @Named(MAIN_HANDLER_NAME) private val mainHandler: Handler,
-    @Named(BG_LOOPER_NAME) private val bgLooper: Looper
+    @MainHandler private val mainHandler: Handler,
+    @BgLooper private val bgLooper: Looper
 ) : Dumpable {
 
     // Only modify in BG thread
@@ -75,7 +74,7 @@ open class BroadcastDispatcher @Inject constructor (
      * @param filter A filter to determine what broadcasts should be dispatched to this receiver.
      *               It will only take into account actions and categories for filtering.
      * @param handler A handler to dispatch [BroadcastReceiver.onReceive]. By default, it is the
-     *                main handler.
+     *                main handler. Pass `null` to use the default.
      * @param user A user handle to determine which broadcast should be dispatched to this receiver.
      *             By default, it is the current user.
      */
@@ -83,10 +82,12 @@ open class BroadcastDispatcher @Inject constructor (
     fun registerReceiver(
         receiver: BroadcastReceiver,
         filter: IntentFilter,
-        handler: Handler = mainHandler,
+        handler: Handler? = mainHandler,
         user: UserHandle = context.user
     ) {
-        this.handler.obtainMessage(MSG_ADD_RECEIVER, ReceiverData(receiver, filter, handler, user))
+        this.handler
+                .obtainMessage(MSG_ADD_RECEIVER,
+                ReceiverData(receiver, filter, handler ?: mainHandler, user))
                 .sendToTarget()
     }
 

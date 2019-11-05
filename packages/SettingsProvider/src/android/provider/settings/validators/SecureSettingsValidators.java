@@ -41,8 +41,8 @@ import java.util.Map;
 public class SecureSettingsValidators {
     /**
      * All settings in {@link Secure.SETTINGS_TO_BACKUP} and {@link
-     * Secure.DEVICE_SPECIFIC_SETTINGS_TO_BACKUP} array *must* have a non-null validator, otherwise
-     * they won't be restored.
+     * DeviceSpecificSettings.DEVICE_SPECIFIC_SETTINGS_TO_BACKUP} array *must* have a non-null
+     * validator, otherwise they won't be restored.
      */
     public static final Map<String, Validator> VALIDATORS = new ArrayMap<>();
 
@@ -158,7 +158,6 @@ public class SecureSettingsValidators {
         VALIDATORS.put(Secure.ASSIST_GESTURE_WAKE_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.VR_DISPLAY_MODE, new DiscreteValueValidator(new String[] {"0", "1"}));
         VALIDATORS.put(Secure.NOTIFICATION_BADGING, BOOLEAN_VALIDATOR);
-        VALIDATORS.put(Secure.NOTIFICATION_BUBBLES, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.NOTIFICATION_DISMISS_RTL, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.QS_AUTO_ADDED_TILES, TILE_LIST_VALIDATOR);
         VALIDATORS.put(Secure.SCREENSAVER_ENABLED, BOOLEAN_VALIDATOR);
@@ -222,6 +221,8 @@ public class SecureSettingsValidators {
         VALIDATORS.put(Secure.SILENCE_ALARMS_TOUCH_COUNT, NON_NEGATIVE_INTEGER_VALIDATOR);
         VALIDATORS.put(Secure.SILENCE_TIMER_TOUCH_COUNT, NON_NEGATIVE_INTEGER_VALIDATOR);
         VALIDATORS.put(Secure.SILENCE_CALL_TOUCH_COUNT, NON_NEGATIVE_INTEGER_VALIDATOR);
+        VALIDATORS.put(Secure.AWARE_TAP_PAUSE_GESTURE_COUNT, NON_NEGATIVE_INTEGER_VALIDATOR);
+        VALIDATORS.put(Secure.AWARE_TAP_PAUSE_TOUCH_COUNT, NON_NEGATIVE_INTEGER_VALIDATOR);
         VALIDATORS.put(Secure.ODI_CAPTIONS_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.DARK_MODE_DIALOG_SEEN, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.UI_NIGHT_MODE, new InclusiveIntegerRangeValidator(0, 2));

@@ -74,7 +74,6 @@
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
 #include <bionic/malloc.h>
-#include <cutils/ashmem.h>
 #include <cutils/fs.h>
 #include <cutils/multiuser.h>
 #include <cutils/properties.h>
@@ -305,7 +304,8 @@ enum MountExternalKind {
   MOUNT_EXTERNAL_LEGACY = 4,
   MOUNT_EXTERNAL_INSTALLER = 5,
   MOUNT_EXTERNAL_FULL = 6,
-  MOUNT_EXTERNAL_COUNT = 7
+  MOUNT_EXTERNAL_PASS_THROUGH = 7,
+  MOUNT_EXTERNAL_COUNT = 8
 };
 
 // The order of entries here must be kept in sync with MountExternalKind enum values.
@@ -717,15 +717,14 @@ static void MountEmulatedStorage(uid_t uid, jint mount_mode,
 
   const userid_t user_id = multiuser_get_user_id(uid);
   const std::string user_source = StringPrintf("/mnt/user/%d", user_id);
+  const std::string pass_through_source = StringPrintf("/mnt/pass_through/%d", user_id);
   bool isFuse = GetBoolProperty(kPropFuse, false);
 
   CreateDir(user_source, 0751, AID_ROOT, AID_ROOT, fail_fn);
 
   if (isFuse) {
-    // TODO(b/135341433): Bind mount the appropriate storage view for the app given its permissions
-    // media and media_location permission access. This should prevent the kernel from incorrectly
-    // sharing a cache across permission buckets
-    BindMount(user_source, "/storage", fail_fn);
+    BindMount(mount_mode == MOUNT_EXTERNAL_PASS_THROUGH ? pass_through_source : user_source,
+              "/storage", fail_fn);
   } else {
     const std::string& storage_source = ExternalStorageViews[mount_mode];
     BindMount(storage_source, "/storage", fail_fn);
@@ -1667,11 +1666,6 @@ static void com_android_internal_os_Zygote_nativeInitNativeState(JNIEnv* env, jc
   if (!SetTaskProfiles(0, {})) {
     ZygoteFailure(env, "zygote", nullptr, "Zygote SetTaskProfiles failed");
   }
-
-  /*
-   * ashmem initialization to avoid dlopen overhead
-   */
-  ashmem_init();
 }
 
 /**

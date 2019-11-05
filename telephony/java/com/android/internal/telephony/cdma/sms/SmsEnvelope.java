@@ -18,6 +18,7 @@ package com.android.internal.telephony.cdma.sms;
 
 
 import android.annotation.UnsupportedAppUsage;
+import android.telephony.cdma.CdmaSmsCbProgramData;
 
 public final class SmsEnvelope {
     /**
@@ -56,12 +57,18 @@ public final class SmsEnvelope {
     //...
 
     // CMAS alert service category assignments, see 3GPP2 C.R1001 table 9.3.3-1
-    public static final int SERVICE_CATEGORY_CMAS_PRESIDENTIAL_LEVEL_ALERT  = 0x1000;
-    public static final int SERVICE_CATEGORY_CMAS_EXTREME_THREAT            = 0x1001;
-    public static final int SERVICE_CATEGORY_CMAS_SEVERE_THREAT             = 0x1002;
-    public static final int SERVICE_CATEGORY_CMAS_CHILD_ABDUCTION_EMERGENCY = 0x1003;
-    public static final int SERVICE_CATEGORY_CMAS_TEST_MESSAGE              = 0x1004;
-    public static final int SERVICE_CATEGORY_CMAS_LAST_RESERVED_VALUE       = 0x10ff;
+    public static final int SERVICE_CATEGORY_CMAS_PRESIDENTIAL_LEVEL_ALERT  =
+            CdmaSmsCbProgramData.CATEGORY_CMAS_PRESIDENTIAL_LEVEL_ALERT;  // = 4096
+    public static final int SERVICE_CATEGORY_CMAS_EXTREME_THREAT            =
+            CdmaSmsCbProgramData.CATEGORY_CMAS_EXTREME_THREAT;            // = 4097
+    public static final int SERVICE_CATEGORY_CMAS_SEVERE_THREAT             =
+            CdmaSmsCbProgramData.CATEGORY_CMAS_SEVERE_THREAT;             // = 4098
+    public static final int SERVICE_CATEGORY_CMAS_CHILD_ABDUCTION_EMERGENCY =
+            CdmaSmsCbProgramData.CATEGORY_CMAS_CHILD_ABDUCTION_EMERGENCY; // = 4099
+    public static final int SERVICE_CATEGORY_CMAS_TEST_MESSAGE              =
+            CdmaSmsCbProgramData.CATEGORY_CMAS_TEST_MESSAGE;              // = 4100
+    public static final int SERVICE_CATEGORY_CMAS_LAST_RESERVED_VALUE       =
+            CdmaSmsCbProgramData.CATEGORY_CMAS_LAST_RESERVED_VALUE;       // = 4351
 
     /**
      * Provides the type of a SMS message like point to point, broadcast or acknowledge

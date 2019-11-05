@@ -24,7 +24,6 @@ import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER;
 
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_APP_TRANSITIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_SCREENSHOT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER_LIGHT;
@@ -119,7 +118,7 @@ class WallpaperController {
         }
 
         mFindResults.resetTopWallpaper = true;
-        if (w.mAppToken != null && w.mAppToken.isHidden() && !w.mAppToken.isSelfAnimating()) {
+        if (w.mActivityRecord != null && w.mActivityRecord.isHidden() && !w.mActivityRecord.isSelfAnimating()) {
 
             // If this window's app token is hidden and not animating, it is of no interest to us.
             if (DEBUG_WALLPAPER) Slog.v(TAG, "Skipping hidden and not animating token: " + w);
@@ -136,10 +135,10 @@ class WallpaperController {
             mFindResults.setUseTopWallpaperAsTarget(true);
         }
 
-        final boolean keyguardGoingAwayWithWallpaper = (w.mAppToken != null
-                && w.mAppToken.isSelfAnimating()
-                && AppTransition.isKeyguardGoingAwayTransit(w.mAppToken.getTransit())
-                && (w.mAppToken.getTransitFlags()
+        final boolean keyguardGoingAwayWithWallpaper = (w.mActivityRecord != null
+                && w.mActivityRecord.isSelfAnimating()
+                && AppTransition.isKeyguardGoingAwayTransit(w.mActivityRecord.getTransit())
+                && (w.mActivityRecord.getTransitFlags()
                         & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER) != 0);
 
         boolean needsShowWhenLockedWallpaper = false;
@@ -149,7 +148,7 @@ class WallpaperController {
             // The lowest show when locked window decides whether we need to put the wallpaper
             // behind.
             needsShowWhenLockedWallpaper = !isFullscreen(w.mAttrs)
-                    || (w.mAppToken != null && !w.mAppToken.fillsParent());
+                    || (w.mActivityRecord != null && !w.mActivityRecord.fillsParent());
         }
 
         if (keyguardGoingAwayWithWallpaper || needsShowWhenLockedWallpaper) {
@@ -160,8 +159,8 @@ class WallpaperController {
 
         final RecentsAnimationController recentsAnimationController =
                 mService.getRecentsAnimationController();
-        final boolean animationWallpaper = w.mAppToken != null && w.mAppToken.getAnimation() != null
-                && w.mAppToken.getAnimation().getShowWallpaper();
+        final boolean animationWallpaper = w.mActivityRecord != null && w.mActivityRecord.getAnimation() != null
+                && w.mActivityRecord.getAnimation().getShowWallpaper();
         final boolean hasWallpaper = (w.mAttrs.flags & FLAG_SHOW_WALLPAPER) != 0
                 || animationWallpaper;
         final boolean isRecentsTransitionTarget = (recentsAnimationController != null
@@ -224,22 +223,22 @@ class WallpaperController {
                 && recentsAnimationController.isWallpaperVisible(wallpaperTarget);
         if (DEBUG_WALLPAPER) Slog.v(TAG, "Wallpaper vis: target " + wallpaperTarget + ", obscured="
                 + (wallpaperTarget != null ? Boolean.toString(wallpaperTarget.mObscured) : "??")
-                + " animating=" + ((wallpaperTarget != null && wallpaperTarget.mAppToken != null)
-                ? wallpaperTarget.mAppToken.isSelfAnimating() : null)
+                + " animating=" + ((wallpaperTarget != null && wallpaperTarget.mActivityRecord != null)
+                ? wallpaperTarget.mActivityRecord.isSelfAnimating() : null)
                 + " prev=" + mPrevWallpaperTarget
                 + " recentsAnimationWallpaperVisible=" + isAnimatingWithRecentsComponent);
         return (wallpaperTarget != null
                 && (!wallpaperTarget.mObscured
                         || isAnimatingWithRecentsComponent
-                        || (wallpaperTarget.mAppToken != null
-                                && wallpaperTarget.mAppToken.isSelfAnimating())))
+                        || (wallpaperTarget.mActivityRecord != null
+                                && wallpaperTarget.mActivityRecord.isSelfAnimating())))
                 || mPrevWallpaperTarget != null;
     }
 
     boolean isWallpaperTargetAnimating() {
         return mWallpaperTarget != null && mWallpaperTarget.isAnimating()
-                && (mWallpaperTarget.mAppToken == null
-                        || !mWallpaperTarget.mAppToken.isWaitingForTransitionStart());
+                && (mWallpaperTarget.mActivityRecord == null
+                        || !mWallpaperTarget.mActivityRecord.isWaitingForTransitionStart());
     }
 
     void updateWallpaperVisibility() {
@@ -528,10 +527,10 @@ class WallpaperController {
             return;
         }
 
-        final boolean newTargetHidden = wallpaperTarget.mAppToken != null
-                && wallpaperTarget.mAppToken.hiddenRequested;
-        final boolean oldTargetHidden = prevWallpaperTarget.mAppToken != null
-                && prevWallpaperTarget.mAppToken.hiddenRequested;
+        final boolean newTargetHidden = wallpaperTarget.mActivityRecord != null
+                && wallpaperTarget.mActivityRecord.hiddenRequested;
+        final boolean oldTargetHidden = prevWallpaperTarget.mActivityRecord != null
+                && prevWallpaperTarget.mActivityRecord.hiddenRequested;
 
         if (DEBUG_WALLPAPER_LIGHT) Slog.v(TAG, "Animating wallpapers:" + " old: "
                 + prevWallpaperTarget + " hidden=" + oldTargetHidden + " new: " + wallpaperTarget
@@ -545,9 +544,9 @@ class WallpaperController {
             // is not. If they're both hidden, still use the new target.
             mWallpaperTarget = prevWallpaperTarget;
         } else if (newTargetHidden == oldTargetHidden
-                && !mDisplayContent.mOpeningApps.contains(wallpaperTarget.mAppToken)
-                && (mDisplayContent.mOpeningApps.contains(prevWallpaperTarget.mAppToken)
-                || mDisplayContent.mClosingApps.contains(prevWallpaperTarget.mAppToken))) {
+                && !mDisplayContent.mOpeningApps.contains(wallpaperTarget.mActivityRecord)
+                && (mDisplayContent.mOpeningApps.contains(prevWallpaperTarget.mActivityRecord)
+                || mDisplayContent.mClosingApps.contains(prevWallpaperTarget.mActivityRecord))) {
             // If they're both hidden (or both not hidden), prefer the one that's currently in
             // opening or closing app list, this allows transition selection logic to better
             // determine the wallpaper status of opening/closing apps.
@@ -607,8 +606,9 @@ class WallpaperController {
     boolean processWallpaperDrawPendingTimeout() {
         if (mWallpaperDrawState == WALLPAPER_DRAW_PENDING) {
             mWallpaperDrawState = WALLPAPER_DRAW_TIMEOUT;
-            if (DEBUG_APP_TRANSITIONS || DEBUG_WALLPAPER) Slog.v(TAG,
-                    "*** WALLPAPER DRAW TIMEOUT");
+            if (DEBUG_WALLPAPER) {
+                Slog.v(TAG, "*** WALLPAPER DRAW TIMEOUT");
+            }
 
             // If there was a pending recents animation, start the animation anyways (it's better
             // to not see the wallpaper than for the animation to not start)
@@ -641,9 +641,11 @@ class WallpaperController {
                                 WALLPAPER_DRAW_PENDING_TIMEOUT_DURATION);
 
                 }
-                if (DEBUG_APP_TRANSITIONS || DEBUG_WALLPAPER) Slog.v(TAG,
-                        "Wallpaper should be visible but has not been drawn yet. " +
-                                "mWallpaperDrawState=" + mWallpaperDrawState);
+                if (DEBUG_WALLPAPER) {
+                    Slog.v(TAG,
+                            "Wallpaper should be visible but has not been drawn yet. "
+                                    + "mWallpaperDrawState=" + mWallpaperDrawState);
+                }
                 break;
             }
         }
@@ -659,23 +661,23 @@ class WallpaperController {
      * Adjusts the wallpaper windows if the input display has a pending wallpaper layout or one of
      * the opening apps should be a wallpaper target.
      */
-    void adjustWallpaperWindowsForAppTransitionIfNeeded(ArraySet<AppWindowToken> openingApps,
-            ArraySet<AppWindowToken> changingApps) {
+    void adjustWallpaperWindowsForAppTransitionIfNeeded(ArraySet<ActivityRecord> openingApps,
+            ArraySet<ActivityRecord> changingApps) {
         boolean adjust = false;
         if ((mDisplayContent.pendingLayoutChanges & FINISH_LAYOUT_REDO_WALLPAPER) != 0) {
             adjust = true;
         } else {
             for (int i = openingApps.size() - 1; i >= 0; --i) {
-                final AppWindowToken token = openingApps.valueAt(i);
-                if (token.windowsCanBeWallpaperTarget()) {
+                final ActivityRecord activity = openingApps.valueAt(i);
+                if (activity.windowsCanBeWallpaperTarget()) {
                     adjust = true;
                     break;
                 }
             }
             if (!adjust) {
                 for (int i = changingApps.size() - 1; i >= 0; --i) {
-                    final AppWindowToken token = changingApps.valueAt(i);
-                    if (token.windowsCanBeWallpaperTarget()) {
+                    final ActivityRecord activity = changingApps.valueAt(i);
+                    if (activity.windowsCanBeWallpaperTarget()) {
                         adjust = true;
                         break;
                     }

@@ -90,14 +90,15 @@ import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.MultiListLayout;
 import com.android.systemui.MultiListLayout.MultiListAdapter;
+import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.GlobalActions.GlobalActionsManager;
 import com.android.systemui.plugins.GlobalActionsPanelPlugin;
 import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
-import com.android.systemui.statusbar.phone.UnlockMethodCache;
 import com.android.systemui.statusbar.policy.ConfigurationController;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.EmergencyDialerConstants;
 import com.android.systemui.util.leak.RotationUtils;
 import com.android.systemui.volume.SystemUIInterpolators.LogAccelerateInterpolator;
@@ -187,7 +188,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
         filter.addAction(Intent.ACTION_SCREEN_OFF);
         filter.addAction(TelephonyIntents.ACTION_EMERGENCY_CALLBACK_MODE_CHANGED);
-        context.registerReceiver(mBroadcastReceiver, filter);
+        Dependency.get(BroadcastDispatcher.class).registerReceiver(mBroadcastReceiver, filter);
 
         ConnectivityManager cm = (ConnectivityManager)
                 context.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -213,14 +214,17 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         Dependency.get(ConfigurationController.class).addCallback(this);
 
         mActivityStarter = Dependency.get(ActivityStarter.class);
-        UnlockMethodCache unlockMethodCache = UnlockMethodCache.getInstance(context);
-        unlockMethodCache.addListener(
-                () -> {
-                    if (mDialog != null && mDialog.mPanelController != null) {
-                        boolean locked = !unlockMethodCache.canSkipBouncer();
-                        mDialog.mPanelController.onDeviceLockStateChanged(locked);
-                    }
-                });
+        KeyguardStateController keyguardStateController =
+                Dependency.get(KeyguardStateController.class);
+        keyguardStateController.addCallback(new KeyguardStateController.Callback() {
+            @Override
+            public void onUnlockedChanged() {
+                if (mDialog != null && mDialog.mPanelController != null) {
+                    boolean locked = !keyguardStateController.canDismissLockScreen();
+                    mDialog.mPanelController.onDeviceLockStateChanged(locked);
+                }
+            }
+        });
     }
 
     /**
@@ -665,8 +669,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                         // Take an "interactive" bugreport.
                         MetricsLogger.action(mContext,
                                 MetricsEvent.ACTION_BUGREPORT_FROM_POWER_MENU_INTERACTIVE);
-                        ActivityManager.getService().requestBugReport(
-                                ActivityManager.BUGREPORT_OPTION_INTERACTIVE);
+                        ActivityManager.getService().requestInteractiveBugReport();
                     } catch (RemoteException e) {
                     }
                 }
@@ -683,8 +686,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             try {
                 // Take a "full" bugreport.
                 MetricsLogger.action(mContext, MetricsEvent.ACTION_BUGREPORT_FROM_POWER_MENU_FULL);
-                ActivityManager.getService().requestBugReport(
-                        ActivityManager.BUGREPORT_OPTION_FULL);
+                ActivityManager.getService().requestFullBugReport();
             } catch (RemoteException e) {
             }
             return false;

@@ -26,6 +26,7 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.IMediaRouter2Client;
 import android.media.IMediaRouter2Manager;
+import android.media.IMediaRouterClient;
 import android.media.MediaRoute2Info;
 import android.media.MediaRoute2ProviderInfo;
 import android.os.Binder;
@@ -54,7 +55,7 @@ import java.util.Objects;
  * TODO: Merge this to MediaRouterService once it's finished.
  */
 class MediaRouter2ServiceImpl {
-    private static final String TAG = "MediaRouter2ServiceImpl";
+    private static final String TAG = "MR2ServiceImpl";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     private final Context mContext;
@@ -86,7 +87,7 @@ class MediaRouter2ServiceImpl {
         final long token = Binder.clearCallingIdentity();
         try {
             synchronized (mLock) {
-                registerClientLocked(client, uid, pid, packageName, userId, trusted);
+                registerClient2Locked(client, uid, pid, packageName, userId, trusted);
             }
         } finally {
             Binder.restoreCallingIdentity(token);
@@ -99,7 +100,7 @@ class MediaRouter2ServiceImpl {
         final long token = Binder.clearCallingIdentity();
         try {
             synchronized (mLock) {
-                unregisterClientLocked(client, false);
+                unregisterClient2Locked(client, false);
             }
         } finally {
             Binder.restoreCallingIdentity(token);
@@ -155,14 +156,30 @@ class MediaRouter2ServiceImpl {
         }
     }
 
-    public void setControlCategories(@NonNull IMediaRouter2Client client,
+    //TODO: What would happen if a media app used MediaRouter and MediaRouter2 simultaneously?
+    public void setControlCategories(@NonNull IMediaRouterClient client,
+            @Nullable List<String> categories) {
+        Objects.requireNonNull(client, "client must not be null");
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                ClientRecord clientRecord = mAllClientRecords.get(client.asBinder());
+                setControlCategoriesLocked(clientRecord, categories);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void setControlCategories2(@NonNull IMediaRouter2Client client,
             @Nullable List<String> categories) {
         Objects.requireNonNull(client, "client must not be null");
 
         final long token = Binder.clearCallingIdentity();
         try {
             synchronized (mLock) {
-                setControlCategoriesLocked(client, categories);
+                ClientRecord clientRecord = mAllClientRecords.get(client.asBinder());
+                setControlCategoriesLocked(clientRecord, categories);
             }
         } finally {
             Binder.restoreCallingIdentity(token);
@@ -174,7 +191,35 @@ class MediaRouter2ServiceImpl {
         final long token = Binder.clearCallingIdentity();
         try {
             synchronized (mLock) {
-                selectRoute2Locked(client, route);
+                selectRoute2Locked(mAllClientRecords.get(client.asBinder()), route);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void requestSetVolume2(IMediaRouter2Client client, MediaRoute2Info route, int volume) {
+        Objects.requireNonNull(client, "client must not be null");
+        Objects.requireNonNull(route, "route must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                requestSetVolumeLocked(client, route, volume);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void requestUpdateVolume2(IMediaRouter2Client client, MediaRoute2Info route, int delta) {
+        Objects.requireNonNull(client, "client must not be null");
+        Objects.requireNonNull(route, "route must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                requestUpdateVolumeLocked(client, route, delta);
             }
         } finally {
             Binder.restoreCallingIdentity(token);
@@ -187,6 +232,67 @@ class MediaRouter2ServiceImpl {
         try {
             synchronized (mLock) {
                 selectClientRoute2Locked(manager, packageName, route);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void requestSetVolume2Manager(IMediaRouter2Manager manager,
+            MediaRoute2Info route, int volume) {
+        Objects.requireNonNull(manager, "manager must not be null");
+        Objects.requireNonNull(route, "route must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                requestSetVolumeLocked(manager, route, volume);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void requestUpdateVolume2Manager(IMediaRouter2Manager manager,
+            MediaRoute2Info route, int delta) {
+        Objects.requireNonNull(manager, "manager must not be null");
+        Objects.requireNonNull(route, "route must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                requestUpdateVolumeLocked(manager, route, delta);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+
+    public void registerClient(@NonNull IMediaRouterClient client, @NonNull String packageName) {
+        Objects.requireNonNull(client, "client must not be null");
+
+        final int uid = Binder.getCallingUid();
+        final int pid = Binder.getCallingPid();
+        final int userId = UserHandle.getUserId(uid);
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                registerClient1Locked(client, packageName, userId);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    public void unregisterClient(@NonNull IMediaRouterClient client) {
+        Objects.requireNonNull(client, "client must not be null");
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            synchronized (mLock) {
+                unregisterClient1Locked(client);
             }
         } finally {
             Binder.restoreCallingIdentity(token);
@@ -217,9 +323,9 @@ class MediaRouter2ServiceImpl {
         }
     }
 
-    void clientDied(ClientRecord clientRecord) {
+    void clientDied(Client2Record clientRecord) {
         synchronized (mLock) {
-            unregisterClientLocked(clientRecord.mClient, true);
+            unregisterClient2Locked(clientRecord.mClient, true);
         }
     }
 
@@ -229,27 +335,22 @@ class MediaRouter2ServiceImpl {
         }
     }
 
-    private void registerClientLocked(IMediaRouter2Client client,
+    private void registerClient2Locked(IMediaRouter2Client client,
             int uid, int pid, String packageName, int userId, boolean trusted) {
         final IBinder binder = client.asBinder();
-        ClientRecord clientRecord = mAllClientRecords.get(binder);
-        if (clientRecord == null) {
-            boolean newUser = false;
+        if (mAllClientRecords.get(binder) == null) {
             UserRecord userRecord = mUserRecords.get(userId);
             if (userRecord == null) {
                 userRecord = new UserRecord(userId);
-                newUser = true;
+                mUserRecords.put(userId, userRecord);
+                initializeUserLocked(userRecord);
             }
-            clientRecord = new ClientRecord(userRecord, client, uid, pid, packageName, trusted);
+            Client2Record clientRecord = new Client2Record(userRecord, client, uid, pid,
+                    packageName, trusted);
             try {
                 binder.linkToDeath(clientRecord, 0);
             } catch (RemoteException ex) {
                 throw new RuntimeException("Media router client died prematurely.", ex);
-            }
-
-            if (newUser) {
-                mUserRecords.put(userId, userRecord);
-                initializeUserLocked(userRecord);
             }
 
             userRecord.mClientRecords.add(clientRecord);
@@ -261,8 +362,8 @@ class MediaRouter2ServiceImpl {
         }
     }
 
-    private void unregisterClientLocked(IMediaRouter2Client client, boolean died) {
-        ClientRecord clientRecord = mAllClientRecords.remove(client.asBinder());
+    private void unregisterClient2Locked(IMediaRouter2Client client, boolean died) {
+        Client2Record clientRecord = (Client2Record) mAllClientRecords.remove(client.asBinder());
         if (clientRecord != null) {
             UserRecord userRecord = clientRecord.mUserRecord;
             userRecord.mClientRecords.remove(clientRecord);
@@ -272,8 +373,7 @@ class MediaRouter2ServiceImpl {
         }
     }
 
-    private void selectRoute2Locked(IMediaRouter2Client client, MediaRoute2Info route) {
-        ClientRecord clientRecord = mAllClientRecords.get(client.asBinder());
+    private void selectRoute2Locked(ClientRecord clientRecord, MediaRoute2Info route) {
         if (clientRecord != null) {
             MediaRoute2Info oldRoute = clientRecord.mSelectedRoute;
             clientRecord.mSelectedRoute = route;
@@ -294,10 +394,7 @@ class MediaRouter2ServiceImpl {
         }
     }
 
-    private void setControlCategoriesLocked(IMediaRouter2Client client, List<String> categories) {
-        final IBinder binder = client.asBinder();
-        ClientRecord clientRecord = mAllClientRecords.get(binder);
-
+    private void setControlCategoriesLocked(ClientRecord clientRecord, List<String> categories) {
         if (clientRecord != null) {
             clientRecord.mControlCategories = categories;
 
@@ -316,6 +413,30 @@ class MediaRouter2ServiceImpl {
             clientRecord.mUserRecord.mHandler.sendMessage(
                     obtainMessage(UserHandler::sendControlRequest,
                             clientRecord.mUserRecord.mHandler, route, request));
+        }
+    }
+
+    private void requestSetVolumeLocked(IMediaRouter2Client client, MediaRoute2Info route,
+            int volume) {
+        final IBinder binder = client.asBinder();
+        ClientRecord clientRecord = mAllClientRecords.get(binder);
+
+        if (clientRecord != null) {
+            clientRecord.mUserRecord.mHandler.sendMessage(
+                    obtainMessage(UserHandler::requestSetVolume,
+                            clientRecord.mUserRecord.mHandler, route, volume));
+        }
+    }
+
+    private void requestUpdateVolumeLocked(IMediaRouter2Client client, MediaRoute2Info route,
+            int delta) {
+        final IBinder binder = client.asBinder();
+        ClientRecord clientRecord = mAllClientRecords.get(binder);
+
+        if (clientRecord != null) {
+            clientRecord.mUserRecord.mHandler.sendMessage(
+                    obtainMessage(UserHandler::requestUpdateVolume,
+                            clientRecord.mUserRecord.mHandler, route, delta));
         }
     }
 
@@ -349,9 +470,7 @@ class MediaRouter2ServiceImpl {
                     obtainMessage(UserHandler::notifyProviderInfosUpdatedToManager,
                             userRecord.mHandler, manager));
 
-            final int count = userRecord.mClientRecords.size();
-            for (int i = 0; i < count; i++) {
-                ClientRecord clientRecord = userRecord.mClientRecords.get(i);
+            for (ClientRecord clientRecord : userRecord.mClientRecords) {
                 clientRecord.mUserRecord.mHandler.sendMessage(
                         obtainMessage(UserHandler::updateClientUsage,
                             clientRecord.mUserRecord.mHandler, clientRecord));
@@ -378,10 +497,35 @@ class MediaRouter2ServiceImpl {
                 Slog.w(TAG, "Ignoring route selection for unknown client.");
             }
             if (clientRecord != null && managerRecord.mTrusted) {
-                selectRoute2Locked(clientRecord.mClient, route);
+                selectRoute2Locked(clientRecord, route);
             }
         }
     }
+
+    private void requestSetVolumeLocked(IMediaRouter2Manager manager, MediaRoute2Info route,
+            int volume) {
+        final IBinder binder = manager.asBinder();
+        ManagerRecord managerRecord = mAllManagerRecords.get(binder);
+
+        if (managerRecord != null) {
+            managerRecord.mUserRecord.mHandler.sendMessage(
+                    obtainMessage(UserHandler::requestSetVolume,
+                            managerRecord.mUserRecord.mHandler, route, volume));
+        }
+    }
+
+    private void requestUpdateVolumeLocked(IMediaRouter2Manager manager, MediaRoute2Info route,
+            int delta) {
+        final IBinder binder = manager.asBinder();
+        ManagerRecord managerRecord = mAllManagerRecords.get(binder);
+
+        if (managerRecord != null) {
+            managerRecord.mUserRecord.mHandler.sendMessage(
+                    obtainMessage(UserHandler::requestUpdateVolume,
+                            managerRecord.mUserRecord.mHandler, route, delta));
+        }
+    }
+
 
     private void initializeUserLocked(UserRecord userRecord) {
         if (DEBUG) {
@@ -409,6 +553,37 @@ class MediaRouter2ServiceImpl {
         }
     }
 
+    private void registerClient1Locked(IMediaRouterClient client, String packageName,
+            int userId) {
+        final IBinder binder = client.asBinder();
+        if (mAllClientRecords.get(binder) == null) {
+            boolean newUser = false;
+            UserRecord userRecord = mUserRecords.get(userId);
+            if (userRecord == null) {
+                userRecord = new UserRecord(userId);
+                newUser = true;
+            }
+            ClientRecord clientRecord = new Client1Record(userRecord, client, packageName);
+
+            if (newUser) {
+                mUserRecords.put(userId, userRecord);
+                initializeUserLocked(userRecord);
+            }
+
+            userRecord.mClientRecords.add(clientRecord);
+            mAllClientRecords.put(binder, clientRecord);
+        }
+    }
+
+    private void unregisterClient1Locked(IMediaRouterClient client) {
+        ClientRecord clientRecord = mAllClientRecords.remove(client.asBinder());
+        if (clientRecord != null) {
+            UserRecord userRecord = clientRecord.mUserRecord;
+            userRecord.mClientRecords.remove(clientRecord);
+            disposeUserIfNeededLocked(userRecord);
+        }
+    }
+
     final class UserRecord {
         public final int mUserId;
         final ArrayList<ClientRecord> mClientRecords = new ArrayList<>();
@@ -430,25 +605,43 @@ class MediaRouter2ServiceImpl {
         }
     }
 
-    final class ClientRecord implements IBinder.DeathRecipient {
+    class ClientRecord {
         public final UserRecord mUserRecord;
-        public final IMediaRouter2Client mClient;
-        public final int mUid;
-        public final int mPid;
         public final String mPackageName;
-        public final boolean mTrusted;
         public List<String> mControlCategories;
         public MediaRoute2Info mSelectedRoute;
 
-        ClientRecord(UserRecord userRecord, IMediaRouter2Client client,
-                int uid, int pid, String packageName, boolean trusted) {
+        ClientRecord(UserRecord userRecord, String packageName) {
             mUserRecord = userRecord;
+            mPackageName = packageName;
+            mControlCategories = Collections.emptyList();
+        }
+    }
+
+    final class Client1Record extends ClientRecord {
+        public final IMediaRouterClient mClient;
+
+        Client1Record(UserRecord userRecord, IMediaRouterClient client,
+                String packageName) {
+            super(userRecord, packageName);
+            mClient = client;
+        }
+    }
+
+    final class Client2Record extends ClientRecord
+            implements IBinder.DeathRecipient {
+        public final IMediaRouter2Client mClient;
+        public final int mUid;
+        public final int mPid;
+        public final boolean mTrusted;
+
+        Client2Record(UserRecord userRecord, IMediaRouter2Client client,
+                int uid, int pid, String packageName, boolean trusted) {
+            super(userRecord, packageName);
             mClient = client;
             mUid = uid;
             mPid = pid;
-            mPackageName = packageName;
             mTrusted = trusted;
-            mControlCategories = Collections.emptyList();
         }
 
         public void dispose() {
@@ -589,6 +782,20 @@ class MediaRouter2ServiceImpl {
             }
         }
 
+        private void requestSetVolume(MediaRoute2Info route, int volume) {
+            final MediaRoute2ProviderProxy provider = findProvider(route.getProviderId());
+            if (provider != null) {
+                provider.requestSetVolume(route, volume);
+            }
+        }
+
+        private void requestUpdateVolume(MediaRoute2Info route, int delta) {
+            final MediaRoute2ProviderProxy provider = findProvider(route.getProviderId());
+            if (provider != null) {
+                provider.requestUpdateVolume(route, delta);
+            }
+        }
+
         private void scheduleUpdateProviderInfos() {
             if (!mProviderInfosUpdateScheduled) {
                 mProviderInfosUpdateScheduled = true;
@@ -603,8 +810,6 @@ class MediaRouter2ServiceImpl {
             if (service == null) {
                 return;
             }
-            final List<IMediaRouter2Manager> managers = new ArrayList<>();
-            final List<IMediaRouter2Client> clients = new ArrayList<>();
             final List<MediaRoute2ProviderInfo> providers = new ArrayList<>();
             for (MediaRoute2ProviderProxy mediaProvider : mMediaProviders) {
                 final MediaRoute2ProviderInfo providerInfo =
@@ -617,12 +822,16 @@ class MediaRouter2ServiceImpl {
             }
             mProviderInfos = providers;
 
+            final List<IMediaRouter2Manager> managers = new ArrayList<>();
+            final List<IMediaRouter2Client> clients = new ArrayList<>();
             synchronized (service.mLock) {
                 for (ManagerRecord managerRecord : mUserRecord.mManagerRecords) {
                     managers.add(managerRecord.mManager);
                 }
                 for (ClientRecord clientRecord : mUserRecord.mClientRecords) {
-                    clients.add(clientRecord.mClient);
+                    if (clientRecord instanceof Client2Record) {
+                        clients.add(((Client2Record) clientRecord).mClient);
+                    }
                 }
             }
             for (IMediaRouter2Manager manager : managers) {
@@ -664,9 +873,8 @@ class MediaRouter2ServiceImpl {
             }
             List<IMediaRouter2Manager> managers = new ArrayList<>();
             synchronized (service.mLock) {
-                final int count = mUserRecord.mManagerRecords.size();
-                for (int i = 0; i < count; i++) {
-                    managers.add(mUserRecord.mManagerRecords.get(i).mManager);
+                for (ManagerRecord managerRecord : mUserRecord.mManagerRecords) {
+                    managers.add(managerRecord.mManager);
                 }
             }
             for (IMediaRouter2Manager manager : managers) {

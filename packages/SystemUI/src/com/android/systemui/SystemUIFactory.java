@@ -17,7 +17,6 @@
 package com.android.systemui;
 
 import android.annotation.NonNull;
-import android.app.AlarmManager;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
@@ -25,33 +24,26 @@ import android.util.Log;
 import android.view.ViewGroup;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.colorextraction.ColorExtractor.GradientColors;
-import com.android.internal.util.function.TriConsumer;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.ViewMediatorCallback;
+import com.android.systemui.dagger.DaggerSystemUIRootComponent;
+import com.android.systemui.dagger.DependencyProvider;
+import com.android.systemui.dagger.SystemUIRootComponent;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.KeyguardIndicationController;
 import com.android.systemui.statusbar.NotificationMediaManager;
-import com.android.systemui.statusbar.ScrimView;
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.KeyguardBouncer;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.LockIcon;
-import com.android.systemui.statusbar.phone.LockscreenWallpaper;
 import com.android.systemui.statusbar.phone.NotificationIconAreaController;
-import com.android.systemui.statusbar.phone.ScrimController;
-import com.android.systemui.statusbar.phone.ScrimState;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
-import com.android.systemui.statusbar.phone.UnlockMethodCache;
-import com.android.systemui.statusbar.policy.KeyguardMonitor;
-import com.android.systemui.volume.VolumeDialogComponent;
-
-import java.util.function.Consumer;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
 
 import dagger.Module;
 import dagger.Provides;
@@ -118,7 +110,7 @@ public class SystemUIFactory {
 
     protected SystemUIRootComponent buildSystemUIRootComponent(Context context) {
         return DaggerSystemUIRootComponent.builder()
-                .dependencyProvider(new com.android.systemui.DependencyProvider())
+                .dependencyProvider(new DependencyProvider())
                 .contextHolder(new ContextHolder(context))
                 .build();
     }
@@ -136,22 +128,13 @@ public class SystemUIFactory {
             LockPatternUtils lockPatternUtils, ViewGroup container,
             DismissCallbackRegistry dismissCallbackRegistry,
             KeyguardBouncer.BouncerExpansionCallback expansionCallback,
-            FalsingManager falsingManager, KeyguardBypassController bypassController) {
+            KeyguardStateController keyguardStateController, FalsingManager falsingManager,
+            KeyguardBypassController bypassController) {
         return new KeyguardBouncer(context, callback, lockPatternUtils, container,
                 dismissCallbackRegistry, falsingManager,
-                expansionCallback, UnlockMethodCache.getInstance(context),
+                expansionCallback, keyguardStateController,
                 Dependency.get(KeyguardUpdateMonitor.class), bypassController,
                 new Handler(Looper.getMainLooper()));
-    }
-
-    public ScrimController createScrimController(ScrimView scrimBehind, ScrimView scrimInFront,
-            ScrimView scrimForBubble,
-            LockscreenWallpaper lockscreenWallpaper,
-            TriConsumer<ScrimState, Float, GradientColors> scrimStateListener,
-            Consumer<Integer> scrimVisibleListener, DozeParameters dozeParameters,
-            AlarmManager alarmManager, KeyguardMonitor keyguardMonitor) {
-        return new ScrimController(scrimBehind, scrimInFront, scrimForBubble, scrimStateListener,
-                scrimVisibleListener, dozeParameters, alarmManager, keyguardMonitor);
     }
 
     public NotificationIconAreaController createNotificationIconAreaController(Context context,
@@ -161,16 +144,13 @@ public class SystemUIFactory {
             StatusBarStateController statusBarStateController) {
         return new NotificationIconAreaController(context, statusBar, statusBarStateController,
                 wakeUpCoordinator, keyguardBypassController,
-                Dependency.get(NotificationMediaManager.class));
+                Dependency.get(NotificationMediaManager.class),
+                Dependency.get(DozeParameters.class));
     }
 
     public KeyguardIndicationController createKeyguardIndicationController(Context context,
             ViewGroup indicationArea, LockIcon lockIcon) {
         return new KeyguardIndicationController(context, indicationArea, lockIcon);
-    }
-
-    public VolumeDialogComponent createVolumeDialogComponent(SystemUI systemUi, Context context) {
-        return new VolumeDialogComponent(systemUi, context);
     }
 
     @Module

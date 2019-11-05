@@ -249,6 +249,7 @@ public final class MediaRouterService extends IMediaRouterService.Stub
             synchronized (mLock) {
                 registerClientLocked(client, uid, pid, packageName, resolvedUserId, trusted);
             }
+            mService2.registerClient(client, packageName);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -289,6 +290,7 @@ public final class MediaRouterService extends IMediaRouterService.Stub
             synchronized (mLock) {
                 unregisterClientLocked(client, false);
             }
+            mService2.unregisterClient(client);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -395,6 +397,12 @@ public final class MediaRouterService extends IMediaRouterService.Stub
 
     // Binder call
     @Override
+    public void setControlCategories(IMediaRouterClient client, List<String> controlCategories) {
+        mService2.setControlCategories(client, controlCategories);
+    }
+
+    // Binder call
+    @Override
     public void requestUpdateVolume(IMediaRouterClient client, String routeId, int direction) {
         if (client == null) {
             throw new IllegalArgumentException("client must not be null");
@@ -487,8 +495,34 @@ public final class MediaRouterService extends IMediaRouterService.Stub
 
     // Binder call
     @Override
-    public void setControlCategories(IMediaRouter2Client client, List<String> categories) {
-        mService2.setControlCategories(client, categories);
+    public void setControlCategories2(IMediaRouter2Client client, List<String> categories) {
+        mService2.setControlCategories2(client, categories);
+    }
+
+    // Binder call
+    @Override
+    public void requestSetVolume2(IMediaRouter2Client client, MediaRoute2Info route, int volume) {
+        mService2.requestSetVolume2(client, route, volume);
+    }
+
+    // Binder call
+    @Override
+    public void requestUpdateVolume2(IMediaRouter2Client client, MediaRoute2Info route, int delta) {
+        mService2.requestUpdateVolume2(client, route, delta);
+    }
+
+    // Binder call
+    @Override
+    public void requestSetVolume2Manager(IMediaRouter2Manager manager,
+            MediaRoute2Info route, int volume) {
+        mService2.requestSetVolume2Manager(manager, route, volume);
+    }
+
+    // Binder call
+    @Override
+    public void requestUpdateVolume2Manager(IMediaRouter2Manager manager,
+            MediaRoute2Info route, int delta) {
+        mService2.requestUpdateVolume2Manager(manager, route, delta);
     }
 
     void restoreBluetoothA2dp() {
@@ -561,6 +595,7 @@ public final class MediaRouterService extends IMediaRouterService.Stub
         synchronized (mLock) {
             unregisterClientLocked(clientRecord.mClient, true);
         }
+        mService2.unregisterClient(clientRecord.mClient);
     }
 
     private void registerClientLocked(IMediaRouterClient client,

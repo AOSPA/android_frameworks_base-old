@@ -34,6 +34,7 @@ import android.util.ArraySet;
 import android.util.Log;
 import android.util.TimingsTraceLog;
 
+import com.android.systemui.dagger.ContextComponentHelper;
 import com.android.systemui.plugins.OverlayPlugin;
 import com.android.systemui.plugins.PluginListener;
 import com.android.systemui.shared.plugins.PluginManager;
@@ -42,6 +43,8 @@ import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
 import com.android.systemui.util.NotificationChannels;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -193,18 +196,18 @@ public class SystemUIApplication extends Application implements SysUiServiceProv
             try {
                 SystemUI obj = mComponentHelper.resolveSystemUI(clsName);
                 if (obj == null) {
-                    obj = (SystemUI) Class.forName(clsName).newInstance();
+                    Constructor constructor = Class.forName(clsName).getConstructor(Context.class);
+                    obj = (SystemUI) constructor.newInstance(this);
                 }
                 mServices[i] = obj;
-            } catch (ClassNotFoundException ex) {
-                throw new RuntimeException(ex);
-            } catch (IllegalAccessException ex) {
-                throw new RuntimeException(ex);
-            } catch (InstantiationException ex) {
+            } catch (ClassNotFoundException
+                    | NoSuchMethodException
+                    | IllegalAccessException
+                    | InstantiationException
+                    | InvocationTargetException ex) {
                 throw new RuntimeException(ex);
             }
 
-            mServices[i].mContext = this;
             mServices[i].mComponents = mComponents;
             if (DEBUG) Log.d(TAG, "running: " + mServices[i]);
             mServices[i].start();
@@ -235,7 +238,7 @@ public class SystemUIApplication extends Application implements SysUiServiceProv
                                 if (statusBar != null) {
                                     plugin.setup(statusBar.getStatusBarWindow(),
                                             statusBar.getNavigationBarView(), new Callback(plugin),
-                                            DozeParameters.getInstance(getBaseContext()));
+                                            Dependency.get(DozeParameters.class));
                                 }
                             }
                         });

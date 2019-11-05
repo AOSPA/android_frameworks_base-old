@@ -56,7 +56,6 @@ public class UiAutomationManagerTest {
 
     MessageCapturingHandler mMessageCapturingHandler;
 
-    @Mock AccessibilityManagerService.UserState mMockUserState;
     @Mock Context mMockContext;
     @Mock AccessibilityServiceInfo mMockServiceInfo;
     @Mock ResolveInfo mMockResolveInfo;
@@ -64,7 +63,7 @@ public class UiAutomationManagerTest {
     @Mock AccessibilityWindowManager mMockA11yWindowManager;
     @Mock AbstractAccessibilityServiceConnection.SystemSupport mMockSystemSupport;
     @Mock WindowManagerInternal mMockWindowManagerInternal;
-    @Mock GlobalActionPerformer mMockGlobalActionPerformer;
+    @Mock SystemActionPerformer mMockSystemActionPerformer;
     @Mock IBinder mMockOwner;
     @Mock IAccessibilityServiceClient mMockAccessibilityServiceClient;
     @Mock IBinder mMockServiceAsBinder;
@@ -174,7 +173,7 @@ public class UiAutomationManagerTest {
         mUiAutomationManager.registerUiTestAutomationServiceLocked(mMockOwner,
                 mMockAccessibilityServiceClient, mMockContext, mMockServiceInfo, SERVICE_ID,
                 mMessageCapturingHandler, mMockSecurityPolicy, mMockSystemSupport,
-                mMockWindowManagerInternal, mMockGlobalActionPerformer,
+                mMockWindowManagerInternal, mMockSystemActionPerformer,
                 mMockA11yWindowManager, flags);
     }
 

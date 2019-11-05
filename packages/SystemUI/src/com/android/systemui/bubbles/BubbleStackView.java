@@ -181,7 +181,9 @@ public class BubbleStackView extends FrameLayout {
      */
     private float mVerticalPosPercentBeforeRotation = -1;
 
+    private int mMaxBubbles;
     private int mBubbleSize;
+    private int mBubbleElevation;
     private int mBubblePaddingTop;
     private int mBubbleTouchPadding;
     private int mExpandedViewPadding;
@@ -326,7 +328,9 @@ public class BubbleStackView extends FrameLayout {
         mInflater = LayoutInflater.from(context);
 
         Resources res = getResources();
+        mMaxBubbles = res.getInteger(R.integer.bubbles_max_rendered);
         mBubbleSize = res.getDimensionPixelSize(R.dimen.individual_bubble_size);
+        mBubbleElevation = res.getDimensionPixelSize(R.dimen.bubble_elevation);
         mBubblePaddingTop = res.getDimensionPixelSize(R.dimen.bubble_padding_top);
         mBubbleTouchPadding = res.getDimensionPixelSize(R.dimen.bubble_touch_padding);
         mExpandedAnimateXDistance =
@@ -625,7 +629,7 @@ public class BubbleStackView extends FrameLayout {
         }
         Bubble topBubble = mBubbleData.getBubbles().get(0);
         String appName = topBubble.getAppName();
-        Notification notification = topBubble.getEntry().notification.getNotification();
+        Notification notification = topBubble.getEntry().getSbn().getNotification();
         CharSequence titleCharSeq = notification.extras.getCharSequence(Notification.EXTRA_TITLE);
         String titleStr = getResources().getString(R.string.stream_notification);
         if (titleCharSeq != null) {
@@ -1597,8 +1601,7 @@ public class BubbleStackView extends FrameLayout {
         for (int i = 0; i < bubbleCount; i++) {
             BubbleView bv = (BubbleView) mBubbleContainer.getChildAt(i);
             bv.updateDotVisibility(true /* animate */);
-            bv.setZ((BubbleController.MAX_BUBBLES
-                    * getResources().getDimensionPixelSize(R.dimen.bubble_elevation)) - i);
+            bv.setZ((mMaxBubbles * mBubbleElevation) - i);
             // If the dot is on the left, and so is the stack, we need to change the dot position.
             if (bv.getDotPositionOnLeft() == mStackOnLeftOrWillBe) {
                 bv.setDotPosition(!mStackOnLeftOrWillBe, animate);
@@ -1678,7 +1681,7 @@ public class BubbleStackView extends FrameLayout {
      */
     private void logBubbleEvent(@Nullable Bubble bubble, int action) {
         if (bubble == null || bubble.getEntry() == null
-                || bubble.getEntry().notification == null) {
+                || bubble.getEntry().getSbn() == null) {
             StatsLog.write(StatsLog.BUBBLE_UI_CHANGED,
                     null /* package name */,
                     null /* notification channel */,
@@ -1692,7 +1695,7 @@ public class BubbleStackView extends FrameLayout {
                     false /* on-going bubble */,
                     false /* isAppForeground (unused) */);
         } else {
-            StatusBarNotification notification = bubble.getEntry().notification;
+            StatusBarNotification notification = bubble.getEntry().getSbn();
             StatsLog.write(StatsLog.BUBBLE_UI_CHANGED,
                     notification.getPackageName(),
                     notification.getNotification().getChannelId(),

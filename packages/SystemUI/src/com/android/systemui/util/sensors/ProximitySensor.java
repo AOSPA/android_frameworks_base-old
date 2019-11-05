@@ -16,7 +16,7 @@
 
 package com.android.systemui.util.sensors;
 
-import android.content.Context;
+import android.content.res.Resources;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -24,8 +24,9 @@ import android.hardware.SensorManager;
 import android.os.Handler;
 import android.util.Log;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.R;
-import com.android.systemui.shared.plugins.PluginManager;
+import com.android.systemui.dagger.qualifiers.MainResources;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -47,7 +48,7 @@ public class ProximitySensor {
     private final float mMaxRange;
     private List<ProximitySensorListener> mListeners = new ArrayList<>();
     private String mTag = null;
-    private ProximityEvent mLastEvent;
+    @VisibleForTesting ProximityEvent mLastEvent;
     private int mSensorDelay = SensorManager.SENSOR_DELAY_NORMAL;
     private boolean mPaused;
     private boolean mRegistered;
@@ -64,10 +65,10 @@ public class ProximitySensor {
     };
 
     @Inject
-    public ProximitySensor(
-            Context context, AsyncSensorManager sensorManager, PluginManager pluginManager) {
+    public ProximitySensor(@MainResources Resources resources,
+            AsyncSensorManager sensorManager) {
         mSensorManager = sensorManager;
-        Sensor sensor = findBrightnessSensor(context);
+        Sensor sensor = findBrightnessSensor(resources);
 
         if (sensor == null) {
             mUsingBrightnessSensor = false;
@@ -107,8 +108,8 @@ public class ProximitySensor {
         registerInternal();
     }
 
-    private Sensor findBrightnessSensor(Context context) {
-        String sensorType = context.getString(R.string.doze_brightness_sensor_type);
+    private Sensor findBrightnessSensor(Resources resources) {
+        String sensorType = resources.getString(R.string.doze_brightness_sensor_type);
         List<Sensor> sensorList = mSensorManager.getSensorList(Sensor.TYPE_ALL);
         Sensor sensor = null;
         for (Sensor s : sensorList) {
@@ -146,17 +147,17 @@ public class ProximitySensor {
             return false;
         }
 
-        logDebug("Using brightness sensor? " + mUsingBrightnessSensor);
         mListeners.add(listener);
         registerInternal();
 
         return true;
     }
 
-    private void registerInternal() {
+    protected void registerInternal() {
         if (mRegistered || mPaused || mListeners.isEmpty()) {
             return;
         }
+        logDebug("Using brightness sensor? " + mUsingBrightnessSensor);
         logDebug("Registering sensor listener");
         mRegistered = true;
         mSensorManager.registerListener(mSensorEventListener, mSensor, mSensorDelay);
@@ -175,7 +176,7 @@ public class ProximitySensor {
         }
     }
 
-    private void unregisterInternal() {
+    protected void unregisterInternal() {
         if (!mRegistered) {
             return;
         }

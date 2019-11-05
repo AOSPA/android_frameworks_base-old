@@ -55,8 +55,8 @@ import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.classifier.FalsingManagerFake;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
-import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.EmptyShadeView;
+import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationShelf;
@@ -65,11 +65,14 @@ import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
+import com.android.systemui.statusbar.notification.NotificationSectionsFeatureManager;
 import com.android.systemui.statusbar.notification.collection.NotificationData;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.people.PeopleHubSectionFooterViewAdapter;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.FooterView;
 import com.android.systemui.statusbar.notification.row.NotificationBlockingHelperManager;
+import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
@@ -79,6 +82,7 @@ import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarTest.TestableNotificationEntryManager;
 import com.android.systemui.statusbar.policy.ConfigurationController;
+import com.android.systemui.util.DeviceConfigProxyFake;
 
 import org.junit.After;
 import org.junit.Before;
@@ -144,11 +148,10 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         mDependency.injectMockDependency(ShadeController.class);
         when(mRemoteInputManager.getController()).thenReturn(mRemoteInputController);
 
-        mEntryManager = new TestableNotificationEntryManager(mContext);
+        mEntryManager = new TestableNotificationEntryManager(mNotificationData);
         mDependency.injectTestDependency(NotificationEntryManager.class, mEntryManager);
         Dependency.get(InitController.class).executePostInitTasks();
-        mEntryManager.setUpForTest(mock(NotificationPresenter.class), null, mHeadsUpManager,
-                mNotificationData);
+        mEntryManager.setUpForTest(mock(NotificationPresenter.class), null, mHeadsUpManager);
 
 
         NotificationShelf notificationShelf = mock(NotificationShelf.class);
@@ -166,7 +169,11 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
                 mock(SysuiStatusBarStateController.class),
                 mHeadsUpManager,
                 mKeyguardBypassController,
-                new FalsingManagerFake());
+                new FalsingManagerFake(),
+                mock(NotificationLockscreenUserManager.class),
+                mock(NotificationGutsManager.class),
+                new NotificationSectionsFeatureManager(new DeviceConfigProxyFake(), mContext),
+                mock(PeopleHubSectionFooterViewAdapter.class));
         mStackScroller = spy(mStackScrollerInternal);
         mStackScroller.setShelf(notificationShelf);
         mStackScroller.setStatusBar(mBar);

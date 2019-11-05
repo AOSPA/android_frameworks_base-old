@@ -58,6 +58,7 @@ import com.android.internal.policy.ScreenDecorationsUtils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.model.SysUiState;
+import com.android.systemui.pip.PipUI;
 import com.android.systemui.recents.OverviewProxyService.OverviewProxyListener;
 import com.android.systemui.shared.recents.IOverviewProxy;
 import com.android.systemui.shared.recents.ISystemUiProxy;
@@ -100,6 +101,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     private static final long MAX_BACKOFF_MILLIS = 10 * 60 * 1000;
 
     private final Context mContext;
+    private final PipUI mPipUI;
     private SysUiState mSysUiState;
     private final Handler mHandler;
     private final NavigationBarController mNavBarController;
@@ -353,6 +355,19 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             }
         }
 
+        @Override
+        public void setShelfHeight(boolean visible, int shelfHeight) {
+            if (!verifyCaller("setShelfHeight")) {
+                return;
+            }
+            long token = Binder.clearCallingIdentity();
+            try {
+                mPipUI.setShelfHeight(visible, shelfHeight);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
         private boolean verifyCaller(String reason) {
             final int callerId = Binder.getCallingUserHandle().getIdentifier();
             if (callerId != mCurrentBoundedUserId) {
@@ -464,8 +479,9 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     public OverviewProxyService(Context context, DeviceProvisionedController provisionController,
             NavigationBarController navBarController, NavigationModeController navModeController,
             StatusBarWindowController statusBarWinController,
-            SysUiState sysUiState) {
+            SysUiState sysUiState, PipUI pipUI) {
         mContext = context;
+        mPipUI = pipUI;
         mHandler = new Handler();
         mNavBarController = navBarController;
         mStatusBarWinController = statusBarWinController;

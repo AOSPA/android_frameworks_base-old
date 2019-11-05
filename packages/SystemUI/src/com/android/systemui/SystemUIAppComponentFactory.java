@@ -27,6 +27,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.AppComponentFactory;
 
+import com.android.systemui.dagger.ContextComponentHelper;
+
 import javax.inject.Inject;
 
 /**
@@ -92,6 +94,12 @@ public class SystemUIAppComponentFactory extends AppComponentFactory {
     public Activity instantiateActivityCompat(@NonNull ClassLoader cl, @NonNull String className,
             @Nullable Intent intent)
             throws InstantiationException, IllegalAccessException, ClassNotFoundException {
+        if (mComponentHelper == null) {
+            // This shouldn't happen, but is seen on occasion.
+            // Bug filed against framework to take a look: http://b/141008541
+            SystemUIFactory.getInstance().getRootComponent().inject(
+                    SystemUIAppComponentFactory.this);
+        }
         Activity activity = mComponentHelper.resolveActivity(className);
         if (activity != null) {
             return activity;

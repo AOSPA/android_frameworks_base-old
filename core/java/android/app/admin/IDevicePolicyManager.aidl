@@ -72,6 +72,8 @@ interface IDevicePolicyManager {
     void setPasswordMinimumNonLetter(in ComponentName who, int length, boolean parent);
     int getPasswordMinimumNonLetter(in ComponentName who, int userHandle, boolean parent);
 
+    PasswordMetrics getPasswordMinimumMetrics(int userHandle);
+
     void setPasswordHistoryLength(in ComponentName who, int length, boolean parent);
     int getPasswordHistoryLength(in ComponentName who, int userHandle, boolean parent);
 
@@ -255,6 +257,8 @@ interface IDevicePolicyManager {
     void setGlobalSetting(in ComponentName who, in String setting, in String value);
     void setSystemSetting(in ComponentName who, in String setting, in String value);
     void setSecureSetting(in ComponentName who, in String setting, in String value);
+
+    void setLocationEnabled(in ComponentName who, boolean locationEnabled);
 
     boolean setTime(in ComponentName who, long millis);
     boolean setTimeZone(in ComponentName who, String timeZone);

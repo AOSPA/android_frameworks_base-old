@@ -22,6 +22,7 @@
 
 #include <android-base/macros.h>
 #include <android-base/properties.h>
+#include <android/graphics/jni_runtime.h>
 #include <binder/IBinder.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
@@ -32,8 +33,6 @@
 #include <utils/threads.h>
 #include <cutils/properties.h>
 #include <server_configurable_flags/get_flags.h>
-
-#include <SkGraphics.h>
 
 #include "jni.h"
 #include <nativehelper/JNIHelp.h>
@@ -56,24 +55,7 @@ using android::base::GetProperty;
 
 extern int register_android_os_Binder(JNIEnv* env);
 extern int register_android_os_Process(JNIEnv* env);
-extern int register_android_graphics_Bitmap(JNIEnv*);
-extern int register_android_graphics_BitmapFactory(JNIEnv*);
-extern int register_android_graphics_BitmapRegionDecoder(JNIEnv*);
-extern int register_android_graphics_ByteBufferStreamAdaptor(JNIEnv* env);
-extern int register_android_graphics_Camera(JNIEnv* env);
-extern int register_android_graphics_CreateJavaOutputStreamAdaptor(JNIEnv* env);
 extern int register_android_graphics_GraphicBuffer(JNIEnv* env);
-extern int register_android_graphics_Graphics(JNIEnv* env);
-extern int register_android_graphics_ImageDecoder(JNIEnv*);
-extern int register_android_graphics_drawable_AnimatedImageDrawable(JNIEnv*);
-extern int register_android_graphics_Interpolator(JNIEnv* env);
-extern int register_android_graphics_MaskFilter(JNIEnv* env);
-extern int register_android_graphics_Movie(JNIEnv* env);
-extern int register_android_graphics_NinePatch(JNIEnv*);
-extern int register_android_graphics_PathEffect(JNIEnv* env);
-extern int register_android_graphics_Shader(JNIEnv* env);
-extern int register_android_graphics_Typeface(JNIEnv* env);
-extern int register_android_graphics_YuvImage(JNIEnv* env);
 
 extern int register_com_google_android_gles_jni_EGLImpl(JNIEnv* env);
 extern int register_com_google_android_gles_jni_GLImpl(JNIEnv* env);
@@ -113,7 +95,6 @@ extern int register_android_media_AudioProductStrategies(JNIEnv *env);
 extern int register_android_media_AudioVolumeGroups(JNIEnv *env);
 extern int register_android_media_AudioVolumeGroupChangeHandler(JNIEnv *env);
 extern int register_android_media_MicrophoneInfo(JNIEnv *env);
-extern int register_android_media_JetPlayer(JNIEnv *env);
 extern int register_android_media_ToneGenerator(JNIEnv *env);
 extern int register_android_media_midi(JNIEnv *env);
 
@@ -131,46 +112,19 @@ extern int register_android_util_StatsLog(JNIEnv* env);
 extern int register_android_util_StatsLogInternal(JNIEnv* env);
 extern int register_android_util_Log(JNIEnv* env);
 extern int register_android_util_MemoryIntArray(JNIEnv* env);
-extern int register_android_util_PathParser(JNIEnv* env);
 extern int register_android_content_StringBlock(JNIEnv* env);
 extern int register_android_content_XmlBlock(JNIEnv* env);
 extern int register_android_content_res_ApkAssets(JNIEnv* env);
-extern int register_android_graphics_Canvas(JNIEnv* env);
-extern int register_android_graphics_CanvasProperty(JNIEnv* env);
-extern int register_android_graphics_ColorFilter(JNIEnv* env);
-extern int register_android_graphics_ColorSpace(JNIEnv* env);
-extern int register_android_graphics_DrawFilter(JNIEnv* env);
-extern int register_android_graphics_FontFamily(JNIEnv* env);
-extern int register_android_graphics_Matrix(JNIEnv* env);
-extern int register_android_graphics_Paint(JNIEnv* env);
-extern int register_android_graphics_Path(JNIEnv* env);
-extern int register_android_graphics_PathMeasure(JNIEnv* env);
-extern int register_android_graphics_Picture(JNIEnv*);
-extern int register_android_graphics_Region(JNIEnv* env);
-extern int register_android_graphics_SurfaceTexture(JNIEnv* env);
-extern int register_android_graphics_drawable_AnimatedVectorDrawable(JNIEnv* env);
-extern int register_android_graphics_drawable_VectorDrawable(JNIEnv* env);
-extern int register_android_graphics_fonts_Font(JNIEnv* env);
-extern int register_android_graphics_fonts_FontFamily(JNIEnv* env);
-extern int register_android_graphics_pdf_PdfDocument(JNIEnv* env);
-extern int register_android_graphics_pdf_PdfEditor(JNIEnv* env);
-extern int register_android_graphics_pdf_PdfRenderer(JNIEnv* env);
-extern int register_android_graphics_text_MeasuredText(JNIEnv* env);
-extern int register_android_graphics_text_LineBreaker(JNIEnv *env);
+extern int register_android_graphics_BLASTBufferQueue(JNIEnv* env);
 extern int register_android_view_DisplayEventReceiver(JNIEnv* env);
-extern int register_android_view_DisplayListCanvas(JNIEnv* env);
-extern int register_android_view_FrameMetricsObserver(JNIEnv* env);
 extern int register_android_view_InputApplicationHandle(JNIEnv* env);
 extern int register_android_view_InputWindowHandle(JNIEnv* env);
-extern int register_android_view_TextureLayer(JNIEnv* env);
-extern int register_android_view_RenderNode(JNIEnv* env);
 extern int register_android_view_RenderNodeAnimator(JNIEnv* env);
 extern int register_android_view_Surface(JNIEnv* env);
 extern int register_android_view_SurfaceControl(JNIEnv* env);
 extern int register_android_view_SurfaceSession(JNIEnv* env);
 extern int register_android_view_CompositionSamplingListener(JNIEnv* env);
 extern int register_android_view_TextureView(JNIEnv* env);
-extern int register_android_view_ThreadedRenderer(JNIEnv* env);
 extern int register_com_android_internal_view_animation_NativeInterpolatorFactoryHelper(JNIEnv *env);
 extern int register_android_database_CursorWindow(JNIEnv* env);
 extern int register_android_database_SQLiteConnection(JNIEnv* env);
@@ -316,7 +270,7 @@ AndroidRuntime::AndroidRuntime(char* argBlockStart, const size_t argBlockLength)
         mArgBlockStart(argBlockStart),
         mArgBlockLength(argBlockLength)
 {
-    SkGraphics::Init();
+    init_android_graphics();
 
     // Pre-allocate enough space to hold a fair number of options.
     mOptions.setCapacity(20);
@@ -698,26 +652,32 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
     // Read if we are using the profile configuration, do this at the start since the last ART args
     // take precedence.
     property_get("dalvik.vm.profilebootclasspath", propBuf, "");
-    std::string profile_boot_class_path = propBuf;
+    std::string profile_boot_class_path_flag = propBuf;
     // Empty means the property is unset and we should default to the phenotype property.
     // The possible values are {"true", "false", ""}
-    if (profile_boot_class_path.empty()) {
-        profile_boot_class_path = server_configurable_flags::GetServerConfigurableFlag(
+    if (profile_boot_class_path_flag.empty()) {
+        profile_boot_class_path_flag = server_configurable_flags::GetServerConfigurableFlag(
                 RUNTIME_NATIVE_BOOT_NAMESPACE,
                 PROFILE_BOOT_CLASS_PATH,
                 /*default_value=*/ "");
     }
-    if (profile_boot_class_path == "true") {
+    const bool profile_boot_class_path = (profile_boot_class_path_flag == "true");
+    if (profile_boot_class_path) {
+        addOption("-Xcompiler-option");
+        addOption("--count-hotness-in-compiled-code");
         addOption("-Xps-profile-boot-class-path");
         addOption("-Xps-profile-aot-code");
         addOption("-Xjitsaveprofilinginfo");
     }
 
-    std::string use_apex_image =
+    std::string use_apex_image_flag =
         server_configurable_flags::GetServerConfigurableFlag(RUNTIME_NATIVE_BOOT_NAMESPACE,
                                                              ENABLE_APEX_IMAGE,
                                                              /*default_value=*/ "");
-    if (use_apex_image == "true") {
+    // Use the APEX boot image for boot class path profiling to get JIT samples on BCP methods.
+    // Also use the APEX boot image if it's explicitly enabled via configuration flag.
+    const bool use_apex_image = profile_boot_class_path || (use_apex_image_flag == "true");
+    if (use_apex_image) {
         addOption(kApexImageOption);
         ALOGI("Using Apex boot image: '%s'\n", kApexImageOption);
     } else if (parseRuntimeOption("dalvik.vm.boot-image", bootImageBuf, "-Ximage:")) {
@@ -1165,9 +1125,15 @@ void AndroidRuntime::start(const char* className, const Vector<String8>& options
         setenv("ANDROID_ROOT", rootDir, 1);
     }
 
-    const char* runtimeRootDir = getenv("ANDROID_RUNTIME_ROOT");
-    if (runtimeRootDir == NULL) {
-        LOG_FATAL("No runtime directory specified with ANDROID_RUNTIME_ROOT environment variable.");
+    const char* artRootDir = getenv("ANDROID_ART_ROOT");
+    if (artRootDir == NULL) {
+        LOG_FATAL("No ART directory specified with ANDROID_ART_ROOT environment variable.");
+        return;
+    }
+
+    const char* i18nRootDir = getenv("ANDROID_I18N_ROOT");
+    if (i18nRootDir == NULL) {
+        LOG_FATAL("No runtime directory specified with ANDROID_I18N_ROOT environment variable.");
         return;
     }
 
@@ -1448,7 +1414,6 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_util_EventLog),
     REG_JNI(register_android_util_Log),
     REG_JNI(register_android_util_MemoryIntArray),
-    REG_JNI(register_android_util_PathParser),
     REG_JNI(register_android_util_StatsLog),
     REG_JNI(register_android_util_StatsLogInternal),
     REG_JNI(register_android_app_admin_SecurityLog),
@@ -1472,20 +1437,10 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_os_NativeHandle),
     REG_JNI(register_android_os_VintfObject),
     REG_JNI(register_android_os_VintfRuntimeInfo),
-    REG_JNI(register_android_graphics_Canvas),
-    // This needs to be before register_android_graphics_Graphics, or the latter
-    // will not be able to find the jmethodID for ColorSpace.get().
-    REG_JNI(register_android_graphics_ColorSpace),
-    REG_JNI(register_android_graphics_Graphics),
     REG_JNI(register_android_view_DisplayEventReceiver),
-    REG_JNI(register_android_view_RenderNode),
     REG_JNI(register_android_view_RenderNodeAnimator),
-    REG_JNI(register_android_view_DisplayListCanvas),
-    REG_JNI(register_android_view_FrameMetricsObserver),
     REG_JNI(register_android_view_InputApplicationHandle),
     REG_JNI(register_android_view_InputWindowHandle),
-    REG_JNI(register_android_view_TextureLayer),
-    REG_JNI(register_android_view_ThreadedRenderer),
     REG_JNI(register_android_view_Surface),
     REG_JNI(register_android_view_SurfaceControl),
     REG_JNI(register_android_view_SurfaceSession),
@@ -1506,45 +1461,9 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_opengl_jni_GLES31),
     REG_JNI(register_android_opengl_jni_GLES31Ext),
     REG_JNI(register_android_opengl_jni_GLES32),
-
-    REG_JNI(register_android_graphics_Bitmap),
-    REG_JNI(register_android_graphics_BitmapFactory),
-    REG_JNI(register_android_graphics_BitmapRegionDecoder),
-    REG_JNI(register_android_graphics_ByteBufferStreamAdaptor),
-    REG_JNI(register_android_graphics_Camera),
-    REG_JNI(register_android_graphics_CreateJavaOutputStreamAdaptor),
-    REG_JNI(register_android_graphics_CanvasProperty),
-    REG_JNI(register_android_graphics_ColorFilter),
-    REG_JNI(register_android_graphics_DrawFilter),
-    REG_JNI(register_android_graphics_FontFamily),
+    REG_JNI(register_android_graphics_classes),
+    REG_JNI(register_android_graphics_BLASTBufferQueue),
     REG_JNI(register_android_graphics_GraphicBuffer),
-    REG_JNI(register_android_graphics_ImageDecoder),
-    REG_JNI(register_android_graphics_drawable_AnimatedImageDrawable),
-    REG_JNI(register_android_graphics_Interpolator),
-    REG_JNI(register_android_graphics_MaskFilter),
-    REG_JNI(register_android_graphics_Matrix),
-    REG_JNI(register_android_graphics_Movie),
-    REG_JNI(register_android_graphics_NinePatch),
-    REG_JNI(register_android_graphics_Paint),
-    REG_JNI(register_android_graphics_Path),
-    REG_JNI(register_android_graphics_PathMeasure),
-    REG_JNI(register_android_graphics_PathEffect),
-    REG_JNI(register_android_graphics_Picture),
-    REG_JNI(register_android_graphics_Region),
-    REG_JNI(register_android_graphics_Shader),
-    REG_JNI(register_android_graphics_SurfaceTexture),
-    REG_JNI(register_android_graphics_Typeface),
-    REG_JNI(register_android_graphics_YuvImage),
-    REG_JNI(register_android_graphics_drawable_AnimatedVectorDrawable),
-    REG_JNI(register_android_graphics_drawable_VectorDrawable),
-    REG_JNI(register_android_graphics_fonts_Font),
-    REG_JNI(register_android_graphics_fonts_FontFamily),
-    REG_JNI(register_android_graphics_pdf_PdfDocument),
-    REG_JNI(register_android_graphics_pdf_PdfEditor),
-    REG_JNI(register_android_graphics_pdf_PdfRenderer),
-    REG_JNI(register_android_graphics_text_MeasuredText),
-    REG_JNI(register_android_graphics_text_LineBreaker),
-
     REG_JNI(register_android_database_CursorWindow),
     REG_JNI(register_android_database_SQLiteConnection),
     REG_JNI(register_android_database_SQLiteGlobal),
@@ -1585,7 +1504,6 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_media_AudioProductStrategies),
     REG_JNI(register_android_media_AudioVolumeGroups),
     REG_JNI(register_android_media_AudioVolumeGroupChangeHandler),
-    REG_JNI(register_android_media_JetPlayer),
     REG_JNI(register_android_media_MicrophoneInfo),
     REG_JNI(register_android_media_RemoteDisplay),
     REG_JNI(register_android_media_ToneGenerator),

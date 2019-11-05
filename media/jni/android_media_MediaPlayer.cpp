@@ -1436,6 +1436,7 @@ static int register_android_media_MediaPlayer(JNIEnv *env)
 }
 extern int register_android_media_ImageReader(JNIEnv *env);
 extern int register_android_media_ImageWriter(JNIEnv *env);
+extern int register_android_media_JetPlayer(JNIEnv *env);
 extern int register_android_media_Crypto(JNIEnv *env);
 extern int register_android_media_Drm(JNIEnv *env);
 extern int register_android_media_Descrambler(JNIEnv *env);
@@ -1446,7 +1447,6 @@ extern int register_android_media_MediaHTTPConnection(JNIEnv *env);
 extern int register_android_media_MediaMetadataRetriever(JNIEnv *env);
 extern int register_android_media_MediaMuxer(JNIEnv *env);
 extern int register_android_media_MediaRecorder(JNIEnv *env);
-extern int register_android_media_MediaScanner(JNIEnv *env);
 extern int register_android_media_MediaSync(JNIEnv *env);
 extern int register_android_media_ResampleInputStream(JNIEnv *env);
 extern int register_android_media_MediaProfiles(JNIEnv *env);
@@ -1475,6 +1475,11 @@ jint JNI_OnLoad(JavaVM* vm, void* /* reserved */)
         goto bail;
     }
 
+    if (register_android_media_JetPlayer(env) < 0) {
+        ALOGE("ERROR: JetPlayer native registration failed");
+        goto bail;
+    }
+
     if (register_android_media_MediaPlayer(env) < 0) {
         ALOGE("ERROR: MediaPlayer native registration failed\n");
         goto bail;
@@ -1482,11 +1487,6 @@ jint JNI_OnLoad(JavaVM* vm, void* /* reserved */)
 
     if (register_android_media_MediaRecorder(env) < 0) {
         ALOGE("ERROR: MediaRecorder native registration failed\n");
-        goto bail;
-    }
-
-    if (register_android_media_MediaScanner(env) < 0) {
-        ALOGE("ERROR: MediaScanner native registration failed\n");
         goto bail;
     }
 

@@ -16,7 +16,6 @@
 
 package com.android.server.wm;
 
-import static android.view.InsetsState.InternalInsetType;
 import static android.view.InsetsState.TYPE_IME;
 import static android.view.InsetsState.TYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.TYPE_TOP_BAR;
@@ -31,6 +30,7 @@ import android.util.SparseArray;
 import android.view.InsetsSource;
 import android.view.InsetsSourceControl;
 import android.view.InsetsState;
+import android.view.InsetsState.InternalInsetType;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -73,7 +73,7 @@ class InsetsStateController {
      * @return The state stripped of the necessary information.
      */
     InsetsState getInsetsForDispatch(WindowState target) {
-        final InsetsSourceProvider provider = target.getInsetProvider();
+        final InsetsSourceProvider provider = target.getControllableInsetProvider();
         if (provider == null) {
             return mState;
         }
@@ -108,8 +108,25 @@ class InsetsStateController {
      * @return The provider of a specific type.
      */
     InsetsSourceProvider getSourceProvider(@InternalInsetType int type) {
-        return mProviders.computeIfAbsent(type,
-                key -> new InsetsSourceProvider(mState.getSource(key), this, mDisplayContent));
+        if (type == TYPE_IME) {
+            return mProviders.computeIfAbsent(type,
+                    key -> new ImeInsetsSourceProvider(
+                            mState.getSource(key), this, mDisplayContent));
+        } else {
+            return mProviders.computeIfAbsent(type,
+                    key -> new InsetsSourceProvider(mState.getSource(key), this, mDisplayContent));
+        }
+    }
+
+    ImeInsetsSourceProvider getImeSourceProvider() {
+        return (ImeInsetsSourceProvider) getSourceProvider(TYPE_IME);
+    }
+
+    /**
+     * @return The provider of a specific type or null if we don't have it.
+     */
+    @Nullable InsetsSourceProvider peekSourceProvider(@InternalInsetType int type) {
+        return mProviders.get(type);
     }
 
     /**
@@ -124,6 +141,7 @@ class InsetsStateController {
             mLastState.set(mState, true /* copySources */);
             notifyInsetsChanged();
         }
+        getImeSourceProvider().onPostInsetsDispatched();
     }
 
     void onInsetsModified(WindowState windowState, InsetsState state) {
@@ -141,6 +159,10 @@ class InsetsStateController {
         }
     }
 
+    boolean isFakeTarget(@InternalInsetType int type, InsetsControlTarget target) {
+        return mTypeFakeControlTargetMap.get(type) == target;
+    }
+
     void onImeTargetChanged(@Nullable InsetsControlTarget imeTarget) {
         onControlChanged(TYPE_IME, imeTarget);
         notifyPendingInsetsControlChanged();
@@ -155,9 +177,13 @@ class InsetsStateController {
      *                       and visibility.
      */
     void onBarControlTargetChanged(@Nullable InsetsControlTarget topControlling,
-            @Nullable InsetsControlTarget navControlling) {
+            @Nullable InsetsControlTarget fakeTopControlling,
+            @Nullable InsetsControlTarget navControlling,
+            @Nullable InsetsControlTarget fakeNavControlling) {
         onControlChanged(TYPE_TOP_BAR, topControlling);
         onControlChanged(TYPE_NAVIGATION_BAR, navControlling);
+        onControlFakeTargetChanged(TYPE_TOP_BAR, fakeTopControlling);
+        onControlFakeTargetChanged(TYPE_NAVIGATION_BAR, fakeNavControlling);
         notifyPendingInsetsControlChanged();
     }
 
@@ -268,7 +294,7 @@ class InsetsStateController {
         });
     }
 
-    private void notifyInsetsChanged() {
+    void notifyInsetsChanged() {
         mDisplayContent.forAllWindows(mDispatchInsetsChanged, true /* traverseTopToBottom */);
     }
 

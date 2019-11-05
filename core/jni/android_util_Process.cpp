@@ -63,20 +63,20 @@
 
 using namespace android;
 
-static const bool kDebugPolicy = false;
-static const bool kDebugProc = false;
+static constexpr bool kDebugPolicy = false;
+static constexpr bool kDebugProc = false;
 
 // Stack reservation for reading small proc files.  Most callers of
 // readProcFile() are reading files under this threshold, e.g.,
 // /proc/pid/stat.  /proc/pid/time_in_state ends up being about 520
 // bytes, so use 1024 for the stack to provide a bit of slack.
-static const ssize_t kProcReadStackBufferSize = 1024;
+static constexpr ssize_t kProcReadStackBufferSize = 1024;
 
 // The other files we read from proc tend to be a bit larger (e.g.,
 // /proc/stat is about 3kB), so once we exhaust the stack buffer,
 // retry with a relatively large heap-allocated buffer.  We double
 // this size and retry until the whole file fits.
-static const ssize_t kProcReadMinHeapBufferSize = 4096;
+static constexpr ssize_t kProcReadMinHeapBufferSize = 4096;
 
 static int kCgroupFollowForDex2oatOnly = -1;
 
@@ -195,11 +195,25 @@ jint android_os_Process_getGidForName(JNIEnv* env, jobject clazz, jstring name)
     return -1;
 }
 
+static bool verifyGroup(JNIEnv* env, int grp)
+{
+    if (grp < SP_DEFAULT || grp  >= SP_CNT) {
+        signalExceptionForError(env, EINVAL, grp);
+        return false;
+    }
+    return true;
+}
+
 void android_os_Process_setThreadGroup(JNIEnv* env, jobject clazz, int tid, jint grp)
 {
     ALOGV("%s tid=%d grp=%" PRId32, __func__, tid, grp);
+    if (!verifyGroup(env, grp)) {
+        return;
+    }
+
     SchedPolicy sp = (SchedPolicy) grp;
-    int res = set_sched_policy(tid, sp);
+    int res = SetTaskProfiles(tid, {get_sched_policy_name((SchedPolicy)grp)}, true) ? 0 : -1;
+
     if (res != NO_ERROR) {
         signalExceptionForGroupError(env, -res, tid);
     }
@@ -215,14 +229,12 @@ void android_os_Process_setThreadGroup(JNIEnv* env, jobject clazz, int tid, jint
 void android_os_Process_setThreadGroupAndCpuset(JNIEnv* env, jobject clazz, int tid, jint grp)
 {
     ALOGV("%s tid=%d grp=%" PRId32, __func__, tid, grp);
-    SchedPolicy sp = (SchedPolicy) grp;
-    int res = set_sched_policy(tid, sp);
-
-    if (res != NO_ERROR) {
-        signalExceptionForGroupError(env, -res, tid);
+    if (!verifyGroup(env, grp)) {
+        return;
     }
 
-    res = set_cpuset_policy(tid, sp);
+    int res = SetTaskProfiles(tid, {get_cpuset_policy_profile_name((SchedPolicy)grp)}, true) ? 0 : -1;
+
     if (res != NO_ERROR) {
         signalExceptionForGroupError(env, -res, tid);
     }
@@ -235,7 +247,11 @@ void android_os_Process_setProcessGroup(JNIEnv* env, jobject clazz, int pid, jin
     char proc_path[255];
     struct dirent *de;
 
-    if ((grp == SP_FOREGROUND) || (grp > SP_MAX)) {
+    if (!verifyGroup(env, grp)) {
+        return;
+    }
+
+    if (grp == SP_FOREGROUND) {
         signalExceptionForGroupError(env, EINVAL, pid);
         return;
     }
@@ -245,7 +261,6 @@ void android_os_Process_setProcessGroup(JNIEnv* env, jobject clazz, int pid, jin
         grp = SP_FOREGROUND;
         isDefault = true;
     }
-    SchedPolicy sp = (SchedPolicy) grp;
 
     if (kDebugPolicy) {
         char cmdline[32];
@@ -261,7 +276,7 @@ void android_os_Process_setProcessGroup(JNIEnv* env, jobject clazz, int pid, jin
             close(fd);
         }
 
-        if (sp == SP_BACKGROUND) {
+        if (grp == SP_BACKGROUND) {
             ALOGD("setProcessGroup: vvv pid %d (%s)", pid, cmdline);
         } else {
             ALOGD("setProcessGroup: ^^^ pid %d (%s)", pid, cmdline);
@@ -279,6 +294,7 @@ void android_os_Process_setProcessGroup(JNIEnv* env, jobject clazz, int pid, jin
     while ((de = readdir(d))) {
         int t_pid;
         int t_pri;
+        int err;
 
         if (de->d_name[0] == '.')
             continue;
@@ -304,28 +320,16 @@ void android_os_Process_setProcessGroup(JNIEnv* env, jobject clazz, int pid, jin
             if (t_pri >= ANDROID_PRIORITY_BACKGROUND) {
                 // This task wants to stay at background
                 // update its cpuset so it doesn't only run on bg core(s)
-                if (cpusets_enabled()) {
-                    int err = set_cpuset_policy(t_pid, sp);
-                    if (err != NO_ERROR) {
-                        signalExceptionForGroupError(env, -err, t_pid);
-                        break;
-                    }
+                err = SetTaskProfiles(t_pid, {get_cpuset_policy_profile_name((SchedPolicy)grp)}, true) ? 0 : -1;
+                if (err != NO_ERROR) {
+                    signalExceptionForGroupError(env, -err, t_pid);
+                    break;
                 }
                 continue;
             }
         }
-        int err;
 
-        if (cpusets_enabled()) {
-            // set both cpuset and cgroup for general threads
-            err = set_cpuset_policy(t_pid, sp);
-            if (err != NO_ERROR) {
-                signalExceptionForGroupError(env, -err, t_pid);
-                break;
-            }
-        }
-
-        err = set_sched_policy(t_pid, sp);
+        err = SetTaskProfiles(t_pid, {get_cpuset_policy_profile_name((SchedPolicy)grp)}, true) ? 0 : -1;
         if (err != NO_ERROR) {
             signalExceptionForGroupError(env, -err, t_pid);
             break;

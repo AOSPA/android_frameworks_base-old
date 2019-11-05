@@ -75,7 +75,7 @@
     <string name="CLIRDefaultOnNextCallOff" msgid="3092918006077864624">"Standarder for opkalds-id til begrænset. Næste opkald: Ikke begrænset"</string>
     <string name="CLIRDefaultOffNextCallOn" msgid="6179425182856418465">"Standarder for opkalds-id til ikke begrænset. Næste opkald: Begrænset"</string>
     <string name="CLIRDefaultOffNextCallOff" msgid="2567998633124408552">"Standarder for opkalds-id til ikke begrænset. Næste opkald: Ikke begrænset"</string>
-    <string name="serviceNotProvisioned" msgid="8614830180508686666">"Tjenesten leveres ikke!"</string>
+    <string name="serviceNotProvisioned" msgid="8614830180508686666">"Tjenesten provisioneres ikke."</string>
     <string name="CLIRPermanent" msgid="3377371145926835671">"Du kan ikke ændre indstillingen for opkalds-id\'et."</string>
     <string name="RestrictedOnDataTitle" msgid="5221736429761078014">"Ingen mobildatatjeneste"</string>
     <string name="RestrictedOnEmergencyTitle" msgid="6855466023161191166">"Det er ikke muligt at foretage nødopkald"</string>
@@ -226,7 +226,7 @@
     <string name="global_actions" product="default" msgid="2406416831541615258">"Indstillinger for telefon"</string>
     <string name="global_action_lock" msgid="2844945191792119712">"Skærmlås"</string>
     <string name="global_action_power_off" msgid="4471879440839879722">"Sluk"</string>
-    <string name="global_action_emergency" msgid="7112311161137421166">"Nødopkald"</string>
+    <string name="global_action_emergency" msgid="7112311161137421166">"Nødsituation"</string>
     <string name="global_action_bug_report" msgid="7934010578922304799">"Fejlrapport"</string>
     <string name="global_action_logout" msgid="935179188218826050">"Afslut sessionen"</string>
     <string name="global_action_screenshot" msgid="8329831278085426283">"Screenshot"</string>
@@ -344,6 +344,8 @@
     <string name="permdesc_receiveSms" msgid="6424387754228766939">"Tillader, at appen kan modtage og behandle sms-beskeder. Det betyder, at appen kan overvåge eller slette de beskeder, der sendes til din enhed, uden at vise dem til dig."</string>
     <string name="permlab_receiveMms" msgid="1821317344668257098">"modtage tekstbeskeder (mms)"</string>
     <string name="permdesc_receiveMms" msgid="533019437263212260">"Tillader, at appen kan modtage og behandle mms-beskeder. Det betyder, at appen kan overvåge eller slette de beskeder, der sendes til din enhed, uden at vise dem til dig."</string>
+    <string name="permlab_bindCellBroadcastService" msgid="4468585041824555604">"Videresend Cell Broadcast-meddelelser"</string>
+    <string name="permdesc_bindCellBroadcastService" msgid="9073440260695196089">"Tillader, at appen bindes til Cell Broadcast-modulet, så Cell Broadcast-meddelelser kan videresendes, når de modtages. I nogle områder sendes der Cell Broadcast-underretninger for at advare dig om nødsituationer. Ondsindede apps kan forstyrre effektiviteten eller driften af din enhed, når den modtager en Cell Broadcast-meddelelse om en nødsituation."</string>
     <string name="permlab_readCellBroadcasts" msgid="1598328843619646166">"læse Cell Broadcast-meddelelser"</string>
     <string name="permdesc_readCellBroadcasts" msgid="6361972776080458979">"Tillader, at appen læser Cell Broadcast-underretninger, der modtages af din enhed. I nogle områder sendes der Cell Broadcast-underretninger for at advare om nødsituationer. Ondsindede apps kan forstyrre ydelsen eller driften af ​din ​enhed, når der modtages en Cell Broadcast-meddelelse om en nødsituation."</string>
     <string name="permlab_subscribedFeedsRead" msgid="4756609637053353318">"læse feeds, jeg abonnerer på"</string>
@@ -512,10 +514,10 @@
     <string name="permdesc_requestPasswordComplexity" msgid="4730994229754212347">"Giver appen tilladelse til at kende skærmlåsens kompleksitet (høj, medium, lav eller ingen), hvilket kan afsløre oplysninger om skærmlåsens længde og type. Appen kan også foreslå brugerne at opdatere deres skærmlås til et bestemt niveau, men brugerne kan frit ignorere det og gå videre. Bemærk! Skærmlåsen gemmes ikke som almindelig tekst, så appen kender ikke den nøjagtige adgangskode."</string>
     <string name="permlab_useBiometric" msgid="8837753668509919318">"brug biometrisk hardware"</string>
     <string name="permdesc_useBiometric" msgid="8389855232721612926">"Tillader, at appen kan bruge biometrisk hardware til godkendelse"</string>
-    <string name="permlab_manageFingerprint" msgid="5640858826254575638">"administrer fingeraftrykhardware"</string>
+    <string name="permlab_manageFingerprint" msgid="5640858826254575638">"administrer hardware til fingeraftryk"</string>
     <string name="permdesc_manageFingerprint" msgid="178208705828055464">"Tillader, at appen kan køre metoder til at tilføje og slette fingeraftryksskabeloner"</string>
-    <string name="permlab_useFingerprint" msgid="3150478619915124905">"bruge fingeraftrykhardware"</string>
-    <string name="permdesc_useFingerprint" msgid="9165097460730684114">"Tillader, at appen kan bruge fingeraftrykhardware til godkendelse"</string>
+    <string name="permlab_useFingerprint" msgid="3150478619915124905">"bruge hardware til fingeraftryk"</string>
+    <string name="permdesc_useFingerprint" msgid="9165097460730684114">"Tillader, at appen kan bruge hardware til fingeraftryk til godkendelse"</string>
     <string name="permlab_audioWrite" msgid="2661772059799779292">"ændre din musiksamling"</string>
     <string name="permdesc_audioWrite" msgid="8888544708166230494">"Tillader, at appen kan ændre din musiksamling."</string>
     <string name="permlab_videoWrite" msgid="128769316366746446">"ændre din videosamling"</string>
@@ -532,7 +534,7 @@
     <string name="biometric_error_device_not_secured" msgid="6583143098363528349">"Der er ikke angivet pinkode, mønster eller adgangskode"</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"Der blev registreret et delvist fingeraftryk. Prøv igen."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"Fingeraftrykket kunne ikke behandles. Prøv igen."</string>
-    <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"Sensoren til registrering af fingeraftryk er beskidt. Tør den af, og prøv igen."</string>
+    <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"Fingeraftrykslæseren er beskidt. Tør den af, og prøv igen."</string>
     <string name="fingerprint_acquired_too_fast" msgid="6470642383109155969">"Du bevægede fingeren for hurtigt. Prøv igen."</string>
     <string name="fingerprint_acquired_too_slow" msgid="59250885689661653">"Du bevægede fingeren for langsomt. Prøv igen."</string>
   <string-array name="fingerprint_acquired_vendor">
@@ -1361,6 +1363,8 @@
     <string name="adb_active_notification_message" product="tv" msgid="8470296818270110396">"Vælg for at deaktivere USB-fejlretning."</string>
     <string name="test_harness_mode_notification_title" msgid="2216359742631914387">"Tilstanden Testsele er aktiveret"</string>
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Gendan fabriksindstillingerne for at deaktivere tilstanden Testsele."</string>
+    <string name="console_running_notification_title" msgid="4955436518220103382">"Seriekonsollen er aktiveret"</string>
+    <string name="console_running_notification_message" msgid="1331995933976263865">"Effektiviteten er påvirket. Deaktiver via bootloaderen."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"Væske eller snavs i USB-porten"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB-porten deaktiveres automatisk. Tryk for at få flere oplysninger."</string>
     <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"USB-porten kan bruges"</string>
@@ -1890,10 +1894,8 @@
     <string name="default_notification_channel_label" msgid="5929663562028088222">"Uden kategori"</string>
     <string name="importance_from_user" msgid="7318955817386549931">"Du angiver, hvor vigtige disse notifikationer er."</string>
     <string name="importance_from_person" msgid="9160133597262938296">"Dette er vigtigt på grund af de personer, det handler om."</string>
-    <!-- no translation found for user_creation_account_exists (6559477114648176531) -->
-    <skip />
-    <!-- no translation found for user_creation_adding (9089159170398841763) -->
-    <skip />
+    <string name="user_creation_account_exists" msgid="6559477114648176531">"Vil du give <xliff:g id="APP">%1$s</xliff:g> tilladelse til at oprette en ny bruger med <xliff:g id="ACCOUNT">%2$s</xliff:g> (der findes allerede en bruger med denne konto)?"</string>
+    <string name="user_creation_adding" msgid="9089159170398841763">"Vil du give <xliff:g id="APP">%1$s</xliff:g> tilladelse til at oprette en nye bruger med <xliff:g id="ACCOUNT">%2$s</xliff:g>?"</string>
     <string name="language_selection_title" msgid="2680677278159281088">"Tilføj et sprog"</string>
     <string name="country_selection_title" msgid="2954859441620215513">"Områdeindstilling"</string>
     <string name="search_language_hint" msgid="7042102592055108574">"Angiv sprog"</string>
@@ -1971,7 +1973,7 @@
     <string name="notification_reply_button_accessibility" msgid="3621714652387814344">"Svar"</string>
     <string name="etws_primary_default_message_others" msgid="6293148756130398971"></string>
     <string name="mmcc_authentication_reject" msgid="5767701075994754356">"SIM-kort er ikke tilladt for tale"</string>
-    <string name="mmcc_imsi_unknown_in_hlr" msgid="5316658473301462825">"SIM-kort er ikke aktiveret for tale"</string>
+    <string name="mmcc_imsi_unknown_in_hlr" msgid="5316658473301462825">"SIM-kort er ikke provisioneret til tale"</string>
     <string name="mmcc_illegal_ms" msgid="807334478177362062">"SIM-kort er ikke tilladt for tale"</string>
     <string name="mmcc_illegal_me" msgid="1950705155760872972">"Telefon er ikke tilladt for tale"</string>
     <string name="mmcc_authentication_reject_msim_template" msgid="1217031195834766479">"SIM-kortet <xliff:g id="SIMNUMBER">%d</xliff:g> er ikke tilladt"</string>

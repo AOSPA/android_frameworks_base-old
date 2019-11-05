@@ -29,6 +29,7 @@ import android.graphics.Rect;
 import android.hardware.biometrics.IBiometricServiceReceiverInternal;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManager.DisplayListener;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
@@ -46,6 +47,7 @@ import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.view.WindowInsetsController.Appearance;
 
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
@@ -55,6 +57,7 @@ import com.android.internal.statusbar.NotificationVisibility;
 import com.android.internal.statusbar.RegisterStatusBarResult;
 import com.android.internal.statusbar.StatusBarIcon;
 import com.android.internal.util.DumpUtils;
+import com.android.internal.view.AppearanceRegion;
 import com.android.server.LocalServices;
 import com.android.server.notification.NotificationDelegate;
 import com.android.server.policy.GlobalActionsProvider;
@@ -255,8 +258,8 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         }
 
         @Override
-        public void topAppWindowChanged(int displayId, boolean menuVisible) {
-            StatusBarManagerService.this.topAppWindowChanged(displayId, menuVisible);
+        public void topAppWindowChanged(int displayId, boolean isFullscreen, boolean isImmersive) {
+            StatusBarManagerService.this.topAppWindowChanged(displayId, isFullscreen, isImmersive);
         }
 
         @Override
@@ -466,6 +469,36 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
             }
 
         }
+
+        @Override
+        public void onSystemBarAppearanceChanged(int displayId, @Appearance int appearance,
+                AppearanceRegion[] appearanceRegions, boolean navbarColorManagedByIme) {
+            // TODO (b/118118435): save the information to UiState
+            if (mBar != null) {
+                try {
+                    mBar.onSystemBarAppearanceChanged(displayId, appearance, appearanceRegions,
+                            navbarColorManagedByIme);
+                } catch (RemoteException ex) { }
+            }
+        }
+
+        @Override
+        public void showTransient(int displayId, int[] types) {
+            if (mBar != null) {
+                try {
+                    mBar.showTransient(displayId, types);
+                } catch (RemoteException ex) { }
+            }
+        }
+
+        @Override
+        public void abortTransient(int displayId, int[] types) {
+            if (mBar != null) {
+                try {
+                    mBar.abortTransient(displayId, types);
+                } catch (RemoteException ex) { }
+            }
+        }
     };
 
     private final GlobalActionsProvider mGlobalActionsProvider = new GlobalActionsProvider() {
@@ -609,24 +642,24 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
     }
 
     @Override
-    public void showBiometricDialog(Bundle bundle, IBiometricServiceReceiverInternal receiver,
-            int type, boolean requireConfirmation, int userId, String opPackageName) {
+    public void showAuthenticationDialog(Bundle bundle, IBiometricServiceReceiverInternal receiver,
+            int biometricModality, boolean requireConfirmation, int userId, String opPackageName) {
         enforceBiometricDialog();
         if (mBar != null) {
             try {
-                mBar.showBiometricDialog(bundle, receiver, type, requireConfirmation, userId,
-                        opPackageName);
+                mBar.showAuthenticationDialog(bundle, receiver, biometricModality,
+                        requireConfirmation, userId, opPackageName);
             } catch (RemoteException ex) {
             }
         }
     }
 
     @Override
-    public void onBiometricAuthenticated(boolean authenticated, String failureReason) {
+    public void onBiometricAuthenticated() {
         enforceBiometricDialog();
         if (mBar != null) {
             try {
-                mBar.onBiometricAuthenticated(authenticated, failureReason);
+                mBar.onBiometricAuthenticated();
             } catch (RemoteException ex) {
             }
         }
@@ -644,22 +677,22 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
     }
 
     @Override
-    public void onBiometricError(String error) {
+    public void onBiometricError(int modality, int error, int vendorCode) {
         enforceBiometricDialog();
         if (mBar != null) {
             try {
-                mBar.onBiometricError(error);
+                mBar.onBiometricError(modality, error, vendorCode);
             } catch (RemoteException ex) {
             }
         }
     }
 
     @Override
-    public void hideBiometricDialog() {
+    public void hideAuthenticationDialog() {
         enforceBiometricDialog();
         if (mBar != null) {
             try {
-                mBar.hideBiometricDialog();
+                mBar.hideAuthenticationDialog();
             } catch (RemoteException ex) {
             }
         }
@@ -816,23 +849,19 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
     }
 
     /**
-     * Hide or show the on-screen Menu key. Only call this from the window manager, typically in
-     * response to a window with {@link android.view.WindowManager.LayoutParams#needsMenuKey} set
-     * to {@link android.view.WindowManager.LayoutParams#NEEDS_MENU_SET_TRUE}.
+     * Enables System UI to know whether the top app is fullscreen or not, and whether this app is
+     * in immersive mode or not.
      */
-    private void topAppWindowChanged(int displayId, final boolean menuVisible) {
+    private void topAppWindowChanged(int displayId, boolean isFullscreen, boolean isImmersive) {
         enforceStatusBar();
 
-        if (SPEW) {
-            Slog.d(TAG, "display#" + displayId + ": "
-                    + (menuVisible ? "showing" : "hiding") + " MENU key");
-        }
         synchronized(mLock) {
-            getUiState(displayId).setMenuVisible(menuVisible);
+            getUiState(displayId).setFullscreen(isFullscreen);
+            getUiState(displayId).setImmersive(isImmersive);
             mHandler.post(() -> {
                 if (mBar != null) {
                     try {
-                        mBar.topAppWindowChanged(displayId, menuVisible);
+                        mBar.topAppWindowChanged(displayId, isFullscreen, isImmersive);
                     } catch (RemoteException ex) {
                     }
                 }
@@ -941,7 +970,8 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         private int mDockedStackSysUiVisibility = 0;
         private final Rect mFullscreenStackBounds = new Rect();
         private final Rect mDockedStackBounds = new Rect();
-        private boolean mMenuVisible = false;
+        private boolean mFullscreen = false;
+        private boolean mImmersive = false;
         private int mDisabled1 = 0;
         private int mDisabled2 = 0;
         private int mImeWindowVis = 0;
@@ -963,12 +993,12 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
             mDisabled2 = disabled2;
         }
 
-        private boolean isMenuVisible() {
-            return mMenuVisible;
+        private void setFullscreen(boolean isFullscreen) {
+            mFullscreen = isFullscreen;
         }
 
-        private void setMenuVisible(boolean menuVisible) {
-            mMenuVisible = menuVisible;
+        private void setImmersive(boolean immersive) {
+            mImmersive = immersive;
         }
 
         private boolean disableEquals(int disabled1, int disabled2) {
@@ -1055,12 +1085,12 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
             // Make it aware of multi-display if needed.
             final UiState state = mDisplayUiState.get(DEFAULT_DISPLAY);
             return new RegisterStatusBarResult(icons, gatherDisableActionsLocked(mCurrentUserId, 1),
-                    state.mSystemUiVisibility, state.mMenuVisible, state.mImeWindowVis,
+                    state.mSystemUiVisibility, state.mImeWindowVis,
                     state.mImeBackDisposition, state.mShowImeSwitcher,
                     gatherDisableActionsLocked(mCurrentUserId, 2),
                     state.mFullscreenStackSysUiVisibility, state.mDockedStackSysUiVisibility,
                     state.mImeToken, state.mFullscreenStackBounds, state.mDockedStackBounds,
-                    state.mNavbarColorManagedByIme);
+                    state.mNavbarColorManagedByIme, state.mFullscreen, state.mImmersive);
         }
     }
 
@@ -1328,6 +1358,18 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
         long identity = Binder.clearCallingIdentity();
         try {
             mNotificationDelegate.onNotificationBubbleChanged(key, isBubble);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
+    public void grantInlineReplyUriPermission(String key, Uri uri) {
+        enforceStatusBarService();
+        int callingUid = Binder.getCallingUid();
+        long identity = Binder.clearCallingIdentity();
+        try {
+            mNotificationDelegate.grantInlineReplyUriPermission(key, uri, callingUid);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }

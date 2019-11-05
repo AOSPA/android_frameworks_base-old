@@ -458,15 +458,6 @@ static void nativeSetInputWindowInfo(JNIEnv* env, jclass clazz, jlong transactio
     transaction->setInputWindowInfo(ctrl, *handle->getInfo());
 }
 
-static void nativeTransferTouchFocus(JNIEnv* env, jclass clazz, jlong transactionObj,
-        jobject fromTokenObj, jobject toTokenObj) {
-    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-
-    sp<IBinder> fromToken(ibinderForJavaObject(env, fromTokenObj));
-    sp<IBinder> toToken(ibinderForJavaObject(env, toTokenObj));
-    transaction->transferTouchFocus(fromToken, toToken);
-}
-
 static void nativeSyncInputWindows(JNIEnv* env, jclass clazz, jlong transactionObj) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
     transaction->syncInputWindows();
@@ -1253,6 +1244,15 @@ static jlong nativeReadTransactionFromParcel(JNIEnv* env, jclass clazz, jobject 
     return reinterpret_cast<jlong>(transaction.release());
 }
 
+static jlong nativeMirrorSurface(JNIEnv* env, jclass clazz, jlong mirrorOfObj) {
+    sp<SurfaceComposerClient> client = SurfaceComposerClient::getDefault();
+    SurfaceControl *mirrorOf = reinterpret_cast<SurfaceControl*>(mirrorOfObj);
+    sp<SurfaceControl> surface = client->mirrorSurface(mirrorOf);
+
+    surface->incStrong((void *)nativeCreate);
+    return reinterpret_cast<jlong>(surface.get());
+}
+
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod sSurfaceControlMethods[] = {
@@ -1381,8 +1381,6 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeCaptureLayers },
     {"nativeSetInputWindowInfo", "(JJLandroid/view/InputWindowHandle;)V",
             (void*)nativeSetInputWindowInfo },
-    {"nativeTransferTouchFocus", "(JLandroid/os/IBinder;Landroid/os/IBinder;)V",
-            (void*)nativeTransferTouchFocus },
     {"nativeSetMetadata", "(JJILandroid/os/Parcel;)V",
             (void*)nativeSetMetadata },
     {"nativeGetDisplayedContentSamplingAttributes",
@@ -1405,6 +1403,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeReadTransactionFromParcel },
     {"nativeWriteTransactionToParcel", "(JLandroid/os/Parcel;)V",
             (void*)nativeWriteTransactionToParcel },
+    {"nativeMirrorSurface", "(J)J",
+            (void*)nativeMirrorSurface },
 };
 
 int register_android_view_SurfaceControl(JNIEnv* env)

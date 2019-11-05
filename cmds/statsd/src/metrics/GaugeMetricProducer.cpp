@@ -72,8 +72,13 @@ GaugeMetricProducer::GaugeMetricProducer(
         const sp<ConditionWizard>& wizard, const int whatMatcherIndex,
         const sp<EventMatcherWizard>& matcherWizard, const int pullTagId, const int triggerAtomId,
         const int atomId, const int64_t timeBaseNs, const int64_t startTimeNs,
-        const sp<StatsPullerManager>& pullerManager)
-    : MetricProducer(metric.id(), key, timeBaseNs, conditionIndex, wizard),
+        const sp<StatsPullerManager>& pullerManager,
+        const unordered_map<int, shared_ptr<Activation>>& eventActivationMap,
+        const unordered_map<int, vector<shared_ptr<Activation>>>& eventDeactivationMap,
+        const vector<int>& slicedStateAtoms,
+        const unordered_map<int, unordered_map<int, int64_t>>& stateGroupMap)
+    : MetricProducer(metric.id(), key, timeBaseNs, conditionIndex, wizard, eventActivationMap,
+                     eventDeactivationMap, slicedStateAtoms, stateGroupMap),
       mWhatMatcherIndex(whatMatcherIndex),
       mEventMatcherWizard(matcherWizard),
       mPullerManager(pullerManager),
@@ -133,8 +138,11 @@ GaugeMetricProducer::GaugeMetricProducer(
                                          mBucketSizeNs);
     }
 
-    // Adjust start for partial bucket
+    // Adjust start for partial first bucket and then pull if needed
     mCurrentBucketStartTimeNs = startTimeNs;
+    if (mIsActive && mIsPulled && mSamplingType == GaugeMetric::RANDOM_ONE_SAMPLE) {
+        pullAndMatchEventsLocked(mCurrentBucketStartTimeNs);
+    }
 
     VLOG("Gauge metric %lld created. bucket size %lld start_time: %lld sliced %d",
          (long long)metric.id(), (long long)mBucketSizeNs, (long long)mTimeBaseNs,
@@ -295,11 +303,6 @@ void GaugeMetricProducer::onDumpReportLocked(const int64_t dumpTimeNs,
     }
 }
 
-void GaugeMetricProducer::prepareFirstBucketLocked() {
-    if (mIsActive && mIsPulled && mSamplingType == GaugeMetric::RANDOM_ONE_SAMPLE) {
-        pullAndMatchEventsLocked(mCurrentBucketStartTimeNs);
-    }
-}
 
 void GaugeMetricProducer::pullAndMatchEventsLocked(const int64_t timestampNs) {
     bool triggerPuller = false;
@@ -439,6 +442,7 @@ bool GaugeMetricProducer::hitGuardRailLocked(const MetricDimensionKey& newKey) {
         if (newTupleCount > mDimensionHardLimit) {
             ALOGE("GaugeMetric %lld dropping data for dimension key %s",
                 (long long)mMetricId, newKey.toString().c_str());
+            StatsdStats::getInstance().noteHardDimensionLimitReached(mMetricId);
             return true;
         }
     }

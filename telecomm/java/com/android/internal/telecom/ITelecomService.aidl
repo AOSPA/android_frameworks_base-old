@@ -261,6 +261,11 @@ interface ITelecomService {
     **/
     Intent createManageBlockedNumbersIntent();
 
+   /**
+    * @see TelecomServiceImpl#createLaunchEmergencyDialerIntent
+    */
+    Intent createLaunchEmergencyDialerIntent(in String number);
+
     /**
      * @see TelecomServiceImpl#isIncomingCallPermitted
      */
@@ -282,6 +287,11 @@ interface ITelecomService {
     void acceptHandover(in Uri srcAddr, int videoState, in PhoneAccountHandle destAcct);
 
     /**
+     * @see TelecomServiceImpl#setTestEmergencyPhoneAccountPackageNameFilter
+     */
+    void setTestEmergencyPhoneAccountPackageNameFilter(String packageName);
+
+    /**
      * @see TelecomServiceImpl#isInEmergencyCall
      */
     boolean isInEmergencyCall();
@@ -289,7 +299,7 @@ interface ITelecomService {
     /**
      * @see TelecomServiceImpl#handleCallIntent
      */
-    void handleCallIntent(in Intent intent);
+    void handleCallIntent(in Intent intent, in String callingPackageProxy);
 
     void setTestDefaultCallRedirectionApp(String packageName);
 
@@ -300,6 +310,11 @@ interface ITelecomService {
     void addOrRemoveTestCallCompanionApp(String packageName, boolean isAdded);
 
     void setTestAutoModeApp(String packageName);
+
+    /**
+     * @see TelecomServiceImpl#setSystemDialer
+     */
+    void setSystemDialer(in ComponentName testComponentName);
 
     /**
      * @see TelecomServiceImpl#setTestDefaultDialer

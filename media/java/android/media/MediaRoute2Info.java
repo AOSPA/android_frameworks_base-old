@@ -46,6 +46,21 @@ public final class MediaRoute2Info implements Parcelable {
         }
     };
 
+    /**
+     * Playback information indicating the playback volume is fixed, i&#46;e&#46; it cannot be
+     * controlled from this object. An example of fixed playback volume is a remote player,
+     * playing over HDMI where the user prefers to control the volume on the HDMI sink, rather
+     * than attenuate at the source.
+     * @see #getVolumeHandling()
+     */
+    public static final int PLAYBACK_VOLUME_FIXED = 0;
+    /**
+     * Playback information indicating the playback volume is variable and can be controlled
+     * from this object.
+     * @see #getVolumeHandling()
+     */
+    public static final int PLAYBACK_VOLUME_VARIABLE = 1;
+
     @NonNull
     final String mId;
     @Nullable
@@ -58,8 +73,13 @@ public final class MediaRoute2Info implements Parcelable {
     final String mClientPackageName;
     @NonNull
     final List<String> mSupportedCategories;
+    final int mVolume;
+    final int mVolumeMax;
+    final int mVolumeHandling;
     @Nullable
     final Bundle mExtras;
+
+    private final String mUniqueId;
 
     MediaRoute2Info(@NonNull Builder builder) {
         mId = builder.mId;
@@ -68,7 +88,11 @@ public final class MediaRoute2Info implements Parcelable {
         mDescription = builder.mDescription;
         mClientPackageName = builder.mClientPackageName;
         mSupportedCategories = builder.mSupportedCategories;
+        mVolume = builder.mVolume;
+        mVolumeMax = builder.mVolumeMax;
+        mVolumeHandling = builder.mVolumeHandling;
         mExtras = builder.mExtras;
+        mUniqueId = createUniqueId();
     }
 
     MediaRoute2Info(@NonNull Parcel in) {
@@ -78,7 +102,19 @@ public final class MediaRoute2Info implements Parcelable {
         mDescription = in.readString();
         mClientPackageName = in.readString();
         mSupportedCategories = in.createStringArrayList();
+        mVolume = in.readInt();
+        mVolumeMax = in.readInt();
+        mVolumeHandling = in.readInt();
         mExtras = in.readBundle();
+        mUniqueId = createUniqueId();
+    }
+
+    private String createUniqueId() {
+        String uniqueId = null;
+        if (mProviderId != null) {
+            uniqueId = mProviderId + ":" + mId;
+        }
+        return uniqueId;
     }
 
     /**
@@ -111,6 +147,9 @@ public final class MediaRoute2Info implements Parcelable {
                 && Objects.equals(mDescription, other.mDescription)
                 && Objects.equals(mClientPackageName, other.mClientPackageName)
                 && Objects.equals(mSupportedCategories, other.mSupportedCategories)
+                && (mVolume == other.mVolume)
+                && (mVolumeMax == other.mVolumeMax)
+                && (mVolumeHandling == other.mVolumeHandling)
                 //TODO: This will be evaluated as false in most cases. Try not to.
                 && Objects.equals(mExtras, other.mExtras);
     }
@@ -120,13 +159,33 @@ public final class MediaRoute2Info implements Parcelable {
         return Objects.hash(mId, mName, mDescription, mSupportedCategories);
     }
 
+    /**
+     * Gets the id of the route.
+     * Use {@link #getUniqueId()} if you need a unique identifier.
+     *
+     * @see #getUniqueId()
+     */
     @NonNull
     public String getId() {
         return mId;
     }
 
     /**
-     * Gets the provider id of the route.
+     * Gets the unique id of the route. A route obtained from
+     * {@link com.android.server.media.MediaRouterService} always has a unique id.
+     *
+     * @return unique id of the route or null if it has no unique id.
+     */
+    @Nullable
+    public String getUniqueId() {
+        return mUniqueId;
+    }
+
+    /**
+     * Gets the provider id of the route. It is assigned automatically by
+     * {@link com.android.server.media.MediaRouterService}.
+     *
+     * @return provider id of the route or null if it's not set.
      * @hide
      */
     @Nullable
@@ -160,6 +219,29 @@ public final class MediaRoute2Info implements Parcelable {
     @NonNull
     public List<String> getSupportedCategories() {
         return mSupportedCategories;
+    }
+
+    /**
+     * Gets the current volume of the route. This may be invalid if the route is not selected.
+     */
+    public int getVolume() {
+        return mVolume;
+    }
+
+    /**
+     * Gets the maximum volume of the route.
+     */
+    public int getVolumeMax() {
+        return mVolumeMax;
+    }
+
+    /**
+     * Gets information about how volume is handled on the route.
+     *
+     * @return {@link #PLAYBACK_VOLUME_FIXED} or {@link #PLAYBACK_VOLUME_VARIABLE}
+     */
+    public int getVolumeHandling() {
+        return mVolumeHandling;
     }
 
     @Nullable
@@ -199,6 +281,9 @@ public final class MediaRoute2Info implements Parcelable {
         dest.writeString(mDescription);
         dest.writeString(mClientPackageName);
         dest.writeStringList(mSupportedCategories);
+        dest.writeInt(mVolume);
+        dest.writeInt(mVolumeMax);
+        dest.writeInt(mVolumeHandling);
         dest.writeBundle(mExtras);
     }
 
@@ -209,6 +294,9 @@ public final class MediaRoute2Info implements Parcelable {
                 .append("id=").append(getId())
                 .append(", name=").append(getName())
                 .append(", description=").append(getDescription())
+                .append(", volume=").append(getVolume())
+                .append(", volumeMax=").append(getVolumeMax())
+                .append(", volumeHandling=").append(getVolumeHandling())
                 .append(", providerId=").append(getProviderId())
                 .append(" }");
         return result.toString();
@@ -224,6 +312,9 @@ public final class MediaRoute2Info implements Parcelable {
         String mDescription;
         String mClientPackageName;
         List<String> mSupportedCategories;
+        int mVolume;
+        int mVolumeMax;
+        int mVolumeHandling;
         Bundle mExtras;
 
         public Builder(@NonNull String id, @NonNull String name) {
@@ -251,6 +342,9 @@ public final class MediaRoute2Info implements Parcelable {
             mDescription = routeInfo.mDescription;
             setClientPackageName(routeInfo.mClientPackageName);
             setSupportedCategories(routeInfo.mSupportedCategories);
+            setVolume(routeInfo.mVolume);
+            setVolumeMax(routeInfo.mVolumeMax);
+            setVolumeHandling(routeInfo.mVolumeHandling);
             if (routeInfo.mExtras != null) {
                 mExtras = new Bundle(routeInfo.mExtras);
             }
@@ -275,7 +369,7 @@ public final class MediaRoute2Info implements Parcelable {
         @NonNull
         public Builder setProviderId(@NonNull String providerId) {
             if (TextUtils.isEmpty(providerId)) {
-                throw new IllegalArgumentException("id must not be null or empty");
+                throw new IllegalArgumentException("providerId must not be null or empty");
             }
             mProviderId = providerId;
             return this;
@@ -344,6 +438,32 @@ public final class MediaRoute2Info implements Parcelable {
             return this;
         }
 
+        /**
+         * Sets the route's current volume, or 0 if unknown.
+         */
+        @NonNull
+        public Builder setVolume(int volume) {
+            mVolume = volume;
+            return this;
+        }
+
+        /**
+         * Sets the route's maximum volume, or 0 if unknown.
+         */
+        @NonNull
+        public Builder setVolumeMax(int volumeMax) {
+            mVolumeMax = volumeMax;
+            return this;
+        }
+
+        /**
+         * Sets the route's volume handling.
+         */
+        @NonNull
+        public Builder setVolumeHandling(int volumeHandling) {
+            mVolumeHandling = volumeHandling;
+            return this;
+        }
         /**
          * Sets a bundle of extras for the route.
          */

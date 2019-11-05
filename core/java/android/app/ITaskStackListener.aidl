@@ -158,7 +158,7 @@ oneway interface ITaskStackListener {
      * @param activityToken Token of the size compatibility mode activity. It will be null when
      *                      switching to a activity that is not in size compatibility mode or the
      *                      configuration of the activity.
-     * @see com.android.server.wm.AppWindowToken#inSizeCompatMode
+     * @see com.android.server.wm.ActivityRecord#inSizeCompatMode
      */
     void onSizeCompatModeActivityChanged(int displayId, in IBinder activityToken);
 
@@ -197,4 +197,11 @@ oneway interface ITaskStackListener {
      * Called when any additions or deletions to the recent tasks list have been made.
      */
     void onRecentTaskListUpdated();
+
+    /**
+     * Called when Recent Tasks list is frozen or unfrozen.
+     *
+     * @param frozen if true, Recents Tasks list is currently frozen, false otherwise
+     */
+    void onRecentTaskListFrozenChanged(boolean frozen);
 }

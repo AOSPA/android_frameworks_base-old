@@ -109,13 +109,14 @@ import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.FakeShadowView;
 import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
+import com.android.systemui.statusbar.notification.NotificationSectionsFeatureManager;
 import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.notification.ShadeViewRefactor;
 import com.android.systemui.statusbar.notification.ShadeViewRefactor.RefactorComponent;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
-import com.android.systemui.statusbar.notification.collection.NotificationData;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
+import com.android.systemui.statusbar.notification.people.PeopleHubSectionFooterViewAdapter;
 import com.android.systemui.statusbar.notification.row.ActivatableNotificationView;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.ExpandableView;
@@ -473,8 +474,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     private int mHeadsUpInset;
     private HeadsUpAppearanceController mHeadsUpAppearanceController;
     private NotificationIconAreaController mIconAreaController;
-    private final NotificationLockscreenUserManager mLockscreenUserManager =
-            Dependency.get(NotificationLockscreenUserManager.class);
+    private final NotificationLockscreenUserManager mLockscreenUserManager;
     private final Rect mTmpRect = new Rect();
     private final NotificationEntryManager mEntryManager =
             Dependency.get(NotificationEntryManager.class);
@@ -497,8 +497,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     private NotificationPanelView mNotificationPanel;
     private final ShadeController mShadeController = Dependency.get(ShadeController.class);
 
-    private final NotificationGutsManager
-            mNotificationGutsManager = Dependency.get(NotificationGutsManager.class);
+    private final NotificationGutsManager mNotificationGutsManager;
     private final NotificationSectionsManager mSectionsManager;
     private boolean mAnimateBottomOnLayout;
     private float mLastSentAppear;
@@ -517,7 +516,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             StatusBarStateController statusBarStateController,
             HeadsUpManagerPhone headsUpManager,
             KeyguardBypassController keyguardBypassController,
-            FalsingManager falsingManager) {
+            FalsingManager falsingManager,
+            NotificationLockscreenUserManager notificationLockscreenUserManager,
+            NotificationGutsManager notificationGutsManager,
+            NotificationSectionsFeatureManager sectionsFeatureManager,
+            PeopleHubSectionFooterViewAdapter peopleHubViewAdapter) {
         super(context, attrs, 0, 0);
         Resources res = getResources();
 
@@ -525,19 +528,22 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
 
         mRoundnessManager = notificationRoundnessManager;
 
+        mLockscreenUserManager = notificationLockscreenUserManager;
+        mNotificationGutsManager = notificationGutsManager;
         mHeadsUpManager = headsUpManager;
         mHeadsUpManager.addListener(mRoundnessManager);
         mHeadsUpManager.setAnimationStateHandler(this::setHeadsUpGoingAwayAnimationsAllowed);
         mKeyguardBypassController = keyguardBypassController;
         mFalsingManager = falsingManager;
 
-        int[] buckets = NotificationData.getNotificationBuckets(context);
+        int[] buckets = sectionsFeatureManager.getNotificationBuckets();
         mSectionsManager =
                 new NotificationSectionsManager(
                         this,
                         activityStarter,
                         statusBarStateController,
                         configurationController,
+                        peopleHubViewAdapter,
                         buckets.length);
         mSectionsManager.initialize(LayoutInflater.from(context));
         mSectionsManager.setOnClearGentleNotifsClickListener(v -> {
@@ -599,7 +605,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         mEntryManager.addNotificationEntryListener(new NotificationEntryListener() {
             @Override
             public void onPostEntryUpdated(NotificationEntry entry) {
-                if (!entry.notification.isClearable()) {
+                if (!entry.getSbn().isClearable()) {
                     // The user may have performed a dismiss action on the notification, since it's
                     // not clearable we should snap it back.
                     snapViewIfNeeded(entry);
@@ -1624,7 +1630,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
                     if (!mIsExpanded && row.isHeadsUp() && row.isPinned()
                             && mHeadsUpManager.getTopEntry().getRow() != row
                             && mGroupManager.getGroupSummary(
-                                mHeadsUpManager.getTopEntry().notification)
+                            mHeadsUpManager.getTopEntry().getSbn())
                             != entry) {
                         continue;
                     }
@@ -5332,7 +5338,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         requestChildrenUpdate();
         onUpdateRowStates();
 
-        mEntryManager.updateNotifications();
+        mEntryManager.updateNotifications("StatusBar state changed");
         updateVisibility();
     }
 
@@ -5522,12 +5528,12 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
                         // TODO: This is a listener method; we shouldn't be calling it. Can we just
                         // call performRemoveNotification as below?
                         mEntryManager.removeNotification(
-                                rowToRemove.getEntry().key,
+                                rowToRemove.getEntry().getKey(),
                                 null /* ranking */,
                                 NotificationListenerService.REASON_CANCEL_ALL);
                     } else {
                         mEntryManager.performRemoveNotification(
-                                rowToRemove.getEntry().notification,
+                                rowToRemove.getEntry().getSbn(),
                                 NotificationListenerService.REASON_CANCEL_ALL);
                     }
                 } else {
@@ -6491,12 +6497,12 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
 
         @Override
         public void onGroupCreatedFromChildren(NotificationGroupManager.NotificationGroup group) {
-            mStatusBar.requestNotificationUpdate();
+            mStatusBar.requestNotificationUpdate("onGroupCreatedFromChildren");
         }
 
         @Override
         public void onGroupsChanged() {
-            mStatusBar.requestNotificationUpdate();
+            mStatusBar.requestNotificationUpdate("onGroupsChanged");
         }
     };
 

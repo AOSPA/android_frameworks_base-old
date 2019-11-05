@@ -76,7 +76,7 @@ class SettingsProtoDumpUtil {
                 ConfigSettingsProto.RUNTIME_NATIVE_SETTINGS);
         namespaceToFieldMap.put(DeviceConfig.NAMESPACE_RUNTIME_NATIVE_BOOT,
                 ConfigSettingsProto.RUNTIME_NATIVE_BOOT_SETTINGS);
-        namespaceToFieldMap.put(DeviceConfig.NAMESPACE_STORAGE,
+        namespaceToFieldMap.put(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
                 ConfigSettingsProto.STORAGE_SETTINGS);
         namespaceToFieldMap.put(DeviceConfig.NAMESPACE_SYSTEMUI,
                 ConfigSettingsProto.SYSTEMUI_SETTINGS);
@@ -1350,6 +1350,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.CHARGING_STARTED_SOUND,
                 GlobalSettingsProto.Sounds.CHARGING_STARTED);
+        dumpSetting(s, p,
+                Settings.Global.WIRELESS_CHARGING_STARTED_SOUND,
+                GlobalSettingsProto.Sounds.WIRELESS_CHARGING_STARTED);
         p.end(soundsToken);
 
         final long soundTriggerToken = p.start(GlobalSettingsProto.SOUND_TRIGGER);
@@ -2050,6 +2053,12 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.SKIP_TOUCH_COUNT,
                 SecureSettingsProto.Gesture.SKIP_TOUCH_COUNT);
+        dumpSetting(s, p,
+                Settings.Secure.AWARE_TAP_PAUSE_GESTURE_COUNT,
+                SecureSettingsProto.Gesture.AWARE_TAP_PAUSE_GESTURE_COUNT);
+        dumpSetting(s, p,
+                Settings.Secure.AWARE_TAP_PAUSE_TOUCH_COUNT,
+                SecureSettingsProto.Gesture.AWARE_TAP_PAUSE_TOUCH_COUNT);
         p.end(gestureToken);
 
         dumpSetting(s, p,
@@ -2245,9 +2254,6 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.PACKAGE_VERIFIER_USER_CONSENT,
                 SecureSettingsProto.PackageVerifier.USER_CONSENT);
-        dumpSetting(s, p,
-                Settings.Secure.PACKAGE_VERIFIER_STATE,
-                SecureSettingsProto.PackageVerifier.STATE);
         p.end(packageVerifierToken);
 
         final long parentalControlToken = p.start(SecureSettingsProto.PARENTAL_CONTROL);

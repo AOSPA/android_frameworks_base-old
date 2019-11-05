@@ -37,6 +37,18 @@
         </activity>
 
         <activity
+            android:label="CPU Intensive Benchmark Test"
+            android:name=".CPUIntensiveBenchmarkActivity"
+            android:exported="true" >
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
             android:label="Empty Activity Layout Test"
             android:name=".EmptyActivity"
             android:exported="true" >
@@ -84,6 +96,14 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:label="Non-interactive SystemServer Benchmark"
+            android:name=".NonInteractiveSystemServerBenchmarkActivity"
+            android:exported="true" />
+
     </application>
+
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
 </manifest>

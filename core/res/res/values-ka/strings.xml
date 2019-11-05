@@ -344,6 +344,8 @@
     <string name="permdesc_receiveSms" msgid="6424387754228766939">"აპს შეეძლება SMS შეტყობინებების მიღება და დამუშავება. ეს ნიშნავს, რომ აპს შეეძლება თქვენ მოწყობილობაზე გამოგზავნილი შეტყობინებების მონიტორინგი და მათი წაშლა თქვენთვის ჩვენების გარეშე."</string>
     <string name="permlab_receiveMms" msgid="1821317344668257098">"ტექსტური შეტყობინებების (MMS) მიღება"</string>
     <string name="permdesc_receiveMms" msgid="533019437263212260">"აპს შეეძლება MMS შეტყობინებების მიღება და დამუშავება. ეს ნიშნავს, რომ აპს შეეძლება შეტყობინებების მონიტორინგი და მათი წაშლა თქვენთვის ჩვენების გარეშე."</string>
+    <string name="permlab_bindCellBroadcastService" msgid="4468585041824555604">"Cell broadcast შეტყობინებების გადამისამართება"</string>
+    <string name="permdesc_bindCellBroadcastService" msgid="9073440260695196089">"საშუალებას აძლევს აპს, დაუკავშირდეს cell broadcast მოდულს იმისთვის, რომ გადაამისამართოს cell broadcast შეტყობინებები მათი მიღებისთანავე. Cell broadcast გაფრთხილებები მიეწოდება ზოგიერთ მდებარეობაზე საგანგებო სიტუაციების შესახებ გაფრთხილების მიზნით. საგანგებო cell broadcast-ის მიღების დროს, მავნე აპებმა შეიძლება ხელი შეუშალონ თქვენი მოწყობილობის ფუნქციონირებას ან ოპერაციებს."</string>
     <string name="permlab_readCellBroadcasts" msgid="1598328843619646166">"მასიური დაგზავნის შეტყობინებების წაკითხვა"</string>
     <string name="permdesc_readCellBroadcasts" msgid="6361972776080458979">"აპს შეეძლება, წაიკითხოს თქვენს მოწყობილობაზე გამოგზავნილი ქსელის სამაუწყებლო შეტყობინებები. სამაუწყებლო გაფრთხილებები მოგეწოდებათ ზოგიერთ ადგილზე ექსტრემალური სიტუაციების შესახებ გასაფრთხილებლად. ქსელის გადაუდებელი შეტყონიბენის მიღების დროს მავნე აპებმა შეიძლება ხელი შეუშალონ თქვენი მოწყობილობის ფუნქციონირებას ან ოპერაციებს."</string>
     <string name="permlab_subscribedFeedsRead" msgid="4756609637053353318">"გამოწერილი არხების წაკითხვა"</string>
@@ -513,9 +515,9 @@
     <string name="permlab_useBiometric" msgid="8837753668509919318">"ბიომეტრიული აპარატის გამოყენება"</string>
     <string name="permdesc_useBiometric" msgid="8389855232721612926">"საშუალებას აძლევს აპს, ავტორიზაციისთვის გამოიყენოს ბიომეტრიული აპარატი"</string>
     <string name="permlab_manageFingerprint" msgid="5640858826254575638">"თითის ანაბეჭდის აპარატის მართვა"</string>
-    <string name="permdesc_manageFingerprint" msgid="178208705828055464">"საშუალებას აძლევს აპლიკაციას დაამატოს ან ამოშალოს გამოსაყენებელი თითის ანაბეჭდის ნიმუშები,"</string>
+    <string name="permdesc_manageFingerprint" msgid="178208705828055464">"საშუალებას აძლევს აპლიკაციას დაამატოს ან ამოშალოს გამოსაყენებელი თითის ანაბეჭდის ნიმუშები."</string>
     <string name="permlab_useFingerprint" msgid="3150478619915124905">"თითის ანაბეჭდის აპარატის გამოყენება"</string>
-    <string name="permdesc_useFingerprint" msgid="9165097460730684114">"საშუალებას აძლევს აპლიკაციას გამოიყენოს ავტენთიფიკაციისათვის თითის ანაბეჭდის აპარატი"</string>
+    <string name="permdesc_useFingerprint" msgid="9165097460730684114">"საშუალებას აძლევს აპლიკაციას ავტორიზაციისთვის გამოიყენოს თითის ანაბეჭდის აპარატი"</string>
     <string name="permlab_audioWrite" msgid="2661772059799779292">"თქვენი მუსიკალური კოლექციის შეცვლა"</string>
     <string name="permdesc_audioWrite" msgid="8888544708166230494">"აპი შეძლებს თქვენი მუსიკალური კოლექციის შეცვლას."</string>
     <string name="permlab_videoWrite" msgid="128769316366746446">"თქვენი ვიდეოკოლექციის შეცვლა"</string>
@@ -531,7 +533,7 @@
     <string name="biometric_error_canceled" msgid="349665227864885880">"ავტორიზაცია გაუქმდა"</string>
     <string name="biometric_error_device_not_secured" msgid="6583143098363528349">"PIN-კოდი, ნიმუში ან პაროლი დაყენებული არ არის"</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"აღმოჩენილია თითის ნაწილობრივი ანაბეჭდი. გთხოვთ, სცადოთ ხელახლა."</string>
-    <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"თითის ანაბეჭდი ვერ მუშავდება. გთხოვთ, სცადოთ ხელახლა."</string>
+    <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"თითის ანაბეჭდის დამუშავება ვერ მოხერხდა. გთხოვთ, ცადოთ ხელახლა."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"თითის ანაბეჭდის სენსორი დაბინძურებულია. გთხოვთ, გაასუფთაოთ და სცადოთ ხელახლა."</string>
     <string name="fingerprint_acquired_too_fast" msgid="6470642383109155969">"თითის აღება მეტისმეტად სწრაფად მოხდა. გთხოვთ, სცადოთ ხელახლა."</string>
     <string name="fingerprint_acquired_too_slow" msgid="59250885689661653">"თითის აღება მეტისმეტად ნელა მოხდა. გთხოვთ, სცადოთ ხელახლა."</string>
@@ -1361,6 +1363,8 @@
     <string name="adb_active_notification_message" product="tv" msgid="8470296818270110396">"მონიშნეთ რათა შეწყვიტოთ USB-ის გამართვა"</string>
     <string name="test_harness_mode_notification_title" msgid="2216359742631914387">"რეჟიმი „გარემო ტესტირებისთვის“ ჩართულია"</string>
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"დააბრუნეთ ქარხნული პარამეტრები „გარემო ტესტირებისთვის“ რეჟიმის გასათიშად."</string>
+    <string name="console_running_notification_title" msgid="4955436518220103382">"სერიული კონსოლი ჩართულია"</string>
+    <string name="console_running_notification_message" msgid="1331995933976263865">"მუშაობა შეფერხებულია. გასათიშად მონიშნეთ ჩამტვირთავი."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"USB პორტში აღმოჩენილია სითხე ან ჭუჭყი"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB პორტი ავტომატურად გათიშულია. შეეხეთ დამატებითი ინფორმაციისთვის."</string>
     <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"თანხმობა USB პორტის გამოყენებაზე"</string>
@@ -1890,10 +1894,8 @@
     <string name="default_notification_channel_label" msgid="5929663562028088222">"კატეგორიის გარეშე"</string>
     <string name="importance_from_user" msgid="7318955817386549931">"ამ შეტყობინებების მნიშვნელობის დონე განისაზღვრა თქვენ მიერ."</string>
     <string name="importance_from_person" msgid="9160133597262938296">"მნიშვნელოვანია ჩართული მომხმარებლების გამო."</string>
-    <!-- no translation found for user_creation_account_exists (6559477114648176531) -->
-    <skip />
-    <!-- no translation found for user_creation_adding (9089159170398841763) -->
-    <skip />
+    <string name="user_creation_account_exists" msgid="6559477114648176531">"მიეცეს უფლება <xliff:g id="APP">%1$s</xliff:g>-ს <xliff:g id="ACCOUNT">%2$s</xliff:g>-ის მეშვეობით ახალი მომხმარებელი შექმნას (ამ ანგარიშის მქონე მომხმარებელი უკვე არსებობს)?"</string>
+    <string name="user_creation_adding" msgid="9089159170398841763">"მიეცეს უფლება <xliff:g id="APP">%1$s</xliff:g>-ს <xliff:g id="ACCOUNT">%2$s</xliff:g>-ის მეშვეობით ახალი მომხმარებელი შექმნას?"</string>
     <string name="language_selection_title" msgid="2680677278159281088">"ენის დამატება"</string>
     <string name="country_selection_title" msgid="2954859441620215513">"რეგიონის პარამეტრები"</string>
     <string name="search_language_hint" msgid="7042102592055108574">"აკრიფეთ ენის სახელი"</string>

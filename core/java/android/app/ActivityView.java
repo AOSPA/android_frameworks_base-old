@@ -22,6 +22,7 @@ import static android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLI
 import static android.view.Display.INVALID_DISPLAY;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.TestApi;
 import android.app.ActivityManager.StackInfo;
 import android.content.ComponentName;
@@ -29,6 +30,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Insets;
 import android.graphics.Matrix;
+import android.graphics.Rect;
 import android.graphics.Region;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
@@ -100,6 +102,8 @@ public class ActivityView extends ViewGroup {
     private final boolean mSingleTaskInstance;
 
     private Insets mForwardedInsets;
+
+    private float mCornerRadius;
 
     public ActivityView(Context context) {
         this(context, null /* attrs */);
@@ -204,6 +208,45 @@ public class ActivityView extends ViewGroup {
     }
 
     /**
+     * @hide
+     */
+    public float getCornerRadius() {
+        return mSurfaceView.getCornerRadius();
+    }
+
+    /**
+     * Control whether the surface is clipped to the same bounds as the View. If true, then
+     * the bounds set by {@link #setSurfaceClipBounds(Rect)} are applied to the surface as
+     * window-crop.
+     *
+     * @param clippingEnabled whether to enable surface clipping
+     * @hide
+     */
+    public void setSurfaceClippingEnabled(boolean clippingEnabled) {
+        mSurfaceView.setEnableSurfaceClipping(clippingEnabled);
+    }
+
+    /**
+     * Sets an area on the contained surface to which it will be clipped
+     * when it is drawn. Setting the value to null will remove the clip bounds
+     * and the surface will draw normally, using its full bounds.
+     *
+     * @param clipBounds The rectangular area, in the local coordinates of
+     * this view, to which future drawing operations will be clipped.
+     * @hide
+     */
+    public void setSurfaceClipBounds(Rect clipBounds) {
+        mSurfaceView.setClipBounds(clipBounds);
+    }
+
+    /**
+     * @hide
+     */
+    public boolean getSurfaceClipBounds(Rect outRect) {
+        return mSurfaceView.getClipBounds(outRect);
+    }
+
+    /**
      * Launch a new activity into this container.
      * <p>Activity resolved by the provided {@link Intent} must have
      * {@link android.R.attr#resizeableActivity} attribute set to {@code true} in order to be
@@ -282,16 +325,17 @@ public class ActivityView extends ViewGroup {
      * this method can be called.
      *
      * @param pendingIntent Intent used to launch an activity.
+     * @param fillInIntent Additional Intent data, see {@link Intent#fillIn Intent.fillIn()}.
      * @param options options for the activity
      *
      * @see StateCallback
      * @see #startActivity(Intent)
      */
-    public void startActivity(@NonNull PendingIntent pendingIntent,
+    public void startActivity(@NonNull PendingIntent pendingIntent, @Nullable Intent fillInIntent,
             @NonNull ActivityOptions options) {
         options.setLaunchDisplayId(mVirtualDisplay.getDisplay().getDisplayId());
         try {
-            pendingIntent.send(null /* context */, 0 /* code */, null /* intent */,
+            pendingIntent.send(getContext(), 0 /* code */, fillInIntent,
                     null /* onFinished */, null /* handler */, null /* requiredPermission */,
                     options.toBundle());
         } catch (PendingIntent.CanceledException e) {

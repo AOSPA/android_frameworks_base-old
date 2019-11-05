@@ -1551,7 +1551,8 @@ public class DevicePolicyManager {
      * scopes will be sent in an {@code ArrayList<String>} extra identified by the
      * {@link #EXTRA_DELEGATION_SCOPES} key.
      *
-     * <p class=”note”> Note: This is a protected intent that can only be sent by the system.</p>
+     * <p class="note"><b>Note:</b> This is a protected intent that can only be sent by the
+     * system.</p>
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_APPLICATION_DELEGATION_SCOPES_CHANGED =
@@ -2078,7 +2079,8 @@ public class DevicePolicyManager {
         ID_TYPE_BASE_INFO,
         ID_TYPE_SERIAL,
         ID_TYPE_IMEI,
-        ID_TYPE_MEID
+        ID_TYPE_MEID,
+        ID_TYPE_INDIVIDUAL_ATTESTATION
     })
     public @interface AttestationIdType {}
 
@@ -2111,6 +2113,14 @@ public class DevicePolicyManager {
      * @see #generateKeyPair
      */
     public static final int ID_TYPE_MEID = 8;
+
+    /**
+     * Specifies that the device should attest using an individual attestation certificate.
+     * For use with {@link #generateKeyPair}.
+     *
+     * @see #generateKeyPair
+     */
+    public static final int ID_TYPE_INDIVIDUAL_ATTESTATION = 16;
 
     /**
      * Service-specific error code for {@link #generateKeyPair}:
@@ -2318,6 +2328,12 @@ public class DevicePolicyManager {
      */
     public static final String ACTION_ADMIN_POLICY_COMPLIANCE =
             "android.app.action.ADMIN_POLICY_COMPLIANCE";
+
+    /**
+     * Maximum supported password length. Kind-of arbitrary.
+     * @hide
+     */
+    public static final int MAX_PASSWORD_LENGTH = 16;
 
     /**
      * Return true if the given administrator component is currently active (enabled) in the system.
@@ -2609,6 +2625,7 @@ public class DevicePolicyManager {
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param quality The new desired quality. One of {@link #PASSWORD_QUALITY_UNSPECIFIED},
+     *            {@link #PASSWORD_QUALITY_BIOMETRIC_WEAK},
      *            {@link #PASSWORD_QUALITY_SOMETHING}, {@link #PASSWORD_QUALITY_NUMERIC},
      *            {@link #PASSWORD_QUALITY_NUMERIC_COMPLEX}, {@link #PASSWORD_QUALITY_ALPHABETIC},
      *            {@link #PASSWORD_QUALITY_ALPHANUMERIC} or {@link #PASSWORD_QUALITY_COMPLEX}.
@@ -2667,7 +2684,10 @@ public class DevicePolicyManager {
      * only imposed if the administrator has also requested either {@link #PASSWORD_QUALITY_NUMERIC}
      * , {@link #PASSWORD_QUALITY_NUMERIC_COMPLEX}, {@link #PASSWORD_QUALITY_ALPHABETIC},
      * {@link #PASSWORD_QUALITY_ALPHANUMERIC}, or {@link #PASSWORD_QUALITY_COMPLEX} with
-     * {@link #setPasswordQuality}.
+     * {@link #setPasswordQuality}. If an app targeting SDK level
+     * {@link android.os.Build.VERSION_CODES#R} and above enforces this constraint without settings
+     * password quality to one of these values first, this method will throw
+     * {@link IllegalStateException}.
      * <p>
      * On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
      * password is always treated as empty.
@@ -2682,9 +2702,12 @@ public class DevicePolicyManager {
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param length The new desired minimum password length. A value of 0 means there is no
-     *            restriction.
+     *     restriction.
      * @throws SecurityException if {@code admin} is not an active administrator or {@code admin}
-     *             does not use {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD}
+     *     does not use {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD}
+     * @throws IllegalStateException if the calling app is targeting SDK level
+     *     {@link android.os.Build.VERSION_CODES#R} and above and didn't set a sufficient password
+     *     quality requirement prior to calling this method.
      */
     public void setPasswordMinimumLength(@NonNull ComponentName admin, int length) {
         if (mService != null) {
@@ -2736,7 +2759,10 @@ public class DevicePolicyManager {
      * place immediately. To prompt the user for a new password, use
      * {@link #ACTION_SET_NEW_PASSWORD} or {@link #ACTION_SET_NEW_PARENT_PROFILE_PASSWORD} after
      * setting this value. This constraint is only imposed if the administrator has also requested
-     * {@link #PASSWORD_QUALITY_COMPLEX} with {@link #setPasswordQuality}. The default value is 0.
+     * {@link #PASSWORD_QUALITY_COMPLEX} with {@link #setPasswordQuality}. If an app targeting
+     * SDK level {@link android.os.Build.VERSION_CODES#R} and above enforces this constraint without
+     * settings password quality to {@link #PASSWORD_QUALITY_COMPLEX} first, this method will throw
+     * {@link IllegalStateException}. The default value is 0.
      * <p>
      * On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
      * password is always treated as empty.
@@ -2754,6 +2780,9 @@ public class DevicePolicyManager {
      *            A value of 0 means there is no restriction.
      * @throws SecurityException if {@code admin} is not an active administrator or {@code admin}
      *             does not use {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD}
+     * @throws IllegalStateException if the calling app is targeting SDK level
+     *     {@link android.os.Build.VERSION_CODES#R} and above and didn't set a sufficient password
+     *     quality requirement prior to calling this method.
      */
     public void setPasswordMinimumUpperCase(@NonNull ComponentName admin, int length) {
         if (mService != null) {
@@ -2812,7 +2841,10 @@ public class DevicePolicyManager {
      * place immediately. To prompt the user for a new password, use
      * {@link #ACTION_SET_NEW_PASSWORD} or {@link #ACTION_SET_NEW_PARENT_PROFILE_PASSWORD} after
      * setting this value. This constraint is only imposed if the administrator has also requested
-     * {@link #PASSWORD_QUALITY_COMPLEX} with {@link #setPasswordQuality}. The default value is 0.
+     * {@link #PASSWORD_QUALITY_COMPLEX} with {@link #setPasswordQuality}. If an app targeting
+     * SDK level {@link android.os.Build.VERSION_CODES#R} and above enforces this constraint without
+     * settings password quality to {@link #PASSWORD_QUALITY_COMPLEX} first, this method will throw
+     * {@link IllegalStateException}. The default value is 0.
      * <p>
      * On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
      * password is always treated as empty.
@@ -2830,6 +2862,9 @@ public class DevicePolicyManager {
      *            A value of 0 means there is no restriction.
      * @throws SecurityException if {@code admin} is not an active administrator or {@code admin}
      *             does not use {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD}
+     * @throws IllegalStateException if the calling app is targeting SDK level
+     *     {@link android.os.Build.VERSION_CODES#R} and above and didn't set a sufficient password
+     *     quality requirement prior to calling this method.
      */
     public void setPasswordMinimumLowerCase(@NonNull ComponentName admin, int length) {
         if (mService != null) {
@@ -2888,7 +2923,10 @@ public class DevicePolicyManager {
      * immediately. To prompt the user for a new password, use {@link #ACTION_SET_NEW_PASSWORD} or
      * {@link #ACTION_SET_NEW_PARENT_PROFILE_PASSWORD} after setting this value. This constraint is
      * only imposed if the administrator has also requested {@link #PASSWORD_QUALITY_COMPLEX} with
-     * {@link #setPasswordQuality}. The default value is 1.
+     * {@link #setPasswordQuality}. If an app targeting SDK level
+     * {@link android.os.Build.VERSION_CODES#R} and above enforces this constraint without settings
+     * password quality to {@link #PASSWORD_QUALITY_COMPLEX} first, this method will throw
+     * {@link IllegalStateException}. The default value is 1.
      * <p>
      * On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
      * password is always treated as empty.
@@ -2906,6 +2944,9 @@ public class DevicePolicyManager {
      *            0 means there is no restriction.
      * @throws SecurityException if {@code admin} is not an active administrator or {@code admin}
      *             does not use {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD}
+     * @throws IllegalStateException if the calling app is targeting SDK level
+     *     {@link android.os.Build.VERSION_CODES#R} and above and didn't set a sufficient password
+     *     quality requirement prior to calling this method.
      */
     public void setPasswordMinimumLetters(@NonNull ComponentName admin, int length) {
         if (mService != null) {
@@ -2963,7 +3004,10 @@ public class DevicePolicyManager {
      * place immediately. To prompt the user for a new password, use
      * {@link #ACTION_SET_NEW_PASSWORD} or {@link #ACTION_SET_NEW_PARENT_PROFILE_PASSWORD} after
      * setting this value. This constraint is only imposed if the administrator has also requested
-     * {@link #PASSWORD_QUALITY_COMPLEX} with {@link #setPasswordQuality}. The default value is 1.
+     * {@link #PASSWORD_QUALITY_COMPLEX} with {@link #setPasswordQuality}. If an app targeting
+     * SDK level {@link android.os.Build.VERSION_CODES#R} and above enforces this constraint without
+     * settings password quality to {@link #PASSWORD_QUALITY_COMPLEX} first, this method will throw
+     * {@link IllegalStateException}. The default value is 1.
      * <p>
      * On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
      * password is always treated as empty.
@@ -2981,6 +3025,9 @@ public class DevicePolicyManager {
      *            value of 0 means there is no restriction.
      * @throws SecurityException if {@code admin} is not an active administrator or {@code admin}
      *             does not use {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD}
+     * @throws IllegalStateException if the calling app is targeting SDK level
+     *     {@link android.os.Build.VERSION_CODES#R} and above and didn't set a sufficient password
+     *     quality requirement prior to calling this method.
      */
     public void setPasswordMinimumNumeric(@NonNull ComponentName admin, int length) {
         if (mService != null) {
@@ -3038,7 +3085,10 @@ public class DevicePolicyManager {
      * immediately. To prompt the user for a new password, use {@link #ACTION_SET_NEW_PASSWORD} or
      * {@link #ACTION_SET_NEW_PARENT_PROFILE_PASSWORD} after setting this value. This constraint is
      * only imposed if the administrator has also requested {@link #PASSWORD_QUALITY_COMPLEX} with
-     * {@link #setPasswordQuality}. The default value is 1.
+     * {@link #setPasswordQuality}. If an app targeting SDK level
+     * {@link android.os.Build.VERSION_CODES#R} and above enforces this constraint without settings
+     * password quality to {@link #PASSWORD_QUALITY_COMPLEX} first, this method will throw
+     * {@link IllegalStateException}. The default value is 1.
      * <p>
      * On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
      * password is always treated as empty.
@@ -3056,6 +3106,9 @@ public class DevicePolicyManager {
      *            0 means there is no restriction.
      * @throws SecurityException if {@code admin} is not an active administrator or {@code admin}
      *             does not use {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD}
+     * @throws IllegalStateException if the calling app is targeting SDK level
+     *     {@link android.os.Build.VERSION_CODES#R} and above and didn't set a sufficient password
+     *     quality requirement prior to calling this method.
      */
     public void setPasswordMinimumSymbols(@NonNull ComponentName admin, int length) {
         if (mService != null) {
@@ -3112,7 +3165,10 @@ public class DevicePolicyManager {
      * one, so the change does not take place immediately. To prompt the user for a new password,
      * use {@link #ACTION_SET_NEW_PASSWORD} or {@link #ACTION_SET_NEW_PARENT_PROFILE_PASSWORD} after
      * setting this value. This constraint is only imposed if the administrator has also requested
-     * {@link #PASSWORD_QUALITY_COMPLEX} with {@link #setPasswordQuality}. The default value is 0.
+     * {@link #PASSWORD_QUALITY_COMPLEX} with {@link #setPasswordQuality}. If an app targeting
+     * SDK level {@link android.os.Build.VERSION_CODES#R} and above enforces this constraint without
+     * settings password quality to {@link #PASSWORD_QUALITY_COMPLEX} first, this method will throw
+     * {@link IllegalStateException}. The default value is 0.
      * <p>
      * On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, the
      * password is always treated as empty.
@@ -3130,6 +3186,9 @@ public class DevicePolicyManager {
      *            0 means there is no restriction.
      * @throws SecurityException if {@code admin} is not an active administrator or {@code admin}
      *             does not use {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD}
+     * @throws IllegalStateException if the calling app is targeting SDK level
+     *     {@link android.os.Build.VERSION_CODES#R} and above and didn't set a sufficient password
+     *     quality requirement prior to calling this method.
      */
     public void setPasswordMinimumNonLetter(@NonNull ComponentName admin, int length) {
         if (mService != null) {
@@ -3177,6 +3236,22 @@ public class DevicePolicyManager {
             }
         }
         return 0;
+    }
+
+    /**
+     * Returns minimum PasswordMetrics that satisfies all admin policies.
+     *
+     * @hide
+     */
+    public PasswordMetrics getPasswordMinimumMetrics(@UserIdInt int userHandle) {
+        if (mService != null) {
+            try {
+                return mService.getPasswordMinimumMetrics(userHandle);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return null;
     }
 
     /**
@@ -3362,8 +3437,7 @@ public class DevicePolicyManager {
         if (!pm.hasSystemFeature(PackageManager.FEATURE_SECURE_LOCK_SCREEN)) {
             return 0;
         }
-        // Kind-of arbitrary.
-        return 16;
+        return MAX_PASSWORD_LENGTH;
     }
 
     /**
@@ -4890,24 +4964,47 @@ public class DevicePolicyManager {
      * have been given to access the key and certificates associated with this alias will be
      * revoked.
      *
+     * <p>Attestation: to enable attestation, set an attestation challenge in {@code keySpec} via
+     * {@link KeyGenParameterSpec.Builder#setAttestationChallenge}. By specifying flags to the
+     * {@code idAttestationFlags} parameter, it is possible to request the device's unique
+     * identity to be included in the attestation record.
+     *
+     * <p>Specific identifiers can be included in the attestation record, and an individual
+     * attestation certificate can be used to sign the attestation record. To find out if the device
+     * supports these features, refer to {@link #isDeviceIdAttestationSupported()} and
+     * {@link #isUniqueDeviceAttestationSupported()}.
+     *
+     * <p>Device owner, profile owner and their delegated certificate installer can use
+     * {@link #ID_TYPE_BASE_INFO} to request inclusion of the general device information
+     * including manufacturer, model, brand, device and product in the attestation record.
+     * Only device owner and their delegated certificate installer can use
+     * {@link #ID_TYPE_SERIAL}, {@link #ID_TYPE_IMEI} and {@link #ID_TYPE_MEID} to request
+     * unique device identifiers to be attested (the serial number, IMEI and MEID correspondingly),
+     * if supported by the device (see {@link #isDeviceIdAttestationSupported()}).
+     * Additionally, device owner and their delegated certificate installer can also request the
+     * attestation record to be signed using an individual attestation certificate by specifying
+     * the {@link #ID_TYPE_INDIVIDUAL_ATTESTATION} flag (if supported by the device, see
+     * {@link #isUniqueDeviceAttestationSupported()}).
+     * <p>
+     * If any of {@link #ID_TYPE_SERIAL}, {@link #ID_TYPE_IMEI} and {@link #ID_TYPE_MEID}
+     * is set, it is implicitly assumed that {@link #ID_TYPE_BASE_INFO} is also set.
+     * <p>
+     * Attestation using {@link #ID_TYPE_INDIVIDUAL_ATTESTATION} can only be requested if
+     * key generation is done in StrongBox.
+     *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *            {@code null} if calling from a delegated certificate installer.
      * @param algorithm The key generation algorithm, see {@link java.security.KeyPairGenerator}.
      * @param keySpec Specification of the key to generate, see
      * {@link java.security.KeyPairGenerator}.
-     * @param idAttestationFlags A bitmask of all the identifiers that should be included in the
+     * @param idAttestationFlags A bitmask of the identifiers that should be included in the
      *        attestation record ({@code ID_TYPE_BASE_INFO}, {@code ID_TYPE_SERIAL},
-     *        {@code ID_TYPE_IMEI} and {@code ID_TYPE_MEID}), or {@code 0} if no device
-     *        identification is required in the attestation record.
-     *        Device owner, profile owner and their delegated certificate installer can use
-     *        {@link #ID_TYPE_BASE_INFO} to request inclusion of the general device information
-     *        including manufacturer, model, brand, device and product in the attestation record.
-     *        Only device owner and their delegated certificate installer can use
-     *        {@link #ID_TYPE_SERIAL}, {@link #ID_TYPE_IMEI} and {@link #ID_TYPE_MEID} to request
-     *        unique device identifiers to be attested.
+     *        {@code ID_TYPE_IMEI} and {@code ID_TYPE_MEID}), and
+     *        {@code ID_TYPE_INDIVIDUAL_ATTESTATION} if the attestation record should be signed
+     *        using an individual attestation certificate.
      *        <p>
-     *        If any of {@link #ID_TYPE_SERIAL}, {@link #ID_TYPE_IMEI} and {@link #ID_TYPE_MEID}
-     *        is set, it is implicitly assumed that {@link #ID_TYPE_BASE_INFO} is also set.
+     *        {@code 0} should be passed in if no device identification is required in the
+     *        attestation record and the batch attestation certificate should be used.
      *        <p>
      *        If any flag is specified, then an attestation challenge must be included in the
      *        {@code keySpec}.
@@ -5049,12 +5146,27 @@ public class DevicePolicyManager {
 
     /**
      * Returns {@code true} if the device supports attestation of device identifiers in addition
-     * to key attestation.
+     * to key attestation. See
+     * {@link #generateKeyPair(ComponentName, String, KeyGenParameterSpec, int)}
      * @return {@code true} if Device ID attestation is supported.
      */
     public boolean isDeviceIdAttestationSupported() {
         PackageManager pm = mContext.getPackageManager();
         return pm.hasSystemFeature(PackageManager.FEATURE_DEVICE_ID_ATTESTATION);
+    }
+
+    /**
+     * Returns {@code true} if the StrongBox Keymaster implementation on the device was provisioned
+     * with an individual attestation certificate and can sign attestation records using it (as
+     * attestation using an individual attestation certificate is a feature only Keymaster
+     * implementations with StrongBox security level can implement).
+     * For use prior to calling
+     * {@link #generateKeyPair(ComponentName, String, KeyGenParameterSpec, int)}.
+     * @return {@code true} if individual attestation is supported.
+     */
+    public boolean isUniqueDeviceAttestationSupported() {
+        PackageManager pm = mContext.getPackageManager();
+        return pm.hasSystemFeature(PackageManager.FEATURE_DEVICE_UNIQUE_ATTESTATION);
     }
 
     /**
@@ -6521,6 +6633,8 @@ public class DevicePolicyManager {
      * The calling device admin must be a profile owner or device owner. If it is not, a security
      * exception will be thrown.
      *
+     * <p>NOTE: Performs disk I/O and shouldn't be called on the main thread.
+     *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param filter The IntentFilter for which a default handler is added.
      * @param activity The Activity that is added as default intent handler.
@@ -7091,7 +7205,8 @@ public class DevicePolicyManager {
      * used, calling with an empty list only allows the built-in system services. Any non-system
      * accessibility service that's currently enabled must be included in the list.
      * <p>
-     * System accessibility services are always available to the user the list can't modify this.
+     * System accessibility services are always available to the user and this method can't
+     * disable them.
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param packageNames List of accessibility service package names.
      * @return {@code true} if the operation succeeded, or {@code false} if the list didn't
@@ -8236,6 +8351,24 @@ public class DevicePolicyManager {
     }
 
     /**
+     * Called by device owners to set the user's master location setting.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with
+     * @param locationEnabled whether location should be enabled or disabled
+     * @throws SecurityException if {@code admin} is not a device owner.
+     */
+    public void setLocationEnabled(@NonNull ComponentName admin, boolean locationEnabled) {
+        throwIfParentInstance("setLocationEnabled");
+        if (mService != null) {
+            try {
+                mService.setLocationEnabled(admin, locationEnabled);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
      * Called by profile or device owners to update {@link android.provider.Settings.Secure}
      * settings. Validation that the value of the setting is in the correct form for the setting
      * type should be performed by the caller.
@@ -8262,6 +8395,11 @@ public class DevicePolicyManager {
      * Starting from Android Q, the device and profile owner can also call
      * {@link UserManager#DISALLOW_INSTALL_UNKNOWN_SOURCES_GLOBALLY} to restrict unknown sources for
      * all users.
+     * </strong>
+     *
+     * <strong>Note: Starting from Android R, apps should no longer call this method with the
+     * setting {@link android.provider.Settings.Secure#LOCATION_MODE}, which is deprecated. Instead,
+     * device owners should call {@link #setLocationEnabled(ComponentName, boolean)}.
      * </strong>
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.

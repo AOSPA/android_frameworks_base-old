@@ -34,11 +34,14 @@ import android.os.UserHandle;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper.RunWithLooper;
+import android.testing.TestableResources;
 
+import com.android.internal.logging.MetricsLogger;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.statusbar.NotificationMediaManager;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -70,28 +73,35 @@ public class BiometricsUnlockControllerTest extends SysuiTestCase {
     @Mock
     private StatusBar mStatusBar;
     @Mock
-    private UnlockMethodCache mUnlockMethodCache;
+    private KeyguardStateController mKeyguardStateController;
     @Mock
     private Handler mHandler;
     @Mock
     private KeyguardBypassController mKeyguardBypassController;
+    @Mock
+    private DozeParameters mDozeParameters;
+    @Mock
+    private MetricsLogger mMetricsLogger;
     private BiometricUnlockController mBiometricUnlockController;
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
+        TestableResources res = getContext().getOrCreateTestableResources();
         when(mStatusBarKeyguardViewManager.isShowing()).thenReturn(true);
         when(mUpdateMonitor.isDeviceInteractive()).thenReturn(true);
-        when(mUnlockMethodCache.isFaceAuthEnabled()).thenReturn(true);
+        when(mKeyguardStateController.isFaceAuthEnabled()).thenReturn(true);
         when(mKeyguardBypassController.onBiometricAuthenticated(any())).thenReturn(true);
         when(mKeyguardBypassController.canPlaySubtleWindowAnimations()).thenReturn(true);
         mContext.addMockSystemService(PowerManager.class, mPowerManager);
         mDependency.injectTestDependency(NotificationMediaManager.class, mMediaManager);
         mDependency.injectTestDependency(StatusBarWindowController.class,
                 mStatusBarWindowController);
+        res.addOverride(com.android.internal.R.integer.config_wakeUpDelayDoze, 0);
         mBiometricUnlockController = new BiometricUnlockController(mContext, mDozeScrimController,
-                mKeyguardViewMediator, mScrimController, mStatusBar, mUnlockMethodCache,
-                mHandler, mUpdateMonitor, 0 /* wakeUpDelay */, mKeyguardBypassController);
+                mKeyguardViewMediator, mScrimController, mStatusBar, mKeyguardStateController,
+                mHandler, mUpdateMonitor, res.getResources(), mKeyguardBypassController,
+                mDozeParameters, mMetricsLogger);
         mBiometricUnlockController.setStatusBarKeyguardViewManager(mStatusBarKeyguardViewManager);
     }
 

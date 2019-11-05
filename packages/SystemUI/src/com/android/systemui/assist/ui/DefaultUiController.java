@@ -17,6 +17,7 @@
 package com.android.systemui.assist.ui;
 
 import static com.android.systemui.assist.AssistManager.DISMISS_REASON_INVOCATION_CANCELLED;
+import static com.android.systemui.assist.AssistManager.INVOCATION_TYPE_GESTURE;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -24,6 +25,7 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.PixelFormat;
 import android.metrics.LogMaker;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Gravity;
@@ -36,9 +38,11 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.ScreenDecorations;
-import com.android.systemui.SysUiServiceProvider;
+import com.android.systemui.assist.AssistHandleViewController;
 import com.android.systemui.assist.AssistManager;
+import com.android.systemui.statusbar.NavigationBarController;
+
+import java.util.Locale;
 
 /**
  * Default UiController implementation. Shows white edge lights along the bottom of the phone,
@@ -49,6 +53,9 @@ public class DefaultUiController implements AssistManager.UiController {
     private static final String TAG = "DefaultUiController";
 
     private static final long ANIM_DURATION_MS = 200;
+
+    private static final boolean VERBOSE = Build.TYPE.toLowerCase(Locale.ROOT).contains("debug")
+            || Build.TYPE.toLowerCase(Locale.ROOT).equals("eng");
 
     protected final FrameLayout mRoot;
     protected InvocationLightsView mInvocationLightsView;
@@ -114,6 +121,7 @@ public class DefaultUiController implements AssistManager.UiController {
     @Override // AssistManager.UiController
     public void onGestureCompletion(float velocity) {
         animateInvocationCompletion(AssistManager.INVOCATION_TYPE_GESTURE, velocity);
+        logInvocationProgressMetrics(INVOCATION_TYPE_GESTURE, 1, mInvocationInProgress);
     }
 
     @Override // AssistManager.UiController
@@ -127,16 +135,28 @@ public class DefaultUiController implements AssistManager.UiController {
         updateAssistHandleVisibility();
     }
 
-    protected static void logInvocationProgressMetrics(
+    protected void logInvocationProgressMetrics(
             int type, float progress, boolean invocationWasInProgress) {
         // Logs assistant invocation start.
+        if (progress == 1f) {
+            if (VERBOSE) {
+                Log.v(TAG, "Invocation complete: type=" + type);
+            }
+        }
         if (!invocationWasInProgress && progress > 0.f) {
+            if (VERBOSE) {
+                Log.v(TAG, "Invocation started: type=" + type);
+            }
             MetricsLogger.action(new LogMaker(MetricsEvent.ASSISTANT)
                     .setType(MetricsEvent.TYPE_ACTION)
                     .setSubtype(Dependency.get(AssistManager.class).toLoggingSubType(type)));
         }
         // Logs assistant invocation cancelled.
-        if (invocationWasInProgress && progress == 0f) {
+        if ((mInvocationAnimator == null || !mInvocationAnimator.isRunning())
+                && invocationWasInProgress && progress == 0f) {
+            if (VERBOSE) {
+                Log.v(TAG, "Invocation cancelled: type=" + type);
+            }
             MetricsLogger.action(new LogMaker(MetricsEvent.ASSISTANT)
                     .setType(MetricsEvent.TYPE_DISMISS)
                     .setSubtype(DISMISS_REASON_INVOCATION_CANCELLED));
@@ -144,9 +164,14 @@ public class DefaultUiController implements AssistManager.UiController {
     }
 
     private void updateAssistHandleVisibility() {
-        ScreenDecorations decorations = SysUiServiceProvider.getComponent(mRoot.getContext(),
-                ScreenDecorations.class);
-        decorations.setAssistHintBlocked(mInvocationInProgress);
+        NavigationBarController navigationBarController =
+                Dependency.get(NavigationBarController.class);
+        AssistHandleViewController controller =
+                navigationBarController == null
+                        ? null : navigationBarController.getAssistHandlerViewController();
+        if (controller != null) {
+            controller.setAssistHintBlocked(mInvocationInProgress);
+        }
     }
 
     private void attach() {

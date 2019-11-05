@@ -394,17 +394,9 @@ final class Constants {
     static final String PROPERTY_PREFERRED_ADDRESS_PLAYBACK = "persist.sys.hdmi.addr.playback";
     static final String PROPERTY_PREFERRED_ADDRESS_TV = "persist.sys.hdmi.addr.tv";
 
-    // Property name for the local device configurations.
-    // TODO(OEM): OEM should provide this property, and the value is the comma separated integer
-    //     values which denotes the device type in HDMI Spec 1.4.
-    static final String PROPERTY_DEVICE_TYPE = "ro.hdmi.device_type";
-
     // TODO(OEM): Set this to false to keep the playback device in sleep upon hotplug event.
     //            True by default.
     static final String PROPERTY_WAKE_ON_HOTPLUG = "ro.hdmi.wake_on_hotplug";
-
-    // TODO(OEM): Set this to true to enable 'Set Menu Language' feature. False by default.
-    static final String PROPERTY_SET_MENU_LANGUAGE = "ro.hdmi.set_menu_language";
 
     /**
      * Property to save the ARC port id on system audio device.

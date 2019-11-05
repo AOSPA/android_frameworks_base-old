@@ -17,11 +17,13 @@
 package com.android.server.om;
 
 import static android.app.AppGlobals.getPackageManager;
+import static android.content.Intent.ACTION_OVERLAY_CHANGED;
 import static android.content.Intent.ACTION_PACKAGE_ADDED;
 import static android.content.Intent.ACTION_PACKAGE_CHANGED;
 import static android.content.Intent.ACTION_PACKAGE_REMOVED;
 import static android.content.Intent.ACTION_USER_ADDED;
 import static android.content.Intent.ACTION_USER_REMOVED;
+import static android.content.Intent.EXTRA_REASON;
 import static android.content.pm.PackageManager.SIGNATURE_MATCH;
 import static android.os.Trace.TRACE_TAG_RRO;
 import static android.os.Trace.traceBegin;
@@ -62,7 +64,6 @@ import com.android.server.FgThread;
 import com.android.server.IoThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
-import com.android.server.pm.Installer;
 import com.android.server.pm.UserManagerService;
 
 import libcore.util.EmptyArray;
@@ -230,8 +231,7 @@ public final class OverlayManagerService extends SystemService {
 
     private final AtomicBoolean mPersistSettingsScheduled = new AtomicBoolean(false);
 
-    public OverlayManagerService(@NonNull final Context context,
-            @NonNull final Installer installer) {
+    public OverlayManagerService(@NonNull final Context context) {
         super(context);
         try {
             traceBegin(TRACE_TAG_RRO, "OMS#OverlayManagerService");
@@ -239,7 +239,7 @@ public final class OverlayManagerService extends SystemService {
                     new File(Environment.getDataSystemDirectory(), "overlays.xml"), "overlays");
             mPackageManager = new PackageManagerHelper();
             mUserManager = UserManagerService.getInstance();
-            IdmapManager im = new IdmapManager(installer, mPackageManager);
+            IdmapManager im = new IdmapManager(mPackageManager);
             mSettings = new OverlayManagerSettings();
             mImpl = new OverlayManagerServiceImpl(mPackageManager, im, mSettings,
                     getDefaultOverlayPackages(), new OverlayChangeListener());
@@ -358,7 +358,11 @@ public final class OverlayManagerService extends SystemService {
                     }
                     break;
                 case ACTION_PACKAGE_CHANGED:
-                    onPackageChanged(packageName, userIds);
+                    // ignore the intent if it was sent by the package manager as a result of the
+                    // overlay manager having sent ACTION_OVERLAY_CHANGED
+                    if (!ACTION_OVERLAY_CHANGED.equals(intent.getStringExtra(EXTRA_REASON))) {
+                        onPackageChanged(packageName, userIds);
+                    }
                     break;
                 case ACTION_PACKAGE_REMOVED:
                     if (replacing) {
@@ -740,6 +744,25 @@ public final class OverlayManagerService extends SystemService {
         }
 
         @Override
+        public void invalidateCachesForOverlay(@Nullable String packageName, int userId)
+                throws RemoteException {
+            if (packageName == null) {
+                return;
+            }
+
+            enforceChangeOverlayPackagesPermission("invalidateCachesForOverlay");
+            userId = handleIncomingUser(userId, "invalidateCachesForOverlay");
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    mImpl.removeIdmapForOverlay(packageName, userId);
+                }
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        @Override
         public void onShellCommand(@NonNull final FileDescriptor in,
                 @NonNull final FileDescriptor out, @NonNull final FileDescriptor err,
                 @NonNull final String[] args, @NonNull final ShellCallback callback,
@@ -868,7 +891,7 @@ public final class OverlayManagerService extends SystemService {
             FgThread.getHandler().post(() -> {
                 updateAssets(userId, targetPackageName);
 
-                final Intent intent = new Intent(Intent.ACTION_OVERLAY_CHANGED,
+                final Intent intent = new Intent(ACTION_OVERLAY_CHANGED,
                         Uri.fromParts("package", targetPackageName, null));
                 intent.setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
 

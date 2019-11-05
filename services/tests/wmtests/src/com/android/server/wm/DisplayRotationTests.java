@@ -68,6 +68,7 @@ import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.wm.utils.WmDisplayCutout;
 
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -120,6 +121,12 @@ public class DisplayRotationTests {
         sMockWm = mock(WindowManagerService.class);
         sMockWm.mPowerManagerInternal = mock(PowerManagerInternal.class);
         sMockWm.mPolicy = mock(WindowManagerPolicy.class);
+    }
+
+    @AfterClass
+    public static void tearDownOnce() {
+        // Make sure the fake settings are cleared after the last test method.
+        FakeSettingsProvider.clearSettingsProvider();
     }
 
     @Before
@@ -238,15 +245,55 @@ public class DisplayRotationTests {
     }
 
     @Test
-    public void testReturnsUserRotation_UserRotationLocked_CompatibleAppRequest()
+    public void testReturnsLandscape_UserRotationLockedSeascape_AppRequestsLandscape()
             throws Exception {
         mBuilder.build();
-        configureDisplayRotation(SCREEN_ORIENTATION_LANDSCAPE, false, false);
+        configureDisplayRotation(SCREEN_ORIENTATION_LANDSCAPE, false /* isCar */,
+                false /* isTv */);
+
+        freezeRotation(Surface.ROTATION_180);
+
+        assertEquals(Surface.ROTATION_0, mTarget.rotationForOrientation(
+                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE, Surface.ROTATION_90));
+    }
+
+    @Test
+    public void testReturnsSeascape_UserRotationLockedSeascape_AppRequestsSeascape()
+            throws Exception {
+        mBuilder.build();
+        configureDisplayRotation(SCREEN_ORIENTATION_LANDSCAPE, false /* isCar */,
+                false /* isTv */);
 
         freezeRotation(Surface.ROTATION_180);
 
         assertEquals(Surface.ROTATION_180, mTarget.rotationForOrientation(
-                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE, Surface.ROTATION_90));
+                ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE, Surface.ROTATION_90));
+    }
+
+    @Test
+    public void testReturnsPortrait_UserRotationLockedPortrait_AppRequestsPortrait()
+            throws Exception {
+        mBuilder.build();
+        configureDisplayRotation(SCREEN_ORIENTATION_LANDSCAPE, false /* isCar */,
+                false /* isTv */);
+
+        freezeRotation(Surface.ROTATION_270);
+
+        assertEquals(Surface.ROTATION_270, mTarget.rotationForOrientation(
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, Surface.ROTATION_0));
+    }
+
+    @Test
+    public void testReturnsUpsideDown_UserRotationLockedUpsideDown_AppRequestsUpsideDown()
+            throws Exception {
+        mBuilder.build();
+        configureDisplayRotation(SCREEN_ORIENTATION_LANDSCAPE, false /* isCar */,
+                false /* isTv */);
+
+        freezeRotation(Surface.ROTATION_90);
+
+        assertEquals(Surface.ROTATION_90, mTarget.rotationForOrientation(
+                ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT, Surface.ROTATION_0));
     }
 
     @Test
@@ -591,7 +638,7 @@ public class DisplayRotationTests {
         mBuilder.build();
 
         final WindowState win = mock(WindowState.class);
-        win.mAppToken = mock(AppWindowToken.class);
+        win.mActivityRecord = mock(ActivityRecord.class);
         final WindowManager.LayoutParams attrs = new WindowManager.LayoutParams();
         attrs.rotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLESS;
 
@@ -601,13 +648,13 @@ public class DisplayRotationTests {
         mMockDisplayContent.mCurrentFocus = win;
         mTarget.mUpsideDownRotation = Surface.ROTATION_180;
 
-        doReturn(true).when(win.mAppToken).matchParentBounds();
+        doReturn(true).when(win.mActivityRecord).matchParentBounds();
         // The focused fullscreen opaque window without override bounds should be able to be
         // rotated seamlessly.
         assertTrue(mTarget.shouldRotateSeamlessly(
                 Surface.ROTATION_0, Surface.ROTATION_90, false /* forceUpdate */));
 
-        doReturn(false).when(win.mAppToken).matchParentBounds();
+        doReturn(false).when(win.mActivityRecord).matchParentBounds();
         // No seamless rotation if the window may be positioned with offset after rotation.
         assertFalse(mTarget.shouldRotateSeamlessly(
                 Surface.ROTATION_0, Surface.ROTATION_90, false /* forceUpdate */));

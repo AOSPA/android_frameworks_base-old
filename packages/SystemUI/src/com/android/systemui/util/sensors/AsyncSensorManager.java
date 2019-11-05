@@ -146,9 +146,11 @@ public class AsyncSensorManager extends SensorManager
 
     @Override
     protected boolean requestTriggerSensorImpl(TriggerEventListener listener, Sensor sensor) {
-        if ( sensor == null ) {
-            Log.e(TAG, "sensor cannot be null \n" + Log.getStackTraceString(new Throwable()));
-            return false;
+        if (listener == null) {
+            throw new IllegalArgumentException("listener cannot be null");
+        }
+        if (sensor == null) {
+            throw new IllegalArgumentException("sensor cannot be null");
         }
         mHandler.post(() -> {
             if ( sensor == null ) {

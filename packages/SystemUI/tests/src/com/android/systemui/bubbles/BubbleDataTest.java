@@ -99,7 +99,7 @@ public class BubbleDataTest extends SysuiTestCase {
 
     @Before
     public void setUp() throws Exception {
-        mNotificationTestHelper = new NotificationTestHelper(mContext);
+        mNotificationTestHelper = new NotificationTestHelper(mContext, mDependency);
         MockitoAnnotations.initMocks(this);
 
         mEntryA1 = createBubbleEntry(1, "a1", "package.a");
@@ -842,14 +842,14 @@ public class BubbleDataTest extends SysuiTestCase {
     }
 
     private void setPostTime(NotificationEntry entry, long postTime) {
-        when(entry.notification.getPostTime()).thenReturn(postTime);
+        when(entry.getSbn().getPostTime()).thenReturn(postTime);
     }
 
     private void setOngoing(NotificationEntry entry, boolean ongoing) {
         if (ongoing) {
-            entry.notification.getNotification().flags |= Notification.FLAG_FOREGROUND_SERVICE;
+            entry.getSbn().getNotification().flags |= Notification.FLAG_FOREGROUND_SERVICE;
         } else {
-            entry.notification.getNotification().flags &= ~Notification.FLAG_FOREGROUND_SERVICE;
+            entry.getSbn().getNotification().flags &= ~Notification.FLAG_FOREGROUND_SERVICE;
         }
     }
 

@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -41,37 +42,39 @@ import com.android.systemui.SysuiTestCase;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.util.sensors.AsyncSensorManager;
+import com.android.systemui.util.sensors.FakeProximitySensor;
 import com.android.systemui.util.sensors.FakeSensorManager;
+import com.android.systemui.util.sensors.ProximitySensor;
 import com.android.systemui.util.wakelock.WakeLock;
 import com.android.systemui.util.wakelock.WakeLockFake;
 
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
 @RunWithLooper(setAsMainLooper = true)
 public class DozeTriggersTest extends SysuiTestCase {
-    private DozeTriggers mTriggers;
+
+    @Mock
     private DozeMachine mMachine;
-    private DozeHostFake mHost;
+    @Mock
+    private DozeHost mHost;
+    @Mock
+    private AlarmManager mAlarmManager;
+    private DozeTriggers mTriggers;
     private FakeSensorManager mSensors;
     private Sensor mTapSensor;
     private DockManager mDockManagerFake;
-
-    @BeforeClass
-    public static void setupSuite() {
-        // We can't use KeyguardUpdateMonitor from tests.
-        DozeLog.setRegisterKeyguardCallback(false);
-    }
+    private FakeProximitySensor mProximitySensor;
 
     @Before
     public void setUp() throws Exception {
-        mMachine = mock(DozeMachine.class);
-        AlarmManager alarmManager = mock(AlarmManager.class);
-        mHost = spy(new DozeHostFake());
+        MockitoAnnotations.initMocks(this);
         AmbientDisplayConfiguration config = DozeConfigurationUtil.createMockConfig();
         DozeParameters parameters = DozeConfigurationUtil.createMockParameters();
         mSensors = spy(new FakeSensorManager(mContext));
@@ -80,30 +83,35 @@ public class DozeTriggersTest extends SysuiTestCase {
         mDockManagerFake = mock(DockManager.class);
         AsyncSensorManager asyncSensorManager =
                 new AsyncSensorManager(mSensors, null, new Handler());
+        mProximitySensor = new FakeProximitySensor(getContext().getResources(), asyncSensorManager);
 
-        mTriggers = new DozeTriggers(mContext, mMachine, mHost, alarmManager, config, parameters,
+        mTriggers = new DozeTriggers(mContext, mMachine, mHost, mAlarmManager, config, parameters,
                 asyncSensorManager, Handler.createAsync(Looper.myLooper()), wakeLock, true,
-                mDockManagerFake);
+                mDockManagerFake, mProximitySensor, mock(DozeLog.class));
         waitForSensorManager();
     }
 
     @Test
     public void testOnNotification_stillWorksAfterOneFailedProxCheck() throws Exception {
         when(mMachine.getState()).thenReturn(DozeMachine.State.DOZE);
+        ArgumentCaptor<DozeHost.Callback> captor = ArgumentCaptor.forClass(DozeHost.Callback.class);
+        doAnswer(invocation -> null).when(mHost).addCallback(captor.capture());
 
         mTriggers.transitionTo(DozeMachine.State.UNINITIALIZED, DozeMachine.State.INITIALIZED);
         mTriggers.transitionTo(DozeMachine.State.INITIALIZED, DozeMachine.State.DOZE);
         clearInvocations(mMachine);
 
-        mHost.callback.onNotificationAlerted(null /* pulseSuppressedListener */);
-        mSensors.getFakeProximitySensor().sendProximityResult(false); /* Near */
+        mProximitySensor.setLastEvent(new ProximitySensor.ProximityEvent(true, 1));
+        captor.getValue().onNotificationAlerted(null /* pulseSuppressedListener */);
+        mProximitySensor.alertListeners();
 
         verify(mMachine, never()).requestState(any());
         verify(mMachine, never()).requestPulse(anyInt());
 
-        mHost.callback.onNotificationAlerted(null /* pulseSuppressedListener */);
+        captor.getValue().onNotificationAlerted(null /* pulseSuppressedListener */);
         waitForSensorManager();
-        mSensors.getFakeProximitySensor().sendProximityResult(true); /* Far */
+        mProximitySensor.setLastEvent(new ProximitySensor.ProximityEvent(false, 2));
+        mProximitySensor.alertListeners();
 
         verify(mMachine).requestPulse(anyInt());
     }
@@ -137,6 +145,15 @@ public class DozeTriggersTest extends SysuiTestCase {
 
         mTriggers.transitionTo(DozeMachine.State.DOZE, DozeMachine.State.FINISH);
         verify(mDockManagerFake).removeListener(any());
+    }
+
+    @Test
+    public void testProximitySensorNotAvailablel() {
+        mProximitySensor.setSensorAvailable(false);
+        mTriggers.onSensor(DozeEvent.PULSE_REASON_SENSOR_LONG_PRESS, 100, 100, null);
+        mTriggers.onSensor(DozeEvent.PULSE_REASON_SENSOR_WAKE_LOCK_SCREEN, 100, 100,
+                new float[]{1});
+        mTriggers.onSensor(DozeEvent.REASON_SENSOR_TAP, 100, 100, null);
     }
 
     private void waitForSensorManager() {

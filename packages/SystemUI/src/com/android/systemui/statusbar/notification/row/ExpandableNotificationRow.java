@@ -74,7 +74,6 @@ import com.android.internal.widget.CachingIconView;
 import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
-import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.PluginListener;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.MenuItem;
@@ -221,7 +220,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private ViewStub mGutsStub;
     private boolean mIsSystemChildExpanded;
     private boolean mIsPinned;
-    private FalsingManager mFalsingManager;
     private boolean mExpandAnimationRunning;
     private AboveShelfChangedListener mAboveShelfChangedListener;
     private HeadsUpManager mHeadsUpManager;
@@ -444,7 +442,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      */
     public void setEntry(@NonNull NotificationEntry entry) {
         mEntry = entry;
-        mStatusBarNotification = entry.notification;
+        mStatusBarNotification = entry.getSbn();
         cacheIsSystemNotification();
     }
 
@@ -1205,7 +1203,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         // Let's update our childrencontainer. This is intentionally not guarded with
         // mIsSummaryWithChildren since we might have had children but not anymore.
         if (mChildrenContainer != null) {
-            mChildrenContainer.reInflateViews(mExpandClickListener, mEntry.notification);
+            mChildrenContainer.reInflateViews(mExpandClickListener, mEntry.getSbn());
         }
         if (mGuts != null) {
             NotificationGuts oldGuts = mGuts;
@@ -1449,6 +1447,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         }
         setDismissed(fromAccessibility);
         if (mEntry.isClearable()) {
+            // TODO: beverlyt, log dismissal
             // TODO: track dismiss sentiment
             if (mOnDismissRunnable != null) {
                 mOnDismissRunnable.run();
@@ -1636,7 +1635,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
     public ExpandableNotificationRow(Context context, AttributeSet attrs) {
         super(context, attrs);
-        mFalsingManager = Dependency.get(FalsingManager.class);  // TODO: inject into a controller.
         mNotificationInflater = new NotificationContentInflater(this);
         mMenuRow = new NotificationMenuRow(mContext);
         mImageResolver = new NotificationInlineImageResolver(context,
@@ -2208,7 +2206,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      * @param allowChildExpansion whether a call to this method allows expanding children
      */
     public void setUserExpanded(boolean userExpanded, boolean allowChildExpansion) {
-        mFalsingManager.setNotificationExpanded();
+        getFalsingManager().setNotificationExpanded();
         if (mIsSummaryWithChildren && !shouldShowPublic() && allowChildExpansion
                 && !mChildrenContainer.showingAsLowPriority()) {
             final boolean wasExpanded = mGroupManager.isGroupExpanded(mStatusBarNotification);
@@ -2305,7 +2303,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
     private void updateRippleAllowed() {
         boolean allowed = isOnKeyguard()
-                || mEntry.notification.getNotification().contentIntent == null;
+                || mEntry.getSbn().getNotification().contentIntent == null;
         setRippleAllowed(allowed);
     }
 

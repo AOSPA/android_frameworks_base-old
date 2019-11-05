@@ -890,6 +890,16 @@
       messages. This means the app could monitor or delete messages sent to your
       device without showing them to you.</string>
 
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this.[CHAR LIMIT=NONE] -->
+    <string name="permlab_bindCellBroadcastService">Forward cell broadcast messages</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=NONE] -->
+    <string name="permdesc_bindCellBroadcastService">Allows the app to bind to the
+        cell broadcast module in order to forward cell broadcast messages
+        as they are received. Cell broadcast alerts are delivered in some
+        locations to warn you of emergency situations. Malicious apps may
+        interfere with the performance or operation of your device when an
+        emergency cell broadcast is received.</string>
+
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_readCellBroadcasts">read cell broadcast messages</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
@@ -3430,6 +3440,15 @@
     <!-- A notification is shown when the user connects to a Wi-Fi network and the system detects that that network has no Internet access. This is the notification's message. -->
     <string name="wifi_no_internet_detailed">Tap for options</string>
 
+    <!-- A notification is shown when the user connects to a mobile network without internet access. This is the notification's title. -->
+    <string name="mobile_no_internet">Mobile network has no internet access</string>
+
+    <!-- A notification is shown when the user connects to a non-mobile and non-wifi network without internet access. This is the notification's title. -->
+    <string name="other_networks_no_internet">Network has no internet access</string>
+
+    <!-- A notification is shown when connected network without internet due to private dns validation failed. This is the notification's message. [CHAR LIMIT=NONE] -->
+    <string name="private_dns_broken_detailed">Private DNS server cannot be accessed</string>
+
     <!-- A notification is shown after the user logs in to a captive portal network, to indicate that the network should now have internet connectivity. This is the message of notification. [CHAR LIMIT=50] -->
     <string name="captive_portal_logged_in_detailed">Connected</string>
     <!-- A notification is shown when the user connects to a network that doesn't have access to some services (e.g. Push notifications may not work). This is the notification's title. [CHAR LIMIT=50] -->
@@ -3628,6 +3647,11 @@
     <string name="test_harness_mode_notification_title">Test Harness Mode enabled</string>
     <!-- Message of notification shown when Test Harness Mode is enabled. [CHAR LIMIT=NONE] -->
     <string name="test_harness_mode_notification_message">Perform a factory reset to disable Test Harness Mode.</string>
+
+    <!-- Title of notification shown when serial console is enabled. [CHAR LIMIT=NONE] -->
+    <string name="console_running_notification_title">Serial console enabled</string>
+    <!-- Message of notification shown when serial console is enabled. [CHAR LIMIT=NONE] -->
+    <string name="console_running_notification_message">Performance is impacted. To disable, check bootloader.</string>
 
     <!-- Title of notification shown when contaminant is detected on the USB port. [CHAR LIMIT=NONE] -->
     <string name="usb_contaminant_detected_title">Liquid or debris in USB port</string>
@@ -5190,6 +5214,8 @@
     <string name="autofill_save_no">No thanks</string>
     <!-- Label for the autofill update button [CHAR LIMIT=NONE] -->
     <string name="autofill_update_yes">Update</string>
+    <!-- Label for the autofill continue button [CHAR LIMIT=NONE] -->
+    <string name="autofill_continue_yes">Continue</string>
 
     <!-- Label for the type of data being saved for autofill when it represent user credentials with a password [CHAR LIMIT=NONE] -->
     <string name="autofill_save_type_password">password</string>
@@ -5197,6 +5223,12 @@
     <string name="autofill_save_type_address">address</string>
     <!-- Label for the type of data being saved for autofill when it represents a credit card [CHAR LIMIT=NONE] -->
     <string name="autofill_save_type_credit_card">credit card</string>
+    <!-- Label for the type of data being saved for autofill when it represents a debit card [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_type_debit_card">debit card</string>
+    <!-- Label for the type of data being saved for autofill when it represents a payment card [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_type_payment_card">payment card</string>
+    <!-- Label for the type of data being saved for autofill when it represents a card that does not a specified type or cannot identify what the type is for [CHAR LIMIT=NONE] -->
+    <string name="autofill_save_type_generic_card">card</string>
     <!-- Label for the type of data being saved for autofill when it represents an username [CHAR LIMIT=NONE] -->
     <string name="autofill_save_type_username">username</string>
     <!-- Label for the type of data being saved for autofill when it represents an email address [CHAR LIMIT=NONE] -->

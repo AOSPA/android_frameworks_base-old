@@ -291,8 +291,8 @@ public abstract class PermissionManagerServiceInternal extends PermissionManager
     public abstract @Nullable BasePermission getPermissionTEMP(@NonNull String permName);
 
     /** Get all permission that have a certain protection level */
-    public abstract @NonNull ArrayList<PermissionInfo> getAllPermissionWithProtectionLevel(
-            @PermissionInfo.Protection int protectionLevel);
+    public abstract @NonNull ArrayList<PermissionInfo> getAllPermissionWithProtection(
+            @PermissionInfo.Protection int protection);
 
     /**
      * Returns the delegate used to influence permission checking.
@@ -445,13 +445,4 @@ public abstract class PermissionManagerServiceInternal extends PermissionManager
 
     /** Called when a new user has been created. */
     public abstract void onNewUserCreated(@UserIdInt int userId);
-
-    /**
-     * Compute an app op mode based on its runtime permission state.
-     *
-     * @param uid the uid for the app op
-     * @param permissionName the permission name for the app op
-     * @return the computed mode
-     */
-    public abstract int computeRuntimePermissionAppOpMode(int uid, @NonNull String permissionName);
 }

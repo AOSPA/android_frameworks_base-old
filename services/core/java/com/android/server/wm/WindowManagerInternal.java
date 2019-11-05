@@ -30,6 +30,7 @@ import android.view.InputChannel;
 import android.view.MagnificationSpec;
 import android.view.WindowInfo;
 
+import com.android.internal.policy.KeyInterceptionInfo;
 import com.android.server.input.InputManagerService;
 import com.android.server.policy.WindowManagerPolicy;
 
@@ -160,9 +161,8 @@ public abstract class WindowManagerInternal {
         default boolean registerInputChannel(
                 DragState state, Display display, InputManagerService service,
                 InputChannel source) {
-            state.mTransferTouchFromToken = source.getToken();
             state.register(display);
-            return true;
+            return service.transferTouchFocus(source, state.getInputChannel());
         }
 
         /**
@@ -313,10 +313,15 @@ public abstract class WindowManagerInternal {
     public abstract void showGlobalActions();
 
     /**
-     * Invalidate all visible windows. Then report back on the callback once all windows have
-     * redrawn.
+     * Invalidate all visible windows on a given display, and report back on the callback when all
+     * windows have redrawn.
+     *
+     * @param callback reporting callback to be called when all windows have redrawn.
+     * @param timeout calls the callback anyway after the timeout.
+     * @param displayId waits for the windows on the given display, INVALID_DISPLAY to wait for all
+     *                  windows on all displays.
      */
-    public abstract void waitForAllWindowsDrawn(Runnable callback, long timeout);
+    public abstract void waitForAllWindowsDrawn(Runnable callback, long timeout, int displayId);
 
     /**
      * Overrides the display size.
@@ -502,6 +507,20 @@ public abstract class WindowManagerInternal {
     public abstract boolean shouldShowIme(int displayId);
 
     /**
+     * Show IME on imeTargetWindow once IME has finished layout.
+     *
+     * @param imeTargetWindowToken token of the (IME target) window on which IME should be shown.
+     */
+    public abstract void showImePostLayout(IBinder imeTargetWindowToken);
+
+    /**
+     * Hide IME using imeTargetWindow when requested.
+     *
+     * @param displayId on which IME is shown
+     */
+    public abstract void hideIme(int displayId);
+
+    /**
      * Tell window manager about a package that should not be running with high refresh rate
      * setting until removeNonHighRefreshRatePackage is called for the same package.
      *
@@ -519,4 +538,10 @@ public abstract class WindowManagerInternal {
      */
     public abstract boolean isTouchableDisplay(int displayId);
 
+    /**
+     * Returns the info associated with the input token used to determine if a key should be
+     * intercepted. This info can be accessed without holding the global wm lock.
+     */
+    public abstract @Nullable KeyInterceptionInfo
+            getKeyInterceptionInfoFromToken(IBinder inputToken);
 }
