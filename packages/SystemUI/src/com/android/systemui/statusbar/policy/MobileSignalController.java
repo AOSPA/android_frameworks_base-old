@@ -680,7 +680,8 @@ public class MobileSignalController extends SignalController<
             }
 
         }else if ( nr5GIconGroup == null && isSideCarNsaValid() ) {
-            mCurrentState.iconGroup = mFiveGState.getIconGroup();
+            nr5GIconGroup = mFiveGState.getIconGroup();
+            mCurrentState.iconGroup = nr5GIconGroup;
             if (DEBUG) {
                 Log.d(mTag,"get 5G NSA icon from side-car");
             }
@@ -718,19 +719,23 @@ public class MobileSignalController extends SignalController<
         }
 
 
-        if ( mConfig.alwaysShowNetworkTypeIcon && nr5GIconGroup == null) {
-            int iconType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
-            if ( mCurrentState.connected ) {
-                if (isDataNetworkTypeAvailable()) {
-                    iconType = mDataNetType;
-                } else {
-                    iconType = getVoiceNetworkType();
+        if ( mConfig.alwaysShowNetworkTypeIcon ) {
+            if ( nr5GIconGroup != null ) {
+                mCurrentState.iconGroup = nr5GIconGroup;
+            }else {
+                int iconType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
+                if (mCurrentState.connected) {
+                    if (isDataNetworkTypeAvailable()) {
+                        iconType = mDataNetType;
+                    } else {
+                        iconType = getVoiceNetworkType();
+                    }
                 }
-            }
-            if (mNetworkToIconLookup.indexOfKey(iconType) >= 0) {
-                mCurrentState.iconGroup = mNetworkToIconLookup.get(iconType);
-            } else {
-                mCurrentState.iconGroup = mDefaultIcons;
+                if (mNetworkToIconLookup.indexOfKey(iconType) >= 0) {
+                    mCurrentState.iconGroup = mNetworkToIconLookup.get(iconType);
+                } else {
+                    mCurrentState.iconGroup = mDefaultIcons;
+                }
             }
         }
 
