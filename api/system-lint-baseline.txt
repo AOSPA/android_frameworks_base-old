@@ -1,4 +1,8 @@
 // Baseline format: 1.0
+AcronymName: android.telephony.ims.stub.ImsUtImplBase#queryCFForServiceClass(int, String, int):
+    Acronyms should not be capitalized in method names: was `queryCFForServiceClass`, should this be `queryCfForServiceClass`?
+
+
 ActionValue: android.location.Location#EXTRA_NO_GPS_LOCATION:
     
 
@@ -129,6 +133,8 @@ MissingNullability: android.telephony.ims.stub.ImsSmsImplBase#onSmsStatusReportR
     
 MissingNullability: android.telephony.ims.stub.ImsSmsImplBase#onSmsStatusReportReceived(int, String, byte[]) parameter #2:
     
+MissingNullability: android.telephony.ims.stub.ImsUtImplBase#queryCFForServiceClass(int, String, int) parameter #1:
+    Missing nullability on parameter `number` in method `queryCFForServiceClass`
 MissingNullability: android.telephony.mbms.DownloadRequest.Builder#setServiceId(String):
     
 MissingNullability: android.telephony.mbms.DownloadRequest.Builder#setServiceId(String) parameter #0:
@@ -193,6 +199,8 @@ SamShouldBeLast: android.app.AlarmManager#setWindow(int, long, long, String, and
     
 SamShouldBeLast: android.app.WallpaperInfo#dump(android.util.Printer, String):
     
+SamShouldBeLast: android.app.WallpaperManager#addOnColorsChangedListener(android.app.WallpaperManager.OnColorsChangedListener, android.os.Handler):
+    SAM-compatible parameters (such as parameter 1, "listener", in android.app.WallpaperManager.addOnColorsChangedListener) should be last to improve Kotlin interoperability; see https://kotlinlang.org/docs/reference/java-interop.html#sam-conversions
 SamShouldBeLast: android.app.admin.DevicePolicyManager#installSystemUpdate(android.content.ComponentName, android.net.Uri, java.util.concurrent.Executor, android.app.admin.DevicePolicyManager.InstallSystemUpdateCallback):
     
 SamShouldBeLast: android.content.Context#bindIsolatedService(android.content.Intent, int, String, java.util.concurrent.Executor, android.content.ServiceConnection):
