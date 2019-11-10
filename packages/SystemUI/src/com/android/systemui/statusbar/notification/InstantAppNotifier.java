@@ -31,6 +31,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.SynchronousUserSwitchObserver;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
@@ -55,16 +56,16 @@ import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.SystemUI;
 import com.android.systemui.UiOffloadThread;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.policy.KeyguardMonitor;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.NotificationChannels;
 
 import java.util.List;
 
-/** The clsss to show notification(s) of instant apps. This may show multiple notifications on
+/** The class to show notification(s) of instant apps. This may show multiple notifications on
  * splitted screen.
  */
 public class InstantAppNotifier extends SystemUI
-        implements CommandQueue.Callbacks, KeyguardMonitor.Callback {
+        implements CommandQueue.Callbacks, KeyguardStateController.Callback {
     private static final String TAG = "InstantAppNotifier";
     public static final int NUM_TASKS_FOR_INSTANT_APP_INFO = 5;
 
@@ -72,13 +73,15 @@ public class InstantAppNotifier extends SystemUI
     private final UiOffloadThread mUiOffloadThread = Dependency.get(UiOffloadThread.class);
     private final ArraySet<Pair<String, Integer>> mCurrentNotifs = new ArraySet<>();
     private boolean mDockedStackExists;
-    private KeyguardMonitor mKeyguardMonitor;
+    private KeyguardStateController mKeyguardStateController;
 
-    public InstantAppNotifier() {}
+    public InstantAppNotifier(Context context) {
+        super(context);
+    }
 
     @Override
     public void start() {
-        mKeyguardMonitor = Dependency.get(KeyguardMonitor.class);
+        mKeyguardStateController = Dependency.get(KeyguardStateController.class);
 
         // listen for user / profile change.
         try {
@@ -88,7 +91,7 @@ public class InstantAppNotifier extends SystemUI
         }
 
         SysUiServiceProvider.getComponent(mContext, CommandQueue.class).addCallback(this);
-        mKeyguardMonitor.addCallback(this);
+        mKeyguardStateController.addCallback(this);
 
         DockedStackExistsListener.register(
                 exists -> {

@@ -23,18 +23,22 @@ import android.content.Context;
 
 import com.android.systemui.car.CarNotificationEntryManager;
 import com.android.systemui.car.CarNotificationInterruptionStateProvider;
+import com.android.systemui.dagger.SystemUIRootComponent;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.dock.DockManagerImpl;
 import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.EnhancedEstimatesImpl;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationLockscreenUserManagerImpl;
+import com.android.systemui.statusbar.car.CarStatusBar;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
 import com.android.systemui.statusbar.notification.collection.NotificationData;
 import com.android.systemui.statusbar.phone.KeyguardEnvironmentImpl;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.volume.CarVolumeDialogComponent;
+import com.android.systemui.volume.VolumeDialogComponent;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
@@ -42,6 +46,8 @@ import javax.inject.Singleton;
 import dagger.Binds;
 import dagger.Module;
 import dagger.Provides;
+import dagger.multibindings.ClassKey;
+import dagger.multibindings.IntoMap;
 
 @Module
 abstract class CarSystemUIModule {
@@ -94,4 +100,16 @@ abstract class CarSystemUIModule {
     @Binds
     abstract SystemUIRootComponent bindSystemUIRootComponent(
             CarSystemUIRootComponent systemUIRootComponent);
+
+    @Binds
+    public abstract StatusBar bindStatusBar(CarStatusBar statusBar);
+
+    @Binds
+    @IntoMap
+    @ClassKey(StatusBar.class)
+    public abstract SystemUI providesStatusBar(CarStatusBar statusBar);
+
+    @Binds
+    abstract VolumeDialogComponent bindVolumeDialogComponent(
+            CarVolumeDialogComponent carVolumeDialogComponent);
 }

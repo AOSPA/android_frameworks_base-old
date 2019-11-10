@@ -76,7 +76,6 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager.ServiceNotFoundException;
 import android.os.StrictMode;
-import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.text.Selection;
@@ -1925,11 +1924,15 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
-     * Like {@link #isVoiceInteraction}, but only returns true if this is also the root
-     * of a voice interaction.  That is, returns true if this activity was directly
+     * Like {@link #isVoiceInteraction}, but only returns {@code true} if this is also the root
+     * of a voice interaction.  That is, returns {@code true} if this activity was directly
      * started by the voice interaction service as the initiation of a voice interaction.
      * Otherwise, for example if it was started by another activity while under voice
-     * interaction, returns false.
+     * interaction, returns {@code false}.
+     * If the activity {@link android.R.styleable#AndroidManifestActivity_launchMode launchMode} is
+     * {@code singleTask}, it forces the activity to launch in a new task, separate from the one
+     * that started it. Therefore, there is no longer a relationship between them, and
+     * {@link #isVoiceInteractionRoot()} return {@code false} in this case.
      */
     public boolean isVoiceInteractionRoot() {
         try {
@@ -2473,17 +2476,13 @@ public class Activity extends ContextThemeWrapper
             getAutofillManager().onInvisibleForAutofill();
         }
 
-        if (isFinishing()) {
-            if (mAutoFillResetNeeded) {
-                getAutofillManager().onActivityFinishing();
-            } else if (mIntent != null
-                    && mIntent.hasExtra(AutofillManager.EXTRA_RESTORE_SESSION_TOKEN)) {
-                // Activity was launched when user tapped a link in the Autofill Save UI - since
-                // user launched another activity, the Save UI should not be restored when this
-                // activity is finished.
-                getAutofillManager().onPendingSaveUi(AutofillManager.PENDING_UI_OPERATION_CANCEL,
-                        mIntent.getIBinderExtra(AutofillManager.EXTRA_RESTORE_SESSION_TOKEN));
-            }
+        if (isFinishing() && !mAutoFillResetNeeded && mIntent != null
+                && mIntent.hasExtra(AutofillManager.EXTRA_RESTORE_SESSION_TOKEN)) {
+            // Activity was launched when user tapped a link in the Autofill Save UI - since
+            // user launched another activity, the Save UI should not be restored when this
+            // activity is finished.
+            getAutofillManager().onPendingSaveUi(AutofillManager.PENDING_UI_OPERATION_CANCEL,
+                    mIntent.getIBinderExtra(AutofillManager.EXTRA_RESTORE_SESSION_TOKEN));
         }
         mEnterAnimationComplete = false;
     }
@@ -2520,6 +2519,10 @@ public class Activity extends ContextThemeWrapper
     protected void onDestroy() {
         if (DEBUG_LIFECYCLE) Slog.v(TAG, "onDestroy " + this);
         mCalled = true;
+
+        if (isFinishing() && mAutoFillResetNeeded) {
+            getAutofillManager().onActivityFinishing();
+        }
 
         // dismiss any dialogs we are managing.
         if (mManagedDialogs != null) {
@@ -7094,14 +7097,28 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
-     * Convert a translucent themed Activity {@link android.R.attr#windowIsTranslucent} to a
-     * fullscreen opaque Activity.
+     * Convert an activity, which particularly with {@link android.R.attr#windowIsTranslucent} or
+     * {@link android.R.attr#windowIsFloating} attribute, to a fullscreen opaque activity, or
+     * convert it from opaque back to translucent.
+     *
+     * @param translucent {@code true} convert from opaque to translucent.
+     *                    {@code false} convert from translucent to opaque.
+     * @return The result of setting translucency. Return {@code true} if set successfully,
+     *         {@code false} otherwise.
+     */
+    public boolean setTranslucent(boolean translucent) {
+        if (translucent) {
+            return convertToTranslucent(null /* callback */, null /* options */);
+        } else {
+            return convertFromTranslucentInternal();
+        }
+    }
+
+    /**
+     * Convert an activity to a fullscreen opaque activity.
      * <p>
-     * Call this whenever the background of a translucent Activity has changed to become opaque.
-     * Doing so will allow the {@link android.view.Surface} of the Activity behind to be released.
-     * <p>
-     * This call has no effect on non-translucent activities or on activities with the
-     * {@link android.R.attr#windowIsFloating} attribute.
+     * Call this whenever the background of a translucent activity has changed to become opaque.
+     * Doing so will allow the {@link android.view.Surface} of the activity behind to be released.
      *
      * @see #convertToTranslucent(android.app.Activity.TranslucentConversionListener,
      * ActivityOptions)
@@ -7111,31 +7128,33 @@ public class Activity extends ContextThemeWrapper
      */
     @SystemApi
     public void convertFromTranslucent() {
+        convertFromTranslucentInternal();
+    }
+
+    private boolean convertFromTranslucentInternal() {
         try {
             mTranslucentCallback = null;
             if (ActivityTaskManager.getService().convertFromTranslucent(mToken)) {
                 WindowManagerGlobal.getInstance().changeCanvasOpacity(mToken, true);
+                return true;
             }
         } catch (RemoteException e) {
             // pass
         }
+        return false;
     }
 
     /**
-     * Convert a translucent themed Activity {@link android.R.attr#windowIsTranslucent} back from
-     * opaque to translucent following a call to {@link #convertFromTranslucent()}.
+     * Convert an activity to a translucent activity.
      * <p>
-     * Calling this allows the Activity behind this one to be seen again. Once all such Activities
+     * Calling this allows the activity behind this one to be seen again. Once all such activities
      * have been redrawn {@link TranslucentConversionListener#onTranslucentConversionComplete} will
      * be called indicating that it is safe to make this activity translucent again. Until
      * {@link TranslucentConversionListener#onTranslucentConversionComplete} is called the image
-     * behind the frontmost Activity will be indeterminate.
-     * <p>
-     * This call has no effect on non-translucent activities or on activities with the
-     * {@link android.R.attr#windowIsFloating} attribute.
+     * behind the frontmost activity will be indeterminate.
      *
-     * @param callback the method to call when all visible Activities behind this one have been
-     * drawn and it is safe to make this Activity translucent again.
+     * @param callback the method to call when all visible activities behind this one have been
+     * drawn and it is safe to make this activity translucent again.
      * @param options activity options delivered to the activity below this one. The options
      * are retrieved using {@link #getActivityOptions}.
      * @return <code>true</code> if Window was opaque and will become translucent or
@@ -7862,13 +7881,10 @@ public class Activity extends ContextThemeWrapper
         mFragments.dispatchStart();
         mFragments.reportLoaderStart();
 
+        // Warn app developers if the dynamic linker logged anything during startup.
         boolean isAppDebuggable =
                 (mApplication.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
-
-        // This property is set for all non-user builds except final release
-        boolean isDlwarningEnabled = SystemProperties.getInt("ro.bionic.ld.warning", 0) == 1;
-
-        if (isAppDebuggable || isDlwarningEnabled) {
+        if (isAppDebuggable) {
             String dlwarning = getDlWarning();
             if (dlwarning != null) {
                 String appName = getApplicationInfo().loadLabel(getPackageManager())

@@ -39,11 +39,27 @@ import java.util.HashMap;
 class WindowlessWindowManager implements IWindowSession {
     private final static String TAG = "WindowlessWindowManager";
 
+    private class State {
+        SurfaceControl mSurfaceControl;
+        WindowManager.LayoutParams mParams = new WindowManager.LayoutParams();
+        State(SurfaceControl sc, WindowManager.LayoutParams p) {
+            mSurfaceControl = sc;
+            mParams.copyFrom(p);
+        }
+    };
     /**
      * Used to store SurfaceControl we've built for clients to
      * reconfigure them if relayout is called.
      */
-    final HashMap<IBinder, SurfaceControl> mScForWindow = new HashMap<IBinder, SurfaceControl>();
+    final HashMap<IBinder, State> mStateForWindow = new HashMap<IBinder, State>();
+
+    public interface ResizeCompleteCallback {
+        public void finished(SurfaceControl.Transaction completion);
+    }
+
+    final HashMap<IBinder, ResizeCompleteCallback> mResizeCompletionForWindow =
+        new HashMap<IBinder, ResizeCompleteCallback>();
+
     final SurfaceSession mSurfaceSession = new SurfaceSession();
     final SurfaceControl mRootSurface;
     final Configuration mConfiguration;
@@ -58,6 +74,19 @@ class WindowlessWindowManager implements IWindowSession {
         mRealWm = WindowManagerGlobal.getWindowSession();
     }
 
+    /**
+     * Utility API.
+     */
+    void setCompletionCallback(IBinder window, ResizeCompleteCallback callback) {
+        if (mResizeCompletionForWindow.get(window) != null) {
+            Log.w(TAG, "Unsupported overlapping resizes");
+        }
+        mResizeCompletionForWindow.put(window, callback);
+    }
+
+    /**
+     * IWindowSession implementation.
+     */
     public int addToDisplay(IWindow window, int seq, WindowManager.LayoutParams attrs,
             int viewVisibility, int displayId, Rect outFrame, Rect outContentInsets,
             Rect outStableInsets, Rect outOutsets,
@@ -68,7 +97,7 @@ class WindowlessWindowManager implements IWindowSession {
             .setName(attrs.getTitle().toString());
         final SurfaceControl sc = b.build();
         synchronized (this) {
-            mScForWindow.put(window.asBinder(), sc);
+            mStateForWindow.put(window.asBinder(), new State(sc, attrs));
         }
 
         if ((attrs.inputFeatures &
@@ -104,34 +133,40 @@ class WindowlessWindowManager implements IWindowSession {
     }
 
     @Override
-    public int relayout(IWindow window, int seq, WindowManager.LayoutParams attrs,
+    public int relayout(IWindow window, int seq, WindowManager.LayoutParams inAttrs,
             int requestedWidth, int requestedHeight, int viewFlags, int flags, long frameNumber,
             Rect outFrame, Rect outOverscanInsets, Rect outContentInsets, Rect outVisibleInsets,
             Rect outStableInsets, Rect outsets, Rect outBackdropFrame,
             DisplayCutout.ParcelableWrapper cutout, MergedConfiguration mergedConfiguration,
             SurfaceControl outSurfaceControl, InsetsState outInsetsState) {
-        SurfaceControl sc = null;
+        State state = null;
         synchronized (this) {
-            sc = mScForWindow.get(window.asBinder());
+            state = mStateForWindow.get(window.asBinder());
         }
-        if (sc == null) {
+        if (state == null) {
             throw new IllegalArgumentException(
                     "Invalid window token (never added or removed already)");
         }
+        SurfaceControl sc = state.mSurfaceControl;
         SurfaceControl.Transaction t = new SurfaceControl.Transaction();
+
+        if (inAttrs != null) {
+            state.mParams.copyFrom(inAttrs);
+        }
+        WindowManager.LayoutParams attrs = state.mParams;
 
         final Rect surfaceInsets = attrs.surfaceInsets;
         int width = surfaceInsets != null ?
-                requestedWidth + surfaceInsets.left + surfaceInsets.right : requestedWidth;
+                attrs.width + surfaceInsets.left + surfaceInsets.right : attrs.width;
         int height = surfaceInsets != null ?
-                requestedHeight + surfaceInsets.top + surfaceInsets.bottom : requestedHeight;
+                attrs.height + surfaceInsets.top + surfaceInsets.bottom : attrs.height;
 
         t.show(sc)
             .setBufferSize(sc, width, height)
             .setOpaque(sc, isOpaque(attrs))
             .apply();
         outSurfaceControl.copyFrom(sc);
-        outFrame.set(0, 0, requestedWidth, requestedHeight);
+        outFrame.set(0, 0, attrs.width, attrs.height);
 
         mergedConfiguration.setConfiguration(mConfiguration, mConfiguration);
 
@@ -165,6 +200,17 @@ class WindowlessWindowManager implements IWindowSession {
     @Override
     public void finishDrawing(android.view.IWindow window,
             android.view.SurfaceControl.Transaction postDrawTransaction) {
+        synchronized (this) {
+            final ResizeCompleteCallback c =
+                mResizeCompletionForWindow.get(window.asBinder());
+            if (c == null) {
+                // No one wanted the callback, but it wasn't necessarily unexpected.
+                postDrawTransaction.apply();
+                return;
+            }
+            c.finished(postDrawTransaction);
+            mResizeCompletionForWindow.remove(window.asBinder());
+        }
     }
 
     @Override

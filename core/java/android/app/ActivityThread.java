@@ -1164,6 +1164,10 @@ public final class ActivityThread extends ClientTransactionHandler {
             sendMessage(H.ATTACH_AGENT, agent);
         }
 
+        public void attachStartupAgents(String dataDir) {
+            sendMessage(H.ATTACH_STARTUP_AGENTS, dataDir);
+        }
+
         public void setSchedulingGroup(int group) {
             // Note: do this immediately, since going into the foreground
             // should happen regardless of what pending work we have to do
@@ -1813,6 +1817,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         public static final int EXECUTE_TRANSACTION = 159;
         public static final int RELAUNCH_ACTIVITY = 160;
         public static final int PURGE_RESOURCES = 161;
+        public static final int ATTACH_STARTUP_AGENTS = 162;
 
         String codeToString(int code) {
             if (DEBUG_MESSAGES) {
@@ -1856,6 +1861,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     case EXECUTE_TRANSACTION: return "EXECUTE_TRANSACTION";
                     case RELAUNCH_ACTIVITY: return "RELAUNCH_ACTIVITY";
                     case PURGE_RESOURCES: return "PURGE_RESOURCES";
+                    case ATTACH_STARTUP_AGENTS: return "ATTACH_STARTUP_AGENTS";
                 }
             }
             return Integer.toString(code);
@@ -2043,6 +2049,9 @@ public final class ActivityThread extends ClientTransactionHandler {
                     break;
                 case PURGE_RESOURCES:
                     schedulePurgeIdler();
+                    break;
+                case ATTACH_STARTUP_AGENTS:
+                    handleAttachStartupAgents((String) msg.obj);
                     break;
             }
             Object obj = msg.obj;
@@ -3780,6 +3789,27 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
+    static void handleAttachStartupAgents(String dataDir) {
+        try {
+            Path code_cache = ContextImpl.getCodeCacheDirBeforeBind(new File(dataDir)).toPath();
+            if (!Files.exists(code_cache)) {
+                return;
+            }
+            Path startup_path = code_cache.resolve("startup_agents");
+            if (Files.exists(startup_path)) {
+                for (Path p : Files.newDirectoryStream(startup_path)) {
+                    handleAttachAgent(
+                            p.toAbsolutePath().toString()
+                            + "="
+                            + dataDir,
+                            null);
+                }
+            }
+        } catch (Exception e) {
+            // Ignored.
+        }
+    }
+
     private static final ThreadLocal<Intent> sCurrentBroadcastIntent = new ThreadLocal<Intent>();
 
     /**
@@ -4836,7 +4866,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         View.sDebugViewAttributesApplicationPackage = mCoreSettings.getString(
                 Settings.Global.DEBUG_VIEW_ATTRIBUTES_APPLICATION_PACKAGE, "");
         String currentPackage = (mBoundApplication != null && mBoundApplication.appInfo != null)
-                ? mBoundApplication.appInfo.packageName : "";
+                ? mBoundApplication.appInfo.packageName : "<unknown-app>";
         View.sDebugViewAttributes =
                 mCoreSettings.getInt(Settings.Global.DEBUG_VIEW_ATTRIBUTES, 0) != 0
                         || View.sDebugViewAttributesApplicationPackage.equals(currentPackage);
@@ -6445,26 +6475,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "NetworkSecurityConfigProvider.install");
         NetworkSecurityConfigProvider.install(appContext);
         Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
-
-
-        if (isAppDebuggable) {
-            try {
-                // Load all the agents in the code_cache/startup_agents directory.
-                // We pass the absolute path to the data_dir as an argument.
-                Path startup_path = appContext.getCodeCacheDir().toPath().resolve("startup_agents");
-                if (Files.exists(startup_path)) {
-                    for (Path p : Files.newDirectoryStream(startup_path)) {
-                        handleAttachAgent(
-                                p.toAbsolutePath().toString()
-                                + "="
-                                + appContext.getDataDir().toPath().toAbsolutePath().toString(),
-                                data.info);
-                    }
-                }
-            } catch (Exception e) {
-                // Ignored.
-            }
-        }
 
         // Continue loading instrumentation.
         if (ii != null) {

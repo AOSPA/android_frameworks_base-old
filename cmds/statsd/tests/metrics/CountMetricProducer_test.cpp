@@ -43,8 +43,8 @@ TEST(CountMetricProducerTest, TestFirstBucket) {
     metric.set_bucket(ONE_MINUTE);
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
 
-    CountMetricProducer countProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      5, 600 * NS_PER_SEC + NS_PER_SEC/2);
+    CountMetricProducer countProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard, 5,
+                                      600 * NS_PER_SEC + NS_PER_SEC / 2);
     EXPECT_EQ(600500000000, countProducer.mCurrentBucketStartTimeNs);
     EXPECT_EQ(10, countProducer.mCurrentBucketNum);
     EXPECT_EQ(660000000005, countProducer.getCurrentBucketEndTimeNs());
@@ -131,7 +131,8 @@ TEST(CountMetricProducerTest, TestEventsWithNonSlicedCondition) {
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
 
-    CountMetricProducer countProducer(kConfigKey, metric, 1, wizard, bucketStartTimeNs, bucketStartTimeNs);
+    CountMetricProducer countProducer(kConfigKey, metric, 1, wizard, bucketStartTimeNs,
+                                      bucketStartTimeNs);
 
     countProducer.onConditionChanged(true, bucketStartTimeNs);
     countProducer.onMatchedLogEvent(1 /*matcher index*/, event1);
@@ -394,6 +395,26 @@ TEST(CountMetricProducerTest, TestAnomalyDetectionUnSliced) {
     EXPECT_EQ(4L, countProducer.mCurrentSlicedCounter->begin()->second);
     EXPECT_EQ(anomalyTracker->getRefractoryPeriodEndsSec(DEFAULT_METRIC_DIMENSION_KEY),
             std::ceil(1.0 * event7.GetElapsedTimestampNs() / NS_PER_SEC + refPeriodSec));
+}
+
+TEST(CountMetricProducerTest, TestOneWeekTimeUnit) {
+    CountMetric metric;
+    metric.set_id(1);
+    metric.set_bucket(ONE_WEEK);
+
+    sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
+
+    int64_t oneDayNs = 24 * 60 * 60 * 1e9;
+    int64_t fiveWeeksNs = 5 * 7 * oneDayNs;
+
+    CountMetricProducer countProducer(
+            kConfigKey, metric, -1 /* meaning no condition */, wizard, oneDayNs, fiveWeeksNs);
+
+    int64_t fiveWeeksOneDayNs = fiveWeeksNs + oneDayNs;
+
+    EXPECT_EQ(fiveWeeksNs, countProducer.mCurrentBucketStartTimeNs);
+    EXPECT_EQ(4, countProducer.mCurrentBucketNum);
+    EXPECT_EQ(fiveWeeksOneDayNs, countProducer.getCurrentBucketEndTimeNs());
 }
 
 }  // namespace statsd

@@ -52,6 +52,7 @@ import com.android.systemui.SysuiTestCase;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.plugins.ActivityStarter.OnDismissAction;
 import com.android.systemui.plugins.FalsingManager;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -83,11 +84,13 @@ public class KeyguardBouncerTest extends SysuiTestCase {
     @Mock
     private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     @Mock
-    private UnlockMethodCache mUnlockMethodCache;
+    private KeyguardStateController mKeyguardStateController;
     @Mock
     private KeyguardBypassController mKeyguardBypassController;
     @Mock
     private Handler mHandler;
+    @Mock
+    private KeyguardSecurityModel mKeyguardSecurityModel;
 
     private KeyguardBouncer mBouncer;
 
@@ -96,13 +99,17 @@ public class KeyguardBouncerTest extends SysuiTestCase {
         com.android.systemui.util.Assert.sMainLooper = TestableLooper.get(this).getLooper();
         MockitoAnnotations.initMocks(this);
         mDependency.injectTestDependency(KeyguardUpdateMonitor.class, mKeyguardUpdateMonitor);
+        mDependency.injectTestDependency(KeyguardSecurityModel.class, mKeyguardSecurityModel);
+        mDependency.injectMockDependency(KeyguardStateController.class);
+        when(mKeyguardSecurityModel.getSecurityMode(anyInt()))
+                .thenReturn(KeyguardSecurityModel.SecurityMode.None);
         DejankUtils.setImmediate(true);
         final ViewGroup container = new FrameLayout(getContext());
         when(mKeyguardHostView.getViewTreeObserver()).thenReturn(mViewTreeObserver);
         when(mKeyguardHostView.getHeight()).thenReturn(500);
         mBouncer = new KeyguardBouncer(getContext(), mViewMediatorCallback,
                 mLockPatternUtils, container, mDismissCallbackRegistry, mFalsingManager,
-                mExpansionCallback, mUnlockMethodCache, mKeyguardUpdateMonitor,
+                mExpansionCallback, mKeyguardStateController, mKeyguardUpdateMonitor,
                 mKeyguardBypassController, mHandler) {
             @Override
             protected void inflateView() {
@@ -305,14 +312,6 @@ public class KeyguardBouncerTest extends SysuiTestCase {
     }
 
     @Test
-    public void testNeedsFullscreenBouncer_asksKeyguardView() {
-        mBouncer.ensureView();
-        mBouncer.needsFullscreenBouncer();
-        verify(mKeyguardHostView).getSecurityMode();
-        verify(mKeyguardHostView, never()).getCurrentSecurityMode();
-    }
-
-    @Test
     public void testIsFullscreenBouncer_asksKeyguardView() {
         mBouncer.ensureView();
         mBouncer.isFullscreenBouncer();
@@ -384,7 +383,7 @@ public class KeyguardBouncerTest extends SysuiTestCase {
 
     @Test
     public void testShow_delaysIfFaceAuthIsRunning() {
-        when(mUnlockMethodCache.isFaceAuthEnabled()).thenReturn(true);
+        when(mKeyguardStateController.isFaceAuthEnabled()).thenReturn(true);
         mBouncer.show(true /* reset */);
 
         ArgumentCaptor<Runnable> showRunnable = ArgumentCaptor.forClass(Runnable.class);
@@ -397,7 +396,7 @@ public class KeyguardBouncerTest extends SysuiTestCase {
 
     @Test
     public void testShow_delaysIfFaceAuthIsRunning_unlessBypass() {
-        when(mUnlockMethodCache.isFaceAuthEnabled()).thenReturn(true);
+        when(mKeyguardStateController.isFaceAuthEnabled()).thenReturn(true);
         when(mKeyguardBypassController.getBypassEnabled()).thenReturn(true);
         mBouncer.show(true /* reset */);
 

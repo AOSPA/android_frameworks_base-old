@@ -121,7 +121,7 @@ class RecentTasks {
 
     // Comparator to sort by taskId
     private static final Comparator<TaskRecord> TASK_ID_COMPARATOR =
-            (lhs, rhs) -> rhs.taskId - lhs.taskId;
+            (lhs, rhs) -> rhs.mTaskId - lhs.mTaskId;
 
     // Placeholder variables to keep track of activities/apps that are no longer avialble while
     // iterating through the recents list
@@ -274,9 +274,14 @@ class RecentTasks {
      * app, or a timeout occurs.
      */
     void setFreezeTaskListReordering() {
+        // Only fire the callback once per quickswitch session, not on every individual switch
+        if (!mFreezeTaskListReordering) {
+            mTaskNotificationController.notifyTaskListFrozen(true);
+            mFreezeTaskListReordering = true;
+        }
+
         // Always update the reordering time when this is called to ensure that the timeout
         // is reset
-        mFreezeTaskListReordering = true;
         mService.mH.removeCallbacks(mResetFreezeTaskListOnTimeoutRunnable);
         mService.mH.postDelayed(mResetFreezeTaskListOnTimeoutRunnable, mFreezeTaskListTimeoutMs);
     }
@@ -304,6 +309,7 @@ class RecentTasks {
         trimInactiveRecentTasks();
 
         mTaskNotificationController.notifyTaskStackChanged();
+        mTaskNotificationController.notifyTaskListFrozen(false);
     }
 
     /**
@@ -460,8 +466,8 @@ class RecentTasks {
         // Check if any tasks are added before recents is loaded
         final SparseBooleanArray preaddedTasks = new SparseBooleanArray();
         for (final TaskRecord task : mTasks) {
-            if (task.userId == userId && shouldPersistTaskLocked(task)) {
-                preaddedTasks.put(task.taskId, true);
+            if (task.mUserId == userId && shouldPersistTaskLocked(task)) {
+                preaddedTasks.put(task.mTaskId, true);
             }
         }
 
@@ -529,12 +535,12 @@ class RecentTasks {
             if (shouldPersistTaskLocked(task)) {
                 // Set of persisted taskIds for task.userId should not be null here
                 // TODO Investigate why it can happen. For now initialize with an empty set
-                if (mPersistedTaskIds.get(task.userId) == null) {
-                    Slog.wtf(TAG, "No task ids found for userId " + task.userId + ". task=" + task
+                if (mPersistedTaskIds.get(task.mUserId) == null) {
+                    Slog.wtf(TAG, "No task ids found for userId " + task.mUserId + ". task=" + task
                             + " mPersistedTaskIds=" + mPersistedTaskIds);
-                    mPersistedTaskIds.put(task.userId, new SparseBooleanArray());
+                    mPersistedTaskIds.put(task.mUserId, new SparseBooleanArray());
                 }
-                mPersistedTaskIds.get(task.userId).put(task.taskId, true);
+                mPersistedTaskIds.get(task.mUserId).put(task.mTaskId, true);
             }
         }
     }
@@ -610,7 +616,7 @@ class RecentTasks {
 
         for (int i = mTasks.size() - 1; i >= 0; --i) {
             TaskRecord tr = mTasks.get(i);
-            if (tr.userId == userId) {
+            if (tr.mUserId == userId) {
                 if(DEBUG_TASKS) Slog.i(TAG_TASKS,
                         "remove RecentTask " + tr + " when finishing user" + userId);
                 remove(tr);
@@ -624,11 +630,11 @@ class RecentTasks {
             final TaskRecord tr = mTasks.get(i);
             if (tr.realActivity != null
                     && packageNames.contains(tr.realActivity.getPackageName())
-                    && tr.userId == userId
+                    && tr.mUserId == userId
                     && tr.realActivitySuspended != suspended) {
                tr.realActivitySuspended = suspended;
                if (suspended) {
-                   mSupervisor.removeTaskByIdLocked(tr.taskId, false,
+                   mSupervisor.removeTaskByIdLocked(tr.mTaskId, false,
                            REMOVE_FROM_RECENTS, "suspended-package");
                }
                notifyTaskPersisterLocked(tr, false);
@@ -642,7 +648,7 @@ class RecentTasks {
         }
         for (int i = mTasks.size() - 1; i >= 0; --i) {
             final TaskRecord tr = mTasks.get(i);
-            if (tr.userId == userId && !mService.getLockTaskController().isTaskWhitelisted(tr)) {
+            if (tr.mUserId == userId && !mService.getLockTaskController().isTaskWhitelisted(tr)) {
                 remove(tr);
             }
         }
@@ -653,10 +659,10 @@ class RecentTasks {
             final TaskRecord tr = mTasks.get(i);
             final String taskPackageName =
                     tr.getBaseIntent().getComponent().getPackageName();
-            if (tr.userId != userId) continue;
+            if (tr.mUserId != userId) continue;
             if (!taskPackageName.equals(packageName)) continue;
 
-            mSupervisor.removeTaskByIdLocked(tr.taskId, true, REMOVE_FROM_RECENTS,
+            mSupervisor.removeTaskByIdLocked(tr.mTaskId, true, REMOVE_FROM_RECENTS,
                     "remove-package-task");
         }
     }
@@ -665,7 +671,7 @@ class RecentTasks {
         Set<Integer> profileIds = getProfileIds(userId);
         for (int i = mTasks.size() - 1; i >= 0; --i) {
             final TaskRecord tr = mTasks.get(i);
-            if (!profileIds.contains(tr.userId)) continue;
+            if (!profileIds.contains(tr.mUserId)) continue;
             if (isVisibleRecentTask(tr)) {
                 mTasks.remove(i);
                 notifyTaskRemoved(tr, true /* wasTrimmed */, true /* killProcess */);
@@ -677,7 +683,7 @@ class RecentTasks {
             int userId) {
         for (int i = mTasks.size() - 1; i >= 0; --i) {
             final TaskRecord tr = mTasks.get(i);
-            if (userId != UserHandle.USER_ALL && tr.userId != userId) {
+            if (userId != UserHandle.USER_ALL && tr.mUserId != userId) {
                 continue;
             }
 
@@ -685,7 +691,7 @@ class RecentTasks {
             final boolean sameComponent = cn != null && cn.getPackageName().equals(packageName)
                     && (filterByClasses == null || filterByClasses.contains(cn.getClassName()));
             if (sameComponent) {
-                mSupervisor.removeTaskByIdLocked(tr.taskId, false,
+                mSupervisor.removeTaskByIdLocked(tr.mTaskId, false,
                         REMOVE_FROM_RECENTS, "disabled-package");
             }
         }
@@ -711,7 +717,7 @@ class RecentTasks {
         final IPackageManager pm = AppGlobals.getPackageManager();
         for (int i = recentsCount - 1; i >= 0; i--) {
             final TaskRecord task = mTasks.get(i);
-            if (userId != UserHandle.USER_ALL && task.userId != userId) {
+            if (userId != UserHandle.USER_ALL && task.mUserId != userId) {
                 // Only look at tasks for the user ID of interest.
                 continue;
             }
@@ -828,7 +834,7 @@ class RecentTasks {
             if (intent == null || !callingPackage.equals(intent.getComponent().getPackageName())) {
                 continue;
             }
-            AppTaskImpl taskImpl = new AppTaskImpl(mService, tr.taskId, callingUid);
+            AppTaskImpl taskImpl = new AppTaskImpl(mService, tr.mTaskId, callingUid);
             list.add(taskImpl.asBinder());
         }
         return list;
@@ -910,7 +916,7 @@ class RecentTasks {
             }
 
             // Only add calling user or related users recent tasks
-            if (!includedUsers.contains(Integer.valueOf(tr.userId))) {
+            if (!includedUsers.contains(Integer.valueOf(tr.mUserId))) {
                 if (DEBUG_RECENTS) Slog.d(TAG_RECENTS, "Skipping, not user: " + tr);
                 continue;
             }
@@ -974,7 +980,7 @@ class RecentTasks {
             if ((task.isPersistable || task.inRecents)
                     && (stack == null || !stack.isHomeOrRecentsStack())) {
                 if (TaskPersister.DEBUG) Slog.d(TAG, "adding to persistentTaskIds task=" + task);
-                persistentTaskIds.add(task.taskId);
+                persistentTaskIds.add(task.mTaskId);
             } else {
                 if (TaskPersister.DEBUG) Slog.d(TAG, "omitting from persistentTaskIds task="
                         + task);
@@ -999,7 +1005,7 @@ class RecentTasks {
             if (isVisibleRecentTask(tr)) {
                 numVisibleTasks++;
                 if (isInVisibleRange(tr, i, numVisibleTasks, false /* skipExcludedCheck */)) {
-                    res.put(tr.taskId, true);
+                    res.put(tr.mTaskId, true);
                 }
             }
         }
@@ -1013,7 +1019,7 @@ class RecentTasks {
         final int recentsCount = mTasks.size();
         for (int i = 0; i < recentsCount; i++) {
             TaskRecord tr = mTasks.get(i);
-            if (tr.taskId == id) {
+            if (tr.mTaskId == id) {
                 return tr;
             }
         }
@@ -1026,7 +1032,7 @@ class RecentTasks {
     void add(TaskRecord task) {
         if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "add: task=" + task);
 
-        final boolean isAffiliated = task.mAffiliatedTaskId != task.taskId
+        final boolean isAffiliated = task.mAffiliatedTaskId != task.mTaskId
                 || task.mNextAffiliateTaskId != INVALID_TASK_ID
                 || task.mPrevAffiliateTaskId != INVALID_TASK_ID;
 
@@ -1140,7 +1146,7 @@ class RecentTasks {
 
         if (needAffiliationFix) {
             if (DEBUG_RECENTS) Slog.d(TAG_RECENTS, "addRecent: regrouping affiliations");
-            cleanupLocked(task.userId);
+            cleanupLocked(task.mUserId);
         }
 
         // Trim the set of tasks to the active set
@@ -1257,13 +1263,13 @@ class RecentTasks {
         if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "isActiveRecentTask: task=" + task
                 + " globalMax=" + mGlobalMaxNumTasks);
 
-        if (quietProfileUserIds.get(task.userId)) {
+        if (quietProfileUserIds.get(task.mUserId)) {
             // Quiet profile user's tasks are never active
             if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "\tisQuietProfileTask=true");
             return false;
         }
 
-        if (task.mAffiliatedTaskId != INVALID_TASK_ID && task.mAffiliatedTaskId != task.taskId) {
+        if (task.mAffiliatedTaskId != INVALID_TASK_ID && task.mAffiliatedTaskId != task.mTaskId) {
             // Keep the task active if its affiliated task is also active
             final TaskRecord affiliatedTask = getTask(task.mAffiliatedTaskId);
             if (affiliatedTask != null) {
@@ -1439,7 +1445,7 @@ class RecentTasks {
             final TaskRecord tr = mTasks.get(i);
             if (task != tr) {
                 if (!hasCompatibleActivityTypeAndWindowingMode(task, tr)
-                        || task.userId != tr.userId) {
+                        || task.mUserId != tr.mUserId) {
                     continue;
                 }
                 final Intent trIntent = tr.intent;
@@ -1494,7 +1500,7 @@ class RecentTasks {
         final int affiliateId = startTask.mAffiliatedTaskId;
 
         // Quick identification of isolated tasks. I.e. those not launched behind.
-        if (startTask.taskId == affiliateId && startTask.mPrevAffiliate == null &&
+        if (startTask.mTaskId == affiliateId && startTask.mPrevAffiliate == null &&
                 startTask.mNextAffiliate == null) {
             // There is still a slim chance that there are other tasks that point to this task
             // and that the chain is so messed up that this task no longer points to them but
@@ -1590,7 +1596,7 @@ class RecentTasks {
             } else {
                 // Verify middle of the chain's next points back to the one before.
                 if (cur.mNextAffiliate != prev
-                        || cur.mNextAffiliateTaskId != prev.taskId) {
+                        || cur.mNextAffiliateTaskId != prev.mTaskId) {
                     Slog.wtf(TAG, "Bad chain @" + endIndex
                             + ": middle task " + cur + " @" + endIndex
                             + " has bad next affiliate "

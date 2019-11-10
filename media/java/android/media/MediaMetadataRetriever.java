@@ -224,7 +224,45 @@ public class MediaMetadataRetriever implements AutoCloseable {
      * @return The meta data value associate with the given keyCode on success;
      * null on failure.
      */
-    public native String extractMetadata(int keyCode);
+    public native @Nullable String extractMetadata(int keyCode);
+
+    /**
+     * This method is similar to {@link #getFrameAtTime(long, int, BitmapParams)}
+     * except that the device will choose the actual {@link Bitmap.Config} to use.
+     *
+     * @param timeUs The time position where the frame will be retrieved.
+     * When retrieving the frame at the given time position, there is no
+     * guarantee that the data source has a frame located at the position.
+     * When this happens, a frame nearby will be returned. If timeUs is
+     * negative, time position and option will ignored, and any frame
+     * that the implementation considers as representative may be returned.
+     *
+     * @param option a hint on how the frame is found. Use
+     * {@link #OPTION_PREVIOUS_SYNC} if one wants to retrieve a sync frame
+     * that has a timestamp earlier than or the same as timeUs. Use
+     * {@link #OPTION_NEXT_SYNC} if one wants to retrieve a sync frame
+     * that has a timestamp later than or the same as timeUs. Use
+     * {@link #OPTION_CLOSEST_SYNC} if one wants to retrieve a sync frame
+     * that has a timestamp closest to or the same as timeUs. Use
+     * {@link #OPTION_CLOSEST} if one wants to retrieve a frame that may
+     * or may not be a sync frame but is closest to or the same as timeUs.
+     * {@link #OPTION_CLOSEST} often has larger performance overhead compared
+     * to the other options if there is no sync frame located at timeUs.
+     *
+     * @return A Bitmap containing a representative video frame, which can be null,
+     *         if such a frame cannot be retrieved. {@link Bitmap#getConfig()} can
+     *         be used to query the actual {@link Bitmap.Config}.
+     *
+     * @see {@link #getFrameAtTime(long, int, BitmapParams)}
+     */
+    public @Nullable Bitmap getFrameAtTime(long timeUs, @Option int option) {
+        if (option < OPTION_PREVIOUS_SYNC ||
+            option > OPTION_CLOSEST) {
+            throw new IllegalArgumentException("Unsupported option: " + option);
+        }
+
+        return _getFrameAtTime(timeUs, option, -1 /*dst_width*/, -1 /*dst_height*/, null);
+    }
 
     /**
      * Call this method after setDataSource(). This method finds a
@@ -255,16 +293,60 @@ public class MediaMetadataRetriever implements AutoCloseable {
      * {@link #OPTION_CLOSEST} often has larger performance overhead compared
      * to the other options if there is no sync frame located at timeUs.
      *
+     * @param params BitmapParams that controls the returned bitmap config
+     *        (such as pixel formats).
+     *
      * @return A Bitmap containing a representative video frame, which
      *         can be null, if such a frame cannot be retrieved.
+     *
+     * @see {@link #getFrameAtTime(long, int)}
      */
-    public Bitmap getFrameAtTime(long timeUs, @Option int option) {
+    public @Nullable Bitmap getFrameAtTime(
+            long timeUs, @Option int option, @NonNull BitmapParams params) {
         if (option < OPTION_PREVIOUS_SYNC ||
             option > OPTION_CLOSEST) {
             throw new IllegalArgumentException("Unsupported option: " + option);
         }
 
-        return _getFrameAtTime(timeUs, option, -1 /*dst_width*/, -1 /*dst_height*/);
+        return _getFrameAtTime(timeUs, option, -1 /*dst_width*/, -1 /*dst_height*/, params);
+    }
+
+    /**
+     * This method is similar to {@link #getScaledFrameAtTime(long, int, int, int, BitmapParams)}
+     * except that the device will choose the actual {@link Bitmap.Config} to use.
+     *
+     * @param timeUs The time position in microseconds where the frame will be retrieved.
+     * When retrieving the frame at the given time position, there is no
+     * guarantee that the data source has a frame located at the position.
+     * When this happens, a frame nearby will be returned. If timeUs is
+     * negative, time position and option will ignored, and any frame
+     * that the implementation considers as representative may be returned.
+     *
+     * @param option a hint on how the frame is found. Use
+     * {@link #OPTION_PREVIOUS_SYNC} if one wants to retrieve a sync frame
+     * that has a timestamp earlier than or the same as timeUs. Use
+     * {@link #OPTION_NEXT_SYNC} if one wants to retrieve a sync frame
+     * that has a timestamp later than or the same as timeUs. Use
+     * {@link #OPTION_CLOSEST_SYNC} if one wants to retrieve a sync frame
+     * that has a timestamp closest to or the same as timeUs. Use
+     * {@link #OPTION_CLOSEST} if one wants to retrieve a frame that may
+     * or may not be a sync frame but is closest to or the same as timeUs.
+     * {@link #OPTION_CLOSEST} often has larger performance overhead compared
+     * to the other options if there is no sync frame located at timeUs.
+     *
+     * @param dstWidth expected output bitmap width
+     * @param dstHeight expected output bitmap height
+     * @return A Bitmap containing a representative video frame, which can be null,
+     *         if such a frame cannot be retrieved. {@link Bitmap#getConfig()} can
+     *         be used to query the actual {@link Bitmap.Config}.
+     * @throws IllegalArgumentException if passed in invalid option or width by height
+     *         is less than or equal to 0.
+     * @see {@link #getScaledFrameAtTime(long, int, int, int, BitmapParams)}
+     */
+    public @Nullable Bitmap getScaledFrameAtTime(
+            long timeUs, @Option int option, int dstWidth, int dstHeight) {
+        validate(option, dstWidth, dstHeight);
+        return _getFrameAtTime(timeUs, option, dstWidth, dstHeight, null);
     }
 
     /**
@@ -297,15 +379,23 @@ public class MediaMetadataRetriever implements AutoCloseable {
      *
      * @param dstWidth expected output bitmap width
      * @param dstHeight expected output bitmap height
+     * @param params BitmapParams that controls the returned bitmap config
+     *        (such as pixel formats).
+     *
      * @return A Bitmap of size not larger than dstWidth by dstHeight containing a
      *         scaled video frame, which can be null, if such a frame cannot be retrieved.
      * @throws IllegalArgumentException if passed in invalid option or width by height
      *         is less than or equal to 0.
+     * @see {@link #getScaledFrameAtTime(long, int, int, int)}
      */
-    public Bitmap getScaledFrameAtTime(
-            long timeUs, @Option int option, int dstWidth, int dstHeight) {
-        if (option < OPTION_PREVIOUS_SYNC ||
-            option > OPTION_CLOSEST) {
+    public @Nullable Bitmap getScaledFrameAtTime(long timeUs, @Option int option,
+            int dstWidth, int dstHeight, @NonNull BitmapParams params) {
+        validate(option, dstWidth, dstHeight);
+        return _getFrameAtTime(timeUs, option, dstWidth, dstHeight, params);
+    }
+
+    private void validate(@Option int option, int dstWidth, int dstHeight) {
+        if (option < OPTION_PREVIOUS_SYNC || option > OPTION_CLOSEST) {
             throw new IllegalArgumentException("Unsupported option: " + option);
         }
         if (dstWidth <= 0) {
@@ -314,8 +404,6 @@ public class MediaMetadataRetriever implements AutoCloseable {
         if (dstHeight <= 0) {
             throw new IllegalArgumentException("Invalid height: " + dstHeight);
         }
-
-        return _getFrameAtTime(timeUs, option, dstWidth, dstHeight);
     }
 
     /**
@@ -342,7 +430,7 @@ public class MediaMetadataRetriever implements AutoCloseable {
      *
      * @see #getFrameAtTime(long, int)
      */
-    public Bitmap getFrameAtTime(long timeUs) {
+    public @Nullable Bitmap getFrameAtTime(long timeUs) {
         return getFrameAtTime(timeUs, OPTION_CLOSEST_SYNC);
     }
 
@@ -364,11 +452,13 @@ public class MediaMetadataRetriever implements AutoCloseable {
      * @see #getFrameAtTime(long)
      * @see #getFrameAtTime(long, int)
      */
-    public Bitmap getFrameAtTime() {
-        return _getFrameAtTime(-1, OPTION_CLOSEST_SYNC, -1 /*dst_width*/, -1 /*dst_height*/);
+    public @Nullable Bitmap getFrameAtTime() {
+        return _getFrameAtTime(
+                -1, OPTION_CLOSEST_SYNC, -1 /*dst_width*/, -1 /*dst_height*/, null);
     }
 
-    private native Bitmap _getFrameAtTime(long timeUs, int option, int width, int height);
+    private native Bitmap _getFrameAtTime(
+            long timeUs, int option, int width, int height, @Nullable BitmapParams params);
 
     public static final class BitmapParams {
         private Bitmap.Config inPreferredConfig = Bitmap.Config.ARGB_8888;
@@ -438,7 +528,7 @@ public class MediaMetadataRetriever implements AutoCloseable {
      * @see #getFramesAtIndex(int, int, BitmapParams)
      * @see #getFramesAtIndex(int, int)
      */
-    public Bitmap getFrameAtIndex(int frameIndex, @NonNull BitmapParams params) {
+    public @Nullable Bitmap getFrameAtIndex(int frameIndex, @NonNull BitmapParams params) {
         List<Bitmap> bitmaps = getFramesAtIndex(frameIndex, 1, params);
         return bitmaps.get(0);
     }
@@ -460,7 +550,7 @@ public class MediaMetadataRetriever implements AutoCloseable {
      * @see #getFramesAtIndex(int, int, BitmapParams)
      * @see #getFramesAtIndex(int, int)
      */
-    public Bitmap getFrameAtIndex(int frameIndex) {
+    public @Nullable Bitmap getFrameAtIndex(int frameIndex) {
         List<Bitmap> bitmaps = getFramesAtIndex(frameIndex, 1);
         return bitmaps.get(0);
     }
@@ -563,7 +653,7 @@ public class MediaMetadataRetriever implements AutoCloseable {
      * @see #getPrimaryImage(BitmapParams)
      * @see #getPrimaryImage()
      */
-    public Bitmap getImageAtIndex(int imageIndex, @NonNull BitmapParams params) {
+    public @Nullable Bitmap getImageAtIndex(int imageIndex, @NonNull BitmapParams params) {
         return getImageAtIndexInternal(imageIndex, params);
     }
 
@@ -601,7 +691,7 @@ public class MediaMetadataRetriever implements AutoCloseable {
      * @see #getPrimaryImage(BitmapParams)
      * @see #getPrimaryImage()
      */
-    public Bitmap getImageAtIndex(int imageIndex) {
+    public @Nullable Bitmap getImageAtIndex(int imageIndex) {
         return getImageAtIndexInternal(imageIndex, null);
     }
 
@@ -623,7 +713,7 @@ public class MediaMetadataRetriever implements AutoCloseable {
      * @see #getImageAtIndex(int)
      * @see #getPrimaryImage()
      */
-    public Bitmap getPrimaryImage(@NonNull BitmapParams params) {
+    public @Nullable Bitmap getPrimaryImage(@NonNull BitmapParams params) {
         return getImageAtIndexInternal(-1, params);
     }
 
@@ -639,7 +729,7 @@ public class MediaMetadataRetriever implements AutoCloseable {
      * @see #getImageAtIndex(int)
      * @see #getPrimaryImage(BitmapParams)
      */
-    public Bitmap getPrimaryImage() {
+    public @Nullable Bitmap getPrimaryImage() {
         return getImageAtIndexInternal(-1, null);
     }
 
@@ -665,7 +755,7 @@ public class MediaMetadataRetriever implements AutoCloseable {
      *
      * @return null if no such graphic is found.
      */
-    public byte[] getEmbeddedPicture() {
+    public @Nullable byte[] getEmbeddedPicture() {
         return getEmbeddedPicture(EMBEDDED_PICTURE_TYPE_ANY);
     }
 
@@ -938,8 +1028,6 @@ public class MediaMetadataRetriever implements AutoCloseable {
      * @see MediaFormat#COLOR_STANDARD_BT601_PAL
      * @see MediaFormat#COLOR_STANDARD_BT601_NTSC
      * @see MediaFormat#COLOR_STANDARD_BT2020
-     *
-     * @hide
      */
     public static final int METADATA_KEY_COLOR_STANDARD = 35;
 
@@ -950,8 +1038,6 @@ public class MediaMetadataRetriever implements AutoCloseable {
      * @see MediaFormat#COLOR_TRANSFER_SDR_VIDEO
      * @see MediaFormat#COLOR_TRANSFER_ST2084
      * @see MediaFormat#COLOR_TRANSFER_HLG
-     *
-     * @hide
      */
     public static final int METADATA_KEY_COLOR_TRANSFER = 36;
 
@@ -960,8 +1046,6 @@ public class MediaMetadataRetriever implements AutoCloseable {
      *
      * @see MediaFormat#COLOR_RANGE_LIMITED
      * @see MediaFormat#COLOR_RANGE_FULL
-     *
-     * @hide
      */
     public static final int METADATA_KEY_COLOR_RANGE    = 37;
     // Add more here...

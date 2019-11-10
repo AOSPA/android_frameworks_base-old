@@ -64,6 +64,9 @@ import android.test.mock.MockContentResolver;
 import android.util.ArraySet;
 import android.util.Pair;
 
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
+
 import com.android.internal.app.IAppOpsCallback;
 import com.android.internal.app.IAppOpsService;
 import com.android.server.AppStateTracker.Listener;
@@ -85,14 +88,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-import androidx.test.filters.SmallTest;
-import androidx.test.runner.AndroidJUnit4;
-
 /**
  * Tests for {@link AppStateTracker}
  *
- * Run with:
- atest $ANDROID_BUILD_TOP/frameworks/base/services/tests/mockingservicestests/src/com/android/server/AppStateTrackerTest.java
+ * Run with: atest com.android.server.AppStateTrackerTest
  */
 @SmallTest
 @RunWith(AndroidJUnit4.class)
@@ -685,10 +684,12 @@ public class AppStateTrackerTest {
         List<OpEntry> entries = new ArrayList<>();
         entries.add(new OpEntry(
                 AppOpsManager.OP_ACCESS_NOTIFICATIONS,
-                AppOpsManager.MODE_IGNORED));
+                AppOpsManager.MODE_IGNORED,
+                new Pair[0]));
         entries.add(new OpEntry(
                 AppStateTracker.TARGET_OP,
-                AppOpsManager.MODE_IGNORED));
+                AppOpsManager.MODE_IGNORED,
+                new Pair[0]));
 
         ops.add(new PackageOps(PACKAGE_1, UID_1, entries));
 
@@ -696,7 +697,8 @@ public class AppStateTrackerTest {
         entries = new ArrayList<>();
         entries.add(new OpEntry(
                 AppStateTracker.TARGET_OP,
-                AppOpsManager.MODE_IGNORED));
+                AppOpsManager.MODE_IGNORED,
+                new Pair[0]));
 
         ops.add(new PackageOps(PACKAGE_2, UID_2, entries));
 
@@ -704,7 +706,8 @@ public class AppStateTrackerTest {
         entries = new ArrayList<>();
         entries.add(new OpEntry(
                 AppStateTracker.TARGET_OP,
-                AppOpsManager.MODE_ALLOWED));
+                AppOpsManager.MODE_ALLOWED,
+                new Pair[0]));
 
         ops.add(new PackageOps(PACKAGE_1, UID_10_1, entries));
 
@@ -712,10 +715,12 @@ public class AppStateTrackerTest {
         entries = new ArrayList<>();
         entries.add(new OpEntry(
                 AppStateTracker.TARGET_OP,
-                AppOpsManager.MODE_IGNORED));
+                AppOpsManager.MODE_IGNORED,
+                new Pair[0]));
         entries.add(new OpEntry(
                 AppOpsManager.OP_ACCESS_NOTIFICATIONS,
-                AppOpsManager.MODE_IGNORED));
+                AppOpsManager.MODE_IGNORED,
+                new Pair[0]));
 
         ops.add(new PackageOps(PACKAGE_3, UID_10_3, entries));
 

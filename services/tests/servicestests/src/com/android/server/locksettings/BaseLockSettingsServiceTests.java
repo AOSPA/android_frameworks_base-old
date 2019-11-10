@@ -29,14 +29,21 @@ import android.app.KeyguardManager;
 import android.app.NotificationManager;
 import android.app.admin.DevicePolicyManager;
 import android.app.admin.DevicePolicyManagerInternal;
+import android.app.admin.DeviceStateCache;
 import android.app.trust.TrustManager;
 import android.content.ComponentName;
+import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
 import android.hardware.authsecret.V1_0.IAuthSecret;
+import android.hardware.face.Face;
+import android.hardware.face.FaceManager;
+import android.hardware.fingerprint.Fingerprint;
+import android.hardware.fingerprint.FingerprintManager;
 import android.os.FileUtils;
 import android.os.IProgressListener;
 import android.os.RemoteException;
 import android.os.UserManager;
+import android.os.UserManagerInternal;
 import android.os.storage.IStorageManager;
 import android.os.storage.StorageManager;
 import android.security.KeyStore;
@@ -45,6 +52,7 @@ import android.test.AndroidTestCase;
 import com.android.internal.widget.ILockSettings;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.internal.widget.LockSettingsInternal;
+import com.android.internal.widget.LockscreenCredential;
 import com.android.server.LocalServices;
 import com.android.server.locksettings.recoverablekeystore.RecoverableKeyStoreManager;
 import com.android.server.wm.WindowManagerInternal;
@@ -91,7 +99,13 @@ public abstract class BaseLockSettingsServiceTests extends AndroidTestCase {
     FakeGsiService mGsiService;
     PasswordSlotManagerTestable mPasswordSlotManager;
     RecoverableKeyStoreManager mRecoverableKeyStoreManager;
+    UserManagerInternal mUserManagerInternal;
+    DeviceStateCache mDeviceStateCache;
+    FingerprintManager mFingerprintManager;
+    FaceManager mFaceManager;
+    PackageManager mPackageManager;
     protected boolean mHasSecureLockScreen;
+    FakeSettings mSettings;
 
     @Override
     protected void setUp() throws Exception {
@@ -108,6 +122,12 @@ public abstract class BaseLockSettingsServiceTests extends AndroidTestCase {
         mGsiService = new FakeGsiService();
         mPasswordSlotManager = new PasswordSlotManagerTestable();
         mRecoverableKeyStoreManager = mock(RecoverableKeyStoreManager.class);
+        mUserManagerInternal = mock(UserManagerInternal.class);
+        mDeviceStateCache = mock(DeviceStateCache.class);
+        mFingerprintManager = mock(FingerprintManager.class);
+        mFaceManager = mock(FaceManager.class);
+        mPackageManager = mock(PackageManager.class);
+        mSettings = new FakeSettings();
 
         LocalServices.removeServiceForTest(LockSettingsInternal.class);
         LocalServices.removeServiceForTest(DevicePolicyManagerInternal.class);
@@ -117,7 +137,7 @@ public abstract class BaseLockSettingsServiceTests extends AndroidTestCase {
 
         mContext = new MockLockSettingsContext(getContext(), mUserManager, mNotificationManager,
                 mDevicePolicyManager, mock(StorageManager.class), mock(TrustManager.class),
-                mock(KeyguardManager.class));
+                mock(KeyguardManager.class), mFingerprintManager, mFaceManager, mPackageManager);
         mStorage = new LockSettingsStorageTestable(mContext,
                 new File(getContext().getFilesDir(), "locksettings"));
         File storageDir = mStorage.mStorageDir;
@@ -144,7 +164,8 @@ public abstract class BaseLockSettingsServiceTests extends AndroidTestCase {
         mAuthSecretService = mock(IAuthSecret.class);
         mService = new LockSettingsServiceTestable(mContext, mLockPatternUtils, mStorage,
                 mGateKeeperService, mKeyStore, setUpStorageManagerMock(), mActivityManager,
-                mSpManager, mAuthSecretService, mGsiService, mRecoverableKeyStoreManager);
+                mSpManager, mAuthSecretService, mGsiService, mRecoverableKeyStoreManager,
+                mUserManagerInternal, mDeviceStateCache, mSettings);
         when(mUserManager.getUserInfo(eq(PRIMARY_USER_ID))).thenReturn(PRIMARY_USER_INFO);
         mPrimaryUserProfiles.add(PRIMARY_USER_INFO);
         installChildProfile(MANAGED_PROFILE_USER_ID);
@@ -172,6 +193,12 @@ public abstract class BaseLockSettingsServiceTests extends AndroidTestCase {
         // Adding a fake Device Owner app which will enable escrow token support in LSS.
         when(mDevicePolicyManager.getDeviceOwnerComponentOnAnyUser()).thenReturn(
                 new ComponentName("com.dummy.package", ".FakeDeviceOwner"));
+        when(mUserManagerInternal.isDeviceManaged()).thenReturn(true);
+        when(mDeviceStateCache.isDeviceProvisioned()).thenReturn(true);
+        mockBiometricsHardwareFingerprintsAndTemplates(PRIMARY_USER_ID);
+        mockBiometricsHardwareFingerprintsAndTemplates(MANAGED_PROFILE_USER_ID);
+
+        mSettings.setDeviceProvisioned(true);
         mLocalService = LocalServices.getService(LockSettingsInternal.class);
     }
 
@@ -184,6 +211,7 @@ public abstract class BaseLockSettingsServiceTests extends AndroidTestCase {
         when(mUserManager.getProfileParent(eq(profileId))).thenReturn(PRIMARY_USER_INFO);
         when(mUserManager.isUserRunning(eq(profileId))).thenReturn(true);
         when(mUserManager.isUserUnlocked(eq(profileId))).thenReturn(true);
+        when(mUserManagerInternal.isUserManaged(eq(profileId))).thenReturn(true);
         return userInfo;
     }
 
@@ -222,6 +250,39 @@ public abstract class BaseLockSettingsServiceTests extends AndroidTestCase {
         return sm;
     }
 
+    private void mockBiometricsHardwareFingerprintsAndTemplates(int userId) {
+        // Hardware must be detected and fingerprints must be enrolled
+        when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)).thenReturn(true);
+        when(mFingerprintManager.isHardwareDetected()).thenReturn(true);
+        when(mFingerprintManager.hasEnrolledFingerprints(userId)).thenReturn(true);
+        doAnswer(new Answer<Void>() {
+            @Override
+            public Void answer(InvocationOnMock invocation) throws Throwable {
+                Fingerprint fp = (Fingerprint) invocation.getArguments()[0];
+                FingerprintManager.RemovalCallback callback =
+                        (FingerprintManager.RemovalCallback) invocation.getArguments()[2];
+                callback.onRemovalSucceeded(fp, 0);
+                return null;
+            }
+        }).when(mFingerprintManager).remove(any(), eq(userId), any());
+
+
+        // Hardware must be detected and templates must be enrolled
+        when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_FACE)).thenReturn(true);
+        when(mFaceManager.isHardwareDetected()).thenReturn(true);
+        when(mFaceManager.hasEnrolledTemplates(userId)).thenReturn(true);
+        doAnswer(new Answer<Void>() {
+            @Override
+            public Void answer(InvocationOnMock invocation) throws Throwable {
+                Face face = (Face) invocation.getArguments()[0];
+                FaceManager.RemovalCallback callback =
+                        (FaceManager.RemovalCallback) invocation.getArguments()[2];
+                callback.onRemovalSucceeded(face, 0);
+                return null;
+            }
+        }).when(mFaceManager).remove(any(), eq(userId), any());
+    }
+
     @Override
     protected void tearDown() throws Exception {
         super.tearDown();
@@ -250,4 +311,22 @@ public abstract class BaseLockSettingsServiceTests extends AndroidTestCase {
     protected static void assertArrayNotEquals(byte[] expected, byte[] actual) {
         assertFalse(Arrays.equals(expected, actual));
     }
+
+    protected LockscreenCredential newPassword(String password) {
+        return LockscreenCredential.createPasswordOrNone(password);
+    }
+
+    protected LockscreenCredential newPin(String pin) {
+        return LockscreenCredential.createPinOrNone(pin);
+    }
+
+    protected LockscreenCredential newPattern(String pattern) {
+        return LockscreenCredential.createPattern(LockPatternUtils.byteArrayToPattern(
+                pattern.getBytes()));
+    }
+
+    protected LockscreenCredential nonePassword() {
+        return LockscreenCredential.createNone();
+    }
+
 }

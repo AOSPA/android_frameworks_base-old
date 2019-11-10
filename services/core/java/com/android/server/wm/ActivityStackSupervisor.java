@@ -44,7 +44,7 @@ import static android.graphics.Rect.copyOrNull;
 import static android.os.PowerManager.PARTIAL_WAKE_LOCK;
 import static android.os.Process.INVALID_UID;
 import static android.os.Process.SYSTEM_UID;
-import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
+import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.Display.TYPE_VIRTUAL;
@@ -710,7 +710,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     ResolveInfo resolveIntent(Intent intent, String resolvedType, int userId, int flags,
             int filterCallingUid) {
         try {
-            Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "resolveIntent");
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "resolveIntent");
             int modifiedFlags = flags
                     | PackageManager.MATCH_DEFAULT_ONLY | ActivityManagerService.STOCK_PM_FLAGS;
             if (intent.isWebIntent()
@@ -731,7 +731,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 Binder.restoreCallingIdentity(token);
             }
         } finally {
-            Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
     }
 
@@ -841,10 +841,10 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                                 + " with results=" + results + " newIntents=" + newIntents
                                 + " andResume=" + andResume);
                 EventLog.writeEvent(EventLogTags.AM_RESTART_ACTIVITY, r.mUserId,
-                        System.identityHashCode(r), task.taskId, r.shortComponentName);
+                        System.identityHashCode(r), task.mTaskId, r.shortComponentName);
                 if (r.isActivityTypeHome()) {
                     // Home process is the root process of the task.
-                    updateHomeProcess(task.mActivities.get(0).app);
+                    updateHomeProcess(task.getChildAt(0).app);
                 }
                 mService.getPackageManagerInternalLocked().notifyPackageUse(
                         r.intent.getComponent().getPackageName(), NOTIFY_PACKAGE_USE_ACTIVITY);
@@ -1193,7 +1193,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             return ACTIVITY_RESTRICTION_NONE;
         }
 
-        if (mService.getAppOpsService().noteOperation(opCode, callingUid, callingPackage)
+        // TODO moltmann b/136595429: Set featureId from caller
+        if (mService.getAppOpsService().noteOperation(opCode, callingUid, callingPackage, /* featureId */ null)
                 != AppOpsManager.MODE_ALLOWED) {
             if (!ignoreTargetSecurity) {
                 return ACTIVITY_RESTRICTION_APPOP;
@@ -1236,7 +1237,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             return ACTIVITY_RESTRICTION_NONE;
         }
 
-        if (mService.getAppOpsService().noteOperation(opCode, callingUid, callingPackage)
+        // TODO moltmann b/136595429: Set componentId from caller
+        if (mService.getAppOpsService().noteOperation(opCode, callingUid, callingPackage, /* featureId */ null)
                 != AppOpsManager.MODE_ALLOWED) {
             return ACTIVITY_RESTRICTION_APPOP;
         }
@@ -1663,7 +1665,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             mPendingTempOtherTaskInsetBounds = copyOrNull(tempOtherTaskInsetBounds);
         }
 
-        Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "am.resizeDockedStack");
+        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "resizeDockedStack");
         mService.deferWindowLayout();
         try {
             // Don't allow re-entry while resizing. E.g. due to docked stack detaching.
@@ -1729,7 +1731,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         } finally {
             mAllowDockedStackResize = true;
             mService.continueWindowLayout();
-            Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
     }
 
@@ -1751,7 +1753,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             return;
         }
 
-        Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "am.resizePinnedStack");
+        Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "resizePinnedStack");
         mService.deferWindowLayout();
         try {
             Rect insetBounds = null;
@@ -1773,7 +1775,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                     !DEFER_RESUME);
         } finally {
             mService.continueWindowLayout();
-            Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
     }
 
@@ -1799,7 +1801,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             moveTasksToFullscreenStackLocked(stack, !ON_TOP);
         } else {
             for (int i = tasks.size() - 1; i >= 0; i--) {
-                removeTaskByIdLocked(tasks.get(i).taskId, true /* killProcess */,
+                removeTaskByIdLocked(tasks.get(i).mTaskId, true /* killProcess */,
                         REMOVE_FROM_RECENTS, "remove-stack");
             }
         }
@@ -1830,6 +1832,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             tr.removeTaskActivitiesLocked(reason);
             cleanUpRemovedTaskLocked(tr, killProcess, removeFromRecents);
             mService.getLockTaskController().clearLockedTask(tr);
+            mService.getTaskChangeNotificationController().notifyTaskStackChanged();
             if (tr.isPersistable) {
                 mService.notifyTaskPersisterLocked(null, true);
             }
@@ -1851,7 +1854,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
         // Find any running services associated with this app and stop if needed.
         final Message msg = PooledLambda.obtainMessage(ActivityManagerInternal::cleanUpServices,
-                mService.mAmInternal, tr.userId, component, new Intent(tr.getBaseIntent()));
+                mService.mAmInternal, tr.mUserId, component, new Intent(tr.getBaseIntent()));
         mService.mH.sendMessage(msg);
 
         if (!killProcess) {
@@ -1868,7 +1871,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             SparseArray<WindowProcessController> uids = pmap.valueAt(i);
             for (int j = 0; j < uids.size(); j++) {
                 WindowProcessController proc = uids.valueAt(j);
-                if (proc.mUserId != tr.userId) {
+                if (proc.mUserId != tr.mUserId) {
                     // Don't kill process for a different user.
                     continue;
                 }
@@ -1942,9 +1945,9 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         task.createTask(onTop, true /* showForAllUsers */);
         if (DEBUG_RECENTS) Slog.v(TAG_RECENTS,
                 "Added restored task=" + task + " to stack=" + stack);
-        final ArrayList<ActivityRecord> activities = task.mActivities;
-        for (int activityNdx = activities.size() - 1; activityNdx >= 0; --activityNdx) {
-            activities.get(activityNdx).createAppWindowToken();
+        for (int activityNdx = task.getChildCount() - 1; activityNdx >= 0; --activityNdx) {
+            final ActivityRecord r = task.getChildAt(activityNdx);
+            r.setTask(task);
         }
         return true;
     }
@@ -1959,7 +1962,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         if (wasTrimmed) {
             // Task was trimmed from the recent tasks list -- remove the active task record as well
             // since the user won't really be able to go back to it
-            removeTaskByIdLocked(task.taskId, killProcess, false /* removeFromRecents */,
+            removeTaskByIdLocked(task.mTaskId, killProcess, false /* removeFromRecents */,
                     "recent-task-trimmed");
         }
         task.removedFromRecents();
@@ -2149,7 +2152,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         final TaskRecord task = r.getTaskRecord();
         final ActivityStack stack = task.getStack();
 
-        r.mLaunchTaskBehind = false;
         mRecentTasks.add(task);
         mService.getTaskChangeNotificationController().notifyTaskStackChanged();
         stack.ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
@@ -2189,6 +2191,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         return false;
     }
 
+    // TODO: Change method name to reflect what it actually does.
     final ArrayList<ActivityRecord> processStoppingActivitiesLocked(ActivityRecord idleActivity,
             boolean remove, boolean processPausingActivities) {
         ArrayList<ActivityRecord> stops = null;
@@ -2197,7 +2200,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         for (int activityNdx = mStoppingActivities.size() - 1; activityNdx >= 0; --activityNdx) {
             ActivityRecord s = mStoppingActivities.get(activityNdx);
 
-            final boolean animating = s.mAppWindowToken.isSelfAnimating();
+            final boolean animating = s.isSelfAnimating();
 
             if (DEBUG_STATES) Slog.v(TAG, "Stopping " + s + ": nowVisible=" + nowVisible
                     + " animating=" + animating + " finishing=" + s.finishing);
@@ -2318,7 +2321,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             pw.print(" #"); pw.print(i); pw.print(": ");
             pw.println(r);
             if (full) {
-                r.dump(pw, innerPrefix);
+                r.dump(pw, innerPrefix, true /* dumpAll */);
             } else if (complete) {
                 // Complete + brief == give a summary.  Isn't that obvious?!?
                 pw.print(innerPrefix); pw.println(r.intent.toInsecureString());
@@ -2542,15 +2545,13 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             return;
         }
         mService.getTaskChangeNotificationController().notifyActivityForcedResizable(
-                task.taskId, reason, topActivity.info.applicationInfo.packageName);
+                task.mTaskId, reason, topActivity.info.applicationInfo.packageName);
     }
 
     void activityRelaunchedLocked(IBinder token) {
         final ActivityRecord r = ActivityRecord.isInStackLocked(token);
         if (r != null) {
-            if (r.mAppWindowToken != null) {
-                r.mAppWindowToken.finishRelaunching();
-            }
+            r.finishRelaunching();
             if (r.getActivityStack().shouldSleepOrShutDownActivities()) {
                 r.setSleeping(true, true);
             }
@@ -2568,8 +2569,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             return;
         }
 
-        for (int i = task.mActivities.size() - 1; i >= 0; i--) {
-            final ActivityRecord r = task.mActivities.get(i);
+        for (int i = task.getChildCount() - 1; i >= 0; i--) {
+            final ActivityRecord r = task.getChildAt(i);
             if (r.attachedToProcess()) {
                 mMultiWindowModeChangedActivities.add(r);
             }
@@ -2591,8 +2592,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
     }
 
     void scheduleUpdatePictureInPictureModeIfNeeded(TaskRecord task, Rect targetStackBounds) {
-        for (int i = task.mActivities.size() - 1; i >= 0; i--) {
-            final ActivityRecord r = task.mActivities.get(i);
+        for (int i = task.getChildCount() - 1; i >= 0; i--) {
+            final ActivityRecord r = task.getChildAt(i);
             if (r.attachedToProcess()) {
                 mPipModeChangedActivities.add(r);
                 // If we are scheduling pip change, then remove this activity from multi-window
@@ -2610,8 +2611,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
     void updatePictureInPictureMode(TaskRecord task, Rect targetStackBounds, boolean forceUpdate) {
         mHandler.removeMessages(REPORT_PIP_MODE_CHANGED_MSG);
-        for (int i = task.mActivities.size() - 1; i >= 0; i--) {
-            final ActivityRecord r = task.mActivities.get(i);
+        for (int i = task.getChildCount() - 1; i >= 0; i--) {
+            final ActivityRecord r = task.getChildAt(i);
             if (r.attachedToProcess()) {
                 r.updatePictureInPictureMode(targetStackBounds, forceUpdate);
             }
@@ -2766,7 +2767,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
      * @param task The task to put into resizing mode
      */
     void setResizingDuringAnimation(TaskRecord task) {
-        mResizingTasksDuringAnimation.add(task.taskId);
+        mResizingTasksDuringAnimation.add(task.mTaskId);
         task.setTaskDockedResizing(true);
     }
 
@@ -2828,7 +2829,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
             // If the user must confirm credentials (e.g. when first launching a work app and the
             // Work Challenge is present) let startActivityInPackage handle the intercepting.
-            if (!mService.mAmInternal.shouldConfirmCredentials(task.userId)
+            if (!mService.mAmInternal.shouldConfirmCredentials(task.mUserId)
                     && task.getRootActivity() != null) {
                 final ActivityRecord targetActivity = task.getTopActivity();
 
@@ -2837,7 +2838,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 mActivityMetricsLogger.notifyActivityLaunching(task.intent);
                 try {
                     mService.moveTaskToFrontLocked(null /* appThread */, null /* callingPackage */,
-                            task.taskId, 0, options, true /* fromRecents */);
+                            task.mTaskId, 0, options, true /* fromRecents */);
                     // Apply options to prevent pendingOptions be taken by client to make sure
                     // the override pending app transition will be applied immediately.
                     targetActivity.applyOptionsLocked();
@@ -2854,7 +2855,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             callingPackage = task.mCallingPackage;
             intent = task.intent;
             intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY);
-            userId = task.userId;
+            userId = task.mUserId;
             return mService.getActivityStartController().startActivityInPackage(
                     task.mCallingUid, callingPid, callingUid, callingPackage, intent, null, null,
                     null, 0, 0, options, userId, task, "startActivityFromRecents",

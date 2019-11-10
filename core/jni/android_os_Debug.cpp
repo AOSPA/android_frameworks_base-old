@@ -85,7 +85,8 @@ enum {
     // Dalvik other extra sections.
     HEAP_DALVIK_OTHER_LINEARALLOC,
     HEAP_DALVIK_OTHER_ACCOUNTING,
-    HEAP_DALVIK_OTHER_CODE_CACHE,
+    HEAP_DALVIK_OTHER_ZYGOTE_CODE_CACHE,
+    HEAP_DALVIK_OTHER_APP_CODE_CACHE,
     HEAP_DALVIK_OTHER_COMPILER_METADATA,
     HEAP_DALVIK_OTHER_INDIRECT_REFERENCE_TABLE,
 
@@ -138,8 +139,8 @@ static stat_field_names stat_field_names[_NUM_CORE_HEAP] = {
         "nativePrivateClean", "nativeSharedClean", "nativeSwappedOut", "nativeSwappedOutPss" }
 };
 
-jfieldID otherStats_field;
-jfieldID hasSwappedOutPss_field;
+static jfieldID otherStats_field;
+static jfieldID hasSwappedOutPss_field;
 
 struct stats_t {
     int pss;
@@ -257,6 +258,8 @@ static void load_maps(int pid, stats_t* stats, bool* foundSwapPss)
             which_heap = HEAP_NATIVE;
         } else if (base::StartsWith(name, "[anon:libc_malloc]")) {
             which_heap = HEAP_NATIVE;
+        } else if (base::StartsWith(name, "[anon:scudo:")) {
+            which_heap = HEAP_NATIVE;
         } else if (base::StartsWith(name, "[stack")) {
             which_heap = HEAP_STACK;
         } else if (base::StartsWith(name, "[anon:stack_and_tls:")) {
@@ -280,9 +283,10 @@ static void load_maps(int pid, stats_t* stats, bool* foundSwapPss)
             is_swappable = true;
         } else if (base::EndsWith(name, ".vdex")) {
             which_heap = HEAP_DEX;
-            // Handle system@framework@boot and system/framework/boot
+            // Handle system@framework@boot and system/framework/boot|apex
             if ((strstr(name.c_str(), "@boot") != nullptr) ||
-                    (strstr(name.c_str(), "/boot"))) {
+                    (strstr(name.c_str(), "/boot") != nullptr) ||
+                    (strstr(name.c_str(), "/apex") != nullptr)) {
                 sub_heap = HEAP_DEX_BOOT_VDEX;
             } else {
                 sub_heap = HEAP_DEX_APP_VDEX;
@@ -293,9 +297,10 @@ static void load_maps(int pid, stats_t* stats, bool* foundSwapPss)
             is_swappable = true;
         } else if (base::EndsWith(name, ".art") || base::EndsWith(name, ".art]")) {
             which_heap = HEAP_ART;
-            // Handle system@framework@boot* and system/framework/boot*
+            // Handle system@framework@boot* and system/framework/boot|apex*
             if ((strstr(name.c_str(), "@boot") != nullptr) ||
-                    (strstr(name.c_str(), "/boot"))) {
+                    (strstr(name.c_str(), "/boot") != nullptr) ||
+                    (strstr(name.c_str(), "/apex") != nullptr)) {
                 sub_heap = HEAP_ART_BOOT;
             } else {
                 sub_heap = HEAP_ART_APP;
@@ -307,9 +312,18 @@ static void load_maps(int pid, stats_t* stats, bool* foundSwapPss)
                 which_heap = HEAP_GL_DEV;
             } else if (base::StartsWith(name, "/dev/ashmem/CursorWindow")) {
                 which_heap = HEAP_CURSOR;
+            } else if (base::StartsWith(name, "/dev/ashmem/jit-zygote-cache")) {
+                which_heap = HEAP_DALVIK_OTHER;
+                sub_heap = HEAP_DALVIK_OTHER_ZYGOTE_CODE_CACHE;
             } else if (base::StartsWith(name, "/dev/ashmem")) {
                 which_heap = HEAP_ASHMEM;
             }
+        } else if (base::StartsWith(name, "/memfd:jit-cache")) {
+          which_heap = HEAP_DALVIK_OTHER;
+          sub_heap = HEAP_DALVIK_OTHER_APP_CODE_CACHE;
+        } else if (base::StartsWith(name, "/memfd:jit-zygote-cache")) {
+          which_heap = HEAP_DALVIK_OTHER;
+          sub_heap = HEAP_DALVIK_OTHER_ZYGOTE_CODE_CACHE;
         } else if (base::StartsWith(name, "[anon:")) {
             which_heap = HEAP_UNKNOWN;
             if (base::StartsWith(name, "[anon:dalvik-")) {
@@ -337,7 +351,7 @@ static void load_maps(int pid, stats_t* stats, bool* foundSwapPss)
                     sub_heap = HEAP_DALVIK_OTHER_INDIRECT_REFERENCE_TABLE;
                 } else if (base::StartsWith(name, "[anon:dalvik-jit-code-cache") ||
                         base::StartsWith(name, "[anon:dalvik-data-code-cache")) {
-                    sub_heap = HEAP_DALVIK_OTHER_CODE_CACHE;
+                    sub_heap = HEAP_DALVIK_OTHER_APP_CODE_CACHE;
                 } else if (base::StartsWith(name, "[anon:dalvik-CompilerMetadata")) {
                     sub_heap = HEAP_DALVIK_OTHER_COMPILER_METADATA;
                 } else {

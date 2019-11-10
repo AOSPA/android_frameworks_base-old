@@ -46,6 +46,7 @@ import static android.view.accessibility.AccessibilityNodeInfo.ROOT_NODE_ID;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -140,6 +141,8 @@ public class AbstractAccessibilityServiceConnectionTest {
     private final List<AccessibilityWindowInfo> mA11yWindowInfosOnSecondDisplay = new ArrayList<>();
     private Callable[] mFindA11yNodesFunctions;
     private Callable<Boolean> mPerformA11yAction;
+    private ArrayList<Integer> mDisplayList = new ArrayList<>(Arrays.asList(
+            Display.DEFAULT_DISPLAY, SECONDARY_DISPLAY_ID));
 
     // To mock package-private class.
     @Rule public final DexmakerShareClassLoaderRule mDexmakerShareClassLoaderRule =
@@ -153,7 +156,7 @@ public class AbstractAccessibilityServiceConnectionTest {
     @Mock private AccessibilityWindowManager mMockA11yWindowManager;
     @Mock private AbstractAccessibilityServiceConnection.SystemSupport mMockSystemSupport;
     @Mock private WindowManagerInternal mMockWindowManagerInternal;
-    @Mock private GlobalActionPerformer mMockGlobalActionPerformer;
+    @Mock private SystemActionPerformer mMockSystemActionPerformer;
     @Mock private IBinder mMockService;
     @Mock private IAccessibilityServiceClient mMockServiceInterface;
     @Mock private KeyEventDispatcher mMockKeyEventDispatcher;
@@ -184,6 +187,7 @@ public class AbstractAccessibilityServiceConnectionTest {
         addA11yWindowInfo(mA11yWindowInfos, PIP_WINDOWID, true, Display.DEFAULT_DISPLAY);
         addA11yWindowInfo(mA11yWindowInfosOnSecondDisplay, WINDOWID_ONSECONDDISPLAY, false,
                 SECONDARY_DISPLAY_ID);
+        when(mMockA11yWindowManager.getDisplayListLocked()).thenReturn(mDisplayList);
         when(mMockA11yWindowManager.getWindowListLocked(Display.DEFAULT_DISPLAY))
                 .thenReturn(mA11yWindowInfos);
         when(mMockA11yWindowManager.findA11yWindowInfoByIdLocked(WINDOWID))
@@ -217,7 +221,7 @@ public class AbstractAccessibilityServiceConnectionTest {
 
         mServiceConnection = new TestAccessibilityServiceConnection(mMockContext, COMPONENT_NAME,
                 mSpyServiceInfo, SERVICE_ID, mHandler, new Object(), mMockSecurityPolicy,
-                mMockSystemSupport, mMockWindowManagerInternal, mMockGlobalActionPerformer,
+                mMockSystemSupport, mMockWindowManagerInternal, mMockSystemActionPerformer,
                 mMockA11yWindowManager);
         // Assume that the service is connected
         mServiceConnection.mService = mMockService;
@@ -285,7 +289,14 @@ public class AbstractAccessibilityServiceConnectionTest {
 
     @Test
     public void getWindows() {
-        assertThat(mServiceConnection.getWindows(), is(mA11yWindowInfos));
+        final AccessibilityWindowInfo.WindowListSparseArray allWindows =
+                mServiceConnection.getWindows();
+
+        assertEquals(2, allWindows.size());
+        assertThat(allWindows.get(Display.DEFAULT_DISPLAY), is(mA11yWindowInfos));
+        assertEquals(2, allWindows.get(Display.DEFAULT_DISPLAY).size());
+        assertThat(allWindows.get(SECONDARY_DISPLAY_ID), is(mA11yWindowInfosOnSecondDisplay));
+        assertEquals(1, allWindows.get(SECONDARY_DISPLAY_ID).size());
     }
 
     @Test
@@ -478,7 +489,7 @@ public class AbstractAccessibilityServiceConnectionTest {
     @Test
     public void performGlobalAction() {
         mServiceConnection.performGlobalAction(GLOBAL_ACTION_HOME);
-        verify(mMockGlobalActionPerformer).performGlobalAction(GLOBAL_ACTION_HOME);
+        verify(mMockSystemActionPerformer).performSystemAction(GLOBAL_ACTION_HOME);
     }
 
     @Test
@@ -765,10 +776,10 @@ public class AbstractAccessibilityServiceConnectionTest {
                 AccessibilityServiceInfo accessibilityServiceInfo, int id, Handler mainHandler,
                 Object lock, AccessibilitySecurityPolicy securityPolicy,
                 SystemSupport systemSupport, WindowManagerInternal windowManagerInternal,
-                GlobalActionPerformer globalActionPerfomer,
+                SystemActionPerformer systemActionPerfomer,
                 AccessibilityWindowManager a11yWindowManager) {
             super(context, componentName, accessibilityServiceInfo, id, mainHandler, lock,
-                    securityPolicy, systemSupport, windowManagerInternal, globalActionPerfomer,
+                    securityPolicy, systemSupport, windowManagerInternal, systemActionPerfomer,
                     a11yWindowManager);
             mResolvedUserId = USER_ID;
         }

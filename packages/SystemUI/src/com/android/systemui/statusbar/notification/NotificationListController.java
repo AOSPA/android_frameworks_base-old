@@ -73,7 +73,7 @@ public class NotificationListController {
 
         @Override
         public void onBeforeNotificationAdded(NotificationEntry entry) {
-            tagForeground(entry.notification);
+            tagForeground(entry.getSbn());
         }
     };
 
@@ -81,7 +81,7 @@ public class NotificationListController {
             new DeviceProvisionedListener() {
                 @Override
                 public void onDeviceProvisionedChanged() {
-                    mEntryManager.updateNotifications();
+                    mEntryManager.updateNotifications("device provisioned changed");
                 }
             };
 
@@ -106,7 +106,7 @@ public class NotificationListController {
         if (foregroundKey != null) {
             mEntryManager
                     .getNotificationData().updateAppOp(appOp, uid, pkg, foregroundKey, showIcon);
-            mEntryManager.updateNotifications();
+            mEntryManager.updateNotifications("app opp changed pkg=" + pkg);
         }
     }
 }

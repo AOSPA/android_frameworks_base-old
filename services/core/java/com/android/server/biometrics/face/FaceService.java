@@ -20,6 +20,7 @@ import static android.Manifest.permission.INTERACT_ACROSS_USERS;
 import static android.Manifest.permission.MANAGE_BIOMETRIC;
 import static android.Manifest.permission.RESET_FACE_LOCKOUT;
 import static android.Manifest.permission.USE_BIOMETRIC_INTERNAL;
+import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FACE;
 
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
@@ -538,7 +539,7 @@ public class FaceService extends BiometricServiceBase {
 
         // TODO: refactor out common code here
         @Override // Binder call
-        public boolean isHardwareDetected(long deviceId, String opPackageName) {
+        public boolean isHardwareDetected(String opPackageName) {
             checkPermission(USE_BIOMETRIC_INTERNAL);
             if (!canUseBiometric(opPackageName, false /* foregroundOnly */,
                     Binder.getCallingUid(), Binder.getCallingPid(),
@@ -752,8 +753,7 @@ public class FaceService extends BiometricServiceBase {
         public void onError(long deviceId, int error, int vendorCode, int cookie)
                 throws RemoteException {
             if (getWrapperReceiver() != null) {
-                getWrapperReceiver().onError(cookie, error,
-                        FaceManager.getErrorString(getContext(), error, vendorCode));
+                getWrapperReceiver().onError(cookie, TYPE_FACE, error, vendorCode);
             }
         }
     }
@@ -930,7 +930,8 @@ public class FaceService extends BiometricServiceBase {
                     final Face face = new Face("", 0 /* identifier */, deviceId);
                     FaceService.super.handleRemoved(face, 0 /* remaining */);
                 }
-
+                Settings.Secure.putIntForUser(getContext().getContentResolver(),
+                        Settings.Secure.FACE_UNLOCK_RE_ENROLL, 0, UserHandle.USER_CURRENT);
             });
         }
 
@@ -1088,7 +1089,7 @@ public class FaceService extends BiometricServiceBase {
         publishBinderService(Context.FACE_SERVICE, new FaceServiceWrapper());
         // Get the face daemon on FaceService's on thread so SystemServerInitThreadPool isn't
         // blocked
-        SystemServerInitThreadPool.get().submit(() -> mHandler.post(this::getFaceDaemon),
+        SystemServerInitThreadPool.submit(() -> mHandler.post(this::getFaceDaemon),
                 TAG + ".onStart");
     }
 

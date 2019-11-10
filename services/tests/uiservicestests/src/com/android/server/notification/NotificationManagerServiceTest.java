@@ -44,6 +44,7 @@ import static android.content.pm.PackageManager.PERMISSION_DENIED;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.Build.VERSION_CODES.O_MR1;
 import static android.os.Build.VERSION_CODES.P;
+import static android.os.UserHandle.USER_SYSTEM;
 import static android.service.notification.Adjustment.KEY_IMPORTANCE;
 import static android.service.notification.Adjustment.KEY_USER_SENTIMENT;
 import static android.service.notification.NotificationListenerService.Ranking.USER_SENTIMENT_NEGATIVE;
@@ -129,6 +130,7 @@ import android.testing.TestableContext;
 import android.testing.TestableLooper;
 import android.testing.TestableLooper.RunWithLooper;
 import android.testing.TestablePermissions;
+import android.testing.TestableResources;
 import android.text.Html;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -532,6 +534,18 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         }
         StatusBarNotification sbn = new StatusBarNotification(PKG, PKG, 8, "tag", mUid, 0,
                 nb.build(), new UserHandle(mUid), null, 0);
+        return new NotificationRecord(mContext, sbn, channel);
+    }
+
+    private NotificationRecord generateNotificationRecord(NotificationChannel channel, int userId) {
+        if (channel == null) {
+            channel = mTestNotificationChannel;
+        }
+        Notification.Builder nb = new Notification.Builder(mContext, channel.getId())
+                .setContentTitle("foo")
+                .setSmallIcon(android.R.drawable.sym_def_app_icon);
+        StatusBarNotification sbn = new StatusBarNotification(PKG, PKG, 1, "tag", mUid, 0,
+                nb.build(), new UserHandle(userId), null, 0);
         return new NotificationRecord(mContext, sbn, channel);
     }
 
@@ -1177,6 +1191,36 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         waitForIdle();
 
         assertEquals(0, mService.getNotificationRecordCount());
+    }
+
+    @Test
+    public void testAutobundledSummary_notificationAdded() {
+        NotificationRecord summary =
+                generateNotificationRecord(mTestNotificationChannel, 0, "pkg", true);
+        summary.getNotification().flags |= Notification.FLAG_AUTOGROUP_SUMMARY;
+        mService.addNotification(summary);
+        mService.mSummaryByGroupKey.put("pkg", summary);
+        mService.mAutobundledSummaries.put(0, new ArrayMap<>());
+        mService.mAutobundledSummaries.get(0).put("pkg", summary.getKey());
+        mService.updateAutobundledSummaryFlags(0, "pkg", true);
+
+        assertTrue(summary.sbn.isOngoing());
+    }
+
+    @Test
+    public void testAutobundledSummary_notificationRemoved() {
+        NotificationRecord summary =
+                generateNotificationRecord(mTestNotificationChannel, 0, "pkg", true);
+        summary.getNotification().flags |= Notification.FLAG_AUTOGROUP_SUMMARY;
+        summary.getNotification().flags |= Notification.FLAG_ONGOING_EVENT;
+        mService.addNotification(summary);
+        mService.mAutobundledSummaries.put(0, new ArrayMap<>());
+        mService.mAutobundledSummaries.get(0).put("pkg", summary.getKey());
+        mService.mSummaryByGroupKey.put("pkg", summary);
+
+        mService.updateAutobundledSummaryFlags(0, "pkg", false);
+
+        assertFalse(summary.sbn.isOngoing());
     }
 
     @Test
@@ -3278,7 +3322,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     @Test
     public void testRestore() throws Exception {
         int systemChecks = mService.countSystemChecks;
-        mBinderService.applyRestore(null, UserHandle.USER_SYSTEM);
+        mBinderService.applyRestore(null, USER_SYSTEM);
         assertEquals(1, mService.countSystemChecks - systemChecks);
     }
 
@@ -3347,7 +3391,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         reset(mUgmInternal);
         when(mUgmInternal.newUriPermissionOwner(any())).thenReturn(new Binder());
         mService.updateUriPermissions(recordA, null, mContext.getPackageName(),
-                UserHandle.USER_SYSTEM);
+                USER_SYSTEM);
         verify(mUgm, times(1)).grantUriPermissionFromOwner(any(), anyInt(), any(),
                 eq(message1.getDataUri()), anyInt(), anyInt(), anyInt());
         verify(mUgm, times(1)).grantUriPermissionFromOwner(any(), anyInt(), any(),
@@ -3363,21 +3407,21 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         // Update means we drop access to first
         reset(mUgmInternal);
         mService.updateUriPermissions(recordB, recordA, mContext.getPackageName(),
-                UserHandle.USER_SYSTEM);
+                USER_SYSTEM);
         verify(mUgmInternal, times(1)).revokeUriPermissionFromOwner(any(),
                 eq(message1.getDataUri()), anyInt(), anyInt());
 
         // Update back means we grant access to first again
         reset(mUgm);
         mService.updateUriPermissions(recordA, recordB, mContext.getPackageName(),
-                UserHandle.USER_SYSTEM);
+                USER_SYSTEM);
         verify(mUgm, times(1)).grantUriPermissionFromOwner(any(), anyInt(), any(),
                 eq(message1.getDataUri()), anyInt(), anyInt(), anyInt());
 
         // And update to empty means we drop everything
         reset(mUgmInternal);
         mService.updateUriPermissions(null, recordB, mContext.getPackageName(),
-                UserHandle.USER_SYSTEM);
+                USER_SYSTEM);
         verify(mUgmInternal, times(1)).revokeUriPermissionFromOwner(any(), eq(null),
                 anyInt(), anyInt());
     }
@@ -3864,7 +3908,9 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.simulatePackageDistractionBroadcast(
                 PackageManager.RESTRICTION_HIDE_NOTIFICATIONS, new String[] {"a", "b"});
         ArgumentCaptor<List<NotificationRecord>> captorHide = ArgumentCaptor.forClass(List.class);
-        verify(mListeners, times(2)).notifyHiddenLocked(captorHide.capture());
+
+        // should be called only once.
+        verify(mListeners, times(1)).notifyHiddenLocked(captorHide.capture());
         assertEquals(2, captorHide.getValue().size());
         assertEquals("a", captorHide.getValue().get(0).sbn.getPackageName());
         assertEquals("b", captorHide.getValue().get(1).sbn.getPackageName());
@@ -3873,7 +3919,9 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.simulatePackageDistractionBroadcast(
                 PackageManager.RESTRICTION_HIDE_FROM_SUGGESTIONS, new String[] {"a", "b"});
         ArgumentCaptor<List<NotificationRecord>> captorUnhide = ArgumentCaptor.forClass(List.class);
-        verify(mListeners, times(2)).notifyUnhiddenLocked(captorUnhide.capture());
+
+        // should be called only once.
+        verify(mListeners, times(1)).notifyUnhiddenLocked(captorUnhide.capture());
         assertEquals(2, captorUnhide.getValue().size());
         assertEquals("a", captorUnhide.getValue().get(0).sbn.getPackageName());
         assertEquals("b", captorUnhide.getValue().get(1).sbn.getPackageName());
@@ -4073,7 +4121,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     public void testIsCallerInstantApp_userAllNotification() throws Exception {
         ApplicationInfo info = new ApplicationInfo();
         info.privateFlags = ApplicationInfo.PRIVATE_FLAG_INSTANT;
-        when(mPackageManager.getApplicationInfo(anyString(), anyInt(), eq(UserHandle.USER_SYSTEM)))
+        when(mPackageManager.getApplicationInfo(anyString(), anyInt(), eq(USER_SYSTEM)))
                 .thenReturn(info);
         when(mPackageManager.getPackagesForUid(anyInt())).thenReturn(new String[]{"any"});
 
@@ -5415,6 +5463,112 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testGrantInlineReplyUriPermission_recordExists() throws Exception {
+        NotificationRecord nr = generateNotificationRecord(mTestNotificationChannel, 0);
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, "tag",
+                nr.sbn.getId(), nr.sbn.getNotification(), nr.sbn.getUserId());
+        waitForIdle();
+
+        // A notification exists for the given record
+        StatusBarNotification[] notifsBefore = mBinderService.getActiveNotifications(PKG);
+        assertEquals(1, notifsBefore.length);
+
+        reset(mPackageManager);
+
+        Uri uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, 1);
+
+        mService.mNotificationDelegate.grantInlineReplyUriPermission(
+                nr.getKey(), uri, nr.sbn.getUid());
+
+        // Grant permission called for the UID of SystemUI under the target user ID
+        verify(mUgm, times(1)).grantUriPermissionFromOwner(any(),
+                eq(nr.sbn.getUid()), eq(nr.sbn.getPackageName()), eq(uri), anyInt(), anyInt(),
+                eq(nr.sbn.getUserId()));
+    }
+
+    @Test
+    public void testGrantInlineReplyUriPermission_userAll() throws Exception {
+        // generate a NotificationRecord for USER_ALL to make sure it's converted into USER_SYSTEM
+        NotificationRecord nr =
+                generateNotificationRecord(mTestNotificationChannel, UserHandle.USER_ALL);
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, "tag",
+                nr.sbn.getId(), nr.sbn.getNotification(), nr.sbn.getUserId());
+        waitForIdle();
+
+        // A notification exists for the given record
+        StatusBarNotification[] notifsBefore = mBinderService.getActiveNotifications(PKG);
+        assertEquals(1, notifsBefore.length);
+
+        reset(mPackageManager);
+
+        Uri uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, 1);
+
+        mService.mNotificationDelegate.grantInlineReplyUriPermission(
+                nr.getKey(), uri, nr.sbn.getUid());
+
+        // Target user for the grant is USER_ALL instead of USER_SYSTEM
+        verify(mUgm, times(1)).grantUriPermissionFromOwner(any(),
+                eq(nr.sbn.getUid()), eq(nr.sbn.getPackageName()), eq(uri), anyInt(), anyInt(),
+                eq(UserHandle.USER_SYSTEM));
+    }
+
+    @Test
+    public void testGrantInlineReplyUriPermission_acrossUsers() throws Exception {
+        // generate a NotificationRecord for USER_ALL to make sure it's converted into USER_SYSTEM
+        int otherUserId = 11;
+        NotificationRecord nr =
+                generateNotificationRecord(mTestNotificationChannel, otherUserId);
+        mBinderService.enqueueNotificationWithTag(PKG, PKG, "tag",
+                nr.sbn.getId(), nr.sbn.getNotification(), nr.sbn.getUserId());
+        waitForIdle();
+
+        // A notification exists for the given record
+        StatusBarNotification[] notifsBefore = mBinderService.getActiveNotifications(PKG);
+        assertEquals(1, notifsBefore.length);
+
+        reset(mPackageManager);
+
+        Uri uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, 1);
+
+        int uid = 0; // sysui on primary user
+        int otherUserUid = (otherUserId * 100000) + 1; // SystemUI as a different user
+        String sysuiPackage = "sysui";
+        final String[] sysuiPackages = new String[] { sysuiPackage };
+        when(mPackageManager.getPackagesForUid(uid)).thenReturn(sysuiPackages);
+
+        // Make sure to mock call for USER_SYSTEM and not USER_ALL, since it's been replaced by the
+        // time this is called
+        when(mPackageManager.getPackageUid(sysuiPackage, 0, otherUserId))
+                .thenReturn(otherUserUid);
+
+        mService.mNotificationDelegate.grantInlineReplyUriPermission(nr.getKey(), uri, uid);
+
+        // Target user for the grant is USER_ALL instead of USER_SYSTEM
+        verify(mUgm, times(1)).grantUriPermissionFromOwner(any(),
+                eq(otherUserUid), eq(nr.sbn.getPackageName()), eq(uri), anyInt(), anyInt(),
+                eq(otherUserId));
+    }
+
+    @Test
+    public void testGrantInlineReplyUriPermission_noRecordExists() throws Exception {
+        NotificationRecord nr = generateNotificationRecord(mTestNotificationChannel);
+        waitForIdle();
+
+        // No notifications exist for the given record
+        StatusBarNotification[] notifsBefore = mBinderService.getActiveNotifications(PKG);
+        assertEquals(0, notifsBefore.length);
+
+        Uri uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, 1);
+        int uid = 0; // sysui on primary user
+
+        mService.mNotificationDelegate.grantInlineReplyUriPermission(nr.getKey(), uri, uid);
+
+        // Grant permission not called if no record exists for the given key
+        verify(mUgm, times(0)).grantUriPermissionFromOwner(any(), anyInt(), any(),
+                eq(uri), anyInt(), anyInt(), anyInt());
+    }
+
+    @Test
     public void testNotificationBubbles_disabled_lowRamDevice() throws Exception {
         // Bubbles are allowed!
         setUpPrefsForBubbles(true /* global */, true /* app */, true /* channel */);
@@ -5662,4 +5816,33 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         StatusBarNotification[] notifsAfter = mBinderService.getActiveNotifications(PKG);
         assertEquals(1, notifsAfter.length);
     }
+
+    @Test
+    public void testLoadDefaultApprovedServices_emptyResources() {
+        TestableResources tr = mContext.getOrCreateTestableResources();
+        tr.addOverride(com.android.internal.R.string.config_defaultListenerAccessPackages, "");
+        tr.addOverride(com.android.internal.R.string.config_defaultDndAccessPackages, "");
+        tr.addOverride(com.android.internal.R.string.config_defaultAssistantAccessComponent, "");
+        setDefaultAssistantInDeviceConfig("");
+
+        mService.loadDefaultApprovedServices(USER_SYSTEM);
+
+        verify(mListeners, never()).addDefaultComponentOrPackage(anyString());
+        verify(mConditionProviders, never()).addDefaultComponentOrPackage(anyString());
+        verify(mAssistants, never()).addDefaultComponentOrPackage(anyString());
+    }
+
+    @Test
+    public void testLoadDefaultApprovedServices_dnd() {
+        TestableResources tr = mContext.getOrCreateTestableResources();
+        tr.addOverride(com.android.internal.R.string.config_defaultDndAccessPackages, "test");
+        when(mListeners.queryPackageForServices(anyString(), anyInt(), anyInt()))
+                .thenReturn(new ArraySet<>());
+
+        mService.loadDefaultApprovedServices(USER_SYSTEM);
+
+        verify(mConditionProviders, times(1)).addDefaultComponentOrPackage("test");
+    }
+
+    // TODO: add tests for the rest of the non-empty cases
 }

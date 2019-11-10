@@ -56,8 +56,8 @@ import android.media.AudioManager;
 import android.media.tv.TvInputManager;
 import android.media.tv.TvInputManager.TvInputCallback;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -68,6 +68,7 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings.Global;
+import android.sysprop.HdmiProperties;
 import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.Slog;
@@ -95,6 +96,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Provides a service for sending and processing HDMI control messages,
@@ -308,6 +311,11 @@ public class HdmiControlService extends SystemService {
     private IHdmiControlCallback mDisplayStatusCallback = null;
 
     @Nullable
+    // Save callback when the device is still under logcial address allocation
+    // Invoke once new local device is ready.
+    private IHdmiControlCallback mOtpCallbackPendingAddressAllocation = null;
+
+    @Nullable
     private HdmiCecController mCecController;
 
     // HDMI port information. Stored in the unmodifiable list to keep the static information
@@ -452,7 +460,14 @@ public class HdmiControlService extends SystemService {
 
     public HdmiControlService(Context context) {
         super(context);
-        mLocalDevices = getIntList(SystemProperties.get(Constants.PROPERTY_DEVICE_TYPE));
+        List<Integer> deviceTypes = HdmiProperties.device_type();
+        if (deviceTypes.contains(null)) {
+            Slog.w(TAG, "Error parsing ro.hdmi.device.type: " + SystemProperties.get(
+                    "ro.hdmi.device_type"));
+            deviceTypes = deviceTypes.stream().filter(Objects::nonNull).collect(
+                    Collectors.toList());
+        }
+        mLocalDevices = deviceTypes;
         mSettingsObserver = new SettingsObserver(mHandler);
     }
 
@@ -775,17 +790,21 @@ public class HdmiControlService extends SystemService {
                     // Address allocation completed for all devices. Notify each device.
                     if (allocatingDevices.size() == ++finished[0]) {
                         mAddressAllocated = true;
-                        // Reinvoke the saved display status callback once the local device is ready.
-                        if (mDisplayStatusCallback != null) {
-                            queryDisplayStatus(mDisplayStatusCallback);
-                            mDisplayStatusCallback = null;
-                        }
                         if (initiatedBy != INITIATED_BY_HOTPLUG) {
                             // In case of the hotplug we don't call onInitializeCecComplete()
                             // since we reallocate the logical address only.
                             onInitializeCecComplete(initiatedBy);
                         }
                         notifyAddressAllocated(allocatedDevices, initiatedBy);
+                        // Reinvoke the saved display status callback once the local device is ready.
+                        if (mDisplayStatusCallback != null) {
+                            queryDisplayStatus(mDisplayStatusCallback);
+                            mDisplayStatusCallback = null;
+                        }
+                        if (mOtpCallbackPendingAddressAllocation != null) {
+                            oneTouchPlay(mOtpCallbackPendingAddressAllocation);
+                            mOtpCallbackPendingAddressAllocation = null;
+                        }
                         mCecMessageBuffer.processMessages();
                     }
                 }
@@ -2236,8 +2255,16 @@ public class HdmiControlService extends SystemService {
     }
 
     @ServiceThreadOnly
-    private void oneTouchPlay(final IHdmiControlCallback callback) {
+    @VisibleForTesting
+    protected void oneTouchPlay(final IHdmiControlCallback callback) {
         assertRunOnServiceThread();
+        if (!mAddressAllocated) {
+            mOtpCallbackPendingAddressAllocation = callback;
+            Slog.d(TAG, "Local device is under address allocation. "
+                        + "Save OTP callback for later process.");
+            return;
+        }
+
         HdmiCecLocalDeviceSource source = playback();
         if (source == null) {
             source = audioSystem();

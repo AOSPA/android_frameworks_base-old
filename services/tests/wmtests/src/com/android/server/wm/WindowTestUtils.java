@@ -23,80 +23,61 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
 import android.app.ActivityManager;
-import android.content.ComponentName;
-import android.os.Build;
 import android.os.IBinder;
-import android.view.IApplicationToken;
 import android.view.IWindow;
 import android.view.WindowManager;
+
+import com.android.server.wm.ActivityTestsBase.ActivityBuilder;
 
 /**
  * A collection of static functions that provide access to WindowManager related test functionality.
  */
 class WindowTestUtils {
-    private static int sNextTaskId = 0;
 
     /** Creates a {@link Task} and adds it to the specified {@link TaskStack}. */
-    static Task createTaskInStack(WindowManagerService service, TaskStack stack,
-            int userId) {
+    static Task createTaskInStack(WindowManagerService service, TaskStack stack, int userId) {
         synchronized (service.mGlobalLock) {
-            final Task newTask = new Task(sNextTaskId++, stack, userId, service, 0, false,
-                    new ActivityManager.TaskDescription(), null);
-            stack.addTask(newTask, POSITION_TOP);
-            return newTask;
+            final TaskRecord task = new ActivityTestsBase.TaskBuilder(
+                    stack.mActivityStack.mStackSupervisor)
+                    .setUserId(userId)
+                    .setStack(stack.mActivityStack)
+                    .build();
+            return task.mTask;
         }
     }
 
-    /** Creates an {@link AppWindowToken} and adds it to the specified {@link Task}. */
-    static TestAppWindowToken createAppWindowTokenInTask(DisplayContent dc, Task task) {
-        final TestAppWindowToken newToken = createTestAppWindowToken(dc);
-        task.addChild(newToken, POSITION_TOP);
-        return newToken;
+    /** Creates an {@link ActivityRecord} and adds it to the specified {@link Task}. */
+    static ActivityRecord createActivityRecordInTask(DisplayContent dc, Task task) {
+        final ActivityRecord activity = createTestActivityRecord(dc);
+        task.addChild(activity, POSITION_TOP);
+        return activity;
     }
 
-    static TestAppWindowToken createTestAppWindowToken(DisplayContent dc) {
+    static ActivityRecord createTestActivityRecord(ActivityStack stack) {
+        synchronized (stack.mService.mGlobalLock) {
+            final ActivityRecord activity = new ActivityTestsBase.ActivityBuilder(
+                    stack.mService)
+                    .setStack(stack)
+                    .setCreateTask(true)
+                    .build();
+            postCreateActivitySetup(activity, stack.mTaskStack.getDisplayContent());
+            return activity;
+        }
+    }
+
+    static ActivityRecord createTestActivityRecord(DisplayContent dc) {
         synchronized (dc.mWmService.mGlobalLock) {
-            return new TestAppWindowToken(dc);
+            final ActivityRecord activity = new ActivityBuilder(dc.mWmService.mAtmService).build();
+            postCreateActivitySetup(activity, dc);
+            return activity;
         }
     }
 
-    /** Used so we can gain access to some protected members of the {@link AppWindowToken} class. */
-    static class TestAppWindowToken extends AppWindowToken {
-        boolean mOnTop = false;
-
-        private TestAppWindowToken(DisplayContent dc) {
-            super(dc.mWmService, new IApplicationToken.Stub() {
-                @Override
-                public String getName() {
-                    return null;
-                }
-            }, new ComponentName("", ""), false, dc, true /* fillsParent */);
-            mTargetSdk = Build.VERSION_CODES.CUR_DEVELOPMENT;
-            mActivityRecord = mock(ActivityRecord.class);
-            mActivityRecord.app = mock(WindowProcessController.class);
-        }
-
-        int getWindowsCount() {
-            return mChildren.size();
-        }
-
-        boolean hasWindow(WindowState w) {
-            return mChildren.contains(w);
-        }
-
-        WindowState getFirstChild() {
-            return mChildren.peekFirst();
-        }
-
-        WindowState getLastChild() {
-            return mChildren.peekLast();
-        }
-
-        @Override
-        boolean isOnTop() {
-            return mOnTop;
-        }
-
+    private static void postCreateActivitySetup(ActivityRecord activity, DisplayContent dc) {
+        activity.onDisplayChanged(dc);
+        activity.setOccludesParent(true);
+        activity.setHidden(false);
+        activity.hiddenRequested = false;
     }
 
     static TestWindowToken createTestWindowToken(int type, DisplayContent dc) {
@@ -125,49 +106,6 @@ class WindowTestUtils {
         boolean hasWindow(WindowState w) {
             return mChildren.contains(w);
         }
-    }
-
-    /* Used so we can gain access to some protected members of the {@link Task} class */
-    static class TestTask extends Task {
-        boolean mShouldDeferRemoval = false;
-        boolean mOnDisplayChangedCalled = false;
-        private boolean mIsAnimating = false;
-
-        TestTask(int taskId, TaskStack stack, int userId, WindowManagerService service,
-                int resizeMode, boolean supportsPictureInPicture,
-                TaskRecord taskRecord) {
-            super(taskId, stack, userId, service, resizeMode, supportsPictureInPicture,
-                    new ActivityManager.TaskDescription(), taskRecord);
-            stack.addTask(this, POSITION_TOP);
-        }
-
-        boolean shouldDeferRemoval() {
-            return mShouldDeferRemoval;
-        }
-
-        int positionInParent() {
-            return getParent().mChildren.indexOf(this);
-        }
-
-        @Override
-        void onDisplayChanged(DisplayContent dc) {
-            super.onDisplayChanged(dc);
-            mOnDisplayChangedCalled = true;
-        }
-
-        @Override
-        boolean isSelfAnimating() {
-            return mIsAnimating;
-        }
-
-        void setLocalIsAnimating(boolean isAnimating) {
-            mIsAnimating = isAnimating;
-        }
-    }
-
-    static TestTask createTestTask(TaskStack stack) {
-        return new TestTask(sNextTaskId++, stack, 0, stack.mWmService, RESIZE_MODE_UNRESIZEABLE,
-                false, mock(TaskRecord.class));
     }
 
     /** Used to track resize reports. */

@@ -59,12 +59,13 @@ public class SizeCompatModeActivityController extends SystemUI implements Comman
     /** Only show once automatically in the process life. */
     private boolean mHasShownHint;
 
-    public SizeCompatModeActivityController() {
-        this(ActivityManagerWrapper.getInstance());
+    public SizeCompatModeActivityController(Context context) {
+        this(context, ActivityManagerWrapper.getInstance());
     }
 
     @VisibleForTesting
-    SizeCompatModeActivityController(ActivityManagerWrapper am) {
+    SizeCompatModeActivityController(Context context, ActivityManagerWrapper am) {
+        super(context);
         am.registerTaskStackListener(new TaskStackChangeListener() {
             @Override
             public void onSizeCompatModeActivityChanged(int displayId, IBinder activityToken) {
@@ -202,7 +203,7 @@ public class SizeCompatModeActivityController extends SystemUI implements Comman
             mWinParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                     | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
             mWinParams.format = PixelFormat.TRANSLUCENT;
-            mWinParams.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
+            mWinParams.privateFlags |= WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
             mWinParams.setTitle(SizeCompatModeActivityController.class.getSimpleName()
                     + context.getDisplayId());
         }

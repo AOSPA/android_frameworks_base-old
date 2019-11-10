@@ -141,6 +141,7 @@ public class UsageStatsService extends SystemService implements
     static final int MSG_UID_STATE_CHANGED = 3;
     static final int MSG_REPORT_EVENT_TO_ALL_USERID = 4;
     static final int MSG_UNLOCKED_USER = 5;
+    static final int MSG_PACKAGE_REMOVED = 6;
 
     private final Object mLock = new Object();
     Handler mHandler;
@@ -148,7 +149,6 @@ public class UsageStatsService extends SystemService implements
     UserManager mUserManager;
     PackageManager mPackageManager;
     PackageManagerInternal mPackageManagerInternal;
-    PackageMonitor mPackageMonitor;
     IDeviceIdleController mDeviceIdleController;
     // Do not use directly. Call getDpmInternal() instead
     DevicePolicyManagerInternal mDpmInternal;
@@ -159,10 +159,12 @@ public class UsageStatsService extends SystemService implements
     int mUsageSource;
 
     /** Manages the standby state of apps. */
-    AppStandbyController mAppStandby;
+    AppStandbyInternal mAppStandby;
 
     /** Manages app time limit observers */
     AppTimeLimitController mAppTimeLimit;
+
+    private final PackageMonitor mPackageMonitor = new MyPackageMonitor();
 
     // A map maintaining a queue of events to be reported per user.
     private final SparseArray<LinkedList<Event>> mReportedEvents = new SparseArray<>();
@@ -189,11 +191,6 @@ public class UsageStatsService extends SystemService implements
                     event.mPackage = packageName;
                     reportEventOrAddToQueue(userId, event);
                 }
-
-                @Override
-                public void onParoleStateChanged(boolean isParoleOn) {
-
-                }
             };
 
     public UsageStatsService(Context context) {
@@ -208,7 +205,9 @@ public class UsageStatsService extends SystemService implements
         mPackageManagerInternal = LocalServices.getService(PackageManagerInternal.class);
         mHandler = new H(BackgroundThread.get().getLooper());
 
-        mAppStandby = new AppStandbyController(getContext(), BackgroundThread.get().getLooper());
+        mAppStandby = AppStandbyInternal.newAppStandbyController(
+                UsageStatsService.class.getClassLoader(), getContext(),
+                BackgroundThread.get().getLooper());
 
         mAppTimeLimit = new AppTimeLimitController(
                 new AppTimeLimitController.TimeLimitCallbackListener() {
@@ -245,6 +244,8 @@ public class UsageStatsService extends SystemService implements
                 }, mHandler.getLooper());
 
         mAppStandby.addListener(mStandbyChangeListener);
+
+        mPackageMonitor.register(getContext(), null, UserHandle.ALL, true);
 
         IntentFilter filter = new IntentFilter(Intent.ACTION_USER_REMOVED);
         filter.addAction(Intent.ACTION_USER_STARTED);
@@ -340,6 +341,10 @@ public class UsageStatsService extends SystemService implements
             mUserUnlockedStates.put(userId, true);
             final UserUsageStatsService userService = getUserDataAndInitializeIfNeededLocked(
                     userId, System.currentTimeMillis());
+            if (userService == null) {
+                Slog.i(TAG, "Attempted to unlock stopped or removed user " + userId);
+                return;
+            }
             userService.userUnlocked(System.currentTimeMillis());
             // Process all the pending reported events
             while (pendingEvents.peek() != null) {
@@ -456,7 +461,17 @@ public class UsageStatsService extends SystemService implements
                     "usagestats");
             service = new UserUsageStatsService(getContext(), userId, usageStatsDir, this);
             if (mUserUnlockedStates.get(userId)) {
-                service.init(currentTimeMillis);
+                try {
+                    service.init(currentTimeMillis);
+                } catch (Exception e) {
+                    if (mUserManager.isUserUnlocked(userId)) {
+                        throw e; // rethrow exception - user is unlocked
+                    } else {
+                        Slog.w(TAG, "Attempted to initialize service for "
+                                + "stopped or removed user " + userId);
+                        return null;
+                    }
+                }
             }
             mUserState.put(userId, service);
         }
@@ -606,7 +621,7 @@ public class UsageStatsService extends SystemService implements
             final AtomicFile af = new AtomicFile(pendingEventsFiles[i]);
             try {
                 try (FileInputStream in = af.openRead()) {
-                    UsageStatsProto.readPendingEvents(in, pendingEvents);
+                    UsageStatsProtoV2.readPendingEvents(in, pendingEvents);
                 }
             } catch (IOException e) {
                 // Even if one file read fails, exit here to keep all events in order on disk -
@@ -636,11 +651,11 @@ public class UsageStatsService extends SystemService implements
         FileOutputStream fos = null;
         try {
             fos = af.startWrite();
-            UsageStatsProto.writePendingEvents(fos, pendingEvents);
+            UsageStatsProtoV2.writePendingEvents(fos, pendingEvents);
             af.finishWrite(fos);
             fos = null;
             pendingEvents.clear();
-        } catch (IOException e) {
+        } catch (IOException | IllegalArgumentException e) {
             Slog.e(TAG, "Failed to write " + pendingEventsFile.getAbsolutePath()
                     + " for user " + userId);
         } finally {
@@ -779,6 +794,9 @@ public class UsageStatsService extends SystemService implements
 
             final UserUsageStatsService service =
                     getUserDataAndInitializeIfNeededLocked(userId, timeNow);
+            if (service == null) {
+                return; // user was stopped or removed
+            }
             service.reportEvent(event);
 
             mAppStandby.reportEvent(event, elapsedRealtime, userId);
@@ -829,6 +847,26 @@ public class UsageStatsService extends SystemService implements
     }
 
     /**
+     * Called by the Handler for message MSG_PACKAGE_REMOVED.
+     */
+    private void onPackageRemoved(int userId, String packageName) {
+        synchronized (mLock) {
+            final long timeRemoved = System.currentTimeMillis();
+            if (!mUserUnlockedStates.get(userId, false)) {
+                // If user is not unlocked and a package is removed for them, we will handle it
+                // when the user service is initialized and package manager is queried.
+                return;
+            }
+            final UserUsageStatsService userService = mUserState.get(userId);
+            if (userService == null) {
+                return;
+            }
+
+            userService.onPackageRemoved(packageName, timeRemoved);
+        }
+    }
+
+    /**
      * Called by the Binder stub.
      */
     List<UsageStats> queryUsageStats(int userId, int bucketType, long beginTime, long endTime,
@@ -841,6 +879,9 @@ public class UsageStatsService extends SystemService implements
 
             final UserUsageStatsService service =
                     getUserDataAndInitializeIfNeededLocked(userId, System.currentTimeMillis());
+            if (service == null) {
+                return null; // user was stopped or removed
+            }
             List<UsageStats> list = service.queryUsageStats(bucketType, beginTime, endTime);
             if (list == null) {
                 return null;
@@ -873,6 +914,9 @@ public class UsageStatsService extends SystemService implements
 
             final UserUsageStatsService service =
                     getUserDataAndInitializeIfNeededLocked(userId, System.currentTimeMillis());
+            if (service == null) {
+                return null; // user was stopped or removed
+            }
             return service.queryConfigurationStats(bucketType, beginTime, endTime);
         }
     }
@@ -890,6 +934,9 @@ public class UsageStatsService extends SystemService implements
 
             final UserUsageStatsService service =
                     getUserDataAndInitializeIfNeededLocked(userId, System.currentTimeMillis());
+            if (service == null) {
+                return null; // user was stopped or removed
+            }
             return service.queryEventStats(bucketType, beginTime, endTime);
         }
     }
@@ -907,6 +954,9 @@ public class UsageStatsService extends SystemService implements
 
             final UserUsageStatsService service =
                     getUserDataAndInitializeIfNeededLocked(userId, System.currentTimeMillis());
+            if (service == null) {
+                return null; // user was stopped or removed
+            }
             return service.queryEvents(beginTime, endTime, shouldObfuscateInstantApps);
         }
     }
@@ -924,6 +974,9 @@ public class UsageStatsService extends SystemService implements
 
             final UserUsageStatsService service =
                     getUserDataAndInitializeIfNeededLocked(userId, System.currentTimeMillis());
+            if (service == null) {
+                return null; // user was stopped or removed
+            }
             return service.queryEventsForPackage(beginTime, endTime, packageName, includeTaskRoot);
         }
     }
@@ -945,7 +998,9 @@ public class UsageStatsService extends SystemService implements
                 continue;
             }
             UserUsageStatsService service = mUserState.get(userId);
-            service.persistActiveStats();
+            if (service != null) {
+                service.persistActiveStats();
+            }
             mAppStandby.flushToDisk(userId);
         }
         mAppStandby.flushDurationsToDisk();
@@ -976,7 +1031,7 @@ public class UsageStatsService extends SystemService implements
                         pw.println("Flushed stats to disk");
                         return;
                     } else if ("is-app-standby-enabled".equals(arg)) {
-                        pw.println(mAppStandby.mAppIdleEnabled);
+                        pw.println(mAppStandby.isAppIdleEnabled());
                         return;
                     } else if ("apptimelimit".equals(arg)) {
                         if (i + 1 >= args.length) {
@@ -999,21 +1054,13 @@ public class UsageStatsService extends SystemService implements
                                 ipw.decreaseIndent();
                             }
                         } else {
-                            final int user;
-                            try {
-                                user = Integer.valueOf(args[i + 1]);
-                            } catch (NumberFormatException nfe) {
-                                ipw.println("invalid user specified.");
-                                return;
+                            final int user = parseUserIdFromArgs(args, i, ipw);
+                            if (user != UserHandle.USER_NULL) {
+                                final String[] remainingArgs = Arrays.copyOfRange(
+                                        args, i + 2, args.length);
+                                // dump everything for the specified user
+                                mUserState.get(user).dumpFile(ipw, remainingArgs);
                             }
-                            if (mUserState.indexOfKey(user) < 0) {
-                                ipw.println("the specified user does not exist.");
-                                return;
-                            }
-                            final String[] remainingArgs = Arrays.copyOfRange(
-                                    args, i + 2, args.length);
-                            // dump everything for the specified user
-                            mUserState.get(user).dumpFile(ipw, remainingArgs);
                         }
                         return;
                     } else if ("database-info".equals(arg)) {
@@ -1028,19 +1075,11 @@ public class UsageStatsService extends SystemService implements
                                 ipw.decreaseIndent();
                             }
                         } else {
-                            final int user;
-                            try {
-                                user = Integer.valueOf(args[i + 1]);
-                            } catch (NumberFormatException nfe) {
-                                ipw.println("invalid user specified.");
-                                return;
+                            final int user = parseUserIdFromArgs(args, i, ipw);
+                            if (user != UserHandle.USER_NULL) {
+                                // dump info only for the specified user
+                                mUserState.get(user).dumpDatabaseInfo(ipw);
                             }
-                            if (mUserState.indexOfKey(user) < 0) {
-                                ipw.println("the specified user does not exist.");
-                                return;
-                            }
-                            // dump info only for the specified user
-                            mUserState.get(user).dumpDatabaseInfo(ipw);
                         }
                         return;
                     } else if ("appstandby".equals(arg)) {
@@ -1048,15 +1087,18 @@ public class UsageStatsService extends SystemService implements
                         return;
                     } else if ("stats-directory".equals(arg)) {
                         final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ");
-                        final int userId;
-                        try {
-                            userId = Integer.valueOf(args[i + 1]);
-                        } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
-                            ipw.println("invalid user specified.");
-                            return;
+                        final int userId = parseUserIdFromArgs(args, i, ipw);
+                        if (userId != UserHandle.USER_NULL) {
+                            ipw.println(new File(Environment.getDataSystemCeDirectory(userId),
+                                    "usagestats").getAbsolutePath());
                         }
-                        ipw.println(new File(Environment.getDataSystemCeDirectory(userId),
-                                "usagestats").getAbsolutePath());
+                        return;
+                    } else if ("mappings".equals(arg)) {
+                        final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ");
+                        final int userId = parseUserIdFromArgs(args, i, ipw);
+                        if (userId != UserHandle.USER_NULL) {
+                            mUserState.get(userId).dumpMappings(ipw);
+                        }
                         return;
                     } else if (arg != null && !arg.startsWith("-")) {
                         // Anything else that doesn't start with '-' is a pkg to filter
@@ -1095,6 +1137,21 @@ public class UsageStatsService extends SystemService implements
         }
     }
 
+    private int parseUserIdFromArgs(String[] args, int index, IndentingPrintWriter ipw) {
+        final int userId;
+        try {
+            userId = Integer.valueOf(args[index + 1]);
+        } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
+            ipw.println("invalid user specified.");
+            return UserHandle.USER_NULL;
+        }
+        if (mUserState.indexOfKey(userId) < 0) {
+            ipw.println("the specified user does not exist.");
+            return UserHandle.USER_NULL;
+        }
+        return userId;
+    }
+
     class H extends Handler {
         public H(Looper looper) {
             super(looper);
@@ -1113,12 +1170,22 @@ public class UsageStatsService extends SystemService implements
                     flushToDisk();
                     break;
                 case MSG_UNLOCKED_USER:
-                    onUserUnlocked(msg.arg1);
+                    try {
+                        onUserUnlocked(msg.arg1);
+                    } catch (Exception e) {
+                        if (mUserManager.isUserUnlocked(msg.arg1)) {
+                            throw e; // rethrow exception - user is unlocked
+                        } else {
+                            Slog.w(TAG, "Attempted to unlock stopped or removed user " + msg.arg1);
+                        }
+                    }
                     break;
                 case MSG_REMOVE_USER:
                     onUserRemoved(msg.arg1);
                     break;
-
+                case MSG_PACKAGE_REMOVED:
+                    onPackageRemoved(msg.arg1, (String) msg.obj);
+                    break;
                 case MSG_UID_STATE_CHANGED: {
                     final int uid = msg.arg1;
                     final int procState = msg.arg2;
@@ -1380,7 +1447,7 @@ public class UsageStatsService extends SystemService implements
                     Binder.getCallingUid(), userId);
             final long token = Binder.clearCallingIdentity();
             try {
-                return mAppStandby.isAppIdleFilteredOrParoled(
+                return mAppStandby.isAppIdleFiltered(
                         packageName, userId,
                         SystemClock.elapsedRealtime(), obfuscateInstantApps);
             } finally {
@@ -1687,10 +1754,13 @@ public class UsageStatsService extends SystemService implements
         public void registerAppUsageLimitObserver(int observerId, String[] packages,
                 long timeLimitMs, long timeUsedMs, PendingIntent callbackIntent,
                 String callingPackage) {
+            final int callingUid = Binder.getCallingUid();
+            final DevicePolicyManagerInternal dpmInternal = getDpmInternal();
             if (!hasPermissions(callingPackage,
-                    Manifest.permission.SUSPEND_APPS, Manifest.permission.OBSERVE_APP_USAGE)) {
-                throw new SecurityException("Caller doesn't have both SUSPEND_APPS and "
-                        + "OBSERVE_APP_USAGE permissions");
+                    Manifest.permission.SUSPEND_APPS, Manifest.permission.OBSERVE_APP_USAGE)
+                    && (dpmInternal != null && !dpmInternal.isActiveSupervisionApp(callingUid))) {
+                throw new SecurityException("Caller must be the active supervision app or "
+                        + "it must have both SUSPEND_APPS and OBSERVE_APP_USAGE permissions");
             }
 
             if (packages == null || packages.length == 0) {
@@ -1699,7 +1769,6 @@ public class UsageStatsService extends SystemService implements
             if (callbackIntent == null && timeUsedMs < timeLimitMs) {
                 throw new NullPointerException("callbackIntent can't be null");
             }
-            final int callingUid = Binder.getCallingUid();
             final int userId = UserHandle.getUserId(callingUid);
             final long token = Binder.clearCallingIdentity();
             try {
@@ -1712,13 +1781,15 @@ public class UsageStatsService extends SystemService implements
 
         @Override
         public void unregisterAppUsageLimitObserver(int observerId, String callingPackage) {
+            final int callingUid = Binder.getCallingUid();
+            final DevicePolicyManagerInternal dpmInternal = getDpmInternal();
             if (!hasPermissions(callingPackage,
-                    Manifest.permission.SUSPEND_APPS, Manifest.permission.OBSERVE_APP_USAGE)) {
-                throw new SecurityException("Caller doesn't have both SUSPEND_APPS and "
-                        + "OBSERVE_APP_USAGE permissions");
+                    Manifest.permission.SUSPEND_APPS, Manifest.permission.OBSERVE_APP_USAGE)
+                    && (dpmInternal != null && !dpmInternal.isActiveSupervisionApp(callingUid))) {
+                throw new SecurityException("Caller must be the active supervision app or "
+                        + "it must have both SUSPEND_APPS and OBSERVE_APP_USAGE permissions");
             }
 
-            final int callingUid = Binder.getCallingUid();
             final int userId = UserHandle.getUserId(callingUid);
             final long token = Binder.clearCallingIdentity();
             try {
@@ -1945,11 +2016,6 @@ public class UsageStatsService extends SystemService implements
         }
 
         @Override
-        public boolean isAppIdleParoleOn() {
-            return mAppStandby.isParoledOrCharging();
-        }
-
-        @Override
         public void prepareShutdown() {
             // This method *WILL* do IO work, but we must block until it is finished or else
             // we might not shutdown cleanly. This is ok to do with the 'am' lock held, because
@@ -1965,7 +2031,6 @@ public class UsageStatsService extends SystemService implements
         @Override
         public void addAppIdleStateChangeListener(AppIdleStateChangeListener listener) {
             mAppStandby.addListener(listener);
-            listener.onParoleStateChanged(isAppIdleParoleOn());
         }
 
         @Override
@@ -1986,6 +2051,9 @@ public class UsageStatsService extends SystemService implements
                 if (user == UserHandle.USER_SYSTEM) {
                     final UserUsageStatsService userStats = getUserDataAndInitializeIfNeededLocked(
                             user, System.currentTimeMillis());
+                    if (userStats == null) {
+                        return null; // user was stopped or removed
+                    }
                     return userStats.getBackupPayload(key);
                 } else {
                     return null;
@@ -2004,6 +2072,9 @@ public class UsageStatsService extends SystemService implements
                 if (user == UserHandle.USER_SYSTEM) {
                     final UserUsageStatsService userStats = getUserDataAndInitializeIfNeededLocked(
                             user, System.currentTimeMillis());
+                    if (userStats == null) {
+                        return; // user was stopped or removed
+                    }
                     userStats.applyRestoredPayload(key, payload);
                 }
             }
@@ -2060,6 +2131,15 @@ public class UsageStatsService extends SystemService implements
         @Override
         public AppUsageLimitData getAppUsageLimit(String packageName, UserHandle user) {
             return mAppTimeLimit.getAppUsageLimit(packageName, user);
+        }
+    }
+
+    private class MyPackageMonitor extends PackageMonitor {
+        @Override
+        public void onPackageRemoved(String packageName, int uid) {
+            mHandler.obtainMessage(MSG_PACKAGE_REMOVED, getChangingUserId(), 0, packageName)
+                    .sendToTarget();
+            super.onPackageRemoved(packageName, uid);
         }
     }
 }

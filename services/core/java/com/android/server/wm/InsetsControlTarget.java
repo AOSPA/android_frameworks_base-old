@@ -16,9 +16,37 @@
 
 package com.android.server.wm;
 
+import android.inputmethodservice.InputMethodService;
+import android.view.WindowInsets.Type.InsetType;
+
 /**
  * Generalization of an object that can control insets state.
  */
 interface InsetsControlTarget {
     void notifyInsetsControlChanged();
+
+    /**
+     * Instructs the control target to show inset sources.
+     *
+     * @param types to specify which types of insets source window should be shown.
+     * @param fromIme {@code true} if IME show request originated from {@link InputMethodService}.
+     */
+    default void showInsets(@InsetType int types, boolean fromIme) {
+    }
+
+    /**
+     * Instructs the control target to hide inset sources.
+     *
+     * @param types to specify which types of insets source window should be hidden.
+     * @param fromIme {@code true} if IME hide request originated from {@link InputMethodService}.
+     */
+    default void hideInsets(@InsetType int types, boolean fromIme) {
+    }
+
+    /**
+     * Returns {@code true} if the control target allows the system to show transient windows.
+     */
+    default boolean canShowTransient() {
+        return false;
+    }
 }

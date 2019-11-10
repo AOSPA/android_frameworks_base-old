@@ -265,7 +265,7 @@ public class BtHelper {
         return mapBluetoothCodecToAudioFormat(btCodecConfig.getCodecType());
     }
 
-    //SCO device tracking for TWSPLUS device
+     //SCO device tracking for TWSPLUS device
     private HashMap<BluetoothDevice, Integer> mScoClientDevices =
                                           new HashMap<BluetoothDevice, Integer>();
 

@@ -344,6 +344,8 @@
     <string name="permdesc_receiveSms" msgid="6424387754228766939">"Апп нь SMS мессежийг хүлээн авах болон гүйцэтгэх боломжтой. Ингэснээр апп нь таны төхөөрөмжрүү илгээсэн мессежийг танд үзүүлэхгүйгээр хянах болон устгаж чадна."</string>
     <string name="permlab_receiveMms" msgid="1821317344668257098">"текст мессеж(МMS) хүлээж авах"</string>
     <string name="permdesc_receiveMms" msgid="533019437263212260">"Апп нь MMS мессежийг хүлээн авах болон гүйцэтгэх боломжтой. Ингэснээр апп нь таны төхөөрөмжрүү илгээсэн мессежийг танд үзүүлэхгүйгээр хянах болон устгаж чадна."</string>
+    <string name="permlab_bindCellBroadcastService" msgid="4468585041824555604">"Гар утсанд масс мессеж түгээх онцлогийн мессежийг шилжүүлэх"</string>
+    <string name="permdesc_bindCellBroadcastService" msgid="9073440260695196089">"Гар утсанд масс мессеж түгээх онцлогийн мессежийг хүлээн авах үед түүнийг шилжүүлэх зорилгоор аппад гар утсанд масс мессеж түгээх модультай холбогдохыг зөвшөөрөх Гар утсанд масс мессеж түгээх онцлогийн сэрэмжлүүлэг нь онцгой нөхцөл байдлын тухай танд анхааруулахын тулд зарим байршилд хүрдэг. Гар утсанд масс мессеж түгээх онцлогийн илгээх онцгой нөхцөл байдлын тухай мессежийг хүлээн авах үед хортой апп таны төхөөрөмжийн гүйцэтгэл эсвэл ажиллагаанд саад учруулж болзошгүй."</string>
     <string name="permlab_readCellBroadcasts" msgid="1598328843619646166">"үүрэн өргөн дамжууллын мессеж унших"</string>
     <string name="permdesc_readCellBroadcasts" msgid="6361972776080458979">"Апп нь таны төхөөрөмжийн хүлээн авсан үүрэн өргөн дамжуулах мессежийг унших боломжтой. Үүрэн өргөн дамжууллын мэдэгдэл нь яаралтай нөхцөл байдлыг анхааруулах зорилгоор зарим байршлуудад хүрдэг. Хортой апп нь яаралтай үүрэн өргөн дамжууллыг хүлээн авсан үед таны төхөөрөмжийн ажиллагаа болон чадамжид нөлөөлөх боломжтой."</string>
     <string name="permlab_subscribedFeedsRead" msgid="4756609637053353318">"бүртгүүлсэн хангамжийг унших"</string>
@@ -512,10 +514,10 @@
     <string name="permdesc_requestPasswordComplexity" msgid="4730994229754212347">"Аппад дэлгэцийн түгжээний боломжтой уртын хэмжээ болон төрлийг заадаг дэлгэцийн түгжээний төвөгтэй байдлын түвшнийг (өндөр, дундаж, бага эсвэл байхгүй) мэдэж авахыг зөвшөөрдөг. Түүнчлэн, апп хэрэглэгчдэд дэлгэцийн түгжээг тодорхой түвшинд шинэчлэхийг санал болгох боломжтой хэдий ч хэрэглэгч үүнийг чөлөөтэй үл хэрэгсэж, орхих боломжтой. Дэлгэцийн түгжээг ил бичвэрээр хадгалдаггүй тул энэ апп тодорхой нууц үгийг мэддэггүй болохыг анхаарна уу."</string>
     <string name="permlab_useBiometric" msgid="8837753668509919318">"биометрийн техник хангамжийг ашиглах"</string>
     <string name="permdesc_useBiometric" msgid="8389855232721612926">"Aппад биометрийн техник хангамжийг баталгаажуулалтад ашиглахыг зөвшөөрдөг"</string>
-    <string name="permlab_manageFingerprint" msgid="5640858826254575638">"хурууны хээний програм хангамжийг удирдах"</string>
-    <string name="permdesc_manageFingerprint" msgid="178208705828055464">"Хурууны хээний загварыг нэмэх эсвэл усгтах үйлдлийг хийх зөвшөөрлийг програмд олгодог."</string>
-    <string name="permlab_useFingerprint" msgid="3150478619915124905">"хурууны хээний програм хангамжийг ашиглах"</string>
-    <string name="permdesc_useFingerprint" msgid="9165097460730684114">"Баталгаажуулалт хийх зорилгоор хурууны хээний апп хамгамжийг ашиглах зөвшөөрлийг аппд олгодог"</string>
+    <string name="permlab_manageFingerprint" msgid="5640858826254575638">"хурууны хээний төхөөрөмжийг удирдах"</string>
+    <string name="permdesc_manageFingerprint" msgid="178208705828055464">"Хурууны хээний загвар нэмэх эсвэл устгах үйлдэл хийх зөвшөөрлийг аппд олгодог."</string>
+    <string name="permlab_useFingerprint" msgid="3150478619915124905">"хурууны хээний төхөөрөмж ашиглах"</string>
+    <string name="permdesc_useFingerprint" msgid="9165097460730684114">"Баталгаажуулалт хийх зорилгоор хурууны хээний төхөөрөмжийг ашиглах зөвшөөрлийг аппд олгодог"</string>
     <string name="permlab_audioWrite" msgid="2661772059799779292">"хөгжмийн цуглуулгаа тохируулах"</string>
     <string name="permdesc_audioWrite" msgid="8888544708166230494">"Таны хөгжмийн цуглуулгыг тохируулах зөвшөөрлийг аппад олгодог."</string>
     <string name="permlab_videoWrite" msgid="128769316366746446">"видео цуглуулгаа тохируулах"</string>
@@ -532,7 +534,7 @@
     <string name="biometric_error_device_not_secured" msgid="6583143098363528349">"Тохируулсан пин, хээ эсвэл нууц үг алга"</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"Хурууны хээг дутуу уншуулсан байна. Дахин оролдоно уу."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"Хурууны хээ боловсруулж чадахгүй байна. Дахин оролдоно уу."</string>
-    <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"Хурууны хээ мэдрэгч бохирдсон байна. Та цэвэрлэсний дараагаар дахин оролдоно уу."</string>
+    <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"Хурууны хээ мэдрэгч бохирдсон байна. Цэвэрлэсний дараа дахин оролдоно уу."</string>
     <string name="fingerprint_acquired_too_fast" msgid="6470642383109155969">"Хуруугаа хэт хурдан хөдөлгөсөн байна. Дахин оролдоно уу."</string>
     <string name="fingerprint_acquired_too_slow" msgid="59250885689661653">"Хуруу хэт удаан хөдөлгөсөн байна. Дахин оролдоно уу."</string>
   <string-array name="fingerprint_acquired_vendor">
@@ -540,11 +542,11 @@
     <string name="fingerprint_authenticated" msgid="5309333983002526448">"Хурууны хээг нотолсон"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="4018680978348659031">"Царайг баталгаажууллаа"</string>
     <string name="face_authenticated_confirmation_required" msgid="8778347003507633610">"Царайг баталгаажууллаа. Баталгаажуулах товчлуурыг дарна уу"</string>
-    <string name="fingerprint_error_hw_not_available" msgid="7955921658939936596">"Хурууны хээний тоног төхөөрөмж бэлэн бус байна."</string>
+    <string name="fingerprint_error_hw_not_available" msgid="7955921658939936596">"Хурууны хээний төхөөрөмж бэлэн бус байна."</string>
     <string name="fingerprint_error_no_space" msgid="1055819001126053318">"Хурууны хээг хадгалах боломжгүй байна. Одоо байгаа хурууны хээг арилгана уу."</string>
     <string name="fingerprint_error_timeout" msgid="3927186043737732875">"Хурууны хээ оруулах хугацаа өнгөрсөн байна. Дахин оруулна уу."</string>
     <string name="fingerprint_error_canceled" msgid="4402024612660774395">"Хурууны хээний бүртгэл амжилтгүй боллоо."</string>
-    <string name="fingerprint_error_user_canceled" msgid="7999639584615291494">"Хэрэглэгч хурууны хээн баталгаажуулалтыг цуцалсан байна."</string>
+    <string name="fingerprint_error_user_canceled" msgid="7999639584615291494">"Хэрэглэгч хурууны хээний баталгаажуулалтыг цуцалсан байна."</string>
     <string name="fingerprint_error_lockout" msgid="5536934748136933450">"Хэтэрхий олон оролдлоо.  Түр хүлээгээд дахин оролдоно уу."</string>
     <string name="fingerprint_error_lockout_permanent" msgid="5033251797919508137">"Хэт олон удаа оролдсон тул хурууны хээ мэдрэгчийг идэвхгүй болголоо."</string>
     <string name="fingerprint_error_unable_to_process" msgid="6107816084103552441">"Дахин оролдно уу."</string>
@@ -1361,6 +1363,8 @@
     <string name="adb_active_notification_message" product="tv" msgid="8470296818270110396">"USB дебаг хийхийг идэвхгүй болгох бол сонгоно уу."</string>
     <string name="test_harness_mode_notification_title" msgid="2216359742631914387">"Туршилтын цогц горимыг идэвхжүүлсэн"</string>
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Туршилтын цогц горимыг идэвхгүй болгохын тулд үйлдвэрийн төлөвт шинэчилнэ үү."</string>
+    <string name="console_running_notification_title" msgid="4955436518220103382">"Цуваа консолыг идэвхжүүлсэн"</string>
+    <string name="console_running_notification_message" msgid="1331995933976263865">"Гүйцэтгэлд нөлөөлнө. Идэвхгүй болгохын тулд эхэлж ачаалагчийг шалгана уу."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"USB порт дээрх шингэн зүйл эсвэл бохирдол"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB портыг автоматаар идэвхгүй болгосон байна. Дэлгэрэнгүй мэдээлэл авахын тулд товшино уу."</string>
     <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"USB портыг ашиглахад зүгээр"</string>
@@ -1510,7 +1514,7 @@
     <string name="sync_do_nothing" msgid="3743764740430821845">"Одоо юу ч хийхгүй"</string>
     <string name="choose_account_label" msgid="5655203089746423927">"Бүртгэл сонгох"</string>
     <string name="add_account_label" msgid="2935267344849993553">"Бүртгэл нэмэх"</string>
-    <string name="add_account_button_label" msgid="3611982894853435874">"Аккаунт нэмэх"</string>
+    <string name="add_account_button_label" msgid="3611982894853435874">"Бүртгэл нэмэх"</string>
     <string name="number_picker_increment_button" msgid="2412072272832284313">"Өсөх"</string>
     <string name="number_picker_decrement_button" msgid="476050778386779067">"Бууруулах"</string>
     <string name="number_picker_increment_scroll_mode" msgid="5259126567490114216">"<xliff:g id="VALUE">%s</xliff:g> хүрээд, хүлээнэ үү."</string>
@@ -1547,7 +1551,7 @@
     <string name="action_menu_overflow_description" msgid="2295659037509008453">"Нэмэлт сонголтууд"</string>
     <string name="action_bar_home_description_format" msgid="7965984360903693903">"%1$s, %2$s"</string>
     <string name="action_bar_home_subtitle_description_format" msgid="6985546530471780727">"%1$s, %2$s, %3$s"</string>
-    <string name="storage_internal" msgid="3570990907910199483">"Дотоод хуваалцсан санах ой"</string>
+    <string name="storage_internal" msgid="3570990907910199483">"Дундын дотоод хадгалах сан"</string>
     <string name="storage_sd_card" msgid="3282948861378286745">"SD карт"</string>
     <string name="storage_sd_card_label" msgid="6347111320774379257">"<xliff:g id="MANUFACTURER">%s</xliff:g> SD карт"</string>
     <string name="storage_usb_drive" msgid="6261899683292244209">"USB диск"</string>
@@ -1890,10 +1894,8 @@
     <string name="default_notification_channel_label" msgid="5929663562028088222">"Ангилаагүй"</string>
     <string name="importance_from_user" msgid="7318955817386549931">"Та эдгээр мэдэгдлийн ач холбогдлыг тогтоосон."</string>
     <string name="importance_from_person" msgid="9160133597262938296">"Оролцсон хүмүүсээс шалтгаалан энэ нь өндөр ач холбогдолтой."</string>
-    <!-- no translation found for user_creation_account_exists (6559477114648176531) -->
-    <skip />
-    <!-- no translation found for user_creation_adding (9089159170398841763) -->
-    <skip />
+    <string name="user_creation_account_exists" msgid="6559477114648176531">"<xliff:g id="APP">%1$s</xliff:g>-д <xliff:g id="ACCOUNT">%2$s</xliff:g>-тай (ийм бүртгэлтэй хэрэглэгч аль хэдийн байна) шинэ хэрэглэгч үүсгэхийг зөвшөөрөх үү ?"</string>
+    <string name="user_creation_adding" msgid="9089159170398841763">"<xliff:g id="APP">%1$s</xliff:g>-д <xliff:g id="ACCOUNT">%2$s</xliff:g>-тай шинэ хэрэглэгч үүсгэхийг зөвшөөрөх үү?"</string>
     <string name="language_selection_title" msgid="2680677278159281088">"Хэл нэмэх"</string>
     <string name="country_selection_title" msgid="2954859441620215513">"Бүс нутгийн тохиргоо"</string>
     <string name="search_language_hint" msgid="7042102592055108574">"Улсын хэлийг бичнэ үү"</string>

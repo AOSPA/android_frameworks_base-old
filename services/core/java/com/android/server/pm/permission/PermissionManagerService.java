@@ -24,7 +24,7 @@ import static android.content.pm.PackageManager.FLAG_PERMISSION_APPLY_RESTRICTIO
 import static android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_POLICY_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED;
-import static android.content.pm.PackageManager.FLAG_PERMISSION_REVOKE_ON_UPGRADE;
+import static android.content.pm.PackageManager.FLAG_PERMISSION_REVOKED_COMPAT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVOKE_WHEN_REQUESTED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_SYSTEM_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_FIXED;
@@ -53,7 +53,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
-import android.app.AppOpsManager;
 import android.app.ApplicationPackageManager;
 import android.app.IActivityManager;
 import android.content.Context;
@@ -298,7 +297,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             // Critical; after this call the application should never have the permission
             mPackageManagerInt.writeSettings(false);
             final int appId = UserHandle.getAppId(uid);
-            killUid(appId, userId, KILL_APP_REASON_PERMISSIONS_REVOKED);
+            mHandler.post(() -> killUid(appId, userId, KILL_APP_REASON_PERMISSIONS_REVOKED));
         }
         @Override
         public void onInstallPermissionRevoked() {
@@ -795,79 +794,57 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         synchronized (mLock) {
             checkPermissionDelegate = mCheckPermissionDelegate;
         }
-        if (checkPermissionDelegate == null)  {
+        if (checkPermissionDelegate == null) {
             return checkPermissionImpl(permName, pkgName, userId);
         }
         return checkPermissionDelegate.checkPermission(permName, pkgName, userId,
                 this::checkPermissionImpl);
     }
 
-    private int checkPermissionImpl(@NonNull String permissionName, @NonNull String packageName,
-            @UserIdInt int userId) {
-        final PackageParser.Package pkg = mPackageManagerInt.getPackage(packageName);
+    private int checkPermissionImpl(String permName, String pkgName, int userId) {
+        final PackageParser.Package pkg = mPackageManagerInt.getPackage(pkgName);
         if (pkg == null) {
             return PackageManager.PERMISSION_DENIED;
         }
-        return checkPermissionInternal(pkg, true, permissionName, true, userId)
-                ? PackageManager.PERMISSION_GRANTED : PackageManager.PERMISSION_DENIED;
+        return checkPermissionInternal(pkg, true, permName, userId);
     }
 
-    private boolean checkPermissionInternal(@NonNull Package pkg, boolean isPackageExplicit,
-            @NonNull String permissionName, boolean useRequestedPermissionsForLegacyApps,
-            @UserIdInt int userId) {
+    private int checkPermissionInternal(@NonNull Package pkg, boolean isPackageExplicit,
+            @NonNull String permissionName, @UserIdInt int userId) {
         final int callingUid = getCallingUid();
         if (isPackageExplicit || pkg.mSharedUserId == null) {
             if (mPackageManagerInt.filterAppAccess(pkg, callingUid, userId)) {
-                return false;
+                return PackageManager.PERMISSION_DENIED;
             }
         } else {
             if (mPackageManagerInt.getInstantAppPackageName(callingUid) != null) {
-                return false;
+                return PackageManager.PERMISSION_DENIED;
             }
         }
 
         final int uid = UserHandle.getUid(userId, pkg.applicationInfo.uid);
         final PackageSetting ps = (PackageSetting) pkg.mExtras;
         if (ps == null) {
-            return false;
+            return PackageManager.PERMISSION_DENIED;
         }
         final PermissionsState permissionsState = ps.getPermissionsState();
 
-        if (checkSinglePermissionInternal(uid, permissionsState, permissionName,
-                useRequestedPermissionsForLegacyApps)) {
-            return true;
+        if (checkSinglePermissionInternal(uid, permissionsState, permissionName)) {
+            return PackageManager.PERMISSION_GRANTED;
         }
 
         final String fullerPermissionName = FULLER_PERMISSION_MAP.get(permissionName);
-        if (fullerPermissionName != null && checkSinglePermissionInternal(uid, permissionsState,
-                fullerPermissionName, useRequestedPermissionsForLegacyApps)) {
-            return true;
+        if (fullerPermissionName != null
+                && checkSinglePermissionInternal(uid, permissionsState, fullerPermissionName)) {
+            return PackageManager.PERMISSION_GRANTED;
         }
 
-        return false;
+        return PackageManager.PERMISSION_DENIED;
     }
 
     private boolean checkSinglePermissionInternal(int uid,
-            @NonNull PermissionsState permissionsState, @NonNull String permissionName,
-            boolean useRequestedPermissionsForLegacyApps) {
-        boolean hasPermission = permissionsState.hasPermission(permissionName,
-                UserHandle.getUserId(uid));
-
-        if (!hasPermission && useRequestedPermissionsForLegacyApps
-                && mSettings.isPermissionRuntime(permissionName)) {
-            final String[] packageNames = mContext.getPackageManager().getPackagesForUid(uid);
-            final int packageNamesSize = packageNames != null ? packageNames.length : 0;
-            for (int i = 0; i < packageNamesSize; i++) {
-                final PackageParser.Package pkg = mPackageManagerInt.getPackage(packageNames[i]);
-                if (pkg != null && pkg.applicationInfo.targetSdkVersion < Build.VERSION_CODES.M
-                        && pkg.requestedPermissions.contains(permissionName)) {
-                    hasPermission = true;
-                    break;
-                }
-            }
-        }
-
-        if (!hasPermission) {
+            @NonNull PermissionsState permissionsState, @NonNull String permissionName) {
+        if (!permissionsState.hasPermission(permissionName, UserHandle.getUserId(uid))) {
             return false;
         }
 
@@ -891,19 +868,18 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
         final CheckPermissionDelegate checkPermissionDelegate;
         synchronized (mLock) {
-            if (mCheckPermissionDelegate == null)  {
-                return checkUidPermissionImpl(permName, uid);
-            }
             checkPermissionDelegate = mCheckPermissionDelegate;
+        }
+        if (checkPermissionDelegate == null)  {
+            return checkUidPermissionImpl(permName, uid);
         }
         return checkPermissionDelegate.checkUidPermission(permName, uid,
                 this::checkUidPermissionImpl);
     }
 
-    private int checkUidPermissionImpl(@NonNull String permissionName, int uid) {
+    private int checkUidPermissionImpl(String permName, int uid) {
         final PackageParser.Package pkg = mPackageManagerInt.getPackage(uid);
-        return checkUidPermissionInternal(uid, pkg, permissionName, true)
-                ? PackageManager.PERMISSION_GRANTED : PackageManager.PERMISSION_DENIED;
+        return checkUidPermissionInternal(pkg, uid, permName);
     }
 
     /**
@@ -913,25 +889,24 @@ public class PermissionManagerService extends IPermissionManager.Stub {
      *
      * @see SystemConfig#getSystemPermissions()
      */
-    private boolean checkUidPermissionInternal(int uid, @Nullable Package pkg,
-            @NonNull String permissionName, boolean useRequestedPermissionsForLegacyApps) {
+    private int checkUidPermissionInternal(@Nullable Package pkg, int uid,
+            @NonNull String permissionName) {
         if (pkg != null) {
             final int userId = UserHandle.getUserId(uid);
-            return checkPermissionInternal(pkg, false, permissionName,
-                    useRequestedPermissionsForLegacyApps, userId);
+            return checkPermissionInternal(pkg, false, permissionName, userId);
         }
 
         if (checkSingleUidPermissionInternal(uid, permissionName)) {
-            return true;
+            return PackageManager.PERMISSION_GRANTED;
         }
 
         final String fullerPermissionName = FULLER_PERMISSION_MAP.get(permissionName);
         if (fullerPermissionName != null
                 && checkSingleUidPermissionInternal(uid, fullerPermissionName)) {
-            return true;
+            return PackageManager.PERMISSION_GRANTED;
         }
 
-        return false;
+        return PackageManager.PERMISSION_DENIED;
     }
 
     private boolean checkSingleUidPermissionInternal(int uid, @NonNull String permissionName) {
@@ -939,17 +914,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             ArraySet<String> permissions = mSystemPermissions.get(uid);
             return permissions != null && permissions.contains(permissionName);
         }
-    }
-
-    private int computeRuntimePermissionAppOpMode(int uid, @NonNull String permissionName) {
-        boolean granted = isUidPermissionGranted(uid, permissionName);
-        // TODO: Foreground permissions.
-        return granted ? AppOpsManager.MODE_ALLOWED : AppOpsManager.MODE_IGNORED;
-    }
-
-    private boolean isUidPermissionGranted(int uid, @NonNull String permissionName) {
-        final PackageParser.Package pkg = mPackageManagerInt.getPackage(uid);
-        return checkUidPermissionInternal(uid, pkg, permissionName, false);
     }
 
     @Override
@@ -1295,7 +1259,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         }
 
         if (bp.isSoftRestricted() && !SoftRestrictedPermissionPolicy.forPermission(mContext,
-                pkg.applicationInfo, UserHandle.of(userId), permName).canBeGranted()) {
+                pkg.applicationInfo, UserHandle.of(userId), permName).mayGrantPermission()) {
             Log.e(TAG, "Cannot grant soft restricted permission " + permName + " for package "
                     + packageName);
             return;
@@ -1514,7 +1478,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         // These are flags that can change base on user actions.
         final int userSettableMask = FLAG_PERMISSION_USER_SET
                 | FLAG_PERMISSION_USER_FIXED
-                | FLAG_PERMISSION_REVOKE_ON_UPGRADE
+                | FLAG_PERMISSION_REVOKED_COMPAT
                 | FLAG_PERMISSION_REVIEW_REQUIRED;
 
         final int policyOrSystemFlags = FLAG_PERMISSION_SYSTEM_FIXED
@@ -1577,7 +1541,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             }
         };
 
-        final AppOpsManager appOpsManager = mContext.getSystemService(AppOpsManager.class);
         for (int i = 0; i < permissionCount; i++) {
             final String permName = pkg.requestedPermissions.get(i);
             final BasePermission bp;
@@ -1624,7 +1587,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             final int uid = mPackageManagerInt.getPackageUid(packageName, 0, userId);
             final int targetSdk = mPackageManagerInt.getUidTargetSdkVersion(uid);
             final int flags = (targetSdk < Build.VERSION_CODES.M && bp.isRuntime())
-                    ? FLAG_PERMISSION_REVIEW_REQUIRED | FLAG_PERMISSION_REVOKE_ON_UPGRADE
+                    ? FLAG_PERMISSION_REVIEW_REQUIRED | FLAG_PERMISSION_REVOKED_COMPAT
                     : 0;
 
             updatePermissionFlagsInternal(
@@ -1643,16 +1606,9 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
             // If this permission was granted by default, make sure it is.
             if ((oldFlags & FLAG_PERMISSION_GRANTED_BY_DEFAULT) != 0) {
+                // PermissionPolicyService will handle the app op for runtime permissions later.
                 grantRuntimePermissionInternal(permName, packageName, false,
                         Process.SYSTEM_UID, userId, delayingPermCallback);
-                // Allow app op later as we are holding mPackages
-                // PermissionPolicyService will handle the app op for foreground/background
-                // permissions.
-                String appOp = AppOpsManager.permissionToOp(permName);
-                if (appOp != null) {
-                    mHandler.post(() -> appOpsManager.setUidMode(appOp, uid,
-                            AppOpsManager.MODE_ALLOWED));
-                }
             // If permission review is enabled the permissions for a legacy apps
             // are represented as constantly granted runtime ones, so don't revoke.
             } else if ((flags & FLAG_PERMISSION_REVIEW_REQUIRED) == 0) {
@@ -1697,10 +1653,11 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         if (mPackageManagerInt.getInstantAppPackageName(callingUid) != null) {
             return null;
         }
+        DefaultBrowserProvider provider;
         synchronized (mLock) {
-            return mDefaultBrowserProvider == null
-                    ? null : mDefaultBrowserProvider.getDefaultBrowser(userId);
+            provider = mDefaultBrowserProvider;
         }
+        return provider != null ? provider.getDefaultBrowser(userId) : null;
     }
 
     @Override
@@ -1716,23 +1673,27 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
     private boolean setDefaultBrowserInternal(String packageName, boolean async,
             boolean doGrant, int userId) {
+        if (userId == UserHandle.USER_ALL) {
+            return false;
+        }
+        DefaultBrowserProvider provider;
         synchronized (mLock) {
-            if (userId == UserHandle.USER_ALL) {
+            provider = mDefaultBrowserProvider;
+        }
+        if (provider == null) {
+            return false;
+        }
+        if (async) {
+            provider.setDefaultBrowserAsync(packageName, userId);
+        } else {
+            if (!provider.setDefaultBrowser(packageName, userId)) {
                 return false;
             }
-            if (mDefaultBrowserProvider == null) {
-                return false;
-            }
-            if (async) {
-                mDefaultBrowserProvider.setDefaultBrowserAsync(packageName, userId);
-            } else {
-                if (!mDefaultBrowserProvider.setDefaultBrowser(packageName, userId)) {
-                    return false;
-                }
-            }
-            if (doGrant && packageName != null) {
-                mDefaultPermissionGrantPolicy
-                        .grantDefaultPermissionsToDefaultBrowser(packageName, userId);
+        }
+        if (doGrant && packageName != null) {
+            synchronized (mLock) {
+                mDefaultPermissionGrantPolicy.grantDefaultPermissionsToDefaultBrowser(packageName,
+                        userId);
             }
         }
         return true;
@@ -1941,7 +1902,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
     private void restoreRuntimePermissions(@NonNull byte[] backup, @NonNull UserHandle user) {
         synchronized (mLock) {
             mHasNoDelayedPermBackup.delete(user.getIdentifier());
-            mPermissionControllerManager.restoreRuntimePermissionBackup(backup, user);
+            mPermissionControllerManager.stageAndApplyRuntimePermissionsBackup(backup, user);
         }
     }
 
@@ -1962,7 +1923,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                 return;
             }
 
-            mPermissionControllerManager.restoreDelayedRuntimePermissionBackup(packageName, user,
+            mPermissionControllerManager.applyStagedRuntimePermissionBackup(packageName, user,
                     mContext.getMainExecutor(), (hasMoreBackup) -> {
                         if (hasMoreBackup) {
                             return;
@@ -2536,8 +2497,8 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                                         wasChanged = true;
                                     }
 
-                                    if ((flags & FLAG_PERMISSION_REVOKE_ON_UPGRADE) != 0) {
-                                        flags &= ~FLAG_PERMISSION_REVOKE_ON_UPGRADE;
+                                    if ((flags & FLAG_PERMISSION_REVOKED_COMPAT) != 0) {
+                                        flags &= ~FLAG_PERMISSION_REVOKED_COMPAT;
                                         wasChanged = true;
                                     // Hard restricted permissions cannot be held.
                                     } else if (!permissionPolicyInitialized
@@ -2556,7 +2517,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                                                 bp.getSourcePackageName())) {
                                             if (!bp.isRemoved()) {
                                                 flags |= FLAG_PERMISSION_REVIEW_REQUIRED
-                                                        | FLAG_PERMISSION_REVOKE_ON_UPGRADE;
+                                                        | FLAG_PERMISSION_REVOKED_COMPAT;
                                                 wasChanged = true;
                                             }
                                         }
@@ -2671,8 +2632,8 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                                         wasChanged = true;
                                     }
 
-                                    if ((flags & FLAG_PERMISSION_REVOKE_ON_UPGRADE) != 0) {
-                                        flags &= ~FLAG_PERMISSION_REVOKE_ON_UPGRADE;
+                                    if ((flags & FLAG_PERMISSION_REVOKED_COMPAT) != 0) {
+                                        flags &= ~FLAG_PERMISSION_REVOKED_COMPAT;
                                         wasChanged = true;
                                     // Hard restricted permissions cannot be held.
                                     } else if (!permissionPolicyInitialized ||
@@ -3117,8 +3078,9 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                 }
             }
         }
-        final String systemPackageName = mPackageManagerInt.getKnownPackageName(
-                PackageManagerInternal.PACKAGE_SYSTEM, UserHandle.USER_SYSTEM);
+        // expect single system package
+        String systemPackageName = ArrayUtils.firstOrNull(mPackageManagerInt.getKnownPackageNames(
+                PackageManagerInternal.PACKAGE_SYSTEM, UserHandle.USER_SYSTEM));
         final PackageParser.Package systemPackage =
                 mPackageManagerInt.getPackage(systemPackageName);
 
@@ -3234,18 +3196,19 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             //                  need a separate flag anymore. Hence we need to check which
             //                  permissions are needed by the permission controller
             if (!allowed && bp.isInstaller()
-                    && (pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
-                            PackageManagerInternal.PACKAGE_INSTALLER, UserHandle.USER_SYSTEM))
-                    || pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
+                    && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
+                            PackageManagerInternal.PACKAGE_INSTALLER, UserHandle.USER_SYSTEM),
+                    pkg.packageName) || ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
                             PackageManagerInternal.PACKAGE_PERMISSION_CONTROLLER,
-                            UserHandle.USER_SYSTEM)))) {
+                    UserHandle.USER_SYSTEM), pkg.packageName)) {
                 // If this permission is to be granted to the system installer and
                 // this app is an installer, then it gets the permission.
                 allowed = true;
             }
             if (!allowed && bp.isVerifier()
-                    && pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
-                            PackageManagerInternal.PACKAGE_VERIFIER, UserHandle.USER_SYSTEM))) {
+                    && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
+                            PackageManagerInternal.PACKAGE_VERIFIER, UserHandle.USER_SYSTEM),
+                    pkg.packageName)) {
                 // If this permission is to be granted to the system verifier and
                 // this app is a verifier, then it gets the permission.
                 allowed = true;
@@ -3261,51 +3224,69 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                 allowed = origPermissions.hasInstallPermission(perm);
             }
             if (!allowed && bp.isSetup()
-                    && pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
-                            PackageManagerInternal.PACKAGE_SETUP_WIZARD, UserHandle.USER_SYSTEM))) {
+                    && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
+                            PackageManagerInternal.PACKAGE_SETUP_WIZARD, UserHandle.USER_SYSTEM),
+                    pkg.packageName)) {
                 // If this permission is to be granted to the system setup wizard and
                 // this app is a setup wizard, then it gets the permission.
                 allowed = true;
             }
             if (!allowed && bp.isSystemTextClassifier()
-                    && pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
+                    && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
                             PackageManagerInternal.PACKAGE_SYSTEM_TEXT_CLASSIFIER,
-                            UserHandle.USER_SYSTEM))) {
+                    UserHandle.USER_SYSTEM), pkg.packageName)) {
                 // Special permissions for the system default text classifier.
                 allowed = true;
             }
             if (!allowed && bp.isConfigurator()
-                    && pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
-                    PackageManagerInternal.PACKAGE_CONFIGURATOR,
-                    UserHandle.USER_SYSTEM))) {
+                    && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
+                            PackageManagerInternal.PACKAGE_CONFIGURATOR,
+                    UserHandle.USER_SYSTEM), pkg.packageName)) {
                 // Special permissions for the device configurator.
                 allowed = true;
             }
             if (!allowed && bp.isWellbeing()
-                    && pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
-                    PackageManagerInternal.PACKAGE_WELLBEING, UserHandle.USER_SYSTEM))) {
+                    && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
+                            PackageManagerInternal.PACKAGE_WELLBEING, UserHandle.USER_SYSTEM),
+                    pkg.packageName)) {
                 // Special permission granted only to the OEM specified wellbeing app
                 allowed = true;
             }
             if (!allowed && bp.isDocumenter()
-                    && pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
-                            PackageManagerInternal.PACKAGE_DOCUMENTER, UserHandle.USER_SYSTEM))) {
+                    && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
+                            PackageManagerInternal.PACKAGE_DOCUMENTER, UserHandle.USER_SYSTEM),
+                    pkg.packageName)) {
                 // If this permission is to be granted to the documenter and
                 // this app is the documenter, then it gets the permission.
                 allowed = true;
             }
             if (!allowed && bp.isIncidentReportApprover()
-                    && pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
+                    && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
                             PackageManagerInternal.PACKAGE_INCIDENT_REPORT_APPROVER,
-                            UserHandle.USER_SYSTEM))) {
+                    UserHandle.USER_SYSTEM), pkg.packageName)) {
                 // If this permission is to be granted to the incident report approver and
                 // this app is the incident report approver, then it gets the permission.
                 allowed = true;
             }
             if (!allowed && bp.isAppPredictor()
-                    && pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
-                        PackageManagerInternal.PACKAGE_APP_PREDICTOR, UserHandle.USER_SYSTEM))) {
+                    && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
+                            PackageManagerInternal.PACKAGE_APP_PREDICTOR, UserHandle.USER_SYSTEM),
+                    pkg.packageName)) {
                 // Special permissions for the system app predictor.
+                allowed = true;
+            }
+            if (!allowed && bp.isTelephony()
+                    && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
+                        PackageManagerInternal.PACKAGE_TELEPHONY, UserHandle.USER_SYSTEM),
+                    pkg.packageName)) {
+                // Special permissions for the system telephony apps.
+                allowed = true;
+            }
+            if (!allowed && bp.isWifi()
+                    && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
+                        PackageManagerInternal.PACKAGE_WIFI, UserHandle.USER_SYSTEM),
+                    pkg.packageName)) {
+                // Special permissions for the system wifi.
                 allowed = true;
             }
         }
@@ -3407,6 +3388,9 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         final int immutableFlags = PackageManager.FLAG_PERMISSION_SYSTEM_FIXED
                 | PackageManager.FLAG_PERMISSION_POLICY_FIXED;
 
+        final int compatFlags = PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED
+                | PackageManager.FLAG_PERMISSION_REVOKED_COMPAT;
+
         final boolean supportsRuntimePermissions = pkg.applicationInfo.targetSdkVersion
                 >= Build.VERSION_CODES.M;
 
@@ -3430,12 +3414,11 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                                 callingUid, userId, callback);
                     }
                 } else {
-                    // In permission review mode we clear the review flag when we
-                    // are asked to install the app with all permissions granted.
-                    if ((flags & PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED) != 0) {
-                        updatePermissionFlagsInternal(permission, pkg.packageName,
-                                PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED, 0, callingUid,
-                                userId, false, callback);
+                    // In permission review mode we clear the review flag and the revoked compat
+                    // flag when we are asked to install the app with all permissions granted.
+                    if ((flags & compatFlags) != 0) {
+                        updatePermissionFlagsInternal(permission, pkg.packageName, compatFlags,
+                                0, callingUid, userId, false, callback);
                     }
                 }
             }
@@ -4241,8 +4224,8 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         }
 
         @Override
-        public @NonNull ArrayList<PermissionInfo> getAllPermissionWithProtectionLevel(
-                @PermissionInfo.Protection int protectionLevel) {
+        public @NonNull ArrayList<PermissionInfo> getAllPermissionWithProtection(
+                @PermissionInfo.Protection int protection) {
             ArrayList<PermissionInfo> matchingPermissions = new ArrayList<>();
 
             synchronized (PermissionManagerService.this.mLock) {
@@ -4252,7 +4235,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                     BasePermission bp = mSettings.mPermissions.valueAt(i);
 
                     if (bp.perm != null && bp.perm.info != null
-                            && bp.protectionLevel == protectionLevel) {
+                            && bp.perm.info.getProtection() == protection) {
                         matchingPermissions.add(bp.perm.info);
                     }
                 }
@@ -4334,15 +4317,17 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
         @Override
         public void setDefaultHome(String packageName, int userId, Consumer<Boolean> callback) {
-            synchronized (mLock) {
-                if (userId == UserHandle.USER_ALL) {
-                    return;
-                }
-                if (mDefaultHomeProvider == null) {
-                    return;
-                }
-                mDefaultHomeProvider.setDefaultHomeAsync(packageName, userId, callback);
+            if (userId == UserHandle.USER_ALL) {
+                return;
             }
+            DefaultHomeProvider provider;
+            synchronized (mLock) {
+                provider = mDefaultHomeProvider;
+            }
+            if (provider == null) {
+                return;
+            }
+            provider.setDefaultHomeAsync(packageName, userId, callback);
         }
 
         @Override
@@ -4403,26 +4388,29 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
         @Override
         public String getDefaultBrowser(int userId) {
+            DefaultBrowserProvider provider;
             synchronized (mLock) {
-                return mDefaultBrowserProvider == null
-                        ? null : mDefaultBrowserProvider.getDefaultBrowser(userId);
+                provider = mDefaultBrowserProvider;
             }
+            return provider != null ? provider.getDefaultBrowser(userId) : null;
         }
 
         @Override
         public String getDefaultDialer(int userId) {
+            DefaultDialerProvider provider;
             synchronized (mLock) {
-                return mDefaultDialerProvider == null
-                        ? null : mDefaultDialerProvider.getDefaultDialer(userId);
+                provider = mDefaultDialerProvider;
             }
+            return provider != null ? provider.getDefaultDialer(userId) : null;
         }
 
         @Override
         public String getDefaultHome(int userId) {
+            DefaultHomeProvider provider;
             synchronized (mLock) {
-                return mDefaultHomeProvider == null
-                        ? null : mDefaultHomeProvider.getDefaultHome(userId);
+                provider = mDefaultHomeProvider;
             }
+            return provider != null ? provider.getDefaultHome(userId) : null;
         }
 
         @Override
@@ -4464,12 +4452,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                 PermissionManagerService.this.updateAllPermissions(
                         StorageManager.UUID_PRIVATE_INTERNAL, true, mDefaultPermissionCallback);
             }
-        }
-
-        @Override
-        public int computeRuntimePermissionAppOpMode(int uid, @NonNull String permissionName) {
-            return PermissionManagerService.this.computeRuntimePermissionAppOpMode(uid,
-                    permissionName);
         }
     }
 

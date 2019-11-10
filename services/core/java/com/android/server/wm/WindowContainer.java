@@ -19,6 +19,11 @@ package com.android.server.wm;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+import static android.content.pm.ActivityInfo.isFixedOrientationLandscape;
+import static android.content.pm.ActivityInfo.isFixedOrientationPortrait;
+import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
+import static android.content.res.Configuration.ORIENTATION_UNDEFINED;
 import static android.view.SurfaceControl.Transaction;
 
 import static com.android.server.wm.WindowContainerProto.CONFIGURATION_CONTAINER;
@@ -28,14 +33,17 @@ import static com.android.server.wm.WindowContainerProto.VISIBLE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
+import static com.android.server.wm.WindowStateAnimator.DRAW_PENDING;
 
 import android.annotation.CallSuper;
 import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.app.WindowConfiguration;
+import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.os.Debug;
 import android.os.IBinder;
 import android.util.Pools;
 import android.util.Slog;
@@ -47,9 +55,11 @@ import android.view.SurfaceSession;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ToBooleanFunction;
+import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.SurfaceAnimator.Animatable;
 
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedList;
 import java.util.function.Consumer;
@@ -106,9 +116,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     private final Pools.SynchronizedPool<ForAllWindowsConsumerWrapper> mConsumerWrapperPool =
             new Pools.SynchronizedPool<>(3);
 
-    // The owner/creator for this container. No controller if null.
-    WindowContainerController mController;
-
     // The display this window container is on.
     protected DisplayContent mDisplayContent;
 
@@ -118,6 +125,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     // TODO(b/132320879): Remove this from WindowContainers except DisplayContent.
     private final Transaction mPendingTransaction;
+
+    /**
+     * Windows that clients are waiting to have drawn.
+     */
+    final ArrayList<WindowState> mWaitingForDrawn = new ArrayList<>();
 
     /**
      * Applied as part of the animation pass in "prepareSurfaces".
@@ -136,6 +148,16 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * surface to the animation leash
      */
     private boolean mCommittedReparentToAnimationLeash;
+
+    private final Configuration mTmpConfig = new Configuration();
+
+    /**
+     * Callback which is triggered while changing the parent, after setting up the surface but
+     * before asking the parent to assign child layers.
+     */
+    interface PreAssignChildLayersCallback {
+        void onPreAssignChildLayers();
+    }
 
     WindowContainer(WindowManagerService wms) {
         mWmService = wms;
@@ -176,6 +198,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      */
     @Override
     void onParentChanged() {
+        onParentChanged(null);
+    }
+
+    void onParentChanged(PreAssignChildLayersCallback callback) {
         super.onParentChanged();
         if (mParent == null) {
             return;
@@ -193,6 +219,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             // mSurfaceControl stays attached to the leash and we just reparent the leash to the
             // new parent.
             reparentSurfaceControl(getPendingTransaction(), mParent.mSurfaceControl);
+        }
+
+        if (callback != null) {
+            callback.onPreAssignChildLayers();
         }
 
         // Either way we need to ask the parent to assign us a Z-order.
@@ -247,7 +277,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         if (child.getParent() != null) {
             throw new IllegalArgumentException("addChild: container=" + child.getName()
                     + " is already a child of container=" + child.getParent().getName()
-                    + " can't add to container=" + getName());
+                    + " can't add to container=" + getName()
+                    + "\n callers=" + Debug.getCallers(15, "\n"));
         }
 
         if ((index < 0 && index != POSITION_BOTTOM)
@@ -340,11 +371,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         if (mParent != null) {
             mParent.removeChild(this);
         }
-
-        if (mController != null) {
-            setController(null);
-        }
-
     }
 
     /**
@@ -743,6 +769,31 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     /**
+     * Get the configuration orientation by the requested screen orientation
+     * ({@link ActivityInfo.ScreenOrientation}) of this activity.
+     *
+     * @return orientation in ({@link Configuration#ORIENTATION_LANDSCAPE},
+     *         {@link Configuration#ORIENTATION_PORTRAIT},
+     *         {@link Configuration#ORIENTATION_UNDEFINED}).
+     */
+    int getRequestedConfigurationOrientation() {
+        if (mOrientation == ActivityInfo.SCREEN_ORIENTATION_NOSENSOR) {
+            // NOSENSOR means the display's "natural" orientation, so return that.
+            if (mDisplayContent != null) {
+                return mDisplayContent.getNaturalOrientation();
+            }
+        } else if (mOrientation == ActivityInfo.SCREEN_ORIENTATION_LOCKED) {
+            // LOCKED means the activity's orientation remains unchanged, so return existing value.
+            return getConfiguration().orientation;
+        } else if (isFixedOrientationLandscape(mOrientation)) {
+            return ORIENTATION_LANDSCAPE;
+        } else if (isFixedOrientationPortrait(mOrientation)) {
+            return ORIENTATION_PORTRAIT;
+        }
+        return ORIENTATION_UNDEFINED;
+    }
+
+    /**
      * Calls {@link #setOrientation(int, IBinder, ActivityRecord)} with {@code null} to the last 2
      * parameters.
      *
@@ -772,6 +823,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
 
         mOrientation = orientation;
+        final int configOrientation = getRequestedConfigurationOrientation();
+        if (getRequestedOverrideConfiguration().orientation != configOrientation) {
+            mTmpConfig.setTo(getRequestedOverrideConfiguration());
+            mTmpConfig.orientation = configOrientation;
+            onRequestedOverrideConfigurationChanged(mTmpConfig);
+        }
+
         final WindowContainer parent = getParent();
         if (parent != null) {
             onDescendantOrientationChanged(freezeDisplayToken, requestingContainer);
@@ -889,9 +947,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         wrapper.release();
     }
 
-    void forAllAppWindows(Consumer<AppWindowToken> callback) {
+    void forAllActivities(Consumer<ActivityRecord> callback) {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
-            mChildren.get(i).forAllAppWindows(callback);
+            mChildren.get(i).forAllActivities(callback);
         }
     }
 
@@ -987,23 +1045,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             parents.addLast(current);
             current = current.mParent;
         } while (current != null);
-    }
-
-    WindowContainerController getController() {
-        return mController;
-    }
-
-    void setController(WindowContainerController controller) {
-        if (mController != null && controller != null) {
-            throw new IllegalArgumentException("Can't set controller=" + mController
-                    + " for container=" + this + " Already set to=" + mController);
-        }
-        if (controller != null) {
-            controller.setContainer(this);
-        } else if (mController != null) {
-            mController.setContainer(null);
-        }
-        mController = controller;
     }
 
     SurfaceControl.Builder makeSurface() {
@@ -1399,6 +1440,19 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             final Rect parentBounds = parent.getDisplayedBounds();
             outPos.offset(-parentBounds.left, -parentBounds.top);
         }
+    }
+
+    void waitForAllWindowsDrawn() {
+        final WindowManagerPolicy policy = mWmService.mPolicy;
+        forAllWindows(w -> {
+            final boolean keyguard = policy.isKeyguardHostWindow(w.mAttrs);
+            if (w.isVisibleLw() && (w.mActivityRecord != null || keyguard)) {
+                w.mWinAnimator.mDrawState = DRAW_PENDING;
+                // Force add to mResizingWindows.
+                w.resetLastContentInsets();
+                mWaitingForDrawn.add(w);
+            }
+        }, true /* traverseTopToBottom */);
     }
 
     Dimmer getDimmer() {

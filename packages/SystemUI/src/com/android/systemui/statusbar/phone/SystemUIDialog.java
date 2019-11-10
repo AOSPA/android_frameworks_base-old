@@ -28,7 +28,8 @@ import android.view.WindowManager.LayoutParams;
 
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.statusbar.policy.KeyguardMonitor;
+import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
 
 
 /**
@@ -92,15 +93,15 @@ public class SystemUIDialog extends AlertDialog {
     public static void setShowForAllUsers(Dialog dialog, boolean show) {
         if (show) {
             dialog.getWindow().getAttributes().privateFlags |=
-                    WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
+                    WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
         } else {
             dialog.getWindow().getAttributes().privateFlags &=
-                    ~WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
+                    ~WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
         }
     }
 
     public static void setWindowOnTop(Dialog dialog) {
-        if (Dependency.get(KeyguardMonitor.class).isShowing()) {
+        if (Dependency.get(KeyguardStateController.class).isShowing()) {
             dialog.getWindow().setType(LayoutParams.TYPE_STATUS_BAR_PANEL);
         } else {
             dialog.getWindow().setType(LayoutParams.TYPE_STATUS_BAR_SUB_PANEL);
@@ -138,20 +139,21 @@ public class SystemUIDialog extends AlertDialog {
 
         private final Dialog mDialog;
         private boolean mRegistered;
+        private final BroadcastDispatcher mBroadcastDispatcher;
 
         DismissReceiver(Dialog dialog) {
             mDialog = dialog;
+            mBroadcastDispatcher = Dependency.get(BroadcastDispatcher.class);
         }
 
         void register() {
-            mDialog.getContext()
-                    .registerReceiverAsUser(this, UserHandle.CURRENT, INTENT_FILTER, null, null);
+            mBroadcastDispatcher.registerReceiver(this, INTENT_FILTER, null, UserHandle.CURRENT);
             mRegistered = true;
         }
 
         void unregister() {
             if (mRegistered) {
-                mDialog.getContext().unregisterReceiver(this);
+                mBroadcastDispatcher.unregisterReceiver(this);
                 mRegistered = false;
             }
         }

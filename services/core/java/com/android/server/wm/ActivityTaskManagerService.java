@@ -52,7 +52,7 @@ import static android.os.FactoryTest.FACTORY_TEST_LOW_LEVEL;
 import static android.os.FactoryTest.FACTORY_TEST_OFF;
 import static android.os.Process.FIRST_APPLICATION_UID;
 import static android.os.Process.SYSTEM_UID;
-import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
+import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.provider.Settings.Global.DEVELOPMENT_ENABLE_FREEFORM_WINDOWS_SUPPORT;
 import static android.provider.Settings.Global.DEVELOPMENT_FORCE_RESIZABLE_ACTIVITIES;
 import static android.provider.Settings.Global.DEVELOPMENT_FORCE_RTL;
@@ -63,7 +63,6 @@ import static android.text.format.DateUtils.MINUTE_IN_MILLIS;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManager.TRANSIT_NONE;
-import static android.view.WindowManager.TRANSIT_TASK_IN_PLACE;
 
 import static com.android.server.am.ActivityManagerService.ANR_TRACE_DIR;
 import static com.android.server.am.ActivityManagerService.MY_PID;
@@ -807,7 +806,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         mUiHandler = new UiHandler();
         mIntentFirewall = intentFirewall;
         final File systemDir = SystemServiceManager.ensureSystemDir();
-        mAppWarnings = new AppWarnings(this, mUiContext, mH, mUiHandler, systemDir);
+        mAppWarnings = createAppWarnings(mUiContext, mH, mUiHandler, systemDir);
         mCompatModePackages = new CompatModePackages(this, systemDir, mH);
         mPendingIntentController = intentController;
 
@@ -843,6 +842,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         final ActivityStackSupervisor supervisor = new ActivityStackSupervisor(this, mH.getLooper());
         supervisor.initialize();
         return supervisor;
+    }
+
+    protected AppWarnings createAppWarnings(
+            Context uiContext, Handler handler, Handler uiHandler, File systemDir) {
+        return new AppWarnings(this, uiContext, handler, uiHandler, systemDir);
     }
 
     public void setWindowManager(WindowManagerService wm) {
@@ -882,7 +886,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     boolean hasSystemAlertWindowPermission(int callingUid, int callingPid, String callingPackage) {
         final int mode = getAppOpsService().noteOperation(AppOpsManager.OP_SYSTEM_ALERT_WINDOW,
-                callingUid, callingPackage);
+                callingUid, callingPackage, /* featureId */ null);
         if (mode == AppOpsManager.MODE_DEFAULT) {
             return checkPermission(Manifest.permission.SYSTEM_ALERT_WINDOW, callingPid, callingUid)
                     == PERMISSION_GRANTED;
@@ -1602,6 +1606,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
 
             final long origId = Binder.clearCallingIdentity();
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "finishActivity");
             try {
                 boolean res;
                 final boolean finishWithRootActivity =
@@ -1613,7 +1618,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     // because we don't support returning them across task boundaries. Also, to
                     // keep backwards compatibility we remove the task from recents when finishing
                     // task with root activity.
-                    res = mStackSupervisor.removeTaskByIdLocked(tr.taskId, false /* killProcess */,
+                    res = mStackSupervisor.removeTaskByIdLocked(tr.mTaskId, false /* killProcess */,
                             finishWithRootActivity, "finish-activity");
                     if (!res) {
                         Slog.i(TAG, "Removing task failed to finish activity");
@@ -1629,6 +1634,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 }
                 return res;
             } finally {
+                Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
                 Binder.restoreCallingIdentity(origId);
             }
         }
@@ -1663,6 +1669,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         try {
             WindowProcessController proc = null;
             synchronized (mGlobalLock) {
+                Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "activityIdle");
                 ActivityStack stack = ActivityRecord.getStackLocked(token);
                 if (stack == null) {
                     return;
@@ -1677,6 +1684,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 }
             }
         } finally {
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
             Binder.restoreCallingIdentity(origId);
         }
     }
@@ -1703,10 +1711,12 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     public final void activityPaused(IBinder token) {
         final long origId = Binder.clearCallingIdentity();
         synchronized (mGlobalLock) {
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "activityPaused");
             ActivityStack stack = ActivityRecord.getStackLocked(token);
             if (stack != null) {
                 stack.activityPausedLocked(token, false);
             }
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
         Binder.restoreCallingIdentity(origId);
     }
@@ -1727,6 +1737,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         int restartingUid = 0;
         final ActivityRecord r;
         synchronized (mGlobalLock) {
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "activityStopped");
             r = ActivityRecord.isInStackLocked(token);
             if (r != null) {
                 if (r.attachedToProcess()
@@ -1738,6 +1749,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 }
                 r.activityStoppedLocked(icicle, persistentState, description);
             }
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
 
         if (restartingName != null) {
@@ -1759,12 +1771,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "ACTIVITY DESTROYED: " + token);
         synchronized (mGlobalLock) {
             final long origId = Binder.clearCallingIdentity();
+            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "activityDestroyed");
             try {
                 final ActivityRecord activity = ActivityRecord.forTokenLocked(token);
                 if (activity != null) {
                     activity.destroyed("activityDestroyed");
                 }
             } finally {
+                Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
                 Binder.restoreCallingIdentity(origId);
             }
         }
@@ -1813,11 +1827,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     @Override
     public int getRequestedOrientation(IBinder token) {
         synchronized (mGlobalLock) {
-            ActivityRecord r = ActivityRecord.isInStackLocked(token);
-            if (r == null) {
-                return ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
-            }
-            return r.getOrientation();
+            final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+            return (r != null)
+                    ? r.getRequestedOrientation() : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
         }
     }
 
@@ -1979,7 +1991,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 final TaskRecord task = r.getTaskRecord();
                 int index = task.mActivities.lastIndexOf(r);
                 if (index > 0) {
-                    ActivityRecord under = task.mActivities.get(index - 1);
+                    ActivityRecord under = task.getChildAt(index - 1);
                     under.returningOptions = safeOptions != null ? safeOptions.getOptions(r) : null;
                 }
                 return r.setOccludesParent(false);
@@ -2230,7 +2242,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             final TaskRecord tr = mRootActivityContainer.anyTaskForId(id,
                     MATCH_TASK_IN_STACKS_OR_RECENT_TASKS);
             if (tr != null) {
-                return tr.lastTaskDescription;
+                return tr.mTaskDescription;
             }
         }
         return null;
@@ -3029,7 +3041,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             }
             if (structure != null) {
                 // Pre-fill the task/activity component for all assist data receivers
-                structure.setTaskId(pae.activity.getTaskRecord().taskId);
+                structure.setTaskId(pae.activity.getTaskRecord().mTaskId);
                 structure.setActivityComponent(pae.activity.mActivityComponent);
                 structure.setHomeActivity(pae.isHome);
             }
@@ -3056,7 +3068,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 // Caller wants result sent back to them.
                 sendBundle = new Bundle();
                 sendBundle.putInt(ActivityTaskManagerInternal.ASSIST_TASK_ID,
-                        pae.activity.getTaskRecord().taskId);
+                        pae.activity.getTaskRecord().mTaskId);
                 sendBundle.putBinder(ActivityTaskManagerInternal.ASSIST_ACTIVITY_ID,
                         pae.activity.assistToken);
                 sendBundle.putBundle(ASSIST_KEY_DATA, pae.extras);
@@ -3152,11 +3164,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     stack.removeTask(task, "addAppTask", REMOVE_TASK_MODE_DESTROYING);
                     return INVALID_TASK_ID;
                 }
-                task.lastTaskDescription.copyFrom(description);
+                task.mTaskDescription.copyFrom(description);
 
                 // TODO: Send the thumbnail to WM to store it.
 
-                return task.taskId;
+                return task.mTaskId;
             }
         } finally {
             Binder.restoreCallingIdentity(callingIdent);
@@ -3315,29 +3327,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     + " passed for userId " + userId);
         }
         return mRecentTasks.getTaskDescriptionIcon(filePath);
-    }
-
-    @Override
-    public void startInPlaceAnimationOnFrontMostApplication(Bundle opts) {
-        final SafeActivityOptions safeOptions = SafeActivityOptions.fromBundle(opts);
-        final ActivityOptions activityOptions = safeOptions != null
-                ? safeOptions.getOptions(mStackSupervisor)
-                : null;
-        if (activityOptions == null
-                || activityOptions.getAnimationType() != ActivityOptions.ANIM_CUSTOM_IN_PLACE
-                || activityOptions.getCustomInPlaceResId() == 0) {
-            throw new IllegalArgumentException("Expected in-place ActivityOption " +
-                    "with valid animation");
-        }
-        // Get top display of front most application.
-        final ActivityStack focusedStack = getTopDisplayFocusedStack();
-        if (focusedStack != null) {
-            final DisplayContent dc = focusedStack.getDisplay().mDisplayContent;
-            dc.prepareAppTransition(TRANSIT_TASK_IN_PLACE, false);
-            dc.mAppTransition.overrideInPlaceAppTransition(activityOptions.getPackageName(),
-                    activityOptions.getCustomInPlaceResId());
-            dc.executeAppTransition();
-        }
     }
 
     @Override
@@ -4964,8 +4953,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 if (lastTask != task) {
                     lastTask = task;
                     pw.print("TASK "); pw.print(lastTask.affinity);
-                    pw.print(" id="); pw.print(lastTask.taskId);
-                    pw.print(" userId="); pw.println(lastTask.userId);
+                    pw.print(" id="); pw.print(lastTask.mTaskId);
+                    pw.print(" userId="); pw.println(lastTask.mUserId);
                     if (dumpAll) {
                         lastTask.dump(pw, "  ");
                     }
@@ -4995,7 +4984,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 pw.println("(not running)");
             }
             if (dumpAll) {
-                r.dump(pw, innerPrefix);
+                r.dump(pw, innerPrefix, true /* dumpAll */);
             }
         }
         if (appThread != null) {
@@ -5527,8 +5516,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     void startProcessAsync(ActivityRecord activity, boolean knownToBeDead, boolean isTop,
             String hostingType) {
         try {
-            if (Trace.isTagEnabled(TRACE_TAG_ACTIVITY_MANAGER)) {
-                Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "dispatchingStartProcess:"
+            if (Trace.isTagEnabled(TRACE_TAG_WINDOW_MANAGER)) {
+                Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "dispatchingStartProcess:"
                         + activity.processName);
             }
             // Post message to start process to avoid possible deadlock of calling into AMS with the
@@ -5538,7 +5527,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     isTop, hostingType, activity.intent.getComponent());
             mH.sendMessage(m);
         } finally {
-            Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
+            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
     }
 
@@ -5691,11 +5680,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     private void updateResumedAppTrace(@Nullable ActivityRecord resumed) {
         if (mTracedResumedActivity != null) {
-            Trace.asyncTraceEnd(TRACE_TAG_ACTIVITY_MANAGER,
+            Trace.asyncTraceEnd(TRACE_TAG_WINDOW_MANAGER,
                     constructResumedTraceName(mTracedResumedActivity.packageName), 0);
         }
         if (resumed != null) {
-            Trace.asyncTraceBegin(TRACE_TAG_ACTIVITY_MANAGER,
+            Trace.asyncTraceBegin(TRACE_TAG_WINDOW_MANAGER,
                     constructResumedTraceName(resumed.packageName), 0);
         }
         mTracedResumedActivity = resumed;
@@ -6023,10 +6012,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         @Override
         public void notifyAppTransitionStarting(SparseIntArray reasons,
-                long timestamp) {
+                long timestampNs) {
             synchronized (mGlobalLock) {
                 mStackSupervisor.getActivityMetricsLogger().notifyTransitionStarting(
-                        reasons, timestamp);
+                        reasons, timestampNs);
             }
         }
 
@@ -6794,7 +6783,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         @Override
         public boolean attachApplication(WindowProcessController wpc) throws RemoteException {
             synchronized (mGlobalLockWithoutBoost) {
-                return mRootActivityContainer.attachApplication(wpc);
+                if (Trace.isTagEnabled(TRACE_TAG_WINDOW_MANAGER)) {
+                    Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "attachApplication:" + wpc.mName);
+                }
+                try {
+                    return mRootActivityContainer.attachApplication(wpc);
+                } finally {
+                    Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
+                }
             }
         }
 

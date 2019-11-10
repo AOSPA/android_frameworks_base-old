@@ -153,6 +153,11 @@ public class StorageManager {
     public static final String PROP_ISOLATED_STORAGE = "persist.sys.isolated_storage";
     /** {@hide} */
     public static final String PROP_ISOLATED_STORAGE_SNAPSHOT = "sys.isolated_storage_snapshot";
+    /** {@hide} */
+    public static final String PROP_FUSE = "persist.sys.fuse";
+    /** {@hide} */
+    public static final String PROP_FUSE_SNAPSHOT = "sys.fuse_snapshot";
+
 
     /** {@hide} */
     public static final String UUID_PRIVATE_INTERNAL = null;
@@ -1575,7 +1580,14 @@ public class StorageManager {
 
     /** {@hide} */
     public static boolean hasAdoptable() {
-        return SystemProperties.getBoolean(PROP_HAS_ADOPTABLE, false);
+        switch (SystemProperties.get(PROP_ADOPTABLE)) {
+            case "force_on":
+                return true;
+            case "force_off":
+                return false;
+            default:
+                return SystemProperties.getBoolean(PROP_HAS_ADOPTABLE, false);
+        }
     }
 
     /**

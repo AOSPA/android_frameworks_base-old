@@ -15,6 +15,8 @@
 package com.android.systemui.statusbar;
 
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.InsetsState.TYPE_NAVIGATION_BAR;
+import static android.view.InsetsState.TYPE_TOP_BAR;
 
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Matchers.eq;
@@ -25,10 +27,12 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import android.content.ComponentName;
 import android.graphics.Rect;
 import android.os.Bundle;
+import android.view.WindowInsetsController.Appearance;
 
 import androidx.test.filters.SmallTest;
 
 import com.android.internal.statusbar.StatusBarIcon;
+import com.android.internal.view.AppearanceRegion;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.CommandQueue.Callbacks;
 
@@ -110,21 +114,56 @@ public class CommandQueueTest extends SysuiTestCase {
     }
 
     @Test
-    public void testSetSystemUiVisibility() {
-        Rect r = new Rect();
-        mCommandQueue.setSystemUiVisibility(DEFAULT_DISPLAY, 1, 2, 3, 4, null, r, false);
-        waitForIdleSync();
-        verify(mCallbacks).setSystemUiVisibility(eq(DEFAULT_DISPLAY), eq(1), eq(2), eq(3), eq(4),
-                eq(null), eq(r), eq(false));
+    public void testOnSystemBarAppearanceChanged() {
+        doTestOnSystemBarAppearanceChanged(DEFAULT_DISPLAY, 1,
+                new AppearanceRegion[]{new AppearanceRegion(2, new Rect())}, false);
     }
 
     @Test
-    public void testSetSystemUiVisibilityForSecondaryDisplay() {
-        Rect r = new Rect();
-        mCommandQueue.setSystemUiVisibility(SECONDARY_DISPLAY, 1, 2, 3, 4, null, r, false);
+    public void testOnSystemBarAppearanceChangedForSecondaryDisplay() {
+        doTestOnSystemBarAppearanceChanged(SECONDARY_DISPLAY, 1,
+                new AppearanceRegion[]{new AppearanceRegion(2, new Rect())}, false);
+    }
+
+    private void doTestOnSystemBarAppearanceChanged(int displayId, @Appearance int appearance,
+            AppearanceRegion[] appearanceRegions, boolean navbarColorManagedByIme) {
+        mCommandQueue.onSystemBarAppearanceChanged(displayId, appearance, appearanceRegions,
+                navbarColorManagedByIme);
         waitForIdleSync();
-        verify(mCallbacks).setSystemUiVisibility(eq(SECONDARY_DISPLAY), eq(1), eq(2), eq(3), eq(4),
-                eq(null), eq(r), eq(false));
+        verify(mCallbacks).onSystemBarAppearanceChanged(eq(displayId), eq(appearance),
+                eq(appearanceRegions), eq(navbarColorManagedByIme));
+    }
+
+    @Test
+    public void testShowTransient() {
+        int[] types = new int[]{ TYPE_TOP_BAR, TYPE_NAVIGATION_BAR };
+        mCommandQueue.showTransient(DEFAULT_DISPLAY, types);
+        waitForIdleSync();
+        verify(mCallbacks).showTransient(eq(DEFAULT_DISPLAY), eq(types));
+    }
+
+    @Test
+    public void testShowTransientForSecondaryDisplay() {
+        int[] types = new int[]{ TYPE_TOP_BAR, TYPE_NAVIGATION_BAR };
+        mCommandQueue.showTransient(SECONDARY_DISPLAY, types);
+        waitForIdleSync();
+        verify(mCallbacks).showTransient(eq(SECONDARY_DISPLAY), eq(types));
+    }
+
+    @Test
+    public void testAbortTransient() {
+        int[] types = new int[]{ TYPE_TOP_BAR, TYPE_NAVIGATION_BAR };
+        mCommandQueue.abortTransient(DEFAULT_DISPLAY, types);
+        waitForIdleSync();
+        verify(mCallbacks).abortTransient(eq(DEFAULT_DISPLAY), eq(types));
+    }
+
+    @Test
+    public void testAbortTransientForSecondaryDisplay() {
+        int[] types = new int[]{ TYPE_TOP_BAR, TYPE_NAVIGATION_BAR };
+        mCommandQueue.abortTransient(SECONDARY_DISPLAY, types);
+        waitForIdleSync();
+        verify(mCallbacks).abortTransient(eq(SECONDARY_DISPLAY), eq(types));
     }
 
     @Test
@@ -367,21 +406,21 @@ public class CommandQueueTest extends SysuiTestCase {
     }
 
     @Test
-    public void testShowBiometricDialog() {
+    public void testShowAuthenticationDialog() {
         Bundle bundle = new Bundle();
         String packageName = "test";
-        mCommandQueue.showBiometricDialog(bundle, null /* receiver */, 1, true, 3, packageName);
+        mCommandQueue.showAuthenticationDialog(bundle, null /* receiver */, 1, true, 3,
+                packageName);
         waitForIdleSync();
-        verify(mCallbacks).showBiometricDialog(eq(bundle), eq(null), eq(1), eq(true), eq(3),
+        verify(mCallbacks).showAuthenticationDialog(eq(bundle), eq(null), eq(1), eq(true), eq(3),
                 eq(packageName));
     }
 
     @Test
     public void testOnBiometricAuthenticated() {
-        String failureReason = "test_failure_reason";
-        mCommandQueue.onBiometricAuthenticated(true /* authenticated */, failureReason);
+        mCommandQueue.onBiometricAuthenticated();
         waitForIdleSync();
-        verify(mCallbacks).onBiometricAuthenticated(eq(true), eq(failureReason));
+        verify(mCallbacks).onBiometricAuthenticated();
     }
 
     @Test
@@ -394,16 +433,18 @@ public class CommandQueueTest extends SysuiTestCase {
 
     @Test
     public void testOnBiometricError() {
-        String errorMessage = "test_error_message";
-        mCommandQueue.onBiometricError(errorMessage);
+        final int modality = 1;
+        final int error = 2;
+        final int vendorCode = 3;
+        mCommandQueue.onBiometricError(modality, error, vendorCode);
         waitForIdleSync();
-        verify(mCallbacks).onBiometricError(eq(errorMessage));
+        verify(mCallbacks).onBiometricError(eq(modality), eq(error), eq(vendorCode));
     }
 
     @Test
-    public void testHideBiometricDialog() {
-        mCommandQueue.hideBiometricDialog();
+    public void testHideAuthenticationDialog() {
+        mCommandQueue.hideAuthenticationDialog();
         waitForIdleSync();
-        verify(mCallbacks).hideBiometricDialog();
+        verify(mCallbacks).hideAuthenticationDialog();
     }
 }

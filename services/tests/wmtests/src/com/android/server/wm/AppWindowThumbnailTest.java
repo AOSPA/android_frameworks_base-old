@@ -17,8 +17,8 @@
 package com.android.server.wm;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
-
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.when;
+
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
@@ -26,12 +26,12 @@ import android.graphics.GraphicBuffer;
 import android.graphics.PixelFormat;
 import android.platform.test.annotations.Presubmit;
 import android.view.Surface;
-import android.view.SurfaceControl;
 
 import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
 /**
  * Test class for {@link TaskSnapshotSurface}.
@@ -42,14 +42,15 @@ import org.junit.Test;
  */
 @SmallTest
 @Presubmit
+@RunWith(WindowTestRunner.class)
 public class AppWindowThumbnailTest extends WindowTestsBase {
     private AppWindowThumbnail buildThumbnail() {
         final GraphicBuffer buffer = GraphicBuffer.create(1, 1, PixelFormat.RGBA_8888,
                 GraphicBuffer.USAGE_SW_READ_RARELY | GraphicBuffer.USAGE_SW_WRITE_NEVER);
-        final AppWindowToken mockAwt = mock(AppWindowToken.class);
-        when(mockAwt.getPendingTransaction()).thenReturn(new StubTransaction());
-        when(mockAwt.makeSurface()).thenReturn(new MockSurfaceControlBuilder());
-        return new AppWindowThumbnail(new StubTransaction(), mockAwt,
+        final ActivityRecord mockAr = mock(ActivityRecord.class);
+        when(mockAr.getPendingTransaction()).thenReturn(new StubTransaction());
+        when(mockAr.makeSurface()).thenReturn(new MockSurfaceControlBuilder());
+        return new AppWindowThumbnail(new StubTransaction(), mockAr,
                 buffer, false, mock(Surface.class), mock(SurfaceAnimator.class));
     }
 

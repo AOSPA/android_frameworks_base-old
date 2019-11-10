@@ -42,6 +42,7 @@ import com.android.systemui.ForegroundServiceController;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.NotificationEntryBuilder;
+import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationTestHelper;
 import com.android.systemui.statusbar.notification.collection.NotificationData;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
@@ -94,10 +95,11 @@ public class NotificationFilterTest extends SysuiTestCase {
         mDependency.injectTestDependency(NotificationGroupManager.class,
                 new NotificationGroupManager(mock(StatusBarStateController.class)));
         mDependency.injectMockDependency(ShadeController.class);
+        mDependency.injectMockDependency(NotificationLockscreenUserManager.class);
         mDependency.injectTestDependency(NotificationData.KeyguardEnvironment.class, mEnvironment);
         when(mEnvironment.isDeviceProvisioned()).thenReturn(true);
         when(mEnvironment.isNotificationForCurrentProfiles(any())).thenReturn(true);
-        mRow = new NotificationTestHelper(getContext()).createRow();
+        mRow = new NotificationTestHelper(getContext(), mDependency).createRow();
         mNotificationFilter = new NotificationFilter();
     }
 
@@ -140,7 +142,7 @@ public class NotificationFilterTest extends SysuiTestCase {
     public void testSuppressSystemAlertNotification() {
         when(mFsc.isSystemAlertWarningNeeded(anyInt(), anyString())).thenReturn(false);
         when(mFsc.isSystemAlertNotification(any())).thenReturn(true);
-        StatusBarNotification sbn = mRow.getEntry().notification;
+        StatusBarNotification sbn = mRow.getEntry().getSbn();
         Bundle bundle = new Bundle();
         bundle.putStringArray(Notification.EXTRA_FOREGROUND_APPS, new String[]{"something"});
         sbn.getNotification().extras = bundle;
@@ -150,7 +152,7 @@ public class NotificationFilterTest extends SysuiTestCase {
 
     @Test
     public void testDoNotSuppressSystemAlertNotification() {
-        StatusBarNotification sbn = mRow.getEntry().notification;
+        StatusBarNotification sbn = mRow.getEntry().getSbn();
         Bundle bundle = new Bundle();
         bundle.putStringArray(Notification.EXTRA_FOREGROUND_APPS, new String[]{"something"});
         sbn.getNotification().extras = bundle;
@@ -178,7 +180,7 @@ public class NotificationFilterTest extends SysuiTestCase {
         // missing extra
         assertFalse(mNotificationFilter.shouldFilterOut(mRow.getEntry()));
 
-        StatusBarNotification sbn = mRow.getEntry().notification;
+        StatusBarNotification sbn = mRow.getEntry().getSbn();
         Bundle bundle = new Bundle();
         bundle.putStringArray(Notification.EXTRA_FOREGROUND_APPS, new String[]{});
         sbn.getNotification().extras = bundle;

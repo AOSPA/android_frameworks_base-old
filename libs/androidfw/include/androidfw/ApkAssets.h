@@ -24,6 +24,7 @@
 #include "android-base/unique_fd.h"
 
 #include "androidfw/Asset.h"
+#include "androidfw/Idmap.h"
 #include "androidfw/LoadedArsc.h"
 #include "androidfw/misc.h"
 
@@ -40,7 +41,8 @@ class ApkAssets {
   // Creates an ApkAssets.
   // If `system` is true, the package is marked as a system package, and allows some functions to
   // filter out this package when computing what configurations/resources are available.
-  static std::unique_ptr<const ApkAssets> Load(const std::string& path, bool system = false);
+  static std::unique_ptr<const ApkAssets> Load(const std::string& path, bool system = false,
+                                               bool for_loader = false);
 
   // Creates an ApkAssets, but forces any package with ID 0x7f to be loaded as a shared library.
   // If `system` is true, the package is marked as a system package, and allows some functions to
@@ -63,7 +65,21 @@ class ApkAssets {
   // If `force_shared_lib` is true, any package with ID 0x7f is loaded as a shared library.
   static std::unique_ptr<const ApkAssets> LoadFromFd(base::unique_fd fd,
                                                      const std::string& friendly_name, bool system,
-                                                     bool force_shared_lib);
+                                                     bool force_shared_lib,
+                                                     bool for_loader = false);
+
+  // Creates an empty wrapper ApkAssets from the given path which points to an .arsc.
+  static std::unique_ptr<const ApkAssets> LoadArsc(const std::string& path,
+                                                   bool for_loader = false);
+
+  // Creates an empty wrapper ApkAssets from the given file descriptor which points to an .arsc,
+  // Takes ownership of the file descriptor.
+  static std::unique_ptr<const ApkAssets> LoadArsc(base::unique_fd fd,
+                                                   const std::string& friendly_name,
+                                                   bool resource_loader = false);
+
+  // Creates a totally empty ApkAssets with no resources table and no file entries.
+  static std::unique_ptr<const ApkAssets> LoadEmpty(bool resource_loader = false);
 
   std::unique_ptr<Asset> Open(const std::string& path,
                               Asset::AccessMode mode = Asset::AccessMode::ACCESS_RANDOM) const;
@@ -80,11 +96,22 @@ class ApkAssets {
     return loaded_arsc_.get();
   }
 
+  inline const LoadedIdmap* GetLoadedIdmap() const {
+    return loaded_idmap_.get();
+  }
+
   inline bool IsOverlay() const {
     return idmap_asset_.get() != nullptr;
   }
 
+  inline bool IsLoader() const {
+    return for_loader_;
+  }
+
   bool IsUpToDate() const;
+
+  // Creates an Asset from any file on the file system.
+  static std::unique_ptr<Asset> CreateAssetFromFile(const std::string& path);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ApkAssets);
@@ -92,21 +119,28 @@ class ApkAssets {
   static std::unique_ptr<const ApkAssets> LoadImpl(base::unique_fd fd, const std::string& path,
                                                    std::unique_ptr<Asset> idmap_asset,
                                                    std::unique_ptr<const LoadedIdmap> loaded_idmap,
-                                                   bool system, bool load_as_shared_library);
+                                                   bool system, bool load_as_shared_library,
+                                                   bool resource_loader = false);
 
-  // Creates an Asset from any file on the file system.
-  static std::unique_ptr<Asset> CreateAssetFromFile(const std::string& path);
+  static std::unique_ptr<const ApkAssets> LoadArscImpl(base::unique_fd fd,
+                                                       const std::string& path,
+                                                       bool resource_loader = false);
 
-  ApkAssets(ZipArchiveHandle unmanaged_handle, const std::string& path, time_t last_mod_time);
+  ApkAssets(ZipArchiveHandle unmanaged_handle,
+            const std::string& path,
+            time_t last_mod_time,
+            bool for_loader = false);
 
-  using ZipArchivePtr = std::unique_ptr<ZipArchive, void(*)(ZipArchiveHandle)>;
+  using ZipArchivePtr = std::unique_ptr<ZipArchive, void (*)(ZipArchiveHandle)>;
 
   ZipArchivePtr zip_handle_;
   const std::string path_;
   time_t last_mod_time_;
+  bool for_loader_;
   std::unique_ptr<Asset> resources_asset_;
   std::unique_ptr<Asset> idmap_asset_;
   std::unique_ptr<const LoadedArsc> loaded_arsc_;
+  std::unique_ptr<const LoadedIdmap> loaded_idmap_;
 };
 
 }  // namespace android

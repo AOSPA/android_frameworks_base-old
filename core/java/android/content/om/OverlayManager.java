@@ -21,6 +21,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
 import android.content.Context;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -159,6 +160,29 @@ public class OverlayManager {
             @NonNull UserHandle user) {
         try {
             return mService.getOverlayInfosForTarget(targetPackageName, user.getIdentifier());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Clear part of the overlay manager's internal cache of PackageInfo
+     * objects. Only intended for testing.
+     *
+     * @param targetPackageName The name of the target package.
+     * @param user The user to get the OverlayInfos for.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(anyOf = {
+            "android.permission.INTERACT_ACROSS_USERS",
+    })
+    @NonNull
+    public void invalidateCachesForOverlay(@NonNull final String targetPackageName,
+            @NonNull UserHandle user) {
+        try {
+            mService.invalidateCachesForOverlay(targetPackageName, user.getIdentifier());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

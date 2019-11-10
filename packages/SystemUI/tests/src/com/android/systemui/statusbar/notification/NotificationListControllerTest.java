@@ -21,6 +21,7 @@ import static junit.framework.Assert.assertTrue;
 
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -41,11 +42,15 @@ import com.android.systemui.ForegroundServiceController;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.NotificationEntryBuilder;
+import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.notification.collection.NotificationData;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.logging.NotifLog;
+import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
+import com.android.systemui.util.DeviceConfigProxyFake;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -73,13 +78,18 @@ public class NotificationListControllerTest extends SysuiTestCase {
     private DeviceProvisionedListener mProvisionedListener;
 
     // TODO: Remove this once EntryManager no longer needs to be mocked
-    private NotificationData mNotificationData = new NotificationData(mContext);
+    private NotificationData mNotificationData =
+            new NotificationData(
+                    new NotificationSectionsFeatureManager(new DeviceConfigProxyFake(), mContext),
+                    mock(NotifLog.class),
+                    mock(PeopleNotificationIdentifier.class));
 
     private int mNextNotifId = 0;
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
+        mDependency.injectMockDependency(NotificationLockscreenUserManager.class);
 
         when(mEntryManager.getNotificationData()).thenReturn(mNotificationData);
 
@@ -102,7 +112,7 @@ public class NotificationListControllerTest extends SysuiTestCase {
         final NotificationEntry entry = buildEntry();
         mEntryListener.onEntryRemoved(
                 entry,
-                NotificationVisibility.obtain(entry.key, 0, 0, true),
+                NotificationVisibility.obtain(entry.getKey(), 0, 0, true),
                 false);
         verify(mListContainer).cleanUpViewStateForEntry(entry);
     }
@@ -110,7 +120,7 @@ public class NotificationListControllerTest extends SysuiTestCase {
     @Test
     public void testCallUpdateNotificationsOnDeviceProvisionedChange() {
         mProvisionedListener.onDeviceProvisionedChanged();
-        verify(mEntryManager).updateNotifications();
+        verify(mEntryManager).updateNotifications(anyString());
     }
 
     @Test
@@ -119,19 +129,19 @@ public class NotificationListControllerTest extends SysuiTestCase {
         final NotificationEntry entry = buildEntry();
         mNotificationData.add(entry);
         when(mForegroundServiceController.getStandardLayoutKey(anyInt(), anyString()))
-                .thenReturn(entry.key);
+                .thenReturn(entry.getKey());
 
         // WHEN we are notified of a new app op
         mController.updateNotificationsForAppOp(
                 AppOpsManager.OP_CAMERA,
-                entry.notification.getUid(),
-                entry.notification.getPackageName(),
+                entry.getSbn().getUid(),
+                entry.getSbn().getPackageName(),
                 true);
 
         // THEN the app op is added to the entry
         assertTrue(entry.mActiveAppOps.contains(AppOpsManager.OP_CAMERA));
-        // THEN updateNotifications() is called
-        verify(mEntryManager, times(1)).updateNotifications();
+        // THEN updateNotifications(TEST) is called
+        verify(mEntryManager, times(1)).updateNotifications(anyString());
     }
 
     @Test
@@ -143,8 +153,8 @@ public class NotificationListControllerTest extends SysuiTestCase {
         // WHEN An unrelated notification gets a new app op
         mController.updateNotificationsForAppOp(AppOpsManager.OP_CAMERA, 1000, "pkg", true);
 
-        // THEN We never call updateNotifications()
-        verify(mEntryManager, never()).updateNotifications();
+        // THEN We never call updateNotifications(TEST)
+        verify(mEntryManager, never()).updateNotifications(anyString());
     }
 
     @Test
@@ -158,10 +168,10 @@ public class NotificationListControllerTest extends SysuiTestCase {
         expected.add(235);
         expected.add(1);
         when(mForegroundServiceController.getStandardLayoutKey(
-                entry.notification.getUserId(),
-                entry.notification.getPackageName())).thenReturn(entry.key);
-        when(mForegroundServiceController.getAppOps(entry.notification.getUserId(),
-                entry.notification.getPackageName())).thenReturn(expected);
+                entry.getSbn().getUserId(),
+                entry.getSbn().getPackageName())).thenReturn(entry.getKey());
+        when(mForegroundServiceController.getAppOps(entry.getSbn().getUserId(),
+                entry.getSbn().getPackageName())).thenReturn(expected);
 
         // WHEN the notification is added
         mEntryListener.onBeforeNotificationAdded(entry);
@@ -180,10 +190,10 @@ public class NotificationListControllerTest extends SysuiTestCase {
 
         mNotificationData.add(entry);
         when(mForegroundServiceController.getStandardLayoutKey(
-                entry.notification.getUserId(),
-                entry.notification.getPackageName())).thenReturn(entry.key);
-        when(mForegroundServiceController.getAppOps(entry.notification.getUserId(),
-                entry.notification.getPackageName())).thenReturn(null);
+                entry.getSbn().getUserId(),
+                entry.getSbn().getPackageName())).thenReturn(entry.getKey());
+        when(mForegroundServiceController.getAppOps(entry.getSbn().getUserId(),
+                entry.getSbn().getPackageName())).thenReturn(null);
 
         // WHEN the notification is added
         mEntryListener.onBeforeNotificationAdded(entry);
@@ -201,11 +211,11 @@ public class NotificationListControllerTest extends SysuiTestCase {
         ops.add(3);
         ops.add(235);
         ops.add(1);
-        when(mForegroundServiceController.getAppOps(entry.notification.getUserId(),
-                entry.notification.getPackageName())).thenReturn(ops);
+        when(mForegroundServiceController.getAppOps(entry.getSbn().getUserId(),
+                entry.getSbn().getPackageName())).thenReturn(ops);
         when(mForegroundServiceController.getStandardLayoutKey(
-                entry.notification.getUserId(),
-                entry.notification.getPackageName())).thenReturn("something else");
+                entry.getSbn().getUserId(),
+                entry.getSbn().getPackageName())).thenReturn("something else");
 
         // WHEN the notification is added
         mEntryListener.onBeforeNotificationAdded(entry);

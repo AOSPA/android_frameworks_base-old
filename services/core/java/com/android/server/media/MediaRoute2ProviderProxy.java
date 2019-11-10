@@ -43,7 +43,7 @@ import java.util.Objects;
  * Maintains a connection to a particular media route provider service.
  */
 final class MediaRoute2ProviderProxy implements ServiceConnection {
-    private static final String TAG = "MediaRoute2Provider";
+    private static final String TAG = "MR2ProviderProxy";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     private final Context mContext;
@@ -93,7 +93,7 @@ final class MediaRoute2ProviderProxy implements ServiceConnection {
 
     public void unselectRoute(String packageName, String routeId) {
         if (mConnectionReady) {
-            mActiveConnection.unselectRotue(packageName, routeId);
+            mActiveConnection.unselectRoute(packageName, routeId);
             updateBinding();
         }
     }
@@ -101,6 +101,20 @@ final class MediaRoute2ProviderProxy implements ServiceConnection {
     public void sendControlRequest(MediaRoute2Info route, Intent request) {
         if (mConnectionReady) {
             mActiveConnection.sendControlRequest(route.getId(), request);
+            updateBinding();
+        }
+    }
+
+    public void requestSetVolume(MediaRoute2Info route, int volume) {
+        if (mConnectionReady) {
+            mActiveConnection.requestSetVolume(route.getId(), volume);
+            updateBinding();
+        }
+    }
+
+    public void requestUpdateVolume(MediaRoute2Info route, int delta) {
+        if (mConnectionReady) {
+            mActiveConnection.requestUpdateVolume(route.getId(), delta);
             updateBinding();
         }
     }
@@ -260,7 +274,9 @@ final class MediaRoute2ProviderProxy implements ServiceConnection {
                 .setUniqueId(mUniqueId)
                 .build();
         }
-        mHandler.post(mStateChanged);
+        if (mCallback != null) {
+            mCallback.onProviderStateChanged(MediaRoute2ProviderProxy.this);
+        }
     }
 
     private void disconnect() {
@@ -276,15 +292,6 @@ final class MediaRoute2ProviderProxy implements ServiceConnection {
     public String toString() {
         return "Service connection " + mComponentName.flattenToShortString();
     }
-
-    private final Runnable mStateChanged = new Runnable() {
-        @Override
-        public void run() {
-            if (mCallback != null) {
-                mCallback.onProviderStateChanged(MediaRoute2ProviderProxy.this);
-            }
-        }
-    };
 
     public interface Callback {
         void onProviderStateChanged(MediaRoute2ProviderProxy provider);
@@ -324,7 +331,7 @@ final class MediaRoute2ProviderProxy implements ServiceConnection {
             }
         }
 
-        public void unselectRotue(String packageName, String routeId) {
+        public void unselectRoute(String packageName, String routeId) {
             try {
                 mProvider.unselectRoute(packageName, routeId);
             } catch (RemoteException ex) {
@@ -337,6 +344,22 @@ final class MediaRoute2ProviderProxy implements ServiceConnection {
                 mProvider.notifyControlRequestSent(routeId, request);
             } catch (RemoteException ex) {
                 Slog.e(TAG, "Failed to deliver request to send control request.", ex);
+            }
+        }
+
+        public void requestSetVolume(String routeId, int volume) {
+            try {
+                mProvider.requestSetVolume(routeId, volume);
+            } catch (RemoteException ex) {
+                Slog.e(TAG, "Failed to deliver request to request set volume.", ex);
+            }
+        }
+
+        public void requestUpdateVolume(String routeId, int delta) {
+            try {
+                mProvider.requestUpdateVolume(routeId, delta);
+            } catch (RemoteException ex) {
+                Slog.e(TAG, "Failed to deliver request to request update volume.", ex);
             }
         }
 

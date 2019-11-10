@@ -197,6 +197,9 @@ class StorageManagerService extends IStorageManager.Stub
     private static final String ZRAM_ENABLED_PROPERTY =
             "persist.sys.zram_enabled";
 
+    private static final boolean IS_FUSE_ENABLED =
+            SystemProperties.getBoolean(StorageManager.PROP_FUSE, false);
+
     private static final boolean ENABLE_ISOLATED_STORAGE = StorageManager.hasIsolatedStorage();
 
     /**
@@ -205,6 +208,12 @@ class StorageManagerService extends IStorageManager.Stub
      * value from the build system.
      */
     private static final String ISOLATED_STORAGE_ENABLED = "isolated_storage_enabled";
+
+    /**
+     * If {@code 1}, enables FuseDaemon to intercept file system ops. If {@code -1},
+     * disables FuseDaemon. If {@code 0}, uses the default value from the build system.
+     */
+    private static final String FUSE_ENABLED = "fuse_enabled";
 
     public static class Lifecycle extends SystemService {
         private StorageManagerService mStorageManagerService;
@@ -346,6 +355,9 @@ class StorageManagerService extends IStorageManager.Stub
     private IPackageMoveObserver mMoveCallback;
     @GuardedBy("mLock")
     private String mMoveTargetUuid;
+
+    @Nullable
+    private volatile String mMediaStoreAuthorityPackageName = null;
 
     private volatile int mCurrentUserId = UserHandle.USER_SYSTEM;
 
@@ -809,11 +821,13 @@ class StorageManagerService extends IStorageManager.Stub
                 }
             });
         // For now, simply clone property when it changes
-        DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_STORAGE,
+        DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
                 mContext.getMainExecutor(), (properties) -> {
                     refreshIsolatedStorageSettings();
+                    refreshFuseSettings();
                 });
         refreshIsolatedStorageSettings();
+        refreshFuseSettings();
     }
 
     /**
@@ -849,7 +863,8 @@ class StorageManagerService extends IStorageManager.Stub
         // Always copy value from newer DeviceConfig location
         Settings.Global.putString(mResolver,
                 Settings.Global.ISOLATED_STORAGE_REMOTE,
-                DeviceConfig.getProperty(DeviceConfig.NAMESPACE_STORAGE, ISOLATED_STORAGE_ENABLED));
+                DeviceConfig.getProperty(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
+                        ISOLATED_STORAGE_ENABLED));
 
         final int local = Settings.Global.getInt(mContext.getContentResolver(),
                 Settings.Global.ISOLATED_STORAGE_LOCAL, 0);
@@ -874,6 +889,18 @@ class StorageManagerService extends IStorageManager.Stub
         Slog.d(TAG, "Isolated storage local flag " + local + " and remote flag "
                 + remote + " resolved to " + res);
         SystemProperties.set(StorageManager.PROP_ISOLATED_STORAGE, Boolean.toString(res));
+    }
+
+    private void refreshFuseSettings() {
+        int isFuseEnabled = DeviceConfig.getInt(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
+                FUSE_ENABLED, 0);
+        if (isFuseEnabled == 1) {
+            SystemProperties.set(StorageManager.PROP_FUSE, "true");
+        } else if (isFuseEnabled == -1) {
+            SystemProperties.set(StorageManager.PROP_FUSE, "false");
+        }
+        // else, keep the build config.
+        // This can be overridden be direct adjustment of persist.sys.prop
     }
 
     /**
@@ -1521,6 +1548,9 @@ class StorageManagerService extends IStorageManager.Stub
         SystemProperties.set(StorageManager.PROP_ISOLATED_STORAGE_SNAPSHOT, Boolean.toString(
                 SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, true)));
 
+        SystemProperties.set(StorageManager.PROP_FUSE_SNAPSHOT, Boolean.toString(
+                SystemProperties.getBoolean(StorageManager.PROP_FUSE, false)));
+
         mContext = context;
         mResolver = mContext.getContentResolver();
 
@@ -1662,6 +1692,15 @@ class StorageManagerService extends IStorageManager.Stub
                 ServiceManager.getService("package"));
         mIAppOpsService = IAppOpsService.Stub.asInterface(
                 ServiceManager.getService(Context.APP_OPS_SERVICE));
+
+        ProviderInfo provider = mPmInternal.resolveContentProvider(
+                MediaStore.AUTHORITY, PackageManager.MATCH_DIRECT_BOOT_AWARE
+                | PackageManager.MATCH_DIRECT_BOOT_UNAWARE,
+                UserHandle.getUserId(UserHandle.USER_SYSTEM));
+        if (provider != null) {
+            mMediaStoreAuthorityPackageName = provider.packageName;
+        }
+
         try {
             mIAppOpsService.startWatchingMode(OP_REQUEST_INSTALL_PACKAGES, null, mAppOpsCallback);
             mIAppOpsService.startWatchingMode(OP_LEGACY_STORAGE, null, mAppOpsCallback);
@@ -1844,7 +1883,7 @@ class StorageManagerService extends IStorageManager.Stub
             // This means the mountUserId on such volumes is USER_NULL. This breaks fuse which
             // requires a valid user to mount a volume. Create individual volumes per user in vold
             // and remove this property check
-            int userId = SystemProperties.getBoolean("persist.sys.fuse", false)
+            int userId = SystemProperties.getBoolean(StorageManager.PROP_FUSE_SNAPSHOT, false)
                     ? mCurrentUserId : vol.mountUserId;
             return mVold.mount(vol.id, vol.mountFlags, userId);
         } catch (Exception e) {
@@ -3703,6 +3742,11 @@ class StorageManagerService extends IStorageManager.Stub
 
             if (mPmInternal.isInstantApp(packageName, UserHandle.getUserId(uid))) {
                 return Zygote.MOUNT_EXTERNAL_NONE;
+            }
+
+            if (IS_FUSE_ENABLED && packageName.equals(mMediaStoreAuthorityPackageName)) {
+                // Determine if caller requires pass_through mount
+                return Zygote.MOUNT_EXTERNAL_PASS_THROUGH;
             }
 
             // Determine if caller is holding runtime permission

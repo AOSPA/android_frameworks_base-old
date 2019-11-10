@@ -17,12 +17,17 @@
 #define DEBUG false
 #include "Log.h"
 
+#include "StatsPullerManager.h"
+
 #include <android/os/IStatsCompanionService.h>
 #include <android/os/IStatsPullerCallback.h>
 #include <cutils/log.h>
 #include <math.h>
 #include <stdint.h>
+
 #include <algorithm>
+#include <iostream>
+
 #include "../StatsService.h"
 #include "../logd/LogEvent.h"
 #include "../stats_log_util.h"
@@ -32,12 +37,10 @@
 #include "ResourceHealthManagerPuller.h"
 #include "StatsCallbackPuller.h"
 #include "StatsCompanionServicePuller.h"
-#include "StatsPullerManager.h"
 #include "SubsystemSleepStatePuller.h"
+#include "SurfaceflingerStatsPuller.h"
 #include "TrainInfoPuller.h"
 #include "statslog.h"
-
-#include <iostream>
 
 using std::make_shared;
 using std::map;
@@ -119,9 +122,10 @@ std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
          {.puller = new StatsCompanionServicePuller(android::util::BLUETOOTH_ACTIVITY_INFO)}},
         // system_elapsed_realtime
         {android::util::SYSTEM_ELAPSED_REALTIME,
-         {.pullTimeoutNs = NS_PER_SEC / 2,
-          .coolDownNs = NS_PER_SEC,
-          .puller = new StatsCompanionServicePuller(android::util::SYSTEM_ELAPSED_REALTIME)}},
+         {.coolDownNs = NS_PER_SEC,
+          .puller = new StatsCompanionServicePuller(android::util::SYSTEM_ELAPSED_REALTIME),
+          .pullTimeoutNs = NS_PER_SEC / 2,
+         }},
         // system_uptime
         {android::util::SYSTEM_UPTIME,
          {.puller = new StatsCompanionServicePuller(android::util::SYSTEM_UPTIME)}},
@@ -142,17 +146,15 @@ std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
          {.puller = new ResourceHealthManagerPuller(android::util::BATTERY_CYCLE_COUNT)}},
         // process_memory_state
         {android::util::PROCESS_MEMORY_STATE,
-         {.additiveFields = {4, 5, 6, 7, 8, 9},
+         {.additiveFields = {4, 5, 6, 7, 8},
           .puller = new StatsCompanionServicePuller(android::util::PROCESS_MEMORY_STATE)}},
-        // native_process_memory_state
-        {android::util::NATIVE_PROCESS_MEMORY_STATE,
-         {.additiveFields = {3, 4, 5, 6, 8},
-          .puller = new StatsCompanionServicePuller(android::util::NATIVE_PROCESS_MEMORY_STATE)}},
         // process_memory_high_water_mark
         {android::util::PROCESS_MEMORY_HIGH_WATER_MARK,
-         {.additiveFields = {3},
-          .puller =
+         {.puller =
                   new StatsCompanionServicePuller(android::util::PROCESS_MEMORY_HIGH_WATER_MARK)}},
+        // process_memory_snapshot
+        {android::util::PROCESS_MEMORY_SNAPSHOT,
+         {.puller = new StatsCompanionServicePuller(android::util::PROCESS_MEMORY_SNAPSHOT)}},
         // system_ion_heap_size
         {android::util::SYSTEM_ION_HEAP_SIZE,
          {.puller = new StatsCompanionServicePuller(android::util::SYSTEM_ION_HEAP_SIZE)}},
@@ -266,6 +268,10 @@ std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         // App ops
         {android::util::APP_OPS,
          {.puller = new StatsCompanionServicePuller(android::util::APP_OPS)}},
+        // SurfaceflingerStatsGlobalInfo
+        {android::util::SURFACEFLINGER_STATS_GLOBAL_INFO,
+         {.puller =
+                  new SurfaceflingerStatsPuller(android::util::SURFACEFLINGER_STATS_GLOBAL_INFO)}},
 };
 
 StatsPullerManager::StatsPullerManager() : mNextPullTimeNs(NO_ALARM_UPDATE) {

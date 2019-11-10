@@ -41,12 +41,14 @@ import android.content.pm.ServiceInfo;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.testing.DexmakerShareClassLoaderRule;
 import android.view.Display;
 
 import com.android.server.wm.WindowManagerInternal;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -65,9 +67,14 @@ public class AccessibilityServiceConnectionTest {
             "com.android.server.accessibility", "AccessibilityServiceConnectionTest");
     static final int SERVICE_ID = 42;
 
+    // Mock package-private AccessibilityUserState class
+    @Rule
+    public final DexmakerShareClassLoaderRule mDexmakerShareClassLoaderRule =
+            new DexmakerShareClassLoaderRule();
+
     AccessibilityServiceConnection mConnection;
 
-    @Mock AccessibilityManagerService.UserState mMockUserState;
+    @Mock AccessibilityUserState mMockUserState;
     @Mock Context mMockContext;
     @Mock AccessibilityServiceInfo mMockServiceInfo;
     @Mock ResolveInfo mMockResolveInfo;
@@ -75,7 +82,7 @@ public class AccessibilityServiceConnectionTest {
     @Mock AccessibilityWindowManager mMockA11yWindowManager;
     @Mock AbstractAccessibilityServiceConnection.SystemSupport mMockSystemSupport;
     @Mock WindowManagerInternal mMockWindowManagerInternal;
-    @Mock GlobalActionPerformer mMockGlobalActionPerformer;
+    @Mock SystemActionPerformer mMockSystemActionPerformer;
     @Mock KeyEventDispatcher mMockKeyEventDispatcher;
     @Mock MagnificationController mMockMagnificationController;
     @Mock IBinder mMockIBinder;
@@ -104,7 +111,7 @@ public class AccessibilityServiceConnectionTest {
         mConnection = new AccessibilityServiceConnection(mMockUserState, mMockContext,
                 COMPONENT_NAME, mMockServiceInfo, SERVICE_ID, mHandler, new Object(),
                 mMockSecurityPolicy, mMockSystemSupport, mMockWindowManagerInternal,
-                mMockGlobalActionPerformer, mMockA11yWindowManager);
+                mMockSystemActionPerformer, mMockA11yWindowManager);
         when(mMockSecurityPolicy.canPerformGestures(mConnection)).thenReturn(true);
     }
 

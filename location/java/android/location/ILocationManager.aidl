@@ -31,6 +31,7 @@ import android.location.Location;
 import android.location.LocationRequest;
 import android.location.LocationTime;
 import android.os.Bundle;
+import android.os.ICancellationSignal;
 
 import com.android.internal.location.ProviderProperties;
 
@@ -41,17 +42,23 @@ import com.android.internal.location.ProviderProperties;
  */
 interface ILocationManager
 {
+    Location getLastLocation(in LocationRequest request, String packageName, String featureId);
+    boolean getCurrentLocation(in LocationRequest request,
+            in ICancellationSignal cancellationSignal, in ILocationListener listener,
+            String packageName, String featureId, String listenerIdentifier);
+
     void requestLocationUpdates(in LocationRequest request, in ILocationListener listener,
-            in PendingIntent intent, String packageName);
+            in PendingIntent intent, String packageName, String featureId,
+            String listenerIdentifier);
     void removeUpdates(in ILocationListener listener, in PendingIntent intent, String packageName);
 
     void requestGeofence(in LocationRequest request, in Geofence geofence,
-            in PendingIntent intent, String packageName);
+            in PendingIntent intent, String packageName, String featureId,
+            String listenerIdentifier);
     void removeGeofence(in Geofence fence, in PendingIntent intent, String packageName);
 
-    Location getLastLocation(in LocationRequest request, String packageName);
-
-    boolean registerGnssStatusCallback(IGnssStatusListener callback, String packageName);
+    boolean registerGnssStatusCallback(IGnssStatusListener callback, String packageName,
+            String featureId);
     void unregisterGnssStatusCallback(IGnssStatusListener callback);
 
     boolean geocoderIsPresent();
@@ -64,22 +71,23 @@ interface ILocationManager
 
     boolean sendNiResponse(int notifId, int userResponse);
 
-    boolean addGnssMeasurementsListener(in IGnssMeasurementsListener listener, in String packageName);
+    boolean addGnssMeasurementsListener(in IGnssMeasurementsListener listener,
+             String packageName, String featureId, String listenerIdentifier);
     void injectGnssMeasurementCorrections(in GnssMeasurementCorrections corrections,
             in String packageName);
     long getGnssCapabilities(in String packageName);
     void removeGnssMeasurementsListener(in IGnssMeasurementsListener listener);
 
-    boolean addGnssNavigationMessageListener(
-            in IGnssNavigationMessageListener listener,
-            in String packageName);
+    boolean addGnssNavigationMessageListener(in IGnssNavigationMessageListener listener,
+             String packageName, String featureId, String listenerIdentifier);
     void removeGnssNavigationMessageListener(in IGnssNavigationMessageListener listener);
 
     int getGnssYearOfHardware();
     String getGnssHardwareModelName();
 
     int getGnssBatchSize(String packageName);
-    boolean addGnssBatchingCallback(in IBatchedLocationCallback callback, String packageName);
+    boolean addGnssBatchingCallback(in IBatchedLocationCallback callback, String packageName,
+             String featureId, String listenerIdentifier);
     void removeGnssBatchingCallback();
     boolean startGnssBatch(long periodNanos, boolean wakeOnFifoFull, String packageName);
     void flushGnssBatch(String packageName);
@@ -92,6 +100,7 @@ interface ILocationManager
     String getBestProvider(in Criteria criteria, boolean enabledOnly);
     ProviderProperties getProviderProperties(String provider);
     boolean isProviderPackage(String packageName);
+    List<String> getProviderPackages(String provider);
 
     void setExtraLocationControllerPackage(String packageName);
     String getExtraLocationControllerPackage();

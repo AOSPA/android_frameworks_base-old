@@ -93,6 +93,7 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.SomeArgs;
 import com.android.server.LocalServices;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Listens to activity launches, transitions, visibility changes and window drawn callbacks to
@@ -133,8 +134,8 @@ class ActivityMetricsLogger {
 
     // set to INVALID_START_TIME in reset.
     // set to valid value in notifyActivityLaunching
-    private long mCurrentTransitionStartTime = INVALID_START_TIME;
-    private long mLastTransitionStartTime = INVALID_START_TIME;
+    private long mCurrentTransitionStartTimeNs = INVALID_START_TIME;
+    private long mLastTransitionStartTimeNs = INVALID_START_TIME;
 
     private int mCurrentTransitionDeviceUptime;
     private int mCurrentTransitionDelayMs;
@@ -190,9 +191,22 @@ class ActivityMetricsLogger {
         private int startingWindowDelayMs = INVALID_DELAY;
         private int bindApplicationDelayMs = INVALID_DELAY;
         private int reason = APP_TRANSITION_TIMEOUT;
-        private boolean loggedWindowsDrawn;
+        // TODO(b/132736359) The number may need to consider the visibility change.
+        private int numUndrawnActivities = 1;
         private boolean loggedStartingWindowDrawn;
         private boolean launchTraceActive;
+
+        /**
+         * Remembers the latest launched activity to represent the final transition. This also
+         * increments the number of activities that should be drawn, so a consecutive launching
+         * sequence can be coalesced as one event.
+         */
+        void setLatestLaunchedActivity(ActivityRecord r) {
+            if (launchedActivity == r) {
+                return;
+            }
+            launchedActivity = r;
+        }
     }
 
     final class WindowingModeTransitionInfoSnapshot {
@@ -330,12 +344,12 @@ class ActivityMetricsLogger {
                                       intent));
         }
 
-        if (mCurrentTransitionStartTime == INVALID_START_TIME) {
+        if (mCurrentTransitionStartTimeNs == INVALID_START_TIME) {
 
-            mCurrentTransitionStartTime = SystemClock.uptimeMillis();
-            mLastTransitionStartTime = mCurrentTransitionStartTime;
+            mCurrentTransitionStartTimeNs = SystemClock.elapsedRealtimeNanos();
+            mLastTransitionStartTimeNs = mCurrentTransitionStartTimeNs;
 
-            launchObserverNotifyIntentStarted(intent);
+            launchObserverNotifyIntentStarted(intent, mCurrentTransitionStartTimeNs);
         }
     }
 
@@ -386,14 +400,15 @@ class ActivityMetricsLogger {
                 ? launchedActivity.getWindowingMode()
                 : WINDOWING_MODE_UNDEFINED;
         final WindowingModeTransitionInfo info = mWindowingModeTransitionInfo.get(windowingMode);
-        if (mCurrentTransitionStartTime == INVALID_START_TIME) {
+        if (mCurrentTransitionStartTimeNs == INVALID_START_TIME) {
             // No transition is active ignore this launch.
             return;
         }
 
         if (launchedActivity != null && launchedActivity.mDrawn) {
             // Launched activity is already visible. We cannot measure windows drawn delay.
-            reset(true /* abort */, info, "launched activity already visible");
+            reset(true /* abort */, info, "launched activity already visible",
+                0L /* timestampNs */);
             return;
         }
 
@@ -402,7 +417,7 @@ class ActivityMetricsLogger {
             // the other attributes.
 
             // Coalesce multiple (trampoline) activities from a single sequence together.
-            info.launchedActivity = launchedActivity;
+            info.setLatestLaunchedActivity(launchedActivity);
             return;
         }
 
@@ -411,7 +426,8 @@ class ActivityMetricsLogger {
         if ((!isLoggableResultCode(resultCode) || launchedActivity == null
                 || windowingMode == WINDOWING_MODE_UNDEFINED) && !otherWindowModesLaunching) {
             // Failed to launch or it was not a process switch, so we don't care about the timing.
-            reset(true /* abort */, info, "failed to launch or not a process switch");
+            reset(true /* abort */, info, "failed to launch or not a process switch",
+                0L /* timestampNs */);
             return;
         } else if (otherWindowModesLaunching) {
             // Don't log this windowing mode but continue with the other windowing modes.
@@ -423,7 +439,7 @@ class ActivityMetricsLogger {
         // A new launch sequence [with the windowingMode] has begun.
         // Start tracking it.
         final WindowingModeTransitionInfo newInfo = new WindowingModeTransitionInfo();
-        newInfo.launchedActivity = launchedActivity;
+        newInfo.setLatestLaunchedActivity(launchedActivity);
         newInfo.currentTransitionProcessRunning = processRunning;
         newInfo.startResult = resultCode;
         mWindowingModeTransitionInfo.put(windowingMode, newInfo);
@@ -445,19 +461,20 @@ class ActivityMetricsLogger {
      * Notifies the tracker that all windows of the app have been drawn.
      */
     WindowingModeTransitionInfoSnapshot notifyWindowsDrawn(@WindowingMode int windowingMode,
-                                                           long timestamp) {
+                                                           long timestampNs) {
         if (DEBUG_METRICS) Slog.i(TAG, "notifyWindowsDrawn windowingMode=" + windowingMode);
 
         final WindowingModeTransitionInfo info = mWindowingModeTransitionInfo.get(windowingMode);
-        if (info == null || info.loggedWindowsDrawn) {
+        if (info == null || info.numUndrawnActivities == 0) {
             return null;
         }
-        info.windowsDrawnDelayMs = calculateDelay(timestamp);
-        info.loggedWindowsDrawn = true;
+        info.windowsDrawnDelayMs = calculateDelay(timestampNs);
+        info.numUndrawnActivities--;
         final WindowingModeTransitionInfoSnapshot infoSnapshot =
                 new WindowingModeTransitionInfoSnapshot(info);
         if (allWindowsDrawn() && mLoggedTransitionStarting) {
-            reset(false /* abort */, info, "notifyWindowsDrawn - all windows drawn");
+            reset(false /* abort */, info, "notifyWindowsDrawn - all windows drawn",
+                timestampNs /* timestampNs */);
         }
         return infoSnapshot;
     }
@@ -480,7 +497,7 @@ class ActivityMetricsLogger {
      * @param windowingModeToReason A map from windowing mode to a reason integer, which must be on
      *                              of ActivityTaskManagerInternal.APP_TRANSITION_* reasons.
      */
-    void notifyTransitionStarting(SparseIntArray windowingModeToReason, long timestamp) {
+    void notifyTransitionStarting(SparseIntArray windowingModeToReason, long timestampNs) {
         if (!isAnyTransitionActive() || mLoggedTransitionStarting) {
             // Ignore calls to this made after a reset and prior to notifyActivityLaunching.
 
@@ -488,7 +505,7 @@ class ActivityMetricsLogger {
             return;
         }
         if (DEBUG_METRICS) Slog.i(TAG, "notifyTransitionStarting");
-        mCurrentTransitionDelayMs = calculateDelay(timestamp);
+        mCurrentTransitionDelayMs = calculateDelay(timestampNs);
         mLoggedTransitionStarting = true;
 
         WindowingModeTransitionInfo foundInfo = null;
@@ -505,7 +522,8 @@ class ActivityMetricsLogger {
         if (allWindowsDrawn()) {
             // abort metrics collection if we cannot find a matching transition.
             final boolean abortMetrics = foundInfo == null;
-            reset(abortMetrics, foundInfo, "notifyTransitionStarting - all windows drawn");
+            reset(abortMetrics, foundInfo, "notifyTransitionStarting - all windows drawn",
+                timestampNs /* timestampNs */);
         }
     }
 
@@ -531,8 +549,8 @@ class ActivityMetricsLogger {
     }
 
     private boolean hasVisibleNonFinishingActivity(TaskRecord t) {
-        for (int i = t.mActivities.size() - 1; i >= 0; --i) {
-            final ActivityRecord r = t.mActivities.get(i);
+        for (int i = t.getChildCount() - 1; i >= 0; --i) {
+            final ActivityRecord r = t.getChildAt(i);
             if (r.visible && !r.finishing) {
                 return true;
             }
@@ -571,7 +589,8 @@ class ActivityMetricsLogger {
             logAppTransitionCancel(info);
             mWindowingModeTransitionInfo.remove(r.getWindowingMode());
             if (mWindowingModeTransitionInfo.size() == 0) {
-                reset(true /* abort */, info, "notifyVisibilityChanged to invisible");
+                reset(true /* abort */, info, "notifyVisibilityChanged to invisible",
+                    0L /* timestampNs */);
             }
         }
     }
@@ -592,9 +611,10 @@ class ActivityMetricsLogger {
         }
     }
 
-    private boolean allWindowsDrawn() {
+    @VisibleForTesting
+    boolean allWindowsDrawn() {
         for (int index = mWindowingModeTransitionInfo.size() - 1; index >= 0; index--) {
-            if (!mWindowingModeTransitionInfo.valueAt(index).loggedWindowsDrawn) {
+            if (mWindowingModeTransitionInfo.valueAt(index).numUndrawnActivities != 0) {
                 return false;
             }
         }
@@ -602,12 +622,16 @@ class ActivityMetricsLogger {
     }
 
     private boolean isAnyTransitionActive() {
-        return mCurrentTransitionStartTime != INVALID_START_TIME
+        return mCurrentTransitionStartTimeNs != INVALID_START_TIME
                 && mWindowingModeTransitionInfo.size() > 0;
     }
 
-    private void reset(boolean abort, WindowingModeTransitionInfo info, String cause) {
-        if (DEBUG_METRICS) Slog.i(TAG, "reset abort=" + abort + ",cause=" + cause);
+    private void reset(boolean abort, WindowingModeTransitionInfo info, String cause,
+        long timestampNs) {
+        if (DEBUG_METRICS) {
+            Slog.i(TAG,
+                "reset abort=" + abort + ",cause=" + cause + ",timestamp=" + timestampNs);
+        }
         if (!abort && isAnyTransitionActive()) {
             logAppTransitionMultiEvents();
         }
@@ -619,13 +643,13 @@ class ActivityMetricsLogger {
             if (abort) {
                 launchObserverNotifyActivityLaunchCancelled(info);
             } else {
-                launchObserverNotifyActivityLaunchFinished(info);
+                launchObserverNotifyActivityLaunchFinished(info, timestampNs);
             }
         } else {
             launchObserverNotifyIntentFailed();
         }
 
-        mCurrentTransitionStartTime = INVALID_START_TIME;
+        mCurrentTransitionStartTimeNs = INVALID_START_TIME;
         mCurrentTransitionDelayMs = INVALID_DELAY;
         mLoggedTransitionStarting = false;
         mWindowingModeTransitionInfo.clear();
@@ -633,12 +657,14 @@ class ActivityMetricsLogger {
 
     private int calculateCurrentDelay() {
         // Shouldn't take more than 25 days to launch an app, so int is fine here.
-        return (int) (SystemClock.uptimeMillis() - mCurrentTransitionStartTime);
+        return (int) TimeUnit.NANOSECONDS
+            .toMillis(SystemClock.elapsedRealtimeNanos() - mCurrentTransitionStartTimeNs);
     }
 
-    private int calculateDelay(long timestamp) {
+    private int calculateDelay(long timestampNs) {
         // Shouldn't take more than 25 days to launch an app, so int is fine here.
-        return (int) (timestamp - mCurrentTransitionStartTime);
+        return (int) TimeUnit.NANOSECONDS.toMillis(timestampNs -
+            mCurrentTransitionStartTimeNs);
     }
 
     private void logAppTransitionCancel(WindowingModeTransitionInfo info) {
@@ -685,7 +711,7 @@ class ActivityMetricsLogger {
             // Take a snapshot of the transition info before sending it to the handler for logging.
             // This will avoid any races with other operations that modify the ActivityRecord.
             final WindowingModeTransitionInfoSnapshot infoSnapshot =
-                    new WindowingModeTransitionInfoSnapshot(info);
+                     new WindowingModeTransitionInfoSnapshot(info);
             final int currentTransitionDeviceUptime = mCurrentTransitionDeviceUptime;
             final int currentTransitionDelayMs = mCurrentTransitionDelayMs;
             BackgroundThread.getHandler().post(() -> logAppTransition(
@@ -832,7 +858,9 @@ class ActivityMetricsLogger {
         final LogMaker builder = new LogMaker(APP_TRANSITION_REPORTED_DRAWN);
         builder.setPackageName(r.packageName);
         builder.addTaggedData(FIELD_CLASS_NAME, r.info.name);
-        long startupTimeMs = SystemClock.uptimeMillis() - mLastTransitionStartTime;
+        long currentTimestampNs = SystemClock.elapsedRealtimeNanos();
+        long startupTimeMs =
+            TimeUnit.NANOSECONDS.toMillis(currentTimestampNs - mLastTransitionStartTimeNs);
         builder.addTaggedData(APP_TRANSITION_REPORTED_DRAWN_MS, startupTimeMs);
         builder.setType(restoredFromBundle
                 ? TYPE_TRANSITION_REPORTED_DRAWN_WITH_BUNDLE
@@ -858,6 +886,10 @@ class ActivityMetricsLogger {
         final WindowingModeTransitionInfoSnapshot infoSnapshot =
                 new WindowingModeTransitionInfoSnapshot(info, r, (int) startupTimeMs);
         BackgroundThread.getHandler().post(() -> logAppFullyDrawn(infoSnapshot));
+
+        // Notify reportFullyDrawn event.
+        launchObserverNotifyReportFullyDrawn(r, currentTimestampNs);
+
         return infoSnapshot;
     }
 
@@ -1027,12 +1059,12 @@ class ActivityMetricsLogger {
     }
 
     /** Notify the {@link ActivityMetricsLaunchObserver} that a new launch sequence has begun. */
-    private void launchObserverNotifyIntentStarted(Intent intent) {
+    private void launchObserverNotifyIntentStarted(Intent intent, long timestampNs) {
         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
                 "MetricsLogger:launchObserverNotifyIntentStarted");
 
         // Beginning a launch is timing sensitive and so should be observed as soon as possible.
-        mLaunchObserver.onIntentStarted(intent);
+        mLaunchObserver.onIntentStarted(intent, timestampNs);
 
         Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
     }
@@ -1070,6 +1102,16 @@ class ActivityMetricsLogger {
     }
 
     /**
+     * Notifies the {@link ActivityMetricsLaunchObserver} the reportFullDrawn event.
+     */
+    private void launchObserverNotifyReportFullyDrawn(ActivityRecord r, long timestampNs) {
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+            "MetricsLogger:launchObserverNotifyReportFullyDrawn");
+        mLaunchObserver.onReportFullyDrawn(convertActivityRecordToProto(r), timestampNs);
+        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+    }
+
+    /**
      * Notify the {@link ActivityMetricsLaunchObserver} that the current launch sequence is
      * cancelled.
      */
@@ -1089,12 +1131,14 @@ class ActivityMetricsLogger {
      * Notify the {@link ActivityMetricsLaunchObserver} that the current launch sequence's activity
      * has fully finished (successfully).
      */
-    private void launchObserverNotifyActivityLaunchFinished(WindowingModeTransitionInfo info) {
+    private void launchObserverNotifyActivityLaunchFinished(WindowingModeTransitionInfo info,
+        long timestampNs) {
         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
                 "MetricsLogger:launchObserverNotifyActivityLaunchFinished");
 
-        mLaunchObserver.onActivityLaunchFinished(
-                convertActivityRecordToProto(info.launchedActivity));
+        mLaunchObserver
+            .onActivityLaunchFinished(convertActivityRecordToProto(info.launchedActivity),
+                timestampNs);
 
         Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
     }

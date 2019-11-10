@@ -24,10 +24,14 @@ import android.net.wifi.hotspot2.IProvisioningCallback;
 
 import android.net.DhcpInfo;
 import android.net.Network;
+import android.net.wifi.IActionListener;
 import android.net.wifi.IDppCallback;
+import android.net.wifi.ILocalOnlyHotspotCallback;
 import android.net.wifi.INetworkRequestMatchCallback;
+import android.net.wifi.IScanResultsListener;
 import android.net.wifi.ISoftApCallback;
 import android.net.wifi.ITrafficStateCallback;
+import android.net.wifi.ITxPacketCountListener;
 import android.net.wifi.IOnWifiUsabilityStatsListener;
 import android.net.wifi.ScanResult;
 import android.net.wifi.WifiActivityEnergyInfo;
@@ -107,8 +111,6 @@ interface IWifiManager
 
     int getWifiEnabledState();
 
-    void setCountryCode(String country);
-
     String getCountryCode();
 
     boolean isDualBandSupported();
@@ -139,11 +141,11 @@ interface IWifiManager
 
     boolean stopSoftAp();
 
-    int startLocalOnlyHotspot(in Messenger messenger, in IBinder binder, String packageName);
+    int startLocalOnlyHotspot(in ILocalOnlyHotspotCallback callback, String packageName);
 
     void stopLocalOnlyHotspot();
 
-    void startWatchLocalOnlyHotspot(in Messenger messenger, in IBinder binder);
+    void startWatchLocalOnlyHotspot(in ILocalOnlyHotspotCallback callback);
 
     void stopWatchLocalOnlyHotspot();
 
@@ -156,8 +158,6 @@ interface IWifiManager
     boolean setWifiApConfiguration(in WifiConfiguration wifiConfig, String packageName);
 
     void notifyUserOfApBandConversion(String packageName);
-
-    Messenger getWifiServiceMessenger(String packageName);
 
     void enableTdls(String remoteIPAddress, boolean enable);
 
@@ -249,6 +249,18 @@ interface IWifiManager
     void stopDppSession();
 
     void updateWifiUsabilityScore(int seqNum, int score, int predictionHorizonSec);
+
+    oneway void connect(in WifiConfiguration config, int netId, in IBinder binder, in IActionListener listener, int callbackIdentifier);
+
+    oneway void save(in WifiConfiguration config, in IBinder binder, in IActionListener listener, int callbackIdentifier);
+
+    oneway void forget(int netId, in IBinder binder, in IActionListener listener, int callbackIdentifier);
+
+    oneway void getTxPacketCount(String packageName, in IBinder binder, in ITxPacketCountListener listener, int callbackIdentifier);
+
+    void registerScanResultsListener(in IBinder binder, in IScanResultsListener Listener, int listenerIdentifier);
+
+    void unregisterScanResultsListener(int listenerIdentifier);
 
     int getSoftApWifiGeneration();
 }

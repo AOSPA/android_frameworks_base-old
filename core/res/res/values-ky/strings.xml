@@ -283,7 +283,7 @@
     <string name="permgrouprequest_contacts" msgid="6032805601881764300">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; колдонмосуна байланыштарыңызды пайдаланууга уруксат берилсинби?"</string>
     <string name="permgrouplab_location" msgid="7275582855722310164">"Жайгашкан жер"</string>
     <string name="permgroupdesc_location" msgid="1346617465127855033">"түзмөктүн жайгашкан жерин аныктоого"</string>
-    <string name="permgrouprequest_location" msgid="3788275734953323491">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; колдонмосу бул түзмөктүн кайда жүргөнүн көрүп турганга уруксат бересизби?"</string>
+    <string name="permgrouprequest_location" msgid="3788275734953323491">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; колдонмосу бул түзмөктүн кайда жүргөнүн көрүп турсунбу?"</string>
     <string name="permgrouprequestdetail_location" msgid="1347189607421252902">"Колдонмону колдонуп жаткан маалда гана, ал сиздин кайда жүргөнүңүздү билип турат."</string>
     <string name="permgroupbackgroundrequest_location" msgid="5039063878675613235">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; колдонмосу бул түзмөктүн жүргөн жерин &lt;b&gt;ар дайым&lt;/b&gt; билип турсунбу?"</string>
     <string name="permgroupbackgroundrequestdetail_location" msgid="4597006851453417387">"Колдонмону пайдаланып жаткан учурда гана ал жайгашкан жерди көрө алат"</string>
@@ -344,6 +344,8 @@
     <string name="permdesc_receiveSms" msgid="6424387754228766939">"Колдонмого SMS билдирүүлөрүн кабыл алууга жана аларды иштетип чыгууга уруксат берет. Бул, колдонмо сизге билгизбестен түзмөгүңүзгө жөнөтүлгөн билдирүүлөрдү мониторлой же жок кыла алат дегенди билдирет."</string>
     <string name="permlab_receiveMms" msgid="1821317344668257098">"билдирүүлөрдү (MMS) кабыл алуу"</string>
     <string name="permdesc_receiveMms" msgid="533019437263212260">"Колдонмого MMS билдирүүлөрүн кабыл алууга жана аларды иштетип чыгууга уруксат берет. Бул, колдонмо сизге билгизбестен түзмөгүңүзгө жөнөтүлгөн билдирүүлөрдү мониторлой же жок кыла алат дегенди билдирет."</string>
+    <string name="permlab_bindCellBroadcastService" msgid="4468585041824555604">"Уюк жөнөтүүлөрүнүн билдирүүлөрүн башка номерге багыттоо"</string>
+    <string name="permdesc_bindCellBroadcastService" msgid="9073440260695196089">"Уюк жөнөтүүлөрүнүн билдирүүлөрү келген сайын башка номерге багыттап туруу үчүн колдонмого уюк жөнөтүүлөрүнүн модулу менен байланышууга уруксат берет. Шашылыш уюк жөнөтүүлөрү кээ бир жерлердеги өзгөчө кырдаалдар тууралуу сизге эскертүү үчүн жөнөтүлөт. Зыянкеч колдонмолор шашылыш уюк жөнөтүүлөрү кабыл алынганда түзмөктүн майнаптуулугуна же иштешине жолтоо болушу мүмкүн."</string>
     <string name="permlab_readCellBroadcasts" msgid="1598328843619646166">"уюктук берүү билдирүүлөрүн окуу"</string>
     <string name="permdesc_readCellBroadcasts" msgid="6361972776080458979">"Колдонмого түзмөгүңүз кабыл алган уюк берүүнүн билдирүүлөрүн окууга жол берет. Шашылыш эскертүү билдирүүлөрү кээ бир жерлердеги өзгөчө кырдаалдар тууралу сизди эскертүү үчүн жөнөтүлөт. Зыяндуу колдономолор шашылыш эскертүүлөр берилип жатканда, сиздин түзмөктүн иштешине жолтоо болушу мүмкүн."</string>
     <string name="permlab_subscribedFeedsRead" msgid="4756609637053353318">"жазылган түрмөктөрдү окуу"</string>
@@ -537,14 +539,14 @@
     <string name="fingerprint_acquired_too_slow" msgid="59250885689661653">"Манжа өтө жай жылды. Кайра аракет кылыңыз."</string>
   <string-array name="fingerprint_acquired_vendor">
   </string-array>
-    <string name="fingerprint_authenticated" msgid="5309333983002526448">"Манжа изинин аныктыгы текшерилди"</string>
+    <string name="fingerprint_authenticated" msgid="5309333983002526448">"Манжа изи текшерилди"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="4018680978348659031">"Жүздүн аныктыгы текшерилди"</string>
     <string name="face_authenticated_confirmation_required" msgid="8778347003507633610">"Жүздүн аныктыгы текшерилди, эми \"Ырастоону\" басыңыз"</string>
     <string name="fingerprint_error_hw_not_available" msgid="7955921658939936596">"Манжа изинин аппараттык камсыздоосу жеткиликтүү эмес."</string>
     <string name="fingerprint_error_no_space" msgid="1055819001126053318">"Манжа изин сактоо мүмкүн эмес. Учурдагы манжа изин алып салыңыз."</string>
     <string name="fingerprint_error_timeout" msgid="3927186043737732875">"Манжа изин күтүү мөөнөтү бүттү. Кайра аракет кылыңыз."</string>
     <string name="fingerprint_error_canceled" msgid="4402024612660774395">"Манжа изи иш-аракети жокко чыгарылды."</string>
-    <string name="fingerprint_error_user_canceled" msgid="7999639584615291494">"Манжа изи менен аныктыгын текшерүүнү колдонуучу жокко чыгарды."</string>
+    <string name="fingerprint_error_user_canceled" msgid="7999639584615291494">"Манжа изи операциясын колдонуучу жокко чыгарды."</string>
     <string name="fingerprint_error_lockout" msgid="5536934748136933450">"Аракеттер өтө көп болду. Кийинчерээк кайра аракет кылыңыз."</string>
     <string name="fingerprint_error_lockout_permanent" msgid="5033251797919508137">"Өтө көп жолу аракет жасадыңыз. Манжа изинин сенсору өчүрүлдү."</string>
     <string name="fingerprint_error_unable_to_process" msgid="6107816084103552441">"Кайра бир аракеттениңиз."</string>
@@ -1075,7 +1077,7 @@
     <string name="Midnight" msgid="5630806906897892201">"Түн ортосу"</string>
     <string name="elapsed_time_short_format_mm_ss" msgid="4431555943828711473">"<xliff:g id="MINUTES">%1$02d</xliff:g>:<xliff:g id="SECONDS">%2$02d</xliff:g>"</string>
     <string name="elapsed_time_short_format_h_mm_ss" msgid="1846071997616654124">"<xliff:g id="HOURS">%1$d</xliff:g>:<xliff:g id="MINUTES">%2$02d</xliff:g>:<xliff:g id="SECONDS">%3$02d</xliff:g>"</string>
-    <string name="selectAll" msgid="6876518925844129331">"Бардыгын тандоо"</string>
+    <string name="selectAll" msgid="6876518925844129331">"Баарын тандоо"</string>
     <string name="cut" msgid="3092569408438626261">"Кесүү"</string>
     <string name="copy" msgid="2681946229533511987">"Көчүрүү"</string>
     <string name="failed_to_copy_to_clipboard" msgid="1833662432489814471">"Алмашуу буферине көчүрүлбөй калды"</string>
@@ -1315,7 +1317,7 @@
     <string name="sms_control_title" msgid="7296612781128917719">"SMS билдирүүлөр жөнөтүлүүдө"</string>
     <string name="sms_control_message" msgid="3867899169651496433">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; көп SMS билдирүүлөрдү жөнөтүп жатат. Бул колдонмо билдирүүлөрдү жөнөтө берсинби?"</string>
     <string name="sms_control_yes" msgid="3663725993855816807">"Ооба"</string>
-    <string name="sms_control_no" msgid="625438561395534982">"Жок"</string>
+    <string name="sms_control_no" msgid="625438561395534982">"Тыюу салынат"</string>
     <string name="sms_short_code_confirm_message" msgid="1645436466285310855">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; &lt;b&gt;<xliff:g id="DEST_ADDRESS">%2$s</xliff:g>&lt;/b&gt; номуруна билдирүү жөнөткөнү жатат."</string>
     <string name="sms_short_code_details" msgid="5873295990846059400">"Бул уюлдук эсебиңиздеги төлөмдөргө "<b>"алып келиши мүмкүн"</b>"."</string>
     <string name="sms_premium_short_code_details" msgid="7869234868023975"><b>"Бул уюлдук эсебиңиздеги төлөмдөргө алып келет."</b></string>
@@ -1357,12 +1359,14 @@
     <string name="usb_power_notification_message" msgid="4647527153291917218">"Туташкан түзмөк кубатталууда. Дагы параметрлерди көрүү үчүн таптап коюңуз."</string>
     <string name="usb_unsupported_audio_accessory_title" msgid="3529881374464628084">"Аналогдук аудио жабдуу табылды"</string>
     <string name="usb_unsupported_audio_accessory_message" msgid="6309553946441565215">"Тиркелген түзмөк бул телефонго шайкеш келбейт. Көбүрөөк маалымат алуу үчүн таптап коюңуз."</string>
-    <string name="adb_active_notification_title" msgid="6729044778949189918">"Мүчүлүштүктөрдү USB аркылуу оңдоо иштетилген"</string>
-    <string name="adb_active_notification_message" msgid="7463062450474107752">"USB арклуу мүчүлштктрдү оңдоону өчрүү үчүн басып коюңуз"</string>
+    <string name="adb_active_notification_title" msgid="6729044778949189918">"Мүчүлүштүктөрдү USB аркылуу оңдоо иштеп жатат"</string>
+    <string name="adb_active_notification_message" msgid="7463062450474107752">"Өчүрүү үчүн тийип коюңуз"</string>
     <!-- no translation found for adb_active_notification_message (8470296818270110396) -->
     <skip />
     <string name="test_harness_mode_notification_title" msgid="2216359742631914387">"Сыноо программасынын режими иштетилди"</string>
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Сыноо программасынын режимин өчүрүү үчүн, баштапкы жөндөөлөргө кайтарыңыз."</string>
+    <string name="console_running_notification_title" msgid="4955436518220103382">"Сериялык консоль иштетилди"</string>
+    <string name="console_running_notification_message" msgid="1331995933976263865">"Майнаптуулугуна таасири тиет. Аны өчүрүү үчүн операциялык тутумду жүктөгүчтү текшериңиз."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"USB портунда суюктук же урандылар бар"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB порт автоматтык түрдө өчүрүлдү. Кененирээк маалымат алуу үчүн таптап коюңуз."</string>
     <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"USB портун колдонууга болот"</string>
@@ -1451,7 +1455,7 @@
     <string name="grant_credentials_permission_message_footer" msgid="3125211343379376561">"Бул өтүнүчкө уруксат бересизби?"</string>
     <string name="grant_permissions_header_text" msgid="6874497408201826708">"Жетки талабы"</string>
     <string name="allow" msgid="7225948811296386551">"Уруксат берүү"</string>
-    <string name="deny" msgid="2081879885755434506">"Жок"</string>
+    <string name="deny" msgid="2081879885755434506">"Уруксат берилбейт"</string>
     <string name="permission_request_notification_title" msgid="6486759795926237907">"Уруксат талап кылуу"</string>
     <string name="permission_request_notification_with_subtitle" msgid="8530393139639560189">"Кийинки эсепке\nуруксат талап кылынууда: <xliff:g id="ACCOUNT">%s</xliff:g>."</string>
     <string name="forward_intent_to_owner" msgid="1207197447013960896">"Бул колдонмо жумуш профилиңиздин сыртында колдонулуп жатат"</string>
@@ -1583,7 +1587,7 @@
     <string name="fingerprints" msgid="4516019619850763049">"Манжа издери:"</string>
     <string name="sha256_fingerprint" msgid="4391271286477279263">"SHA-256 манжа изи:"</string>
     <string name="sha1_fingerprint" msgid="7930330235269404581">"SHA-1 манжа изи:"</string>
-    <string name="activity_chooser_view_see_all" msgid="4292569383976636200">"Бардыгын көрүү"</string>
+    <string name="activity_chooser_view_see_all" msgid="4292569383976636200">"Баарын көрүү"</string>
     <string name="activity_chooser_view_dialog_title_default" msgid="4710013864974040615">"Аракетти тандаңыз"</string>
     <string name="share_action_provider_share_with" msgid="5247684435979149216">"Төмөнкү менен бөлүшүү"</string>
     <string name="sending" msgid="3245653681008218030">"Жөнөтүлүүдө…"</string>
@@ -1892,10 +1896,8 @@
     <string name="default_notification_channel_label" msgid="5929663562028088222">"Категорияларга бөлүнгөн эмес"</string>
     <string name="importance_from_user" msgid="7318955817386549931">"Бул эскертмелердин маанилүүлүгүн белгиледиңиз."</string>
     <string name="importance_from_person" msgid="9160133597262938296">"Булар сиз үчүн маанилүү адамдар."</string>
-    <!-- no translation found for user_creation_account_exists (6559477114648176531) -->
-    <skip />
-    <!-- no translation found for user_creation_adding (9089159170398841763) -->
-    <skip />
+    <string name="user_creation_account_exists" msgid="6559477114648176531">"<xliff:g id="APP">%1$s</xliff:g> колдонмосуна <xliff:g id="ACCOUNT">%2$s</xliff:g> аккаунту менен жаңы колдонуучу түзүүгө уруксат бересизби (мындай аккаунту бар колдонуучу мурунтан эле бар)?"</string>
+    <string name="user_creation_adding" msgid="9089159170398841763">"<xliff:g id="APP">%1$s</xliff:g> колдонмосуна <xliff:g id="ACCOUNT">%2$s</xliff:g> аккаунту менен жаңы колдонуучу түзүүгө уруксат бересизби?"</string>
     <string name="language_selection_title" msgid="2680677278159281088">"Тил кошуу"</string>
     <string name="country_selection_title" msgid="2954859441620215513">"Чөлкөмдүк жөндөөлөр"</string>
     <string name="search_language_hint" msgid="7042102592055108574">"Тилди киргизиңиз"</string>

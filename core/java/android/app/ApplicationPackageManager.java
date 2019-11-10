@@ -2414,14 +2414,11 @@ public class ApplicationPackageManager extends PackageManager {
 
     @Override
     public Bundle getSuspendedPackageAppExtras() {
-        final PersistableBundle extras;
         try {
-            extras = mPM.getSuspendedPackageAppExtras(mContext.getOpPackageName(),
-                    getUserId());
+            return mPM.getSuspendedPackageAppExtras(mContext.getOpPackageName(), getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-        return extras != null ? new Bundle(extras.deepCopy()) : null;
     }
 
     @Override
@@ -3163,9 +3160,27 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
+    public String[] getTelephonyPackageNames() {
+        try {
+            return mPM.getTelephonyPackageNames();
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
     public String getSystemCaptionsServicePackageName() {
         try {
             return mPM.getSystemCaptionsServicePackageName();
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public String getSetupWizardPackageName() {
+        try {
+            return mPM.getSetupWizardPackageName();
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
         }

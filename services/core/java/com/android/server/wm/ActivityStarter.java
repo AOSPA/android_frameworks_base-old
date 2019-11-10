@@ -774,13 +774,13 @@ class ActivityStarter {
         boolean restrictedBgActivity = false;
         if (!abort) {
             try {
-                Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
+                Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER,
                         "shouldAbortBackgroundActivityStart");
                 restrictedBgActivity = shouldAbortBackgroundActivityStart(callingUid,
                         callingPid, callingPackage, realCallingUid, realCallingPid, callerApp,
                         originatingPendingIntent, allowBackgroundActivityStart, intent);
             } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+                Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
             }
         }
 
@@ -1405,47 +1405,61 @@ class ActivityStarter {
         final ActivityStack startedActivityStack;
         try {
             mService.deferWindowLayout();
-            result = startActivityUnchecked(r, sourceRecord, voiceSession, voiceInteractor,
+            Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "startActivityInner");
+            result = startActivityInner(r, sourceRecord, voiceSession, voiceInteractor,
                     startFlags, doResume, options, inTask, outActivity, restrictedBgActivity);
         } finally {
-            final ActivityStack currentStack = r.getActivityStack();
-            startedActivityStack = currentStack != null ? currentStack : mTargetStack;
-
-            if (ActivityManager.isStartResultSuccessful(result)) {
-                if (startedActivityStack != null) {
-                    // If there is no state change (e.g. a resumed activity is reparented to
-                    // top of another display) to trigger a visibility/configuration checking,
-                    // we have to update the configuration for changing to different display.
-                    final ActivityRecord currentTop =
-                            startedActivityStack.topRunningActivityLocked();
-                    if (currentTop != null && currentTop.shouldUpdateConfigForDisplayChanged()) {
-                        mRootActivityContainer.ensureVisibilityAndConfig(
-                                currentTop, currentTop.getDisplayId(),
-                                true /* markFrozenIfConfigChanged */, false /* deferResume */);
-                    }
-                }
-            } else {
-                // If we are not able to proceed, disassociate the activity from the task.
-                // Leaving an activity in an incomplete state can lead to issues, such as
-                // performing operations without a window container.
-                final ActivityStack stack = mStartActivity.getActivityStack();
-                if (stack != null) {
-                    mStartActivity.finishIfPossible("startActivity", true /* oomAdj */);
-                }
-
-                // Stack should also be detached from display and be removed if it's empty.
-                if (startedActivityStack != null && startedActivityStack.isAttached()
-                        && startedActivityStack.numActivities() == 0
-                        && !startedActivityStack.isActivityTypeHome()) {
-                    startedActivityStack.remove();
-                }
-            }
+            Trace.traceEnd(Trace.TRACE_TAG_WINDOW_MANAGER);
+            startedActivityStack = handleStartResult(r, result);
             mService.continueWindowLayout();
         }
 
         postStartActivityProcessing(r, result, startedActivityStack);
 
         return result;
+    }
+
+    /**
+     * If the start result is success, ensure that the configuration of the started activity matches
+     * the current display. Otherwise clean up unassociated containers to avoid leakage.
+     *
+     * @return the stack where the successful started activity resides.
+     */
+    private @Nullable ActivityStack handleStartResult(@NonNull ActivityRecord started, int result) {
+        final ActivityStack currentStack = started.getActivityStack();
+        ActivityStack startedActivityStack = currentStack != null ? currentStack : mTargetStack;
+
+        if (ActivityManager.isStartResultSuccessful(result)) {
+            if (startedActivityStack != null) {
+                // If there is no state change (e.g. a resumed activity is reparented to top of
+                // another display) to trigger a visibility/configuration checking, we have to
+                // update the configuration for changing to different display.
+                final ActivityRecord currentTop = startedActivityStack.topRunningActivityLocked();
+                if (currentTop != null && currentTop.shouldUpdateConfigForDisplayChanged()) {
+                    mRootActivityContainer.ensureVisibilityAndConfig(
+                            currentTop, currentTop.getDisplayId(),
+                            true /* markFrozenIfConfigChanged */, false /* deferResume */);
+                }
+            }
+            return startedActivityStack;
+        }
+
+        // If we are not able to proceed, disassociate the activity from the task. Leaving an
+        // activity in an incomplete state can lead to issues, such as performing operations
+        // without a window container.
+        final ActivityStack stack = mStartActivity.getActivityStack();
+        if (stack != null) {
+            mStartActivity.finishIfPossible("startActivity", true /* oomAdj */);
+        }
+
+        // Stack should also be detached from display and be removed if it's empty.
+        if (startedActivityStack != null && startedActivityStack.isAttached()
+                && startedActivityStack.numActivities() == 0
+                && !startedActivityStack.isActivityTypeHome()) {
+            startedActivityStack.remove();
+            startedActivityStack = null;
+        }
+        return startedActivityStack;
     }
 
     /**
@@ -1473,7 +1487,7 @@ class ActivityStarter {
     }
 
     // Note: This method should only be called from {@link startActivity}.
-    private int startActivityUnchecked(final ActivityRecord r, ActivityRecord sourceRecord,
+    private int startActivityInner(final ActivityRecord r, ActivityRecord sourceRecord,
             IVoiceInteractionSession voiceSession, IVoiceInteractor voiceInteractor,
             int startFlags, boolean doResume, ActivityOptions options, TaskRecord inTask,
             ActivityRecord[] outActivity, boolean restrictedBgActivity) {
@@ -1562,12 +1576,12 @@ class ActivityStarter {
                 mIntent, mStartActivity.getUriPermissionsLocked(), mStartActivity.mUserId);
         mService.getPackageManagerInternalLocked().grantImplicitAccess(
                 mStartActivity.mUserId, mIntent,
-                UserHandle.getAppId(mCallingUid),
+                mCallingUid,
                 UserHandle.getAppId(mStartActivity.info.applicationInfo.uid)
         );
         if (newTask) {
             EventLog.writeEvent(EventLogTags.AM_CREATE_TASK, mStartActivity.mUserId,
-                    mStartActivity.getTaskRecord().taskId);
+                    mStartActivity.getTaskRecord().mTaskId);
         }
         mStartActivity.logStartActivity(
                 EventLogTags.AM_CREATE_ACTIVITY, mStartActivity.getTaskRecord());
@@ -1602,7 +1616,7 @@ class ActivityStarter {
                 // accordingly.
                 if (mTargetStack.isFocusable()
                         && !mRootActivityContainer.isTopDisplayFocusedStack(mTargetStack)) {
-                    mTargetStack.moveToFront("startActivityUnchecked");
+                    mTargetStack.moveToFront("startActivityInner");
                 }
                 mRootActivityContainer.resumeFocusedStacksTopActivities(
                         mTargetStack, mStartActivity, mOptions);
@@ -1694,14 +1708,16 @@ class ActivityStarter {
                         == (FLAG_ACTIVITY_CLEAR_TOP | FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
                         && mLaunchMode == LAUNCH_MULTIPLE;
 
-        // If mStartActivity does not have a task associated with it, associate it with the
-        // reused activity's task. Do not do so if we're clearing top and resetting for a
-        // standard launchMode activity.
-        if (mStartActivity.getTaskRecord() == null && !clearTopAndResetStandardLaunchMode) {
-            mStartActivity.setTask(targetTask);
-        }
-
+        boolean clearTaskForReuse = false;
         if (reusedActivity != null) {
+            // If mStartActivity does not have a task associated with it, associate it with the
+            // reused activity's task. Do not do so if we're clearing top and resetting for a
+            // standard launchMode activity.
+            if (mStartActivity.getTaskRecord() == null && !clearTopAndResetStandardLaunchMode) {
+                mStartActivity.setTaskForReuse(reusedActivity.getTaskRecord());
+                clearTaskForReuse = true;
+            }
+
             if (targetTask.intent == null) {
                 // This task was started because of movement of the activity based on
                 // affinity...
@@ -1749,11 +1765,23 @@ class ActivityStarter {
 
         complyActivityFlags(targetTask, reusedActivity);
 
+        if (clearTaskForReuse) {
+            // Clear task for re-use so later code to methods
+            // {@link #setTaskFromReuseOrCreateNewTask}, {@link #setTaskFromSourceRecord}, or
+            // {@link #setTaskFromInTask} can parent it to the task.
+            mStartActivity.setTaskForReuse(null);
+        }
+
         if (mAddingToTask) {
             return START_SUCCESS;
         }
 
-        if (!mMovedToFront && mDoResume) {
+        if (mMovedToFront) {
+            // We moved the task to front, use starting window to hide initial drawn delay.
+            targetTaskTop.showStartingWindow(null /* prev */, false /* newTask */,
+                    true /* taskSwitch */);
+        } else if (mDoResume) {
+            // Make sure the stack and its belonging display are moved to topmost.
             mTargetStack.moveToFront("intentActivityFound");
         }
         // We didn't do anything...  but it was needed (a.k.a., client don't use that intent!)
@@ -1816,7 +1844,9 @@ class ActivityStarter {
      */
     private void complyActivityFlags(TaskRecord targetTask, ActivityRecord reusedActivity) {
         ActivityRecord targetTaskTop = targetTask.getTopActivity();
-        if (reusedActivity != null && (mLaunchFlags & FLAG_ACTIVITY_RESET_TASK_IF_NEEDED) != 0) {
+        final boolean resetTask =
+                reusedActivity != null && (mLaunchFlags & FLAG_ACTIVITY_RESET_TASK_IF_NEEDED) != 0;
+        if (resetTask) {
             targetTaskTop = mTargetStack.resetTaskIfNeededLocked(targetTaskTop, mStartActivity);
         }
 
@@ -1869,7 +1899,7 @@ class ActivityStarter {
                     mTargetStack = computeStackFocus(mSourceRecord, false /* newTask */,
                             mLaunchFlags, mOptions);
                     mTargetStack.addTask(targetTask,
-                            !mLaunchTaskBehind /* toTop */, "startActivityUnchecked");
+                            !mLaunchTaskBehind /* toTop */, "complyActivityFlags");
                 }
             }
         } else if ((mLaunchFlags & FLAG_ACTIVITY_CLEAR_TOP) == 0 && !mAddingToTask
@@ -1889,14 +1919,17 @@ class ActivityStarter {
                 mAddingToTask = true;
             }
         } else if (mStartActivity.mActivityComponent.equals(targetTask.realActivity)) {
-            // In this case the top activity on the task is the same as the one being launched,
-            // so we take that as a request to bring the task to the foreground. If the top
-            // activity in the task is the root activity, deliver this new intent to it if it
-            // desires.
-            if (((mLaunchFlags & FLAG_ACTIVITY_SINGLE_TOP) != 0
-                    || LAUNCH_SINGLE_TOP == mLaunchMode)
-                    && targetTaskTop.mActivityComponent.equals(
-                    mStartActivity.mActivityComponent) && mStartActivity.resultTo == null) {
+            if (targetTask == mInTask) {
+                // In this case we are bringing up an existing activity from a recent task. We
+                // don't need to add a new activity instance on top.
+            } else if (((mLaunchFlags & FLAG_ACTIVITY_SINGLE_TOP) != 0
+                            || LAUNCH_SINGLE_TOP == mLaunchMode)
+                    && targetTaskTop.mActivityComponent.equals(mStartActivity.mActivityComponent)
+                    && mStartActivity.resultTo == null) {
+                // In this case the top activity on the task is the same as the one being launched,
+                // so we take that as a request to bring the task to the foreground. If the top
+                // activity in the task is the root activity, deliver this new intent to it if it
+                // desires.
                 if (targetTaskTop.isRootOfTask()) {
                     targetTaskTop.getTaskRecord().setIntent(mStartActivity);
                 }
@@ -1908,7 +1941,7 @@ class ActivityStarter {
             } else if (reusedActivity == null) {
                 mAddingToTask = true;
             }
-        } else if ((mLaunchFlags & FLAG_ACTIVITY_RESET_TASK_IF_NEEDED) == 0) {
+        } else if (!resetTask) {
             // In this case an activity is being launched in to an existing task, without
             // resetting that task. This is typically the situation of launching an activity
             // from a notification or shortcut. We want to place the new activity on top of the
@@ -2306,9 +2339,9 @@ class ActivityStarter {
                     intentActivity.setTaskToAffiliateWith(mSourceRecord.getTaskRecord());
                 }
 
-                final ActivityStack launchStack = getLaunchStack(
-                        mStartActivity, mLaunchFlags, mStartActivity.getTaskRecord(), mOptions);
                 final TaskRecord intentTask = intentActivity.getTaskRecord();
+                final ActivityStack launchStack =
+                        getLaunchStack(mStartActivity, mLaunchFlags, intentTask, mOptions);
                 if (launchStack == null || launchStack == mTargetStack) {
                     // We only want to move to the front, if we aren't going to launch on a
                     // different stack. If we launch on a different stack, we will put the
@@ -2352,18 +2385,16 @@ class ActivityStarter {
                             REPARENT_MOVE_STACK_TO_FRONT, ANIMATE, DEFER_RESUME,
                             "reparentingHome");
                     mMovedToFront = true;
-                } else if (launchStack.topTask() == null) {
+                }
+
+                if (launchStack.topTask() == null) {
                     // The task does not need to be reparented to the launch stack. Remove the
                     // launch stack if there is no activity in it.
+                    Slog.w(TAG, "Removing an empty stack: " + launchStack);
                     launchStack.remove();
                 }
 
                 mOptions = null;
-
-                // We are moving a task to the front, use starting window to hide initial drawn
-                // delay.
-                intentActivity.showStartingWindow(null /* prev */, false /* newTask */,
-                        true /* taskSwitch */);
             }
         }
         // Need to update mTargetStack because if task was moved out of it, the original stack may
@@ -2437,7 +2468,7 @@ class ActivityStarter {
         if (mStartActivity.getTaskRecord() == null || mStartActivity.getTaskRecord() == parent) {
             parent.addActivityToTop(mStartActivity);
         } else {
-            mStartActivity.reparent(parent, parent.mActivities.size() /* top */, reason);
+            mStartActivity.reparent(parent, parent.getChildCount() /* top */, reason);
         }
     }
 
@@ -2834,12 +2865,12 @@ class ActivityStarter {
         if (r != null) {
             pw.print(prefix);
             pw.println("mLastStartActivityRecord:");
-            r.dump(pw, prefix + "  ");
+            r.dump(pw, prefix + "  ", true /* dumpAll */);
         }
         if (mStartActivity != null) {
             pw.print(prefix);
             pw.println("mStartActivity:");
-            mStartActivity.dump(pw, prefix + "  ");
+            mStartActivity.dump(pw, prefix + "  ", true /* dumpAll */);
         }
         if (mIntent != null) {
             pw.print(prefix);

@@ -17,7 +17,6 @@
 package com.android.server.wm;
 
 import android.content.ComponentName;
-import android.content.pm.PackageList;
 import android.content.pm.PackageManagerInternal;
 import android.graphics.Rect;
 import android.os.Environment;
@@ -32,6 +31,7 @@ import android.view.DisplayInfo;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.FastXmlSerializer;
 import com.android.server.LocalServices;
+import com.android.server.pm.PackageList;
 import com.android.server.wm.LaunchParamsController.LaunchParams;
 
 import libcore.io.IoUtils;
@@ -198,7 +198,7 @@ class LaunchParamsPersister {
 
     void saveTask(TaskRecord task) {
         final ComponentName name = task.realActivity;
-        final int userId = task.userId;
+        final int userId = task.mUserId;
         PersistableLaunchParams params;
         ArrayMap<ComponentName, PersistableLaunchParams> map = mMap.get(userId);
         if (map == null) {
@@ -247,7 +247,7 @@ class LaunchParamsPersister {
 
     void getLaunchParams(TaskRecord task, ActivityRecord activity, LaunchParams outParams) {
         final ComponentName name = task != null ? task.realActivity : activity.mActivityComponent;
-        final int userId = task != null ? task.userId : activity.mUserId;
+        final int userId = task != null ? task.mUserId : activity.mUserId;
 
         outParams.reset();
         Map<ComponentName, PersistableLaunchParams> map = mMap.get(userId);

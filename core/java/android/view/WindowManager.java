@@ -197,12 +197,6 @@ public interface WindowManager extends ViewManager {
     int TRANSIT_TASK_OPEN_BEHIND = 16;
 
     /**
-     * A window in a task is being animated in-place.
-     * @hide
-     */
-    int TRANSIT_TASK_IN_PLACE = 17;
-
-    /**
      * An activity is being relaunched (e.g. due to configuration change).
      * @hide
      */
@@ -286,7 +280,6 @@ public interface WindowManager extends ViewManager {
             TRANSIT_WALLPAPER_INTRA_OPEN,
             TRANSIT_WALLPAPER_INTRA_CLOSE,
             TRANSIT_TASK_OPEN_BEHIND,
-            TRANSIT_TASK_IN_PLACE,
             TRANSIT_ACTIVITY_RELAUNCH,
             TRANSIT_DOCK_TASK_FROM_RECENTS,
             TRANSIT_KEYGUARD_GOING_AWAY,
@@ -1687,8 +1680,9 @@ public interface WindowManager extends ViewManager {
          * to determine its default behavior.
          *
          * {@hide} */
-        @UnsupportedAppUsage
-        public static final int PRIVATE_FLAG_SHOW_FOR_ALL_USERS = 0x00000010;
+        @SystemApi
+        @RequiresPermission(permission.INTERNAL_SYSTEM_WINDOW)
+        public static final int SYSTEM_FLAG_SHOW_FOR_ALL_USERS = 0x00000010;
 
         /**
          * Never animate position changes of the window.
@@ -1834,6 +1828,13 @@ public interface WindowManager extends ViewManager {
         public static final int PRIVATE_FLAG_COLOR_SPACE_AGNOSTIC = 0x01000000;
 
         /**
+         * Flag to request creation of a BLAST (Buffer as LayerState) Layer.
+         * If not specified the client will receive a BufferQueue layer.
+         * @hide
+         */
+        public static final int PRIVATE_FLAG_USE_BLAST = 0x02000000;
+
+        /**
          * An internal annotation for flags that can be specified to {@link #softInputMode}.
          *
          * @hide
@@ -1842,6 +1843,7 @@ public interface WindowManager extends ViewManager {
         @Retention(RetentionPolicy.SOURCE)
         @IntDef(flag = true, prefix = { "SYSTEM_FLAG_" }, value = {
                 SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS,
+                SYSTEM_FLAG_SHOW_FOR_ALL_USERS,
         })
         public @interface SystemFlags {}
 
@@ -1863,8 +1865,8 @@ public interface WindowManager extends ViewManager {
                         equals = PRIVATE_FLAG_WANTS_OFFSET_NOTIFICATIONS,
                         name = "WANTS_OFFSET_NOTIFICATIONS"),
                 @ViewDebug.FlagToString(
-                        mask = PRIVATE_FLAG_SHOW_FOR_ALL_USERS,
-                        equals = PRIVATE_FLAG_SHOW_FOR_ALL_USERS,
+                        mask = SYSTEM_FLAG_SHOW_FOR_ALL_USERS,
+                        equals = SYSTEM_FLAG_SHOW_FOR_ALL_USERS,
                         name = "SHOW_FOR_ALL_USERS"),
                 @ViewDebug.FlagToString(
                         mask = PRIVATE_FLAG_NO_MOVE_ANIMATION,

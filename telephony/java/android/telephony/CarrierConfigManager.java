@@ -526,6 +526,15 @@ public class CarrierConfigManager {
             "default_vm_number_roaming_string";
 
     /**
+     * Where there is no preloaded voicemail number on a SIM card, specifies the carrier's default
+     * voicemail number while the device is both roaming and not registered for IMS.
+     * When empty string, no default voicemail number is specified for roaming network and
+     * unregistered state in IMS.
+     */
+    public static final String KEY_DEFAULT_VM_NUMBER_ROAMING_AND_IMS_UNREGISTERED_STRING =
+            "default_vm_number_roaming_and_ims_unregistered_string";
+
+    /**
      * Flag that specifies to use the user's own phone number as the voicemail number when there is
      * no pre-loaded voicemail number on the SIM card.
      * <p>
@@ -1753,9 +1762,8 @@ public class CarrierConfigManager {
             "allow_emergency_video_calls_bool";
 
     /**
-     * Flag indicating whether the carrier supports RCS presence indication for video calls.  When
-     * {@code true}, the carrier supports RCS presence indication for video calls.  When presence
-     * is supported, the device should use the
+     * Flag indicating whether the carrier supports RCS presence indication for
+     * User Capability Exchange (UCE).  When presence is supported, the device should use the
      * {@link android.provider.ContactsContract.Data#CARRIER_PRESENCE} bit mask and set the
      * {@link android.provider.ContactsContract.Data#CARRIER_PRESENCE_VT_CAPABLE} bit to indicate
      * whether each contact supports video calling.  The UI is made aware that presence is enabled
@@ -1764,6 +1772,12 @@ public class CarrierConfigManager {
      * video.
      */
     public static final String KEY_USE_RCS_PRESENCE_BOOL = "use_rcs_presence_bool";
+
+    /**
+     * Flag indicating whether the carrier supports RCS SIP OPTIONS indication for
+     * User Capability Exchange (UCE).
+     */
+    public static final String KEY_USE_RCS_SIP_OPTIONS_BOOL = "use_rcs_sip_options_bool";
 
     /**
      * The duration in seconds that platform call and message blocking is disabled after the user
@@ -2839,7 +2853,7 @@ public class CarrierConfigManager {
             "ping_test_before_data_switch_bool";
 
     /**
-     * Controls time in milli seconds until DcTracker reevaluates 5G connection state.
+     * Controls time in milliseconds until DcTracker reevaluates 5G connection state.
      * @hide
      */
     public static final String KEY_5G_WATCHDOG_TIME_MS_LONG =
@@ -3221,6 +3235,13 @@ public class CarrierConfigManager {
     public static final String KEY_CARRIER_CERTIFICATE_STRING_ARRAY =
             "carrier_certificate_string_array";
 
+    /**
+     * DisconnectCause array to play busy tone. Value should be array of
+     * {@link android.telephony.DisconnectCause}.
+     */
+    public static final String KEY_DISCONNECT_CAUSE_PLAY_BUSYTONE_INT_ARRAY =
+            "disconnect_cause_play_busytone_int_array";
+
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
 
@@ -3247,6 +3268,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_SUPPORT_DOWNGRADE_VT_TO_AUDIO_BOOL, true);
         sDefaults.putString(KEY_DEFAULT_VM_NUMBER_STRING, "");
         sDefaults.putString(KEY_DEFAULT_VM_NUMBER_ROAMING_STRING, "");
+        sDefaults.putString(KEY_DEFAULT_VM_NUMBER_ROAMING_AND_IMS_UNREGISTERED_STRING, "");
         sDefaults.putBoolean(KEY_CONFIG_TELEPHONY_USE_OWN_NUMBER_FOR_VOICEMAIL_BOOL, false);
         sDefaults.putBoolean(KEY_IGNORE_DATA_ENABLED_CHANGED_FOR_VIDEO_CALLS, true);
         sDefaults.putBoolean(KEY_VILTE_DATA_IS_METERED_BOOL, true);
@@ -3464,6 +3486,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_ALLOW_NON_EMERGENCY_CALLS_IN_ECM_BOOL, true);
         sDefaults.putInt(KEY_EMERGENCY_SMS_MODE_TIMER_MS_INT, 0);
         sDefaults.putBoolean(KEY_USE_RCS_PRESENCE_BOOL, false);
+        sDefaults.putBoolean(KEY_USE_RCS_SIP_OPTIONS_BOOL, false);
         sDefaults.putBoolean(KEY_FORCE_IMEI_BOOL, false);
         sDefaults.putInt(
                 KEY_CDMA_ROAMING_MODE_INT, TelephonyManager.CDMA_ROAMING_MODE_RADIO_DEFAULT);
@@ -3653,6 +3676,8 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_SUPPORT_WPS_OVER_IMS_BOOL, true);
         sDefaults.putAll(Ims.getDefaults());
         sDefaults.putStringArray(KEY_CARRIER_CERTIFICATE_STRING_ARRAY, null);
+        sDefaults.putIntArray(KEY_DISCONNECT_CAUSE_PLAY_BUSYTONE_INT_ARRAY,
+                new int[] {4 /* BUSY */});
     }
 
     /**

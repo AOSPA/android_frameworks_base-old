@@ -47,6 +47,7 @@ import android.hardware.input.InputManager;
 import android.hardware.input.InputManagerInternal;
 import android.hardware.input.KeyboardLayout;
 import android.hardware.input.TouchCalibration;
+import android.media.AudioManager;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Environment;
@@ -70,7 +71,6 @@ import android.view.Display;
 import android.view.IInputFilter;
 import android.view.IInputFilterHost;
 import android.view.IInputMonitorHost;
-import android.view.IWindow;
 import android.view.InputApplicationHandle;
 import android.view.InputChannel;
 import android.view.InputDevice;
@@ -185,9 +185,6 @@ public class InputManagerService extends IInputManager.Stub
     IInputFilter mInputFilter; // guarded by mInputFilterLock
     InputFilterHost mInputFilterHost; // guarded by mInputFilterLock
 
-    private IWindow mFocusedWindow;
-    private boolean mFocusedWindowHasCapture;
-
     private static native long nativeInit(InputManagerService service,
             Context context, MessageQueue messageQueue);
     private static native void nativeStart(long ptr);
@@ -202,8 +199,7 @@ public class InputManagerService extends IInputManager.Stub
             int deviceId, int sourceMask, int sw);
     private static native boolean nativeHasKeys(long ptr,
             int deviceId, int sourceMask, int[] keyCodes, boolean[] keyExists);
-    private static native void nativeRegisterInputChannel(long ptr, InputChannel inputChannel,
-            int displayId);
+    private static native void nativeRegisterInputChannel(long ptr, InputChannel inputChannel);
     private static native void nativeRegisterInputMonitor(long ptr, InputChannel inputChannel,
             int displayId, boolean isGestureMonitor);
     private static native void nativeUnregisterInputChannel(long ptr, InputChannel inputChannel);
@@ -220,6 +216,8 @@ public class InputManagerService extends IInputManager.Stub
     private static native void nativeSetFocusedApplication(long ptr,
             int displayId, InputApplicationHandle application);
     private static native void nativeSetFocusedDisplay(long ptr, int displayId);
+    private static native boolean nativeTransferTouchFocus(long ptr,
+            InputChannel fromChannel, InputChannel toChannel);
     private static native void nativeSetPointerSpeed(long ptr, int speed);
     private static native void nativeSetShowTouches(long ptr, boolean enabled);
     private static native void nativeSetInteractive(long ptr, boolean interactive);
@@ -294,6 +292,9 @@ public class InputManagerService extends IInputManager.Stub
     /** Switch code: Camera lens cover. When set the lens is covered. */
     public static final int SW_CAMERA_LENS_COVER = 0x09;
 
+    /** Switch code: Microphone. When set it is off. */
+    public static final int SW_MUTE_DEVICE = 0x0e;
+
     public static final int SW_LID_BIT = 1 << SW_LID;
     public static final int SW_TABLET_MODE_BIT = 1 << SW_TABLET_MODE;
     public static final int SW_KEYPAD_SLIDE_BIT = 1 << SW_KEYPAD_SLIDE;
@@ -304,6 +305,7 @@ public class InputManagerService extends IInputManager.Stub
     public static final int SW_JACK_BITS =
             SW_HEADPHONE_INSERT_BIT | SW_MICROPHONE_INSERT_BIT | SW_JACK_PHYSICAL_INSERT_BIT | SW_LINEOUT_INSERT_BIT;
     public static final int SW_CAMERA_LENS_COVER_BIT = 1 << SW_CAMERA_LENS_COVER;
+    public static final int SW_MUTE_DEVICE_BIT = 1 << SW_MUTE_DEVICE;
 
     /** Whether to use the dev/input/event or uevent subsystem for the audio jack. */
     final boolean mUseDevInputEventForAudioJack;
@@ -522,7 +524,6 @@ public class InputManagerService extends IInputManager.Stub
             throw new IllegalArgumentException("displayId must >= 0.");
         }
 
-
         final long ident = Binder.clearCallingIdentity();
         try {
             InputChannel[] inputChannels = InputChannel.openInputChannelPair(inputChannelName);
@@ -530,29 +531,25 @@ public class InputManagerService extends IInputManager.Stub
             inputChannels[0].setToken(host.asBinder());
             nativeRegisterInputMonitor(mPtr, inputChannels[0], displayId,
                     true /*isGestureMonitor*/);
-            return new InputMonitor(inputChannelName, inputChannels[1], host);
+            return new InputMonitor(inputChannels[1], host);
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
     }
 
     /**
-     * Registers an input channel so that it can be used as an input event target.
+     * Registers an input channel so that it can be used as an input event target. The channel is
+     * registered with a generated token.
+     *
      * @param inputChannel The input channel to register.
-     * @param inputWindowHandle The handle of the input window associated with the
-     * input channel, or null if none.
      */
-    public void registerInputChannel(InputChannel inputChannel, IBinder token) {
+    public void registerInputChannel(InputChannel inputChannel) {
         if (inputChannel == null) {
             throw new IllegalArgumentException("inputChannel must not be null.");
         }
+        inputChannel.setToken(new Binder());
 
-        if (token == null) {
-            token = new Binder();
-        }
-        inputChannel.setToken(token);
-
-        nativeRegisterInputChannel(mPtr, inputChannel, Display.INVALID_DISPLAY);
+        nativeRegisterInputChannel(mPtr, inputChannel);
     }
 
     /**
@@ -967,6 +964,11 @@ public class InputManagerService extends IInputManager.Stub
             throw new SecurityException("Requires TABLET_MODE permission");
         }
         return getSwitchState(-1, InputDevice.SOURCE_ANY, SW_TABLET_MODE);
+    }
+
+    @Override // Binder call
+    public int isMicMuted() {
+        return getSwitchState(-1, InputDevice.SOURCE_ANY, SW_MUTE_DEVICE);
     }
 
     @Override // Binder call
@@ -1501,26 +1503,9 @@ public class InputManagerService extends IInputManager.Stub
 
     @Override
     public void requestPointerCapture(IBinder windowToken, boolean enabled) {
-        if (mFocusedWindow == null || mFocusedWindow.asBinder() != windowToken) {
-            Slog.e(TAG, "requestPointerCapture called for a window that has no focus: "
-                    + windowToken);
-            return;
-        }
-        if (mFocusedWindowHasCapture == enabled) {
-            Slog.i(TAG, "requestPointerCapture: already " + (enabled ? "enabled" : "disabled"));
-            return;
-        }
-        setPointerCapture(enabled);
-    }
-
-    private void setPointerCapture(boolean enabled) {
-        if (mFocusedWindowHasCapture != enabled) {
-            mFocusedWindowHasCapture = enabled;
-            try {
-                mFocusedWindow.dispatchPointerCaptureChanged(enabled);
-            } catch (RemoteException ex) {
-                /* ignore */
-            }
+        boolean requestConfigurationRefresh =
+                mWindowManagerCallbacks.requestPointerCapture(windowToken, enabled);
+        if (requestConfigurationRefresh) {
             nativeSetPointerCapture(mPtr, enabled);
         }
     }
@@ -1531,6 +1516,29 @@ public class InputManagerService extends IInputManager.Stub
 
     public void setSystemUiVisibility(int visibility) {
         nativeSetSystemUiVisibility(mPtr, visibility);
+    }
+
+    /**
+     * Atomically transfers touch focus from one window to another as identified by
+     * their input channels.  It is possible for multiple windows to have
+     * touch focus if they support split touch dispatch
+     * {@link android.view.WindowManager.LayoutParams#FLAG_SPLIT_TOUCH} but this
+     * method only transfers touch focus of the specified window without affecting
+     * other windows that may also have touch focus at the same time.
+     * @param fromChannel The channel of a window that currently has touch focus.
+     * @param toChannel The channel of the window that should receive touch focus in
+     * place of the first.
+     * @return True if the transfer was successful.  False if the window with the
+     * specified channel did not actually have touch focus at the time of the request.
+     */
+    public boolean transferTouchFocus(InputChannel fromChannel, InputChannel toChannel) {
+        if (fromChannel == null) {
+            throw new IllegalArgumentException("fromChannel must not be null.");
+        }
+        if (toChannel == null) {
+            throw new IllegalArgumentException("toChannel must not be null.");
+        }
+        return nativeTransferTouchFocus(mPtr, fromChannel, toChannel);
     }
 
     @Override // Binder call
@@ -1779,6 +1787,12 @@ public class InputManagerService extends IInputManager.Stub
             mHandler.obtainMessage(MSG_DELIVER_TABLET_MODE_CHANGED,
                     args).sendToTarget();
         }
+
+        if ((switchMask & SW_MUTE_DEVICE_BIT) != 0) {
+            final boolean micMute = ((switchValues & SW_MUTE_DEVICE_BIT) != 0);
+            AudioManager audioManager = mContext.getSystemService(AudioManager.class);
+            audioManager.setMicrophoneMuteFromSwitch(micMute);
+        }
     }
 
     // Native callback.
@@ -1788,16 +1802,11 @@ public class InputManagerService extends IInputManager.Stub
 
     // Native callback
     private void notifyFocusChanged(IBinder oldToken, IBinder newToken) {
-        if (mFocusedWindow != null) {
-            if (mFocusedWindow.asBinder() == newToken) {
-                Slog.w(TAG, "notifyFocusChanged called with unchanged mFocusedWindow="
-                        + mFocusedWindow);
-                return;
-            }
-            setPointerCapture(false);
+        final boolean requestConfigurationRefresh =
+                mWindowManagerCallbacks.notifyFocusChanged(oldToken, newToken);
+        if (requestConfigurationRefresh) {
+            nativeSetPointerCapture(mPtr, false);
         }
-
-        mFocusedWindow = IWindow.Stub.asInterface(newToken);
     }
 
     // Native callback.
@@ -2075,6 +2084,20 @@ public class InputManagerService extends IInputManager.Stub
          * @param touchedToken The token for the window that received the input event.
          */
         void onPointerDownOutsideFocus(IBinder touchedToken);
+
+        /**
+         * Called when the focused window has changed.
+         *
+         * @return true if we want to request a configuration refresh.
+         */
+        boolean notifyFocusChanged(IBinder oldToken, IBinder newToken);
+
+        /**
+         * Called by the client to request pointer capture.
+         *
+         * @return true if we want to request a configuration refresh.
+         */
+        boolean requestPointerCapture(IBinder windowToken, boolean enabled);
     }
 
     /**

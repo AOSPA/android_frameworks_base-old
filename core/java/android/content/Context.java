@@ -63,6 +63,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.StorageManager;
 import android.provider.MediaStore;
+import android.telephony.TelephonyRegistryManager;
 import android.util.AttributeSet;
 import android.view.Display;
 import android.view.DisplayAdjustments;
@@ -74,6 +75,7 @@ import android.view.contentcapture.ContentCaptureManager.ContentCaptureClient;
 import android.view.textclassifier.TextClassificationManager;
 
 import com.android.internal.compat.IPlatformCompat;
+import com.android.internal.compat.IPlatformCompatNative;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -808,6 +810,17 @@ public abstract class Context {
     @NonNull
     public String getOpPackageName() {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * <p>Features are used in complex apps to logically separate parts of the app. E.g. a
+     * blogging app might also have a instant messaging app built in.
+     *
+     * @return the feature id this context is for or {@code null} if this is the default
+     * feature.
+     */
+    public @Nullable String getFeatureId() {
+        return null;
     }
 
     /** Return the full application info for this context's package. */
@@ -1559,7 +1572,14 @@ public abstract class Context {
      * @see Environment#getExternalStorageState(File)
      * @see Environment#isExternalStorageEmulated(File)
      * @see Environment#isExternalStorageRemovable(File)
+     * @deprecated These directories still exist and are scanned, but developers
+     *             are encouraged to migrate to inserting content into a
+     *             {@link MediaStore} collection directly, as any app can
+     *             contribute new media to {@link MediaStore} with no
+     *             permissions required, starting in
+     *             {@link android.os.Build.VERSION_CODES#Q}.
      */
+    @Deprecated
     public abstract File[] getExternalMediaDirs();
 
     /**
@@ -3236,6 +3256,7 @@ public abstract class Context {
             //@hide ROLE_CONTROLLER_SERVICE,
             CAMERA_SERVICE,
             //@hide: PLATFORM_COMPAT_SERVICE,
+            //@hide: PLATFORM_COMPAT_NATIVE_SERVICE,
             PRINT_SERVICE,
             CONSUMER_IR_SERVICE,
             //@hide: TRUST_SERVICE,
@@ -3301,7 +3322,7 @@ public abstract class Context {
      *  <dt> {@link #VIBRATOR_SERVICE} ("vibrator")
      *  <dd> A {@link android.os.Vibrator} for interacting with the vibrator
      *  hardware.
-     *  <dt> {@link #CONNECTIVITY_SERVICE} ("connection")
+     *  <dt> {@link #CONNECTIVITY_SERVICE} ("connectivity")
      *  <dd> A {@link android.net.ConnectivityManager ConnectivityManager} for
      *  handling management of network connections.
      *  <dt> {@link #IPSEC_SERVICE} ("ipsec")
@@ -4613,6 +4634,14 @@ public abstract class Context {
     public static final String PLATFORM_COMPAT_SERVICE = "platform_compat";
 
     /**
+     * Use with {@link android.os.ServiceManager.getService()} to retrieve a
+     * {@link IPlatformCompatNative} IBinder for native code communicating with the platform compat
+     * service.
+     * @hide
+     */
+    public static final String PLATFORM_COMPAT_NATIVE_SERVICE = "platform_compat_native";
+
+    /**
      * Service to capture a bugreport.
      * @see #getSystemService(String)
      * @see android.os.BugreportManager
@@ -4706,6 +4735,14 @@ public abstract class Context {
      * @hide
      */
     public static final String DYNAMIC_SYSTEM_SERVICE = "dynamic_system";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve an
+     * {@link TelephonyRegistryManager}.
+     * @hide
+     */
+    @SystemApi
+    public static final String TELEPHONY_REGISTRY_SERVICE = "telephony_registry";
 
     /**
      * Determine whether the given permission is allowed for a particular
@@ -5209,11 +5246,29 @@ public abstract class Context {
      */
     @SystemApi
     @TestApi
+    @NonNull
     public Context createPackageContextAsUser(
-            String packageName, @CreatePackageOptions int flags, UserHandle user)
+            @NonNull String packageName, @CreatePackageOptions int flags, @NonNull UserHandle user)
             throws PackageManager.NameNotFoundException {
         if (Build.IS_ENG) {
             throw new IllegalStateException("createPackageContextAsUser not overridden!");
+        }
+        return this;
+    }
+
+    /**
+     * Similar to {@link #createPackageContext(String, int)}, but for the own package with a
+     * different {@link UserHandle}. For example, {@link #getContentResolver()}
+     * will open any {@link Uri} as the given user.
+     *
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    @NonNull
+    public Context createContextAsUser(@NonNull UserHandle user, @CreatePackageOptions int flags) {
+        if (Build.IS_ENG) {
+            throw new IllegalStateException("createContextAsUser not overridden!");
         }
         return this;
     }
@@ -5296,6 +5351,20 @@ public abstract class Context {
      * @return A {@link Context} for the display.
      */
     public abstract Context createDisplayContext(@NonNull Display display);
+
+    /**
+     * Return a new Context object for the current Context but for a different feature in the app.
+     * Features can be used by complex apps to separate logical parts.
+     *
+     * @param featureId The feature id or {@code null} to create a context for the default feature.
+     *
+     * @return A {@link Context} for the feature
+     *
+     * @see #getFeatureId()
+     */
+    public @NonNull Context createFeatureContext(@Nullable String featureId) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Return a new Context object for the current Context but whose storage

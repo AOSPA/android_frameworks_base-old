@@ -78,7 +78,7 @@ public class RecentsAnimationTest extends ActivityTestsBase {
         mRecentsAnimationController = mock(RecentsAnimationController.class);
         mService.mWindowManager.setRecentsAnimationController(mRecentsAnimationController);
         doNothing().when(mService.mWindowManager).initializeRecentsAnimation(
-                anyInt(), any(), any(), anyInt(), any());
+                anyInt(), any(), any(), anyInt(), any(), any());
         doReturn(true).when(mService.mWindowManager).canStartRecentsAnimation();
 
         final RecentTasks recentTasks = mService.getRecentTasks();
@@ -97,7 +97,6 @@ public class RecentsAnimationTest extends ActivityTestsBase {
                 .setStack(recentsStack)
                 .build();
         ActivityRecord topActivity = new ActivityBuilder(mService).setCreateTask(true).build();
-        topActivity.fullscreen = true;
         topActivity.getActivityStack().moveToFront("testRecentsActivityVisiblility");
 
         doCallRealMethod().when(mRootActivityContainer).ensureActivitiesVisible(
@@ -346,7 +345,7 @@ public class RecentsAnimationTest extends ActivityTestsBase {
                 .setCreateTask(true)
                 .setComponent(new ComponentName(mContext.getPackageName(), "Home2"))
                 .build();
-        otherUserHomeActivity.getTaskRecord().userId = TEST_USER_ID;
+        otherUserHomeActivity.getTaskRecord().mUserId = TEST_USER_ID;
 
         ActivityStack fullscreenStack = display.createStack(WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_STANDARD, true /* onTop */);
@@ -386,7 +385,8 @@ public class RecentsAnimationTest extends ActivityTestsBase {
                 return null;
             }).when(mService.mWindowManager).initializeRecentsAnimation(
                     anyInt() /* targetActivityType */, any() /* recentsAnimationRunner */,
-                    any() /* callbacks */, anyInt() /* displayId */, any() /* recentTaskIds */);
+                    any() /* callbacks */, anyInt() /* displayId */, any() /* recentTaskIds */,
+                    any() /* targetActivity */);
         }
 
         Intent recentsIntent = new Intent();

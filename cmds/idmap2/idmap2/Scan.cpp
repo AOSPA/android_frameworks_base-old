@@ -33,7 +33,7 @@
 #include "idmap2/ResourceUtils.h"
 #include "idmap2/Result.h"
 #include "idmap2/SysTrace.h"
-#include "idmap2/Xml.h"
+#include "idmap2/XmlParser.h"
 #include "idmap2/ZipFile.h"
 
 using android::idmap2::CommandLineOptions;
@@ -176,6 +176,17 @@ Result<Unit> Scan(const std::vector<std::string>& args) {
 
     if (overlay_info->priority < 0) {
       continue;
+    }
+
+    // Note that conditional property enablement/exclusion only applies if
+    // the attribute is present. In its absence, all overlays are presumed enabled.
+    if (!overlay_info->requiredSystemPropertyName.empty() &&
+        !overlay_info->requiredSystemPropertyValue.empty()) {
+      // if property set & equal to value, then include overlay - otherwise skip
+      if (android::base::GetProperty(overlay_info->requiredSystemPropertyName, "") !=
+          overlay_info->requiredSystemPropertyValue) {
+        continue;
+      }
     }
 
     std::vector<std::string> fulfilled_policies;

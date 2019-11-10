@@ -20,13 +20,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.app.Instrumentation;
 import android.hardware.display.AmbientDisplayConfiguration;
 import android.os.Handler;
 import android.os.Looper;
@@ -34,7 +32,6 @@ import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.testing.TestableLooper.RunWithLooper;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
@@ -43,32 +40,26 @@ import com.android.systemui.dock.DockManagerFake;
 import com.android.systemui.doze.DozeMachine.State;
 
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
 @RunWithLooper
 public class DozeDockHandlerTest extends SysuiTestCase {
-    private DozeDockHandler mDockHandler;
+    @Mock
     private DozeMachine mMachine;
-    private DozeHostFake mHost;
+    @Mock
+    private DozeHost mHost;
     private AmbientDisplayConfiguration mConfig;
-    private Instrumentation mInstrumentation;
     private DockManagerFake mDockManagerFake;
-
-    @BeforeClass
-    public static void setupSuite() {
-        // We can't use KeyguardUpdateMonitor from tests.
-        DozeLog.setRegisterKeyguardCallback(false);
-    }
+    private DozeDockHandler mDockHandler;
 
     @Before
     public void setUp() throws Exception {
-        mInstrumentation = InstrumentationRegistry.getInstrumentation();
-        mMachine = mock(DozeMachine.class);
-        mHost = spy(new DozeHostFake());
+        MockitoAnnotations.initMocks(this);
         mConfig = DozeConfigurationUtil.createMockConfig();
         doReturn(false).when(mConfig).alwaysOnEnabled(anyInt());
 
@@ -95,7 +86,7 @@ public class DozeDockHandlerTest extends SysuiTestCase {
 
         mDockManagerFake.setDockEvent(DockManager.STATE_DOCKED);
 
-        verify(mMachine).requestPulse(eq(DozeLog.PULSE_REASON_DOCKING));
+        verify(mMachine).requestPulse(eq(DozeEvent.PULSE_REASON_DOCKING));
     }
 
     @Test
@@ -105,14 +96,14 @@ public class DozeDockHandlerTest extends SysuiTestCase {
 
         mDockManagerFake.setDockEvent(DockManager.STATE_DOCKED);
 
-        verify(mMachine).requestPulse(eq(DozeLog.PULSE_REASON_DOCKING));
+        verify(mMachine).requestPulse(eq(DozeEvent.PULSE_REASON_DOCKING));
     }
 
     @Test
     public void testOnEvent_dockedHideWhenPulsing_requestPulseOut() {
         mDockHandler.transitionTo(DozeMachine.State.UNINITIALIZED, DozeMachine.State.INITIALIZED);
         when(mMachine.getState()).thenReturn(State.DOZE_PULSING);
-        when(mMachine.getPulseReason()).thenReturn(DozeLog.PULSE_REASON_DOCKING);
+        when(mMachine.getPulseReason()).thenReturn(DozeEvent.PULSE_REASON_DOCKING);
 
         mDockManagerFake.setDockEvent(DockManager.STATE_DOCKED_HIDE);
 
@@ -123,7 +114,7 @@ public class DozeDockHandlerTest extends SysuiTestCase {
     public void testOnEvent_undockedWhenPulsing_requestPulseOut() {
         mDockHandler.transitionTo(DozeMachine.State.UNINITIALIZED, DozeMachine.State.INITIALIZED);
         when(mMachine.getState()).thenReturn(DozeMachine.State.DOZE_PULSING);
-        when(mMachine.getPulseReason()).thenReturn(DozeLog.PULSE_REASON_DOCKING);
+        when(mMachine.getPulseReason()).thenReturn(DozeEvent.PULSE_REASON_DOCKING);
 
         mDockManagerFake.setDockEvent(DockManager.STATE_NONE);
 
@@ -161,7 +152,7 @@ public class DozeDockHandlerTest extends SysuiTestCase {
 
         TestableLooper.get(this).processAllMessages();
 
-        verify(mMachine).requestPulse(eq(DozeLog.PULSE_REASON_DOCKING));
+        verify(mMachine).requestPulse(eq(DozeEvent.PULSE_REASON_DOCKING));
     }
 
     @Test
@@ -174,7 +165,7 @@ public class DozeDockHandlerTest extends SysuiTestCase {
 
         TestableLooper.get(this).processAllMessages();
 
-        verify(mMachine).requestPulse(eq(DozeLog.PULSE_REASON_DOCKING));
+        verify(mMachine).requestPulse(eq(DozeEvent.PULSE_REASON_DOCKING));
     }
 
     @Test
@@ -186,7 +177,7 @@ public class DozeDockHandlerTest extends SysuiTestCase {
 
         mDockHandler.transitionTo(DozeMachine.State.INITIALIZED, DozeMachine.State.DOZE);
 
-        verify(mMachine, never()).requestPulse(eq(DozeLog.PULSE_REASON_DOCKING));
+        verify(mMachine, never()).requestPulse(eq(DozeEvent.PULSE_REASON_DOCKING));
     }
 
     @Test
@@ -205,7 +196,7 @@ public class DozeDockHandlerTest extends SysuiTestCase {
     public void testTransitionToPulsing_whenDockedHide_requestPulseOut() {
         mDockHandler.transitionTo(DozeMachine.State.UNINITIALIZED, DozeMachine.State.INITIALIZED);
         when(mMachine.getState()).thenReturn(DozeMachine.State.DOZE_PULSING);
-        when(mMachine.getPulseReason()).thenReturn(DozeLog.PULSE_REASON_DOCKING);
+        when(mMachine.getPulseReason()).thenReturn(DozeEvent.PULSE_REASON_DOCKING);
         mDockManagerFake.setDockEvent(DockManager.STATE_DOCKED_HIDE);
 
         mDockHandler.transitionTo(DozeMachine.State.INITIALIZED, State.DOZE_PULSING);

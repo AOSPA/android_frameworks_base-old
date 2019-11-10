@@ -52,12 +52,17 @@ struct ValueBucket {
 // - an alarm set to the end of the bucket
 class ValueMetricProducer : public virtual MetricProducer, public virtual PullDataReceiver {
 public:
-    ValueMetricProducer(const ConfigKey& key, const ValueMetric& valueMetric,
-                        const int conditionIndex, const sp<ConditionWizard>& conditionWizard,
-                        const int whatMatcherIndex,
-                        const sp<EventMatcherWizard>& matcherWizard,
-                        const int pullTagId, const int64_t timeBaseNs, const int64_t startTimeNs,
-                        const sp<StatsPullerManager>& pullerManager);
+    ValueMetricProducer(
+            const ConfigKey& key, const ValueMetric& valueMetric, const int conditionIndex,
+            const sp<ConditionWizard>& conditionWizard, const int whatMatcherIndex,
+            const sp<EventMatcherWizard>& matcherWizard, const int pullTagId,
+            const int64_t timeBaseNs, const int64_t startTimeNs,
+            const sp<StatsPullerManager>& pullerManager,
+            const std::unordered_map<int, std::shared_ptr<Activation>>& eventActivationMap = {},
+            const std::unordered_map<int, std::vector<std::shared_ptr<Activation>>>&
+                    eventDeactivationMap = {},
+            const vector<int>& slicedStateAtoms = {},
+            const unordered_map<int, unordered_map<int, int64_t>>& stateGroupMap = {});
 
     virtual ~ValueMetricProducer();
 
@@ -115,8 +120,6 @@ private:
     // not have complete data for the bucket.
     void flushCurrentBucketLocked(const int64_t& eventTimeNs,
                                   const int64_t& nextBucketStartTimeNs) override;
-
-    void prepareFirstBucketLocked() override;
 
     void dropDataLocked(const int64_t dropTimeNs) override;
 

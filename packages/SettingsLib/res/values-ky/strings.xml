@@ -101,7 +101,7 @@
     <string name="bluetooth_opp_profile_summary_not_connected" msgid="1267091356089086285">"Файл өткөрүү серверине туташкан жок"</string>
     <string name="bluetooth_hid_profile_summary_connected" msgid="3381760054215168689">"Киргизүү түзмөгүнө туташты"</string>
     <string name="bluetooth_pan_user_profile_summary_connected" msgid="6436258151814414028">"Интернетке мүмкүнчүлүк алуу үчүн түзмөккө туташты"</string>
-    <string name="bluetooth_pan_nap_profile_summary_connected" msgid="1322694224800769308">"Жергиликтүү Интернет туташуусу түзмөк менен бөлүшүлүүдө"</string>
+    <string name="bluetooth_pan_nap_profile_summary_connected" msgid="1322694224800769308">"Түзмөк модем катары иштөөдө"</string>
     <string name="bluetooth_pan_profile_summary_use_for" msgid="5736111170225304239">"Интернетке туташуу үчүн колдонулсун"</string>
     <string name="bluetooth_map_profile_summary_use_for" msgid="5154200119919927434">"MAP үчүн колдонуу"</string>
     <string name="bluetooth_sap_profile_summary_use_for" msgid="7085362712786907993">"SIM картаны пайдалануу үчүн колдонуу"</string>
@@ -402,8 +402,8 @@
     <string name="power_remaining_duration_shutdown_imminent" product="tablet" msgid="7466484148515796216">"Планшет бир аздан кийин өчүп калышы мүмкүн (<xliff:g id="LEVEL">%1$s</xliff:g>)"</string>
     <string name="power_remaining_duration_shutdown_imminent" product="device" msgid="603933521600231649">"Түзмөк бир аздан кийин өчүп калышы мүмкүн (<xliff:g id="LEVEL">%1$s</xliff:g>)"</string>
     <string name="power_charging" msgid="1779532561355864267">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
-    <string name="power_remaining_charging_duration_only" msgid="1421102457410268886">"Батарея толгонго чейин калган убакыт: <xliff:g id="TIME">%1$s</xliff:g>"</string>
-    <string name="power_charging_duration" msgid="4676999980973411875">"<xliff:g id="LEVEL">%1$s</xliff:g> – <xliff:g id="TIME">%2$s</xliff:g> кийин толук кубатталат"</string>
+    <string name="power_remaining_charging_duration_only" msgid="6672239353042034265">"<xliff:g id="TIME">%1$s</xliff:g> кийин кубатталат"</string>
+    <string name="power_charging_duration" msgid="5850751284103249125">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g> кийин кубатталат"</string>
     <string name="battery_info_status_unknown" msgid="196130600938058547">"Белгисиз"</string>
     <string name="battery_info_status_charging" msgid="1705179948350365604">"Кубатталууда"</string>
     <string name="battery_info_status_charging_lower" msgid="8689770213898117994">"кубатталууда"</string>
