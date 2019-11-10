@@ -4660,6 +4660,16 @@ public final class Settings {
                 BOOLEAN_VALIDATOR;
 
         /**
+         *  Adaptive playback
+         *  Automatically pause media when the volume is muted and
+         *  will resume automatically when volume is restored.
+         *    0 = disabled
+         *    1 = enabled
+         * @hide
+         */
+        public static final String ADAPTIVE_PLAYBACK = "adaptive_playback";
+
+        /**
          * Whether allowing pocket service to register sensors and dispatch informations.
          *   0 = disabled
          *   1 = enabled
