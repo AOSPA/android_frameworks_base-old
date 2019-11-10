@@ -67,6 +67,7 @@ import android.util.Slog;
 import android.util.SparseBooleanArray;
 import android.view.ContextThemeWrapper;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.AccessibilityDelegate;
@@ -131,6 +132,7 @@ public class VolumeDialogImpl implements VolumeDialog,
 
     private Window mWindow;
     private CustomDialog mDialog;
+    private AudioManager mAudioManager;
     private ViewGroup mDialogView;
     private ViewGroup mDialogRowsView;
     private ViewGroup mRinger;
@@ -182,6 +184,7 @@ public class VolumeDialogImpl implements VolumeDialog,
                 Prefs.getBoolean(context, Prefs.Key.HAS_SEEN_ODI_CAPTIONS_TOOLTIP, false);
         mLeftVolumeRocker = mContext.getResources().getBoolean(R.bool.config_audioPanelOnLeftSide);
         mHasAlertSlider = mContext.getResources().getBoolean(com.android.internal.R.bool.config_hasAlertSlider);
+        mAudioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
     }
 
     @Override
@@ -1423,6 +1426,10 @@ public class VolumeDialogImpl implements VolumeDialog,
                     mController.setActiveStream(mRow.stream);
                     mController.setStreamVolume(mRow.stream, userLevel);
                     mRow.requestedLevel = userLevel;
+                    if (mRow.requestedLevel == 0 && mRow == findRow(STREAM_MUSIC) && mAudioManager.isMusicActive()) {
+                        KeyEvent pause = new KeyEvent(KeyEvent.ACTION_DOWN, 127);
+                        mAudioManager.dispatchMediaKeyEvent(pause);
+                    }
                     Events.writeEvent(mContext, Events.EVENT_TOUCH_LEVEL_CHANGED, mRow.stream,
                             userLevel);
                 }
