@@ -4660,6 +4660,16 @@ public final class Settings {
                 BOOLEAN_VALIDATOR;
 
         /**
+         *  Smart Pause
+         *  Automatically pause media when the volume is muted and
+         *  will resume automatically when volume is restored.
+         *    0 = disabled
+         *    1 = enabled
+         * @hide
+         */
+        public static final String SMART_PAUSE = "smart_pause";
+
+        /**
          * Whether allowing pocket service to register sensors and dispatch informations.
          *   0 = disabled
          *   1 = enabled
