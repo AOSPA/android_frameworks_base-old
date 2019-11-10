@@ -137,6 +137,7 @@ public class MediaSessionService extends SystemService implements Monitor {
     private ContentResolver mContentResolver;
     private SettingsObserver mSettingsObserver;
     private boolean mHasFeatureLeanback;
+    private boolean mAdaptivePlayback;
 
     // The FullUserRecord of the current users. (i.e. The foreground user that isn't a profile)
     // It's always not null after the MediaSessionService is started.
@@ -982,10 +983,16 @@ public class MediaSessionService extends SystemService implements Monitor {
         private void observe() {
             mContentResolver.registerContentObserver(mSecureSettingsUri,
                     false, this, USER_ALL);
+            mContentResolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.ADAPTIVE_PLAYBACK_ENABLED), false, this,
+                    UserHandle.USER_ALL);
         }
 
         @Override
         public void onChange(boolean selfChange, Uri uri) {
+            mAdaptivePlayback = Settings.System.getIntForUser(mContentResolver,
+                            Settings.System.ADAPTIVE_PLAYBACK_ENABLED,
+                            0, UserHandle.USER_CURRENT) == 1;
             updateActiveSessionListeners();
         }
     }
@@ -1466,7 +1473,7 @@ public class MediaSessionService extends SystemService implements Monitor {
         }
 
         /**
-         * Dispaches volume key events. This is called when the foreground activity didn't handled
+         * Dispaches volume key events. This is called when the foreground activity didn't handle
          * the incoming volume key event.
          * <p>
          * Handles the dispatching of the volume button events to one of the
@@ -1868,7 +1875,7 @@ public class MediaSessionService extends SystemService implements Monitor {
             }
             if (session == null || preferSuggestedStream) {
                 if ((flags & AudioManager.FLAG_ACTIVE_MEDIA_ONLY) != 0
-                        && !AudioSystem.isStreamActive(AudioManager.STREAM_MUSIC, 0)) {
+                        && !AudioSystem.isStreamActive(AudioManager.STREAM_MUSIC, 0) && !mAdaptivePlayback) {
                     if (DEBUG) {
                         Log.d(TAG, "No active session to adjust, skipping media only volume event");
                     }

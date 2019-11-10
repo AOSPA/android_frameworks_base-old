@@ -516,6 +516,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     boolean mVolBtnMusicControls;
     boolean mVolBtnLongPress;
 
+    private boolean mAdaptivePlayback;
+
     private boolean mPendingKeyguardOccluded;
     private boolean mKeyguardOccludedChanged;
     private boolean mNotifyUserActivity;
@@ -873,6 +875,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.VOLBTN_MUSIC_CONTROLS), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.ADAPTIVE_PLAYBACK_ENABLED), false, this,
                     UserHandle.USER_ALL);
             updateSettings();
         }
@@ -2234,6 +2239,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mVolBtnMusicControls = Settings.System.getIntForUser(resolver,
                     Settings.System.VOLBTN_MUSIC_CONTROLS,
                     1, UserHandle.USER_CURRENT) == 1;
+            mAdaptivePlayback = Settings.System.getIntForUser(resolver,
+                    Settings.System.ADAPTIVE_PLAYBACK_ENABLED,
+                    0, UserHandle.USER_CURRENT) == 1;
 
             //Three Finger Gesture
             boolean threeFingerGesture = Settings.System.getIntForUser(resolver,
@@ -4094,6 +4102,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
                 if (down) {
                     sendSystemKeyToStatusBarAsync(event.getKeyCode());
+                    Log.d(TAG, "VolumeDialog sendSystemKeyToStatusBarAsync event.getKeyCode=" + event.getKeyCode());
 
                     NotificationManager nm = getNotificationService();
                     if (nm != null && !mHandleVolumeKeysInWM) {
@@ -4169,6 +4178,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             // on key down events
                             mayChangeVolume = down;
                         }
+                    } else if (mAdaptivePlayback) {
+                        mayChangeVolume = down;
                     }
                     if (mayChangeVolume) {
                         // If we aren't passing to the user and no one else
@@ -4180,6 +4191,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         KeyEvent newEvent = new KeyEvent(KeyEvent.ACTION_DOWN, keyCode);
                         MediaSessionLegacyHelper.getHelper(mContext).sendVolumeKeyEvent(
                                 newEvent, AudioManager.USE_DEFAULT_STREAM_TYPE, true);
+                        Log.d(TAG, "VolumeDialog sendVolumeKeyEvent mayChangeVolume=true");
                     }
                     break;
                 }
@@ -4549,8 +4561,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         boolean isDozing = isDozeMode();
-         if (isDozing && isVolumeKey(keyCode)) {
-            return false;
+        if (isDozing) {
+            if (isVolumeKey(keyCode) && mAdaptivePlayback) {
+                return true;
+            } else {
+                return false;
+            }
         }
 
         // Send events to keyguard while the screen is on and it's showing.
