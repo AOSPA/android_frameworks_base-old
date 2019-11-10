@@ -307,6 +307,7 @@ java_library {
         "android.hardware.thermal-V1.1-java",
         "android.hardware.thermal-V2.0-java",
         "android.hardware.tv.input-V1.0-java-constants",
+        "android.hardware.tv.tuner-V1.0-java-constants",
         "android.hardware.usb-V1.0-java-constants",
         "android.hardware.usb-V1.1-java-constants",
         "android.hardware.usb-V1.2-java-constants",
@@ -402,22 +403,35 @@ java_library {
     name: "framework-minus-apex",
     defaults: ["framework-defaults"],
     srcs: [":framework-non-updatable-sources"],
-    javac_shard_size: 150,
-}
-
-java_library {
-    name: "framework",
-    defaults: ["framework-aidl-export-defaults"],
     installable: true,
-    static_libs: [
-        "framework-minus-apex",
-    ],
+    javac_shard_size: 150,
     required: [
         "framework-platform-compat-config",
         "libcore-platform-compat-config",
         "services-platform-compat-config",
         "media-provider-platform-compat-config",
         "services-devicepolicy-platform-compat-config",
+    ],
+    // For backwards compatibility.
+    stem: "framework",
+}
+
+// This "framework" module is NOT installed to the device. It's
+// "framework-minus-apex" that gets installed to the device. Note that
+// the filename is still framework.jar (via the stem property) for
+// compatibility reason. The purpose of this module is to provide
+// framework APIs (both public and private) for bundled apps.
+// "framework-minus-apex" can't be used for the purpose because 1)
+// many apps have already hardcoded the name "framework" and
+// 2) it lacks API symbols from updatable modules - as it's clear from
+// its suffix "-minus-apex".
+java_library {
+    name: "framework",
+    defaults: ["framework-aidl-export-defaults"],
+    installable: false, // this lib is a build-only library
+    static_libs: [
+        "framework-minus-apex",
+        // TODO(jiyong): add stubs for APEXes here
     ],
     sdk_version: "core_platform",
 }
@@ -548,6 +562,12 @@ filegroup {
     ],
 }
 
+filegroup {
+    name: "framework-tethering-shared-srcs",
+    srcs: [
+        "core/java/android/util/LocalLog.java",
+    ],
+}
 // Build ext.jar
 // ============================================================
 java_library {
@@ -916,13 +936,15 @@ framework_docs_only_libs = [
 ]
 
 metalava_framework_docs_args = "--manifest $(location core/res/AndroidManifest.xml) " +
+    "--ignore-classes-on-classpath " +
     "--hide-package com.android.okhttp " +
     "--hide-package com.android.org.conscrypt --hide-package com.android.server " +
     "--error UnhiddenSystemApi " +
     "--hide RequiresPermission " +
     "--hide MissingPermission --hide BroadcastBehavior " +
     "--hide HiddenSuperclass --hide DeprecationMismatch --hide UnavailableSymbol " +
-    "--hide SdkConstant --hide HiddenTypeParameter --hide Todo --hide Typo "
+    "--hide SdkConstant --hide HiddenTypeParameter --hide Todo --hide Typo " +
+    "--force-convert-to-warning-nullability-annotations +*:-android.*:+android.icu.*:-dalvik.*"
 
 // http://b/129765390 Rewrite links to "platform" or "technotes" folders
 // which are siblings (and thus outside of) {@docRoot}.
@@ -1595,6 +1617,17 @@ filegroup {
         "core/java/android/util/Slog.java",
         "core/java/com/android/internal/util/State.java",
         "core/java/com/android/internal/util/StateMachine.java",
+    ],
+}
+
+filegroup {
+    name: "framework-ims-common-shared-srcs",
+    srcs: [
+        "core/java/android/os/AsyncResult.java",
+        "core/java/android/os/RegistrantList.java",
+        "core/java/android/os/Registrant.java",
+        "core/java/com/android/internal/os/SomeArgs.java",
+        "core/java/com/android/internal/util/Preconditions.java",
     ],
 }
 

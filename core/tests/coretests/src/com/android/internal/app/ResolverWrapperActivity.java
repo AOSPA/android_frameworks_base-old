@@ -19,8 +19,14 @@ package com.android.internal.app;
 import static org.mockito.Mockito.mock;
 
 import android.app.usage.UsageStatsManager;
+import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 
+import com.android.internal.app.chooser.TargetInfo;
+
+import java.util.List;
 import java.util.function.Function;
 
 /*
@@ -30,8 +36,16 @@ public class ResolverWrapperActivity extends ResolverActivity {
     static final OverrideData sOverrides = new OverrideData();
     private UsageStatsManager mUsm;
 
-    ResolveListAdapter getAdapter() {
-        return mAdapter;
+    @Override
+    public ResolverListAdapter createAdapter(Context context, List<Intent> payloadIntents,
+            Intent[] initialIntents, List<ResolveInfo> rList, boolean filterLastUsed,
+            boolean useLayoutForBrowsables) {
+        return new ResolverWrapperAdapter(context, payloadIntents, initialIntents, rList,
+                filterLastUsed, createListController(), useLayoutForBrowsables, this);
+    }
+
+    ResolverWrapperAdapter getAdapter() {
+        return (ResolverWrapperAdapter) mAdapter;
     }
 
     @Override

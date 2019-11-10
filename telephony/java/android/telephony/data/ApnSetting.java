@@ -1213,7 +1213,7 @@ public class ApnSetting implements Parcelable {
         return first == null || second == null || first.equals(second);
     }
 
-    // Equal or one is null or "".
+    // Equal or one is null.
     private boolean xorEqualsString(String first, String second) {
         return TextUtils.isEmpty(first) || TextUtils.isEmpty(second) || first.equals(second);
     }

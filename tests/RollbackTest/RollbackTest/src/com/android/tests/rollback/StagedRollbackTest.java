@@ -32,6 +32,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.rollback.RollbackInfo;
 import android.content.rollback.RollbackManager;
+import android.os.ParcelFileDescriptor;
 import android.provider.DeviceConfig;
 import android.text.TextUtils;
 
@@ -45,6 +46,8 @@ import com.android.cts.install.lib.Uninstall;
 import com.android.cts.rollback.lib.Rollback;
 import com.android.cts.rollback.lib.RollbackUtils;
 import com.android.internal.R;
+
+import libcore.io.IoUtils;
 
 import org.junit.After;
 import org.junit.Before;
@@ -215,7 +218,7 @@ public class StagedRollbackTest {
         String networkStack = getNetworkStackPackageName();
 
         rm.expireRollbackForPackage(networkStack);
-        Uninstall.packages(networkStack);
+        uninstallNetworkStackPackage();
 
         assertThat(getUniqueRollbackInfoForPackage(rm.getAvailableRollbacks(),
                         networkStack)).isNull();
@@ -226,13 +229,21 @@ public class StagedRollbackTest {
         RollbackManager rm = RollbackUtils.getRollbackManager();
         assertThat(getUniqueRollbackInfoForPackage(rm.getAvailableRollbacks(),
                         getNetworkStackPackageName())).isNotNull();
+
+        // Sleep for < health check deadline
+        Thread.sleep(TimeUnit.SECONDS.toMillis(5));
+        // Verify rollback was not executed before health check deadline
+        assertThat(getUniqueRollbackInfoForPackage(rm.getRecentlyCommittedRollbacks(),
+                        getNetworkStackPackageName())).isNull();
     }
 
     @Test
     public void testNetworkFailedRollback_Phase3() throws Exception {
-        RollbackManager rm = RollbackUtils.getRollbackManager();
-        assertThat(getUniqueRollbackInfoForPackage(rm.getRecentlyCommittedRollbacks(),
-                        getNetworkStackPackageName())).isNull();
+        // Sleep for > health check deadline
+        // The device is expected to reboot during sleeping. This device method will fail and
+        // the host will catch the assertion. If reboot doesn't happen, the host will fail the
+        // assertion.
+        Thread.sleep(TimeUnit.SECONDS.toMillis(120));
     }
 
     @Test
@@ -247,6 +258,12 @@ public class StagedRollbackTest {
         ComponentName comp = intent.resolveSystemService(
                 InstrumentationRegistry.getContext().getPackageManager(), 0);
         return comp.getPackageName();
+    }
+
+    private void uninstallNetworkStackPackage() {
+        // Since the host side use shell command to install the network stack package, uninstall
+        // must be done by shell command as well. Otherwise uninstall by a different user will fail.
+        runShellCommand("pm uninstall " + getNetworkStackPackageName());
     }
 
     @Test
@@ -291,7 +308,7 @@ public class StagedRollbackTest {
         String networkStack = getNetworkStackPackageName();
 
         rm.expireRollbackForPackage(networkStack);
-        Uninstall.packages(networkStack);
+        uninstallNetworkStackPackage();
 
         assertThat(getUniqueRollbackInfoForPackage(rm.getAvailableRollbacks(),
                         networkStack)).isNull();
@@ -332,7 +349,8 @@ public class StagedRollbackTest {
     }
 
     private void runShellCommand(String cmd) {
-        InstrumentationRegistry.getInstrumentation().getUiAutomation()
+        ParcelFileDescriptor pfd = InstrumentationRegistry.getInstrumentation().getUiAutomation()
                 .executeShellCommand(cmd);
+        IoUtils.closeQuietly(pfd);
     }
 }

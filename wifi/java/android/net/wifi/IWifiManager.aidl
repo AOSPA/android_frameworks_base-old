@@ -34,6 +34,7 @@ import android.net.wifi.ITrafficStateCallback;
 import android.net.wifi.ITxPacketCountListener;
 import android.net.wifi.IOnWifiUsabilityStatsListener;
 import android.net.wifi.ScanResult;
+import android.net.wifi.SoftApConfiguration;
 import android.net.wifi.WifiActivityEnergyInfo;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
@@ -95,6 +96,8 @@ interface IWifiManager
 
     boolean disableNetwork(int netId, String packageName);
 
+    void allowAutojoin(int netId, boolean choice);
+
     boolean startScan(String packageName);
 
     List<ScanResult> getScanResults(String callingPackage);
@@ -141,7 +144,8 @@ interface IWifiManager
 
     boolean stopSoftAp();
 
-    int startLocalOnlyHotspot(in ILocalOnlyHotspotCallback callback, String packageName);
+    int startLocalOnlyHotspot(in ILocalOnlyHotspotCallback callback, String packageName,
+                              in SoftApConfiguration customConfig);
 
     void stopLocalOnlyHotspot();
 

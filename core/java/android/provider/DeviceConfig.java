@@ -338,6 +338,15 @@ public final class DeviceConfig {
     public static final String NAMESPACE_PRIVACY = "privacy";
 
     /**
+     * Permission related properties definitions.
+     *
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public static final String NAMESPACE_PERMISSIONS = "permissions";
+
+    /**
      * Interface for accessing keys belonging to {@link #NAMESPACE_WINDOW_MANAGER}.
      * @hide
      */
@@ -577,9 +586,8 @@ public final class DeviceConfig {
     @RequiresPermission(WRITE_DEVICE_CONFIG)
     public static boolean setProperty(@NonNull String namespace, @NonNull String name,
             @Nullable String value, boolean makeDefault) {
-        String compositeName = createCompositeName(namespace, name);
         ContentResolver contentResolver = ActivityThread.currentApplication().getContentResolver();
-        return Settings.Config.putString(contentResolver, compositeName, value, makeDefault);
+        return Settings.Config.putString(contentResolver, namespace, name, value, makeDefault);
     }
 
     /**
@@ -661,12 +669,6 @@ public final class DeviceConfig {
                 sListeners.remove(onPropertiesChangedListener);
             }
         }
-    }
-
-    private static String createCompositeName(@NonNull String namespace, @NonNull String name) {
-        Preconditions.checkNotNull(namespace);
-        Preconditions.checkNotNull(name);
-        return namespace + "/" + name;
     }
 
     private static Uri createNamespaceUri(@NonNull String namespace) {

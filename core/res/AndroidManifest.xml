@@ -4549,9 +4549,9 @@
         android:protectionLevel="signature" />
 
     <!-- @SystemApi Allows an application to turn on / off quiet mode.
-         @hide <p>Not for use by third-party applications. -->
+         @hide -->
     <permission android:name="android.permission.MODIFY_QUIET_MODE"
-                android:protectionLevel="signature|privileged" />
+                android:protectionLevel="signature|privileged|wellbeing" />
 
     <!-- Allows internal management of the camera framework
          @hide -->
@@ -4684,6 +4684,13 @@
     <permission android:name="android.permission.QUERY_ALL_PACKAGES"
                 android:protectionLevel="normal" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
+
+    <!-- @hide Allow the caller to collect debugging data from processes that otherwise
+        would require USAGE_STATS. Before sharing this data with other apps, holders
+        of this permission are REQUIRED to themselves check that the caller has
+        PACKAGE_USAGE_STATS and OP_GET_USAGE_STATS. -->
+    <permission android:name="android.permission.PEEK_DROPBOX_DATA"
+        android:protectionLevel="signature|privileged" />
 
     <application android:process="system"
                  android:persistent="true"

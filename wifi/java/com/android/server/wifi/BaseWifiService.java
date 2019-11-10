@@ -32,6 +32,7 @@ import android.net.wifi.ITrafficStateCallback;
 import android.net.wifi.ITxPacketCountListener;
 import android.net.wifi.IWifiManager;
 import android.net.wifi.ScanResult;
+import android.net.wifi.SoftApConfiguration;
 import android.net.wifi.WifiActivityEnergyInfo;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiDppConfig;
@@ -169,6 +170,11 @@ public class BaseWifiService extends IWifiManager.Stub {
     }
 
     @Override
+    public void allowAutojoin(int netId, boolean choice) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public boolean startScan(String packageName) {
         throw new UnsupportedOperationException();
     }
@@ -289,8 +295,15 @@ public class BaseWifiService extends IWifiManager.Stub {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    /** @deprecated replaced by newer signature */
+    @Deprecated
     public int startLocalOnlyHotspot(ILocalOnlyHotspotCallback callback, String packageName) {
+        return startLocalOnlyHotspot(callback, packageName, null);
+    }
+
+    @Override
+    public int startLocalOnlyHotspot(ILocalOnlyHotspotCallback callback, String packageName,
+            SoftApConfiguration customConfig) {
         throw new UnsupportedOperationException();
     }
 

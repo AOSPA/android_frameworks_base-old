@@ -424,18 +424,8 @@ public class TelephonyManager {
      * {@link #getActiveModemCount} returns 1 while this API returns 2.
      */
     public @ModemCount int getSupportedModemCount() {
-        // TODO: b/139642279 when turning on this feature, remove dependency of
-        // PROPERTY_REBOOT_REQUIRED_ON_MODEM_CHANGE and always return result based on
-        // PROPERTY_MAX_ACTIVE_MODEMS.
-        String rebootRequired = SystemProperties.get(
-                TelephonyProperties.PROPERTY_REBOOT_REQUIRED_ON_MODEM_CHANGE);
-        if (rebootRequired.equals("false")) {
-            // If no reboot is required, return max possible active modems.
-            return SystemProperties.getInt(
-                    TelephonyProperties.PROPERTY_MAX_ACTIVE_MODEMS, getPhoneCount());
-        } else {
-            return getPhoneCount();
-        }
+        return SystemProperties.getInt(TelephonyProperties.PROPERTY_MAX_ACTIVE_MODEMS,
+                getActiveModemCount());
     }
 
     /** {@hide} */
@@ -1884,7 +1874,12 @@ public class TelephonyManager {
         if (telephony == null) return null;
 
         try {
-            return telephony.getMeidForSlot(slotIndex, getOpPackageName());
+            String meid = telephony.getMeidForSlot(slotIndex, getOpPackageName());
+            if (TextUtils.isEmpty(meid)) {
+                Log.d(TAG, "getMeid: return null because MEID is not available");
+                return null;
+            }
+            return meid;
         } catch (RemoteException ex) {
             return null;
         } catch (NullPointerException ex) {
@@ -9523,10 +9518,12 @@ public class TelephonyManager {
     }
 
     /**
-     * Resets telephony manager settings back to factory defaults.
+     * Resets Telephony and IMS settings back to factory defaults.
      *
      * @hide
      */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.CONNECTIVITY_INTERNAL)
     public void factoryReset(int subId) {
         try {
             Log.d(TAG, "factoryReset: subId=" + subId);

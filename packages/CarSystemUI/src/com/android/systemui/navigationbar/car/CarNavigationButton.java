@@ -85,6 +85,7 @@ public class CarNavigationButton extends com.android.keyguard.AlphaOptimizedImag
         super.onFinishInflate();
         setScaleType(ImageView.ScaleType.CENTER);
         setAlpha(mUnselectedAlpha);
+        setImageResource(mIconResourceId);
         try {
             if (mIntent != null) {
                 final Intent intent = Intent.parseUri(mIntent, Intent.URI_INTENT_SCHEME);
@@ -147,6 +148,11 @@ public class CarNavigationButton extends com.android.keyguard.AlphaOptimizedImag
     public void setUnseen(boolean hasUnseen) {
         mHasUnseen = hasUnseen;
         updateImage();
+    }
+
+    /** Gets whether the icon is in an unseen state. */
+    public boolean getUnseen() {
+        return mHasUnseen;
     }
 
     private void updateImage() {

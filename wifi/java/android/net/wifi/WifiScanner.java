@@ -17,6 +17,7 @@
 package android.net.wifi;
 
 import android.Manifest;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
@@ -39,6 +40,8 @@ import com.android.internal.util.AsyncChannel;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.Protocol;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -51,26 +54,38 @@ import java.util.List;
 @SystemService(Context.WIFI_SCANNING_SERVICE)
 public class WifiScanner {
 
-    /** no band specified; use channel list instead */
-    public static final int WIFI_BAND_UNSPECIFIED = 0;      /* not specified */
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"WIFI_BAND_"}, value = {
+            WIFI_BAND_UNSPECIFIED,
+            WIFI_BAND_24_GHZ,
+            WIFI_BAND_5_GHZ,
+            WIFI_BAND_BOTH,
+            WIFI_BAND_5_GHZ_DFS_ONLY,
+            WIFI_BAND_24_GHZ_WITH_5GHZ_DFS,
+            WIFI_BAND_5_GHZ_WITH_DFS,
+            WIFI_BAND_BOTH_WITH_DFS})
+    public @interface WifiBand {}
 
+    /** no band specified; use channel list instead */
+    public static final int WIFI_BAND_UNSPECIFIED = 0;
     /** 2.4 GHz band */
-    public static final int WIFI_BAND_24_GHZ = 1;           /* 2.4 GHz band */
+    public static final int WIFI_BAND_24_GHZ = 1;
     /** 5 GHz band excluding DFS channels */
-    public static final int WIFI_BAND_5_GHZ = 2;            /* 5 GHz band without DFS channels */
+    public static final int WIFI_BAND_5_GHZ = 2;
+    /** Both 2.4 GHz band and 5 GHz band; no DFS channels */
+    public static final int WIFI_BAND_BOTH = 3;
     /** DFS channels from 5 GHz band only */
-    public static final int WIFI_BAND_5_GHZ_DFS_ONLY  = 4;  /* 5 GHz band DFS channels */
+    public static final int WIFI_BAND_5_GHZ_DFS_ONLY  = 4;
     /**
      * 2.4Ghz band + DFS channels from 5 GHz band only
      * @hide
      */
     public static final int WIFI_BAND_24_GHZ_WITH_5GHZ_DFS  = 5;
     /** 5 GHz band including DFS channels */
-    public static final int WIFI_BAND_5_GHZ_WITH_DFS  = 6;  /* 5 GHz band with DFS channels */
-    /** Both 2.4 GHz band and 5 GHz band; no DFS channels */
-    public static final int WIFI_BAND_BOTH = 3;             /* both bands without DFS channels */
+    public static final int WIFI_BAND_5_GHZ_WITH_DFS  = 6;
     /** Both 2.4 GHz band and 5 GHz band; with DFS channels */
-    public static final int WIFI_BAND_BOTH_WITH_DFS = 7;    /* both bands with DFS channels */
+    public static final int WIFI_BAND_BOTH_WITH_DFS = 7;
     /**
      * Max band value
      * @hide
@@ -78,9 +93,9 @@ public class WifiScanner {
     public static final int WIFI_BAND_MAX = 8;
 
     /** Minimum supported scanning period */
-    public static final int MIN_SCAN_PERIOD_MS = 1000;      /* minimum supported period */
+    public static final int MIN_SCAN_PERIOD_MS = 1000;
     /** Maximum supported scanning period */
-    public static final int MAX_SCAN_PERIOD_MS = 1024000;   /* maximum supported period */
+    public static final int MAX_SCAN_PERIOD_MS = 1024000;
 
     /** No Error */
     public static final int REASON_SUCCEEDED = 0;
@@ -109,16 +124,23 @@ public class WifiScanner {
     }
 
     /**
-     * gives you all the possible channels; channel is specified as an
-     * integer with frequency in MHz i.e. channel 1 is 2412
+     * Returns a list of all the possible channels for the given band(s).
+     *
+     * @param band one of the WifiScanner#WIFI_BAND_* constants, e.g. {@link #WIFI_BAND_24_GHZ}
+     * @return a list of all the frequencies, in MHz, for the given band(s) e.g. channel 1 is
+     * 2412, or null if an error occurred.
+     *
      * @hide
      */
-    public List<Integer> getAvailableChannels(int band) {
+    @SystemApi
+    @NonNull
+    @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE)
+    public List<Integer> getAvailableChannels(@WifiBand int band) {
         try {
-            Bundle bundle =  mService.getAvailableChannels(band);
+            Bundle bundle = mService.getAvailableChannels(band, mContext.getOpPackageName());
             return bundle.getIntegerArrayList(GET_AVAILABLE_CHANNELS_EXTRA);
         } catch (RemoteException e) {
-            return null;
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -321,7 +343,7 @@ public class WifiScanner {
         }
 
         /** Implement the Parcelable interface {@hide} */
-        public static final @android.annotation.NonNull Creator<ScanSettings> CREATOR =
+        public static final @NonNull Creator<ScanSettings> CREATOR =
                 new Creator<ScanSettings>() {
                     public ScanSettings createFromParcel(Parcel in) {
                         ScanSettings settings = new ScanSettings();
@@ -469,7 +491,7 @@ public class WifiScanner {
         }
 
         /** Implement the Parcelable interface {@hide} */
-        public static final @android.annotation.NonNull Creator<ScanData> CREATOR =
+        public static final @NonNull Creator<ScanData> CREATOR =
                 new Creator<ScanData>() {
                     public ScanData createFromParcel(Parcel in) {
                         int id = in.readInt();
@@ -518,7 +540,7 @@ public class WifiScanner {
         }
 
         /** Implement the Parcelable interface {@hide} */
-        public static final @android.annotation.NonNull Creator<ParcelableScanData> CREATOR =
+        public static final @NonNull Creator<ParcelableScanData> CREATOR =
                 new Creator<ParcelableScanData>() {
                     public ParcelableScanData createFromParcel(Parcel in) {
                         int n = in.readInt();
@@ -566,7 +588,7 @@ public class WifiScanner {
         }
 
         /** Implement the Parcelable interface {@hide} */
-        public static final @android.annotation.NonNull Creator<ParcelableScanResults> CREATOR =
+        public static final @NonNull Creator<ParcelableScanResults> CREATOR =
                 new Creator<ParcelableScanResults>() {
                     public ParcelableScanResults createFromParcel(Parcel in) {
                         int n = in.readInt();
@@ -697,7 +719,7 @@ public class WifiScanner {
         }
 
         /** Implement the Parcelable interface {@hide} */
-        public static final @android.annotation.NonNull Creator<PnoSettings> CREATOR =
+        public static final @NonNull Creator<PnoSettings> CREATOR =
                 new Creator<PnoSettings>() {
                     public PnoSettings createFromParcel(Parcel in) {
                         PnoSettings settings = new PnoSettings();
@@ -1045,7 +1067,7 @@ public class WifiScanner {
         }
 
         /** Implement the Parcelable interface {@hide} */
-        public static final @android.annotation.NonNull Creator<WifiChangeSettings> CREATOR =
+        public static final @NonNull Creator<WifiChangeSettings> CREATOR =
                 new Creator<WifiChangeSettings>() {
                     public WifiChangeSettings createFromParcel(Parcel in) {
                         return new WifiChangeSettings();
@@ -1156,7 +1178,7 @@ public class WifiScanner {
         }
 
         /** Implement the Parcelable interface {@hide} */
-        public static final @android.annotation.NonNull Creator<HotlistSettings> CREATOR =
+        public static final @NonNull Creator<HotlistSettings> CREATOR =
                 new Creator<HotlistSettings>() {
                     public HotlistSettings createFromParcel(Parcel in) {
                         HotlistSettings settings = new HotlistSettings();
@@ -1389,7 +1411,7 @@ public class WifiScanner {
         }
 
         /** Implement the Parcelable interface {@hide} */
-        public static final @android.annotation.NonNull Creator<OperationResult> CREATOR =
+        public static final @NonNull Creator<OperationResult> CREATOR =
                 new Creator<OperationResult>() {
                     public OperationResult createFromParcel(Parcel in) {
                         int reason = in.readInt();
