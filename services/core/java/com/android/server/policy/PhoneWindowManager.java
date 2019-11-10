@@ -516,6 +516,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     boolean mVolBtnMusicControls;
     boolean mVolBtnLongPress;
 
+    private boolean mAdaptivePlayback;
+
     private boolean mPendingKeyguardOccluded;
     private boolean mKeyguardOccludedChanged;
     private boolean mNotifyUserActivity;
@@ -873,6 +875,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.VOLBTN_MUSIC_CONTROLS), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.ADAPTIVE_PLAYBACK_ENABLED), false, this,
                     UserHandle.USER_ALL);
             updateSettings();
         }
@@ -2234,6 +2239,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mVolBtnMusicControls = Settings.System.getIntForUser(resolver,
                     Settings.System.VOLBTN_MUSIC_CONTROLS,
                     1, UserHandle.USER_CURRENT) == 1;
+            mAdaptivePlayback = Settings.System.getIntForUser(resolver,
+                    Settings.System.ADAPTIVE_PLAYBACK_ENABLED,
+                    0, UserHandle.USER_CURRENT) == 1;
 
             //Three Finger Gesture
             boolean threeFingerGesture = Settings.System.getIntForUser(resolver,
@@ -4172,7 +4180,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             // on key down events
                             mayChangeVolume = down;
                         }
-                    } else {
+                    } else if (mAdaptivePlayback) {
                         result |= ACTION_PASS_TO_USER;
                         break;
                     }
@@ -4555,7 +4563,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         boolean isDozing = isDozeMode();
-         if (isDozing && isVolumeKey(keyCode)) {
+        if (isDozing && isVolumeKey(keyCode)) {
             return false;
         }
 
