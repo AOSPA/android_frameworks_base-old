@@ -4660,6 +4660,16 @@ public final class Settings {
                 BOOLEAN_VALIDATOR;
 
         /**
+         *  Media AutoPause
+         *  Automatically pause media when the volume is muted and
+         *  will resume automatically when volume is restored.
+         *    0 = disabled
+         *    1 = enabled
+         * @hide
+         */
+        public static final String MEDIA_AUTO_PAUSE = "media_auto_pause";
+
+        /**
          * Whether allowing pocket service to register sensors and dispatch informations.
          *   0 = disabled
          *   1 = enabled
