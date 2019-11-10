@@ -58,12 +58,14 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.io.PrintWriter;
 import java.util.function.Consumer;
 
-class Task extends WindowContainer<AppWindowToken> implements ConfigurationContainerListener{
+class Task extends WindowContainer<ActivityRecord> implements ConfigurationContainerListener{
     static final String TAG = TAG_WITH_CLASS_NAME ? "Task" : TAG_WM;
 
     // TODO: Track parent marks like this in WindowContainer.
     TaskStack mStack;
+    /* Unique identifier for this task. */
     final int mTaskId;
+    /* User for which this task was created. */
     final int mUserId;
     private boolean mDeferRemoval = false;
 
@@ -97,6 +99,8 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
     private boolean mDragResizing;
     private int mDragResizeMode;
 
+    // This represents the last resolved activity values for this task
+    // NOTE: This value needs to be persisted with each task
     private TaskDescription mTaskDescription;
 
     // If set to true, the task will report that it is not in the floating
@@ -114,6 +118,16 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
     // TODO: remove after unification
     TaskRecord mTaskRecord;
 
+    // TODO: Remove after unification.
+    @Override
+    public void onConfigurationChanged(Configuration newParentConfig, boolean forwardToChildren) {
+        // Forward configuration changes in cases
+        // - children won't get it from TaskRecord
+        // - it's a pinned task
+        forwardToChildren &= (mTaskRecord == null) || inPinnedWindowingMode();
+        super.onConfigurationChanged(newParentConfig, forwardToChildren);
+    }
+
     Task(int taskId, TaskStack stack, int userId, WindowManagerService service, int resizeMode,
             boolean supportsPictureInPicture, TaskDescription taskDescription,
             TaskRecord taskRecord) {
@@ -124,16 +138,17 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
         mResizeMode = resizeMode;
         mSupportsPictureInPicture = supportsPictureInPicture;
         mTaskRecord = taskRecord;
-        if (mTaskRecord != null) {
-            // This can be null when we call createTaskInStack in WindowTestUtils. Remove this after
-            // unification.
-            mTaskRecord.registerConfigurationChangeListener(this);
-        }
-        setBounds(getRequestedOverrideBounds());
         mTaskDescription = taskDescription;
 
         // Tasks have no set orientation value (including SCREEN_ORIENTATION_UNSPECIFIED).
         setOrientation(SCREEN_ORIENTATION_UNSET);
+        if (mTaskRecord != null) {
+            // This can be null when we call createTaskInStack in WindowTestUtils. Remove this after
+            // unification.
+            mTaskRecord.registerConfigurationChangeListener(this);
+        } else {
+            setBounds(getResolvedOverrideBounds());
+        }
     }
 
     @Override
@@ -158,14 +173,14 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
     }
 
     @Override
-    void addChild(AppWindowToken wtoken, int position) {
+    void addChild(ActivityRecord child, int position) {
         position = getAdjustedAddPosition(position);
-        super.addChild(wtoken, position);
+        super.addChild(child, position);
         mDeferRemoval = false;
     }
 
     @Override
-    void positionChildAt(int position, AppWindowToken child, boolean includingParents) {
+    void positionChildAt(int position, ActivityRecord child, boolean includingParents) {
         position = getAdjustedAddPosition(position);
         super.positionChildAt(position, child, includingParents);
         mDeferRemoval = false;
@@ -267,16 +282,16 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
     }
 
     @Override
-    void removeChild(AppWindowToken token) {
-        if (!mChildren.contains(token)) {
+    void removeChild(ActivityRecord child) {
+        if (!mChildren.contains(child)) {
             Slog.e(TAG, "removeChild: token=" + this + " not found.");
             return;
         }
 
-        super.removeChild(token);
+        super.removeChild(child);
 
         if (mChildren.isEmpty()) {
-            EventLog.writeEvent(WM_TASK_REMOVED, mTaskId, "removeAppToken: last token");
+            EventLog.writeEvent(WM_TASK_REMOVED, mTaskId, "removeActivity: last activity");
             if (mDeferRemoval) {
                 removeIfPossible();
             }
@@ -398,7 +413,7 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
 
     /**
      * Prepares the task bounds to be frozen with the current size. See
-     * {@link AppWindowToken#freezeBounds}.
+     * {@link ActivityRecord#freezeBounds}.
      */
     void prepareFreezingBounds() {
         mPreparedFrozenBounds.set(getBounds());
@@ -459,7 +474,7 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
     private boolean getMaxVisibleBounds(Rect out) {
         boolean foundTop = false;
         for (int i = mChildren.size() - 1; i >= 0; i--) {
-            final AppWindowToken token = mChildren.get(i);
+            final ActivityRecord token = mChildren.get(i);
             // skip hidden (or about to hide) apps
             if (token.mIsExiting || token.isClientHidden() || token.hiddenRequested) {
                 continue;
@@ -611,7 +626,7 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
 
     @Override
     public SurfaceControl getAnimationLeashParent() {
-        if (!WindowManagerService.sHierarchicalAnimations) {
+        if (WindowManagerService.sHierarchicalAnimations) {
             return super.getAnimationLeashParent();
         }
         // Currently, only the recents animation will create animation leashes for tasks. In this
@@ -636,24 +651,24 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
     }
 
     WindowState getTopVisibleAppMainWindow() {
-        final AppWindowToken token = getTopVisibleAppToken();
-        return token != null ? token.findMainWindow() : null;
+        final ActivityRecord activity = getTopVisibleActivity();
+        return activity != null ? activity.findMainWindow() : null;
     }
 
-    AppWindowToken getTopFullscreenAppToken() {
+    ActivityRecord getTopFullscreenActivity() {
         for (int i = mChildren.size() - 1; i >= 0; i--) {
-            final AppWindowToken token = mChildren.get(i);
-            final WindowState win = token.findMainWindow();
+            final ActivityRecord activity = mChildren.get(i);
+            final WindowState win = activity.findMainWindow();
             if (win != null && win.mAttrs.isFullscreen()) {
-                return token;
+                return activity;
             }
         }
         return null;
     }
 
-    AppWindowToken getTopVisibleAppToken() {
+    ActivityRecord getTopVisibleActivity() {
         for (int i = mChildren.size() - 1; i >= 0; i--) {
-            final AppWindowToken token = mChildren.get(i);
+            final ActivityRecord token = mChildren.get(i);
             // skip hidden (or about to hide) apps
             if (!token.mIsExiting && !token.isClientHidden() && !token.hiddenRequested) {
                 return token;
@@ -662,18 +677,18 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
         return null;
     }
 
-    void positionChildAtTop(AppWindowToken aToken) {
-        positionChildAt(aToken, POSITION_TOP);
+    void positionChildAtTop(ActivityRecord child) {
+        positionChildAt(child, POSITION_TOP);
     }
 
-    void positionChildAt(AppWindowToken aToken, int position) {
-        if (aToken == null) {
+    void positionChildAt(ActivityRecord child, int position) {
+        if (child == null) {
             Slog.w(TAG_WM,
                     "Attempted to position of non-existing app");
             return;
         }
 
-        positionChildAt(position, aToken, false /* includeParents */);
+        positionChildAt(position, child, false /* includeParents */);
     }
 
     void forceWindowsScaleable(boolean force) {
@@ -771,8 +786,8 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
         super.writeToProto(proto, WINDOW_CONTAINER, logLevel);
         proto.write(ID, mTaskId);
         for (int i = mChildren.size() - 1; i >= 0; i--) {
-            final AppWindowToken appWindowToken = mChildren.get(i);
-            appWindowToken.writeToProto(proto, APP_WINDOW_TOKENS, logLevel);
+            final ActivityRecord activity = mChildren.get(i);
+            activity.writeToProto(proto, APP_WINDOW_TOKENS, logLevel);
         }
         proto.write(FILLS_PARENT, matchParentBounds());
         getBounds().writeToProto(proto, BOUNDS);
@@ -798,9 +813,9 @@ class Task extends WindowContainer<AppWindowToken> implements ConfigurationConta
         final String quadruplePrefix = triplePrefix + "  ";
 
         for (int i = mChildren.size() - 1; i >= 0; i--) {
-            final AppWindowToken wtoken = mChildren.get(i);
-            pw.println(triplePrefix + "Activity #" + i + " " + wtoken);
-            wtoken.dump(pw, quadruplePrefix, dumpAll);
+            final ActivityRecord activity = mChildren.get(i);
+            pw.println(triplePrefix + "Activity #" + i + " " + activity);
+            activity.dump(pw, quadruplePrefix, dumpAll);
         }
     }
 

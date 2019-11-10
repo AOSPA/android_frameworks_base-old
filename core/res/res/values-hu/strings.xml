@@ -344,6 +344,8 @@
     <string name="permdesc_receiveSms" msgid="6424387754228766939">"Lehetővé teszi az alkalmazás számára, hogy SMS-eket fogadjon és dolgozzon fel. Ez azt jelenti, hogy az alkalmazás megfigyelheti vagy törölheti a beérkező üzeneteket anélkül, hogy Ön látná azokat."</string>
     <string name="permlab_receiveMms" msgid="1821317344668257098">"szöveges üzenetek (MMS) fogadása"</string>
     <string name="permdesc_receiveMms" msgid="533019437263212260">"Lehetővé teszi az alkalmazás számára, hogy MMS-eket fogadjon és dolgozzon fel. Ez azt jelenti, hogy az alkalmazás megfigyelheti vagy törölheti a beérkező üzeneteket anélkül, hogy Ön látná azokat."</string>
+    <string name="permlab_bindCellBroadcastService" msgid="4468585041824555604">"Cellán belüli üzenetek továbbítása"</string>
+    <string name="permdesc_bindCellBroadcastService" msgid="9073440260695196089">"Az alkalmazás összekapcsolódhat a cellán belüli üzenetszórás moduljával, hogy az érkezésükkor továbbítani tudja a cellán belüli üzeneteket. Bizonyos helyeken figyelmeztető üzeneteket kaphat a cellán belül a vészhelyzetekről. A rosszindulatú alkalmazások vészhelyzeti cellaüzenet érkezésekor befolyásolhatják az eszköz teljesítményét és működését."</string>
     <string name="permlab_readCellBroadcasts" msgid="1598328843619646166">"cellán belüli üzenetek olvasása"</string>
     <string name="permdesc_readCellBroadcasts" msgid="6361972776080458979">"Lehetővé teszi az alkalmazás számára az eszközre érkező cellán belüli üzenetek olvasását. Bizonyos helyeken figyelmeztető üzeneteket kaphat a cellán belül a vészhelyzetekről. A rosszindulatú alkalmazások befolyásolhatják az eszköz  teljesítményét vagy működését vészhelyzeti cellaüzenet érkezésekor."</string>
     <string name="permlab_subscribedFeedsRead" msgid="4756609637053353318">"feliratkozott hírcsatornák olvasása"</string>
@@ -1361,6 +1363,8 @@
     <string name="adb_active_notification_message" product="tv" msgid="8470296818270110396">"Válassza ezt az USB hibakeresés kikapcsolásához."</string>
     <string name="test_harness_mode_notification_title" msgid="2216359742631914387">"Tesztelési alapkörnyezet mód engedélyezve"</string>
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"A Tesztelési alapkörnyezet mód kikapcsolásához állítsa vissza a gyári beállításokat."</string>
+    <string name="console_running_notification_title" msgid="4955436518220103382">"Soros konzol engedélyezve"</string>
+    <string name="console_running_notification_message" msgid="1331995933976263865">"Ez hatással van a teljesítményre. A letiltáshoz ellenőrizze a rendszerindítót."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"Folyadék vagy szennyeződés az USB-portban"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB-port automatikusan letiltva. Koppintson, ha további információra van szüksége."</string>
     <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"Az USB-port rendben használható"</string>
@@ -1890,10 +1894,8 @@
     <string name="default_notification_channel_label" msgid="5929663562028088222">"Nincs kategóriába sorolva"</string>
     <string name="importance_from_user" msgid="7318955817386549931">"Ön állította be ezen értesítések fontossági szintjét."</string>
     <string name="importance_from_person" msgid="9160133597262938296">"Ez az üzenet a résztvevők miatt fontos."</string>
-    <!-- no translation found for user_creation_account_exists (6559477114648176531) -->
-    <skip />
-    <!-- no translation found for user_creation_adding (9089159170398841763) -->
-    <skip />
+    <string name="user_creation_account_exists" msgid="6559477114648176531">"Engedélyezi a(z) <xliff:g id="APP">%1$s</xliff:g> számára, hogy új felhasználót hozzon létre a(z) <xliff:g id="ACCOUNT">%2$s</xliff:g> fiókkal? (Már létezik felhasználó ezzel a fiókkal.)"</string>
+    <string name="user_creation_adding" msgid="9089159170398841763">"Engedélyezi a(z) <xliff:g id="APP">%1$s</xliff:g> számára, hogy új felhasználót hozzon létre a(z) <xliff:g id="ACCOUNT">%2$s</xliff:g> fiókkal?"</string>
     <string name="language_selection_title" msgid="2680677278159281088">"Nyelv hozzáadása"</string>
     <string name="country_selection_title" msgid="2954859441620215513">"Régió beállítása"</string>
     <string name="search_language_hint" msgid="7042102592055108574">"Adja meg a nyelvet"</string>

@@ -21,9 +21,11 @@ import static com.android.systemui.statusbar.phone.ScrimController.SEMI_TRANSPAR
 import static com.android.systemui.statusbar.phone.ScrimController.TRANSPARENT;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -33,8 +35,8 @@ import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 import android.animation.Animator;
-import android.animation.ValueAnimator;
 import android.app.AlarmManager;
+import android.content.res.Resources;
 import android.graphics.Color;
 import android.os.Handler;
 import android.testing.AndroidTestingRunner;
@@ -44,12 +46,13 @@ import android.view.View;
 import androidx.test.filters.SmallTest;
 
 import com.android.internal.colorextraction.ColorExtractor.GradientColors;
-import com.android.internal.util.function.TriConsumer;
 import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.systemui.DejankUtils;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.statusbar.ScrimView;
-import com.android.systemui.statusbar.policy.KeyguardMonitor;
-import com.android.systemui.util.wakelock.WakeLock;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.util.wakelock.DelayedWakeLock;
 import com.android.systemui.utils.os.FakeHandler;
 
 import org.junit.After;
@@ -57,17 +60,20 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.mockito.stubbing.Answer;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.function.Consumer;
 
 @RunWith(AndroidTestingRunner.class)
 @TestableLooper.RunWithLooper
 @SmallTest
 public class ScrimControllerTest extends SysuiTestCase {
 
-    private SynchronousScrimController mScrimController;
+    private ScrimController mScrimController;
     private ScrimView mScrimBehind;
     private ScrimView mScrimInFront;
     private ScrimView mScrimForBubble;
@@ -75,50 +81,159 @@ public class ScrimControllerTest extends SysuiTestCase {
     private float mScrimBehindAlpha;
     private GradientColors mScrimInFrontColor;
     private int mScrimVisibility;
-    private DozeParameters mDozeParamenters;
-    private WakeLock mWakeLock;
     private boolean mAlwaysOnEnabled;
-    private AlarmManager mAlarmManager;
     private TestableLooper mLooper;
+    @Mock
+    private AlarmManager mAlarmManager;
+    @Mock
+    private DozeParameters mDozeParamenters;
+    @Mock
+    LightBarController mLightBarController;
+    @Mock
+    Resources mResources;
+    @Mock
+    DelayedWakeLock.Builder mDelayedWakeLockBuilder;
+    @Mock
+    private DelayedWakeLock mWakeLock;
+    @Mock
+    KeyguardStateController mKeyguardStateController;
+    @Mock
+    KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    @Mock
+    private SysuiColorExtractor mSysuiColorExtractor;
 
+
+    private static class AnimatorListener implements Animator.AnimatorListener {
+        private int mNumStarts;
+        private int mNumEnds;
+        private int mNumCancels;
+
+        @Override
+        public void onAnimationStart(Animator animation) {
+            mNumStarts++;
+        }
+
+        @Override
+        public void onAnimationEnd(Animator animation) {
+            mNumEnds++;
+        }
+
+        @Override
+        public void onAnimationCancel(Animator animation) {
+            mNumCancels++;
+        }
+
+        @Override
+        public void onAnimationRepeat(Animator animation) {
+
+        }
+
+        public int getNumStarts() {
+            return mNumStarts;
+        }
+
+        public int getNumEnds() {
+            return mNumEnds;
+        }
+
+        public int getNumCancels() {
+            return mNumCancels;
+        }
+
+        public void reset() {
+            mNumStarts = 0;
+            mNumEnds = 0;
+            mNumCancels = 0;
+        }
+    };
+
+    private AnimatorListener mAnimatorListener = new AnimatorListener();
+
+
+    private void finishAnimationsImmediately() {
+        // Execute code that will trigger animations.
+        mScrimController.onPreDraw();
+        // Force finish all animations.
+        mLooper.processAllMessages();
+        endAnimation(mScrimBehind);
+        endAnimation(mScrimInFront);
+        endAnimation(mScrimForBubble);
+
+        Assert.assertEquals("Animators did not finish",
+                mAnimatorListener.getNumStarts(), mAnimatorListener.getNumEnds());
+    }
+
+    private void endAnimation(View scrimView) {
+        Animator animator = getAnimator(scrimView);
+        if (animator != null) {
+            animator.end();
+        }
+    }
+
+    private Animator getAnimator(View scrimView) {
+        return (Animator) scrimView.getTag(ScrimController.TAG_KEY_ANIM);
+    }
 
     @Before
     public void setup() {
+        MockitoAnnotations.initMocks(this);
+
         mScrimBehind = spy(new ScrimView(getContext()));
         mScrimInFront = new ScrimView(getContext());
         mScrimForBubble = new ScrimView(getContext());
-        mWakeLock = mock(WakeLock.class);
-        mAlarmManager = mock(AlarmManager.class);
         mAlwaysOnEnabled = true;
-        mDozeParamenters = mock(DozeParameters.class);
         mLooper = TestableLooper.get(this);
-        mDependency.injectMockDependency(KeyguardUpdateMonitor.class);
+        DejankUtils.setImmediate(true);
+
+        // ScrimController uses mScrimBehind to delay some callbacks that we should run immediately.
+        doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(0)).run();
+            return null;
+        }).when(mScrimBehind).postOnAnimationDelayed(any(Runnable.class), anyLong());
+
         when(mDozeParamenters.getAlwaysOn()).thenAnswer(invocation -> mAlwaysOnEnabled);
         when(mDozeParamenters.getDisplayNeedsBlanking()).thenReturn(true);
-        mScrimController = new SynchronousScrimController(mScrimBehind, mScrimInFront,
-                mScrimForBubble,
-                (scrimState, scrimBehindAlpha, scrimInFrontColor) -> {
-                    mScrimState = scrimState;
-                    mScrimBehindAlpha = scrimBehindAlpha;
-                    mScrimInFrontColor = scrimInFrontColor;
-                },
-                visible -> mScrimVisibility = visible, mDozeParamenters, mAlarmManager,
-                mock(KeyguardMonitor.class));
+
+        doAnswer((Answer<Void>) invocation -> {
+            mScrimState = invocation.getArgument(0);
+            mScrimBehindAlpha = invocation.getArgument(1);
+            mScrimInFrontColor = invocation.getArgument(2);
+            return null;
+        }).when(mLightBarController).setScrimState(
+                any(ScrimState.class), anyFloat(), any(GradientColors.class));
+
+        when(mDelayedWakeLockBuilder.setHandler(any(Handler.class)))
+                .thenReturn(mDelayedWakeLockBuilder);
+        when(mDelayedWakeLockBuilder.setTag(any(String.class)))
+                .thenReturn(mDelayedWakeLockBuilder);
+        when(mDelayedWakeLockBuilder.build()).thenReturn(mWakeLock);
+
+        when(mSysuiColorExtractor.getNeutralColors()).thenReturn(new GradientColors());
+
+        mScrimController = new ScrimController(mLightBarController,
+                mDozeParamenters, mAlarmManager, mKeyguardStateController,
+                mResources, mDelayedWakeLockBuilder,
+                new FakeHandler(mLooper.getLooper()), mKeyguardUpdateMonitor, mSysuiColorExtractor);
+        mScrimController.setScrimVisibleListener(visible -> mScrimVisibility = visible);
+        mScrimController.attachViews(mScrimBehind, mScrimInFront, mScrimForBubble);
+        mScrimController.setAnimatorListener(mAnimatorListener);
+
         mScrimController.setHasBackdrop(false);
         mScrimController.setWallpaperSupportsAmbientMode(false);
         mScrimController.transitionTo(ScrimState.KEYGUARD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
     }
 
     @After
     public void tearDown() {
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
+        DejankUtils.setImmediate(false);
     }
 
     @Test
     public void transitionToKeyguard() {
         mScrimController.transitionTo(ScrimState.KEYGUARD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         assertScrimAlpha(TRANSPARENT /* front */,
                 SEMI_TRANSPARENT /* back */,
@@ -130,9 +245,23 @@ public class ScrimControllerTest extends SysuiTestCase {
     }
 
     @Test
+    public void transitionToOff() {
+        mScrimController.transitionTo(ScrimState.OFF);
+        finishAnimationsImmediately();
+
+        assertScrimAlpha(OPAQUE /* front */,
+                OPAQUE /* back */,
+                TRANSPARENT /* bubble */);
+
+        assertScrimTint(true /* front */,
+                true /* behind */,
+                false /* bubble */);
+    }
+
+    @Test
     public void transitionToAod_withRegularWallpaper() {
         mScrimController.transitionTo(ScrimState.AOD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         assertScrimAlpha(TRANSPARENT /* front */,
                 OPAQUE /* back */,
@@ -147,7 +276,7 @@ public class ScrimControllerTest extends SysuiTestCase {
     public void transitionToAod_withAodWallpaper() {
         mScrimController.setWallpaperSupportsAmbientMode(true);
         mScrimController.transitionTo(ScrimState.AOD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         assertScrimAlpha(TRANSPARENT /* front */,
                 TRANSPARENT /* back */,
@@ -155,7 +284,7 @@ public class ScrimControllerTest extends SysuiTestCase {
 
         // Pulsing notification should conserve AOD wallpaper.
         mScrimController.transitionTo(ScrimState.PULSING);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         assertScrimAlpha(TRANSPARENT /* front */,
                 TRANSPARENT /* back */,
@@ -167,7 +296,7 @@ public class ScrimControllerTest extends SysuiTestCase {
         mScrimController.setHasBackdrop(true);
         mScrimController.setWallpaperSupportsAmbientMode(true);
         mScrimController.transitionTo(ScrimState.AOD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         assertScrimAlpha(TRANSPARENT /* front */,
                 OPAQUE /* back */,
@@ -182,9 +311,9 @@ public class ScrimControllerTest extends SysuiTestCase {
     public void setHasBackdrop_withAodWallpaperAndAlbumArt() {
         mScrimController.setWallpaperSupportsAmbientMode(true);
         mScrimController.transitionTo(ScrimState.AOD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         mScrimController.setHasBackdrop(true);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         assertScrimAlpha(TRANSPARENT /* front */,
                 OPAQUE /* back */,
@@ -200,7 +329,7 @@ public class ScrimControllerTest extends SysuiTestCase {
         // Assert that setting the AOD front scrim alpha doesn't take effect in a non-AOD state.
         mScrimController.transitionTo(ScrimState.KEYGUARD);
         mScrimController.setAodFrontScrimAlpha(0.5f);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         assertScrimAlpha(TRANSPARENT /* front */,
                 SEMI_TRANSPARENT /* back */,
@@ -208,7 +337,7 @@ public class ScrimControllerTest extends SysuiTestCase {
 
         // ... but that it does take effect once we enter the AOD state.
         mScrimController.transitionTo(ScrimState.AOD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         assertScrimAlpha(SEMI_TRANSPARENT /* front */,
                 OPAQUE /* back */,
                 TRANSPARENT /* bubble */);
@@ -223,7 +352,7 @@ public class ScrimControllerTest extends SysuiTestCase {
         // for a bit.
         mScrimController.transitionTo(ScrimState.UNLOCKED);
         mScrimController.transitionTo(ScrimState.AOD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         assertScrimAlpha(OPAQUE /* front */,
                 OPAQUE /* back */,
                 TRANSPARENT /* bubble */);
@@ -233,7 +362,7 @@ public class ScrimControllerTest extends SysuiTestCase {
         mAlwaysOnEnabled = false;
         mScrimController.transitionTo(ScrimState.UNLOCKED);
         mScrimController.transitionTo(ScrimState.AOD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         mScrimController.setAodFrontScrimAlpha(0.3f);
         Assert.assertEquals(ScrimState.AOD.getFrontAlpha(), mScrimInFront.getViewAlpha(), 0.001f);
         Assert.assertNotEquals(0.3f, mScrimInFront.getViewAlpha(), 0.001f);
@@ -249,13 +378,13 @@ public class ScrimControllerTest extends SysuiTestCase {
         // the back scrim opacity - otherwise it would hide AoD wallpapers.
         mScrimController.setWallpaperSupportsAmbientMode(false);
         mScrimController.transitionTo(ScrimState.AOD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         assertScrimAlpha(TRANSPARENT /* front */,
                 OPAQUE /* back */,
                 TRANSPARENT /* bubble */);
 
         mScrimController.transitionTo(ScrimState.PULSING);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         // Front scrim should be transparent, but tinted
         // Back scrim should be semi-transparent so the user can see the wallpaper
         // Pulse callback should have been invoked
@@ -269,14 +398,14 @@ public class ScrimControllerTest extends SysuiTestCase {
 
         // ... and when ambient goes dark, front scrim should be semi-transparent
         mScrimController.setAodFrontScrimAlpha(0.5f);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         // Front scrim should be semi-transparent
         assertScrimAlpha(SEMI_TRANSPARENT /* front */,
                 OPAQUE /* back */,
                 TRANSPARENT /* bubble */);
 
         mScrimController.setWakeLockScreenSensorActive(true);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         assertScrimAlpha(SEMI_TRANSPARENT /* front */,
                 SEMI_TRANSPARENT /* back */,
                 TRANSPARENT /* bubble */);
@@ -288,7 +417,7 @@ public class ScrimControllerTest extends SysuiTestCase {
     @Test
     public void transitionToKeyguardBouncer() {
         mScrimController.transitionTo(ScrimState.BOUNCER);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         // Front scrim should be transparent
         // Back scrim should be visible without tint
         assertScrimAlpha(TRANSPARENT /* front */,
@@ -303,7 +432,7 @@ public class ScrimControllerTest extends SysuiTestCase {
     @Test
     public void transitionToBouncer() {
         mScrimController.transitionTo(ScrimState.BOUNCER_SCRIMMED);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         // Front scrim should be transparent
         // Back scrim should be visible without tint
         assertScrimAlpha(SEMI_TRANSPARENT /* front */,
@@ -318,7 +447,7 @@ public class ScrimControllerTest extends SysuiTestCase {
     public void transitionToUnlocked() {
         mScrimController.setPanelExpansion(0f);
         mScrimController.transitionTo(ScrimState.UNLOCKED);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         assertScrimAlpha(TRANSPARENT /* front */,
                 TRANSPARENT /* back */,
                 TRANSPARENT /* bubble */);
@@ -337,7 +466,7 @@ public class ScrimControllerTest extends SysuiTestCase {
     @Test
     public void transitionToBubbleExpanded() {
         mScrimController.transitionTo(ScrimState.BUBBLE_EXPANDED);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         assertScrimTint(false /* front */,
                 false /* behind */,
@@ -357,15 +486,15 @@ public class ScrimControllerTest extends SysuiTestCase {
     @Test
     public void scrimStateCallback() {
         mScrimController.transitionTo(ScrimState.UNLOCKED);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         Assert.assertEquals(mScrimState, ScrimState.UNLOCKED);
 
         mScrimController.transitionTo(ScrimState.BOUNCER);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         Assert.assertEquals(mScrimState, ScrimState.BOUNCER);
 
         mScrimController.transitionTo(ScrimState.BOUNCER_SCRIMMED);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         Assert.assertEquals(mScrimState, ScrimState.BOUNCER_SCRIMMED);
     }
 
@@ -374,18 +503,18 @@ public class ScrimControllerTest extends SysuiTestCase {
         mScrimController.setPanelExpansion(0f);
         mScrimController.setPanelExpansion(0.5f);
         mScrimController.transitionTo(ScrimState.UNLOCKED);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         reset(mScrimBehind);
         mScrimController.setPanelExpansion(0f);
         mScrimController.setPanelExpansion(1.0f);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         Assert.assertEquals("Scrim alpha should change after setPanelExpansion",
                 mScrimBehindAlpha, mScrimBehind.getViewAlpha(), 0.01f);
 
         mScrimController.setPanelExpansion(0f);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         Assert.assertEquals("Scrim alpha should change after setPanelExpansion",
                 mScrimBehindAlpha, mScrimBehind.getViewAlpha(), 0.01f);
@@ -396,7 +525,7 @@ public class ScrimControllerTest extends SysuiTestCase {
         mScrimController.setPanelExpansion(0f);
         mScrimController.setPanelExpansion(0.5f);
         mScrimController.transitionTo(ScrimState.UNLOCKED);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         final float scrimAlpha = mScrimBehind.getViewAlpha();
         reset(mScrimBehind);
@@ -408,7 +537,7 @@ public class ScrimControllerTest extends SysuiTestCase {
 
         mScrimController.setExpansionAffectsAlpha(true);
         mScrimController.setPanelExpansion(0.1f);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         Assert.assertNotEquals("Scrim opacity should change when setExpansionAffectsAlpha "
                 + "is true", scrimAlpha, mScrimBehind.getViewAlpha(), 0.01f);
     }
@@ -418,7 +547,7 @@ public class ScrimControllerTest extends SysuiTestCase {
         // Simulate unlock with fingerprint
         mScrimController.transitionTo(ScrimState.AOD);
         mScrimController.setPanelExpansion(0f);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         mScrimController.transitionTo(ScrimState.UNLOCKED);
 
         // Immediately tinted black after the transition starts
@@ -426,13 +555,14 @@ public class ScrimControllerTest extends SysuiTestCase {
                 true /* behind */,
                 true  /* bubble */);
 
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         // All scrims should be transparent at the end of fade transition.
         assertScrimAlpha(TRANSPARENT /* front */,
                 TRANSPARENT /* behind */,
                 TRANSPARENT /* bubble */);
 
+        // Make sure at the very end of the animation, we're reset to transparent
         assertScrimTint(false /* front */,
                 false /* behind */,
                 false  /* bubble */);
@@ -442,7 +572,7 @@ public class ScrimControllerTest extends SysuiTestCase {
     public void scrimBlanksBeforeLeavingAod() {
         // Simulate unlock with fingerprint
         mScrimController.transitionTo(ScrimState.AOD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         mScrimController.transitionTo(ScrimState.UNLOCKED,
                 new ScrimController.Callback() {
                     @Override
@@ -457,7 +587,7 @@ public class ScrimControllerTest extends SysuiTestCase {
                                 mScrimVisibility, OPAQUE);
                     }
                 });
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
     }
 
     @Test
@@ -465,7 +595,7 @@ public class ScrimControllerTest extends SysuiTestCase {
         boolean[] blanked = {false};
         // Simulate unlock with fingerprint
         mScrimController.transitionTo(ScrimState.PULSING);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         mScrimController.transitionTo(ScrimState.UNLOCKED,
                 new ScrimController.Callback() {
                     @Override
@@ -473,7 +603,7 @@ public class ScrimControllerTest extends SysuiTestCase {
                         blanked[0] = true;
                     }
                 });
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         Assert.assertTrue("Scrim should blank when unlocking from pulse.", blanked[0]);
     }
 
@@ -497,7 +627,7 @@ public class ScrimControllerTest extends SysuiTestCase {
                 callOrder[2] = ++currentCall[0];
             }
         });
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         Assert.assertEquals("onStart called in wrong order", 1, callOrder[0]);
         Assert.assertEquals("onDisplayBlanked called in wrong order", 2, callOrder[1]);
         Assert.assertEquals("onFinished called in wrong order", 3, callOrder[2]);
@@ -527,21 +657,21 @@ public class ScrimControllerTest extends SysuiTestCase {
         mScrimController.transitionTo(ScrimState.AOD);
         verify(mWakeLock).acquire(anyString());
         verify(mWakeLock, never()).release(anyString());
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         verify(mWakeLock).release(anyString());
     }
 
     @Test
     public void testDoesNotHoldWakeLock_whenUnlocking() {
         mScrimController.transitionTo(ScrimState.UNLOCKED);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         verifyZeroInteractions(mWakeLock);
     }
 
     @Test
     public void testCallbackInvokedOnSameStateTransition() {
         mScrimController.transitionTo(ScrimState.UNLOCKED);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         ScrimController.Callback callback = mock(ScrimController.Callback.class);
         mScrimController.transitionTo(ScrimState.UNLOCKED, callback);
         verify(callback).onFinished();
@@ -551,13 +681,13 @@ public class ScrimControllerTest extends SysuiTestCase {
     public void testHoldsAodWallpaperAnimationLock() {
         // Pre-conditions
         mScrimController.transitionTo(ScrimState.AOD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         reset(mWakeLock);
 
         mScrimController.onHideWallpaperTimeout();
         verify(mWakeLock).acquire(anyString());
         verify(mWakeLock, never()).release(anyString());
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         verify(mWakeLock).release(anyString());
     }
 
@@ -565,13 +695,13 @@ public class ScrimControllerTest extends SysuiTestCase {
     public void testHoldsPulsingWallpaperAnimationLock() {
         // Pre-conditions
         mScrimController.transitionTo(ScrimState.PULSING);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         reset(mWakeLock);
 
         mScrimController.onHideWallpaperTimeout();
         verify(mWakeLock).acquire(anyString());
         verify(mWakeLock, never()).release(anyString());
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         verify(mWakeLock).release(anyString());
     }
 
@@ -620,29 +750,29 @@ public class ScrimControllerTest extends SysuiTestCase {
     public void testConservesExpansionOpacityAfterTransition() {
         mScrimController.transitionTo(ScrimState.UNLOCKED);
         mScrimController.setPanelExpansion(0.5f);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         final float expandedAlpha = mScrimBehind.getViewAlpha();
 
         mScrimController.transitionTo(ScrimState.BRIGHTNESS_MIRROR);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         mScrimController.transitionTo(ScrimState.UNLOCKED);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
 
         Assert.assertEquals("Scrim expansion opacity wasn't conserved when transitioning back",
                 expandedAlpha, mScrimBehind.getViewAlpha(), 0.01f);
     }
 
     @Test
-    public void cancelsOldAnimationBeforeBlanking() {
+    public void testCancelsOldAnimationBeforeBlanking() {
         mScrimController.transitionTo(ScrimState.AOD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         // Consume whatever value we had before
-        mScrimController.wasAnimationJustCancelled();
+        mAnimatorListener.reset();
 
         mScrimController.transitionTo(ScrimState.KEYGUARD);
-        mScrimController.finishAnimationsImmediately();
-        Assert.assertTrue(mScrimController.wasAnimationJustCancelled());
+        finishAnimationsImmediately();
+        Assert.assertTrue("Animators not canceled", mAnimatorListener.getNumCancels() != 0);
     }
 
     @Test
@@ -661,13 +791,13 @@ public class ScrimControllerTest extends SysuiTestCase {
         mScrimController.setWallpaperSupportsAmbientMode(true);
         mScrimController.setKeyguardOccluded(true);
         mScrimController.transitionTo(ScrimState.AOD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         assertScrimAlpha(TRANSPARENT /* front */,
                 OPAQUE /* behind */,
                 TRANSPARENT /* bubble */);
 
         mScrimController.transitionTo(ScrimState.PULSING);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         assertScrimAlpha(TRANSPARENT /* front */,
                 OPAQUE /* behind */,
                 TRANSPARENT /* bubble */);
@@ -677,13 +807,13 @@ public class ScrimControllerTest extends SysuiTestCase {
     public void testHidesShowWhenLockedActivity_whenAlreadyInAod() {
         mScrimController.setWallpaperSupportsAmbientMode(true);
         mScrimController.transitionTo(ScrimState.AOD);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         assertScrimAlpha(TRANSPARENT /* front */,
                 TRANSPARENT /* behind */,
                 TRANSPARENT /* bubble */);
 
         mScrimController.setKeyguardOccluded(true);
-        mScrimController.finishAnimationsImmediately();
+        finishAnimationsImmediately();
         assertScrimAlpha(TRANSPARENT /* front */,
                 OPAQUE /* behind */,
                 TRANSPARENT /* bubble */);
@@ -698,7 +828,7 @@ public class ScrimControllerTest extends SysuiTestCase {
                 continue;
             }
             mScrimController.transitionTo(state);
-            mScrimController.finishAnimationsImmediately();
+            finishAnimationsImmediately();
             Assert.assertEquals("Should be clickable unless AOD or PULSING, was: " + state,
                     mScrimBehind.getViewAlpha() != 0 && !eatsTouches.contains(state),
                     mScrimBehind.isClickable());
@@ -727,6 +857,22 @@ public class ScrimControllerTest extends SysuiTestCase {
                 mScrimBehind.getDefaultFocusHighlightEnabled());
         Assert.assertFalse("Scrim shouldn't have focus highlight",
                 mScrimForBubble.getDefaultFocusHighlightEnabled());
+    }
+
+    @Test
+    public void testIsLowPowerMode() {
+        HashSet<ScrimState> lowPowerModeStates = new HashSet<>(Arrays.asList(
+                ScrimState.OFF, ScrimState.AOD, ScrimState.PULSING));
+        HashSet<ScrimState> regularStates = new HashSet<>(Arrays.asList(
+                ScrimState.UNINITIALIZED, ScrimState.KEYGUARD, ScrimState.BOUNCER,
+                ScrimState.BOUNCER_SCRIMMED, ScrimState.BRIGHTNESS_MIRROR, ScrimState.UNLOCKED,
+                ScrimState.BUBBLE_EXPANDED));
+
+        for (ScrimState state : ScrimState.values()) {
+            if (!lowPowerModeStates.contains(state) && !regularStates.contains(state)) {
+                Assert.fail("Scrim state not whitelisted nor blacklisted as low power mode");
+            }
+        }
     }
 
     private void assertScrimTint(boolean front, boolean behind, boolean bubble) {
@@ -787,84 +933,5 @@ public class ScrimControllerTest extends SysuiTestCase {
         Assert.assertEquals("Invalid visibility.",
                 visibility /* expected */,
                 mScrimVisibility);
-    }
-
-    /**
-     * Special version of ScrimController where animations have 0 duration for test purposes.
-     */
-    private class SynchronousScrimController extends ScrimController {
-
-        private boolean mAnimationCancelled;
-        boolean mOnPreDrawCalled;
-
-        SynchronousScrimController(ScrimView scrimBehind, ScrimView scrimInFront,
-                ScrimView scrimForBubble,
-                TriConsumer<ScrimState, Float, GradientColors> scrimStateListener,
-                Consumer<Integer> scrimVisibleListener, DozeParameters dozeParameters,
-                AlarmManager alarmManager, KeyguardMonitor keyguardMonitor) {
-            super(scrimBehind, scrimInFront, scrimForBubble, scrimStateListener,
-                    scrimVisibleListener, dozeParameters, alarmManager, keyguardMonitor);
-        }
-
-        @Override
-        public boolean onPreDraw() {
-            mOnPreDrawCalled = true;
-            return super.onPreDraw();
-        }
-
-        void finishAnimationsImmediately() {
-            boolean[] animationFinished = {false};
-            setOnAnimationFinished(() -> animationFinished[0] = true);
-            // Execute code that will trigger animations.
-            onPreDraw();
-            // Force finish all animations.
-            mLooper.processAllMessages();
-            endAnimation(mScrimBehind, TAG_KEY_ANIM);
-            endAnimation(mScrimInFront, TAG_KEY_ANIM);
-            endAnimation(mScrimForBubble, TAG_KEY_ANIM);
-
-            if (!animationFinished[0]) {
-                throw new IllegalStateException("Animation never finished");
-            }
-        }
-
-        boolean wasAnimationJustCancelled() {
-            final boolean wasCancelled = mAnimationCancelled;
-            mAnimationCancelled = false;
-            return wasCancelled;
-        }
-
-        private void endAnimation(View scrimView, int tag) {
-            Animator animator = (Animator) scrimView.getTag(tag);
-            if (animator != null) {
-                animator.end();
-            }
-        }
-
-        @Override
-        protected void cancelAnimator(ValueAnimator previousAnimator) {
-            super.cancelAnimator(previousAnimator);
-            mAnimationCancelled = true;
-        }
-
-        @Override
-        protected Handler getHandler() {
-            return new FakeHandler(mLooper.getLooper());
-        }
-
-        @Override
-        protected WakeLock createWakeLock() {
-            return mWakeLock;
-        }
-
-        /**
-         * Do not wait for a frame since we're in a test environment.
-         *
-         * @param callback What to execute.
-         */
-        @Override
-        protected void doOnTheNextFrame(Runnable callback) {
-            callback.run();
-        }
     }
 }

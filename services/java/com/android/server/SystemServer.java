@@ -91,6 +91,7 @@ import com.android.server.broadcastradio.BroadcastRadioService;
 import com.android.server.camera.CameraServiceProxy;
 import com.android.server.clipboard.ClipboardService;
 import com.android.server.compat.PlatformCompat;
+import com.android.server.compat.PlatformCompatNative;
 import com.android.server.connectivity.IpConnectivityMetrics;
 import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.coverage.CoverageService;
@@ -142,7 +143,6 @@ import com.android.server.security.KeyAttestationApplicationIdProviderService;
 import com.android.server.security.KeyChainSystemService;
 import com.android.server.signedconfig.SignedConfigService;
 import com.android.server.soundtrigger.SoundTriggerService;
-import com.android.server.stats.StatsCompanionService;
 import com.android.server.statusbar.StatusBarManagerService;
 import com.android.server.storage.DeviceStorageMonitorService;
 import com.android.server.telecom.TelecomLoaderService;
@@ -206,6 +206,8 @@ public final class SystemServer {
             "com.android.server.print.PrintManagerService";
     private static final String COMPANION_DEVICE_MANAGER_SERVICE_CLASS =
             "com.android.server.companion.CompanionDeviceManagerService";
+    private static final String STATS_COMPANION_SERVICE_LIFECYCLE_CLASS =
+            "com.android.server.stats.StatsCompanionService$Lifecycle";
     private static final String USB_SERVICE_CLASS =
             "com.android.server.usb.UsbService$Lifecycle";
     private static final String MIDI_SERVICE_CLASS =
@@ -504,7 +506,7 @@ public final class SystemServer {
                     mRuntimeStartElapsedTime, mRuntimeStartUptime);
             LocalServices.addService(SystemServiceManager.class, mSystemServiceManager);
             // Prepare the thread pool for init tasks that can be parallelized
-            SystemServerInitThreadPool.get();
+            SystemServerInitThreadPool.start();
         } finally {
             t.traceEnd();  // InitBeforeStartServices
         }
@@ -638,14 +640,16 @@ public final class SystemServer {
         Slog.i(TAG, "Reading configuration...");
         final String TAG_SYSTEM_CONFIG = "ReadingSystemConfig";
         t.traceBegin(TAG_SYSTEM_CONFIG);
-        SystemServerInitThreadPool.get().submit(SystemConfig::getInstance, TAG_SYSTEM_CONFIG);
+        SystemServerInitThreadPool.submit(SystemConfig::getInstance, TAG_SYSTEM_CONFIG);
         t.traceEnd();
 
         // Platform compat service is used by ActivityManagerService, PackageManagerService, and
         // possibly others in the future. b/135010838.
         t.traceBegin("PlatformCompat");
-        ServiceManager.addService(Context.PLATFORM_COMPAT_SERVICE,
-                new PlatformCompat(mSystemContext));
+        PlatformCompat platformCompat = new PlatformCompat(mSystemContext);
+        ServiceManager.addService(Context.PLATFORM_COMPAT_SERVICE, platformCompat);
+        ServiceManager.addService(Context.PLATFORM_COMPAT_NATIVE_SERVICE,
+                new PlatformCompatNative(platformCompat));
         t.traceEnd();
 
         // Wait for installd to finish starting up so that it has a chance to
@@ -807,7 +811,7 @@ public final class SystemServer {
 
         // Manages Overlay packages
         t.traceBegin("StartOverlayManagerService");
-        mSystemServiceManager.startService(new OverlayManagerService(mSystemContext, installer));
+        mSystemServiceManager.startService(new OverlayManagerService(mSystemContext));
         t.traceEnd();
 
         t.traceBegin("StartSensorPrivacyService");
@@ -824,7 +828,7 @@ public final class SystemServer {
         // service, and permissions service, therefore we start it after them.
         // Start sensor service in a separate thread. Completion should be checked
         // before using it.
-        mSensorServiceStart = SystemServerInitThreadPool.get().submit(() -> {
+        mSensorServiceStart = SystemServerInitThreadPool.submit(() -> {
             TimingsTraceAndSlog traceLog = TimingsTraceAndSlog.newAsyncLog();
             traceLog.traceBegin(START_SENSOR_SERVICE);
             startSensorService();
@@ -926,7 +930,6 @@ public final class SystemServer {
                 false);
         boolean disableCameraService = SystemProperties.getBoolean("config.disable_cameraservice",
                 false);
-        boolean disableSlices = SystemProperties.getBoolean("config.disable_slices", false);
         boolean enableLeftyService = SystemProperties.getBoolean("config.enable_lefty", false);
 
         boolean isEmulator = SystemProperties.get("ro.kernel.qemu").equals("1");
@@ -952,7 +955,7 @@ public final class SystemServer {
             // ensure that it completes before the 32 bit relro process is forked
             // from the zygote. In the event that it takes too long, the webview
             // RELRO process will block, but it will do so without holding any locks.
-            mZygotePreload = SystemServerInitThreadPool.get().submit(() -> {
+            mZygotePreload = SystemServerInitThreadPool.submit(() -> {
                 try {
                     Slog.i(TAG, SECONDARY_ZYGOTE_PRELOAD);
                     TimingsTraceAndSlog traceLog = TimingsTraceAndSlog.newAsyncLog();
@@ -1064,7 +1067,7 @@ public final class SystemServer {
             // Start receiving calls from HIDL services. Start in in a separate thread
             // because it need to connect to SensorManager. This have to start
             // after START_SENSOR_SERVICE is done.
-            SystemServerInitThreadPool.get().submit(() -> {
+            SystemServerInitThreadPool.submit(() -> {
                 TimingsTraceAndSlog traceLog = TimingsTraceAndSlog.newAsyncLog();
                 traceLog.traceBegin(START_HIDL_SERVICES);
                 startHidlServices();
@@ -1890,7 +1893,7 @@ public final class SystemServer {
             t.traceEnd();
         }
 
-        if (!disableSlices) {
+        if (!mPackageManager.hasSystemFeature(PackageManager.FEATURE_SLICES_DISABLED)) {
             t.traceBegin("StartSliceManagerService");
             mSystemServiceManager.startService(SLICE_MANAGER_SERVICE_CLASS);
             t.traceEnd();
@@ -1910,7 +1913,7 @@ public final class SystemServer {
 
         // Statsd helper
         t.traceBegin("StartStatsCompanionService");
-        mSystemServiceManager.startService(StatsCompanionService.Lifecycle.class);
+        mSystemServiceManager.startService(STATS_COMPANION_SERVICE_LIFECYCLE_CLASS);
         t.traceEnd();
 
         // Incidentd and dumpstated helper
@@ -2103,7 +2106,7 @@ public final class SystemServer {
             final String WEBVIEW_PREPARATION = "WebViewFactoryPreparation";
             Future<?> webviewPrep = null;
             if (!mOnlyCore && mWebViewUpdateService != null) {
-                webviewPrep = SystemServerInitThreadPool.get().submit(() -> {
+                webviewPrep = SystemServerInitThreadPool.submit(() -> {
                     Slog.i(TAG, WEBVIEW_PREPARATION);
                     TimingsTraceAndSlog traceLog = TimingsTraceAndSlog.newAsyncLog();
                     traceLog.traceBegin(WEBVIEW_PREPARATION);

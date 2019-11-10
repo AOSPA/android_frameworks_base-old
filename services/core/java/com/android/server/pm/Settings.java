@@ -205,9 +205,22 @@ public final class Settings {
     private static final String TAG_DEFAULT_BROWSER = "default-browser";
     private static final String TAG_DEFAULT_DIALER = "default-dialer";
     private static final String TAG_VERSION = "version";
+    /**
+     * @deprecated Moved to {@link android.content.pm.PackageUserState.SuspendParams}
+     */
+    @Deprecated
     private static final String TAG_SUSPENDED_DIALOG_INFO = "suspended-dialog-info";
+    /**
+     * @deprecated Moved to {@link android.content.pm.PackageUserState.SuspendParams}
+     */
+    @Deprecated
     private static final String TAG_SUSPENDED_APP_EXTRAS = "suspended-app-extras";
+    /**
+     * @deprecated Moved to {@link android.content.pm.PackageUserState.SuspendParams}
+     */
+    @Deprecated
     private static final String TAG_SUSPENDED_LAUNCHER_EXTRAS = "suspended-launcher-extras";
+    private static final String TAG_SUSPEND_PARAMS = "suspend-params";
 
     public static final String ATTR_NAME = "name";
     public static final String ATTR_PACKAGE = "package";
@@ -541,10 +554,6 @@ public final class Settings {
         return null;
     }
 
-    void addAppOpPackage(String permName, String packageName) {
-        mPermissions.addAppOpPackage(permName, packageName);
-    }
-
     SharedUserSetting addSharedUserLPw(String name, int uid, int pkgFlags, int pkgPrivateFlags) {
         SharedUserSetting s = mSharedUsers.get(name);
         if (s != null) {
@@ -660,10 +669,7 @@ public final class Settings {
                                 false /*hidden*/,
                                 0 /*distractionFlags*/,
                                 false /*suspended*/,
-                                null /*suspendingPackage*/,
-                                null /*dialogInfo*/,
-                                null /*suspendedAppExtras*/,
-                                null /*suspendedLauncherExtras*/,
+                                null /*suspendParams*/,
                                 instantApp,
                                 virtualPreload,
                                 null /*lastDisableAppCaller*/,
@@ -1042,13 +1048,7 @@ public final class Settings {
             return;
         }
         for (int i = 0; i < mPackages.size(); i++) {
-            final PackageSetting ps = mPackages.valueAt(i);
-            final String installerPackageName = ps.getInstallerPackageName();
-            if (installerPackageName != null
-                    && installerPackageName.equals(packageName)) {
-                ps.setInstallerPackageName(null);
-                ps.isOrphaned = true;
-            }
+            mPackages.valueAt(i).removeInstallerPackage(packageName);
         }
         mInstallerPackages.remove(packageName);
     }
@@ -1550,10 +1550,7 @@ public final class Settings {
                                 false /*hidden*/,
                                 0 /*distractionFlags*/,
                                 false /*suspended*/,
-                                null /*suspendingPackage*/,
-                                null /*dialogInfo*/,
-                                null /*suspendedAppExtras*/,
-                                null /*suspendedLauncherExtras*/,
+                                null /*suspendParams*/,
                                 false /*instantApp*/,
                                 false /*virtualPreload*/,
                                 null /*lastDisableAppCaller*/,
@@ -1628,12 +1625,12 @@ public final class Settings {
                             ATTR_DISTRACTION_FLAGS, 0);
                     final boolean suspended = XmlUtils.readBooleanAttribute(parser, ATTR_SUSPENDED,
                             false);
-                    String suspendingPackage = parser.getAttributeValue(null,
+                    String oldSuspendingPackage = parser.getAttributeValue(null,
                             ATTR_SUSPENDING_PACKAGE);
                     final String dialogMessage = parser.getAttributeValue(null,
                             ATTR_SUSPEND_DIALOG_MESSAGE);
-                    if (suspended && suspendingPackage == null) {
-                        suspendingPackage = PLATFORM_PACKAGE_NAME;
+                    if (suspended && oldSuspendingPackage == null) {
+                        oldSuspendingPackage = PLATFORM_PACKAGE_NAME;
                     }
 
                     final boolean blockUninstall = XmlUtils.readBooleanAttribute(parser,
@@ -1663,9 +1660,10 @@ public final class Settings {
                     ArraySet<String> disabledComponents = null;
                     PersistableBundle suspendedAppExtras = null;
                     PersistableBundle suspendedLauncherExtras = null;
-                    SuspendDialogInfo suspendDialogInfo = null;
+                    SuspendDialogInfo oldSuspendDialogInfo = null;
 
                     int packageDepth = parser.getDepth();
+                    ArrayMap<String, PackageUserState.SuspendParams> suspendParamsMap = null;
                     while ((type=parser.next()) != XmlPullParser.END_DOCUMENT
                             && (type != XmlPullParser.END_TAG
                             || parser.getDepth() > packageDepth)) {
@@ -1687,26 +1685,48 @@ public final class Settings {
                                 suspendedLauncherExtras = PersistableBundle.restoreFromXml(parser);
                                 break;
                             case TAG_SUSPENDED_DIALOG_INFO:
-                                suspendDialogInfo = SuspendDialogInfo.restoreFromXml(parser);
+                                oldSuspendDialogInfo = SuspendDialogInfo.restoreFromXml(parser);
+                                break;
+                            case TAG_SUSPEND_PARAMS:
+                                final String suspendingPackage = parser.getAttributeValue(null,
+                                        ATTR_SUSPENDING_PACKAGE);
+                                if (suspendingPackage == null) {
+                                    Slog.wtf(TAG, "No suspendingPackage found inside tag "
+                                            + TAG_SUSPEND_PARAMS);
+                                    continue;
+                                }
+                                if (suspendParamsMap == null) {
+                                    suspendParamsMap = new ArrayMap<>();
+                                }
+                                suspendParamsMap.put(suspendingPackage,
+                                        PackageUserState.SuspendParams.restoreFromXml(parser));
                                 break;
                             default:
                                 Slog.wtf(TAG, "Unknown tag " + parser.getName() + " under tag "
                                         + TAG_PACKAGE);
                         }
                     }
-                    if (suspendDialogInfo == null && !TextUtils.isEmpty(dialogMessage)) {
-                        suspendDialogInfo = new SuspendDialogInfo.Builder()
+                    if (oldSuspendDialogInfo == null && !TextUtils.isEmpty(dialogMessage)) {
+                        oldSuspendDialogInfo = new SuspendDialogInfo.Builder()
                                 .setMessage(dialogMessage)
                                 .build();
+                    }
+                    if (suspended && suspendParamsMap == null) {
+                        final PackageUserState.SuspendParams suspendParams =
+                                PackageUserState.SuspendParams.getInstanceOrNull(
+                                        oldSuspendDialogInfo,
+                                        suspendedAppExtras,
+                                        suspendedLauncherExtras);
+                        suspendParamsMap = new ArrayMap<>();
+                        suspendParamsMap.put(oldSuspendingPackage, suspendParams);
                     }
 
                     if (blockUninstall) {
                         setBlockUninstallLPw(userId, name, true);
                     }
                     ps.setUserState(userId, ceDataInode, enabled, installed, stopped, notLaunched,
-                            hidden, distractionFlags, suspended, suspendingPackage,
-                            suspendDialogInfo,
-                            suspendedAppExtras, suspendedLauncherExtras, instantApp, virtualPreload,
+                            hidden, distractionFlags, suspended, suspendParamsMap,
+                            instantApp, virtualPreload,
                             enabledCaller, enabledComponents, disabledComponents, verifState,
                             linkGeneration, installReason, harmfulAppWarning);
                 } else if (tagName.equals("preferred-activities")) {
@@ -2006,35 +2026,6 @@ public final class Settings {
                 }
                 if (ustate.suspended) {
                     serializer.attribute(null, ATTR_SUSPENDED, "true");
-                    if (ustate.suspendingPackage != null) {
-                        serializer.attribute(null, ATTR_SUSPENDING_PACKAGE,
-                                ustate.suspendingPackage);
-                    }
-                    if (ustate.dialogInfo != null) {
-                        serializer.startTag(null, TAG_SUSPENDED_DIALOG_INFO);
-                        ustate.dialogInfo.saveToXml(serializer);
-                        serializer.endTag(null, TAG_SUSPENDED_DIALOG_INFO);
-                    }
-                    if (ustate.suspendedAppExtras != null) {
-                        serializer.startTag(null, TAG_SUSPENDED_APP_EXTRAS);
-                        try {
-                            ustate.suspendedAppExtras.saveToXml(serializer);
-                        } catch (XmlPullParserException xmle) {
-                            Slog.wtf(TAG, "Exception while trying to write suspendedAppExtras for "
-                                    + pkg + ". Will be lost on reboot", xmle);
-                        }
-                        serializer.endTag(null, TAG_SUSPENDED_APP_EXTRAS);
-                    }
-                    if (ustate.suspendedLauncherExtras != null) {
-                        serializer.startTag(null, TAG_SUSPENDED_LAUNCHER_EXTRAS);
-                        try {
-                            ustate.suspendedLauncherExtras.saveToXml(serializer);
-                        } catch (XmlPullParserException xmle) {
-                            Slog.wtf(TAG, "Exception while trying to write suspendedLauncherExtras"
-                                    + " for " + pkg + ". Will be lost on reboot", xmle);
-                        }
-                        serializer.endTag(null, TAG_SUSPENDED_LAUNCHER_EXTRAS);
-                    }
                 }
                 if (ustate.instantApp) {
                     serializer.attribute(null, ATTR_INSTANT_APP, "true");
@@ -2066,6 +2057,19 @@ public final class Settings {
                 if (ustate.harmfulAppWarning != null) {
                     serializer.attribute(null, ATTR_HARMFUL_APP_WARNING,
                             ustate.harmfulAppWarning);
+                }
+                if (ustate.suspended) {
+                    for (int i = 0; i < ustate.suspendParams.size(); i++) {
+                        final String suspendingPackage = ustate.suspendParams.keyAt(i);
+                        serializer.startTag(null, TAG_SUSPEND_PARAMS);
+                        serializer.attribute(null, ATTR_SUSPENDING_PACKAGE, suspendingPackage);
+                        final PackageUserState.SuspendParams params =
+                                ustate.suspendParams.valueAt(i);
+                        if (params != null) {
+                            params.saveToXml(serializer);
+                        }
+                        serializer.endTag(null, TAG_SUSPEND_PARAMS);
+                    }
                 }
                 if (!ArrayUtils.isEmpty(ustate.enabledComponents)) {
                     serializer.startTag(null, TAG_ENABLED_COMPONENTS);
@@ -2834,18 +2838,21 @@ public final class Settings {
         if (pkg.uidError) {
             serializer.attribute(null, "uidError", "true");
         }
-        if (pkg.installerPackageName != null) {
-            serializer.attribute(null, "installer", pkg.installerPackageName);
+        InstallSource installSource = pkg.installSource;
+        if (installSource.installerPackageName != null) {
+            serializer.attribute(null, "installer", installSource.installerPackageName);
         }
-        if (pkg.isOrphaned) {
+        if (installSource.isOrphaned) {
             serializer.attribute(null, "isOrphaned", "true");
+        }
+        if (installSource.initiatingPackageName != null) {
+            serializer.attribute(null, "installInitiator", installSource.initiatingPackageName);
         }
         if (pkg.volumeUuid != null) {
             serializer.attribute(null, "volumeUuid", pkg.volumeUuid);
         }
         if (pkg.categoryHint != ApplicationInfo.CATEGORY_UNDEFINED) {
-            serializer.attribute(null, "categoryHint",
-                    Integer.toString(pkg.categoryHint));
+            serializer.attribute(null, "categoryHint", Integer.toString(pkg.categoryHint));
         }
         if (pkg.parentPackageName != null) {
             serializer.attribute(null, "parentPackageName", pkg.parentPackageName);
@@ -2860,8 +2867,7 @@ public final class Settings {
 
         pkg.signatures.writeXml(serializer, "sigs", mPastSignatures);
 
-        writePermissionsLPr(serializer, pkg.getPermissionsState()
-                    .getInstallPermissionStates());
+        writePermissionsLPr(serializer, pkg.getPermissionsState().getInstallPermissionStates());
 
         writeSigningKeySetLPr(serializer, pkg.keySetData);
         writeUpgradeKeySetsLPr(serializer, pkg.keySetData);
@@ -3599,6 +3605,7 @@ public final class Settings {
         String systemStr = null;
         String installerPackageName = null;
         String isOrphaned = null;
+        String installInitiatingPackageName = null;
         String volumeUuid = null;
         String categoryHintString = null;
         String updateAvailable = null;
@@ -3645,6 +3652,7 @@ public final class Settings {
             }
             installerPackageName = parser.getAttributeValue(null, "installer");
             isOrphaned = parser.getAttributeValue(null, "isOrphaned");
+            installInitiatingPackageName = parser.getAttributeValue(null, "installInitiator");
             volumeUuid = parser.getAttributeValue(null, "volumeUuid");
             categoryHintString = parser.getAttributeValue(null, "categoryHint");
             if (categoryHintString != null) {
@@ -3799,8 +3807,8 @@ public final class Settings {
         }
         if (packageSetting != null) {
             packageSetting.uidError = "true".equals(uidError);
-            packageSetting.installerPackageName = installerPackageName;
-            packageSetting.isOrphaned = "true".equals(isOrphaned);
+            packageSetting.installSource = InstallSource.create(
+                    installInitiatingPackageName, installerPackageName, "true".equals(isOrphaned));
             packageSetting.volumeUuid = volumeUuid;
             packageSetting.categoryHint = categoryHint;
             packageSetting.legacyNativeLibraryPathString = legacyNativeLibraryPathStr;
@@ -4014,8 +4022,9 @@ public final class Settings {
         }
     }
 
-    void createNewUserLI(@NonNull PackageManagerService service,
-            @NonNull Installer installer, int userHandle, String[] disallowedPackages) {
+    void createNewUserLI(@NonNull PackageManagerService service, @NonNull Installer installer,
+            @UserIdInt int userHandle, @Nullable Set<String> installablePackages,
+            String[] disallowedPackages) {
         final TimingsTraceAndSlog t = new TimingsTraceAndSlog(TAG + "Timing",
                 Trace.TRACE_TAG_PACKAGE_MANAGER);
         t.traceBegin("createNewUser-" + userHandle);
@@ -4025,6 +4034,7 @@ public final class Settings {
         String[] seinfos;
         int[] targetSdkVersions;
         int packagesCount;
+        final boolean skipPackageWhitelist = installablePackages == null;
         synchronized (mLock) {
             Collection<PackageSetting> packages = mPackages.values();
             packagesCount = packages.size();
@@ -4040,6 +4050,7 @@ public final class Settings {
                     continue;
                 }
                 final boolean shouldInstall = ps.isSystem() &&
+                        (skipPackageWhitelist || installablePackages.contains(ps.name)) &&
                         !ArrayUtils.contains(disallowedPackages, ps.name) &&
                         !ps.pkg.applicationInfo.hiddenUntilInstalled;
                 // Only system apps are initially installed.
@@ -4240,7 +4251,7 @@ public final class Settings {
         if (pkg == null) {
             throw new IllegalArgumentException("Unknown package: " + packageName);
         }
-        return pkg.installerPackageName;
+        return pkg.installSource.installerPackageName;
     }
 
     boolean isOrphaned(String packageName) {
@@ -4248,7 +4259,7 @@ public final class Settings {
         if (pkg == null) {
             throw new IllegalArgumentException("Unknown package: " + packageName);
         }
-        return pkg.isOrphaned;
+        return pkg.installSource.isOrphaned;
     }
 
     int getApplicationEnabledSettingLPr(String packageName, int userId) {
@@ -4301,8 +4312,9 @@ public final class Settings {
             pkgSetting.setStopped(stopped, userId);
             // pkgSetting.pkg.mSetStopped = stopped;
             if (pkgSetting.getNotLaunched(userId)) {
-                if (pkgSetting.installerPackageName != null) {
-                    pm.notifyFirstLaunch(pkgSetting.name, pkgSetting.installerPackageName, userId);
+                if (pkgSetting.installSource.installerPackageName != null) {
+                    pm.notifyFirstLaunch(pkgSetting.name,
+                            pkgSetting.installSource.installerPackageName, userId);
                 }
                 pkgSetting.setNotLaunched(false, userId);
             }
@@ -4465,7 +4477,8 @@ public final class Settings {
             pw.print(",");
             pw.print(ps.lastUpdateTime);
             pw.print(",");
-            pw.print(ps.installerPackageName != null ? ps.installerPackageName : "?");
+            pw.print(ps.installSource.installerPackageName != null
+                    ? ps.installSource.installerPackageName : "?");
             pw.println();
             if (ps.pkg != null) {
                 pw.print(checkinTag); pw.print("-"); pw.print("splt,");
@@ -4678,9 +4691,9 @@ public final class Settings {
         pw.print(prefix); pw.print("  lastUpdateTime=");
             date.setTime(ps.lastUpdateTime);
             pw.println(sdf.format(date));
-        if (ps.installerPackageName != null) {
+        if (ps.installSource.installerPackageName != null) {
             pw.print(prefix); pw.print("  installerPackageName=");
-                    pw.println(ps.installerPackageName);
+            pw.println(ps.installSource.installerPackageName);
         }
         if (ps.volumeUuid != null) {
             pw.print(prefix); pw.print("  volumeUuid=");
@@ -4763,13 +4776,6 @@ public final class Settings {
             pw.print(ps.getHidden(user.id));
             pw.print(" suspended=");
             pw.print(ps.getSuspended(user.id));
-            if (ps.getSuspended(user.id)) {
-                final PackageUserState pus = ps.readUserState(user.id);
-                pw.print(" suspendingPackage=");
-                pw.print(pus.suspendingPackage);
-                pw.print(" dialogInfo=");
-                pw.print(pus.dialogInfo);
-            }
             pw.print(" stopped=");
             pw.print(ps.getStopped(user.id));
             pw.print(" notLaunched=");
@@ -4780,6 +4786,23 @@ public final class Settings {
             pw.print(ps.getInstantApp(user.id));
             pw.print(" virtual=");
             pw.println(ps.getVirtulalPreload(user.id));
+
+            if (ps.getSuspended(user.id)) {
+                pw.print(prefix);
+                pw.println("  Suspend params:");
+                final PackageUserState pus = ps.readUserState(user.id);
+                for (int i = 0; i < pus.suspendParams.size(); i++) {
+                    pw.print(prefix);
+                    pw.print("    suspendingPackage=");
+                    pw.print(pus.suspendParams.keyAt(i));
+                    final PackageUserState.SuspendParams params = pus.suspendParams.valueAt(i);
+                    if (params != null) {
+                        pw.print(" dialogInfo=");
+                        pw.print(params.dialogInfo);
+                    }
+                    pw.println();
+                }
+            }
 
             String[] overlayPaths = ps.getOverlayPaths(user.id);
             if (overlayPaths != null && overlayPaths.length > 0) {

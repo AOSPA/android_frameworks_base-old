@@ -45,6 +45,7 @@ import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
+import android.graphics.BLASTBufferQueue;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.FrameInfo;
@@ -91,6 +92,7 @@ import android.view.SurfaceControl.Transaction;
 import android.view.View.AttachInfo;
 import android.view.View.FocusDirection;
 import android.view.View.MeasureSpec;
+import android.view.WindowInsets.Type.InsetType;
 import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
@@ -168,6 +170,8 @@ public final class ViewRootImpl implements ViewParent,
      * this, WindowCallbacks will not fire.
      */
     private static final boolean MT_RENDERER_AVAILABLE = true;
+
+    private static final boolean USE_BLAST_BUFFERQUEUE = false;
 
     /**
      * If set to 2, the view system will switch from using rectangles retrieved from window to
@@ -474,6 +478,9 @@ public final class ViewRootImpl implements ViewParent,
     @UnsupportedAppUsage
     public final Surface mSurface = new Surface();
     private final SurfaceControl mSurfaceControl = new SurfaceControl();
+    private SurfaceControl mBlastSurfaceControl;
+
+    private BLASTBufferQueue mBlastBufferQueue;
 
     /**
      * Transaction object that can be used to synchronize child SurfaceControl changes with
@@ -1283,6 +1290,11 @@ public final class ViewRootImpl implements ViewParent,
             }
             mWindowAttributes.privateFlags |= compatibleWindowFlag;
 
+            if (USE_BLAST_BUFFERQUEUE) {
+                mWindowAttributes.privateFlags =
+                    WindowManager.LayoutParams.PRIVATE_FLAG_USE_BLAST;
+            }
+
             if (mWindowAttributes.preservePreviousSurfaceInsets) {
                 // Restore old surface insets.
                 mWindowAttributes.surfaceInsets.set(
@@ -1630,6 +1642,29 @@ public final class ViewRootImpl implements ViewParent,
         return mBoundsLayer;
     }
 
+    Surface getOrCreateBLASTSurface(int width, int height) {
+        if (mSurfaceControl == null || !mSurfaceControl.isValid()) {
+            return null;
+        }
+        if (mBlastSurfaceControl == null) {
+            mBlastSurfaceControl = new SurfaceControl.Builder(mSurfaceSession)
+            .setParent(mSurfaceControl)
+            .setName("BLAST")
+            .setBLASTLayer()
+            .build();
+            mBlastBufferQueue = new BLASTBufferQueue(
+                mBlastSurfaceControl, width, height);
+
+        }
+        mBlastBufferQueue.update(mSurfaceControl, width, height);
+
+        mTransaction.show(mBlastSurfaceControl)
+            .reparent(mBlastSurfaceControl, mSurfaceControl)
+            .apply();
+
+        return mBlastBufferQueue.getSurface();
+    }
+    
     private void setBoundsLayerCrop() {
         // mWinFrame is already adjusted for surface insets. So offset it and use it as
         // the cropping bounds.
@@ -1659,6 +1694,13 @@ public final class ViewRootImpl implements ViewParent,
         }
         mSurface.release();
         mSurfaceControl.release();
+
+        if (mBlastBufferQueue != null) {
+            mTransaction.remove(mBlastSurfaceControl).apply();
+            mBlastSurfaceControl = null;
+            // We should probably add an explicit dispose.
+            mBlastBufferQueue = null;
+        }
     }
 
     /**
@@ -2414,10 +2456,9 @@ public final class ViewRootImpl implements ViewParent,
                     // will be transparent
                     if (mAttachInfo.mThreadedRenderer != null) {
                         try {
-                            hwInitialized = mAttachInfo.mThreadedRenderer.initialize(
-                                    mSurface);
+                            hwInitialized = mAttachInfo.mThreadedRenderer.initialize(mSurface);
                             if (hwInitialized && (host.mPrivateFlags
-                                    & View.PFLAG_REQUEST_TRANSPARENT_REGIONS) == 0) {
+                                            & View.PFLAG_REQUEST_TRANSPARENT_REGIONS) == 0) {
                                 // Don't pre-allocate if transparent regions
                                 // are requested as they may not be needed
                                 mAttachInfo.mThreadedRenderer.allocateBuffers();
@@ -4530,6 +4571,9 @@ public final class ViewRootImpl implements ViewParent,
     private static final int MSG_INSETS_CONTROL_CHANGED = 31;
     private static final int MSG_SYSTEM_GESTURE_EXCLUSION_CHANGED = 32;
     private static final int MSG_LOCATION_IN_PARENT_DISPLAY_CHANGED = 33;
+    private static final int MSG_SHOW_INSETS = 34;
+    private static final int MSG_HIDE_INSETS = 35;
+
 
     final class ViewRootHandler extends Handler {
         @Override
@@ -4593,6 +4637,10 @@ public final class ViewRootImpl implements ViewParent,
                     return "MSG_SYSTEM_GESTURE_EXCLUSION_CHANGED";
                 case MSG_LOCATION_IN_PARENT_DISPLAY_CHANGED:
                     return "MSG_LOCATION_IN_PARENT_DISPLAY_CHANGED";
+                case MSG_SHOW_INSETS:
+                    return "MSG_SHOW_INSETS";
+                case MSG_HIDE_INSETS:
+                    return "MSG_HIDE_INSETS";
             }
             return super.getMessageName(message);
         }
@@ -4705,6 +4753,14 @@ public final class ViewRootImpl implements ViewParent,
                     SomeArgs args = (SomeArgs) msg.obj;
                     mInsetsController.onControlsChanged((InsetsSourceControl[]) args.arg2);
                     mInsetsController.onStateChanged((InsetsState) args.arg1);
+                    break;
+                }
+                case MSG_SHOW_INSETS: {
+                    mInsetsController.show(msg.arg1, msg.arg2 == 1);
+                    break;
+                }
+                case MSG_HIDE_INSETS: {
+                    mInsetsController.hide(msg.arg1, msg.arg2 == 1);
                     break;
                 }
                 case MSG_WINDOW_MOVED:
@@ -7138,7 +7194,13 @@ public final class ViewRootImpl implements ViewParent,
                 mPendingStableInsets, mPendingOutsets, mPendingBackDropFrame, mPendingDisplayCutout,
                 mPendingMergedConfiguration, mSurfaceControl, mTempInsets);
         if (mSurfaceControl.isValid()) {
-            mSurface.copyFrom(mSurfaceControl);
+            if (USE_BLAST_BUFFERQUEUE == false) {
+                mSurface.copyFrom(mSurfaceControl);
+            } else { 
+                mSurface.transferFrom(getOrCreateBLASTSurface(
+                    (int) (mView.getMeasuredWidth() * appScale + 0.5f),
+                    (int) (mView.getMeasuredHeight() * appScale + 0.5f)));
+            }
         } else {
             destroySurface();
         }
@@ -7296,26 +7358,42 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    public void dumpGfxInfo(int[] info) {
-        info[0] = info[1] = 0;
-        if (mView != null) {
-            getGfxInfo(mView, info);
+    static final class GfxInfo {
+        public int viewCount;
+        public long renderNodeMemoryUsage;
+        public long renderNodeMemoryAllocated;
+
+        void add(GfxInfo other) {
+            viewCount += other.viewCount;
+            renderNodeMemoryUsage += other.renderNodeMemoryUsage;
+            renderNodeMemoryAllocated += other.renderNodeMemoryAllocated;
         }
     }
 
-    private static void getGfxInfo(View view, int[] info) {
-        RenderNode renderNode = view.mRenderNode;
-        info[0]++;
-        if (renderNode != null) {
-            info[1] += (int) renderNode.computeApproximateMemoryUsage();
+    GfxInfo getGfxInfo() {
+        GfxInfo info = new GfxInfo();
+        if (mView != null) {
+            appendGfxInfo(mView, info);
         }
+        return info;
+    }
 
+    private static void computeRenderNodeUsage(RenderNode node, GfxInfo info) {
+        if (node == null) return;
+        info.renderNodeMemoryUsage += node.computeApproximateMemoryUsage();
+        info.renderNodeMemoryAllocated += node.computeApproximateMemoryAllocated();
+    }
+
+    private static void appendGfxInfo(View view, GfxInfo info) {
+        info.viewCount++;
+        computeRenderNodeUsage(view.mRenderNode, info);
+        computeRenderNodeUsage(view.mBackgroundRenderNode, info);
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
 
             int count = group.getChildCount();
             for (int i = 0; i < count; i++) {
-                getGfxInfo(group.getChildAt(i), info);
+                appendGfxInfo(group.getChildAt(i), info);
             }
         }
     }
@@ -7490,6 +7568,14 @@ public final class ViewRootImpl implements ViewParent,
         args.arg1 = insetsState;
         args.arg2 = activeControls;
         mHandler.obtainMessage(MSG_INSETS_CONTROL_CHANGED, args).sendToTarget();
+    }
+
+    private void showInsets(@InsetType int types, boolean fromIme) {
+        mHandler.obtainMessage(MSG_SHOW_INSETS, types, fromIme ? 1 : 0).sendToTarget();
+    }
+
+    private void hideInsets(@InsetType int types, boolean fromIme) {
+        mHandler.obtainMessage(MSG_HIDE_INSETS, types, fromIme ? 1 : 0).sendToTarget();
     }
 
     public void dispatchMoved(int newX, int newY) {
@@ -8603,6 +8689,22 @@ public final class ViewRootImpl implements ViewParent,
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
                 viewAncestor.dispatchInsetsControlChanged(insetsState, activeControls);
+            }
+        }
+
+        @Override
+        public void showInsets(@InsetType int types, boolean fromIme) {
+            final ViewRootImpl viewAncestor = mViewAncestor.get();
+            if (viewAncestor != null) {
+                viewAncestor.showInsets(types, fromIme);
+            }
+        }
+
+        @Override
+        public void hideInsets(@InsetType int types, boolean fromIme) {
+            final ViewRootImpl viewAncestor = mViewAncestor.get();
+            if (viewAncestor != null) {
+                viewAncestor.hideInsets(types, fromIme);
             }
         }
 

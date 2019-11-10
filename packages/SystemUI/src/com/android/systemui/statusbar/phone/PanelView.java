@@ -44,13 +44,12 @@ import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.doze.DozeLog;
 import com.android.systemui.plugins.FalsingManager;
-import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.FlingAnimationUtils;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
-import com.android.systemui.statusbar.policy.KeyguardMonitor;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
 import android.util.BoostFramework;
 
 import java.io.FileDescriptor;
@@ -113,6 +112,7 @@ public abstract class PanelView extends FrameLayout {
     private FlingAnimationUtils mFlingAnimationUtilsClosing;
     private FlingAnimationUtils mFlingAnimationUtilsDismissing;
     private final FalsingManager mFalsingManager;
+    private final DozeLog mDozeLog;
     private final VibratorHelper mVibratorHelper;
 
     /**
@@ -150,9 +150,8 @@ public abstract class PanelView extends FrameLayout {
     private boolean mGestureWaitForTouchSlop;
     private boolean mIgnoreXTouchSlop;
     private boolean mExpandLatencyTracking;
-    protected final KeyguardMonitor mKeyguardMonitor = Dependency.get(KeyguardMonitor.class);
-    protected final SysuiStatusBarStateController mStatusBarStateController =
-            (SysuiStatusBarStateController) Dependency.get(StatusBarStateController.class);
+    protected final KeyguardStateController mKeyguardStateController;
+    protected final SysuiStatusBarStateController mStatusBarStateController;
 
     protected void onExpandingFinished() {
         mBar.onExpandingFinished();
@@ -210,8 +209,12 @@ public abstract class PanelView extends FrameLayout {
         mJustPeeked = true;
     }
 
-    public PanelView(Context context, AttributeSet attrs) {
+    public PanelView(Context context, AttributeSet attrs, FalsingManager falsingManager,
+            DozeLog dozeLog, KeyguardStateController keyguardStateController,
+            SysuiStatusBarStateController statusBarStateController) {
         super(context, attrs);
+        mKeyguardStateController = keyguardStateController;
+        mStatusBarStateController = statusBarStateController;
         mFlingAnimationUtils = new FlingAnimationUtils(context, 0.6f /* maxLengthSeconds */,
                 0.6f /* speedUpFactor */);
         mFlingAnimationUtilsClosing = new FlingAnimationUtils(context, 0.5f /* maxLengthSeconds */,
@@ -220,7 +223,8 @@ public abstract class PanelView extends FrameLayout {
                 0.5f /* maxLengthSeconds */, 0.2f /* speedUpFactor */, 0.6f /* x2 */,
                 0.84f /* y2 */);
         mBounceInterpolator = new BounceInterpolator();
-        mFalsingManager = Dependency.get(FalsingManager.class);  // TODO: inject into a controller.
+        mFalsingManager = falsingManager;
+        mDozeLog = dozeLog;
         mNotificationsDragEnabled =
                 getResources().getBoolean(R.bool.config_enableNotificationShadeDrag);
         mVibratorHelper = Dependency.get(VibratorHelper.class);
@@ -485,7 +489,7 @@ public abstract class PanelView extends FrameLayout {
             boolean expand = flingExpands(vel, vectorVel, x, y)
                     || event.getActionMasked() == MotionEvent.ACTION_CANCEL
                     || forceCancel;
-            DozeLog.traceFling(expand, mTouchAboveFalsingThreshold,
+            mDozeLog.traceFling(expand, mTouchAboveFalsingThreshold,
                     mStatusBar.isFalsingThresholdNeeded(),
                     mStatusBar.isWakeUpComingFromTouch());
                     // Log collapse gesture if on lock screen.
@@ -504,7 +508,8 @@ public abstract class PanelView extends FrameLayout {
                 mUpdateFlingVelocity = vel;
             }
         } else if (mPanelClosedOnDown && !mHeadsUpManager.hasPinnedHeadsUp() && !mTracking
-                && !mStatusBar.isBouncerShowing() && !mKeyguardMonitor.isKeyguardFadingAway()) {
+                && !mStatusBar.isBouncerShowing()
+                && !mKeyguardStateController.isKeyguardFadingAway()) {
             long timePassed = SystemClock.uptimeMillis() - mDownTime;
             if (timePassed < ViewConfiguration.getLongPressTimeout()) {
                 // Lets show the user that he can actually expand the panel

@@ -42,8 +42,6 @@ import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_UNAWARE;
 import static android.content.pm.PackageManager.MATCH_SYSTEM_ONLY;
 import static android.content.pm.PackageManager.MATCH_UNINSTALLED_PACKAGES;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
-import static android.net.NetworkPolicyManager.isProcStateAllowedWhileIdleOrPowerSaveMode;
-import static android.net.NetworkPolicyManager.isProcStateAllowedWhileOnRestrictBackground;
 import static android.os.FactoryTest.FACTORY_TEST_OFF;
 import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_CRITICAL;
 import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_HIGH;
@@ -235,6 +233,7 @@ import android.os.AppZygote;
 import android.os.BatteryStats;
 import android.os.Binder;
 import android.os.BinderProxy;
+import android.os.BugreportParams;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
@@ -284,7 +283,6 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.DebugUtils;
 import android.util.EventLog;
-import android.util.FeatureFlagUtils;
 import android.util.Log;
 import android.util.Pair;
 import android.util.PrintWriterPrinter;
@@ -354,6 +352,7 @@ import com.android.server.Watchdog;
 import com.android.server.am.ActivityManagerServiceDumpProcessesProto.UidObserverRegistrationProto;
 import com.android.server.appop.AppOpsService;
 import com.android.server.compat.CompatConfig;
+import com.android.server.compat.PlatformCompat;
 import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.firewall.IntentFirewall;
 import com.android.server.job.JobSchedulerInternal;
@@ -385,7 +384,6 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -428,7 +426,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     private static final String TAG_LOCKTASK = TAG + POSTFIX_LOCKTASK;
     static final String TAG_LRU = TAG + POSTFIX_LRU;
     private static final String TAG_MU = TAG + POSTFIX_MU;
-    private static final String TAG_NETWORK = TAG + POSTFIX_NETWORK;
+    static final String TAG_NETWORK = TAG + POSTFIX_NETWORK;
     static final String TAG_OOM_ADJ = TAG + POSTFIX_OOM_ADJ;
     private static final String TAG_POWER = TAG + POSTFIX_POWER;
     static final String TAG_PROCESS_OBSERVERS = TAG + POSTFIX_PROCESS_OBSERVERS;
@@ -511,10 +509,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     static final int PERSISTENT_MASK =
             ApplicationInfo.FLAG_SYSTEM|ApplicationInfo.FLAG_PERSISTENT;
 
-    // Intent sent when remote bugreport collection has been completed
-    private static final String INTENT_REMOTE_BUGREPORT_FINISHED =
-            "com.android.internal.intent.action.REMOTE_BUGREPORT_FINISHED";
-
     // If set, we will push process association information in to procstats.
     static final boolean TRACK_PROCSTATS_ASSOCIATIONS = true;
 
@@ -538,27 +532,10 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     private static final int BINDER_PROXY_LOW_WATERMARK = 5500;
 
-    /**
-     * State indicating that there is no need for any blocking for network.
-     */
-    @VisibleForTesting
-    static final int NETWORK_STATE_NO_CHANGE = 0;
-
-    /**
-     * State indicating that the main thread needs to be informed about the network wait.
-     */
-    @VisibleForTesting
-    static final int NETWORK_STATE_BLOCK = 1;
-
-    /**
-     * State indicating that any threads waiting for network state to get updated can be unblocked.
-     */
-    @VisibleForTesting
-    static final int NETWORK_STATE_UNBLOCK = 2;
-
     // Max character limit for a notification title. If the notification title is larger than this
     // the notification will not be legible to the user.
     private static final int MAX_BUGREPORT_TITLE_SIZE = 50;
+    private static final int MAX_BUGREPORT_DESCRIPTION_SIZE = 150;
 
     private static final int NATIVE_DUMP_TIMEOUT_MS = 2000; // 2 seconds;
     private static final int JAVA_DUMP_MINIMUM_SIZE = 100; // 100 bytes.
@@ -913,7 +890,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         // The other observer methods are unused
         @Override
-        public void onIntentStarted(Intent intent) {
+        public void onIntentStarted(Intent intent, long timestampNs) {
         }
 
         @Override
@@ -925,7 +902,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
-        public void onActivityLaunchFinished(byte[] finalActivity) {
+        public void onActivityLaunchFinished(byte[] finalActivity, long timestampNs) {
+        }
+
+        @Override
+        public void onReportFullyDrawn(byte[] finalActivity, long timestampNs) {
         }
     };
 
@@ -1373,7 +1354,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     String mTrackAllocationApp = null;
     String mNativeDebuggingApp = null;
 
-    private final Injector mInjector;
+    final Injector mInjector;
 
     static final class ProcessChangeItem {
         static final int CHANGE_ACTIVITIES = 1<<0;
@@ -1590,6 +1571,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     // Encapsulates the global setting "hidden_api_blacklist_exemptions"
     final HiddenApiSettings mHiddenApiBlacklist;
+
+    private final PlatformCompat mPlatformCompat;
 
     PackageManagerInternal mPackageManagerInt;
     PermissionManagerServiceInternal mPermissionManagerInt;
@@ -2421,7 +2404,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         final ActiveUids activeUids = new ActiveUids(this, false /* postChangesToAtm */);
         mProcessList.init(this, activeUids);
         mLowMemDetector = null;
-        mOomAdjuster = new OomAdjuster(this, mProcessList, activeUids, handlerThread);
+        mOomAdjuster = hasHandlerThread
+                ? new OomAdjuster(this, mProcessList, activeUids, handlerThread) : null;
 
         mIntentFirewall = hasHandlerThread
                 ? new IntentFirewall(new IntentFirewallInterface(), mHandler) : null;
@@ -2442,6 +2426,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mFactoryTest = FACTORY_TEST_OFF;
         mUgmInternal = LocalServices.getService(UriGrantsManagerInternal.class);
         mInternal = new LocalService();
+        mPlatformCompat = null;
     }
 
     // Note: This method is invoked on the main thread but may need to attach various
@@ -2578,6 +2563,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         };
 
         mHiddenApiBlacklist = new HiddenApiSettings(mHandler, mContext);
+
+        mPlatformCompat = (PlatformCompat) ServiceManager.getService(
+                Context.PLATFORM_COMPAT_SERVICE);
 
         Watchdog.getInstance().addMonitor(this);
         Watchdog.getInstance().addThread(mHandler);
@@ -3159,7 +3147,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     private boolean hasUsageStatsPermission(String callingPackage) {
         final int mode = mAppOpsService.noteOperation(AppOpsManager.OP_GET_USAGE_STATS,
-                Binder.getCallingUid(), callingPackage);
+                Binder.getCallingUid(), callingPackage, null);
         if (mode == AppOpsManager.MODE_DEFAULT) {
             return checkCallingPermission(Manifest.permission.PACKAGE_USAGE_STATS)
                     == PackageManager.PERMISSION_GRANTED;
@@ -5085,7 +5073,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (preBindAgent != null) {
                 thread.attachAgent(preBindAgent);
             }
-
+            if ((app.info.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+                thread.attachStartupAgents(app.info.dataDir);
+            }
 
             // Figure out whether the app needs to run in autofill compat mode.
             AutofillOptions autofillOptions = null;
@@ -5112,6 +5102,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             mAtmInternal.preBindApplication(app.getWindowProcessController());
             final ActiveInstrumentation instr2 = app.getActiveInstrumentation();
             long[] disabledCompatChanges = CompatConfig.get().getDisabledChanges(app.info);
+            if (mPlatformCompat != null) {
+                mPlatformCompat.resetReporting(app.info);
+            }
             if (app.isolatedEntryPoint != null) {
                 // This is an isolated process which should just call an entry point instead of
                 // being bound to an application.
@@ -5229,7 +5222,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         if (!didSomething) {
-            updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_PROCESS_BEGIN);
+            updateOomAdjLocked(app, OomAdjuster.OOM_ADJ_REASON_PROCESS_BEGIN);
             checkTime(startTime, "attachApplicationLocked: after updateOomAdjLocked");
         }
 
@@ -5395,8 +5388,40 @@ public class ActivityManagerService extends IActivityManager.Stub
                     });
             mUserController.scheduleStartProfiles();
         }
+        // UART is on if init's console service is running, send a warning notification.
+        showConsoleNotificationIfActive();
 
         t.traceEnd();
+    }
+
+    private void showConsoleNotificationIfActive() {
+        if (!SystemProperties.get("init.svc.console").equals("running")) {
+            return;
+        }
+        String title = mContext
+                .getString(com.android.internal.R.string.console_running_notification_title);
+        String message = mContext
+                .getString(com.android.internal.R.string.console_running_notification_message);
+        Notification notification =
+                new Notification.Builder(mContext, SystemNotificationChannels.DEVELOPER)
+                        .setSmallIcon(com.android.internal.R.drawable.stat_sys_adb)
+                        .setWhen(0)
+                        .setOngoing(true)
+                        .setTicker(title)
+                        .setDefaults(0)  // please be quiet
+                        .setColor(mContext.getColor(
+                                com.android.internal.R.color
+                                        .system_notification_accent_color))
+                        .setContentTitle(title)
+                        .setContentText(message)
+                        .setVisibility(Notification.VISIBILITY_PUBLIC)
+                        .build();
+
+        NotificationManager notificationManager =
+                mContext.getSystemService(NotificationManager.class);
+        notificationManager.notifyAsUser(
+                null, SystemMessage.NOTE_SERIAL_CONSOLE_ENABLED, notification, UserHandle.ALL);
+
     }
 
     @Override
@@ -5715,6 +5740,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     void importanceTokenDied(ImportanceToken token) {
         synchronized (ActivityManagerService.this) {
+            ProcessRecord pr = null;
             synchronized (mPidsSelfLocked) {
                 ImportanceToken cur
                     = mImportantProcesses.get(token.pid);
@@ -5722,14 +5748,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                     return;
                 }
                 mImportantProcesses.remove(token.pid);
-                ProcessRecord pr = mPidsSelfLocked.get(token.pid);
+                pr = mPidsSelfLocked.get(token.pid);
                 if (pr == null) {
                     return;
                 }
                 pr.forcingToImportant = null;
                 updateProcessForegroundLocked(pr, false, 0, false);
             }
-            updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
+            updateOomAdjLocked(pr, OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
         }
     }
 
@@ -5740,8 +5766,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         synchronized(this) {
             boolean changed = false;
 
+            ProcessRecord pr = null;
             synchronized (mPidsSelfLocked) {
-                ProcessRecord pr = mPidsSelfLocked.get(pid);
+                pr = mPidsSelfLocked.get(pid);
                 if (pr == null && isForeground) {
                     Slog.w(TAG, "setProcessForeground called on unknown pid: " + pid);
                     return;
@@ -5775,7 +5802,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
 
             if (changed) {
-                updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
+                updateOomAdjLocked(pr, OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
             }
         }
     }
@@ -5881,8 +5908,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public int noteOp(String op, int uid, String packageName) {
+            // TODO moltmann: Allow to specify featureId
             return mActivityManagerService.mAppOpsService
-                    .noteOperation(AppOpsManager.strOpToOp(op), uid, packageName);
+                    .noteOperation(AppOpsManager.strOpToOp(op), uid, packageName, null);
         }
 
         @Override
@@ -6034,7 +6062,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         // ...and legacy apps get an AppOp check
         int appop = mAppOpsService.noteOperation(AppOpsManager.OP_RUN_IN_BACKGROUND,
-                uid, packageName);
+                uid, packageName, null);
         if (DEBUG_BACKGROUND_CHECK) {
             Slog.i(TAG, "Legacy app " + uid + "/" + packageName + " bg appop " + appop);
         }
@@ -6193,9 +6221,9 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @VisibleForTesting
-    public void grantImplicitAccess(int userId, Intent intent, int callingAppId, int targetAppId) {
+    public void grantImplicitAccess(int userId, Intent intent, int callingUid, int targetAppId) {
         getPackageManagerInternalLocked().
-                grantImplicitAccess(userId, intent, callingAppId, targetAppId);
+                grantImplicitAccess(userId, intent, callingUid, targetAppId);
     }
 
     /**
@@ -7482,6 +7510,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         dst.setProcess(r);
                         dst.notifyAll();
                     }
+                    dst.mRestartCount = 0;
                     updateOomAdjLocked(r, true, OomAdjuster.OOM_ADJ_REASON_GET_PROVIDER);
                     maybeUpdateProviderUsageStatsLocked(r, src.info.packageName,
                             src.info.authority);
@@ -7918,7 +7947,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     new HostingRecord("added application",
                             customProcess != null ? customProcess : info.processName));
             mProcessList.updateLruProcessLocked(app, false, null);
-            updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_PROCESS_BEGIN);
+            updateOomAdjLocked(app, OomAdjuster.OOM_ADJ_REASON_PROCESS_BEGIN);
         }
 
         // This package really, really can not be stopped.
@@ -8275,45 +8304,39 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     /**
-     * @deprecated This method is only used by a few internal components and it will soon start
-     * using bug report API (which will be restricted to a few, pre-defined apps).
-     * No new code should be calling it.
+     * Takes a bugreport using bug report API ({@code BugreportManager}) with no pre-set
+     * title and description
      */
-    // TODO(b/137825297): Remove deprecated annotation and rephrase comments for all
-    // requestBugreport functions below.
-    @Deprecated
     @Override
-    public void requestBugReport(int bugreportType) {
+    public void requestBugReport(@BugreportParams.BugreportMode int bugreportType) {
         requestBugReportWithDescription(null, null, bugreportType);
     }
 
     /**
-     * @deprecated This method is only used by a few internal components and it will soon start
-     * using bug report API (which will be restricted to a few, pre-defined apps).
-     * No new code should be calling it.
+     * Takes a bugreport using bug report API ({@code BugreportManager}) which gets
+     * triggered by sending a broadcast to Shell.
      */
-    @Deprecated
     @Override
     public void requestBugReportWithDescription(@Nullable String shareTitle,
             @Nullable String shareDescription, int bugreportType) {
         String type = null;
         switch (bugreportType) {
-            case ActivityManager.BUGREPORT_OPTION_FULL:
+            case BugreportParams.BUGREPORT_MODE_FULL:
                 type = "bugreportfull";
                 break;
-            case ActivityManager.BUGREPORT_OPTION_INTERACTIVE:
+            case BugreportParams.BUGREPORT_MODE_INTERACTIVE:
                 type = "bugreportplus";
                 break;
-            case ActivityManager.BUGREPORT_OPTION_REMOTE:
+            case BugreportParams.BUGREPORT_MODE_REMOTE:
                 type = "bugreportremote";
                 break;
-            case ActivityManager.BUGREPORT_OPTION_WEAR:
+            case BugreportParams.BUGREPORT_MODE_WEAR:
                 type = "bugreportwear";
                 break;
-            case ActivityManager.BUGREPORT_OPTION_TELEPHONY:
+            case BugreportParams.BUGREPORT_MODE_TELEPHONY:
                 type = "bugreporttelephony";
                 break;
-            case ActivityManager.BUGREPORT_OPTION_WIFI:
+            case BugreportParams.BUGREPORT_MODE_WIFI:
                 type = "bugreportwifi";
                 break;
             default:
@@ -8327,74 +8350,58 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         if (!TextUtils.isEmpty(shareTitle)) {
             if (shareTitle.length() > MAX_BUGREPORT_TITLE_SIZE) {
-                String errorStr = "shareTitle should be less than " +
-                        MAX_BUGREPORT_TITLE_SIZE + " characters";
+                String errorStr = "shareTitle should be less than "
+                        + MAX_BUGREPORT_TITLE_SIZE + " characters";
                 throw new IllegalArgumentException(errorStr);
             }
             if (!TextUtils.isEmpty(shareDescription)) {
-                int length = shareDescription.getBytes(StandardCharsets.UTF_8).length;
-                if (length > SystemProperties.PROP_VALUE_MAX) {
-                    String errorStr = "shareTitle should be less than " +
-                            SystemProperties.PROP_VALUE_MAX + " bytes";
+                if (shareDescription.length() > MAX_BUGREPORT_DESCRIPTION_SIZE) {
+                    String errorStr = "shareDescription should be less than "
+                            + MAX_BUGREPORT_DESCRIPTION_SIZE + " characters";
                     throw new IllegalArgumentException(errorStr);
-                } else {
-                    SystemProperties.set("dumpstate.options.description", shareDescription);
                 }
             }
-            SystemProperties.set("dumpstate.options.title", shareTitle);
             Slog.d(TAG, "Bugreport notification title " + shareTitle
                     + " description " + shareDescription);
         }
-        final boolean useApi = FeatureFlagUtils.isEnabled(mContext,
-                FeatureFlagUtils.USE_BUGREPORT_API);
-
-        if (useApi && bugreportType == ActivityManager.BUGREPORT_OPTION_INTERACTIVE) {
-            // Create intent to trigger Bugreport API via Shell
-            Intent triggerShellBugreport = new Intent();
-            triggerShellBugreport.setAction(INTENT_BUGREPORT_REQUESTED);
-            triggerShellBugreport.setPackage(SHELL_APP_PACKAGE);
-            triggerShellBugreport.putExtra(EXTRA_BUGREPORT_TYPE, bugreportType);
-            if (shareTitle != null) {
-                triggerShellBugreport.putExtra(EXTRA_TITLE, shareTitle);
-            }
-            if (shareDescription != null) {
-                triggerShellBugreport.putExtra(EXTRA_DESCRIPTION, shareDescription);
-            }
-            final long identity = Binder.clearCallingIdentity();
-            try {
-                // Send broadcast to shell to trigger bugreport using Bugreport API
-                mContext.sendBroadcast(triggerShellBugreport);
-            } finally {
-                Binder.restoreCallingIdentity(identity);
-            }
-        } else {
-            SystemProperties.set("dumpstate.options", type);
-            SystemProperties.set("ctl.start", "bugreport");
+        // Create intent to trigger Bugreport API via Shell
+        Intent triggerShellBugreport = new Intent();
+        triggerShellBugreport.setAction(INTENT_BUGREPORT_REQUESTED);
+        triggerShellBugreport.setPackage(SHELL_APP_PACKAGE);
+        triggerShellBugreport.putExtra(EXTRA_BUGREPORT_TYPE, bugreportType);
+        triggerShellBugreport.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+        triggerShellBugreport.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
+        if (shareTitle != null) {
+            triggerShellBugreport.putExtra(EXTRA_TITLE, shareTitle);
+        }
+        if (shareDescription != null) {
+            triggerShellBugreport.putExtra(EXTRA_DESCRIPTION, shareDescription);
+        }
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            // Send broadcast to shell to trigger bugreport using Bugreport API
+            mContext.sendBroadcast(triggerShellBugreport);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
         }
     }
 
     /**
-     * @deprecated This method is only used by a few internal components and it will soon start
-     * using bug report API (which will be restricted to a few, pre-defined apps).
-     * No new code should be calling it.
+     * Takes a telephony bugreport with title and description
      */
-    @Deprecated
     @Override
     public void requestTelephonyBugReport(String shareTitle, String shareDescription) {
         requestBugReportWithDescription(shareTitle, shareDescription,
-                ActivityManager.BUGREPORT_OPTION_TELEPHONY);
+                BugreportParams.BUGREPORT_MODE_TELEPHONY);
     }
 
     /**
-     * @deprecated This method is only used by a few internal components and it will soon start
-     * using bug report API (which will be restricted to a few, pre-defined apps).
-     * No new code should be calling it.
+     * Takes a minimal bugreport of Wifi-related state with pre-set title and description
      */
-    @Deprecated
     @Override
     public void requestWifiBugReport(String shareTitle, String shareDescription) {
         requestBugReportWithDescription(shareTitle, shareDescription,
-                ActivityManager.BUGREPORT_OPTION_WIFI);
+                BugreportParams.BUGREPORT_MODE_WIFI);
     }
 
     /**
@@ -8402,7 +8409,7 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     @Override
     public void requestInteractiveBugReport() {
-        requestBugReportWithDescription(null, null, ActivityManager.BUGREPORT_OPTION_INTERACTIVE);
+        requestBugReportWithDescription(null, null, BugreportParams.BUGREPORT_MODE_INTERACTIVE);
     }
 
     /**
@@ -8413,7 +8420,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     public void requestInteractiveBugReportWithDescription(String shareTitle,
             String shareDescription) {
         requestBugReportWithDescription(shareTitle, shareDescription,
-                ActivityManager.BUGREPORT_OPTION_INTERACTIVE);
+                BugreportParams.BUGREPORT_MODE_INTERACTIVE);
     }
 
     /**
@@ -8421,7 +8428,7 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     @Override
     public void requestFullBugReport() {
-        requestBugReportWithDescription(null, null, ActivityManager.BUGREPORT_OPTION_FULL);
+        requestBugReportWithDescription(null, null,  BugreportParams.BUGREPORT_MODE_FULL);
     }
 
     /**
@@ -8429,7 +8436,7 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     @Override
     public void requestRemoteBugReport() {
-        requestBugReportWithDescription(null, null, ActivityManager.BUGREPORT_OPTION_REMOTE);
+        requestBugReportWithDescription(null, null, BugreportParams.BUGREPORT_MODE_REMOTE);
     }
 
     public void registerProcessObserver(IProcessObserver observer) {
@@ -8684,7 +8691,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         lp.format = v.getBackground().getOpacity();
         lp.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                 | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-        lp.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
+        lp.privateFlags |= WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
         ((WindowManager)mContext.getSystemService(
                 Context.WINDOW_SERVICE)).addView(v, lp);
     }
@@ -9774,6 +9781,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             sb.append("Foreground: ")
                     .append(process.isInterestingToUserLocked() ? "Yes" : "No")
                     .append("\n");
+            if (process.startTime > 0) {
+                long runtimeMillis = SystemClock.elapsedRealtime() - process.startTime;
+                sb.append("Process-Runtime: ").append(runtimeMillis).append("\n");
+            }
         }
         if (activityShortComponentName != null) {
             sb.append("Activity: ").append(activityShortComponentName).append("\n");
@@ -13923,9 +13934,20 @@ public class ActivityManagerService extends IActivityManager.Stub
         return false;
     }
 
+    /**
+     * Remove the dying provider from known provider map and launching provider map.
+     * @param proc The dying process recoder
+     * @param cpr The provider to be removed.
+     * @param always If true, remove the provider from launching map always, no more restart attempt
+     * @return true if the given provider is in launching
+     */
     private final boolean removeDyingProviderLocked(ProcessRecord proc,
             ContentProviderRecord cpr, boolean always) {
-        final boolean inLaunching = mLaunchingProviders.contains(cpr);
+        boolean inLaunching = mLaunchingProviders.contains(cpr);
+        if (inLaunching && !always && ++cpr.mRestartCount > ContentProviderRecord.MAX_RETRY_COUNT) {
+            // It's being launched but we've reached maximum attempts, force the removal
+            always = true;
+        }
 
         if (!inLaunching || always) {
             synchronized (cpr) {
@@ -13977,6 +13999,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         if (inLaunching && always) {
             mLaunchingProviders.remove(cpr);
+            cpr.mRestartCount = 0;
+            inLaunching = false;
         }
         return inLaunching;
     }
@@ -14192,6 +14216,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         for (int i = mLaunchingProviders.size() - 1; i >= 0; i--) {
             ContentProviderRecord cpr = mLaunchingProviders.get(i);
             if (cpr.launchingApp == app) {
+                if (++cpr.mRestartCount > ContentProviderRecord.MAX_RETRY_COUNT) {
+                    // It's being launched but we've reached maximum attempts, mark it as bad
+                    alwaysBad = true;
+                }
                 if (!alwaysBad && !app.bad && cpr.hasConnectionOrHandle()) {
                     restart = true;
                 } else {
@@ -14971,12 +14999,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             HashSet<ComponentName> singleUserReceivers = null;
             boolean scannedFirstReceivers = false;
             for (int user : users) {
-                // Skip users that have Shell restrictions, with exception of always permitted
-                // Shell broadcasts
+                // Skip users that have Shell restrictions
                 if (callingUid == SHELL_UID
                         && mUserController.hasUserRestriction(
-                                UserManager.DISALLOW_DEBUGGING_FEATURES, user)
-                        && !isPermittedShellBroadcast(intent)) {
+                                UserManager.DISALLOW_DEBUGGING_FEATURES, user)) {
                     continue;
                 }
                 List<ResolveInfo> newReceivers = AppGlobals.getPackageManager()
@@ -15041,11 +15067,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             // pm is in same process, this will never happen.
         }
         return receivers;
-    }
-
-    private boolean isPermittedShellBroadcast(Intent intent) {
-        // remote bugreport should always be allowed to be taken
-        return INTENT_REMOTE_BUGREPORT_FINISHED.equals(intent.getAction());
     }
 
     private void checkBroadcastFromSystem(Intent intent, ProcessRecord callerApp,
@@ -15342,7 +15363,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                                 mBatteryStatsService.removeUid(uid);
                                 if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) {
                                     mAppOpsService.resetAllModes(UserHandle.getUserId(uid),
-                                            intent.getData().getSchemeSpecificPart());
+                                            intent.getStringExtra(Intent.EXTRA_PACKAGE_NAME));
                                 } else {
                                     mAppOpsService.uidRemoved(uid);
                                 }
@@ -17036,7 +17057,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             item.foregroundServiceTypes = fgServiceTypes;
 
             if (oomAdj) {
-                updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
+                updateOomAdjLocked(proc, OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
             }
         }
     }
@@ -17291,6 +17312,16 @@ public class ActivityManagerService extends IActivityManager.Stub
         mOomAdjuster.updateOomAdjLocked(oomAdjReason);
     }
 
+    /*
+     * Update OomAdj for a specific process and its reachable processes.
+     * @param app The process to update
+     * @param oomAdjReason
+     */
+    @GuardedBy("this")
+    final void updateOomAdjLocked(ProcessRecord app, String oomAdjReason) {
+        mOomAdjuster.updateOomAdjLocked(app, oomAdjReason);
+    }
+
     @Override
     public void makePackageIdle(String packageName, int userId) {
         if (checkCallingPermission(android.Manifest.permission.FORCE_STOP_PACKAGES)
@@ -17355,115 +17386,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         synchronized (this) {
             mOomAdjuster.idleUidsLocked();
         }
-    }
-
-    /**
-     * Checks if any uid is coming from background to foreground or vice versa and if so, increments
-     * the {@link UidRecord#curProcStateSeq} corresponding to that uid using global seq counter
-     * {@link ProcessList#mProcStateSeqCounter} and notifies the app if it needs to block.
-     */
-    @VisibleForTesting
-    @GuardedBy("this")
-    void incrementProcStateSeqAndNotifyAppsLocked() {
-        if (mWaitForNetworkTimeoutMs <= 0) {
-            return;
-        }
-        // Used for identifying which uids need to block for network.
-        ArrayList<Integer> blockingUids = null;
-        for (int i = mProcessList.mActiveUids.size() - 1; i >= 0; --i) {
-            final UidRecord uidRec = mProcessList.mActiveUids.valueAt(i);
-            // If the network is not restricted for uid, then nothing to do here.
-            if (!mInjector.isNetworkRestrictedForUid(uidRec.uid)) {
-                continue;
-            }
-            if (!UserHandle.isApp(uidRec.uid) || !uidRec.hasInternetPermission) {
-                continue;
-            }
-            // If process state is not changed, then there's nothing to do.
-            if (uidRec.setProcState == uidRec.getCurProcState()) {
-                continue;
-            }
-            final int blockState = getBlockStateForUid(uidRec);
-            // No need to inform the app when the blockState is NETWORK_STATE_NO_CHANGE as
-            // there's nothing the app needs to do in this scenario.
-            if (blockState == NETWORK_STATE_NO_CHANGE) {
-                continue;
-            }
-            synchronized (uidRec.networkStateLock) {
-                uidRec.curProcStateSeq = ++mProcessList.mProcStateSeqCounter; // TODO: use method
-                if (blockState == NETWORK_STATE_BLOCK) {
-                    if (blockingUids == null) {
-                        blockingUids = new ArrayList<>();
-                    }
-                    blockingUids.add(uidRec.uid);
-                } else {
-                    if (DEBUG_NETWORK) {
-                        Slog.d(TAG_NETWORK, "uid going to background, notifying all blocking"
-                                + " threads for uid: " + uidRec);
-                    }
-                    if (uidRec.waitingForNetwork) {
-                        uidRec.networkStateLock.notifyAll();
-                    }
-                }
-            }
-        }
-
-        // There are no uids that need to block, so nothing more to do.
-        if (blockingUids == null) {
-            return;
-        }
-
-        for (int i = mProcessList.mLruProcesses.size() - 1; i >= 0; --i) {
-            final ProcessRecord app = mProcessList.mLruProcesses.get(i);
-            if (!blockingUids.contains(app.uid)) {
-                continue;
-            }
-            if (!app.killedByAm && app.thread != null) {
-                final UidRecord uidRec = mProcessList.getUidRecordLocked(app.uid);
-                try {
-                    if (DEBUG_NETWORK) {
-                        Slog.d(TAG_NETWORK, "Informing app thread that it needs to block: "
-                                + uidRec);
-                    }
-                    if (uidRec != null) {
-                        app.thread.setNetworkBlockSeq(uidRec.curProcStateSeq);
-                    }
-                } catch (RemoteException ignored) {
-                }
-            }
-        }
-    }
-
-    /**
-     * Checks if the uid is coming from background to foreground or vice versa and returns
-     * appropriate block state based on this.
-     *
-     * @return blockState based on whether the uid is coming from background to foreground or
-     *         vice versa. If bg->fg or fg->bg, then {@link #NETWORK_STATE_BLOCK} or
-     *         {@link #NETWORK_STATE_UNBLOCK} respectively, otherwise
-     *         {@link #NETWORK_STATE_NO_CHANGE}.
-     */
-    @VisibleForTesting
-    int getBlockStateForUid(UidRecord uidRec) {
-        // Denotes whether uid's process state is currently allowed network access.
-        final boolean isAllowed =
-                isProcStateAllowedWhileIdleOrPowerSaveMode(uidRec.getCurProcState())
-                || isProcStateAllowedWhileOnRestrictBackground(uidRec.getCurProcState());
-        // Denotes whether uid's process state was previously allowed network access.
-        final boolean wasAllowed = isProcStateAllowedWhileIdleOrPowerSaveMode(uidRec.setProcState)
-                || isProcStateAllowedWhileOnRestrictBackground(uidRec.setProcState);
-
-        // When the uid is coming to foreground, AMS should inform the app thread that it should
-        // block for the network rules to get updated before launching an activity.
-        if (!wasAllowed && isAllowed) {
-            return NETWORK_STATE_BLOCK;
-        }
-        // When the uid is going to background, AMS should inform the app thread that if an
-        // activity launch is blocked for the network rules to get updated, it should be unblocked.
-        if (wasAllowed && !isAllowed) {
-            return NETWORK_STATE_UNBLOCK;
-        }
-        return NETWORK_STATE_NO_CHANGE;
     }
 
     final void runInBackgroundDisabled(int uid) {
@@ -18375,7 +18297,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public int getCurrentUserId() {
-            return mUserController.getCurrentUserIdLU();
+            return mUserController.getCurrentUserId();
         }
 
         @Override
@@ -19320,18 +19242,19 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
-        public int noteOperation(int code, int uid, String packageName,
-                TriFunction<Integer, Integer, String, Integer> superImpl) {
+        public int noteOperation(int code, int uid, @Nullable String packageName,
+                @Nullable String featureId,
+                @NonNull QuadFunction<Integer, Integer, String, String, Integer> superImpl) {
             if (uid == mTargetUid && isTargetOp(code)) {
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     return mAppOpsService.noteProxyOperation(code, Process.SHELL_UID,
-                            "com.android.shell", uid, packageName);
+                            "com.android.shell", null, uid, packageName, featureId);
                 } finally {
                     Binder.restoreCallingIdentity(identity);
                 }
             }
-            return superImpl.apply(code, uid, packageName);
+            return superImpl.apply(code, uid, packageName, featureId);
         }
 
         @Override

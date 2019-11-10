@@ -344,6 +344,8 @@
     <string name="permdesc_receiveSms" msgid="6424387754228766939">"SMS मेसेज प्राप्त करण्याची आणि त्यावर प्रक्रिया करण्याची अ‍ॅप ला अनुमती देते. म्हणजेच अ‍ॅप आपल्या डीव्हाइसवर पाठविलेले मेसेज तुम्हाला न दर्शवता त्यांचे परीक्षण करू किंवा ते हटवू शकतो."</string>
     <string name="permlab_receiveMms" msgid="1821317344668257098">"मजकूर मेसेज मिळवा (MMS)"</string>
     <string name="permdesc_receiveMms" msgid="533019437263212260">"MMS मेसेज प्राप्त करण्यास आणि त्यावर प्रक्रिया करण्यास अ‍ॅप ला अनुमती देते. म्हणजेच अ‍ॅप आपल्या डिव्हाइसवर पाठविलेले मेसेज तुम्हाला न दर्शवता त्यांचे परीक्षण करू किंवा ते हटवू शकतो."</string>
+    <string name="permlab_bindCellBroadcastService" msgid="4468585041824555604">"सेल प्रसारण मेसेज फॉरवर्ड करा"</string>
+    <string name="permdesc_bindCellBroadcastService" msgid="9073440260695196089">"सेल प्रसारण मेसेज मिळाल्यानंतर ते फॉरवर्ड करण्यासाठी अॅपला सेल प्रसारण मॉड्यूलमध्ये प्रतिबद्ध करण्याची अनुमती देते. काही स्थानांमध्ये तुम्हाला आणीबाणीच्या परिस्थीतींची चेतावणी देण्यासाठी सेल प्रसारण सूचना वितरित केल्या जातात. दुर्भावनापूर्ण अॅप्स आणीबाणी सेल प्रसारण मिळवतात तेव्हा ती तुमच्या डिव्हाइसच्या परफॉर्मन्समध्ये किंवा कामामध्ये कदाचित व्यत्यय आणू शकतात."</string>
     <string name="permlab_readCellBroadcasts" msgid="1598328843619646166">"सेल प्रसारण मेसेज वाचा"</string>
     <string name="permdesc_readCellBroadcasts" msgid="6361972776080458979">"आपल्या डिव्हाइसद्वारे प्राप्त केलेले सेल प्रसारण मेसेज वाचण्यासाठी अ‍ॅप ला अनुमती देते. काही स्थानांमध्ये तुम्हाला आणीबाणीच्या परिस्थितीची चेतावणी देण्यासाठी सेल प्रसारण सूचना वितरीत केल्या जातात. आणीबाणी सेल प्रसारण प्राप्त होते तेव्हा आपल्या डिव्हाइसच्या कार्यप्रदर्शनात किंवा कार्यात दुर्भावनापूर्ण अ‍ॅप्स व्यत्यय आणू शकतात."</string>
     <string name="permlab_subscribedFeedsRead" msgid="4756609637053353318">"सदस्यता घेतलेली फीड वाचा"</string>
@@ -999,7 +1001,7 @@
     <string name="weeks" msgid="6509623834583944518">"आठवडे"</string>
     <string name="year" msgid="4001118221013892076">"वर्ष"</string>
     <string name="years" msgid="6881577717993213522">"वर्षे"</string>
-    <string name="now_string_shortest" msgid="8912796667087856402">"आत्ता"</string>
+    <string name="now_string_shortest" msgid="8912796667087856402">"आता"</string>
     <plurals name="duration_minutes_shortest" formatted="false" msgid="3957499975064245495">
       <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g>मि</item>
       <item quantity="one"><xliff:g id="COUNT_0">%d</xliff:g>मि</item>
@@ -1362,6 +1364,8 @@
     <string name="adb_active_notification_message" product="tv" msgid="8470296818270110396">"USB डीबगिंग बंद करण्यासाठी निवडा."</string>
     <string name="test_harness_mode_notification_title" msgid="2216359742631914387">"टेस्ट हार्नेस मोड सुरू केला आहे"</string>
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"टेस्ट हार्नेस मोड बंद करण्यासाठी फॅक्टरी रीसेट करा."</string>
+    <string name="console_running_notification_title" msgid="4955436518220103382">"सिरीअल कन्सोल सुरू केला आहे"</string>
+    <string name="console_running_notification_message" msgid="1331995933976263865">"परफॉर्मन्सवर परिणाम होतो. बंद करण्यासाठी, बूटलोडर तपासा."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"USB पोर्ट मध्ये ओलावा किंवा धूळ आहे"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB पोर्ट आपोआप बंद होईल. अधिक जाणून घेण्यासाठी टॅप करा."</string>
     <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"USB पोर्ट वापरण्यासाठी ठीक आहे"</string>
@@ -1891,10 +1895,8 @@
     <string name="default_notification_channel_label" msgid="5929663562028088222">"वर्गीकरण न केलेले"</string>
     <string name="importance_from_user" msgid="7318955817386549931">"तुम्ही या सूचनांचे महत्त्व सेट केले."</string>
     <string name="importance_from_person" msgid="9160133597262938296">"सामील असलेल्या लोकांमुळे हे महत्वाचे आहे."</string>
-    <!-- no translation found for user_creation_account_exists (6559477114648176531) -->
-    <skip />
-    <!-- no translation found for user_creation_adding (9089159170398841763) -->
-    <skip />
+    <string name="user_creation_account_exists" msgid="6559477114648176531">"<xliff:g id="ACCOUNT">%2$s</xliff:g> सह नवीन वापरकर्ता तयार करण्याची (हे खाते असलेला वापरकर्ता आधीपासून अस्तित्वात आहे) <xliff:g id="APP">%1$s</xliff:g> ला अनुमती द्यायची आहे का?"</string>
+    <string name="user_creation_adding" msgid="9089159170398841763">"<xliff:g id="ACCOUNT">%2$s</xliff:g> सह नवीन वापरकर्ता तयार करण्याची <xliff:g id="APP">%1$s</xliff:g> ला अनुमती द्यायची आहे का?"</string>
     <string name="language_selection_title" msgid="2680677278159281088">"एक भाषा जोडा"</string>
     <string name="country_selection_title" msgid="2954859441620215513">"प्रदेश प्राधान्य"</string>
     <string name="search_language_hint" msgid="7042102592055108574">"भाषा नाव टाइप करा"</string>

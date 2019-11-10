@@ -84,8 +84,10 @@ import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -2248,7 +2250,7 @@ public final class Settings {
         private static final String NAME_EQ_PLACEHOLDER = "name=?";
 
         // Must synchronize on 'this' to access mValues and mValuesVersion.
-        private final HashMap<String, String> mValues = new HashMap<>();
+        private final ArrayMap<String, String> mValues = new ArrayMap<>();
 
         private final Uri mUri;
         @UnsupportedAppUsage
@@ -2258,15 +2260,22 @@ public final class Settings {
         // for the fast path of retrieving settings.
         private final String mCallGetCommand;
         private final String mCallSetCommand;
+        private final String mCallListCommand;
 
         @GuardedBy("this")
         private GenerationTracker mGenerationTracker;
 
         public NameValueCache(Uri uri, String getCommand, String setCommand,
                 ContentProviderHolder providerHolder) {
+            this(uri, getCommand, setCommand, null, providerHolder);
+        }
+
+        NameValueCache(Uri uri, String getCommand, String setCommand, String listCommand,
+                ContentProviderHolder providerHolder) {
             mUri = uri;
             mCallGetCommand = getCommand;
             mCallSetCommand = setCommand;
+            mCallListCommand = listCommand;
             mProviderHolder = providerHolder;
         }
 
@@ -2448,8 +2457,8 @@ public final class Settings {
 
                 String value = c.moveToNext() ? c.getString(0) : null;
                 synchronized (NameValueCache.this) {
-                    if(mGenerationTracker != null &&
-                            currentGeneration == mGenerationTracker.getCurrentGeneration()) {
+                    if (mGenerationTracker != null
+                            && currentGeneration == mGenerationTracker.getCurrentGeneration()) {
                         mValues.put(name, value);
                     }
                 }
@@ -2463,6 +2472,141 @@ public final class Settings {
                 return null;  // Return null, but don't cache it.
             } finally {
                 if (c != null) c.close();
+            }
+        }
+
+        public ArrayMap<String, String> getStringsForPrefix(ContentResolver cr, String prefix,
+                List<String> names) {
+            ArrayMap<String, String> keyValues = new ArrayMap<>();
+            int currentGeneration = -1;
+
+            synchronized (NameValueCache.this) {
+                if (mGenerationTracker != null) {
+                    if (mGenerationTracker.isGenerationChanged()) {
+                        if (DEBUG) {
+                            Log.i(TAG, "Generation changed for type:" + mUri.getPath()
+                                    + " in package:" + cr.getPackageName());
+                        }
+                        mValues.clear();
+                    } else {
+                        boolean prefixCached = false;
+                        int size = mValues.size();
+                        for (int i = 0; i < size; ++i) {
+                            if (mValues.keyAt(i).startsWith(prefix + "/")) {
+                                prefixCached = true;
+                                break;
+                            }
+                        }
+                        if (prefixCached) {
+                            if (!names.isEmpty()) {
+                                for (String name : names) {
+                                    if (mValues.containsKey(name)) {
+                                        keyValues.put(name, mValues.get(name));
+                                    }
+                                }
+                            } else {
+                                for (int i = 0; i < size; ++i) {
+                                    String key = mValues.keyAt(i);
+                                    if (key.startsWith(prefix + "/")) {
+                                        keyValues.put(key, mValues.get(key));
+                                    }
+                                }
+                            }
+                            return keyValues;
+                        }
+                    }
+                    if (mGenerationTracker != null) {
+                        currentGeneration = mGenerationTracker.getCurrentGeneration();
+                    }
+                }
+            }
+
+            if (mCallListCommand == null) {
+                // No list command specified, return empty map
+                return keyValues;
+            }
+            IContentProvider cp = mProviderHolder.getProvider(cr);
+
+            try {
+                Bundle args = new Bundle();
+                args.putString(Settings.CALL_METHOD_PREFIX_KEY, prefix);
+                boolean needsGenerationTracker = false;
+                synchronized (NameValueCache.this) {
+                    if (mGenerationTracker == null) {
+                        needsGenerationTracker = true;
+                        args.putString(CALL_METHOD_TRACK_GENERATION_KEY, null);
+                        if (DEBUG) {
+                            Log.i(TAG, "Requested generation tracker for type: "
+                                    + mUri.getPath() + " in package:" + cr.getPackageName());
+                        }
+                    }
+                }
+
+                // Fetch all flags for the namespace at once for caching purposes
+                Bundle b = cp.call(cr.getPackageName(), mProviderHolder.mUri.getAuthority(),
+                        mCallListCommand, null, args);
+                if (b == null) {
+                    // Invalid response, return an empty map
+                    return keyValues;
+                }
+
+                // All flags for the namespace
+                Map<String, String> flagsToValues =
+                        (HashMap) b.getSerializable(Settings.NameValueTable.VALUE);
+                // Only the flags requested by the caller
+                if (!names.isEmpty()) {
+                    for (Map.Entry<String, String> flag : flagsToValues.entrySet()) {
+                        if (names.contains(flag.getKey())) {
+                            keyValues.put(flag.getKey(), flag.getValue());
+                        }
+                    }
+                } else {
+                    keyValues.putAll(flagsToValues);
+                }
+
+                synchronized (NameValueCache.this) {
+                    if (needsGenerationTracker) {
+                        MemoryIntArray array = b.getParcelable(
+                                CALL_METHOD_TRACK_GENERATION_KEY);
+                        final int index = b.getInt(
+                                CALL_METHOD_GENERATION_INDEX_KEY, -1);
+                        if (array != null && index >= 0) {
+                            final int generation = b.getInt(
+                                    CALL_METHOD_GENERATION_KEY, 0);
+                            if (DEBUG) {
+                                Log.i(TAG, "Received generation tracker for type:"
+                                        + mUri.getPath() + " in package:"
+                                        + cr.getPackageName() + " with index:" + index);
+                            }
+                            if (mGenerationTracker != null) {
+                                mGenerationTracker.destroy();
+                            }
+                            mGenerationTracker = new GenerationTracker(array, index,
+                                    generation, () -> {
+                                synchronized (NameValueCache.this) {
+                                    Log.e(TAG, "Error accessing generation tracker"
+                                            + " - removing");
+                                    if (mGenerationTracker != null) {
+                                        GenerationTracker generationTracker =
+                                                mGenerationTracker;
+                                        mGenerationTracker = null;
+                                        generationTracker.destroy();
+                                        mValues.clear();
+                                    }
+                                }
+                            });
+                        }
+                    }
+                    if (mGenerationTracker != null && currentGeneration
+                            == mGenerationTracker.getCurrentGeneration()) {
+                        // cache the complete list of flags for the namespace
+                        mValues.putAll(flagsToValues);
+                    }
+                }
+                return keyValues;
+            } catch (RemoteException e) {
+                // Not supported by the remote side, return an empty map
+                return keyValues;
             }
         }
 
@@ -7186,6 +7330,19 @@ public final class Settings {
         public static final String SILENCE_CALL_TOUCH_COUNT = "silence_call_touch_count";
 
         /**
+         * Number of successful "Motion Sense" tap gestures to pause media.
+         * @hide
+         */
+        public static final String AWARE_TAP_PAUSE_GESTURE_COUNT = "aware_tap_pause_gesture_count";
+
+        /**
+         * Number of touch interactions to pause media when a "Motion Sense" gesture could
+         * have been used.
+         * @hide
+         */
+        public static final String AWARE_TAP_PAUSE_TOUCH_COUNT = "aware_tap_pause_touch_count";
+
+        /**
          * The current night mode that has been selected by the user.  Owned
          * and controlled by UiModeManagerService.  Constants are as per
          * UiModeManager.
@@ -7642,6 +7799,19 @@ public final class Settings {
                 "face_unlock_always_require_confirmation";
 
         /**
+         * Whether or not a user should re enroll their face.
+         *
+         * Face unlock re enroll.
+         *  0 = No re enrollment.
+         *  1 = Re enrollment is suggested.
+         *  2 = Re enrollment is required after a set time period.
+         *  3 = Re enrollment is required immediately.
+         *
+         * @hide
+         */
+        public static final String FACE_UNLOCK_RE_ENROLL = "face_unlock_re_enroll";
+
+        /**
          * Whether or not debugging is enabled.
          * @hide
          */
@@ -7892,14 +8062,6 @@ public final class Settings {
         public static final String DEVICE_PAIRED = "device_paired";
 
         /**
-         * Integer state indicating whether package verifier is enabled.
-         * TODO(b/34259924): Remove this setting.
-         *
-         * @hide
-         */
-        public static final String PACKAGE_VERIFIER_STATE = "package_verifier_state";
-
-        /**
          * Specifies additional package name for broadcasting the CMAS messages.
          * @hide
          */
@@ -7912,16 +8074,6 @@ public final class Settings {
          */
         @TestApi
         public static final String NOTIFICATION_BADGING = "notification_badging";
-
-        /**
-         * Whether the notification bubbles are globally enabled
-         * The value is boolean (1 or 0).
-         * @hide
-         * @deprecated use {@link Global#NOTIFICATION_BUBBLES} instead.
-         */
-        @TestApi
-        @Deprecated
-        public static final String NOTIFICATION_BUBBLES = "notification_bubbles";
 
         /**
          * Whether notifications are dismissed by a right-to-left swipe (instead of a left-to-right
@@ -8111,20 +8263,6 @@ public final class Settings {
          * @hide
          */
         public static final String AWARE_LOCK_ENABLED = "aware_lock_enabled";
-
-        /**
-         * The settings values which should only be restored if the target device is the
-         * same as the source device
-         *
-         * NOTE: Settings are backed up and restored in the order they appear
-         *       in this array. If you have one setting depending on another,
-         *       make sure that they are ordered appropriately.
-         *
-         * @hide
-         */
-        public static final String[] DEVICE_SPECIFIC_SETTINGS_TO_BACKUP = {
-                DISPLAY_DENSITY_FORCED,
-        };
 
         /**
          * Keys we no longer back up under the current schema, but want to continue to
@@ -8467,11 +8605,17 @@ public final class Settings {
         public static final String POWER_SOUNDS_ENABLED = "power_sounds_enabled";
 
         /**
-         * URI for the "wireless charging started" and "wired charging started" sound.
+         * URI for the "wireless charging started" sound.
          * @hide
          */
-        public static final String CHARGING_STARTED_SOUND =
+        public static final String WIRELESS_CHARGING_STARTED_SOUND =
                 "wireless_charging_started_sound";
+
+        /**
+         * URI for "wired charging started" sound.
+         * @hide
+         */
+        public static final String CHARGING_STARTED_SOUND = "charging_started_sound";
 
         /**
          * Whether to play a sound for charging events.
@@ -10759,16 +10903,13 @@ public final class Settings {
          * App standby (app idle) specific settings.
          * This is encoded as a key=value list, separated by commas. Ex:
          * <p>
-         * "idle_duration=5000,parole_interval=4500,screen_thresholds=0/0/60000/120000"
+         * "idle_duration=5000,prediction_timeout=4500,screen_thresholds=0/0/60000/120000"
          * <p>
          * All durations are in millis.
          * Array values are separated by forward slashes
          * The following keys are supported:
          *
          * <pre>
-         * parole_interval                  (long)
-         * parole_window                    (long)
-         * parole_duration                  (long)
          * screen_thresholds                (long[4])
          * elapsed_thresholds               (long[4])
          * strong_usage_duration            (long)
@@ -10779,17 +10920,12 @@ public final class Settings {
          * exempted_sync_duration           (long)
          * system_interaction_duration      (long)
          * initial_foreground_service_start_duration (long)
-         * stable_charging_threshold        (long)
-         *
-         * idle_duration        (long) // This is deprecated and used to circumvent b/26355386.
-         * idle_duration2       (long) // deprecated
-         * wallclock_threshold  (long) // deprecated
          * </pre>
          *
          * <p>
          * Type: string
          * @hide
-         * @see com.android.server.usage.UsageStatsService.SettingsObserver
+         * @see com.android.server.usage.AppStandbyController
          */
         public static final String APP_IDLE_CONSTANTS = "app_idle_constants";
 
@@ -13525,6 +13661,7 @@ public final class Settings {
                 DeviceConfig.CONTENT_URI,
                 CALL_METHOD_GET_CONFIG,
                 CALL_METHOD_PUT_CONFIG,
+                CALL_METHOD_LIST_CONFIG,
                 sProviderHolder);
 
         /**
@@ -13538,6 +13675,37 @@ public final class Settings {
         @RequiresPermission(Manifest.permission.READ_DEVICE_CONFIG)
         static String getString(ContentResolver resolver, String name) {
             return sNameValueCache.getStringForUser(resolver, name, resolver.getUserId());
+        }
+
+        /**
+         * Look up a list of names in the database, based on a common prefix.
+         *
+         * @param resolver to access the database with
+         * @param prefix to apply to all of the names which will be fetched
+         * @param names to look up in the table
+         * @return a non null, but possibly empty, map from name to value for any of the names that
+         *         were found during lookup.
+         *
+         * @hide
+         */
+        @RequiresPermission(Manifest.permission.READ_DEVICE_CONFIG)
+        static Map<String, String> getStrings(@NonNull ContentResolver resolver,
+                @NonNull String prefix, @NonNull List<String> names) {
+            List<String> concatenatedNames = new ArrayList<>(names.size());
+            for (String name : names) {
+                concatenatedNames.add(prefix + "/" + name);
+            }
+
+            ArrayMap<String, String> rawKeyValues = sNameValueCache.getStringsForPrefix(
+                    resolver, prefix, concatenatedNames);
+            int size = rawKeyValues.size();
+            int substringLength = prefix.length() + 1;
+            ArrayMap<String, String> keyValues = new ArrayMap<>(size);
+            for (int i = 0; i < size; ++i) {
+                keyValues.put(rawKeyValues.keyAt(i).substring(substringLength),
+                        rawKeyValues.valueAt(i));
+            }
+            return keyValues;
         }
 
         /**

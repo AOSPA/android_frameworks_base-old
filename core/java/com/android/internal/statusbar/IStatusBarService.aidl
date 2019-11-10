@@ -17,6 +17,7 @@
 package com.android.internal.statusbar;
 
 import android.app.Notification;
+import android.net.Uri;
 import android.content.ComponentName;
 import android.graphics.Rect;
 import android.os.Bundle;
@@ -77,6 +78,7 @@ interface IStatusBarService
     void onNotificationSettingsViewed(String key);
     void setSystemUiVisibility(int displayId, int vis, int mask, String cause);
     void onNotificationBubbleChanged(String key, boolean isBubble);
+    void grantInlineReplyUriPermission(String key, in Uri uri);
 
     void onGlobalActionsShown();
     void onGlobalActionsHidden();
@@ -99,15 +101,15 @@ interface IStatusBarService
     void showPinningEnterExitToast(boolean entering);
     void showPinningEscapeToast();
 
-    // Used to show the dialog when BiometricService starts authentication
-    void showBiometricDialog(in Bundle bundle, IBiometricServiceReceiverInternal receiver, int type,
-            boolean requireConfirmation, int userId, String opPackageName);
-    // Used to hide the dialog when a biometric is authenticated
-    void onBiometricAuthenticated(boolean authenticated, String failureReason);
+    // Used to show the authentication dialog (Biometrics, Device Credential)
+    void showAuthenticationDialog(in Bundle bundle, IBiometricServiceReceiverInternal receiver,
+            int biometricModality, boolean requireConfirmation, int userId, String opPackageName);
+    // Used to notify the authentication dialog that a biometric has been authenticated
+    void onBiometricAuthenticated();
     // Used to set a temporary message, e.g. fingerprint not recognized, finger moved too fast, etc
     void onBiometricHelp(String message);
-    // Used to set a message - the dialog will dismiss after a certain amount of time
-    void onBiometricError(String error);
-    // Used to hide the biometric dialog when the AuthenticationClient is stopped
-    void hideBiometricDialog();
+    // Used to show an error - the dialog will dismiss after a certain amount of time
+    void onBiometricError(int modality, int error, int vendorCode);
+    // Used to hide the authentication dialog, e.g. when the application cancels authentication
+    void hideAuthenticationDialog();
 }

@@ -19,17 +19,22 @@ package com.android.server.locksettings;
 import static org.mockito.Mockito.mock;
 
 import android.app.IActivityManager;
+import android.app.admin.DeviceStateCache;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.hardware.authsecret.V1_0.IAuthSecret;
 import android.os.Handler;
-import android.os.Looper;
+import android.os.Parcel;
 import android.os.Process;
 import android.os.RemoteException;
+import android.os.UserManagerInternal;
 import android.os.storage.IStorageManager;
 import android.security.KeyStore;
 import android.security.keystore.KeyPermanentlyInvalidatedException;
 
 import com.android.internal.widget.LockPatternUtils;
+import com.android.internal.widget.LockscreenCredential;
+import com.android.server.ServiceThread;
 import com.android.server.locksettings.recoverablekeystore.RecoverableKeyStoreManager;
 
 import java.io.FileNotFoundException;
@@ -44,15 +49,18 @@ public class LockSettingsServiceTestable extends LockSettingsService {
         private LockPatternUtils mLockPatternUtils;
         private IStorageManager mStorageManager;
         private SyntheticPasswordManager mSpManager;
-        private IAuthSecret mAuthSecretService;
         private FakeGsiService mGsiService;
         private RecoverableKeyStoreManager mRecoverableKeyStoreManager;
+        private UserManagerInternal mUserManagerInternal;
+        private DeviceStateCache mDeviceStateCache;
+        private FakeSettings mSettings;
 
         public MockInjector(Context context, LockSettingsStorage storage, KeyStore keyStore,
                 IActivityManager activityManager, LockPatternUtils lockPatternUtils,
                 IStorageManager storageManager, SyntheticPasswordManager spManager,
-                IAuthSecret authSecretService, FakeGsiService gsiService,
-                RecoverableKeyStoreManager recoverableKeyStoreManager) {
+                FakeGsiService gsiService, RecoverableKeyStoreManager recoverableKeyStoreManager,
+                UserManagerInternal userManagerInternal, DeviceStateCache deviceStateCache,
+                FakeSettings settings) {
             super(context);
             mLockSettingsStorage = storage;
             mKeyStore = keyStore;
@@ -62,11 +70,14 @@ public class LockSettingsServiceTestable extends LockSettingsService {
             mSpManager = spManager;
             mGsiService = gsiService;
             mRecoverableKeyStoreManager = recoverableKeyStoreManager;
+            mUserManagerInternal = userManagerInternal;
+            mDeviceStateCache = deviceStateCache;
+            mSettings = settings;
         }
 
         @Override
-        public Handler getHandler() {
-            return new Handler(Looper.getMainLooper());
+        public Handler getHandler(ServiceThread handlerThread) {
+            return new Handler(handlerThread.getLooper());
         }
 
         @Override
@@ -93,6 +104,10 @@ public class LockSettingsServiceTestable extends LockSettingsService {
         public LockPatternUtils getLockPatternUtils() {
             return mLockPatternUtils;
         }
+        @Override
+        public DeviceStateCache getDeviceStateCache() {
+            return mDeviceStateCache;
+        }
 
         @Override
         public KeyStore getKeyStore() {
@@ -107,6 +122,17 @@ public class LockSettingsServiceTestable extends LockSettingsService {
         @Override
         public SyntheticPasswordManager getSyntheticPasswordManager(LockSettingsStorage storage) {
             return mSpManager;
+        }
+
+        @Override
+        public int settingsGlobalGetInt(ContentResolver contentResolver, String keyName,
+                int defaultValue) {
+            return mSettings.globalGetInt(keyName);
+        }
+
+        @Override
+        public UserManagerInternal getUserManagerInternal() {
+            return mUserManagerInternal;
         }
 
         @Override
@@ -130,26 +156,33 @@ public class LockSettingsServiceTestable extends LockSettingsService {
         }
     }
 
+    public MockInjector mInjector;
+
     protected LockSettingsServiceTestable(Context context, LockPatternUtils lockPatternUtils,
             LockSettingsStorage storage, FakeGateKeeperService gatekeeper, KeyStore keystore,
             IStorageManager storageManager, IActivityManager mActivityManager,
             SyntheticPasswordManager spManager, IAuthSecret authSecretService,
-            FakeGsiService gsiService, RecoverableKeyStoreManager recoverableKeyStoreManager) {
+            FakeGsiService gsiService, RecoverableKeyStoreManager recoverableKeyStoreManager,
+            UserManagerInternal userManagerInternal, DeviceStateCache deviceStateCache,
+            FakeSettings settings) {
         super(new MockInjector(context, storage, keystore, mActivityManager, lockPatternUtils,
-                storageManager, spManager, authSecretService, gsiService,
-                recoverableKeyStoreManager));
+                storageManager, spManager, gsiService,
+                recoverableKeyStoreManager, userManagerInternal, deviceStateCache, settings));
         mGateKeeperService = gatekeeper;
         mAuthSecretService = authSecretService;
     }
 
     @Override
-    protected void tieProfileLockToParent(int userId, byte[] password) {
-        mStorage.writeChildProfileLock(userId, password);
+    protected void tieProfileLockToParent(int userId, LockscreenCredential password) {
+        Parcel parcel = Parcel.obtain();
+        parcel.writeParcelable(password, 0);
+        mStorage.writeChildProfileLock(userId, parcel.marshall());
+        parcel.recycle();
     }
 
     @Override
-    protected byte[] getDecryptedPasswordForTiedProfile(int userId) throws FileNotFoundException,
-            KeyPermanentlyInvalidatedException {
+    protected LockscreenCredential getDecryptedPasswordForTiedProfile(int userId)
+            throws FileNotFoundException, KeyPermanentlyInvalidatedException {
         byte[] storedData = mStorage.readChildProfileLock(userId);
         if (storedData == null) {
             throw new FileNotFoundException("Child profile lock file not found");
@@ -161,6 +194,13 @@ public class LockSettingsServiceTestable extends LockSettingsService {
         } catch (RemoteException e) {
             // shouldn't happen.
         }
-        return storedData;
+        Parcel parcel = Parcel.obtain();
+        try {
+            parcel.unmarshall(storedData, 0, storedData.length);
+            parcel.setDataPosition(0);
+            return (LockscreenCredential) parcel.readParcelable(null);
+        } finally {
+            parcel.recycle();
+        }
     }
 }

@@ -51,6 +51,7 @@ import com.android.internal.telephony.RILConstants;
 import com.android.internal.util.XmlUtils;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.internal.widget.LockPatternView;
+import com.android.internal.widget.LockscreenCredential;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -1496,21 +1497,7 @@ class DatabaseHelper extends SQLiteOpenHelper {
         }
 
         if (upgradeVersion == 94) {
-            // Add wireless charging started sound setting
-            if (mUserHandle == UserHandle.USER_SYSTEM) {
-                db.beginTransaction();
-                SQLiteStatement stmt = null;
-                try {
-                    stmt = db.compileStatement("INSERT OR REPLACE INTO global(name,value)"
-                            + " VALUES(?,?);");
-                    loadStringSetting(stmt, Settings.Global.CHARGING_STARTED_SOUND,
-                            R.string.def_wireless_charging_started_sound);
-                    db.setTransactionSuccessful();
-                } finally {
-                    db.endTransaction();
-                    if (stmt != null) stmt.close();
-                }
-            }
+            // charging sound moved to SettingsProvider version 184
             upgradeVersion = 95;
         }
 
@@ -1992,8 +1979,11 @@ class DatabaseHelper extends SQLiteOpenHelper {
                 try {
                     LockPatternUtils lpu = new LockPatternUtils(mContext);
                     List<LockPatternView.Cell> cellPattern =
-                            LockPatternUtils.stringToPattern(lockPattern);
-                    lpu.saveLockPattern(cellPattern, null, UserHandle.USER_SYSTEM);
+                            LockPatternUtils.byteArrayToPattern(lockPattern.getBytes());
+                    lpu.setLockCredential(
+                            LockscreenCredential.createPattern(cellPattern),
+                            LockscreenCredential.createNone(),
+                            UserHandle.USER_SYSTEM);
                 } catch (IllegalArgumentException e) {
                     // Don't want corrupted lock pattern to hang the reboot process
                 }
@@ -2558,8 +2548,6 @@ class DatabaseHelper extends SQLiteOpenHelper {
                     R.string.def_car_dock_sound);
             loadStringSetting(stmt, Settings.Global.CAR_UNDOCK_SOUND,
                     R.string.def_car_undock_sound);
-            loadStringSetting(stmt, Settings.Global.CHARGING_STARTED_SOUND,
-                    R.string.def_wireless_charging_started_sound);
 
             loadIntegerSetting(stmt, Settings.Global.DOCK_AUDIO_MEDIA_ENABLED,
                     R.integer.def_dock_audio_media_enabled);

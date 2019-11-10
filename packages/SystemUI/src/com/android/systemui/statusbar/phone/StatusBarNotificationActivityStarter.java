@@ -68,7 +68,7 @@ import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.policy.HeadsUpUtil;
-import com.android.systemui.statusbar.policy.KeyguardMonitor;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
 
 /**
  * Status bar implementation of {@link NotificationActivityStarter}.
@@ -84,7 +84,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
     private final NotificationRemoteInputManager mRemoteInputManager;
     private final NotificationLockscreenUserManager mLockscreenUserManager;
     private final ShadeController mShadeController;
-    private final KeyguardMonitor mKeyguardMonitor;
+    private final KeyguardStateController mKeyguardStateController;
     private final ActivityStarter mActivityStarter;
     private final NotificationEntryManager mEntryManager;
     private final StatusBarStateController mStatusBarStateController;
@@ -125,7 +125,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             NotificationGroupManager groupManager,
             NotificationLockscreenUserManager lockscreenUserManager,
             ShadeController shadeController,
-            KeyguardMonitor keyguardMonitor,
+            KeyguardStateController keyguardStateController,
             NotificationInterruptionStateProvider notificationInterruptionStateProvider,
             MetricsLogger metricsLogger,
             LockPatternUtils lockPatternUtils,
@@ -145,7 +145,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         mRemoteInputManager = remoteInputManager;
         mLockscreenUserManager = lockscreenUserManager;
         mShadeController = shadeController;
-        mKeyguardMonitor = keyguardMonitor;
+        mKeyguardStateController = keyguardStateController;
         mActivityStarter = activityStarter;
         mEntryManager = entryManager;
         mStatusBarStateController = statusBarStateController;
@@ -204,7 +204,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                 && mActivityIntentHelper.wouldLaunchResolverActivity(intent.getIntent(),
                 mLockscreenUserManager.getCurrentUserId());
         final boolean wasOccluded = mShadeController.isOccluded();
-        boolean showOverLockscreen = mKeyguardMonitor.isShowing() && intent != null
+        boolean showOverLockscreen = mKeyguardStateController.isShowing() && intent != null
                 && mActivityIntentHelper.wouldShowOverLockscreen(intent.getIntent(),
                 mLockscreenUserManager.getCurrentUserId());
         ActivityStarter.OnDismissAction postKeyguardAction =
@@ -245,7 +245,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         StatusBarNotification parentToCancel = null;
         if (shouldAutoCancel(sbn) && mGroupManager.isOnlyChildInGroup(sbn)) {
             StatusBarNotification summarySbn =
-                    mGroupManager.getLogicalGroupSummary(sbn).notification;
+                    mGroupManager.getLogicalGroupSummary(sbn).getSbn();
             if (shouldAutoCancel(summarySbn)) {
                 parentToCancel = summarySbn;
             }
@@ -258,7 +258,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         if (showOverLockscreen) {
             mShadeController.addPostCollapseAction(runnable);
             mShadeController.collapsePanel(true /* animate */);
-        } else if (mKeyguardMonitor.isShowing()
+        } else if (mKeyguardStateController.isShowing()
                 && mShadeController.isOccluded()) {
             mShadeController.addAfterKeyguardGoneRunnable(runnable);
             mShadeController.collapsePanel();
@@ -310,7 +310,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         if (!TextUtils.isEmpty(entry.remoteInputText)) {
             remoteInputText = entry.remoteInputText;
         }
-        if (!TextUtils.isEmpty(remoteInputText) && !controller.isSpinning(entry.key)) {
+        if (!TextUtils.isEmpty(remoteInputText) && !controller.isSpinning(entry.getKey())) {
             fillInIntent = new Intent().putExtra(Notification.EXTRA_REMOTE_INPUT_DRAFT,
                     remoteInputText.toString());
         }
@@ -409,11 +409,11 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         if (mNotificationInterruptionStateProvider.shouldLaunchFullScreenIntentWhenAdded(entry)) {
             if (shouldSuppressFullScreenIntent(entry)) {
                 if (DEBUG) {
-                    Log.d(TAG, "No Fullscreen intent: suppressed by DND: " + entry.key);
+                    Log.d(TAG, "No Fullscreen intent: suppressed by DND: " + entry.getKey());
                 }
             } else if (entry.getImportance() < NotificationManager.IMPORTANCE_HIGH) {
                 if (DEBUG) {
-                    Log.d(TAG, "No Fullscreen intent: not important enough: " + entry.key);
+                    Log.d(TAG, "No Fullscreen intent: not important enough: " + entry.getKey());
                 }
             } else {
                 // Stop screensaver if the notification has a fullscreen intent.
@@ -432,8 +432,8 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                 }
                 try {
                     EventLog.writeEvent(EventLogTags.SYSUI_FULLSCREEN_NOTIFICATION,
-                            entry.key);
-                    entry.notification.getNotification().fullScreenIntent.send();
+                            entry.getKey());
+                    entry.getSbn().getNotification().fullScreenIntent.send();
                     entry.notifyFullScreenIntentLaunched();
                     mMetricsLogger.count("note_fullscreen", 1);
                 } catch (PendingIntent.CanceledException e) {

@@ -26,7 +26,7 @@ import android.view.View;
 import com.android.keyguard.KeyguardClockSwitch;
 import com.android.keyguard.KeyguardMessageArea;
 import com.android.keyguard.KeyguardSliceView;
-import com.android.systemui.SystemUIRootComponent;
+import com.android.systemui.dagger.SystemUIRootComponent;
 import com.android.systemui.qs.QSCarrierGroup;
 import com.android.systemui.qs.QSFooterImpl;
 import com.android.systemui.qs.QSPanel;
@@ -37,6 +37,7 @@ import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 import com.android.systemui.statusbar.phone.LockIcon;
 import com.android.systemui.statusbar.phone.NotificationPanelView;
+import com.android.systemui.statusbar.policy.Clock;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -178,6 +179,11 @@ public class InjectionInflationController {
          * Creates the QSCustomizer.
          */
         QSCustomizer createQSCustomizer();
+
+        /**
+         * Creates a Clock.
+         */
+        Clock createClock();
     }
 
     /**

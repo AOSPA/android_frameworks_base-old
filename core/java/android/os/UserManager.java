@@ -37,6 +37,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.UserInfo;
+import android.content.pm.UserInfo.UserInfoFlag;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -1747,8 +1748,30 @@ public class UserManager {
         }
     }
 
-    /** {@hide} */
-    public boolean isUserUnlockingOrUnlocked(UserHandle user) {
+    /**
+     * Return whether the provided user is already running in an
+     * "unlocked" state or in the process of unlocking.
+     * <p>
+     * On devices with direct boot, a user is unlocked only after they've
+     * entered their credentials (such as a lock pattern or PIN). On devices
+     * without direct boot, a user is unlocked as soon as it starts.
+     * <p>
+     * When a user is locked, only device-protected data storage is available.
+     * When a user is unlocked, both device-protected and credential-protected
+     * private app data storage is available.
+     *
+     * <p>Requires {@code android.permission.MANAGE_USERS} or
+     * {@code android.permission.INTERACT_ACROSS_USERS}, otherwise specified {@link UserHandle user}
+     * must be the calling user or a profile associated with it.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            Manifest.permission.MANAGE_USERS,
+            Manifest.permission.INTERACT_ACROSS_USERS
+    })
+    public boolean isUserUnlockingOrUnlocked(@NonNull UserHandle user) {
         return isUserUnlockingOrUnlocked(user.getIdentifier());
     }
 
@@ -1985,6 +2008,38 @@ public class UserManager {
     }
 
     /**
+     * @hide
+     *
+     * Checks whether changing the given setting to the given value is prohibited
+     * by the corresponding user restriction in the given user.
+     *
+     * May only be called by the OS itself.
+     *
+     * @return {@code true} if the change is prohibited, {@code false} if the change is allowed.
+     */
+    public boolean isSettingRestrictedForUser(String setting, @UserIdInt int userId,
+            String value, int callingUid) {
+        try {
+            return mService.isSettingRestrictedForUser(setting, userId, value, callingUid);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     * Register a binder callback for user restrictions changes.
+     * May only be called by the OS itself.
+     */
+    public void addUserRestrictionsListener(final IUserRestrictionsListener listener) {
+        try {
+            mService.addUserRestrictionsListener(listener);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Return the serial number for a user.  This is a device-unique
      * number assigned to that user; if the user is deleted and then a new
      * user created, the new users will not be given the same serial number.
@@ -2013,18 +2068,20 @@ public class UserManager {
 
     /**
      * Creates a user with the specified name and options. For non-admin users, default user
-     * restrictions are going to be applied.
-     * Requires {@link android.Manifest.permission#MANAGE_USERS} permission.
+     * restrictions will be applied.
+     *
+     * <p>Requires {@link android.Manifest.permission#MANAGE_USERS} permission.
      *
      * @param name the user's name
-     * @param flags flags that identify the type of user and other properties.
+     * @param flags UserInfo flags that identify the type of user and other properties.
      * @see UserInfo
      *
-     * @return the UserInfo object for the created user, or null if the user could not be created.
+     * @return the UserInfo object for the created user, or {@code null} if the user could not be
+     * created.
      * @hide
      */
     @UnsupportedAppUsage
-    public UserInfo createUser(String name, int flags) {
+    public @Nullable UserInfo createUser(@Nullable String name, @UserInfoFlag int flags) {
         UserInfo user = null;
         try {
             user = mService.createUser(name, flags);
@@ -2038,6 +2095,36 @@ public class UserManager {
             throw re.rethrowFromSystemServer();
         }
         return user;
+    }
+
+    /**
+     * Pre-creates a user with the specified name and options. For non-admin users, default user
+     * restrictions will be applied.
+     *
+     * <p>This method can be used by OEMs to "warm" up the user creation by pre-creating some users
+     * at the first boot, so they when the "real" user is created (for example,
+     * by {@link #createUser(String, int)} or {@link #createGuest(Context, String)}), it takes
+     * less time.
+     *
+     * <p>Requires {@link android.Manifest.permission#MANAGE_USERS} permission.
+     *
+     * @param flags UserInfo flags that identify the type of user and other properties.
+     * @see UserInfo
+     *
+     * @return the UserInfo object for the created user, or {@code null} if the user could not be
+     * created.
+     *
+     * @throw {@link IllegalArgumentException} if {@code flags} contains
+     * {@link UserInfo#FLAG_MANAGED_PROFILE}.
+     *
+     * @hide
+     */
+    public @Nullable UserInfo preCreateUser(@UserInfoFlag int flags) {
+        try {
+            return mService.preCreateUser(flags);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -2356,15 +2443,26 @@ public class UserManager {
     /**
      * Returns information for all users on this device, including ones marked for deletion.
      * To retrieve only users that are alive, use {@link #getUsers(boolean)}.
-     * <p>
-     * Requires {@link android.Manifest.permission#MANAGE_USERS} permission.
+     *
      * @return the list of users that exist on the device.
      * @hide
      */
     @UnsupportedAppUsage
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public List<UserInfo> getUsers() {
+        return getUsers(/* excludeDying= */ false);
+    }
+
+    /**
+     * Returns information for all users on this device, based on the filtering parameters.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
+    public List<UserInfo> getUsers(boolean excludePartial, boolean excludeDying,
+            boolean excludePreCreated) {
         try {
-            return mService.getUsers(false);
+            return mService.getUsers(excludePartial, excludeDying, excludePreCreated);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -2380,16 +2478,12 @@ public class UserManager {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public long[] getSerialNumbersOfUsers(boolean excludeDying) {
-        try {
-            List<UserInfo> users = mService.getUsers(excludeDying);
-            long[] result = new long[users.size()];
-            for (int i = 0; i < result.length; i++) {
-                result[i] = users.get(i).serialNumber;
-            }
-            return result;
-        } catch (RemoteException re) {
-            throw re.rethrowFromSystemServer();
+        List<UserInfo> users = getUsers(excludeDying);
+        long[] result = new long[users.size()];
+        for (int i = 0; i < result.length; i++) {
+            result[i] = users.get(i).serialNumber;
         }
+        return result;
     }
 
     /**
@@ -2493,6 +2587,22 @@ public class UserManager {
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Checks if the 2 provided user handles belong to the same profile group.
+     *
+     * @param user one of the two user handles to check.
+     * @param otherUser one of the two user handles to check.
+     * @return true if the two users are in the same profile group.
+     *
+     * Requires {@link android.Manifest.permission#MANAGE_USERS} permission.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
+    public boolean isSameProfileGroup(@NonNull UserHandle user, @NonNull UserHandle otherUser) {
+        return isSameProfileGroup(user.getIdentifier(), otherUser.getIdentifier());
     }
 
     /**
@@ -2773,11 +2883,8 @@ public class UserManager {
      */
     @UnsupportedAppUsage
     public @NonNull List<UserInfo> getUsers(boolean excludeDying) {
-        try {
-            return mService.getUsers(excludeDying);
-        } catch (RemoteException re) {
-            throw re.rethrowFromSystemServer();
-        }
+        return getUsers(/*excludePartial= */ true, excludeDying,
+                /* excludePreCreated= */ true);
     }
 
     /**

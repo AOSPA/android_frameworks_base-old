@@ -17,7 +17,6 @@
 package com.android.systemui.statusbar.phone;
 
 import static com.android.keyguard.KeyguardSecurityModel.SecurityMode;
-import static com.android.systemui.DejankUtils.whitelistIpcs;
 import static com.android.systemui.plugins.ActivityStarter.OnDismissAction;
 
 import android.content.Context;
@@ -38,14 +37,17 @@ import android.view.WindowInsets;
 
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardHostView;
+import com.android.keyguard.KeyguardSecurityModel;
 import com.android.keyguard.KeyguardSecurityView;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.DejankUtils;
+import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.plugins.FalsingManager;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
 
 import java.io.PrintWriter;
 
@@ -69,7 +71,7 @@ public class KeyguardBouncer {
     private final Handler mHandler;
     private final BouncerExpansionCallback mExpansionCallback;
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
-    private final UnlockMethodCache mUnlockMethodCache;
+    private final KeyguardStateController mKeyguardStateController;
     private final KeyguardUpdateMonitorCallback mUpdateMonitorCallback =
             new KeyguardUpdateMonitorCallback() {
                 @Override
@@ -97,7 +99,8 @@ public class KeyguardBouncer {
     public KeyguardBouncer(Context context, ViewMediatorCallback callback,
             LockPatternUtils lockPatternUtils, ViewGroup container,
             DismissCallbackRegistry dismissCallbackRegistry, FalsingManager falsingManager,
-            BouncerExpansionCallback expansionCallback, UnlockMethodCache unlockMethodCache,
+            BouncerExpansionCallback expansionCallback,
+            KeyguardStateController keyguardStateController,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
             KeyguardBypassController keyguardBypassController, Handler handler) {
         mContext = context;
@@ -109,7 +112,7 @@ public class KeyguardBouncer {
         mDismissCallbackRegistry = dismissCallbackRegistry;
         mExpansionCallback = expansionCallback;
         mHandler = handler;
-        mUnlockMethodCache = unlockMethodCache;
+        mKeyguardStateController = keyguardStateController;
         mKeyguardUpdateMonitor.registerCallback(mUpdateMonitorCallback);
         mKeyguardBypassController = keyguardBypassController;
     }
@@ -173,7 +176,7 @@ public class KeyguardBouncer {
 
         // Split up the work over multiple frames.
         DejankUtils.removeCallbacks(mResetRunnable);
-        if (mUnlockMethodCache.isFaceAuthEnabled() && !needsFullscreenBouncer()
+        if (mKeyguardStateController.isFaceAuthEnabled() && !needsFullscreenBouncer()
                 && !mKeyguardUpdateMonitor.userNeedsStrongAuth()
                 && !mKeyguardBypassController.getBypassEnabled()) {
             mHandler.postDelayed(mShowRunnable, BOUNCER_FACE_DELAY);
@@ -459,15 +462,9 @@ public class KeyguardBouncer {
      * notifications on Keyguard, like SIM PIN/PUK.
      */
     public boolean needsFullscreenBouncer() {
-        // TODO(b/140059518)
-        return whitelistIpcs(() -> {
-            ensureView();
-            if (mKeyguardView != null) {
-                SecurityMode mode = mKeyguardView.getSecurityMode();
-                return mode == SecurityMode.SimPin || mode == SecurityMode.SimPuk;
-            }
-            return false;
-        });
+        SecurityMode mode = Dependency.get(KeyguardSecurityModel.class).getSecurityMode(
+                KeyguardUpdateMonitor.getCurrentUser());
+        return mode == SecurityMode.SimPin || mode == SecurityMode.SimPuk;
     }
 
     /**

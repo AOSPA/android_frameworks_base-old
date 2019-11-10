@@ -18,18 +18,25 @@ package com.android.systemui.statusbar.car;
 
 import static android.content.DialogInterface.BUTTON_NEGATIVE;
 import static android.content.DialogInterface.BUTTON_POSITIVE;
+import static android.os.UserManager.DISALLOW_ADD_USER;
 
+import android.app.ActivityManager;
 import android.app.AlertDialog;
 import android.app.AlertDialog.Builder;
 import android.app.Dialog;
 import android.car.userlib.CarUserManagerHelper;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.AsyncTask;
+import android.os.UserHandle;
+import android.os.UserManager;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -48,24 +55,33 @@ import com.android.systemui.statusbar.phone.SystemUIDialog;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Displays a GridLayout with icons for the users in the system to allow switching between users.
  * One of the uses of this is for the lock screen in auto.
  */
-public class UserGridRecyclerView extends RecyclerView implements
-        CarUserManagerHelper.OnUsersUpdateListener {
+public class UserGridRecyclerView extends RecyclerView {
     private UserSelectionListener mUserSelectionListener;
     private UserAdapter mAdapter;
     private CarUserManagerHelper mCarUserManagerHelper;
+    private UserManager mUserManager;
     private Context mContext;
+
+    private final BroadcastReceiver mUserUpdateReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            onUsersUpdate();
+        }
+    };
 
     public UserGridRecyclerView(Context context, AttributeSet attrs) {
         super(context, attrs);
         mContext = context;
         mCarUserManagerHelper = new CarUserManagerHelper(mContext);
+        mUserManager = UserManager.get(mContext);
 
-        addItemDecoration(new ItemSpacingDecoration(context.getResources().getDimensionPixelSize(
+        addItemDecoration(new ItemSpacingDecoration(mContext.getResources().getDimensionPixelSize(
                 R.dimen.car_user_switcher_vertical_spacing_between_users)));
     }
 
@@ -75,7 +91,7 @@ public class UserGridRecyclerView extends RecyclerView implements
     @Override
     public void onFinishInflate() {
         super.onFinishInflate();
-        mCarUserManagerHelper.registerOnUsersUpdateListener(this);
+        registerForUserEvents();
     }
 
     /**
@@ -84,7 +100,7 @@ public class UserGridRecyclerView extends RecyclerView implements
     @Override
     public void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        mCarUserManagerHelper.unregisterOnUsersUpdateListener(this);
+        unregisterForUserEvents();
     }
 
     /**
@@ -93,10 +109,16 @@ public class UserGridRecyclerView extends RecyclerView implements
      * @return the adapter
      */
     public void buildAdapter() {
-        List<UserRecord> userRecords = createUserRecords(mCarUserManagerHelper
-                .getAllUsers());
+        List<UserRecord> userRecords = createUserRecords(getUsersForUserGrid());
         mAdapter = new UserAdapter(mContext, userRecords);
         super.setAdapter(mAdapter);
+    }
+
+    private List<UserInfo> getUsersForUserGrid() {
+        return mUserManager.getUsers(/* excludeDying= */ true)
+                .stream()
+                .filter(UserInfo::supportsSwitchToByUser)
+                .collect(Collectors.toList());
     }
 
     private List<UserRecord> createUserRecords(List<UserInfo> userInfoList) {
@@ -114,8 +136,7 @@ public class UserGridRecyclerView extends RecyclerView implements
                 continue;
             }
 
-            boolean isForeground =
-                    mCarUserManagerHelper.getCurrentForegroundUserId() == userInfo.id;
+            boolean isForeground = ActivityManager.getCurrentUser() == userInfo.id;
             UserRecord record = new UserRecord(userInfo, false /* isStartGuestSession */,
                     false /* isAddUser */, isForeground);
             userRecords.add(record);
@@ -125,7 +146,8 @@ public class UserGridRecyclerView extends RecyclerView implements
         userRecords.add(createStartGuestUserRecord());
 
         // Add add user record if the foreground user can add users
-        if (mCarUserManagerHelper.canForegroundUserAddUsers()) {
+        UserHandle fgUserHandle = UserHandle.of(ActivityManager.getCurrentUser());
+        if (!mUserManager.hasUserRestriction(DISALLOW_ADD_USER, fgUserHandle)) {
             userRecords.add(createAddUserRecord());
         }
 
@@ -133,7 +155,7 @@ public class UserGridRecyclerView extends RecyclerView implements
     }
 
     private UserRecord createForegroundUserRecord() {
-        return new UserRecord(mCarUserManagerHelper.getCurrentForegroundUserInfo(),
+        return new UserRecord(mUserManager.getUserInfo(ActivityManager.getCurrentUser()),
                 false /* isStartGuestSession */, false /* isAddUser */, true /* isForeground */);
     }
 
@@ -161,11 +183,28 @@ public class UserGridRecyclerView extends RecyclerView implements
         mUserSelectionListener = userSelectionListener;
     }
 
-    @Override
-    public void onUsersUpdate() {
+    private void onUsersUpdate() {
         mAdapter.clearUsers();
-        mAdapter.updateUsers(createUserRecords(mCarUserManagerHelper.getAllUsers()));
+        mAdapter.updateUsers(createUserRecords(getUsersForUserGrid()));
         mAdapter.notifyDataSetChanged();
+    }
+
+    private void registerForUserEvents() {
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_USER_REMOVED);
+        filter.addAction(Intent.ACTION_USER_ADDED);
+        filter.addAction(Intent.ACTION_USER_INFO_CHANGED);
+        filter.addAction(Intent.ACTION_USER_SWITCHED);
+        mContext.registerReceiverAsUser(
+                mUserUpdateReceiver,
+                UserHandle.ALL, // Necessary because CarSystemUi lives in User 0
+                filter,
+                /* broadcastPermission= */ null,
+                /* scheduler= */ null);
+    }
+
+    private void unregisterForUserEvents() {
+        mContext.unregisterReceiver(mUserUpdateReceiver);
     }
 
     /**
@@ -248,7 +287,7 @@ public class UserGridRecyclerView extends RecyclerView implements
         }
 
         private void handleAddUserClicked() {
-            if (mCarUserManagerHelper.isUserLimitReached()) {
+            if (!mUserManager.canAddMoreUsers()) {
                 mAddUserView.setEnabled(true);
                 showMaxUserLimitReachedDialog();
             } else {

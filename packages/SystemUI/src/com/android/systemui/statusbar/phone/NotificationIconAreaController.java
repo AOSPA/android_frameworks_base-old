@@ -80,11 +80,14 @@ public class NotificationIconAreaController implements DarkReceiver,
     private boolean mAodIconsVisible;
     private boolean mIsPulsing;
 
-    public NotificationIconAreaController(Context context, StatusBar statusBar,
+    public NotificationIconAreaController(
+            Context context,
+            StatusBar statusBar,
             StatusBarStateController statusBarStateController,
             NotificationWakeUpCoordinator wakeUpCoordinator,
             KeyguardBypassController keyguardBypassController,
-            NotificationMediaManager notificationMediaManager) {
+            NotificationMediaManager notificationMediaManager,
+            DozeParameters dozeParameters) {
         mStatusBar = statusBar;
         mContrastColorUtil = ContrastColorUtil.getInstance(context);
         mContext = context;
@@ -92,7 +95,7 @@ public class NotificationIconAreaController implements DarkReceiver,
         mStatusBarStateController = statusBarStateController;
         mStatusBarStateController.addCallback(this);
         mMediaManager = notificationMediaManager;
-        mDozeParameters = DozeParameters.getInstance(mContext);
+        mDozeParameters = dozeParameters;
         mWakeUpCoordinator = wakeUpCoordinator;
         wakeUpCoordinator.addListener(this);
         mBypassController = keyguardBypassController;
@@ -244,10 +247,10 @@ public class NotificationIconAreaController implements DarkReceiver,
         if (hideCenteredIcon && isCenteredNotificationIcon && !entry.isRowHeadsUp()) {
             return false;
         }
-        if (mEntryManager.getNotificationData().isAmbient(entry.key) && !showAmbient) {
+        if (mEntryManager.getNotificationData().isAmbient(entry.getKey()) && !showAmbient) {
             return false;
         }
-        if (hideCurrentMedia && entry.key.equals(mMediaManager.getMediaNotificationKey())) {
+        if (hideCurrentMedia && entry.getKey().equals(mMediaManager.getMediaNotificationKey())) {
             return false;
         }
         if (!entry.isTopLevelChild()) {
@@ -533,8 +536,7 @@ public class NotificationIconAreaController implements DarkReceiver,
     }
 
     public void appearAodIcons() {
-        DozeParameters dozeParameters = DozeParameters.getInstance(mContext);
-        if (dozeParameters.shouldControlScreenOff()) {
+        if (mDozeParameters.shouldControlScreenOff()) {
             mAodIcons.setTranslationY(-mAodIconAppearTranslation);
             mAodIcons.setAlpha(0);
             animateInAodIconTranslation();

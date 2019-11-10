@@ -159,12 +159,7 @@ static void loadSystemIconAsSpriteWithPointerIcon(JNIEnv* env, jobject contextOb
     status_t status = android_view_PointerIcon_loadSystemIcon(env,
             contextObj, style, outPointerIcon);
     if (!status) {
-        SkBitmap* bitmapCopy = &outSpriteIcon->bitmap;
-        SkImageInfo bitmapCopyInfo = outPointerIcon->bitmap.info().makeColorType(kN32_SkColorType);
-        if (bitmapCopy->tryAllocPixels(bitmapCopyInfo)) {
-            outPointerIcon->bitmap.readPixels(bitmapCopy->info(), bitmapCopy->getPixels(),
-                    bitmapCopy->rowBytes(), 0, 0);
-        }
+        outSpriteIcon->bitmap = outPointerIcon->bitmap.copy(ANDROID_BITMAP_FORMAT_RGBA_8888);
         outSpriteIcon->style = outPointerIcon->style;
         outSpriteIcon->hotSpotX = outPointerIcon->hotSpotX;
         outSpriteIcon->hotSpotY = outPointerIcon->hotSpotY;
@@ -206,8 +201,7 @@ public:
 
     void setDisplayViewports(JNIEnv* env, jobjectArray viewportObjArray);
 
-    status_t registerInputChannel(JNIEnv* env, const sp<InputChannel>& inputChannel,
-            int32_t displayId);
+    status_t registerInputChannel(JNIEnv* env, const sp<InputChannel>& inputChannel);
     status_t registerInputMonitor(JNIEnv* env, const sp<InputChannel>& inputChannel,
             int32_t displayId, bool isGestureMonitor);
     status_t unregisterInputChannel(JNIEnv* env, const sp<InputChannel>& inputChannel);
@@ -440,10 +434,9 @@ void NativeInputManager::setDisplayViewports(JNIEnv* env, jobjectArray viewportO
 }
 
 status_t NativeInputManager::registerInputChannel(JNIEnv* /* env */,
-        const sp<InputChannel>& inputChannel, int32_t displayId) {
+        const sp<InputChannel>& inputChannel) {
     ATRACE_CALL();
-    return mInputManager->getDispatcher()->registerInputChannel(
-            inputChannel, displayId);
+    return mInputManager->getDispatcher()->registerInputChannel(inputChannel);
 }
 
 status_t NativeInputManager::registerInputMonitor(JNIEnv* /* env */,
@@ -1410,7 +1403,7 @@ static void handleInputChannelDisposed(JNIEnv* env,
 }
 
 static void nativeRegisterInputChannel(JNIEnv* env, jclass /* clazz */,
-        jlong ptr, jobject inputChannelObj, jint displayId) {
+        jlong ptr, jobject inputChannelObj) {
     NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
 
     sp<InputChannel> inputChannel = android_view_InputChannel_getInputChannel(env,
@@ -1420,7 +1413,7 @@ static void nativeRegisterInputChannel(JNIEnv* env, jclass /* clazz */,
         return;
     }
 
-    status_t status = im->registerInputChannel(env, inputChannel, displayId);
+    status_t status = im->registerInputChannel(env, inputChannel);
 
     if (status) {
         std::string message;
@@ -1575,6 +1568,27 @@ static void nativeSetSystemUiVisibility(JNIEnv* /* env */,
     im->setSystemUiVisibility(visibility);
 }
 
+static jboolean nativeTransferTouchFocus(JNIEnv* env,
+        jclass /* clazz */, jlong ptr, jobject fromChannelObj, jobject toChannelObj) {
+    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+
+    sp<InputChannel> fromChannel =
+            android_view_InputChannel_getInputChannel(env, fromChannelObj);
+    sp<InputChannel> toChannel =
+            android_view_InputChannel_getInputChannel(env, toChannelObj);
+
+    if (fromChannel == nullptr || toChannel == nullptr) {
+        return JNI_FALSE;
+    }
+
+    if (im->getInputManager()->getDispatcher()->
+            transferTouchFocus(fromChannel->getToken(), toChannel->getToken())) {
+        return JNI_TRUE;
+    } else {
+        return JNI_FALSE;
+    }
+}
+
 static void nativeSetPointerSpeed(JNIEnv* /* env */,
         jclass /* clazz */, jlong ptr, jint speed) {
     NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
@@ -1709,15 +1723,8 @@ static void nativeSetCustomPointerIcon(JNIEnv* env, jclass /* clazz */,
         return;
     }
 
-    SpriteIcon spriteIcon;
-    SkImageInfo spriteInfo = pointerIcon.bitmap.info().makeColorType(kN32_SkColorType);
-    if (spriteIcon.bitmap.tryAllocPixels(spriteInfo)) {
-        pointerIcon.bitmap.readPixels(spriteInfo, spriteIcon.bitmap.getPixels(),
-                spriteIcon.bitmap.rowBytes(), 0, 0);
-    }
-    spriteIcon.style = pointerIcon.style;
-    spriteIcon.hotSpotX = pointerIcon.hotSpotX;
-    spriteIcon.hotSpotY = pointerIcon.hotSpotY;
+    SpriteIcon spriteIcon(pointerIcon.bitmap.copy(ANDROID_BITMAP_FORMAT_RGBA_8888),
+                          pointerIcon.style, pointerIcon.hotSpotX, pointerIcon.hotSpotY);
     im->setCustomPointerIcon(spriteIcon);
 }
 
@@ -1748,7 +1755,7 @@ static const JNINativeMethod gInputManagerMethods[] = {
     { "nativeHasKeys", "(JII[I[Z)Z",
             (void*) nativeHasKeys },
     { "nativeRegisterInputChannel",
-            "(JLandroid/view/InputChannel;I)V",
+            "(JLandroid/view/InputChannel;)V",
             (void*) nativeRegisterInputChannel },
     { "nativeRegisterInputMonitor",
             "(JLandroid/view/InputChannel;IZ)V",
@@ -1775,6 +1782,8 @@ static const JNINativeMethod gInputManagerMethods[] = {
             (void*) nativeSetInputDispatchMode },
     { "nativeSetSystemUiVisibility", "(JI)V",
             (void*) nativeSetSystemUiVisibility },
+    { "nativeTransferTouchFocus", "(JLandroid/view/InputChannel;Landroid/view/InputChannel;)Z",
+            (void*) nativeTransferTouchFocus },
     { "nativeSetPointerSpeed", "(JI)V",
             (void*) nativeSetPointerSpeed },
     { "nativeSetShowTouches", "(JZ)V",

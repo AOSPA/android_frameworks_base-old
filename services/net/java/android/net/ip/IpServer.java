@@ -93,6 +93,8 @@ public class IpServer extends StateMachine {
     private static final int USB_PREFIX_LENGTH = 24;
     private static final String WIFI_HOST_IFACE_ADDR = "192.168.43.1";
     private static final int WIFI_HOST_IFACE_PREFIX_LENGTH = 24;
+    private static final String WIFI_P2P_IFACE_ADDR = "192.168.49.1";
+    private static final int WIFI_P2P_IFACE_PREFIX_LENGTH = 24;
     private static final String WIGIG_HOST_IFACE_ADDR = "192.168.50.1";
     private static final int WIGIG_HOST_IFACE_PREFIX_LENGTH = 24;
 
@@ -406,6 +408,9 @@ public class IpServer extends StateMachine {
         } else if (mInterfaceType == ConnectivityManager.TETHERING_WIFI) {
             ipAsString = getRandomWifiIPv4Address();
             prefixLen = WIFI_HOST_IFACE_PREFIX_LENGTH;
+        } else if (mInterfaceType == ConnectivityManager.TETHERING_WIFI_P2P) {
+            ipAsString = WIFI_P2P_IFACE_ADDR;
+            prefixLen = WIFI_P2P_IFACE_PREFIX_LENGTH;
         } else if (mInterfaceType == ConnectivityManager.TETHERING_WIGIG) {
             ipAsString = WIGIG_HOST_IFACE_ADDR;
             prefixLen = WIGIG_HOST_IFACE_PREFIX_LENGTH;

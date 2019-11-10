@@ -38,6 +38,7 @@ import android.net.DhcpInfo;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
+import android.net.NetworkStack;
 import android.net.wifi.hotspot2.IProvisioningCallback;
 import android.net.wifi.hotspot2.OsuProvider;
 import android.net.wifi.hotspot2.PasspointConfiguration;
@@ -45,23 +46,19 @@ import android.net.wifi.hotspot2.ProvisioningCallback;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.Looper;
-import android.os.Message;
-import android.os.Messenger;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.WorkSource;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
-import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
-import com.android.internal.util.AsyncChannel;
-import com.android.internal.util.Protocol;
 import com.android.server.net.NetworkPinner;
 
 import dalvik.system.CloseGuard;
@@ -75,7 +72,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 
 /**
@@ -566,7 +562,9 @@ public class WifiManager {
      *
      * @hide
      */
-    public static final String EXTRA_WIFI_AP_INTERFACE_NAME = "wifi_ap_interface_name";
+    @SystemApi
+    public static final String EXTRA_WIFI_AP_INTERFACE_NAME =
+            "android.net.wifi.extra.WIFI_AP_INTERFACE_NAME";
     /**
      * The intended ip mode for this softap.
      * @see #IFACE_IP_MODE_TETHERED
@@ -574,7 +572,8 @@ public class WifiManager {
      *
      * @hide
      */
-    public static final String EXTRA_WIFI_AP_MODE = "wifi_ap_mode";
+    @SystemApi
+    public static final String EXTRA_WIFI_AP_MODE = "android.net.wifi.extra.WIFI_AP_MODE";
 
     /** @hide */
     @IntDef(flag = false, prefix = { "WIFI_AP_STATE_" }, value = {
@@ -680,6 +679,7 @@ public class WifiManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int IFACE_IP_MODE_UNSPECIFIED = -1;
 
     /**
@@ -689,6 +689,7 @@ public class WifiManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int IFACE_IP_MODE_CONFIGURATION_ERROR = 0;
 
     /**
@@ -698,6 +699,7 @@ public class WifiManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int IFACE_IP_MODE_TETHERED = 1;
 
     /**
@@ -707,6 +709,7 @@ public class WifiManager {
      *
      * @hide
      */
+    @SystemApi
     public static final int IFACE_IP_MODE_LOCAL_ONLY = 2;
 
     /**
@@ -1204,25 +1207,8 @@ public class WifiManager {
     IWifiManager mService;
     private final int mTargetSdkVersion;
 
-    private static final int INVALID_KEY = 0;
-    private int mListenerKey = 1;
-    private final SparseArray mListenerMap = new SparseArray();
-    private final Object mListenerMapLock = new Object();
-
-    private AsyncChannel mAsyncChannel;
-    private CountDownLatch mConnected;
     private Looper mLooper;
     private boolean mVerboseLoggingEnabled = false;
-
-    /* LocalOnlyHotspot callback message types */
-    /** @hide */
-    public static final int HOTSPOT_STARTED = 0;
-    /** @hide */
-    public static final int HOTSPOT_STOPPED = 1;
-    /** @hide */
-    public static final int HOTSPOT_FAILED = 2;
-    /** @hide */
-    public static final int HOTSPOT_OBSERVER_REGISTERED = 3;
 
     private final Object mLock = new Object(); // lock guarding access to the following vars
     @GuardedBy("mLock")
@@ -1991,12 +1977,13 @@ public class WifiManager {
     }
 
     /**
-     * Remove the Passpoint configuration identified by its FQDN (Fully Qualified Domain Name).
+     * Remove the Passpoint configuration identified by its FQDN (Fully Qualified Domain Name) added
+     * by the caller.
      *
-     * @param fqdn The FQDN of the Passpoint configuration to be removed
+     * @param fqdn The FQDN of the Passpoint configuration added by the caller to be removed
      * @throws IllegalArgumentException if no configuration is associated with the given FQDN or
      *                                  Passpoint is not enabled on the device.
-     * @deprecated This is no longer supported.
+     * @deprecated This will be non-functional in a future release.
      */
     @Deprecated
     @RequiresPermission(anyOf = {
@@ -2020,12 +2007,12 @@ public class WifiManager {
     }
 
     /**
-     * Return the list of installed Passpoint configurations.
+     * Return the list of installed Passpoint configurations added by the caller.
      *
      * An empty list will be returned when no configurations are installed.
      *
-     * @return A list of {@link PasspointConfiguration}
-     * @deprecated This is no longer supported.
+     * @return A list of {@link PasspointConfiguration} added by the caller
+     * @deprecated This will be non-functional in a future release.
      */
     @Deprecated
     @RequiresPermission(anyOf = {
@@ -2658,25 +2645,6 @@ public class WifiManager {
     }
 
     /**
-     * Set the country code.
-     * @param countryCode country code in ISO 3166 format.
-     *
-     * @hide
-     */
-    public void setCountryCode(@NonNull String country) {
-        try {
-            IWifiManager iWifiManager = getIWifiManager();
-            if (iWifiManager == null) {
-                if (TextUtils.isEmpty(country)) return;
-                throw new RemoteException("Wifi service is not running");
-            }
-            iWifiManager.setCountryCode(country);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
     * get the country code.
     * @return the country code in ISO 3166 format.
     *
@@ -2801,8 +2769,23 @@ public class WifiManager {
      *
      * @hide for CTS test only
      */
-    public void getTxPacketCount(TxPacketCountListener listener) {
-        getChannel().sendMessage(RSSI_PKTCNT_FETCH, 0, putListener(listener));
+    public void getTxPacketCount(@NonNull TxPacketCountListener listener) {
+        if (listener == null) throw new IllegalArgumentException("listener cannot be null");
+        Binder binder = new Binder();
+        TxPacketCountListenerProxy listenerProxy =
+                new TxPacketCountListenerProxy(mLooper, listener);
+        try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.getTxPacketCount(mContext.getOpPackageName(), binder, listenerProxy,
+                    listener.hashCode());
+        } catch (RemoteException e) {
+            listenerProxy.onFailure(ERROR);
+        } catch (SecurityException e) {
+            listenerProxy.onFailure(NOT_AUTHORIZED);
+        }
     }
 
     /**
@@ -2843,16 +2826,21 @@ public class WifiManager {
     /**
      * Call allowing ConnectivityService to update WifiService with interface mode changes.
      *
-     * The possible modes include: {@link #IFACE_IP_MODE_TETHERED},
-     *                             {@link #IFACE_IP_MODE_LOCAL_ONLY},
-     *                             {@link #IFACE_IP_MODE_CONFIGURATION_ERROR}
-     *
-     * @param ifaceName String name of the updated interface
-     * @param mode int representing the new mode
+     * @param ifaceName String name of the updated interface, or null to represent all interfaces
+     * @param mode int representing the new mode, one of:
+     *             {@link #IFACE_IP_MODE_TETHERED},
+     *             {@link #IFACE_IP_MODE_LOCAL_ONLY},
+     *             {@link #IFACE_IP_MODE_CONFIGURATION_ERROR},
+     *             {@link #IFACE_IP_MODE_UNSPECIFIED}
      *
      * @hide
      */
-    public void updateInterfaceIpState(String ifaceName, int mode) {
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_STACK,
+            NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK
+    })
+    public void updateInterfaceIpState(@Nullable String ifaceName, @IfaceIpMode int mode) {
         try {
             IWifiManager iWifiManager = getIWifiManager();
             if (iWifiManager == null) {
@@ -2875,6 +2863,11 @@ public class WifiManager {
      *
      * @hide
      */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_STACK,
+            NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK
+    })
     public boolean startSoftAp(@Nullable WifiConfiguration wifiConfig) {
         try {
             IWifiManager iWifiManager = getIWifiManager();
@@ -2892,6 +2885,11 @@ public class WifiManager {
      *
      * @hide
      */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_STACK,
+            NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK
+    })
     public boolean stopSoftAp() {
         try {
             IWifiManager iWifiManager = getIWifiManager();
@@ -2900,6 +2898,13 @@ public class WifiManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    private Executor executorForHandler(@Nullable Handler handler) {
+        if (handler == null) {
+            return mContext.getMainExecutor();
+        }
+        return new HandlerExecutor(handler);
     }
 
     /**
@@ -2959,21 +2964,20 @@ public class WifiManager {
      */
     public void startLocalOnlyHotspot(LocalOnlyHotspotCallback callback,
             @Nullable Handler handler) {
+        Executor executor = executorForHandler(handler);
         synchronized (mLock) {
-            Looper looper = (handler == null) ? mContext.getMainLooper() : handler.getLooper();
             LocalOnlyHotspotCallbackProxy proxy =
-                    new LocalOnlyHotspotCallbackProxy(this, looper, callback);
+                    new LocalOnlyHotspotCallbackProxy(this, executor, callback);
             try {
                 IWifiManager iWifiManager = getIWifiManager();
                 if (iWifiManager == null) {
                     throw new RemoteException("Wifi service is not running");
                 }
                 String packageName = mContext.getOpPackageName();
-                int returnCode = iWifiManager.startLocalOnlyHotspot(
-                        proxy.getMessenger(), new Binder(), packageName);
+                int returnCode = iWifiManager.startLocalOnlyHotspot(proxy, packageName);
                 if (returnCode != LocalOnlyHotspotCallback.REQUEST_REGISTERED) {
                     // Send message to the proxy to make sure we call back on the correct thread
-                    proxy.notifyFailed(returnCode);
+                    proxy.onHotspotFailed(returnCode);
                     return;
                 }
                 mLOHSCallbackProxy = proxy;
@@ -3051,16 +3055,16 @@ public class WifiManager {
      */
     public void watchLocalOnlyHotspot(LocalOnlyHotspotObserver observer,
             @Nullable Handler handler) {
+        Executor executor = executorForHandler(handler);
         synchronized (mLock) {
-            Looper looper = (handler == null) ? mContext.getMainLooper() : handler.getLooper();
-            mLOHSObserverProxy = new LocalOnlyHotspotObserverProxy(this, looper, observer);
+            mLOHSObserverProxy =
+                    new LocalOnlyHotspotObserverProxy(this, executor, observer);
             try {
                 IWifiManager iWifiManager = getIWifiManager();
                 if (iWifiManager == null) {
                     throw new RemoteException("Wifi service is not running");
                 }
-                iWifiManager.startWatchLocalOnlyHotspot(
-                        mLOHSObserverProxy.getMessenger(), new Binder());
+                iWifiManager.startWatchLocalOnlyHotspot(mLOHSObserverProxy);
                 mLOHSObserverProxy.registered();
             } catch (RemoteException e) {
                 mLOHSObserverProxy = null;
@@ -3237,76 +3241,6 @@ public class WifiManager {
         }
     }
 
-    /* TODO: deprecate synchronous API and open up the following API */
-
-    private static final int BASE = Protocol.BASE_WIFI_MANAGER;
-
-    /* Commands to WifiService */
-    /** @hide */
-    public static final int CONNECT_NETWORK                 = BASE + 1;
-    /** @hide */
-    public static final int CONNECT_NETWORK_FAILED          = BASE + 2;
-    /** @hide */
-    public static final int CONNECT_NETWORK_SUCCEEDED       = BASE + 3;
-
-    /** @hide */
-    public static final int FORGET_NETWORK                  = BASE + 4;
-    /** @hide */
-    public static final int FORGET_NETWORK_FAILED           = BASE + 5;
-    /** @hide */
-    public static final int FORGET_NETWORK_SUCCEEDED        = BASE + 6;
-
-    /** @hide */
-    public static final int SAVE_NETWORK                    = BASE + 7;
-    /** @hide */
-    public static final int SAVE_NETWORK_FAILED             = BASE + 8;
-    /** @hide */
-    public static final int SAVE_NETWORK_SUCCEEDED          = BASE + 9;
-
-    /** @hide
-     * @deprecated This is deprecated
-     */
-    public static final int START_WPS                       = BASE + 10;
-    /** @hide
-     * @deprecated This is deprecated
-     */
-    public static final int START_WPS_SUCCEEDED             = BASE + 11;
-    /** @hide
-     * @deprecated This is deprecated
-     */
-    public static final int WPS_FAILED                      = BASE + 12;
-    /** @hide
-     * @deprecated This is deprecated
-     */
-    public static final int WPS_COMPLETED                   = BASE + 13;
-
-    /** @hide
-     * @deprecated This is deprecated
-     */
-    public static final int CANCEL_WPS                      = BASE + 14;
-    /** @hide
-     * @deprecated This is deprecated
-     */
-    public static final int CANCEL_WPS_FAILED               = BASE + 15;
-    /** @hide
-     * @deprecated This is deprecated
-     */
-    public static final int CANCEL_WPS_SUCCEDED             = BASE + 16;
-
-    /** @hide */
-    public static final int DISABLE_NETWORK                 = BASE + 17;
-    /** @hide */
-    public static final int DISABLE_NETWORK_FAILED          = BASE + 18;
-    /** @hide */
-    public static final int DISABLE_NETWORK_SUCCEEDED       = BASE + 19;
-
-    /** @hide */
-    public static final int RSSI_PKTCNT_FETCH               = BASE + 20;
-    /** @hide */
-    public static final int RSSI_PKTCNT_FETCH_SUCCEEDED     = BASE + 21;
-    /** @hide */
-    public static final int RSSI_PKTCNT_FETCH_FAILED        = BASE + 22;
-
     /**
      * Passed with {@link ActionListener#onFailure}.
      * Indicates that the operation failed due to an internal error.
@@ -3328,6 +3262,11 @@ public class WifiManager {
      * @hide
      */
     public static final int BUSY                        = 2;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({ERROR, IN_PROGRESS, BUSY})
+    public @interface ActionListenerFailureReason {}
 
     /* WPS specific errors */
     /** WPS overlap detected
@@ -3373,20 +3312,13 @@ public class WifiManager {
     public interface ActionListener {
         /**
          * The operation succeeded.
-         * This is called when the scan request has been validated and ready
-         * to sent to driver.
          */
-        public void onSuccess();
+        void onSuccess();
         /**
          * The operation failed.
-         * This is called when the scan request failed.
-         * @param reason The reason for failure could be one of the following:
-         * {@link #REASON_INVALID_REQUEST}} is specified when scan request parameters are invalid.
-         * {@link #REASON_NOT_AUTHORIZED} is specified when requesting app doesn't have the required
-         * permission to request a scan.
-         * {@link #REASON_UNSPECIFIED} is specified when driver reports a scan failure.
+         * @param reason The reason for failure depends on the operation.
          */
-        public void onFailure(int reason);
+        void onFailure(@ActionListenerFailureReason int reason);
     }
 
     /** Interface for callback invocation on a start WPS action
@@ -3428,6 +3360,41 @@ public class WifiManager {
          * {@link #ERROR}, {@link #IN_PROGRESS} or {@link #BUSY}
          */
         public void onFailure(int reason);
+    }
+
+    /**
+     * Callback proxy for TxPacketCountListener objects.
+     *
+     * @hide
+     */
+    private class TxPacketCountListenerProxy extends ITxPacketCountListener.Stub {
+        private final Handler mHandler;
+        private final TxPacketCountListener mCallback;
+
+        TxPacketCountListenerProxy(Looper looper, TxPacketCountListener callback) {
+            mHandler = new Handler(looper);
+            mCallback = callback;
+        }
+
+        @Override
+        public void onSuccess(int count) {
+            if (mVerboseLoggingEnabled) {
+                Log.v(TAG, "TxPacketCounterProxy: onSuccess: count=" + count);
+            }
+            mHandler.post(() -> {
+                mCallback.onSuccess(count);
+            });
+        }
+
+        @Override
+        public void onFailure(int reason) {
+            if (mVerboseLoggingEnabled) {
+                Log.v(TAG, "TxPacketCounterProxy: onFailure: reason=" + reason);
+            }
+            mHandler.post(() -> {
+                mCallback.onFailure(reason);
+            });
+        }
     }
 
     /**
@@ -3687,82 +3654,58 @@ public class WifiManager {
     /**
      * Callback proxy for LocalOnlyHotspotCallback objects.
      */
-    private static class LocalOnlyHotspotCallbackProxy {
-        private final Handler mHandler;
+    private static class LocalOnlyHotspotCallbackProxy extends ILocalOnlyHotspotCallback.Stub {
         private final WeakReference<WifiManager> mWifiManager;
-        private final Looper mLooper;
-        private final Messenger mMessenger;
+        private final Executor mExecutor;
+        private final LocalOnlyHotspotCallback mCallback;
 
         /**
-         * Constructs a {@link LocalOnlyHotspotCallback} using the specified looper.  All callbacks
-         * will be delivered on the thread of the specified looper.
+         * Constructs a {@link LocalOnlyHotspotCallbackProxy} using the specified executor.  All
+         * callbacks will run using the given executor.
          *
          * @param manager WifiManager
-         * @param looper Looper for delivering callbacks
+         * @param executor Executor for delivering callbacks.
          * @param callback LocalOnlyHotspotCallback to notify the calling application.
          */
-        LocalOnlyHotspotCallbackProxy(WifiManager manager, Looper looper,
-                final LocalOnlyHotspotCallback callback) {
+        LocalOnlyHotspotCallbackProxy(WifiManager manager, Executor executor,
+                                      LocalOnlyHotspotCallback callback) {
             mWifiManager = new WeakReference<>(manager);
-            mLooper = looper;
-
-            mHandler = new Handler(looper) {
-                @Override
-                public void handleMessage(Message msg) {
-                    Log.d(TAG, "LocalOnlyHotspotCallbackProxy: handle message what: "
-                            + msg.what + " msg: " + msg);
-
-                    WifiManager manager = mWifiManager.get();
-                    if (manager == null) {
-                        Log.w(TAG, "LocalOnlyHotspotCallbackProxy: handle message post GC");
-                        return;
-                    }
-
-                    switch (msg.what) {
-                        case HOTSPOT_STARTED:
-                            WifiConfiguration config = (WifiConfiguration) msg.obj;
-                            if (config == null) {
-                                Log.e(TAG, "LocalOnlyHotspotCallbackProxy: config cannot be null.");
-                                callback.onFailed(LocalOnlyHotspotCallback.ERROR_GENERIC);
-                                return;
-                            }
-                            callback.onStarted(manager.new LocalOnlyHotspotReservation(config));
-                            break;
-                        case HOTSPOT_STOPPED:
-                            Log.w(TAG, "LocalOnlyHotspotCallbackProxy: hotspot stopped");
-                            callback.onStopped();
-                            break;
-                        case HOTSPOT_FAILED:
-                            int reasonCode = msg.arg1;
-                            Log.w(TAG, "LocalOnlyHotspotCallbackProxy: failed to start.  reason: "
-                                    + reasonCode);
-                            callback.onFailed(reasonCode);
-                            Log.w(TAG, "done with the callback...");
-                            break;
-                        default:
-                            Log.e(TAG, "LocalOnlyHotspotCallbackProxy unhandled message.  type: "
-                                    + msg.what);
-                    }
-                }
-            };
-            mMessenger = new Messenger(mHandler);
+            mExecutor = executor;
+            mCallback = callback;
         }
 
-        public Messenger getMessenger() {
-            return mMessenger;
+        @Override
+        public void onHotspotStarted(WifiConfiguration config) {
+            WifiManager manager = mWifiManager.get();
+            if (manager == null) return;
+
+            if (config == null) {
+                Log.e(TAG, "LocalOnlyHotspotCallbackProxy: config cannot be null.");
+                onHotspotFailed(LocalOnlyHotspotCallback.ERROR_GENERIC);
+                return;
+            }
+            final LocalOnlyHotspotReservation reservation =
+                    manager.new LocalOnlyHotspotReservation(config);
+            mExecutor.execute(() -> mCallback.onStarted(reservation));
         }
 
-        /**
-         * Helper method allowing the the incoming application call to move the onFailed callback
-         * over to the desired callback thread.
-         *
-         * @param reason int representing the error type
-         */
-        public void notifyFailed(int reason) throws RemoteException {
-            Message msg = Message.obtain();
-            msg.what = HOTSPOT_FAILED;
-            msg.arg1 = reason;
-            mMessenger.send(msg);
+        @Override
+        public void onHotspotStopped() {
+            WifiManager manager = mWifiManager.get();
+            if (manager == null) return;
+
+            Log.w(TAG, "LocalOnlyHotspotCallbackProxy: hotspot stopped");
+            mExecutor.execute(() -> mCallback.onStopped());
+        }
+
+        @Override
+        public void onHotspotFailed(int reason) {
+            WifiManager manager = mWifiManager.get();
+            if (manager == null) return;
+
+            Log.w(TAG, "LocalOnlyHotspotCallbackProxy: failed to start.  reason: "
+                    + reason);
+            mExecutor.execute(() -> mCallback.onFailed(reason));
         }
     }
 
@@ -3830,191 +3773,115 @@ public class WifiManager {
     /**
      * Callback proxy for LocalOnlyHotspotObserver objects.
      */
-    private static class LocalOnlyHotspotObserverProxy {
-        private final Handler mHandler;
+    private static class LocalOnlyHotspotObserverProxy extends ILocalOnlyHotspotCallback.Stub {
         private final WeakReference<WifiManager> mWifiManager;
-        private final Looper mLooper;
-        private final Messenger mMessenger;
+        private final Executor mExecutor;
+        private final LocalOnlyHotspotObserver mObserver;
 
         /**
          * Constructs a {@link LocalOnlyHotspotObserverProxy} using the specified looper.
          * All callbacks will be delivered on the thread of the specified looper.
          *
          * @param manager WifiManager
-         * @param looper Looper for delivering callbacks
+         * @param executor Executor for delivering callbacks
          * @param observer LocalOnlyHotspotObserver to notify the calling application.
          */
-        LocalOnlyHotspotObserverProxy(WifiManager manager, Looper looper,
+        LocalOnlyHotspotObserverProxy(WifiManager manager, Executor executor,
                 final LocalOnlyHotspotObserver observer) {
             mWifiManager = new WeakReference<>(manager);
-            mLooper = looper;
-
-            mHandler = new Handler(looper) {
-                @Override
-                public void handleMessage(Message msg) {
-                    Log.d(TAG, "LocalOnlyHotspotObserverProxy: handle message what: "
-                            + msg.what + " msg: " + msg);
-
-                    WifiManager manager = mWifiManager.get();
-                    if (manager == null) {
-                        Log.w(TAG, "LocalOnlyHotspotObserverProxy: handle message post GC");
-                        return;
-                    }
-
-                    switch (msg.what) {
-                        case HOTSPOT_OBSERVER_REGISTERED:
-                            observer.onRegistered(manager.new LocalOnlyHotspotSubscription());
-                            break;
-                        case HOTSPOT_STARTED:
-                            WifiConfiguration config = (WifiConfiguration) msg.obj;
-                            if (config == null) {
-                                Log.e(TAG, "LocalOnlyHotspotObserverProxy: config cannot be null.");
-                                return;
-                            }
-                            observer.onStarted(config);
-                            break;
-                        case HOTSPOT_STOPPED:
-                            observer.onStopped();
-                            break;
-                        default:
-                            Log.e(TAG, "LocalOnlyHotspotObserverProxy unhandled message.  type: "
-                                    + msg.what);
-                    }
-                }
-            };
-            mMessenger = new Messenger(mHandler);
-        }
-
-        public Messenger getMessenger() {
-            return mMessenger;
+            mExecutor = executor;
+            mObserver = observer;
         }
 
         public void registered() throws RemoteException {
-            Message msg = Message.obtain();
-            msg.what = HOTSPOT_OBSERVER_REGISTERED;
-            mMessenger.send(msg);
-        }
-    }
+            WifiManager manager = mWifiManager.get();
+            if (manager == null) return;
 
-    // Ensure that multiple ServiceHandler threads do not interleave message dispatch.
-    private static final Object sServiceHandlerDispatchLock = new Object();
-
-    private class ServiceHandler extends Handler {
-        ServiceHandler(Looper looper) {
-            super(looper);
+            mExecutor.execute(() ->
+                    mObserver.onRegistered(manager.new LocalOnlyHotspotSubscription()));
         }
 
         @Override
-        public void handleMessage(Message message) {
-            synchronized (sServiceHandlerDispatchLock) {
-                dispatchMessageToListeners(message);
+        public void onHotspotStarted(WifiConfiguration config) {
+            WifiManager manager = mWifiManager.get();
+            if (manager == null) return;
+
+            if (config == null) {
+                Log.e(TAG, "LocalOnlyHotspotObserverProxy: config cannot be null.");
+                return;
             }
+            mExecutor.execute(() -> mObserver.onStarted(config));
         }
 
-        private void dispatchMessageToListeners(Message message) {
-            Object listener = removeListener(message.arg2);
-            switch (message.what) {
-                case AsyncChannel.CMD_CHANNEL_HALF_CONNECTED:
-                    if (message.arg1 == AsyncChannel.STATUS_SUCCESSFUL) {
-                        mAsyncChannel.sendMessage(AsyncChannel.CMD_CHANNEL_FULL_CONNECTION);
-                    } else {
-                        Log.e(TAG, "Failed to set up channel connection");
-                        // This will cause all further async API calls on the WifiManager
-                        // to fail and throw an exception
-                        mAsyncChannel = null;
-                    }
-                    mConnected.countDown();
-                    break;
-                case AsyncChannel.CMD_CHANNEL_FULLY_CONNECTED:
-                    // Ignore
-                    break;
-                case AsyncChannel.CMD_CHANNEL_DISCONNECTED:
-                    Log.e(TAG, "Channel connection lost");
-                    // This will cause all further async API calls on the WifiManager
-                    // to fail and throw an exception
-                    mAsyncChannel = null;
-                    getLooper().quit();
-                    break;
-                    /* ActionListeners grouped together */
-                case WifiManager.CONNECT_NETWORK_FAILED:
-                case WifiManager.FORGET_NETWORK_FAILED:
-                case WifiManager.SAVE_NETWORK_FAILED:
-                case WifiManager.DISABLE_NETWORK_FAILED:
-                    if (listener != null) {
-                        ((ActionListener) listener).onFailure(message.arg1);
-                    }
-                    break;
-                    /* ActionListeners grouped together */
-                case WifiManager.CONNECT_NETWORK_SUCCEEDED:
-                case WifiManager.FORGET_NETWORK_SUCCEEDED:
-                case WifiManager.SAVE_NETWORK_SUCCEEDED:
-                case WifiManager.DISABLE_NETWORK_SUCCEEDED:
-                    if (listener != null) {
-                        ((ActionListener) listener).onSuccess();
-                    }
-                    break;
-                case WifiManager.RSSI_PKTCNT_FETCH_SUCCEEDED:
-                    if (listener != null) {
-                        RssiPacketCountInfo info = (RssiPacketCountInfo) message.obj;
-                        if (info != null)
-                            ((TxPacketCountListener) listener).onSuccess(info.txgood + info.txbad);
-                        else
-                            ((TxPacketCountListener) listener).onFailure(ERROR);
-                    }
-                    break;
-                case WifiManager.RSSI_PKTCNT_FETCH_FAILED:
-                    if (listener != null) {
-                        ((TxPacketCountListener) listener).onFailure(message.arg1);
-                    }
-                    break;
-                default:
-                    //ignore
-                    break;
-            }
+        @Override
+        public void onHotspotStopped() {
+            WifiManager manager = mWifiManager.get();
+            if (manager == null) return;
+
+            mExecutor.execute(() -> mObserver.onStopped());
+        }
+
+        @Override
+        public void onHotspotFailed(int reason) {
+            // do nothing
         }
     }
 
-    private int putListener(Object listener) {
-        if (listener == null) return INVALID_KEY;
-        int key;
-        synchronized (mListenerMapLock) {
-            do {
-                key = mListenerKey++;
-            } while (key == INVALID_KEY);
-            mListenerMap.put(key, listener);
+    /**
+     * Callback proxy for ActionListener objects.
+     */
+    private class ActionListenerProxy extends IActionListener.Stub {
+        private final String mActionTag;
+        private final Handler mHandler;
+        private final ActionListener mCallback;
+
+        ActionListenerProxy(String actionTag, Looper looper, ActionListener callback) {
+            mActionTag = actionTag;
+            mHandler = new Handler(looper);
+            mCallback = callback;
         }
-        return key;
+
+        @Override
+        public void onSuccess() {
+            if (mVerboseLoggingEnabled) {
+                Log.v(TAG, "ActionListenerProxy:" + mActionTag + ": onSuccess");
+            }
+            mHandler.post(() -> {
+                mCallback.onSuccess();
+            });
+        }
+
+        @Override
+        public void onFailure(@ActionListenerFailureReason int reason) {
+            if (mVerboseLoggingEnabled) {
+                Log.v(TAG, "ActionListenerProxy:" + mActionTag + ": onFailure=" + reason);
+            }
+            mHandler.post(() -> {
+                mCallback.onFailure(reason);
+            });
+        }
     }
 
-    private Object removeListener(int key) {
-        if (key == INVALID_KEY) return null;
-        synchronized (mListenerMapLock) {
-            Object listener = mListenerMap.get(key);
-            mListenerMap.remove(key);
-            return listener;
+    private void connectInternal(@Nullable WifiConfiguration config, int networkId,
+            @Nullable ActionListener listener) {
+        ActionListenerProxy listenerProxy = null;
+        Binder binder = null;
+        if (listener != null) {
+            listenerProxy = new ActionListenerProxy("connect", mLooper, listener);
+            binder = new Binder();
         }
-    }
-
-    private synchronized AsyncChannel getChannel() {
-        if (mAsyncChannel == null) {
-            Messenger messenger = getWifiServiceMessenger();
-            if (messenger == null) {
-                throw new IllegalStateException(
-                        "getWifiServiceMessenger() returned null!  This is invalid.");
+        try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
             }
-
-            mAsyncChannel = new AsyncChannel();
-            mConnected = new CountDownLatch(1);
-
-            Handler handler = new ServiceHandler(mLooper);
-            mAsyncChannel.connect(mContext, handler, messenger);
-            try {
-                mConnected.await();
-            } catch (InterruptedException e) {
-                Log.e(TAG, "interrupted wait at init");
-            }
+            iWifiManager.connect(config, networkId, binder, listenerProxy,
+                    listener == null ? 0 : listener.hashCode());
+        } catch (RemoteException e) {
+            if (listenerProxy != null) listenerProxy.onFailure(ERROR);
+        } catch (SecurityException e) {
+            if (listenerProxy != null) listenerProxy.onFailure(NOT_AUTHORIZED);
         }
-        return mAsyncChannel;
     }
 
     /**
@@ -4040,10 +3907,7 @@ public class WifiManager {
     })
     public void connect(@NonNull WifiConfiguration config, @Nullable ActionListener listener) {
         if (config == null) throw new IllegalArgumentException("config cannot be null");
-        // Use INVALID_NETWORK_ID for arg1 when passing a config object
-        // arg1 is used to pass network id when the network already exists
-        getChannel().sendMessage(CONNECT_NETWORK, WifiConfiguration.INVALID_NETWORK_ID,
-                putListener(listener), config);
+        connectInternal(config, WifiConfiguration.INVALID_NETWORK_ID, listener);
     }
 
     /**
@@ -4066,7 +3930,7 @@ public class WifiManager {
     })
     public void connect(int networkId, @Nullable ActionListener listener) {
         if (networkId < 0) throw new IllegalArgumentException("Network id cannot be negative");
-        getChannel().sendMessage(CONNECT_NETWORK, networkId, putListener(listener));
+        connectInternal(null, networkId, listener);
     }
 
     /**
@@ -4097,7 +3961,24 @@ public class WifiManager {
     })
     public void save(@NonNull WifiConfiguration config, @Nullable ActionListener listener) {
         if (config == null) throw new IllegalArgumentException("config cannot be null");
-        getChannel().sendMessage(SAVE_NETWORK, 0, putListener(listener), config);
+        ActionListenerProxy listenerProxy = null;
+        Binder binder = null;
+        if (listener != null) {
+            listenerProxy = new ActionListenerProxy("save", mLooper, listener);
+            binder = new Binder();
+        }
+        try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.save(config, binder, listenerProxy,
+                    listener == null ? 0 : listener.hashCode());
+        } catch (RemoteException e) {
+            if (listenerProxy != null) listenerProxy.onFailure(ERROR);
+        } catch (SecurityException e) {
+            if (listenerProxy != null) listenerProxy.onFailure(NOT_AUTHORIZED);
+        }
     }
 
     /**
@@ -4121,7 +4002,24 @@ public class WifiManager {
     })
     public void forget(int netId, @Nullable ActionListener listener) {
         if (netId < 0) throw new IllegalArgumentException("Network id cannot be negative");
-        getChannel().sendMessage(FORGET_NETWORK, netId, putListener(listener));
+        ActionListenerProxy listenerProxy = null;
+        Binder binder = null;
+        if (listener != null) {
+            listenerProxy = new ActionListenerProxy("forget", mLooper, listener);
+            binder = new Binder();
+        }
+        try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.forget(netId, binder, listenerProxy,
+                    listener == null ? 0 : listener.hashCode());
+        } catch (RemoteException e) {
+            if (listenerProxy != null) listenerProxy.onFailure(ERROR);
+        } catch (SecurityException e) {
+            if (listenerProxy != null) listenerProxy.onFailure(NOT_AUTHORIZED);
+        }
     }
 
     /**
@@ -4131,6 +4029,7 @@ public class WifiManager {
      * @param listener for callbacks on success or failure. Can be null.
      * @throws IllegalStateException if the WifiManager instance needs to be
      * initialized again
+     * @deprecated This API is deprecated. Use {@link #disableNetwork(int)} instead.
      * @hide
      */
     @SystemApi
@@ -4139,9 +4038,19 @@ public class WifiManager {
             android.Manifest.permission.NETWORK_SETUP_WIZARD,
             android.Manifest.permission.NETWORK_STACK
     })
+    @Deprecated
     public void disable(int netId, @Nullable ActionListener listener) {
         if (netId < 0) throw new IllegalArgumentException("Network id cannot be negative");
-        getChannel().sendMessage(DISABLE_NETWORK, netId, putListener(listener));
+        // Simple wrapper which forwards the call to disableNetwork. This is a temporary
+        // implementation until we can remove this API completely.
+        boolean status = disableNetwork(netId);
+        if (listener != null) {
+            if (status) {
+                listener.onSuccess();
+            } else {
+                listener.onFailure(ERROR);
+            }
+        }
     }
 
     /**
@@ -4195,24 +4104,6 @@ public class WifiManager {
             listener.onFailed(ERROR);
         }
     }
-
-    /**
-     * Get a reference to WifiService handler. This is used by a client to establish
-     * an AsyncChannel communication with WifiService
-     *
-     * @return Messenger pointing to the WifiService handler
-     */
-    @UnsupportedAppUsage
-    private Messenger getWifiServiceMessenger() {
-        try {
-            IWifiManager iWifiManager = getIWifiManager();
-            if (iWifiManager == null) return null;
-            return iWifiManager.getWifiServiceMessenger(mContext.getOpPackageName());
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
 
     /**
      * Allows an application to keep the Wi-Fi radio awake.
@@ -4671,16 +4562,6 @@ public class WifiManager {
             return true;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
-        }
-    }
-
-    protected void finalize() throws Throwable {
-        try {
-            if (mAsyncChannel != null) {
-                mAsyncChannel.disconnect();
-            }
-        } finally {
-            super.finalize();
         }
     }
 
@@ -5639,6 +5520,92 @@ public class WifiManager {
                 throw new RemoteException("Wifi service is not running");
             }
             iWifiManager.updateWifiUsabilityScore(seqNum, score, predictionHorizonSec);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Base class for scan results listener. Should be implemented by applications and set when
+     * calling {@link WifiManager#addScanResultsListener(Executor, ScanResultsListener)}.
+     */
+    public interface ScanResultsListener {
+
+        /**
+         * Called when new scan results available.
+         * Caller should use {@link WifiManager#getScanResults()} to get the scan results.
+         */
+        void onScanResultsAvailable();
+    }
+
+    private class ScanResultsListenerProxy extends IScanResultsListener.Stub {
+        private final Executor mExecutor;
+        private final ScanResultsListener mListener;
+
+        ScanResultsListenerProxy(Executor executor, ScanResultsListener listener) {
+            mExecutor = executor;
+            mListener = listener;
+        }
+
+        @Override
+        public void onScanResultsAvailable() {
+            mExecutor.execute(mListener::onScanResultsAvailable);
+        }
+    }
+
+    /**
+     * Add a listener for Scan Results. See {@link ScanResultsListener}.
+     * Caller will receive the event when scan results are available.
+     * Caller should use {@link WifiManager#getScanResults()} to get the scan results.
+     * Caller can remove a previously registered listener using
+     * {@link WifiManager#removeScanResultsListener(ScanResultsListener)}
+     * <p>
+     * Applications should have the
+     * {@link android.Manifest.permission#ACCESS_WIFI_STATE} permission. Callers
+     * without the permission will trigger a {@link java.lang.SecurityException}.
+     * <p>
+     *
+     * @param executor  The executor to execute the listener of the {@code listener} object.
+     * @param listener listener for Scan Results events
+     */
+
+    @RequiresPermission(ACCESS_WIFI_STATE)
+    public void addScanResultsListener(@NonNull @CallbackExecutor Executor executor,
+            @NonNull ScanResultsListener listener) {
+        if (listener == null) throw new IllegalArgumentException("listener cannot be null");
+        if (executor == null) throw new IllegalArgumentException("executor cannot be null");
+        Log.v(TAG, "addScanResultsListener: listener=" + listener + ", executor=" + executor);
+        try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.registerScanResultsListener(
+                    new Binder(),
+                    new ScanResultsListenerProxy(executor, listener),
+                    mContext.getOpPackageName().hashCode());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Allow callers to remove a previously added listener. After calling this method,
+     * applications will no longer receive Scan Results events.
+     *
+     * @param listener listener to remove for Scan Results events
+     */
+    @RequiresPermission(ACCESS_WIFI_STATE)
+    public void removeScanResultsListener(@NonNull ScanResultsListener listener) {
+        if (listener == null) throw new IllegalArgumentException("listener cannot be null");
+        Log.v(TAG, "removeScanResultsListener: listener=" + listener);
+
+        try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.unregisterScanResultsListener(mContext.getOpPackageName().hashCode());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

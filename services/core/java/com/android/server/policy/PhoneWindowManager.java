@@ -23,6 +23,7 @@ import static android.app.AppOpsManager.OP_TOAST_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.content.Context.CONTEXT_RESTRICTED;
 import static android.content.Context.WINDOW_SERVICE;
+import static android.content.pm.PackageManager.FEATURE_AUTOMOTIVE;
 import static android.content.pm.PackageManager.FEATURE_HDMI_CEC;
 import static android.content.pm.PackageManager.FEATURE_LEANBACK;
 import static android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE;
@@ -46,8 +47,8 @@ import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.LAST_SYSTEM_WINDOW;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_KEYGUARD;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_SYSTEM_ERROR;
+import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
 import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
@@ -204,6 +205,7 @@ import com.android.internal.logging.nano.MetricsProto;
 import com.android.internal.os.RoSystemProperties;
 import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.policy.IShortcutService;
+import com.android.internal.policy.KeyInterceptionInfo;
 import com.android.internal.policy.PhoneWindow;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.ArrayUtils;
@@ -384,6 +386,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     BurnInProtectionHelper mBurnInProtectionHelper;
     private DisplayFoldController mDisplayFoldController;
     AppOpsManager mAppOpsManager;
+    PackageManager mPackageManager;
+    private boolean mHasFeatureAuto;
     private boolean mHasFeatureWatch;
     private boolean mHasFeatureLeanback;
     private boolean mHasFeatureHdmiCec;
@@ -1561,10 +1565,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private void launchAllAppsAction() {
         Intent intent = new Intent(Intent.ACTION_ALL_APPS);
         if (mHasFeatureLeanback) {
-            final PackageManager pm = mContext.getPackageManager();
             Intent intentLauncher = new Intent(Intent.ACTION_MAIN);
             intentLauncher.addCategory(Intent.CATEGORY_HOME);
-            ResolveInfo resolveInfo = pm.resolveActivityAsUser(intentLauncher,
+            ResolveInfo resolveInfo = mPackageManager.resolveActivityAsUser(intentLauncher,
                     PackageManager.MATCH_SYSTEM_ONLY,
                     mCurrentUserId);
             if (resolveInfo != null) {
@@ -1612,7 +1615,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mDisplayId = displayId;
         }
 
-        int handleHomeButton(WindowState win, KeyEvent event) {
+        int handleHomeButton(IBinder focusedToken, KeyEvent event) {
             final boolean keyguardOn = keyguardOn();
             final int repeatCount = event.getRepeatCount();
             final boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
@@ -1655,18 +1658,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 return -1;
             }
 
-            // If a system window has focus, then it doesn't make sense
-            // right now to interact with applications.
-            WindowManager.LayoutParams attrs = win != null ? win.getAttrs() : null;
-            if (attrs != null) {
-                final int type = attrs.type;
-                if (type == TYPE_KEYGUARD_DIALOG
-                        || (attrs.privateFlags & PRIVATE_FLAG_KEYGUARD) != 0) {
+            final KeyInterceptionInfo info =
+                    mWindowManagerInternal.getKeyInterceptionInfoFromToken(focusedToken);
+            if (info != null) {
+                // If a system window has focus, then it doesn't make sense
+                // right now to interact with applications.
+                if (info.layoutParamsType == TYPE_KEYGUARD_DIALOG
+                        || (info.layoutParamsPrivateFlags & PRIVATE_FLAG_KEYGUARD) != 0) {
                     // the "app" is keyguard, so give it the key
                     return 0;
                 }
                 for (int t : WINDOW_TYPES_WHERE_HOME_DOESNT_WORK) {
-                    if (type == t) {
+                    if (info.layoutParamsType == t) {
                         // don't do anything, but also don't pass it to the app
                         return -1;
                     }
@@ -1759,9 +1762,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mPowerManagerInternal = LocalServices.getService(PowerManagerInternal.class);
         mAppOpsManager = mContext.getSystemService(AppOpsManager.class);
         mDisplayManager = mContext.getSystemService(DisplayManager.class);
-        mHasFeatureWatch = mContext.getPackageManager().hasSystemFeature(FEATURE_WATCH);
-        mHasFeatureLeanback = mContext.getPackageManager().hasSystemFeature(FEATURE_LEANBACK);
-        mHasFeatureHdmiCec = mContext.getPackageManager().hasSystemFeature(FEATURE_HDMI_CEC);
+        mPackageManager = mContext.getPackageManager();
+        mHasFeatureWatch = mPackageManager.hasSystemFeature(FEATURE_WATCH);
+        mHasFeatureLeanback = mPackageManager.hasSystemFeature(FEATURE_LEANBACK);
+        mHasFeatureAuto = mPackageManager.hasSystemFeature(FEATURE_AUTOMOTIVE);
+        mHasFeatureHdmiCec = mPackageManager.hasSystemFeature(FEATURE_HDMI_CEC);
         mAccessibilityShortcutController =
                 new AccessibilityShortcutController(mContext, new Handler(), mCurrentUserId);
         mLogger = new MetricsLogger();
@@ -1999,7 +2004,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         mShortPressOnWindowBehavior = SHORT_PRESS_WINDOW_NOTHING;
-        if (mContext.getPackageManager().hasSystemFeature(FEATURE_PICTURE_IN_PICTURE)) {
+        if (mPackageManager.hasSystemFeature(FEATURE_PICTURE_IN_PICTURE)) {
             mShortPressOnWindowBehavior = SHORT_PRESS_WINDOW_PICTURE_IN_PICTURE;
         }
     }
@@ -2143,7 +2148,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
         ApplicationInfo appInfo;
         try {
-            appInfo = mContext.getPackageManager().getApplicationInfoAsUser(
+            appInfo = mPackageManager.getApplicationInfoAsUser(
                             attrs.packageName,
                             0 /* flags */,
                             UserHandle.getUserId(callingUid));
@@ -2194,10 +2199,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             default:
                 // These are the windows that by default are shown only to the user that created
                 // them. If this needs to be overridden, set
-                // {@link WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS} in
+                // {@link WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS} in
                 // {@link WindowManager.LayoutParams}. Note that permission
                 // {@link android.Manifest.permission.INTERNAL_SYSTEM_WINDOW} is required as well.
-                if ((attrs.privateFlags & PRIVATE_FLAG_SHOW_FOR_ALL_USERS) == 0) {
+                if ((attrs.privateFlags & SYSTEM_FLAG_SHOW_FOR_ALL_USERS) == 0) {
                     return true;
                 }
                 break;
@@ -2451,7 +2456,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     com.android.internal.R.styleable.Window_windowAnimationStyle, 0);
             params.privateFlags |=
                     WindowManager.LayoutParams.PRIVATE_FLAG_FAKE_HARDWARE_ACCELERATED;
-            params.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
+            params.privateFlags |= WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
 
             if (!compatInfo.supportsScreen()) {
                 params.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
@@ -2607,8 +2612,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // TODO(b/117479243): handle it in InputPolicy
     /** {@inheritDoc} */
     @Override
-    public long interceptKeyBeforeDispatching(WindowState win, KeyEvent event, int policyFlags) {
-        final long result = interceptKeyBeforeDispatchingInner(win, event, policyFlags);
+    public long interceptKeyBeforeDispatching(IBinder focusedToken, KeyEvent event,
+            int policyFlags) {
+        final long result = interceptKeyBeforeDispatchingInner(focusedToken, event, policyFlags);
         final int eventDisplayId = event.getDisplayId();
         if (result == 0 && !mPerDisplayFocusEnabled
                 && eventDisplayId != INVALID_DISPLAY && eventDisplayId != mTopFocusedDisplayId) {
@@ -2636,7 +2642,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         return result;
     }
 
-    private long interceptKeyBeforeDispatchingInner(WindowState win, KeyEvent event,
+    private long interceptKeyBeforeDispatchingInner(IBinder focusedToken, KeyEvent event,
             int policyFlags) {
         final boolean keyguardOn = keyguardOn();
         final int keyCode = event.getKeyCode();
@@ -2739,7 +2745,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 handler = new DisplayHomeButtonHandler(displayId);
                 mDisplayHomeButtonHandlers.put(displayId, handler);
             }
-            return handler.handleHomeButton(win, event);
+            return handler.handleHomeButton(focusedToken, event);
         } else if (keyCode == KeyEvent.KEYCODE_MENU) {
             // Hijack modified menu keys for debugging features
             final int chordBug = KeyEvent.META_SHIFT_ON;
@@ -3129,8 +3135,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 || Settings.Global.getInt(mContext.getContentResolver(),
                         Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1) {
             try {
-                ActivityManager.getService()
-                        .requestBugReport(ActivityManager.BUGREPORT_OPTION_FULL);
+                ActivityManager.getService().requestFullBugReport();
             } catch (RemoteException e) {
                 Slog.e(TAG, "Error taking bugreport", e);
             }
@@ -3140,10 +3145,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // TODO(b/117479243): handle it in InputPolicy
     /** {@inheritDoc} */
     @Override
-    public KeyEvent dispatchUnhandledKey(WindowState win, KeyEvent event, int policyFlags) {
+    public KeyEvent dispatchUnhandledKey(IBinder focusedToken, KeyEvent event, int policyFlags) {
         // Note: This method is only called if the initial down was unhandled.
         if (DEBUG_INPUT) {
-            Slog.d(TAG, "Unhandled key: win=" + win + ", action=" + event.getAction()
+            final KeyInterceptionInfo info =
+                    mWindowManagerInternal.getKeyInterceptionInfoFromToken(focusedToken);
+            final String title = info == null ? "<unknown>" : info.windowTitle;
+            Slog.d(TAG, "Unhandled key: inputToken=" + focusedToken
+                    + ", title=" + title
+                    + ", action=" + event.getAction()
                     + ", flags=" + event.getFlags()
                     + ", keyCode=" + event.getKeyCode()
                     + ", scanCode=" + event.getScanCode()
@@ -3182,7 +3192,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         event.getDeviceId(), event.getScanCode(),
                         flags, event.getSource(), event.getDisplayId(), null);
 
-                if (!interceptFallback(win, fallbackEvent, policyFlags)) {
+                if (!interceptFallback(focusedToken, fallbackEvent, policyFlags)) {
                     fallbackEvent.recycle();
                     fallbackEvent = null;
                 }
@@ -3206,11 +3216,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         return fallbackEvent;
     }
 
-    private boolean interceptFallback(WindowState win, KeyEvent fallbackEvent, int policyFlags) {
+    private boolean interceptFallback(IBinder focusedToken, KeyEvent fallbackEvent,
+            int policyFlags) {
         int actions = interceptKeyBeforeQueueing(fallbackEvent, policyFlags);
         if ((actions & ACTION_PASS_TO_USER) != 0) {
             long delayMillis = interceptKeyBeforeDispatching(
-                    win, fallbackEvent, policyFlags);
+                    focusedToken, fallbackEvent, policyFlags);
             if (delayMillis == 0) {
                 return true;
             }
@@ -4543,6 +4554,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private void wakeUpFromPowerKey(long eventTime) {
         wakeUp(eventTime, mAllowTheaterModeWakeFromPowerKey,
                 PowerManager.WAKE_REASON_POWER_BUTTON, "android.policy:POWER");
+
+        // Turn on the connected TV and switch HDMI input if we're a HDMI playback device.
+        final HdmiControl hdmiControl = getHdmiControl();
+        if (hdmiControl != null) {
+            hdmiControl.turnOnTv();
+        }
     }
 
     private boolean wakeUp(long wakeTime, boolean wakeInTheaterMode, @WakeReason int reason,
@@ -4575,7 +4592,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // ... eventually calls finishWindowsDrawn which will finalize our screen turn on
         // as well as enabling the orientation change logic/sensor.
         mWindowManagerInternal.waitForAllWindowsDrawn(mWindowManagerDrawCallback,
-                WAITING_FOR_DRAWN_TIMEOUT);
+                WAITING_FOR_DRAWN_TIMEOUT, INVALID_DISPLAY);
     }
 
     // Called on the DisplayManager's DisplayPowerController thread.
@@ -4908,7 +4925,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             @Override public void run() {
                 if (mBootMsgDialog == null) {
                     int theme;
-                    if (mContext.getPackageManager().hasSystemFeature(FEATURE_LEANBACK)) {
+                    if (mPackageManager.hasSystemFeature(FEATURE_LEANBACK)) {
                         theme = com.android.internal.R.style.Theme_Leanback_Dialog_Alert;
                     } else {
                         theme = 0;
@@ -4937,7 +4954,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             return true;
                         }
                     };
-                    if (mContext.getPackageManager().isDeviceUpgrading()) {
+                    if (mPackageManager.isDeviceUpgrading()) {
                         mBootMsgDialog.setTitle(R.string.android_upgrading_title);
                     } else {
                         mBootMsgDialog.setTitle(R.string.android_start_title);
@@ -5197,7 +5214,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         ActivityInfo ai = null;
-        ResolveInfo info = mContext.getPackageManager().resolveActivityAsUser(
+        ResolveInfo info = mPackageManager.resolveActivityAsUser(
                 intent,
                 PackageManager.MATCH_DEFAULT_ONLY | PackageManager.GET_META_DATA,
                 mCurrentUserId);
@@ -5225,7 +5242,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             awakenDreams();
         }
 
-        if (!isUserSetupComplete()) {
+        if (!mHasFeatureAuto && !isUserSetupComplete()) {
             Slog.i(TAG, "Not going home because user setup is in progress.");
             return;
         }

@@ -15,13 +15,18 @@
  */
 package com.android.server.stats;
 
-import static com.android.server.stats.ProcfsMemoryUtil.parseVmHWMFromStatus;
+import static com.android.server.stats.ProcfsMemoryUtil.parseCmdline;
+import static com.android.server.stats.ProcfsMemoryUtil.parseMemorySnapshotFromStatus;
 
 import static com.google.common.truth.Truth.assertThat;
 
 import androidx.test.filters.SmallTest;
 
+import com.android.server.stats.ProcfsMemoryUtil.MemorySnapshot;
+
 import org.junit.Test;
+
+import java.io.ByteArrayOutputStream;
 
 /**
  * Build/Install/Run:
@@ -77,17 +82,60 @@ public class ProcfsMemoryUtilTest {
             + "nonvoluntary_ctxt_switches:\t104\n";
 
     @Test
-    public void testParseVmHWMFromStatus_parsesCorrectValue() {
-        assertThat(parseVmHWMFromStatus(STATUS_CONTENTS)).isEqualTo(137668);
+    public void testParseMemorySnapshotFromStatus_parsesCorrectValue() {
+        MemorySnapshot snapshot = parseMemorySnapshotFromStatus(STATUS_CONTENTS);
+        assertThat(snapshot.uid).isEqualTo(10083);
+        assertThat(snapshot.rssHighWaterMarkInKilobytes).isEqualTo(137668);
+        assertThat(snapshot.rssInKilobytes).isEqualTo(126776);
+        assertThat(snapshot.anonRssInKilobytes).isEqualTo(37860);
+        assertThat(snapshot.swapInKilobytes).isEqualTo(22);
     }
 
     @Test
-    public void testParseVmHWMFromStatus_invalidValue() {
-        assertThat(parseVmHWMFromStatus("test\nVmHWM: x0x0x\ntest")).isEqualTo(0);
+    public void testParseMemorySnapshotFromStatus_invalidValue() {
+        MemorySnapshot snapshot =
+                parseMemorySnapshotFromStatus("test\nVmRSS:\tx0x0x\nVmSwap:\t1 kB\ntest");
+        assertThat(snapshot).isNull();
     }
 
     @Test
-    public void testParseVmHWMFromStatus_emptyContents() {
-        assertThat(parseVmHWMFromStatus("")).isEqualTo(0);
+    public void testParseMemorySnapshotFromStatus_emptyContents() {
+        MemorySnapshot snapshot = parseMemorySnapshotFromStatus("");
+        assertThat(snapshot).isNull();
+    }
+
+    @Test
+    public void testParseCmdline_invalidValue() {
+        byte[] nothing = new byte[] {0x00, 0x74, 0x65, 0x73, 0x74}; // \0test
+
+        assertThat(parseCmdline(bytesToString(nothing))).isEmpty();
+    }
+
+    @Test
+    public void testParseCmdline_correctValue_noNullBytes() {
+        assertThat(parseCmdline("com.google.app")).isEqualTo("com.google.app");
+    }
+
+    @Test
+    public void testParseCmdline_correctValue_withNullBytes() {
+        byte[] trailing = new byte[] {0x74, 0x65, 0x73, 0x74, 0x00, 0x00, 0x00}; // test\0\0\0
+
+        assertThat(parseCmdline(bytesToString(trailing))).isEqualTo("test");
+
+        // test\0\0test
+        byte[] inside = new byte[] {0x74, 0x65, 0x73, 0x74, 0x00, 0x00, 0x74, 0x65, 0x73, 0x74};
+
+        assertThat(parseCmdline(bytesToString(trailing))).isEqualTo("test");
+    }
+
+    @Test
+    public void testParseCmdline_emptyContents() {
+        assertThat(parseCmdline("")).isEmpty();
+    }
+
+    private static String bytesToString(byte[] bytes) {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        output.write(bytes, 0, bytes.length);
+        return output.toString();
     }
 }

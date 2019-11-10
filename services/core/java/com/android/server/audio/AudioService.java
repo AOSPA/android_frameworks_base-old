@@ -59,6 +59,7 @@ import android.hardware.hdmi.HdmiAudioSystemClient;
 import android.hardware.hdmi.HdmiControlManager;
 import android.hardware.hdmi.HdmiPlaybackClient;
 import android.hardware.hdmi.HdmiTvClient;
+import android.hardware.input.InputManager;
 import android.hardware.usb.UsbManager;
 import android.media.AudioAttributes;
 import android.media.AudioFocusInfo;
@@ -549,6 +550,10 @@ public class AudioService extends IAudioService.Stub
     private String mEnabledSurroundFormats;
     private boolean mSurroundModeChanged;
 
+    private boolean mMicMuteFromSwitch;
+    private boolean mMicMuteFromApi;
+    private boolean mMicMuteFromRestrictions;
+
     @GuardedBy("mSettingsLock")
     private int mAssistantUid;
 
@@ -886,6 +891,8 @@ public class AudioService extends IAudioService.Stub
         mRoleObserver.register();
 
         onIndicateSystemReady();
+
+        setMicMuteFromSwitchInput();
     }
 
     RoleObserver mRoleObserver;
@@ -1015,7 +1022,14 @@ public class AudioService extends IAudioService.Stub
 
         synchronized (mAudioPolicies) {
             for (AudioPolicyProxy policy : mAudioPolicies.values()) {
-                policy.connectMixes();
+                final int status = policy.connectMixes();
+                if (status != AudioSystem.SUCCESS) {
+                    // note that PERMISSION_DENIED may also indicate trouble getting to APService
+                    Log.e(TAG, "onAudioServerDied: error "
+                            + AudioSystem.audioSystemErrorToString(status)
+                            + " when connecting mixes for policy " + policy.toLogFriendlyString());
+                    policy.release();
+                }
             }
         }
 
@@ -1025,6 +1039,8 @@ public class AudioService extends IAudioService.Stub
 
         sendMsg(mAudioHandler, MSG_DISPATCH_AUDIO_SERVER_STATE,
                 SENDMSG_QUEUE, 1, 0, null, 0);
+
+        setMicMuteFromSwitchInput();
     }
 
     private void onDispatchAudioServerStateChange(boolean state) {
@@ -1561,12 +1577,13 @@ public class AudioService extends IAudioService.Stub
         AudioSystem.setMasterMute(masterMute);
         broadcastMasterMuteStatus(masterMute);
 
-        boolean microphoneMute = mUserManagerInternal.getUserRestriction(
+        mMicMuteFromRestrictions = mUserManagerInternal.getUserRestriction(
                 currentUser, UserManager.DISALLOW_UNMUTE_MICROPHONE);
         if (DEBUG_VOL) {
-            Log.d(TAG, String.format("Mic mute %s, user=%d", microphoneMute, currentUser));
+            Log.d(TAG, String.format("Mic mute %b, user=%d", mMicMuteFromRestrictions,
+                    currentUser));
         }
-        AudioSystem.muteMicrophone(microphoneMute);
+        setMicrophoneMuteNoCallerCheck(currentUser);
     }
 
     private int rescaleIndex(int index, int srcStream, int dstStream) {
@@ -2861,20 +2878,45 @@ public class AudioService extends IAudioService.Stub
                 != PackageManager.PERMISSION_GRANTED) {
             return;
         }
-        setMicrophoneMuteNoCallerCheck(on, userId);
+        mMicMuteFromApi = on;
+        setMicrophoneMuteNoCallerCheck(userId);
     }
 
-    private void setMicrophoneMuteNoCallerCheck(boolean on, int userId) {
+    /** @see AudioManager#setMicrophoneMuteFromSwitch(boolean) */
+    public void setMicrophoneMuteFromSwitch(boolean on) {
+        int userId = Binder.getCallingUid();
+        if (userId != android.os.Process.SYSTEM_UID) {
+            Log.e(TAG, "setMicrophoneMuteFromSwitch() called from non system user!");
+            return;
+        }
+        mMicMuteFromSwitch = on;
+        setMicrophoneMuteNoCallerCheck(userId);
+    }
+
+    private void setMicMuteFromSwitchInput() {
+        InputManager im = mContext.getSystemService(InputManager.class);
+        final int isMicMuted = im.isMicMuted();
+        if (isMicMuted != InputManager.SWITCH_STATE_UNKNOWN) {
+            setMicrophoneMuteFromSwitch(im.isMicMuted() != InputManager.SWITCH_STATE_OFF);
+        }
+    }
+
+    public boolean isMicrophoneMuted() {
+        return mMicMuteFromSwitch || mMicMuteFromRestrictions || mMicMuteFromApi;
+    }
+
+    private void setMicrophoneMuteNoCallerCheck(int userId) {
+        final boolean muted = isMicrophoneMuted();
         if (DEBUG_VOL) {
-            Log.d(TAG, String.format("Mic mute %s, user=%d", on, userId));
+            Log.d(TAG, String.format("Mic mute %b, user=%d", muted, userId));
         }
         // only mute for the current user
-        if (getCurrentUserId() == userId) {
+        if (getCurrentUserId() == userId || userId == android.os.Process.SYSTEM_UID) {
             final boolean currentMute = AudioSystem.isMicrophoneMuted();
             final long identity = Binder.clearCallingIdentity();
-            AudioSystem.muteMicrophone(on);
+            AudioSystem.muteMicrophone(muted);
             Binder.restoreCallingIdentity(identity);
-            if (on != currentMute) {
+            if (muted != currentMute) {
                 mContext.sendBroadcastAsUser(
                         new Intent(AudioManager.ACTION_MICROPHONE_MUTE_CHANGED)
                                 .setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY), UserHandle.ALL);
@@ -3269,7 +3311,6 @@ public class AudioService extends IAudioService.Stub
         // when entering RINGTONE, IN_CALL or IN_COMMUNICATION mode, clear all
         // SCO connections not started by the application changing the mode when pid changes
         if ((newModeOwnerPid != oldModeOwnerPid) && (newModeOwnerPid != 0)) {
-            Log.i(TAG, "In setMode(), calling disconnectBluetoothSco()");
             mDeviceBroker.postDisconnectBluetoothSco(newModeOwnerPid);
         }
     }
@@ -3898,7 +3939,7 @@ public class AudioService extends IAudioService.Stub
         final boolean muteSystem = (zenPolicy.priorityCategories
                 & NotificationManager.Policy.PRIORITY_CATEGORY_SYSTEM) == 0;
         final boolean muteNotificationAndRing = ZenModeConfig
-                .areAllPriorityOnlyNotificationZenSoundsMuted(
+                .areAllPriorityOnlyRingerSoundsMuted(
                         mNm.getConsolidatedNotificationPolicy());
         return muteAlarms && isAlarm(streamType)
                 || muteMedia && isMedia(streamType)
@@ -3911,16 +3952,26 @@ public class AudioService extends IAudioService.Stub
     }
 
     /**
-     * DND total silence: media and alarms streams are tied to the muted ringer
+     * Notifications, ringer and system sounds are controlled by the ringer:
      * {@link ZenModeHelper.RingerModeDelegate#getRingerModeAffectedStreams(int)}
-     * DND alarms only: notification, ringer + system muted (by default tied to muted ringer mode)
-     * DND priority only: alarms, media, system streams can be muted separate from ringer based on
+     * DND total silence: media and alarms streams can be muted by DND
+     * DND alarms only: no streams additionally controlled by DND
+     * DND priority only: alarms, media, system streams can be muted by DND based on
      * zenPolicy (this method determines which streams)
      * @return true if changed, else false
      */
     private boolean updateZenModeAffectedStreams() {
+        if (!mSystemReady) {
+            return false;
+        }
+
         int zenModeAffectedStreams = 0;
-        if (mSystemReady && mNm.getZenMode() == Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS) {
+        final int zenMode = mNm.getZenMode();
+
+        if (zenMode == Settings.Global.ZEN_MODE_NO_INTERRUPTIONS) {
+            zenModeAffectedStreams |= 1 << AudioManager.STREAM_ALARM;
+            zenModeAffectedStreams |= 1 << AudioManager.STREAM_MUSIC;
+        } else if (zenMode == Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS) {
             NotificationManager.Policy zenPolicy = mNm.getConsolidatedNotificationPolicy();
             if ((zenPolicy.priorityCategories
                     & NotificationManager.Policy.PRIORITY_CATEGORY_ALARMS) == 0) {
@@ -3932,6 +3983,8 @@ public class AudioService extends IAudioService.Stub
                 zenModeAffectedStreams |= 1 << AudioManager.STREAM_MUSIC;
             }
 
+            // even if zen isn't muting the system stream, the ringer mode can still mute
+            // the system stream
             if ((zenPolicy.priorityCategories
                     & NotificationManager.Policy.PRIORITY_CATEGORY_SYSTEM) == 0) {
                 zenModeAffectedStreams |= 1 << AudioManager.STREAM_SYSTEM;
@@ -5469,7 +5522,8 @@ public class AudioService extends IAudioService.Stub
                 final boolean isRestricted =
                         newRestrictions.getBoolean(UserManager.DISALLOW_UNMUTE_MICROPHONE);
                 if (wasRestricted != isRestricted) {
-                    setMicrophoneMuteNoCallerCheck(isRestricted, userId);
+                    mMicMuteFromRestrictions = isRestricted;
+                    setMicrophoneMuteNoCallerCheck(userId);
                 }
             }
 
@@ -7062,16 +7116,8 @@ public class AudioService extends IAudioService.Stub
         }
 
         public void binderDied() {
-            synchronized (mAudioPolicies) {
-                Log.i(TAG, "audio policy " + mPolicyCallback + " died");
-                release();
-                mAudioPolicies.remove(mPolicyCallback.asBinder());
-            }
-            if (mIsVolumeController) {
-                synchronized (mExtVolumeControllerLock) {
-                    mExtVolumeController = null;
-                }
-            }
+            Log.i(TAG, "audio policy " + mPolicyCallback + " died");
+            release();
         }
 
         String getRegistrationId() {
@@ -7095,9 +7141,20 @@ public class AudioService extends IAudioService.Stub
                     Log.e(TAG, "Fail to unregister Audiopolicy callback from MediaProjection");
                 }
             }
+            if (mIsVolumeController) {
+                synchronized (mExtVolumeControllerLock) {
+                    mExtVolumeController = null;
+                }
+            }
             final long identity = Binder.clearCallingIdentity();
             AudioSystem.registerPolicyMixes(mMixes, false);
             Binder.restoreCallingIdentity(identity);
+            synchronized (mAudioPolicies) {
+                mAudioPolicies.remove(mPolicyCallback.asBinder());
+            }
+            try {
+                mPolicyCallback.notifyUnregistration();
+            } catch (RemoteException e) { }
         }
 
         boolean hasMixAffectingUsage(int usage, int excludedFlags) {
@@ -7148,7 +7205,7 @@ public class AudioService extends IAudioService.Stub
             }
         }
 
-        int connectMixes() {
+        @AudioSystem.AudioSystemError int connectMixes() {
             final long identity = Binder.clearCallingIdentity();
             int status = AudioSystem.registerPolicyMixes(mMixes, true);
             Binder.restoreCallingIdentity(identity);

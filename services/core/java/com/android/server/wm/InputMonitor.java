@@ -26,7 +26,7 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_DISABLE_WALLP
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_KEYGUARD;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS_LIGHT;
+import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_FOCUS_LIGHT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_INPUT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TASK_POSITIONING;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
@@ -49,6 +49,7 @@ import android.view.SurfaceControl;
 
 import com.android.server.AnimationThread;
 import com.android.server.policy.WindowManagerPolicy;
+import com.android.server.protolog.common.ProtoLog;
 
 import java.io.PrintWriter;
 import java.util.Set;
@@ -111,7 +112,7 @@ final class InputMonitor {
         }
     }
 
-    private final Runnable mUpdateInputWindows = new Runnable() {
+    private class UpdateInputWindows implements Runnable {
         @Override
         public void run() {
             synchronized (mService.mGlobalLock) {
@@ -147,7 +148,9 @@ final class InputMonitor {
                 mUpdateInputForAllWindowsConsumer.updateInputWindows(inDrag);
             }
         }
-    };
+    }
+
+    private final UpdateInputWindows mUpdateInputWindows = new UpdateInputWindows();
 
     public InputMonitor(WindowManagerService service, int displayId) {
         mService = service;
@@ -260,7 +263,7 @@ final class InputMonitor {
         inputWindowHandle.canReceiveKeys = child.canReceiveKeys();
         inputWindowHandle.hasFocus = hasFocus;
         inputWindowHandle.hasWallpaper = hasWallpaper;
-        inputWindowHandle.paused = child.mAppToken != null ? child.mAppToken.paused : false;
+        inputWindowHandle.paused = child.mActivityRecord != null ? child.mActivityRecord.paused : false;
         inputWindowHandle.layer = child.mLayer;
         inputWindowHandle.ownerPid = child.mSession.mPid;
         inputWindowHandle.ownerUid = child.mSession.mUid;
@@ -331,9 +334,7 @@ final class InputMonitor {
      * Layer assignment is assumed to be complete by the time this is called.
      */
     public void setInputFocusLw(WindowState newWindow, boolean updateInputWindows) {
-        if (DEBUG_FOCUS_LIGHT || DEBUG_INPUT) {
-            Slog.d(TAG_WM, "Input focus has changed to " + newWindow);
-        }
+        ProtoLog.d(WM_DEBUG_FOCUS_LIGHT, "Input focus has changed to %s", newWindow);
 
         if (newWindow != mInputFocus) {
             if (newWindow != null && newWindow.canReceiveKeys()) {
@@ -352,7 +353,7 @@ final class InputMonitor {
         }
     }
 
-    public void setFocusedAppLw(AppWindowToken newApp) {
+    public void setFocusedAppLw(ActivityRecord newApp) {
         // Focused app has changed.
         if (newApp == null) {
             mService.mInputManager.setFocusedApplication(mDisplayId, null);
@@ -412,7 +413,7 @@ final class InputMonitor {
         WallpaperController wallpaperController;
 
         // An invalid window handle that tells SurfaceFlinger not update the input info.
-        final InputWindowHandle mInvalidInputWindow = new InputWindowHandle(null, null, mDisplayId);
+        final InputWindowHandle mInvalidInputWindow = new InputWindowHandle(null, mDisplayId);
 
         private void updateInputWindows(boolean inDrag) {
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "updateInputWindows");
@@ -475,7 +476,7 @@ final class InputMonitor {
                 final RecentsAnimationController recentsAnimationController =
                         mService.getRecentsAnimationController();
                 if (recentsAnimationController != null
-                        && recentsAnimationController.shouldApplyInputConsumer(w.mAppToken)) {
+                        && recentsAnimationController.shouldApplyInputConsumer(w.mActivityRecord)) {
                     if (recentsAnimationController.updateInputConsumerForApp(
                             recentsAnimationInputConsumer.mWindowHandle, hasFocus)) {
                         recentsAnimationInputConsumer.show(mInputTransaction, w);
@@ -527,6 +528,10 @@ final class InputMonitor {
 
             populateInputWindowHandle(
                     inputWindowHandle, w, flags, type, isVisible, hasFocus, hasWallpaper);
+
+            // register key interception info
+            mService.mKeyInterceptionInfoForToken.put(inputWindowHandle.token,
+                    w.getKeyInterceptionInfo());
 
             if (w.mWinAnimator.hasSurface()) {
                 mInputTransaction.setInputWindowInfo(

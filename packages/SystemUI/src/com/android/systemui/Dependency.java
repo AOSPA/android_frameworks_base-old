@@ -17,6 +17,7 @@ package com.android.systemui;
 import android.annotation.Nullable;
 import android.app.AlarmManager;
 import android.app.INotificationManager;
+import android.app.IWallpaperManager;
 import android.content.res.Configuration;
 import android.hardware.SensorPrivacyManager;
 import android.hardware.display.NightDisplayListener;
@@ -30,6 +31,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.Preconditions;
+import com.android.keyguard.KeyguardSecurityModel;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.clock.ClockManager;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
@@ -38,6 +40,10 @@ import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
+import com.android.systemui.dagger.qualifiers.BgHandler;
+import com.android.systemui.dagger.qualifiers.BgLooper;
+import com.android.systemui.dagger.qualifiers.MainHandler;
+import com.android.systemui.dagger.qualifiers.MainLooper;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.ScreenLifecycle;
@@ -76,6 +82,7 @@ import com.android.systemui.statusbar.notification.row.ChannelEditorDialogContro
 import com.android.systemui.statusbar.notification.row.NotificationBlockingHelperManager;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.phone.AutoHideController;
+import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.KeyguardDismissUtil;
 import com.android.systemui.statusbar.phone.LightBarController;
 import com.android.systemui.statusbar.phone.LockscreenGestureLogger;
@@ -97,7 +104,7 @@ import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.ExtensionController;
 import com.android.systemui.statusbar.policy.FlashlightController;
 import com.android.systemui.statusbar.policy.HotspotController;
-import com.android.systemui.statusbar.policy.KeyguardMonitor;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.LocationController;
 import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.NextAlarmController;
@@ -145,16 +152,16 @@ public class Dependency {
     /**
      * Key for getting a the main looper.
      */
-    public static final String MAIN_LOOPER_NAME = "main_looper";
+    private static final String MAIN_LOOPER_NAME = "main_looper";
 
     /**
      * Key for getting a background Looper for background work.
      */
-    public static final String BG_LOOPER_NAME = "background_looper";
+    private static final String BG_LOOPER_NAME = "background_looper";
     /**
      * Key for getting a background Handler for background work.
      */
-    public static final String BG_HANDLER_NAME = "background_handler";
+    private static final String BG_HANDLER_NAME = "background_handler";
     /**
      * Key for getting a Handler for receiving time tick broadcasts on.
      */
@@ -162,7 +169,7 @@ public class Dependency {
     /**
      * Generic handler on the main thread.
      */
-    public static final String MAIN_HANDLER_NAME = "main_handler";
+    private static final String MAIN_HANDLER_NAME = "main_handler";
 
     /**
      * An email address to send memory leak reports to by default.
@@ -221,7 +228,7 @@ public class Dependency {
     @Inject Lazy<FlashlightController> mFlashlightController;
     @Inject Lazy<UserSwitcherController> mUserSwitcherController;
     @Inject Lazy<UserInfoController> mUserInfoController;
-    @Inject Lazy<KeyguardMonitor> mKeyguardMonitor;
+    @Inject Lazy<KeyguardStateController> mKeyguardMonitor;
     @Inject Lazy<KeyguardUpdateMonitor> mKeyguardUpdateMonitor;
     @Inject Lazy<BatteryController> mBatteryController;
     @Inject Lazy<NightDisplayListener> mNightDisplayListener;
@@ -297,10 +304,10 @@ public class Dependency {
     @Inject Lazy<AutoHideController> mAutoHideController;
     @Inject Lazy<ForegroundServiceNotificationListener> mForegroundServiceNotificationListener;
     @Inject Lazy<PrivacyItemController> mPrivacyItemController;
-    @Inject @Named(BG_LOOPER_NAME) Lazy<Looper> mBgLooper;
-    @Inject @Named(BG_HANDLER_NAME) Lazy<Handler> mBgHandler;
-    @Inject @Named(MAIN_LOOPER_NAME) Lazy<Looper> mMainLooper;
-    @Inject @Named(MAIN_HANDLER_NAME) Lazy<Handler> mMainHandler;
+    @Inject @BgLooper Lazy<Looper> mBgLooper;
+    @Inject @BgHandler Lazy<Handler> mBgHandler;
+    @Inject @MainLooper Lazy<Looper> mMainLooper;
+    @Inject @MainHandler Lazy<Handler> mMainHandler;
     @Inject @Named(TIME_TICK_HANDLER_NAME) Lazy<Handler> mTimeTickHandler;
     @Nullable
     @Inject @Named(LEAK_REPORT_EMAIL_NAME) Lazy<String> mLeakReportEmail;
@@ -316,6 +323,9 @@ public class Dependency {
     @Inject Lazy<FalsingManager> mFalsingManager;
     @Inject Lazy<SysUiState> mSysUiStateFlagsContainer;
     @Inject Lazy<AlarmManager> mAlarmManager;
+    @Inject Lazy<KeyguardSecurityModel> mKeyguardSecurityModel;
+    @Inject Lazy<DozeParameters> mDozeParameters;
+    @Inject Lazy<IWallpaperManager> mWallpaperManager;
 
     @Inject
     public Dependency() {
@@ -355,7 +365,7 @@ public class Dependency {
 
         mProviders.put(FlashlightController.class, mFlashlightController::get);
 
-        mProviders.put(KeyguardMonitor.class, mKeyguardMonitor::get);
+        mProviders.put(KeyguardStateController.class, mKeyguardMonitor::get);
 
         mProviders.put(KeyguardUpdateMonitor.class, mKeyguardUpdateMonitor::get);
 
@@ -501,6 +511,9 @@ public class Dependency {
         mProviders.put(FalsingManager.class, mFalsingManager::get);
         mProviders.put(SysUiState.class, mSysUiStateFlagsContainer::get);
         mProviders.put(AlarmManager.class, mAlarmManager::get);
+        mProviders.put(KeyguardSecurityModel.class, mKeyguardSecurityModel::get);
+        mProviders.put(DozeParameters.class, mDozeParameters::get);
+        mProviders.put(IWallpaperManager.class, mWallpaperManager::get);
 
         // TODO(b/118592525): to support multi-display , we start to add something which is
         //                    per-display, while others may be global. I think it's time to add

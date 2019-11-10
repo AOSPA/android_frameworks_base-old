@@ -82,6 +82,7 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManagerInternal;
 import android.os.SystemClock;
+import android.platform.test.annotations.Presubmit;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.SparseArray;
@@ -103,6 +104,7 @@ import java.util.ArrayList;
  * Build/Install/Run:
  * atest MockingOomAdjusterTests
  */
+@Presubmit
 public class MockingOomAdjusterTests {
     private static final int MOCKAPP_PID = 12345;
     private static final int MOCKAPP_UID = 12345;
@@ -139,8 +141,10 @@ public class MockingOomAdjusterTests {
 
         sService.mConstants = new ActivityManagerConstants(sContext, sService,
                 sContext.getMainThreadHandler());
+        ProcessList pr = new ProcessList();
+        pr.init(sService, new ActiveUids(sService, false));
         setFieldValue(ActivityManagerService.class, sService, "mProcessList",
-                new ProcessList());
+                pr);
         setFieldValue(ActivityManagerService.class, sService, "mHandler",
                 mock(ActivityManagerService.MainHandler.class));
         setFieldValue(ActivityManagerService.class, sService, "mProcessStats",
@@ -344,11 +348,13 @@ public class MockingOomAdjusterTests {
     public void testUpdateOomAdj_DoOne_RecentTasks() {
         ProcessRecord app = spy(makeDefaultProcessRecord(MOCKAPP_PID, MOCKAPP_UID,
                 MOCKAPP_PROCESSNAME, MOCKAPP_PACKAGENAME, true));
-        doReturn(true).when(app).hasRecentTasks();
+        doReturn(mock(WindowProcessController.class)).when(app).getWindowProcessController();
+        WindowProcessController wpc = app.getWindowProcessController();
+        doReturn(true).when(wpc).hasRecentTasks();
         app.lastTopTime = SystemClock.uptimeMillis();
         sService.mWakefulness = PowerManagerInternal.WAKEFULNESS_AWAKE;
         sService.mOomAdjuster.updateOomAdjLocked(app, false, OomAdjuster.OOM_ADJ_REASON_NONE);
-        doCallRealMethod().when(app).hasRecentTasks();
+        doCallRealMethod().when(wpc).hasRecentTasks();
 
         assertEquals(PROCESS_STATE_CACHED_RECENT, app.setProcState);
     }
@@ -457,7 +463,7 @@ public class MockingOomAdjusterTests {
         doReturn(mock(WindowProcessController.class)).when(app).getWindowProcessController();
         WindowProcessController wpc = app.getWindowProcessController();
         doReturn(true).when(wpc).isPreviousProcess();
-        doReturn(true).when(app).hasActivities();
+        doReturn(true).when(wpc).hasActivities();
         sService.mWakefulness = PowerManagerInternal.WAKEFULNESS_AWAKE;
         sService.mOomAdjuster.updateOomAdjLocked(app, false, OomAdjuster.OOM_ADJ_REASON_NONE);
 
@@ -642,7 +648,7 @@ public class MockingOomAdjusterTests {
         WindowProcessController wpc = app.getWindowProcessController();
         doReturn(false).when(wpc).isHomeProcess();
         doReturn(true).when(wpc).isPreviousProcess();
-        doReturn(true).when(app).hasActivities();
+        doReturn(true).when(wpc).hasActivities();
         ProcessRecord client = spy(makeDefaultProcessRecord(MOCKAPP2_PID, MOCKAPP2_UID,
                 MOCKAPP2_PROCESSNAME, MOCKAPP2_PACKAGENAME, false));
         bindService(app, client, null, Context.BIND_ALLOW_OOM_MANAGEMENT, mock(IBinder.class));

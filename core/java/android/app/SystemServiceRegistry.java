@@ -152,6 +152,7 @@ import android.os.health.SystemHealthManager;
 import android.os.image.DynamicSystemManager;
 import android.os.image.IDynamicSystemService;
 import android.os.storage.StorageManager;
+import android.telephony.TelephonyRegistryManager;
 import android.permission.PermissionControllerManager;
 import android.permission.PermissionManager;
 import android.print.IPrintManager;
@@ -605,6 +606,13 @@ public final class SystemServiceRegistry {
             public TelephonyManager createService(ContextImpl ctx) {
                 return new TelephonyManager(ctx.getOuterContext());
             }});
+
+        registerService(Context.TELEPHONY_REGISTRY_SERVICE, TelephonyRegistryManager.class,
+            new CachedServiceFetcher<TelephonyRegistryManager>() {
+                @Override
+                public TelephonyRegistryManager createService(ContextImpl ctx) {
+                    return new TelephonyRegistryManager(ctx);
+                }});
 
         registerService(Context.TELEPHONY_SUBSCRIPTION_SERVICE, SubscriptionManager.class,
                 new CachedServiceFetcher<SubscriptionManager>() {
@@ -1335,13 +1343,13 @@ public final class SystemServiceRegistry {
      * @hide
      */
     public static <T> void registerCachedService(String serviceName, Class<T> serviceWrapperClass,
-            BiFunction<ContextImpl, IBinder, T> serviceFetcher) {
+            BiFunction<Context, IBinder, T> serviceFetcher) {
         registerService(serviceName, serviceWrapperClass,
                 new CachedServiceFetcher<T>() {
                     @Override
                     public T createService(ContextImpl ctx) throws ServiceNotFoundException {
                         IBinder b = ServiceManager.getServiceOrThrow(serviceName);
-                        return serviceFetcher.apply(ctx, b);
+                        return serviceFetcher.apply(ctx.getOuterContext(), b);
                     }});
     }
 

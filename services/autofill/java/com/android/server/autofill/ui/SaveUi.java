@@ -78,6 +78,8 @@ final class SaveUi {
     private static final int THEME_ID_DARK =
             com.android.internal.R.style.Theme_DeviceDefault_Autofill_Save;
 
+    private static final int SCROLL_BAR_DEFAULT_DELAY_BEFORE_FADE_MS = 500;
+
     public interface OnSaveListener {
         void onSave();
         void onCancel(IntentSender listener);
@@ -195,8 +197,20 @@ final class SaveUi {
         if ((type & SaveInfo.SAVE_DATA_TYPE_ADDRESS) != 0) {
             types.add(context.getString(R.string.autofill_save_type_address));
         }
-        if ((type & SaveInfo.SAVE_DATA_TYPE_CREDIT_CARD) != 0) {
+
+        // fallback to generic card type if set multiple types
+        final int cardTypeMask = SaveInfo.SAVE_DATA_TYPE_CREDIT_CARD
+                        | SaveInfo.SAVE_DATA_TYPE_DEBIT_CARD
+                        | SaveInfo.SAVE_DATA_TYPE_PAYMENT_CARD;
+        final int count = Integer.bitCount(type & cardTypeMask);
+        if (count > 1 || (type & SaveInfo.SAVE_DATA_TYPE_GENERIC_CARD) != 0) {
+            types.add(context.getString(R.string.autofill_save_type_generic_card));
+        } else if ((type & SaveInfo.SAVE_DATA_TYPE_PAYMENT_CARD) != 0) {
+            types.add(context.getString(R.string.autofill_save_type_payment_card));
+        } else if ((type & SaveInfo.SAVE_DATA_TYPE_CREDIT_CARD) != 0) {
             types.add(context.getString(R.string.autofill_save_type_credit_card));
+        } else if ((type & SaveInfo.SAVE_DATA_TYPE_DEBIT_CARD) != 0) {
+            types.add(context.getString(R.string.autofill_save_type_debit_card));
         }
         if ((type & SaveInfo.SAVE_DATA_TYPE_USERNAME) != 0) {
             types.add(context.getString(R.string.autofill_save_type_username));
@@ -252,6 +266,8 @@ final class SaveUi {
                         new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.WRAP_CONTENT));
                 subtitleContainer.setVisibility(View.VISIBLE);
+                subtitleContainer.setScrollBarDefaultDelayBeforeFade(
+                        SCROLL_BAR_DEFAULT_DELAY_BEFORE_FADE_MS);
             }
             if (sDebug) Slog.d(TAG, "on constructor: title=" + mTitle + ", subTitle=" + mSubTitle);
         }
@@ -265,7 +281,9 @@ final class SaveUi {
         noButton.setOnClickListener((v) -> mListener.onCancel(info.getNegativeActionListener()));
 
         final TextView yesButton = view.findViewById(R.id.autofill_save_yes);
-        if (isUpdate) {
+        if (info.getPositiveActionStyle() == SaveInfo.POSITIVE_BUTTON_STYLE_CONTINUE) {
+            yesButton.setText(R.string.autofill_continue_yes);
+        } else if (isUpdate) {
             yesButton.setText(R.string.autofill_update_yes);
         }
         yesButton.setOnClickListener((v) -> mListener.onSave());
@@ -282,7 +300,7 @@ final class SaveUi {
         window.addFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM
                 | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                 | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH);
-        window.addPrivateFlags(WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS);
+        window.addPrivateFlags(WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS);
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN);
         window.setGravity(Gravity.BOTTOM | Gravity.CENTER);
         window.setCloseOnTouchOutside(true);
@@ -429,6 +447,9 @@ final class SaveUi {
                     saveUiView.findViewById(R.id.autofill_save_custom_subtitle);
             subtitleContainer.addView(customSubtitleView);
             subtitleContainer.setVisibility(View.VISIBLE);
+            subtitleContainer.setScrollBarDefaultDelayBeforeFade(
+                    SCROLL_BAR_DEFAULT_DELAY_BEFORE_FADE_MS);
+
             return true;
         } catch (Exception e) {
             Slog.e(TAG, "Error applying custom description. ", e);

@@ -46,9 +46,11 @@ public class BootImageProfileTest implements IDeviceTest {
      */
     @Test
     public void testProperties() throws Exception {
-        String res = mTestDevice.getProperty("dalvik.vm.profilebootclasspath");
+        String res = mTestDevice.getProperty(
+                "persist.device_config.runtime_native_boot.profilebootclasspath");
         assertTrue("profile boot class path not enabled", res != null && res.equals("true"));
-        res = mTestDevice.getProperty("dalvik.vm.profilesystemserver");
+        res = mTestDevice.getProperty(
+                "persist.device_config.runtime_native_boot.profilesystemserver");
         assertTrue("profile system server not enabled", res != null && res.equals("true"));
     }
 
@@ -66,10 +68,18 @@ public class BootImageProfileTest implements IDeviceTest {
         String res;
         res = mTestDevice.executeShellCommand("truncate -s 0 " + SYSTEM_SERVER_PROFILE).trim();
         assertTrue(res, res.length() == 0);
-        // Force save profiles in case the system just started.
+        // Wait up to 20 seconds for the profile to be saved.
+        for (int i = 0; i < 20; ++i) {
+            // Force save the profile since we truncated it.
+            forceSaveProfile("system_server");
+            String s = mTestDevice.executeShellCommand("wc -c <" + SYSTEM_SERVER_PROFILE).trim();
+            if (!"0".equals(s)) {
+                break;
+            }
+            Thread.sleep(1000);
+        }
+        // In case the profile is partially saved, wait an extra second.
         Thread.sleep(1000);
-        forceSaveProfile("system_server");
-        Thread.sleep(2000);
         // Validate that the profile is non empty.
         res = mTestDevice.executeShellCommand("profman --dump-only --profile-file="
                 + SYSTEM_SERVER_PROFILE);
@@ -84,5 +94,18 @@ public class BootImageProfileTest implements IDeviceTest {
         }
         assertTrue("Did not see framework.jar in " + res, sawFramework);
         assertTrue("Did not see services.jar in " + res, sawServices);
+
+
+        // Test the profile contents contain common methods for core-oj that would normally be AOT
+        // compiled.
+        res = mTestDevice.executeShellCommand("profman --dump-classes-and-methods --profile-file="
+                + SYSTEM_SERVER_PROFILE + " --apk=/apex/com.android.art/javalib/core-oj.jar");
+        boolean sawObjectInit = false;
+        for (String line : res.split("\n")) {
+            if (line.contains("Ljava/lang/Object;-><init>()V")) {
+                sawObjectInit = true;
+            }
+        }
+        assertTrue("Did not see Object.<init> in " + res, sawObjectInit);
     }
 }

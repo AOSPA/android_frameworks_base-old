@@ -16,6 +16,7 @@
 
 package com.android.server.connectivity;
 
+import android.annotation.NonNull;
 import android.net.ConnectivityManager;
 import android.net.IDnsResolver;
 import android.net.INetd;
@@ -344,13 +345,13 @@ public class Nat464Xlat extends BaseNetworkObserver {
      * This is necessary because the LinkProperties in mNetwork come from the transport layer, which
      * has no idea that 464xlat is running on top of it.
      */
-    public void fixupLinkProperties(LinkProperties oldLp, LinkProperties lp) {
+    public void fixupLinkProperties(@NonNull LinkProperties oldLp, @NonNull LinkProperties lp) {
         lp.setNat64Prefix(mNat64Prefix);
 
         if (!isRunning()) {
             return;
         }
-        if (lp == null || lp.getAllInterfaceNames().contains(mIface)) {
+        if (lp.getAllInterfaceNames().contains(mIface)) {
             return;
         }
 
@@ -453,7 +454,7 @@ public class Nat464Xlat extends BaseNetworkObserver {
 
     @Override
     public void interfaceRemoved(String iface) {
-        mNetwork.handler().post(() -> { handleInterfaceRemoved(iface); });
+        mNetwork.handler().post(() -> handleInterfaceRemoved(iface));
     }
 
     @Override

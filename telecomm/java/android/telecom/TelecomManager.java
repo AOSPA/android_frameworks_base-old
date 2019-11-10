@@ -16,6 +16,7 @@ package android.telecom;
 
 import android.Manifest;
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressAutoDoc;
@@ -33,6 +34,7 @@ import android.os.Bundle;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
+import android.telephony.Annotation.CallState;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
@@ -1430,7 +1432,7 @@ public class TelecomManager {
      * @hide
      */
     @SystemApi
-    public @TelephonyManager.CallState int getCallState() {
+    public @CallState int getCallState() {
         try {
             if (isServiceConnected()) {
                 return getTelecomService().getCallState();
@@ -1930,6 +1932,29 @@ public class TelecomManager {
         return result;
     }
 
+
+    /**
+     * Creates the {@link Intent} which can be used with {@link Context#startActivity(Intent)} to
+     * launch the activity for emergency dialer.
+     *
+     * @param number Optional number to call in emergency dialer
+     * @hide
+     */
+    @SystemApi
+    @NonNull
+    public Intent createLaunchEmergencyDialerIntent(@Nullable String number) {
+        ITelecomService service = getTelecomService();
+        Intent result = null;
+        if (service != null) {
+            try {
+                result = service.createLaunchEmergencyDialerIntent(number);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Error createLaunchEmergencyDialerIntent", e);
+            }
+        }
+        return result;
+    }
+
     /**
      * Determines whether Telecom would permit an incoming call to be added via the
      * {@link #addNewIncomingCall(PhoneAccountHandle, Bundle)} API for the specified
@@ -2077,12 +2102,13 @@ public class TelecomManager {
     /**
      * Handles {@link Intent#ACTION_CALL} intents trampolined from UserCallActivity.
      * @param intent The {@link Intent#ACTION_CALL} intent to handle.
+     * @param callingPackageProxy The original package that called this before it was trampolined.
      * @hide
      */
-    public void handleCallIntent(Intent intent) {
+    public void handleCallIntent(Intent intent, String callingPackageProxy) {
         try {
             if (isServiceConnected()) {
-                getTelecomService().handleCallIntent(intent);
+                getTelecomService().handleCallIntent(intent, callingPackageProxy);
             }
         } catch (RemoteException e) {
             Log.e(TAG, "RemoteException handleCallIntent: " + e);

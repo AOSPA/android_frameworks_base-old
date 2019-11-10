@@ -348,6 +348,7 @@ import java.io.PrintWriter;
         if (AudioService.DEBUG_SCO) {
             Log.i(TAG, "setBluetoothScoOn: " + on + " " + eventSource);
         }
+        //Log.i(TAG, "setBluetoothScoOnInt: " + on + " " + eventSource);
         synchronized (mDeviceStateLock) {
             if (on) {
                 // do not accept SCO ON if SCO audio is not connected

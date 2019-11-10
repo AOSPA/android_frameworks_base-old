@@ -306,6 +306,11 @@ interface IWindowManager
     oneway void statusBarVisibilityChanged(int displayId, int visibility);
 
     /**
+     * Called by System UI to notify Window Manager to hide transient bars.
+     */
+    oneway void hideTransientBars(int displayId);
+
+    /**
     * When set to {@code true} the system bars will always be shown. This is true even if an app
     * requests to be fullscreen by setting the system ui visibility flags. The
     * functionality was added for the automotive case as a way to guarantee required content stays
@@ -324,12 +329,6 @@ interface IWindowManager
      * Called by System UI to notify of changes to the visibility of PIP.
      */
     oneway void setPipVisibility(boolean visible);
-
-    /**
-     * Called by System UI to notify of changes to the visibility and height of the shelf.
-     */
-    @UnsupportedAppUsage
-    void setShelfHeight(boolean visible, int shelfHeight);
 
     /**
      * Called by System UI to enable or disable haptic feedback on the navigation bar buttons.
@@ -650,4 +649,16 @@ interface IWindowManager
      * Enables/disables SurfaceFlinger layer tracing.
      */
     void setLayerTracing(boolean enabled);
+
+    /**
+     * Mirrors a specified display. The root of the mirrored hierarchy will be stored in
+     * outSurfaceControl.
+     * Requires the ACCESS_SURFACE_FLINGER permission.
+     *
+     * @param displayId The id of the display to mirror
+     * @param outSurfaceControl The SurfaceControl for the root of the mirrored hierarchy.
+     *
+     * @return true if the display was successfully mirrored.
+     */
+    boolean mirrorDisplay(int displayId, out SurfaceControl outSurfaceControl);
 }

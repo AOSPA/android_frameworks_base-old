@@ -27,6 +27,7 @@ import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentat
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.any;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyBoolean;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 
@@ -38,33 +39,21 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.res.Configuration;
+import android.os.Build;
 import android.os.UserHandle;
 import android.service.voice.IVoiceInteractionSession;
-import android.testing.DexmakerShareClassLoaderRule;
+import android.util.Pair;
 import android.view.DisplayInfo;
 
 import com.android.server.AttributeCache;
 
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Rule;
 
 /**
  * A base class to handle common operations in activity related unit tests.
  */
-class ActivityTestsBase {
-
-    @Rule
-    public final DexmakerShareClassLoaderRule mDexmakerShareClassLoaderRule =
-            new DexmakerShareClassLoaderRule();
-
-    @Rule
-    public final SystemServicesTestRule mSystemServicesTestRule = new SystemServicesTestRule();
-
-    @WindowTestRunner.MethodWrapperRule
-    public final WindowManagerGlobalLockRule mLockRule =
-            new WindowManagerGlobalLockRule(mSystemServicesTestRule);
-
+class ActivityTestsBase extends SystemServiceTestsBase {
     final Context mContext = getInstrumentation().getTargetContext();
 
     ActivityTaskManagerService mService;
@@ -243,6 +232,7 @@ class ActivityTestsBase {
             intent.setComponent(mComponent);
             final ActivityInfo aInfo = new ActivityInfo();
             aInfo.applicationInfo = new ApplicationInfo();
+            aInfo.applicationInfo.targetSdkVersion = Build.VERSION_CODES.CUR_DEVELOPMENT;
             aInfo.applicationInfo.packageName = mComponent.getPackageName();
             aInfo.applicationInfo.uid = mUid;
             aInfo.packageName = mComponent.getPackageName();
@@ -271,12 +261,10 @@ class ActivityTestsBase {
             if (mTaskRecord != null) {
                 // fullscreen value is normally read from resources in ctor, so for testing we need
                 // to set it somewhere else since we can't mock resources.
-                activity.fullscreen = true;
+                doReturn(true).when(activity).occludesParent();
                 activity.setTask(mTaskRecord);
-                activity.createAppWindowToken();
-                spyOn(activity.mAppWindowToken);
                 // Make visible by default...
-                activity.mAppWindowToken.setHidden(false);
+                activity.setHidden(false);
             }
 
             final WindowProcessController wpc = new WindowProcessController(mService,
@@ -285,6 +273,8 @@ class ActivityTestsBase {
                     mock(WindowProcessListener.class));
             wpc.setThread(mock(IApplicationThread.class));
             activity.setProcess(wpc);
+            doReturn(wpc).when(mService).getProcessController(
+                    activity.processName, activity.info.applicationInfo.uid);
 
             // Resume top activities to make sure all other signals in the system are connected.
             mService.mRootActivityContainer.resumeFocusedStacksTopActivities();
@@ -378,9 +368,10 @@ class ActivityTestsBase {
             intent.setFlags(mFlags);
 
             final TaskRecord task = new TaskRecord(mSupervisor.mService, mTaskId, aInfo,
-                    intent /*intent*/, mVoiceSession, null /*_voiceInteractor*/);
+                    intent /*intent*/, mVoiceSession, null /*_voiceInteractor*/,
+                    null /*taskDescription*/);
             spyOn(task);
-            task.userId = mUserId;
+            task.mUserId = mUserId;
 
             if (mStack != null) {
                 mStack.moveToFront("test");
@@ -388,8 +379,6 @@ class ActivityTestsBase {
                 task.createTask(true, true);
                 spyOn(task.mTask);
             }
-
-            task.touchActiveTime();
 
             return task;
         }

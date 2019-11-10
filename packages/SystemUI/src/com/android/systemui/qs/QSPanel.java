@@ -24,14 +24,22 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.graphics.drawable.Icon;
+import android.media.session.MediaSession;
 import android.metrics.LogMaker;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.provider.Settings;
+import android.service.notification.StatusBarNotification;
 import android.service.quicksettings.Tile;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 
 import com.android.internal.logging.MetricsLogger;
@@ -49,6 +57,8 @@ import com.android.systemui.qs.customize.QSCustomizer;
 import com.android.systemui.qs.external.CustomTile;
 import com.android.systemui.settings.BrightnessController;
 import com.android.systemui.settings.ToggleSliderView;
+import com.android.systemui.shared.plugins.PluginManager;
+import com.android.systemui.statusbar.phone.NPVPluginManager;
 import com.android.systemui.statusbar.policy.BrightnessMirrorController;
 import com.android.systemui.statusbar.policy.BrightnessMirrorController.BrightnessMirrorListener;
 import com.android.systemui.tuner.TunerService;
@@ -78,6 +88,9 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     private final MetricsLogger mMetricsLogger = Dependency.get(MetricsLogger.class);
     private final QSTileRevealController mQsTileRevealController;
 
+    private final LinearLayout mMediaCarousel;
+    private final ArrayList<QSMediaPlayer> mMediaPlayers = new ArrayList<>();
+
     protected boolean mExpanded;
     protected boolean mListening;
 
@@ -98,6 +111,10 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     private BrightnessMirrorController mBrightnessMirrorController;
     private View mDivider;
 
+    private FrameLayout mPluginFrame;
+    private final PluginManager mPluginManager;
+    private NPVPluginManager mNPVPluginManager;
+
     public QSPanel(Context context) {
         this(context, null);
     }
@@ -106,9 +123,13 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         this(context, attrs, null);
     }
 
+    public QSPanel(Context context, AttributeSet attrs, DumpController dumpController) {
+        this(context, attrs, dumpController, null);
+    }
+
     @Inject
     public QSPanel(@Named(VIEW_CONTEXT) Context context, AttributeSet attrs,
-            DumpController dumpController) {
+            DumpController dumpController, PluginManager pluginManager) {
         super(context, attrs);
         mContext = context;
 
@@ -128,6 +149,27 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
         addDivider();
 
+        // Add media carousel
+        int flag = Settings.System.getInt(context.getContentResolver(), "qs_media_player", 0);
+        if (flag == 1) {
+            HorizontalScrollView mediaScrollView = new HorizontalScrollView(mContext);
+            mediaScrollView.setHorizontalScrollBarEnabled(false);
+            int playerHeight = (int) getResources().getDimension(R.dimen.qs_media_height);
+            int padding = (int) getResources().getDimension(R.dimen.qs_media_padding);
+            LayoutParams lpView = new LayoutParams(LayoutParams.MATCH_PARENT, playerHeight);
+            lpView.setMarginStart(padding);
+            lpView.setMarginEnd(padding);
+            addView(mediaScrollView, lpView);
+
+            LayoutParams lpCarousel = new LayoutParams(LayoutParams.MATCH_PARENT,
+                    LayoutParams.WRAP_CONTENT);
+            mMediaCarousel = new LinearLayout(mContext);
+            mMediaCarousel.setOrientation(LinearLayout.HORIZONTAL);
+            mediaScrollView.addView(mMediaCarousel, lpCarousel);
+        } else {
+            mMediaCarousel = null;
+        }
+
         mFooter = new QSSecurityFooter(this, context);
         addView(mFooter.getView());
 
@@ -136,6 +178,82 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         mDumpController = dumpController;
 
         updateResources();
+
+        mPluginManager = pluginManager;
+        if (mPluginManager != null && Settings.System.getInt(
+                mContext.getContentResolver(), "npv_plugin_flag", 0) == 2) {
+            mPluginFrame = (FrameLayout) LayoutInflater.from(mContext).inflate(
+                    R.layout.status_bar_expanded_plugin_frame, this, false);
+            addView(mPluginFrame);
+            mNPVPluginManager = new NPVPluginManager(mPluginFrame, mPluginManager);
+        }
+
+    }
+
+    /**
+     * Add or update a player for the associated media session
+     * @param token
+     * @param icon
+     * @param iconColor
+     * @param bgColor
+     * @param actionsContainer
+     * @param notif
+     */
+    public void addMediaSession(MediaSession.Token token, Icon icon, int iconColor, int bgColor,
+            View actionsContainer, StatusBarNotification notif) {
+        int flag = Settings.System.getInt(mContext.getContentResolver(), "qs_media_player", 0);
+        if (flag != 1) {
+            // Shouldn't happen, but just in case
+            Log.e(TAG, "Tried to add media session without player!");
+            return;
+        }
+        QSMediaPlayer player = null;
+        String packageName = notif.getPackageName();
+        for (QSMediaPlayer p : mMediaPlayers) {
+            if (p.getMediaSessionToken().equals(token)) {
+                Log.d(TAG, "a player for this session already exists");
+                player = p;
+                break;
+            }
+
+            if (packageName.equals(p.getMediaPlayerPackage())) {
+                Log.d(TAG, "found an old session for this app");
+                player = p;
+                break;
+            }
+        }
+
+        int playerHeight = (int) getResources().getDimension(R.dimen.qs_media_height);
+        int playerWidth = (int) getResources().getDimension(R.dimen.qs_media_width);
+        int padding = (int) getResources().getDimension(R.dimen.qs_media_padding);
+        LayoutParams lp = new LayoutParams(playerWidth, ViewGroup.LayoutParams.MATCH_PARENT);
+        lp.setMarginStart(padding);
+        lp.setMarginEnd(padding);
+
+        if (player == null) {
+            Log.d(TAG, "creating new player");
+
+            player = new QSMediaPlayer(mContext, this, playerWidth, playerHeight);
+
+            if (player.isPlaying()) {
+                mMediaCarousel.addView(player.getView(), 0, lp); // add in front
+            } else {
+                mMediaCarousel.addView(player.getView(), lp); // add at end
+            }
+        } else if (player.isPlaying()) {
+            // move it to the front
+            mMediaCarousel.removeView(player.getView());
+            mMediaCarousel.addView(player.getView(), 0, lp);
+        }
+
+        Log.d(TAG, "setting player session");
+        player.setMediaSession(token, icon, iconColor, bgColor, actionsContainer,
+                notif.getNotification());
+        mMediaPlayers.add(player);
+    }
+
+    protected View getMediaPanel() {
+        return mMediaCarousel;
     }
 
     protected void addDivider() {
@@ -380,6 +498,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         if (mListening) {
             refreshAllTiles();
         }
+        if (mNPVPluginManager != null) mNPVPluginManager.setListening(listening);
     }
 
     public void setListening(boolean listening, boolean expanded) {

@@ -576,6 +576,8 @@ public class ZygoteProcess {
             argsForZygote.add("--mount-external-installer");
         } else if (mountExternal == Zygote.MOUNT_EXTERNAL_LEGACY) {
             argsForZygote.add("--mount-external-legacy");
+        } else if (mountExternal == Zygote.MOUNT_EXTERNAL_PASS_THROUGH) {
+            argsForZygote.add("--mount-external-pass-through");
         }
 
         argsForZygote.add("--target-sdk-version=" + targetSdkVersion);
@@ -756,6 +758,7 @@ public class ZygoteProcess {
                 ZygoteState state = openZygoteSocketIfNeeded(abi);
                 state.mZygoteOutputWriter.write("1\n--boot-completed\n");
                 state.mZygoteOutputWriter.flush();
+                state.mZygoteInputStream.readInt();
             }
         } catch (Exception ex) {
             throw new RuntimeException("Failed to inform zygote of boot_completed", ex);

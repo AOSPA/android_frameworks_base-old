@@ -16,9 +16,9 @@
 
 package com.android.server.wm;
 
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
@@ -32,7 +32,11 @@ import static android.view.InsetsState.TYPE_TOP_GESTURES;
 import static android.view.InsetsState.TYPE_TOP_TAPPABLE_ELEMENT;
 import static android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
 import static android.view.ViewRootImpl.NEW_INSETS_MODE_NONE;
+import static android.view.WindowInsetsController.APPEARANCE_LIGHT_TOP_BAR;
+import static android.view.WindowInsetsController.BEHAVIOR_SHOW_BARS_BY_SWIPE;
+import static android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
 import static android.view.WindowManager.INPUT_CONSUMER_NAVIGATION;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FIRST_SYSTEM_WINDOW;
@@ -99,9 +103,9 @@ import static com.android.server.policy.WindowManagerPolicy.TRANSIT_PREVIEW_DONE
 import static com.android.server.policy.WindowManagerPolicy.TRANSIT_SHOW;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.LID_ABSENT;
 import static com.android.server.wm.ActivityTaskManagerInternal.SleepToken;
+import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_SCREEN_ON;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_SCREEN_ON;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
@@ -133,6 +137,7 @@ import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.util.BoostFramework;
 import android.util.ArraySet;
+import android.util.IntArray;
 import android.util.Pair;
 import android.util.PrintWriterPrinter;
 import android.util.Slog;
@@ -149,6 +154,7 @@ import android.view.PointerIcon;
 import android.view.Surface;
 import android.view.View;
 import android.view.ViewRootImpl;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
 import android.view.WindowManagerGlobal;
@@ -162,6 +168,7 @@ import com.android.internal.policy.ScreenDecorationsUtils;
 import com.android.internal.util.ScreenShapeHelper;
 import com.android.internal.util.ScreenshotHelper;
 import com.android.internal.util.function.TriConsumer;
+import com.android.internal.view.AppearanceRegion;
 import com.android.internal.widget.PointerLocationView;
 import com.android.server.LocalServices;
 import com.android.server.UiThread;
@@ -171,6 +178,7 @@ import com.android.server.policy.WindowManagerPolicy.NavigationBarPosition;
 import com.android.server.policy.WindowManagerPolicy.ScreenOnListener;
 import com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs;
 import com.android.server.policy.WindowOrientationListener;
+import com.android.server.protolog.common.ProtoLog;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.wallpaper.WallpaperManagerInternal;
 import com.android.server.wm.utils.InsetUtils;
@@ -198,6 +206,11 @@ public class DisplayPolicy {
     private static final int NAV_BAR_TRANSLUCENT_WHEN_FREEFORM_OPAQUE_OTHERWISE = 1;
     // Nav bar is never forced opaque.
     private static final int NAV_BAR_FORCE_TRANSPARENT = 2;
+
+    /** Don't apply window animation (see {@link #selectAnimation}). */
+    static final int ANIMATION_NONE = -1;
+    /** Use the transit animation in style resource (see {@link #selectAnimation}). */
+    static final int ANIMATION_STYLEABLE = 0;
 
     /**
      * These are the system UI flags that, when changing, can cause the layout
@@ -245,7 +258,7 @@ public class DisplayPolicy {
     @Px
     private int mSideGestureInset;
 
-    private StatusBarManagerInternal getStatusBarManagerInternal() {
+    StatusBarManagerInternal getStatusBarManagerInternal() {
         synchronized (mServiceAcquireLock) {
             if (mStatusBarManagerInternal == null) {
                 mStatusBarManagerInternal =
@@ -337,14 +350,18 @@ public class DisplayPolicy {
     private int mForceClearedSystemUiFlags = 0;
     private int mLastFullscreenStackSysUiFlags;
     private int mLastDockedStackSysUiFlags;
+    private int mLastAppearance;
+    private int mLastFullscreenAppearance;
+    private int mLastDockedAppearance;
     private final Rect mNonDockedStackBounds = new Rect();
     private final Rect mDockedStackBounds = new Rect();
     private final Rect mLastNonDockedStackBounds = new Rect();
     private final Rect mLastDockedStackBounds = new Rect();
 
-    // What we last reported to system UI about whether the compatibility
-    // menu needs to be displayed.
-    private boolean mLastFocusNeedsMenu = false;
+    // What we last reported to system UI about whether the focused window is fullscreen/immersive.
+    private boolean mLastFocusIsFullscreen = false;
+    private boolean mLastFocusIsImmersive = false;
+
     // If nonzero, a panic gesture was performed at that time in uptime millis and is still pending.
     private long mPendingPanicGestureUptime;
 
@@ -909,19 +926,19 @@ public class DisplayPolicy {
     /** Return false if it is not ready to turn on. */
     public boolean finishScreenTurningOn() {
         synchronized (mLock) {
-            if (DEBUG_SCREEN_ON) Slog.d(TAG,
-                    "finishScreenTurningOn: mAwake=" + mAwake
-                            + ", mScreenOnEarly=" + mScreenOnEarly
-                            + ", mScreenOnFully=" + mScreenOnFully
-                            + ", mKeyguardDrawComplete=" + mKeyguardDrawComplete
-                            + ", mWindowManagerDrawComplete=" + mWindowManagerDrawComplete);
+            ProtoLog.d(WM_DEBUG_SCREEN_ON,
+                            "finishScreenTurningOn: mAwake=%b, mScreenOnEarly=%b, "
+                                    + "mScreenOnFully=%b, mKeyguardDrawComplete=%b, "
+                                    + "mWindowManagerDrawComplete=%b",
+                            mAwake, mScreenOnEarly, mScreenOnFully, mKeyguardDrawComplete,
+                            mWindowManagerDrawComplete);
 
             if (mScreenOnFully || !mScreenOnEarly || !mWindowManagerDrawComplete
                     || (mAwake && !mKeyguardDrawComplete)) {
                 return false;
             }
 
-            if (DEBUG_SCREEN_ON) Slog.i(TAG, "Finished screen turning on...");
+            ProtoLog.i(WM_DEBUG_SCREEN_ON, "Finished screen turning on...");
             mScreenOnListener = null;
             mScreenOnFully = true;
         }
@@ -1004,6 +1021,8 @@ public class DisplayPolicy {
                 if (canToastShowWhenLocked(callingPid)) {
                     attrs.flags |= WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
                 }
+                // Toasts can't be clickable
+                attrs.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
                 break;
         }
 
@@ -1180,9 +1199,9 @@ public class DisplayPolicy {
     }
 
     /**
-     * Control the animation to run when a window's state changes.  Return a
-     * non-0 number to force the animation to a specific resource ID, or 0
-     * to use the default animation.
+     * Control the animation to run when a window's state changes.  Return a positive number to
+     * force the animation to a specific resource ID, {@link #ANIMATION_STYLEABLE} to use the
+     * style resource defining the animation, or {@link #ANIMATION_NONE} for no animation.
      *
      * @param win The window that is changing.
      * @param transit What is happening to the window:
@@ -1191,9 +1210,9 @@ public class DisplayPolicy {
      *                {@link com.android.server.policy.WindowManagerPolicy#TRANSIT_SHOW}, or
      *                {@link com.android.server.policy.WindowManagerPolicy#TRANSIT_HIDE}.
      *
-     * @return Resource ID of the actual animation to use, or 0 for none.
+     * @return Resource ID of the actual animation to use, or {@link #ANIMATION_NONE} for none.
      */
-    public int selectAnimationLw(WindowState win, int transit) {
+    int selectAnimation(WindowState win, int transit) {
         if (DEBUG_ANIM) Slog.i(TAG, "selectAnimation in " + win
                 + ": transit=" + transit);
         if (win == mStatusBar) {
@@ -1201,7 +1220,7 @@ public class DisplayPolicy {
             final boolean expanded = win.getAttrs().height == MATCH_PARENT
                     && win.getAttrs().width == MATCH_PARENT;
             if (isKeyguard || expanded) {
-                return -1;
+                return ANIMATION_NONE;
             }
             if (transit == TRANSIT_EXIT
                     || transit == TRANSIT_HIDE) {
@@ -1212,7 +1231,7 @@ public class DisplayPolicy {
             }
         } else if (win == mNavigationBar) {
             if (win.getAttrs().windowAnimations != 0) {
-                return 0;
+                return ANIMATION_STYLEABLE;
             }
             // This can be on either the bottom or the right or the left.
             if (mNavigationBarPosition == NAV_BAR_BOTTOM) {
@@ -1245,7 +1264,7 @@ public class DisplayPolicy {
                 }
             }
         } else if (win.getAttrs().type == TYPE_DOCK_DIVIDER) {
-            return selectDockedDividerAnimationLw(win, transit);
+            return selectDockedDividerAnimation(win, transit);
         }
 
         if (transit == TRANSIT_PREVIEW_DONE) {
@@ -1259,13 +1278,13 @@ public class DisplayPolicy {
             // is shown.  We don't want an animation on the dream, because
             // we need it shown immediately with the keyguard animating away
             // to reveal it.
-            return -1;
+            return ANIMATION_NONE;
         }
 
-        return 0;
+        return ANIMATION_STYLEABLE;
     }
 
-    private int selectDockedDividerAnimationLw(WindowState win, int transit) {
+    private int selectDockedDividerAnimation(WindowState win, int transit) {
         int insets = mDisplayContent.getDockedDividerController().getContentInsets();
 
         // If the divider is behind the navigation bar, don't animate.
@@ -1284,14 +1303,14 @@ public class DisplayPolicy {
                 || frame.bottom + insets >= win.getDisplayFrameLw().bottom);
         final boolean offscreen = offscreenLandscape || offscreenPortrait;
         if (behindNavBar || offscreen) {
-            return 0;
+            return ANIMATION_STYLEABLE;
         }
         if (transit == TRANSIT_ENTER || transit == TRANSIT_SHOW) {
             return R.anim.fade_in;
         } else if (transit == TRANSIT_EXIT) {
             return R.anim.fade_out;
         } else {
-            return 0;
+            return ANIMATION_STYLEABLE;
         }
     }
 
@@ -2674,7 +2693,6 @@ public class DisplayPolicy {
                         changes |= FINISH_LAYOUT_REDO_LAYOUT;
                     }
                 } else if (topIsFullscreen
-                        && !mDisplayContent.isStackVisible(WINDOWING_MODE_FREEFORM)
                         && !mDisplayContent.isStackVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY)) {
                     if (DEBUG_LAYOUT) Slog.v(TAG, "** HIDING status bar");
                     if (mStatusBarController.setBarShowingLw(false)) {
@@ -2734,7 +2752,7 @@ public class DisplayPolicy {
      *         window.
      */
     private boolean topAppHidesStatusBar() {
-        if (mTopFullscreenOpaqueWindowState == null) {
+        if (mTopFullscreenOpaqueWindowState == null || mForceShowSystemBars) {
             return false;
         }
         final int fl = PolicyControl.getWindowFlags(null,
@@ -3184,19 +3202,38 @@ public class DisplayPolicy {
                 // Swipe-up for navigation bar is disabled during setup
                 return;
             }
-            boolean sb = mStatusBarController.checkShowTransientBarLw();
-            boolean nb = mNavigationBarController.checkShowTransientBarLw()
-                    && !isNavBarEmpty(mLastSystemUiFlags);
-            if (sb || nb) {
-                // Don't show status bar when swiping on already visible navigation bar
-                if (!nb && swipeTarget == mNavigationBar) {
-                    if (DEBUG) Slog.d(TAG, "Not showing transient bar, wrong swipe target");
+            if (ViewRootImpl.sNewInsetsMode == NEW_INSETS_MODE_FULL) {
+                if (swipeTarget == mNavigationBar
+                        && !getInsetsPolicy().isHidden(InsetsState.TYPE_NAVIGATION_BAR)) {
+                    // Don't show status bar when swiping on already visible navigation bar
                     return;
                 }
-                if (sb) mStatusBarController.showTransient();
-                if (nb) mNavigationBarController.showTransient();
+                final InsetsControlTarget controlTarget =
+                        swipeTarget.getControllableInsetProvider().getControlTarget();
+                if (controlTarget == null) {
+                    return;
+                }
+                if (controlTarget.canShowTransient()) {
+                    mDisplayContent.getInsetsPolicy().showTransient(IntArray.wrap(
+                            new int[]{TYPE_TOP_BAR, InsetsState.TYPE_NAVIGATION_BAR}));
+                } else {
+                    controlTarget.showInsets(WindowInsets.Type.systemBars(), false);
+                }
+            } else {
+                boolean sb = mStatusBarController.checkShowTransientBarLw();
+                boolean nb = mNavigationBarController.checkShowTransientBarLw()
+                        && !isNavBarEmpty(mLastSystemUiFlags);
+                if (sb || nb) {
+                    // Don't show status bar when swiping on already visible navigation bar
+                    if (!nb && swipeTarget == mNavigationBar) {
+                        if (DEBUG) Slog.d(TAG, "Not showing transient bar, wrong swipe target");
+                        return;
+                    }
+                    if (sb) mStatusBarController.showTransient();
+                    if (nb) mNavigationBarController.showTransient();
+                    updateSystemUiVisibilityLw();
+                }
                 mImmersiveModeConfirmation.confirmCurrentPrompt();
-                updateSystemUiVisibilityLw();
             }
         }
     }
@@ -3215,6 +3252,10 @@ public class DisplayPolicy {
     private boolean isKeyguardOccluded() {
         // TODO (b/113840485): Handle per display keyguard.
         return mService.mPolicy.isKeyguardOccluded();
+    }
+
+    InsetsPolicy getInsetsPolicy() {
+        return mDisplayContent.getInsetsPolicy();
     }
 
     void resetSystemUiVisibilityLw() {
@@ -3268,22 +3309,45 @@ public class DisplayPolicy {
                     &= ~PolicyControl.adjustClearableFlags(win, View.SYSTEM_UI_CLEARABLE_FLAGS);
         }
 
+        final int appearance = win.mAttrs.insetsFlags.appearance;
         final int fullscreenVisibility = updateLightStatusBarLw(0 /* vis */,
                 mTopFullscreenOpaqueWindowState, mTopFullscreenOpaqueOrDimmingWindowState);
         final int dockedVisibility = updateLightStatusBarLw(0 /* vis */,
                 mTopDockedOpaqueWindowState, mTopDockedOpaqueOrDimmingWindowState);
-        mService.getStackBounds(
-                WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_HOME, mNonDockedStackBounds);
+        final int fullscreenAppearance = updateLightStatusBarAppearanceLw(0 /* vis */,
+                mTopFullscreenOpaqueWindowState, mTopFullscreenOpaqueOrDimmingWindowState);
+        final int dockedAppearance = updateLightStatusBarAppearanceLw(0 /* vis */,
+                mTopDockedOpaqueWindowState, mTopDockedOpaqueOrDimmingWindowState);
         mService.getStackBounds(
                 WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD, mDockedStackBounds);
+        final boolean inSplitScreen = !mDockedStackBounds.isEmpty();
+        mService.getStackBounds(inSplitScreen ? WINDOWING_MODE_SPLIT_SCREEN_SECONDARY
+                        : WINDOWING_MODE_FULLSCREEN,
+                ACTIVITY_TYPE_UNDEFINED, mNonDockedStackBounds);
         final Pair<Integer, Boolean> result =
                 updateSystemBarsLw(win, mLastSystemUiFlags, tmpVisibility);
         final int visibility = result.first;
         final int diff = visibility ^ mLastSystemUiFlags;
         final int fullscreenDiff = fullscreenVisibility ^ mLastFullscreenStackSysUiFlags;
         final int dockedDiff = dockedVisibility ^ mLastDockedStackSysUiFlags;
-        final boolean needsMenu = win.getNeedsMenuLw(mTopFullscreenOpaqueWindowState);
-        if (diff == 0 && fullscreenDiff == 0 && dockedDiff == 0 && mLastFocusNeedsMenu == needsMenu
+        final InsetsPolicy insetsPolicy = getInsetsPolicy();
+        final boolean isFullscreen = (visibility & (View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION)) != 0
+                || (PolicyControl.getWindowFlags(win, win.mAttrs) & FLAG_FULLSCREEN) != 0
+                || (mStatusBar != null && insetsPolicy.isHidden(TYPE_TOP_BAR))
+                || (mNavigationBar != null && insetsPolicy.isHidden(
+                        InsetsState.TYPE_NAVIGATION_BAR));
+        final int behavior = win.mAttrs.insetsFlags.behavior;
+        final boolean isImmersive = (visibility & (View.SYSTEM_UI_FLAG_IMMERSIVE
+                        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)) != 0
+                || behavior == BEHAVIOR_SHOW_BARS_BY_SWIPE
+                || behavior == BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
+        if (diff == 0 && fullscreenDiff == 0 && dockedDiff == 0
+                && mLastAppearance == appearance
+                && mLastFullscreenAppearance == fullscreenAppearance
+                && mLastDockedAppearance == dockedAppearance
+                && mLastFocusIsFullscreen == isFullscreen
+                && mLastFocusIsImmersive == isImmersive
                 && mFocusedApp == win.getAppToken()
                 && mLastNonDockedStackBounds.equals(mNonDockedStackBounds)
                 && mLastDockedStackBounds.equals(mDockedStackBounds)) {
@@ -3292,21 +3356,40 @@ public class DisplayPolicy {
         mLastSystemUiFlags = visibility;
         mLastFullscreenStackSysUiFlags = fullscreenVisibility;
         mLastDockedStackSysUiFlags = dockedVisibility;
-        mLastFocusNeedsMenu = needsMenu;
+        mLastAppearance = appearance;
+        mLastFullscreenAppearance = fullscreenAppearance;
+        mLastDockedAppearance = dockedAppearance;
+        mLastFocusIsFullscreen = isFullscreen;
+        mLastFocusIsImmersive = isImmersive;
         mFocusedApp = win.getAppToken();
         mLastNonDockedStackBounds.set(mNonDockedStackBounds);
         mLastDockedStackBounds.set(mDockedStackBounds);
         final Rect fullscreenStackBounds = new Rect(mNonDockedStackBounds);
         final Rect dockedStackBounds = new Rect(mDockedStackBounds);
+        final AppearanceRegion[] appearanceRegions = inSplitScreen
+                ? new AppearanceRegion[]{
+                        new AppearanceRegion(fullscreenAppearance, fullscreenStackBounds),
+                        new AppearanceRegion(dockedAppearance, dockedStackBounds)}
+                : new AppearanceRegion[]{
+                        new AppearanceRegion(fullscreenAppearance, fullscreenStackBounds)};
         final boolean isNavbarColorManagedByIme = result.second;
         mHandler.post(() -> {
             StatusBarManagerInternal statusBar = getStatusBarManagerInternal();
             if (statusBar != null) {
                 final int displayId = getDisplayId();
+                // TODO(b/118118435): disabled flags only
                 statusBar.setSystemUiVisibility(displayId, visibility, fullscreenVisibility,
                         dockedVisibility, 0xffffffff, fullscreenStackBounds,
                         dockedStackBounds, isNavbarColorManagedByIme, win.toString());
-                statusBar.topAppWindowChanged(displayId, needsMenu);
+                if (ViewRootImpl.sNewInsetsMode == NEW_INSETS_MODE_FULL) {
+                    statusBar.onSystemBarAppearanceChanged(displayId, appearance,
+                            appearanceRegions, isNavbarColorManagedByIme);
+                }
+                statusBar.topAppWindowChanged(displayId, isFullscreen, isImmersive);
+
+                // TODO(b/118118435): Remove this after removing system UI visibilities.
+                mDisplayContent.statusBarVisibilityChanged(
+                        visibility & ~(View.STATUS_BAR_UNHIDE | View.NAVIGATION_BAR_UNHIDE));
             }
         });
         return diff;
@@ -3326,6 +3409,22 @@ public class DisplayPolicy {
             vis &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
         }
         return vis;
+    }
+
+    private int updateLightStatusBarAppearanceLw(int appearance, WindowState opaque,
+            WindowState opaqueOrDimming) {
+        final boolean onKeyguard = isStatusBarKeyguard() && !isKeyguardOccluded();
+        final WindowState statusColorWin = onKeyguard ? mStatusBar : opaqueOrDimming;
+        if (statusColorWin != null && (statusColorWin == opaque || onKeyguard)) {
+            // If the top fullscreen-or-dimming window is also the top fullscreen, respect
+            // its light flag.
+            appearance &= ~APPEARANCE_LIGHT_TOP_BAR;
+            appearance |= statusColorWin.mAttrs.insetsFlags.appearance & APPEARANCE_LIGHT_TOP_BAR;
+        } else if (statusColorWin != null && statusColorWin.isDimming()) {
+            // Otherwise if it's dimming, clear the light flag.
+            appearance &= ~APPEARANCE_LIGHT_TOP_BAR;
+        }
+        return appearance;
     }
 
     @VisibleForTesting
@@ -3396,9 +3495,9 @@ public class DisplayPolicy {
         final boolean resizing = mDisplayContent.getDockedDividerController().isResizing();
 
         // We need to force system bars when the docked stack is visible, when the freeform stack
-        // is visible but also when we are resizing for the transitions when docked stack
+        // is focused but also when we are resizing for the transitions when docked stack
         // visibility changes.
-        mForceShowSystemBars = dockedStackVisible || freeformStackVisible || resizing
+        mForceShowSystemBars = dockedStackVisible || win.inFreeformWindowingMode() || resizing
                 || mForceShowSystemBarsFromExternal;
         final boolean forceOpaqueStatusBar = mForceShowSystemBars && !mForceStatusBarFromKeyguard;
 
@@ -3649,6 +3748,8 @@ public class DisplayPolicy {
                 mPendingPanicGestureUptime = SystemClock.uptimeMillis();
                 if (!isNavBarEmpty(mLastSystemUiFlags)) {
                     mNavigationBarController.showTransient();
+                    mDisplayContent.getInsetsPolicy().showTransient(IntArray.wrap(
+                            new int[] {InsetsState.TYPE_NAVIGATION_BAR}));
                 }
             }
         }
@@ -3725,9 +3826,6 @@ public class DisplayPolicy {
             pw.print(Integer.toHexString(mResettingSystemUiFlags));
             pw.print(" mForceClearedSystemUiFlags=0x");
             pw.println(Integer.toHexString(mForceClearedSystemUiFlags));
-        }
-        if (mLastFocusNeedsMenu) {
-            pw.print(prefix); pw.print("mLastFocusNeedsMenu="); pw.println(mLastFocusNeedsMenu);
         }
         pw.print(prefix); pw.print("mShowingDream="); pw.print(mShowingDream);
         pw.print(" mDreamingLockscreen="); pw.print(mDreamingLockscreen);
@@ -3845,7 +3943,7 @@ public class DisplayPolicy {
     @VisibleForTesting
     static boolean isOverlappingWithNavBar(WindowState targetWindow, WindowState navBarWindow) {
         if (navBarWindow == null || !navBarWindow.isVisibleLw()
-                || targetWindow.mAppToken == null || !targetWindow.isVisibleLw()) {
+                || targetWindow.mActivityRecord == null || !targetWindow.isVisibleLw()) {
             return false;
         }
 

@@ -32,7 +32,6 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Matchers.any;
 
 import android.content.ComponentName;
-import android.content.pm.PackageList;
 import android.content.pm.PackageManagerInternal;
 import android.graphics.Rect;
 import android.os.UserHandle;
@@ -43,6 +42,7 @@ import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.MediumTest;
 
 import com.android.server.LocalServices;
+import com.android.server.pm.PackageList;
 import com.android.server.wm.LaunchParamsController.LaunchParams;
 
 import org.junit.Before;
@@ -115,16 +115,16 @@ public class LaunchParamsPersisterTests extends ActivityTestsBase {
                 ACTIVITY_TYPE_STANDARD, /* onTop */ true);
         mTestTask = new TaskBuilder(mSupervisor).setComponent(TEST_COMPONENT).setStack(stack)
                 .build();
-        mTestTask.userId = TEST_USER_ID;
+        mTestTask.mUserId = TEST_USER_ID;
         mTestTask.mLastNonFullscreenBounds = TEST_BOUNDS;
         mTestTask.hasBeenVisible = true;
 
         mTaskWithDifferentComponent = new TaskBuilder(mSupervisor)
                 .setComponent(ALTERNATIVE_COMPONENT).build();
-        mTaskWithDifferentComponent.userId = TEST_USER_ID;
+        mTaskWithDifferentComponent.mUserId = TEST_USER_ID;
 
         mTaskWithDifferentUser = new TaskBuilder(mSupervisor).setComponent(TEST_COMPONENT).build();
-        mTaskWithDifferentUser.userId = ALTERNATIVE_USER_ID;
+        mTaskWithDifferentUser.mUserId = ALTERNATIVE_USER_ID;
 
         mTarget = new LaunchParamsPersister(mPersisterQueue, mSupervisor, mUserFolderGetter);
 

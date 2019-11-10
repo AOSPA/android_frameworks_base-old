@@ -20,11 +20,10 @@ import android.content.Context;
 
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.ViewMediatorCallback;
-import com.android.systemui.statusbar.car.CarFacetButtonController;
+import com.android.systemui.dagger.SystemUIRootComponent;
+import com.android.systemui.navigationbar.car.CarFacetButtonController;
 import com.android.systemui.statusbar.car.CarStatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
-import com.android.systemui.volume.CarVolumeDialogComponent;
-import com.android.systemui.volume.VolumeDialogComponent;
 
 import javax.inject.Singleton;
 
@@ -43,7 +42,6 @@ public class CarSystemUIFactory extends SystemUIFactory {
                 .contextHolder(new ContextHolder(context))
                 .build();
         return DaggerCarSystemUIRootComponent.builder()
-                .dependencyProvider(new com.android.systemui.DependencyProvider())
                 .contextHolder(new ContextHolder(context))
                 .build();
     }
@@ -55,10 +53,6 @@ public class CarSystemUIFactory extends SystemUIFactory {
     public StatusBarKeyguardViewManager createStatusBarKeyguardViewManager(Context context,
             ViewMediatorCallback viewMediatorCallback, LockPatternUtils lockPatternUtils) {
         return new CarStatusBarKeyguardViewManager(context, viewMediatorCallback, lockPatternUtils);
-    }
-
-    public VolumeDialogComponent createVolumeDialogComponent(SystemUI systemUi, Context context) {
-        return new CarVolumeDialogComponent(systemUi, context);
     }
 
     @Singleton

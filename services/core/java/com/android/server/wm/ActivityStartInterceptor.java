@@ -249,7 +249,8 @@ class ActivityStartInterceptor {
         if (PLATFORM_PACKAGE_NAME.equals(suspendingPackage)) {
             return interceptSuspendedByAdminPackage();
         }
-        final SuspendDialogInfo dialogInfo = pmi.getSuspendedDialogInfo(suspendedPackage, mUserId);
+        final SuspendDialogInfo dialogInfo = pmi.getSuspendedDialogInfo(suspendedPackage,
+                suspendingPackage, mUserId);
         mIntent = SuspendedAppActivity.createSuspendedAppInterceptIntent(suspendedPackage,
                 suspendingPackage, dialogInfo, mUserId);
         mCallingPid = mRealCallingPid;
@@ -273,7 +274,7 @@ class ActivityStartInterceptor {
         // ConfirmCredentials intent and unassign it, as otherwise the task will move to
         // front even if ConfirmCredentials is cancelled.
         if (mInTask != null) {
-            mIntent.putExtra(EXTRA_TASK_ID, mInTask.taskId);
+            mIntent.putExtra(EXTRA_TASK_ID, mInTask.mTaskId);
             mInTask = null;
         }
         if (mActivityOptions == null) {

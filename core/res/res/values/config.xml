@@ -387,6 +387,12 @@
     </string-array>
 
     <!-- List of regexpressions describing the interface (if any) that represent tetherable
+         Wifi P2P interfaces.  If the device doesn't want to support tethering over Wifi P2p this
+         should be empty.  An example would be "p2p-p2p.*" -->
+    <string-array translatable="false" name="config_tether_wifi_p2p_regexs">
+    </string-array>
+
+    <!-- List of regexpressions describing the interface (if any) that represent tetherable
          WiMAX interfaces.  If the device doesn't want to support tethering over Wifi this
          should be empty.  An example would be "softap.*" -->
     <string-array translatable="false" name="config_tether_wimax_regexs">
@@ -432,6 +438,18 @@
         <item>eth3;12,13,14,15;ip=192.168.0.12/24;1</item>
         -->
     </string-array>
+
+    <!-- Configuration of network interfaces that support WakeOnLAN -->
+    <string-array translatable="false" name="config_wakeonlan_supported_interfaces">
+        <!--
+        <item>wlan0</item>
+        <item>eth0</item>
+        -->
+    </string-array>
+
+    <!-- Package name for the default CellBroadcastService module [DO NOT TRANSLATE] -->
+    <string name="cellbroadcast_default_package" translatable="false">com.android.cellbroadcastservice
+    </string>
 
     <!-- If the mobile hotspot feature requires provisioning, a package name and class name
         can be provided to launch a supported application that provisions the devices.
@@ -748,6 +766,9 @@
 
     <!-- Indicates that p2p MAC randomization is supported on this device -->
     <bool translatable="false" name="config_wifi_p2p_mac_randomization_supported">false</bool>
+
+    <!-- Indicates that AP mode MAC randomization is supported on this device -->
+    <bool translatable="false" name="config_wifi_ap_mac_randomization_supported">true</bool>
 
     <!-- flag for activating paranoid MAC randomization on a limited set of SSIDs -->
     <bool translatable="false" name="config_wifi_aggressive_randomization_ssid_whitelist_enabled">false</bool>
@@ -2533,6 +2554,16 @@
          will be locked. -->
     <bool name="config_multiuserDelayUserDataLocking">false</bool>
 
+    <!-- Whether to only install system packages on a user if they're whitelisted for that user
+         type. These are flags and can be freely combined.
+         0 (0b000) - disable whitelist (install all system packages; no logging)
+         1 (0b001) - enforce (only install system packages if they are whitelisted)
+         2 (0b010) - log (log when a non-whitelisted package is run)
+         4 (0b100) - treat any package not mentioned in the whitelist file as implicitly whitelisted
+        Note: This list must be kept current with PACKAGE_WHITELIST_MODE_PROP in
+        frameworks/base/services/core/java/com/android/server/pm/UserSystemPackageInstaller.java -->
+    <integer name="config_userTypePackageWhitelistMode">5</integer> <!-- 0b101 -->
+
     <!-- Whether UI for multi user should be shown -->
     <bool name="config_enableMultiUserUI">false</bool>
 
@@ -3530,6 +3561,9 @@
     <!-- emergency call number for the emergency affordance -->
     <string name="config_emergency_call_number" translatable="false">112</string>
 
+    <!-- Package name that provides Emergency Dialer -->
+    <string name="config_emergency_dialer_package">com.android.phone</string>
+
     <!-- Do not translate. Mcc codes whose existence trigger the presence of emergency
          affordances-->
     <integer-array name="config_emergency_mcc_codes" translatable="false">
@@ -3673,6 +3707,21 @@
          Example: "com.android.wellbeing"
      -->
     <string name="config_defaultWellbeingPackage" translatable="false"></string>
+
+    <!-- The package name for the system telephony apps.
+         This package must be trusted, as it will be granted with permissions with special telephony
+         protection level. Note, framework by default support multiple telephony apps, each package
+         name is separated by comma.
+         Example: "com.android.phone,com.android.stk,com.android.providers.telephony"
+     -->
+    <string name="config_telephonyPackages" translatable="false">"com.android.phone,com.android.stk,com.android.providers.telephony,com.android.ons"</string>
+
+    <!-- The package name for the default system wifi app.
+         This package must be trusted, as it has the permissions to control wifi
+         connectivity on the device.
+         Example: "com.android.wifi"
+     -->
+    <string name="config_wifiPackage" translatable="false">"com.android.wifi"</string>
 
     <!-- The component name for the default system attention service.
          This service must be trusted, as it can be activated without explicit consent of the user.
@@ -4304,11 +4353,11 @@
 
     <!-- Trigger a warning for notifications with RemoteView objects that are larger in bytes than
     this value (default 1MB)-->
-    <integer name="config_notificationWarnRemoteViewSizeBytes">1000000</integer>
+    <integer name="config_notificationWarnRemoteViewSizeBytes">2000000</integer>
 
     <!-- Strip notification RemoteView objects that are larger in bytes than this value (also log)
     (default 2MB) -->
-    <integer name="config_notificationStripRemoteViewSizeBytes">2000000</integer>
+    <integer name="config_notificationStripRemoteViewSizeBytes">5000000</integer>
 
     <!-- Contains a blacklist of apps that should not get pre-installed carrier app permission
          grants, even if the UICC claims that the app should be privileged. See b/138150105 -->
@@ -4330,6 +4379,10 @@
          create additional screen real estate outside beyond the keyboard. Note that the user needs
          to have a confirmed way to dismiss the keyboard when desired. -->
     <bool name="config_automotiveHideNavBarForKeyboard">false</bool>
+
+    <!-- Whether or not to show the built-in charging animation when the device begins charging
+         wirelessly. -->
+    <bool name="config_showBuiltinWirelessChargingAnim">true</bool>
 
     <!-- pdp data retry for cause 29, 33 and 55-->
     <bool name="config_pdp_retry_for_29_33_55_enabled">false</bool>

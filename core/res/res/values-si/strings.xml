@@ -344,6 +344,8 @@
     <string name="permdesc_receiveSms" msgid="6424387754228766939">"SMS පණිවිඩ ලැබීමට සහ ක්‍රියාත්මක කිරීමට යෙදුමට අවසර දෙන්න. මෙහි තේරුම යෙදුමට ඔබගේ උපාංගයට ලැබෙන පණිවිඩ අධීක්ෂණය කිරීමට හැකිවීම වන අතර, ඒවා ඔබට නොපෙන්වා මකා දැමීමටද හැකි වීමයි."</string>
     <string name="permlab_receiveMms" msgid="1821317344668257098">"පෙළ පණිවුඩ ලබාගන්න (MMS)"</string>
     <string name="permdesc_receiveMms" msgid="533019437263212260">"MMS පණිවිඩ සොයා ලබාගැනීමට සහ ක්‍රියාත්මක කිරීමට යෙදුමට අවසර දෙන්න. යෙදුම නිරීක්ෂණය කරනු ලබන අතර ඔබට ලැබුන පණිවිඩ පෙන්වීමෙන් තොරවම මකා දැමිය හැකි බව මෙමඟින් අදහස් කරයි."</string>
+    <string name="permlab_bindCellBroadcastService" msgid="4468585041824555604">"සෙල් විකාශන පණිවිඩ යොමු කිරීම"</string>
+    <string name="permdesc_bindCellBroadcastService" msgid="9073440260695196089">"සෙල් විකාශන පණිවිඩ ලැබුණු විට ඒවා යොමු කිරීම සඳහා සෙල් විකාශන මොඩියුලයට බැඳීමට යෙදුමට ඉඩ දෙයි. හදිසි අවස්ථා පිළිබඳව ඔබට අනතුරු ඇඟවීම සඳහා සෙල් විකාශන ඇඟවීම් සමහර ස්ථානවල ලබා දෙනු ලැබේ. හදිසි සෙල් විකාශනයක් ලැබෙන අවස්ථාවකදී, අනිෂ්ට යෙදුම්වලින් ඔබගේ උපාංග කාර්ය සාධනයට හෝ මෙහෙයුමට බාධා සිදු විය හැකිය."</string>
     <string name="permlab_readCellBroadcasts" msgid="1598328843619646166">"සෙල් ප්‍රචාරණ පණිවිඩ කියවීම"</string>
     <string name="permdesc_readCellBroadcasts" msgid="6361972776080458979">"ඔබගේ උපාංගයට ලැබුණු සෙල් විකාශන පණිවිඩ කියවීමට යෙදුමට අවසර දෙන්න. ඔබට හදිසි අවස්ථාවන් පිළිබඳ අනතුරු ඇඟවීමට සෙල් විකාශන පණිවිඩ ඇතැම් ස්ථානවල සිට යවනු ලබයි. හදිසි සෙල් විකාශන ලැබෙන අවස්ථාවකදී, අනිෂ්ට යෙදුම් මඟින් ඔබගේ උපාංගයට කාර්ය සාධනයට හෝ ක්‍රියකරණයට බාධා සිදුවිය හැක."</string>
     <string name="permlab_subscribedFeedsRead" msgid="4756609637053353318">"දායක වූ සංග්‍රහ කියවීම"</string>
@@ -1363,6 +1365,8 @@
     <string name="adb_active_notification_message" product="tv" msgid="8470296818270110396">"USB නිදොස්කරණය අබල කිරීමට තෝරන්න."</string>
     <string name="test_harness_mode_notification_title" msgid="2216359742631914387">"පුරක පරීක්‍ෂා ප්‍රකාරය සබලයි"</string>
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"පුරක පරීක්‍ෂා ප්‍රකාරය අබල කිරීමට කර්මාන්තශාලා යළි සැකසීමක් ඉටු කරන්න."</string>
+    <string name="console_running_notification_title" msgid="4955436518220103382">"අනුක්‍රමික කොන්සෝලය සබලයි"</string>
+    <string name="console_running_notification_message" msgid="1331995933976263865">"කාර්ය සාධනය බලපෑමට ලක් වී ඇත. අබල කිරීමට, ආරම්භකය පරීක්ෂා කරන්න."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"USB තොට තුළ ද්‍රව හෝ කුණු"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB තොට ස්වයංක්‍රීයව අබල කෙරේ. තවත් දැන ගැනීමට තට්ටු කරන්න."</string>
     <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"USB තොට භාවිත කළාට කමක් නැත"</string>
@@ -1581,7 +1585,7 @@
     <string name="expires_on" msgid="3676242949915959821">"කල් ඉකුත් වන්නේ:"</string>
     <string name="serial_number" msgid="758814067660862493">"අනුක්‍රමාංකය:"</string>
     <string name="fingerprints" msgid="4516019619850763049">"ඇඟිලි සලකුණු:"</string>
-    <string name="sha256_fingerprint" msgid="4391271286477279263">"SHA-256 ඇඟිලිසලකුණ:"</string>
+    <string name="sha256_fingerprint" msgid="4391271286477279263">"SHA-256 ඇඟිලි සලකුණ:"</string>
     <string name="sha1_fingerprint" msgid="7930330235269404581">"SHA-1 ඇඟිලි සලකුණ:"</string>
     <string name="activity_chooser_view_see_all" msgid="4292569383976636200">"සියල්ල බලන්න"</string>
     <string name="activity_chooser_view_dialog_title_default" msgid="4710013864974040615">"ක්‍රියාකාරකම තෝරන්න"</string>
@@ -1892,10 +1896,8 @@
     <string name="default_notification_channel_label" msgid="5929663562028088222">"වර්ගීකරණය නොකළ"</string>
     <string name="importance_from_user" msgid="7318955817386549931">"ඔබ මෙම දැනුම්දීම්වල වැදගත්කම සකසා ඇත."</string>
     <string name="importance_from_person" msgid="9160133597262938296">"සම්බන්ධ වූ පුද්ගලයන් නිසා මෙය වැදගත් වේ."</string>
-    <!-- no translation found for user_creation_account_exists (6559477114648176531) -->
-    <skip />
-    <!-- no translation found for user_creation_adding (9089159170398841763) -->
-    <skip />
+    <string name="user_creation_account_exists" msgid="6559477114648176531">"<xliff:g id="APP">%1$s</xliff:g> හට <xliff:g id="ACCOUNT">%2$s</xliff:g> සමගින් නව පරිශීලකයෙකු සෑදීමට ඉඩ දෙන්නද (මෙම ගිණුම සහිත පරිශීලකයෙකු දැනටමත් සිටී) ?"</string>
+    <string name="user_creation_adding" msgid="9089159170398841763">"<xliff:g id="APP">%1$s</xliff:g> හට <xliff:g id="ACCOUNT">%2$s</xliff:g> සමගින් නව පරිශීලකයෙකු සෑදීමට ඉඩ දෙන්නද ?"</string>
     <string name="language_selection_title" msgid="2680677278159281088">"භාෂාවක් එක් කරන්න"</string>
     <string name="country_selection_title" msgid="2954859441620215513">"ප්‍රදේශ මනාපය"</string>
     <string name="search_language_hint" msgid="7042102592055108574">"භාෂා නම ටයිප් කරන්න"</string>

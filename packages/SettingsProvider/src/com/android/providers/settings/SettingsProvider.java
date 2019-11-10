@@ -56,6 +56,7 @@ import android.os.DropBoxManager;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.IUserRestrictionsListener;
 import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
@@ -65,7 +66,6 @@ import android.os.SELinux;
 import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.os.UserManagerInternal;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.provider.Settings.Global;
@@ -84,7 +84,6 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.content.PackageMonitor;
 import com.android.internal.os.BackgroundThread;
 import com.android.providers.settings.SettingsState.Setting;
-import com.android.server.LocalServices;
 import com.android.server.SystemConfig;
 
 import com.google.android.collect.Sets;
@@ -286,8 +285,6 @@ public class SettingsProvider extends ContentProvider {
     // We have to call in the user manager with no lock held,
     private volatile UserManager mUserManager;
 
-    private UserManagerInternal mUserManagerInternal;
-
     // We have to call in the package manager with no lock held,
     private volatile IPackageManager mPackageManager;
 
@@ -317,7 +314,6 @@ public class SettingsProvider extends ContentProvider {
 
         synchronized (mLock) {
             mUserManager = UserManager.get(getContext());
-            mUserManagerInternal = LocalServices.getService(UserManagerInternal.class);
             mPackageManager = AppGlobals.getPackageManager();
             mHandlerThread = new HandlerThread(LOG_TAG,
                     Process.THREAD_PRIORITY_BACKGROUND);
@@ -439,10 +435,8 @@ public class SettingsProvider extends ContentProvider {
 
             case Settings.CALL_METHOD_LIST_CONFIG: {
                 String prefix = getSettingPrefix(args);
-                Bundle result = new Bundle();
-                result.putSerializable(
-                        Settings.NameValueTable.VALUE, (HashMap) getAllConfigFlags(prefix));
-                return result;
+                return packageValuesForCallResult(getAllConfigFlags(prefix),
+                        isTrackingGeneration(args));
             }
 
             case Settings.CALL_METHOD_LIST_GLOBAL: {
@@ -904,95 +898,100 @@ public class SettingsProvider extends ContentProvider {
         // TODO: The current design of settings looking different based on user restrictions
         // should be reworked to keep them separate and system code should check the setting
         // first followed by checking the user restriction before performing an operation.
-        UserManagerInternal userManager = LocalServices.getService(UserManagerInternal.class);
-        userManager.addUserRestrictionsListener((int userId, Bundle newRestrictions,
-                Bundle prevRestrictions) -> {
-            Set<String> changedRestrictions = getRestrictionDiff(prevRestrictions, newRestrictions);
-            // We are changing the settings affected by restrictions to their current
-            // value with a forced update to ensure that all cross profile dependencies
-            // are taken into account. Also make sure the settings update to.. the same
-            // value passes the security checks, so clear binder calling id.
-            if (changedRestrictions.contains(UserManager.DISALLOW_SHARE_LOCATION)) {
-                final long identity = Binder.clearCallingIdentity();
-                try {
-                    synchronized (mLock) {
-                        Setting setting = getSecureSetting(
-                                Settings.Secure.LOCATION_MODE, userId);
-                        updateSecureSetting(Settings.Secure.LOCATION_MODE,
-                                setting != null ? setting.getValue() : null, null,
-                                true, userId, true);
-                        setting = getSecureSetting(
-                                Settings.Secure.LOCATION_PROVIDERS_ALLOWED, userId);
-                        updateSecureSetting(Settings.Secure.LOCATION_PROVIDERS_ALLOWED,
-                                setting != null ? setting.getValue() : null, null,
-                                true, userId, true);
+        IUserRestrictionsListener listener = new IUserRestrictionsListener.Stub() {
+            @Override
+            public void onUserRestrictionsChanged(int userId,
+                    Bundle newRestrictions, Bundle prevRestrictions) {
+                Set<String> changedRestrictions =
+                        getRestrictionDiff(prevRestrictions, newRestrictions);
+                // We are changing the settings affected by restrictions to their current
+                // value with a forced update to ensure that all cross profile dependencies
+                // are taken into account. Also make sure the settings update to.. the same
+                // value passes the security checks, so clear binder calling id.
+                if (changedRestrictions.contains(UserManager.DISALLOW_SHARE_LOCATION)) {
+                    final long identity = Binder.clearCallingIdentity();
+                    try {
+                        synchronized (mLock) {
+                            Setting setting = getSecureSetting(
+                                    Settings.Secure.LOCATION_MODE, userId);
+                            updateSecureSetting(Settings.Secure.LOCATION_MODE,
+                                    setting != null ? setting.getValue() : null, null,
+                                            true, userId, true);
+                            setting = getSecureSetting(
+                                    Settings.Secure.LOCATION_PROVIDERS_ALLOWED, userId);
+                            updateSecureSetting(Settings.Secure.LOCATION_PROVIDERS_ALLOWED,
+                                    setting != null ? setting.getValue() : null, null,
+                                            true, userId, true);
+                        }
+                    } finally {
+                        Binder.restoreCallingIdentity(identity);
                     }
-                } finally {
-                    Binder.restoreCallingIdentity(identity);
+                }
+                if (changedRestrictions.contains(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
+                        || changedRestrictions.contains(
+                                UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES_GLOBALLY)) {
+                    final long identity = Binder.clearCallingIdentity();
+                    try {
+                        synchronized (mLock) {
+                            Setting setting = getGlobalSetting(
+                                    Settings.Global.INSTALL_NON_MARKET_APPS);
+                            String value = setting != null ? setting.getValue() : null;
+                            updateGlobalSetting(Settings.Global.INSTALL_NON_MARKET_APPS,
+                                    value, null, true, userId, true);
+                        }
+                    } finally {
+                        Binder.restoreCallingIdentity(identity);
+                    }
+                }
+                if (changedRestrictions.contains(UserManager.DISALLOW_DEBUGGING_FEATURES)) {
+                    final long identity = Binder.clearCallingIdentity();
+                    try {
+                        synchronized (mLock) {
+                            Setting setting = getGlobalSetting(Settings.Global.ADB_ENABLED);
+                            String value = setting != null ? setting.getValue() : null;
+                            updateGlobalSetting(Settings.Global.ADB_ENABLED,
+                                    value, null, true, userId, true);
+                        }
+                    } finally {
+                        Binder.restoreCallingIdentity(identity);
+                    }
+                }
+                if (changedRestrictions.contains(UserManager.ENSURE_VERIFY_APPS)) {
+                    final long identity = Binder.clearCallingIdentity();
+                    try {
+                        synchronized (mLock) {
+                            Setting enable = getGlobalSetting(
+                                    Settings.Global.PACKAGE_VERIFIER_ENABLE);
+                            String enableValue = enable != null ? enable.getValue() : null;
+                            updateGlobalSetting(Settings.Global.PACKAGE_VERIFIER_ENABLE,
+                                    enableValue, null, true, userId, true);
+                            Setting include = getGlobalSetting(
+                                    Settings.Global.PACKAGE_VERIFIER_INCLUDE_ADB);
+                            String includeValue = include != null ? include.getValue() : null;
+                            updateGlobalSetting(Settings.Global.PACKAGE_VERIFIER_INCLUDE_ADB,
+                                    includeValue, null, true, userId, true);
+                        }
+                    } finally {
+                        Binder.restoreCallingIdentity(identity);
+                    }
+                }
+                if (changedRestrictions.contains(UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS)) {
+                    final long identity = Binder.clearCallingIdentity();
+                    try {
+                        synchronized (mLock) {
+                            Setting setting = getGlobalSetting(
+                                    Settings.Global.PREFERRED_NETWORK_MODE);
+                            String value = setting != null ? setting.getValue() : null;
+                            updateGlobalSetting(Settings.Global.PREFERRED_NETWORK_MODE,
+                                    value, null, true, userId, true);
+                        }
+                    } finally {
+                        Binder.restoreCallingIdentity(identity);
+                    }
                 }
             }
-            if (changedRestrictions.contains(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
-                    || changedRestrictions.contains(
-                            UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES_GLOBALLY)) {
-                final long identity = Binder.clearCallingIdentity();
-                try {
-                    synchronized (mLock) {
-                        Setting setting = getGlobalSetting(Settings.Global.INSTALL_NON_MARKET_APPS);
-                        String value = setting != null ? setting.getValue() : null;
-                        updateGlobalSetting(Settings.Global.INSTALL_NON_MARKET_APPS,
-                                value, null, true, userId, true);
-                    }
-                } finally {
-                    Binder.restoreCallingIdentity(identity);
-                }
-            }
-            if (changedRestrictions.contains(UserManager.DISALLOW_DEBUGGING_FEATURES)) {
-                final long identity = Binder.clearCallingIdentity();
-                try {
-                    synchronized (mLock) {
-                        Setting setting = getGlobalSetting(Settings.Global.ADB_ENABLED);
-                        String value = setting != null ? setting.getValue() : null;
-                        updateGlobalSetting(Settings.Global.ADB_ENABLED,
-                                value, null, true, userId, true);
-                    }
-                } finally {
-                    Binder.restoreCallingIdentity(identity);
-                }
-            }
-            if (changedRestrictions.contains(UserManager.ENSURE_VERIFY_APPS)) {
-                final long identity = Binder.clearCallingIdentity();
-                try {
-                    synchronized (mLock) {
-                        Setting enable = getGlobalSetting(
-                                Settings.Global.PACKAGE_VERIFIER_ENABLE);
-                        String enableValue = enable != null ? enable.getValue() : null;
-                        updateGlobalSetting(Settings.Global.PACKAGE_VERIFIER_ENABLE,
-                                enableValue, null, true, userId, true);
-                        Setting include = getGlobalSetting(
-                                Settings.Global.PACKAGE_VERIFIER_INCLUDE_ADB);
-                        String includeValue = include != null ? include.getValue() : null;
-                        updateGlobalSetting(Settings.Global.PACKAGE_VERIFIER_INCLUDE_ADB,
-                                includeValue, null, true, userId, true);
-                    }
-                } finally {
-                    Binder.restoreCallingIdentity(identity);
-                }
-            }
-            if (changedRestrictions.contains(UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS)) {
-                final long identity = Binder.clearCallingIdentity();
-                try {
-                    synchronized (mLock) {
-                        Setting setting = getGlobalSetting(
-                                Settings.Global.PREFERRED_NETWORK_MODE);
-                        String value = setting != null ? setting.getValue() : null;
-                        updateGlobalSetting(Settings.Global.PREFERRED_NETWORK_MODE,
-                                value, null, true, userId, true);
-                    }
-                } finally {
-                    Binder.restoreCallingIdentity(identity);
-                }
-            }
-        });
+        };
+        mUserManager.addUserRestrictionsListener(listener);
     }
 
     private static Set<String> getRestrictionDiff(Bundle prevRestrictions, Bundle newRestrictions) {
@@ -1076,7 +1075,7 @@ public class SettingsProvider extends ContentProvider {
         return false;
     }
 
-    private Map<String, String> getAllConfigFlags(@Nullable String prefix) {
+    private HashMap<String, String> getAllConfigFlags(@Nullable String prefix) {
         if (DEBUG) {
             Slog.v(LOG_TAG, "getAllConfigFlags() for " + prefix);
         }
@@ -1085,12 +1084,11 @@ public class SettingsProvider extends ContentProvider {
             // Get the settings.
             SettingsState settingsState = mSettingsRegistry.getSettingsLocked(
                     SETTINGS_TYPE_CONFIG, UserHandle.USER_SYSTEM);
-
             List<String> names = getSettingsNamesLocked(SETTINGS_TYPE_CONFIG,
                     UserHandle.USER_SYSTEM);
 
             final int nameCount = names.size();
-            Map<String, String> flagsToValues = new HashMap<>(names.size());
+            HashMap<String, String> flagsToValues = new HashMap<>(names.size());
 
             for (int i = 0; i < nameCount; i++) {
                 String name = names.get(i);
@@ -1188,6 +1186,17 @@ public class SettingsProvider extends ContentProvider {
                 MUTATION_OPERATION_RESET, false, mode);
     }
 
+    private boolean isSettingRestrictedForUser(String name, int userId,
+            String value, int callerUid) {
+        final long oldId = Binder.clearCallingIdentity();
+        try {
+            return (name != null
+                    && mUserManager.isSettingRestrictedForUser(name, userId, value, callerUid));
+        } finally {
+            Binder.restoreCallingIdentity(oldId);
+        }
+    }
+
     private boolean mutateGlobalSetting(String name, String value, String tag,
             boolean makeDefault, int requestingUserId, int operation, boolean forceNotify,
             int mode) {
@@ -1199,8 +1208,7 @@ public class SettingsProvider extends ContentProvider {
 
         // If this is a setting that is currently restricted for this user, do not allow
         // unrestricting changes.
-        if (name != null && mUserManagerInternal.isSettingRestrictedForUser(
-                name, callingUserId, value, Binder.getCallingUid())) {
+        if (isSettingRestrictedForUser(name, callingUserId, value, Binder.getCallingUid())) {
             return false;
         }
 
@@ -1508,8 +1516,7 @@ public class SettingsProvider extends ContentProvider {
 
         // If this is a setting that is currently restricted for this user, do not allow
         // unrestricting changes.
-        if (name != null && mUserManagerInternal.isSettingRestrictedForUser(
-                name, callingUserId, value, Binder.getCallingUid())) {
+        if (isSettingRestrictedForUser(name, callingUserId, value, Binder.getCallingUid())) {
             return false;
         }
 
@@ -1649,8 +1656,7 @@ public class SettingsProvider extends ContentProvider {
         // Resolve the userId on whose behalf the call is made.
         final int callingUserId = resolveCallingUserIdEnforcingPermissionsLocked(runAsUserId);
 
-        if (name != null && mUserManagerInternal.isSettingRestrictedForUser(
-                name, callingUserId, value, Binder.getCallingUid())) {
+        if (isSettingRestrictedForUser(name, callingUserId, value, Binder.getCallingUid())) {
             return false;
         }
 
@@ -2057,8 +2063,7 @@ public class SettingsProvider extends ContentProvider {
                 "get/set setting for user", null);
     }
 
-    private Bundle packageValueForCallResult(Setting setting,
-            boolean trackingGeneration) {
+    private Bundle packageValueForCallResult(Setting setting, boolean trackingGeneration) {
         if (!trackingGeneration) {
             if (setting == null || setting.isNull()) {
                 return NULL_SETTING_BUNDLE;
@@ -2070,6 +2075,21 @@ public class SettingsProvider extends ContentProvider {
                 !setting.isNull() ? setting.getValue() : null);
 
         mSettingsRegistry.mGenerationRegistry.addGenerationData(result, setting.getKey());
+        return result;
+    }
+
+    private Bundle packageValuesForCallResult(HashMap<String, String> keyValues,
+            boolean trackingGeneration) {
+        Bundle result = new Bundle();
+        result.putSerializable(Settings.NameValueTable.VALUE, keyValues);
+        if (trackingGeneration) {
+            synchronized (mLock) {
+                mSettingsRegistry.mGenerationRegistry.addGenerationData(result,
+                        mSettingsRegistry.getSettingsLocked(
+                                SETTINGS_TYPE_CONFIG, UserHandle.USER_SYSTEM).mKey);
+            }
+        }
+
         return result;
     }
 
@@ -3173,7 +3193,7 @@ public class SettingsProvider extends ContentProvider {
                         } catch (SecurityException e) {
                             Slog.w(LOG_TAG, "Failed to notify for " + userId + ": " + uri, e);
                         }
-                        if (DEBUG || true) {
+                        if (DEBUG) {
                             Slog.v(LOG_TAG, "Notifying for " + userId + ": " + uri);
                         }
                     } break;
@@ -3186,7 +3206,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 183;
+            private static final int SETTINGS_VERSION = 184;
 
             private final int mUserId;
 
@@ -3825,23 +3845,7 @@ public class SettingsProvider extends ContentProvider {
                 }
 
                 if (currentVersion == 155) {
-                    // Version 156: Set the default value for CHARGING_STARTED_SOUND.
-                    final SettingsState globalSettings = getGlobalSettingsLocked();
-                    final String oldValue = globalSettings.getSettingLocked(
-                            Global.CHARGING_STARTED_SOUND).getValue();
-                    final String oldDefault = getContext().getResources().getString(
-                            R.string.def_wireless_charging_started_sound);
-                    if (TextUtils.equals(null, oldValue)
-                            || TextUtils.equals(oldValue, oldDefault)) {
-                        final String defaultValue = getContext().getResources().getString(
-                                R.string.def_charging_started_sound);
-                        if (!TextUtils.isEmpty(defaultValue)) {
-                            globalSettings.insertSettingLocked(
-                                    Settings.Global.CHARGING_STARTED_SOUND, defaultValue,
-                                    null, true, SettingsState.SYSTEM_PACKAGE_NAME);
-                        }
-
-                    }
+                    // Version 156: migrated to version 184
                     currentVersion = 156;
                 }
 
@@ -4395,8 +4399,7 @@ public class SettingsProvider extends ContentProvider {
 
                 if (currentVersion == 182) {
                     // Remove secure bubble settings.
-                    getSecureSettingsLocked(userId).deleteSettingLocked(
-                            Secure.NOTIFICATION_BUBBLES);
+                    getSecureSettingsLocked(userId).deleteSettingLocked("notification_bubbles");
 
                     // Add global bubble settings.
                     getGlobalSettingsLocked().insertSettingLocked(Global.NOTIFICATION_BUBBLES,
@@ -4405,6 +4408,48 @@ public class SettingsProvider extends ContentProvider {
                             true /* makeDefault */, SettingsState.SYSTEM_PACKAGE_NAME);
 
                     currentVersion = 183;
+                }
+
+                if (currentVersion == 183) {
+                    // Version 184: Set default values for WIRELESS_CHARGING_STARTED_SOUND
+                    // and CHARGING_STARTED_SOUND
+                    final SettingsState globalSettings = getGlobalSettingsLocked();
+
+                    final String oldValueWireless = globalSettings.getSettingLocked(
+                            Global.WIRELESS_CHARGING_STARTED_SOUND).getValue();
+                    final String oldValueWired = globalSettings.getSettingLocked(
+                            Global.CHARGING_STARTED_SOUND).getValue();
+
+                    final String defaultValueWireless = getContext().getResources().getString(
+                            R.string.def_wireless_charging_started_sound);
+                    final String defaultValueWired = getContext().getResources().getString(
+                            R.string.def_charging_started_sound);
+
+                    // wireless charging sound
+                    if (oldValueWireless == null
+                            || TextUtils.equals(oldValueWireless, defaultValueWired)) {
+                        if (!TextUtils.isEmpty(defaultValueWireless)) {
+                            globalSettings.insertSettingLocked(
+                                    Global.WIRELESS_CHARGING_STARTED_SOUND, defaultValueWireless,
+                                    null /* tag */, true /* makeDefault */,
+                                    SettingsState.SYSTEM_PACKAGE_NAME);
+                        } else if (!TextUtils.isEmpty(defaultValueWired)) {
+                            // if the wireless sound is empty, use the wired charging sound
+                            globalSettings.insertSettingLocked(
+                                    Global.WIRELESS_CHARGING_STARTED_SOUND, defaultValueWired,
+                                    null /* tag */, true /* makeDefault */,
+                                    SettingsState.SYSTEM_PACKAGE_NAME);
+                        }
+                    }
+
+                    // wired charging sound
+                    if (oldValueWired == null && !TextUtils.isEmpty(defaultValueWired)) {
+                        globalSettings.insertSettingLocked(
+                                Global.CHARGING_STARTED_SOUND, defaultValueWired,
+                                null /* tag */, true /* makeDefault */,
+                                SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+                    currentVersion = 184;
                 }
 
                 // vXXX: Add new settings above this point.

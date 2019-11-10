@@ -226,7 +226,7 @@
     <string name="global_actions" product="default" msgid="2406416831541615258">"Telefoninnstillinger"</string>
     <string name="global_action_lock" msgid="2844945191792119712">"Lås skjermen"</string>
     <string name="global_action_power_off" msgid="4471879440839879722">"Slå av"</string>
-    <string name="global_action_emergency" msgid="7112311161137421166">"Nødsituasjon"</string>
+    <string name="global_action_emergency" msgid="7112311161137421166">"Nødssituasjon"</string>
     <string name="global_action_bug_report" msgid="7934010578922304799">"Feilrapport"</string>
     <string name="global_action_logout" msgid="935179188218826050">"Avslutt økten"</string>
     <string name="global_action_screenshot" msgid="8329831278085426283">"Skjermdump"</string>
@@ -344,6 +344,8 @@
     <string name="permdesc_receiveSms" msgid="6424387754228766939">"Lar appen motta og behandle tekstmeldinger. Dette betyr at appen kan overvåke eller slette meldinger som er sendt til enheten din uten at du har sett dem."</string>
     <string name="permlab_receiveMms" msgid="1821317344668257098">"motta tekstmeldinger (MMS)"</string>
     <string name="permdesc_receiveMms" msgid="533019437263212260">"Lar appen motta og behandle multimediemeldinger. Dette betyr at appen kan overvåke eller slette meldinger som er sendt til enheten din uten at du har sett dem."</string>
+    <string name="permlab_bindCellBroadcastService" msgid="4468585041824555604">"Videresend kringkastede meldinger"</string>
+    <string name="permdesc_bindCellBroadcastService" msgid="9073440260695196089">"Tillat at denne appen binder seg til modulen for kringkastede meldinger for å videresende kringkastede meldinger når de mottas. Kringkastede varsler leveres noen steder for å advare deg om nødssituasjoner. Skadelige apper kan forstyrre ytelsen eller funksjonen til enheten din når en kringkastet nødmelding mottas."</string>
     <string name="permlab_readCellBroadcasts" msgid="1598328843619646166">"lese kringkastede meldinger"</string>
     <string name="permdesc_readCellBroadcasts" msgid="6361972776080458979">"Tillater at appen kan lese kringkastede meldinger enheten din mottar. Kringkastede varsler leveres noen steder for å advare deg om nødssituasjoner. Skadelige apper kan forstyrre ytelsen eller funksjonen til enheten din når en kringkastet nødmelding mottas."</string>
     <string name="permlab_subscribedFeedsRead" msgid="4756609637053353318">"lese abonnement på nyhetskilder"</string>
@@ -815,7 +817,7 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="46154051614126049">"Trykk på menyknappen for å låse opp eller ringe et nødnummer."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="686260028797158364">"Trykk på menyknappen for å låse opp."</string>
     <string name="lockscreen_pattern_instructions" msgid="7478703254964810302">"Tegn mønster for å låse opp"</string>
-    <string name="lockscreen_emergency_call" msgid="5298642613417801888">"Nødsituasjon"</string>
+    <string name="lockscreen_emergency_call" msgid="5298642613417801888">"Nødssituasjon"</string>
     <string name="lockscreen_return_to_call" msgid="5244259785500040021">"Tilbake til samtale"</string>
     <string name="lockscreen_pattern_correct" msgid="9039008650362261237">"Riktig!"</string>
     <string name="lockscreen_pattern_wrong" msgid="4317955014948108794">"Prøv på nytt"</string>
@@ -1361,6 +1363,8 @@
     <string name="adb_active_notification_message" product="tv" msgid="8470296818270110396">"Velg for å deaktivere USB-debugging."</string>
     <string name="test_harness_mode_notification_title" msgid="2216359742631914387">"Testrammeverk-modus er slått på"</string>
     <string name="test_harness_mode_notification_message" msgid="1343197173054407119">"Tilbakestill enheten til fabrikkstandard for å slå av Testrammeverk-modus."</string>
+    <string name="console_running_notification_title" msgid="4955436518220103382">"Seriekonsollen er aktivert"</string>
+    <string name="console_running_notification_message" msgid="1331995933976263865">"Ytelsen er påvirket. Sjekk oppstartsinnlasteren for å deaktivere."</string>
     <string name="usb_contaminant_detected_title" msgid="7136400633704058349">"Væske eller rusk i USB-porten"</string>
     <string name="usb_contaminant_detected_message" msgid="832337061059487250">"USB-porten deaktiveres automatisk. Trykk for å finne ut mer."</string>
     <string name="usb_contaminant_not_detected_title" msgid="7708281124088684821">"Trygt å bruke USB-porten"</string>
@@ -1890,10 +1894,8 @@
     <string name="default_notification_channel_label" msgid="5929663562028088222">"Uten kategori"</string>
     <string name="importance_from_user" msgid="7318955817386549931">"Du angir viktigheten for disse varslene."</string>
     <string name="importance_from_person" msgid="9160133597262938296">"Dette er viktig på grunn av folkene som er involvert."</string>
-    <!-- no translation found for user_creation_account_exists (6559477114648176531) -->
-    <skip />
-    <!-- no translation found for user_creation_adding (9089159170398841763) -->
-    <skip />
+    <string name="user_creation_account_exists" msgid="6559477114648176531">"Vil du la <xliff:g id="APP">%1$s</xliff:g> opprette en ny bruker med <xliff:g id="ACCOUNT">%2$s</xliff:g> (en bruker med denne kontoen eksisterer allerede)?"</string>
+    <string name="user_creation_adding" msgid="9089159170398841763">"Vil du la <xliff:g id="APP">%1$s</xliff:g> opprette en ny bruker med <xliff:g id="ACCOUNT">%2$s</xliff:g>?"</string>
     <string name="language_selection_title" msgid="2680677278159281088">"Legg til et språk"</string>
     <string name="country_selection_title" msgid="2954859441620215513">"Regionsinnstilling"</string>
     <string name="search_language_hint" msgid="7042102592055108574">"Skriv inn språknavn"</string>

@@ -19,10 +19,10 @@ package com.android.server.wm;
 import static com.android.server.wm.DragDropController.MSG_ANIMATION_END;
 import static com.android.server.wm.DragDropController.MSG_DRAG_END_TIMEOUT;
 import static com.android.server.wm.DragDropController.MSG_TEAR_DOWN_DRAG_AND_DROP_INPUT;
+import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
+import static com.android.server.wm.ProtoLogGroup.WM_SHOW_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_DRAG;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ORIENTATION;
 import static com.android.server.wm.WindowManagerDebugConfig.SHOW_LIGHT_TRANSACTIONS;
-import static com.android.server.wm.WindowManagerDebugConfig.SHOW_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
 import android.animation.Animator;
@@ -58,6 +58,7 @@ import android.view.animation.Interpolator;
 
 import com.android.internal.view.IDragAndDropPermissions;
 import com.android.server.LocalServices;
+import com.android.server.protolog.common.ProtoLog;
 
 import java.util.ArrayList;
 
@@ -120,7 +121,7 @@ class DragState {
     // A surface used to catch input events for the drag-and-drop operation.
     SurfaceControl mInputSurface;
 
-    private final SurfaceControl.Transaction mTransaction;
+    final SurfaceControl.Transaction mTransaction;
 
     private final Rect mTmpClipRect = new Rect();
 
@@ -129,7 +130,6 @@ class DragState {
      * {@code true} when {@link #closeLocked()} is called.
      */
     private boolean mIsClosing;
-    IBinder mTransferTouchFromToken;
 
     DragState(WindowManagerService service, DragDropController controller, IBinder token,
             SurfaceControl surface, int flags, IBinder localWin) {
@@ -167,12 +167,11 @@ class DragState {
 
         mTmpClipRect.set(0, 0, mDisplaySize.x, mDisplaySize.y);
         mTransaction.setWindowCrop(mInputSurface, mTmpClipRect);
-        mTransaction.transferTouchFocus(mTransferTouchFromToken, h.token);
-        mTransferTouchFromToken = null;
 
-        // syncInputWindows here to ensure the input channel isn't removed before the transfer.
+        // syncInputWindows here to ensure the input window info is sent before the
+        // transferTouchFocus is called.
         mTransaction.syncInputWindows();
-        mTransaction.apply();
+        mTransaction.apply(true);
     }
 
     /**
@@ -264,7 +263,7 @@ class DragState {
             InputChannel[] channels = InputChannel.openInputChannelPair("drag");
             mServerChannel = channels[0];
             mClientChannel = channels[1];
-            mService.mInputManager.registerInputChannel(mServerChannel, null);
+            mService.mInputManager.registerInputChannel(mServerChannel);
             mInputEventReceiver = new DragInputEventReceiver(mClientChannel,
                     mService.mH.getLooper(), mDragDropController);
 
@@ -273,7 +272,7 @@ class DragState {
             mDragApplicationHandle.dispatchingTimeoutNanos =
                     WindowManagerService.DEFAULT_INPUT_DISPATCHING_TIMEOUT_NANOS;
 
-            mDragWindowHandle = new InputWindowHandle(mDragApplicationHandle, null,
+            mDragWindowHandle = new InputWindowHandle(mDragApplicationHandle,
                     display.getDisplayId());
             mDragWindowHandle.name = "drag";
             mDragWindowHandle.token = mServerChannel.getToken();
@@ -302,9 +301,7 @@ class DragState {
             mDragWindowHandle.frameBottom = mDisplaySize.y;
 
             // Pause rotations before a drag.
-            if (DEBUG_ORIENTATION) {
-                Slog.d(TAG_WM, "Pausing rotation during drag");
-            }
+            ProtoLog.d(WM_DEBUG_ORIENTATION, "Pausing rotation during drag");
             mDisplayContent.getDisplayRotation().pause();
         }
 
@@ -321,9 +318,7 @@ class DragState {
             mDragApplicationHandle = null;
 
             // Resume rotations after a drag.
-            if (DEBUG_ORIENTATION) {
-                Slog.d(TAG_WM, "Resuming rotation after drag");
-            }
+            ProtoLog.d(WM_DEBUG_ORIENTATION, "Resuming rotation after drag");
             mDisplayContent.getDisplayRotation().resume();
         }
     }
@@ -432,8 +427,8 @@ class DragState {
     private boolean targetWindowSupportsGlobalDrag(WindowState targetWin) {
         // Global drags are limited to system windows, and windows for apps that are targeting N and
         // above.
-        return targetWin.mAppToken == null
-                || targetWin.mAppToken.mTargetSdk >= Build.VERSION_CODES.N;
+        return targetWin.mActivityRecord == null
+                || targetWin.mActivityRecord.mTargetSdk >= Build.VERSION_CODES.N;
     }
 
     /* helper - send a ACTION_DRAG_STARTED event only if the window has not
@@ -501,10 +496,9 @@ class DragState {
             Slog.i(TAG_WM, ">>> OPEN TRANSACTION notifyMoveLocked");
         }
         mTransaction.setPosition(mSurfaceControl, x - mThumbOffsetX, y - mThumbOffsetY).apply();
-        if (SHOW_TRANSACTIONS) {
-            Slog.i(TAG_WM, "  DRAG " + mSurfaceControl + ": pos=(" + (int) (x - mThumbOffsetX) + ","
-                    + (int) (y - mThumbOffsetY) + ")");
-        }
+        ProtoLog.i(WM_SHOW_TRANSACTIONS, "DRAG %s: pos=(%d,%d)", mSurfaceControl,
+                (int) (x - mThumbOffsetX), (int) (y - mThumbOffsetY));
+
         notifyLocationLocked(x, y);
     }
 

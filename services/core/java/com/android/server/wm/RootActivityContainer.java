@@ -638,17 +638,23 @@ public class RootActivityContainer extends ConfigurationContainer
         if (displayContent != null) {
             config = displayContent.updateOrientation(
                     getDisplayOverrideConfiguration(displayId),
-                    starting != null && starting.mayFreezeScreenLocked(starting.app)
+                    starting != null && starting.mayFreezeScreenLocked()
                             ? starting.appToken : null,
                     true /* forceUpdate */);
+        }
+        // Visibilities may change so let the starting activity have a chance to report. Can't do it
+        // when visibility is changed in each AppWindowToken because it may trigger wrong
+        // configuration push because the visibility of some activities may not be updated yet.
+        if (starting != null) {
+            starting.reportDescendantOrientationChangeIfNeeded();
         }
         if (starting != null && markFrozenIfConfigChanged && config != null) {
             starting.frozenBeforeDestroy = true;
         }
 
-        if (displayContent != null && displayContent.mAcitvityDisplay != null) {
+        if (displayContent != null && displayContent.mActivityDisplay != null) {
             // Update the configuration of the activities on the display.
-            return displayContent.mAcitvityDisplay.updateDisplayOverrideConfigurationLocked(config,
+            return displayContent.mActivityDisplay.updateDisplayOverrideConfigurationLocked(config,
                     starting, deferResume, null /* result */);
         } else {
             return true;
@@ -977,7 +983,7 @@ public class RootActivityContainer extends ConfigurationContainer
             stack.resize(task.getRequestedOverrideBounds(), null /* tempTaskBounds */,
                     null /* tempTaskInsetBounds */, !PRESERVE_WINDOWS, !DEFER_RESUME);
 
-            if (task.mActivities.size() == 1) {
+            if (task.getChildCount() == 1) {
                 // Defer resume until below, and do not schedule PiP changes until we animate below
                 task.reparent(stack, ON_TOP, REPARENT_MOVE_STACK_TO_FRONT, !ANIMATE, DEFER_RESUME,
                         false /* schedulePictureInPictureModeChange */, reason);
@@ -1097,7 +1103,7 @@ public class RootActivityContainer extends ConfigurationContainer
                 }
             }
         }
-        return finishedTask != null ? finishedTask.taskId : INVALID_TASK_ID;
+        return finishedTask != null ? finishedTask.mTaskId : INVALID_TASK_ID;
     }
 
     boolean resumeFocusedStacksTopActivities() {
@@ -1254,14 +1260,14 @@ public class RootActivityContainer extends ConfigurationContainer
         int[] taskUserIds = new int[numTasks];
         for (int i = 0; i < numTasks; ++i) {
             final TaskRecord task = tasks.get(i);
-            taskIds[i] = task.taskId;
+            taskIds[i] = task.mTaskId;
             taskNames[i] = task.origActivity != null ? task.origActivity.flattenToString()
                     : task.realActivity != null ? task.realActivity.flattenToString()
                     : task.getTopActivity() != null ? task.getTopActivity().packageName
                     : "unknown";
             taskBounds[i] = new Rect();
             task.getWindowContainerBounds(taskBounds[i]);
-            taskUserIds[i] = task.userId;
+            taskUserIds[i] = task.mUserId;
         }
         info.taskIds = taskIds;
         info.taskNames = taskNames;
@@ -1774,8 +1780,12 @@ public class RootActivityContainer extends ConfigurationContainer
         // If {@code r} is already in target display and its task is the same as the candidate task,
         // the intention should be getting a launch stack for the reusable activity, so we can use
         // the existing stack.
-        if (r.getDisplayId() == displayId && r.getTaskRecord() == candidateTask) {
-            return candidateTask.getStack();
+        if (candidateTask != null
+                && (r.getTaskRecord() == null || r.getTaskRecord() == candidateTask)) {
+            final int attachedDisplayId = r.getDisplayId();
+            if (attachedDisplayId == INVALID_DISPLAY || attachedDisplayId == displayId) {
+                return candidateTask.getStack();
+            }
         }
 
         int windowingMode;
@@ -2097,7 +2107,7 @@ public class RootActivityContainer extends ConfigurationContainer
                         // picker for personal files, opened by a work app, should still get locked.
                         if (taskTopActivityIsUser(task, userId)) {
                             mService.getTaskChangeNotificationController().notifyTaskProfileLocked(
-                                    task.taskId, userId);
+                                    task.mTaskId, userId);
                         }
                     }
                 }

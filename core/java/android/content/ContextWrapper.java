@@ -16,6 +16,7 @@
 
 package android.content;
 
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
@@ -156,6 +157,12 @@ public class ContextWrapper extends Context {
     @Override
     public String getOpPackageName() {
         return mBase.getOpPackageName();
+    }
+
+    /** @hide */
+    @Override
+    public @Nullable String getFeatureId() {
+        return mBase.getFeatureId();
     }
 
     @Override
@@ -881,6 +888,12 @@ public class ContextWrapper extends Context {
     public Context createPackageContextAsUser(String packageName, int flags, UserHandle user)
             throws PackageManager.NameNotFoundException {
         return mBase.createPackageContextAsUser(packageName, flags, user);
+    }
+
+    /** @hide */
+    @Override
+    public Context createContextAsUser(UserHandle user, @CreatePackageOptions int flags) {
+        return mBase.createContextAsUser(user, flags);
     }
 
     /** @hide */

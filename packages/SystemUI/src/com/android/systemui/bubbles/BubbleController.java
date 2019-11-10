@@ -18,7 +18,6 @@ package com.android.systemui.bubbles;
 
 import static android.app.Notification.FLAG_AUTOGROUP_SUMMARY;
 import static android.app.Notification.FLAG_BUBBLE;
-import static android.content.pm.ActivityInfo.DOCUMENT_LAUNCH_ALWAYS;
 import static android.service.notification.NotificationListenerService.REASON_APP_CANCEL;
 import static android.service.notification.NotificationListenerService.REASON_APP_CANCEL_ALL;
 import static android.service.notification.NotificationListenerService.REASON_CANCEL;
@@ -125,8 +124,6 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
     static final int DISMISS_USER_CHANGED = 8;
     static final int DISMISS_GROUP_CANCELLED = 9;
     static final int DISMISS_INVALID_INTENT = 10;
-
-    public static final int MAX_BUBBLES = 5; // TODO: actually enforce this
 
     private final Context mContext;
     private final NotificationEntryManager mNotificationEntryManager;
@@ -265,7 +262,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                         // More notifications could be added causing summary to no longer
                         // be suppressed -- in this case need to remove the key.
                         final String groupKey = group.summary != null
-                                ? group.summary.notification.getGroupKey()
+                                ? group.summary.getSbn().getGroupKey()
                                 : null;
                         if (!suppressed && groupKey != null
                                 && mBubbleData.isSummarySuppressed(groupKey)) {
@@ -349,7 +346,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             return;
         }
         for (NotificationEntry e : notificationData.getNotificationsForCurrentUser()) {
-            if (savedBubbleKeys.contains(e.key)
+            if (savedBubbleKeys.contains(e.getKey())
                     && mNotificationInterruptionStateProvider.shouldBubbleUp(e)
                     && canLaunchInActivityView(mContext, e)) {
                 updateBubble(e, /* suppressFlyout= */ true);
@@ -448,7 +445,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         boolean isBubbleAndSuppressed = mBubbleData.hasBubbleWithKey(key)
                 && !mBubbleData.getBubbleWithKey(key).showInShadeWhenBubble();
         NotificationEntry entry = mNotificationEntryManager.getNotificationData().get(key);
-        String groupKey = entry != null ? entry.notification.getGroupKey() : null;
+        String groupKey = entry != null ? entry.getSbn().getGroupKey() : null;
         boolean isSuppressedSummary = mBubbleData.isSummarySuppressed(groupKey);
         boolean isSummary = key.equals(mBubbleData.getSummaryKey(groupKey));
         return (isSummary && isSuppressedSummary) || isBubbleAndSuppressed;
@@ -531,14 +528,14 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
             @Override
             public boolean onNotificationRemoveRequested(String key, int reason) {
                 NotificationEntry entry = mNotificationEntryManager.getNotificationData().get(key);
-                String groupKey = entry != null ? entry.notification.getGroupKey() : null;
+                String groupKey = entry != null ? entry.getSbn().getGroupKey() : null;
                 ArrayList<Bubble> bubbleChildren = mBubbleData.getBubblesInGroup(groupKey);
 
                 boolean inBubbleData = mBubbleData.hasBubbleWithKey(key);
                 boolean isSuppressedSummary = (mBubbleData.isSummarySuppressed(groupKey)
                         && mBubbleData.getSummaryKey(groupKey).equals(key));
                 boolean isSummary = entry != null
-                        && entry.notification.getNotification().isGroupSummary();
+                        && entry.getSbn().getNotification().isGroupSummary();
                 boolean isSummaryOfBubbles = (isSuppressedSummary || isSummary)
                         && bubbleChildren != null && !bubbleChildren.isEmpty();
 
@@ -569,9 +566,10 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                     bubble.setShowInShadeWhenBubble(false);
                     bubble.setShowBubbleDot(false);
                     if (mStackView != null) {
-                        mStackView.updateDotVisibility(entry.key);
+                        mStackView.updateDotVisibility(entry.getKey());
                     }
-                    mNotificationEntryManager.updateNotifications();
+                    mNotificationEntryManager.updateNotifications(
+                            "BubbleController.onNotificationRemoveRequested");
                     return true;
                 } else if (!userRemovedNotif && entry != null) {
                     // This wasn't a user removal so we should remove the bubble as well
@@ -584,7 +582,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
 
     private boolean handleSummaryRemovalInterception(NotificationEntry summary,
             boolean userRemovedNotif) {
-        String groupKey = summary.notification.getGroupKey();
+        String groupKey = summary.getSbn().getGroupKey();
         ArrayList<Bubble> bubbleChildren = mBubbleData.getBubblesInGroup(groupKey);
 
         if (userRemovedNotif) {
@@ -605,13 +603,14 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
 
             // If the summary was auto-generated we don't need to keep that notification around
             // because apps can't cancel it; so we only intercept & suppress real summaries.
-            boolean isAutogroupSummary = (summary.notification.getNotification().flags
+            boolean isAutogroupSummary = (summary.getSbn().getNotification().flags
                     & FLAG_AUTOGROUP_SUMMARY) != 0;
             if (!isAutogroupSummary) {
-                mBubbleData.addSummaryToSuppress(summary.notification.getGroupKey(),
-                        summary.key);
+                mBubbleData.addSummaryToSuppress(summary.getSbn().getGroupKey(),
+                        summary.getKey());
                 // Tell shade to update for the suppression
-                mNotificationEntryManager.updateNotifications();
+                mNotificationEntryManager.updateNotifications(
+                        "BubbleController.handleSummaryRemovalInterception");
             }
             return !isAutogroupSummary;
         } else {
@@ -642,11 +641,11 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         public void onPreEntryUpdated(NotificationEntry entry) {
             boolean shouldBubble = mNotificationInterruptionStateProvider.shouldBubbleUp(entry)
                     && canLaunchInActivityView(mContext, entry);
-            if (!shouldBubble && mBubbleData.hasBubbleWithKey(entry.key)) {
+            if (!shouldBubble && mBubbleData.hasBubbleWithKey(entry.getKey())) {
                 // It was previously a bubble but no longer a bubble -- lets remove it
-                removeBubble(entry.key, DISMISS_NO_LONGER_BUBBLE);
+                removeBubble(entry.getKey(), DISMISS_NO_LONGER_BUBBLE);
             } else if (shouldBubble) {
-                Bubble b = mBubbleData.getBubbleWithKey(entry.key);
+                Bubble b = mBubbleData.getBubbleWithKey(entry.getKey());
                 updateBubble(entry);
             }
         }
@@ -696,10 +695,10 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                             && !bubble.showInShadeWhenBubble()) {
                         // The bubble is gone & the notification is gone, time to actually remove it
                         mNotificationEntryManager.performRemoveNotification(
-                                bubble.getEntry().notification, UNDEFINED_DISMISS_REASON);
+                                bubble.getEntry().getSbn(), UNDEFINED_DISMISS_REASON);
                     } else {
                         // Update the flag for SysUI
-                        bubble.getEntry().notification.getNotification().flags &= ~FLAG_BUBBLE;
+                        bubble.getEntry().getSbn().getNotification().flags &= ~FLAG_BUBBLE;
 
                         // Make sure NoMan knows it's not a bubble anymore so anyone querying it
                         // will get right result back
@@ -713,7 +712,7 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
 
                     // Check if removed bubble has an associated suppressed group summary that needs
                     // to be removed now.
-                    final String groupKey = bubble.getEntry().notification.getGroupKey();
+                    final String groupKey = bubble.getEntry().getSbn().getGroupKey();
                     if (mBubbleData.isSummarySuppressed(groupKey)
                             && mBubbleData.getBubblesInGroup(groupKey).isEmpty()) {
                         // Time to actually remove the summary.
@@ -722,20 +721,21 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                         NotificationEntry entry =
                                 mNotificationEntryManager.getNotificationData().get(notifKey);
                         mNotificationEntryManager.performRemoveNotification(
-                                entry.notification, UNDEFINED_DISMISS_REASON);
+                                entry.getSbn(), UNDEFINED_DISMISS_REASON);
                     }
 
                     // Check if summary should be removed from NoManGroup
                     NotificationEntry summary = mNotificationGroupManager.getLogicalGroupSummary(
-                            bubble.getEntry().notification);
+                            bubble.getEntry().getSbn());
                     if (summary != null) {
                         ArrayList<NotificationEntry> summaryChildren =
-                                mNotificationGroupManager.getLogicalChildren(summary.notification);
-                        boolean isSummaryThisNotif = summary.key.equals(bubble.getEntry().key);
+                                mNotificationGroupManager.getLogicalChildren(summary.getSbn());
+                        boolean isSummaryThisNotif = summary.getKey().equals(
+                                bubble.getEntry().getKey());
                         if (!isSummaryThisNotif
                                 && (summaryChildren == null || summaryChildren.isEmpty())) {
                             mNotificationEntryManager.performRemoveNotification(
-                                    summary.notification, UNDEFINED_DISMISS_REASON);
+                                    summary.getSbn(), UNDEFINED_DISMISS_REASON);
                         }
                     }
                 }
@@ -762,7 +762,8 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
                 mStackView.setExpanded(true);
             }
 
-            mNotificationEntryManager.updateNotifications();
+            mNotificationEntryManager.updateNotifications(
+                    "BubbleData.Listener.applyUpdate");
             updateStack();
 
             if (DEBUG_BUBBLE_CONTROLLER) {
@@ -961,16 +962,6 @@ public class BubbleController implements ConfigurationController.ConfigurationLi
         }
         if (!ActivityInfo.isResizeableMode(info.resizeMode)) {
             Log.w(TAG, "Unable to send as bubble -- activity is not resizable for intent: "
-                    + intent);
-            return false;
-        }
-        if (info.documentLaunchMode != DOCUMENT_LAUNCH_ALWAYS) {
-            Log.w(TAG, "Unable to send as bubble -- activity is not documentLaunchMode=always "
-                    + "for intent: " + intent);
-            return false;
-        }
-        if ((info.flags & ActivityInfo.FLAG_ALLOW_EMBEDDED) == 0) {
-            Log.w(TAG, "Unable to send as bubble -- activity is not embeddable for intent: "
                     + intent);
             return false;
         }

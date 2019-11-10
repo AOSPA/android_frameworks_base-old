@@ -24,8 +24,11 @@ import android.app.KeyguardManager;
 import android.app.NotificationManager;
 import android.app.admin.DevicePolicyManager;
 import android.app.trust.TrustManager;
+import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
 import android.database.sqlite.SQLiteDatabase;
+import android.hardware.face.FaceManager;
+import android.hardware.fingerprint.FingerprintManager;
 import android.os.FileUtils;
 import android.os.SystemClock;
 import android.os.UserManager;
@@ -86,7 +89,9 @@ public class LockSettingsStorageTests extends AndroidTestCase {
 
         MockLockSettingsContext context = new MockLockSettingsContext(getContext(), mockUserManager,
                 mock(NotificationManager.class), mock(DevicePolicyManager.class),
-                mock(StorageManager.class), mock(TrustManager.class), mock(KeyguardManager.class));
+                mock(StorageManager.class), mock(TrustManager.class), mock(KeyguardManager.class),
+                mock(FingerprintManager.class), mock(FaceManager.class),
+                mock(PackageManager.class));
         mStorage = new LockSettingsStorageTestable(context,
                 new File(getContext().getFilesDir(), "locksettings"));
         mStorage.setDatabaseOnCreateCallback(new LockSettingsStorage.Callback() {
@@ -235,12 +240,12 @@ public class LockSettingsStorageTests extends AndroidTestCase {
         writePasswordBytes(PASSWORD_0, 10);
         writePatternBytes(PATTERN_0, 20);
 
-        assertEquals(LockPatternUtils.CREDENTIAL_TYPE_PASSWORD,
+        assertEquals(LockPatternUtils.CREDENTIAL_TYPE_PASSWORD_OR_PIN,
                 mStorage.readCredentialHash(10).type);
         assertEquals(LockPatternUtils.CREDENTIAL_TYPE_PATTERN,
                 mStorage.readCredentialHash(20).type);
         mStorage.clearCache();
-        assertEquals(LockPatternUtils.CREDENTIAL_TYPE_PASSWORD,
+        assertEquals(LockPatternUtils.CREDENTIAL_TYPE_PASSWORD_OR_PIN,
                 mStorage.readCredentialHash(10).type);
         assertEquals(LockPatternUtils.CREDENTIAL_TYPE_PATTERN,
                 mStorage.readCredentialHash(20).type);
@@ -347,20 +352,20 @@ public class LockSettingsStorageTests extends AndroidTestCase {
     }
 
     public void testPersistentDataBlock_unavailable() {
-        mStorage.mPersistentDataBlock = null;
+        mStorage.mPersistentDataBlockManager = null;
 
         assertSame(PersistentData.NONE, mStorage.readPersistentDataBlock());
     }
 
     public void testPersistentDataBlock_empty() {
-        mStorage.mPersistentDataBlock = mock(PersistentDataBlockManagerInternal.class);
+        mStorage.mPersistentDataBlockManager = mock(PersistentDataBlockManagerInternal.class);
 
         assertSame(PersistentData.NONE, mStorage.readPersistentDataBlock());
     }
 
     public void testPersistentDataBlock_withData() {
-        mStorage.mPersistentDataBlock = mock(PersistentDataBlockManagerInternal.class);
-        when(mStorage.mPersistentDataBlock.getFrpCredentialHandle())
+        mStorage.mPersistentDataBlockManager = mock(PersistentDataBlockManagerInternal.class);
+        when(mStorage.mPersistentDataBlockManager.getFrpCredentialHandle())
                 .thenReturn(PersistentData.toBytes(PersistentData.TYPE_SP_WEAVER, SOME_USER_ID,
                         DevicePolicyManager.PASSWORD_QUALITY_COMPLEX, PAYLOAD));
 
@@ -373,8 +378,8 @@ public class LockSettingsStorageTests extends AndroidTestCase {
     }
 
     public void testPersistentDataBlock_exception() {
-        mStorage.mPersistentDataBlock = mock(PersistentDataBlockManagerInternal.class);
-        when(mStorage.mPersistentDataBlock.getFrpCredentialHandle())
+        mStorage.mPersistentDataBlockManager = mock(PersistentDataBlockManagerInternal.class);
+        when(mStorage.mPersistentDataBlockManager.getFrpCredentialHandle())
                 .thenThrow(new IllegalStateException("oops"));
         assertSame(PersistentData.NONE, mStorage.readPersistentDataBlock());
     }
@@ -429,35 +434,6 @@ public class LockSettingsStorageTests extends AndroidTestCase {
         assertEquals(2, PersistentData.TYPE_SP_WEAVER);
     }
 
-    public void testCredentialHash_serializeUnserialize() {
-        byte[] serialized = CredentialHash.create(
-                PAYLOAD, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD).toBytes();
-        CredentialHash deserialized = CredentialHash.fromBytes(serialized);
-
-        assertEquals(LockPatternUtils.CREDENTIAL_TYPE_PASSWORD, deserialized.type);
-        assertArrayEquals(PAYLOAD, deserialized.hash);
-    }
-
-    public void testCredentialHash_unserialize_versionGatekeeper() {
-        // This test ensures that we can read serialized VERSION_GATEKEEPER CredentialHashes
-        // even if we change the wire format in the future.
-        byte[] serialized = new byte[] {
-                1, /* VERSION_GATEKEEPER */
-                2, /* CREDENTIAL_TYPE_PASSWORD */
-                0, 0, 0, 5, /* hash length */
-                1, 2, -1, -2, 33, /* hash */
-        };
-        CredentialHash deserialized = CredentialHash.fromBytes(serialized);
-
-        assertEquals(LockPatternUtils.CREDENTIAL_TYPE_PASSWORD, deserialized.type);
-        assertArrayEquals(PAYLOAD, deserialized.hash);
-
-        // Make sure the constants we use on the wire do not change.
-        assertEquals(-1, LockPatternUtils.CREDENTIAL_TYPE_NONE);
-        assertEquals(1, LockPatternUtils.CREDENTIAL_TYPE_PATTERN);
-        assertEquals(2, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD);
-    }
-
     private static void assertArrayEquals(byte[] expected, byte[] actual) {
         if (!Arrays.equals(expected, actual)) {
             fail("expected:<" + Arrays.toString(expected) +
@@ -477,7 +453,7 @@ public class LockSettingsStorageTests extends AndroidTestCase {
 
     private void assertPasswordBytes(byte[] password, int userId) {
         CredentialHash cred = mStorage.readCredentialHash(userId);
-        assertEquals(LockPatternUtils.CREDENTIAL_TYPE_PASSWORD, cred.type);
+        assertEquals(LockPatternUtils.CREDENTIAL_TYPE_PASSWORD_OR_PIN, cred.type);
         assertArrayEquals(password, cred.hash);
     }
 

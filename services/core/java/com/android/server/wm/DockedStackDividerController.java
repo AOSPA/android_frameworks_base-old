@@ -660,7 +660,7 @@ public class DockedStackDividerController {
         checkMinimizeChanged(false /* animate */);
     }
 
-    void notifyAppTransitionStarting(ArraySet<AppWindowToken> openingApps, int appTransition) {
+    void notifyAppTransitionStarting(ArraySet<ActivityRecord> openingApps, int appTransition) {
         final boolean wasMinimized = mMinimizedDock;
         checkMinimizeChanged(true /* animate */);
 
@@ -685,10 +685,10 @@ public class DockedStackDividerController {
     /**
      * @return true if {@param apps} contains an activity in the docked stack, false otherwise.
      */
-    private boolean containsAppInDockedStack(ArraySet<AppWindowToken> apps) {
+    private boolean containsAppInDockedStack(ArraySet<ActivityRecord> apps) {
         for (int i = apps.size() - 1; i >= 0; i--) {
-            final AppWindowToken token = apps.valueAt(i);
-            if (token.getTask() != null && token.inSplitScreenPrimaryWindowingMode()) {
+            final ActivityRecord activity = apps.valueAt(i);
+            if (activity.getTask() != null && activity.inSplitScreenPrimaryWindowingMode()) {
                 return true;
             }
         }
@@ -722,7 +722,7 @@ public class DockedStackDividerController {
         final RecentsAnimationController recentsAnim = mService.getRecentsAnimationController();
         final boolean minimizedForRecentsAnimation = recentsAnim != null &&
                 recentsAnim.isSplitScreenMinimized();
-        boolean homeVisible = homeTask.getTopVisibleAppToken() != null;
+        boolean homeVisible = homeTask.getTopVisibleActivity() != null;
         if (homeVisible && topSecondaryStack != null) {
             // Home should only be considered visible if it is greater or equal to the top secondary
             // stack in terms of z-order.
@@ -819,9 +819,12 @@ public class DockedStackDividerController {
 
         // We put all tasks into drag resizing mode - wait until all of them have completed the
         // drag resizing switch.
-        if (!mService.mWaitingForDrawn.isEmpty()) {
-            mService.mH.removeMessages(H.WAITING_FOR_DRAWN_TIMEOUT);
-            mService.mH.sendEmptyMessageDelayed(H.WAITING_FOR_DRAWN_TIMEOUT,
+        final Runnable existingWaitingForDrwanCallback =
+                mService.mWaitingForDrawnCallbacks.get(mService.mRoot);
+        if (existingWaitingForDrwanCallback != null) {
+            mService.mH.removeMessages(H.WAITING_FOR_DRAWN_TIMEOUT, mService.mRoot);
+            mService.mH.sendMessageDelayed(mService.mH.obtainMessage(H.WAITING_FOR_DRAWN_TIMEOUT,
+                    mService.mRoot),
                     IME_ADJUST_DRAWN_TIMEOUT);
             mAnimationStartDelayed = true;
             if (imeWin != null) {
@@ -838,10 +841,8 @@ public class DockedStackDividerController {
             // still gets executed.
             // TODO: Have a real system where we can wait on different windows to be drawn with
             // different callbacks.
-            if (mService.mWaitingForDrawnCallback != null) {
-                mService.mWaitingForDrawnCallback.run();
-            }
-            mService.mWaitingForDrawnCallback = () -> {
+            existingWaitingForDrwanCallback.run();
+            mService.mWaitingForDrawnCallbacks.put(mService.mRoot, () -> {
                 synchronized (mService.mGlobalLock) {
                     mAnimationStartDelayed = false;
                     if (mDelayedImeWin != null) {
@@ -863,7 +864,7 @@ public class DockedStackDividerController {
                     notifyAdjustedForImeChanged(
                             mAdjustedForIme || mAdjustedForDivider, duration);
                 }
-            };
+            });
         } else {
             notifyAdjustedForImeChanged(
                     adjustedForIme || adjustedForDivider, IME_ADJUST_ANIM_DURATION);

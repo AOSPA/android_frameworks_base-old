@@ -248,19 +248,6 @@ private:
     FRIEND_TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm);
     FRIEND_TEST(ValueMetricE2eTest, TestPulledEvents_WithActivation);
 
-    FRIEND_TEST(DimensionInConditionE2eTest, TestCreateCountMetric_NoLink_OR_CombinationCondition);
-    FRIEND_TEST(DimensionInConditionE2eTest, TestCreateCountMetric_Link_OR_CombinationCondition);
-    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_NoLink_OR_CombinationCondition);
-    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_Link_OR_CombinationCondition);
-
-    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_NoLink_SimpleCondition);
-    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_Link_SimpleCondition);
-    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_PartialLink_SimpleCondition);
-
-    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_PartialLink_AND_CombinationCondition);
-    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_NoLink_AND_CombinationCondition);
-    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_Link_AND_CombinationCondition);
-
     FRIEND_TEST(AnomalyDetectionE2eTest, TestSlicedCountMetric_single_bucket);
     FRIEND_TEST(AnomalyDetectionE2eTest, TestSlicedCountMetric_multiple_buckets);
     FRIEND_TEST(AnomalyDetectionE2eTest, TestDurationMetric_SUM_single_bucket);
@@ -274,6 +261,10 @@ private:
     FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithTwoDeactivations);
     FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithSameDeactivation);
     FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithTwoMetricsTwoDeactivations);
+
+    FRIEND_TEST(CountMetricE2eTest, TestWithSimpleState);
+    FRIEND_TEST(CountMetricE2eTest, TestWithMappedState);
+    FRIEND_TEST(CountMetricE2eTest, TestWithMultipleStates);
 
     FRIEND_TEST(DurationMetricE2eTest, TestOneBucket);
     FRIEND_TEST(DurationMetricE2eTest, TestTwoBuckets);

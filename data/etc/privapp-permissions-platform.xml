@@ -50,6 +50,12 @@ applications that come with the platform
         <permission name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"/>
     </privapp-permissions>
 
+    <privapp-permissions package="com.android.cellbroadcastservice">
+        <permission name="android.permission.MODIFY_PHONE_STATE"/>
+        <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
+        <permission name="android.permission.RECEIVE_EMERGENCY_BROADCAST"/>
+    </privapp-permissions>
+
     <privapp-permissions package="com.android.externalstorage">
         <permission name="android.permission.MOUNT_UNMOUNT_FILESYSTEMS"/>
         <permission name="android.permission.WRITE_MEDIA_STORAGE"/>
@@ -121,12 +127,14 @@ applications that come with the platform
         <permission name="android.permission.APPROVE_INCIDENT_REPORTS"/>
         <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
         <permission name="android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME" />
+        <permission name="android.permission.PACKAGE_USAGE_STATS" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.phone">
         <permission name="android.permission.ACCESS_IMS_CALL_SERVICE"/>
         <permission name="android.permission.BIND_CARRIER_MESSAGING_SERVICE"/>
         <permission name="android.permission.BIND_CARRIER_SERVICES"/>
+        <permission name="android.permission.BIND_CELL_BROADCAST_SERVICE"/>
         <permission name="android.permission.BIND_IMS_SERVICE"/>
         <permission name="android.permission.BIND_TELEPHONY_DATA_SERVICE"/>
         <permission name="android.permission.BIND_VISUAL_VOICEMAIL_SERVICE"/>
@@ -353,11 +361,12 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_DYNAMIC_SYSTEM"/>
     </privapp-permissions>
 
-    <privapp-permissions package="com.android.server.wifistack">
+    <privapp-permissions package="com.android.wifi">
         <permission name="android.permission.CHANGE_CONFIGURATION"/>
         <permission name="android.permission.CONNECTIVITY_INTERNAL"/>
         <permission name="android.permission.DUMP"/>
         <permission name="android.permission.INTERACT_ACROSS_USERS"/>
+        <permission name="android.permission.INTERNAL_SYSTEM_WINDOW"/>
         <permission name="android.permission.LOCAL_MAC_ADDRESS"/>
         <permission name="android.permission.MANAGE_USERS"/>
         <permission name="android.permission.PACKAGE_USAGE_STATS"/>

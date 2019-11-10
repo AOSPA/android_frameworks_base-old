@@ -68,35 +68,34 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
      */
     @Test
     public void testBadApkOnly() throws Exception {
-        runPhase("testBadApkOnlyEnableRollback");
+        runPhase("testBadApkOnly_Phase1");
         getDevice().reboot();
-        runPhase("testBadApkOnlyConfirmEnableRollback");
+        runPhase("testBadApkOnly_Phase2");
         try {
             // This is expected to fail due to the device being rebooted out
             // from underneath the test. If this fails for reasons other than
             // the device reboot, those failures should result in failure of
             // the testApkOnlyConfirmRollback phase.
             CLog.logAndDisplay(LogLevel.INFO, "testBadApkOnlyTriggerRollback is expected to fail");
-            runPhase("testBadApkOnlyTriggerRollback");
+            runPhase("testBadApkOnly_Phase3");
         } catch (AssertionError e) {
             // AssertionError is expected.
         }
 
         getDevice().waitForDeviceAvailable();
 
-        runPhase("testBadApkOnlyConfirmRollback");
+        runPhase("testBadApkOnly_Phase4");
     }
 
     @Test
     public void testNativeWatchdogTriggersRollback() throws Exception {
         //Stage install ModuleMetadata package - this simulates a Mainline module update
-        runPhase("installModuleMetadataPackage");
+        runPhase("testNativeWatchdogTriggersRollback_Phase1");
 
         // Reboot device to activate staged package
         getDevice().reboot();
-        getDevice().waitForDeviceAvailable();
 
-        runPhase("assertModuleMetadataRollbackAvailable");
+        runPhase("testNativeWatchdogTriggersRollback_Phase2");
 
         // crash system_server enough times to trigger a rollback
         crashProcess("system_server", NATIVE_CRASHES_THRESHOLD);
@@ -113,7 +112,7 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
         getDevice().waitForDeviceAvailable();
 
         // verify rollback committed
-        runPhase("assertModuleMetadataRollbackCommitted");
+        runPhase("testNativeWatchdogTriggersRollback_Phase3");
     }
 
     /**
@@ -122,7 +121,7 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
     @Test
     public void testNetworkFailedRollback() throws Exception {
         // Remove available rollbacks and uninstall NetworkStack on /data/
-        runPhase("resetNetworkStack");
+        runPhase("testNetworkFailedRollback_Phase1");
         // Reduce health check deadline
         getDevice().executeShellCommand("device_config put rollback "
                 + "watchdog_request_timeout_millis 300000");
@@ -134,20 +133,19 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
         Thread.sleep(5000);
         // Reboot device to activate staged package
         getDevice().reboot();
-        getDevice().waitForDeviceAvailable();
 
         // Verify rollback was enabled
-        runPhase("assertNetworkStackRollbackAvailable");
+        runPhase("testNetworkFailedRollback_Phase2");
 
         // Sleep for < health check deadline
         Thread.sleep(5000);
         // Verify rollback was not executed before health check deadline
-        runPhase("assertNoNetworkStackRollbackCommitted");
+        runPhase("testNetworkFailedRollback_Phase3");
         try {
             // This is expected to fail due to the device being rebooted out
             // from underneath the test. If this fails for reasons other than
             // the device reboot, those failures should result in failure of
-            // the assertNetworkStackExecutedRollback phase.
+            // the testNetworkFailedRollback_Phase4 phase.
             CLog.logAndDisplay(LogLevel.INFO, "Sleep and expect to fail while sleeping");
             // Sleep for > health check deadline
             Thread.sleep(260000);
@@ -157,7 +155,7 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
 
         getDevice().waitForDeviceAvailable();
         // Verify rollback was executed after health check deadline
-        runPhase("assertNetworkStackRollbackCommitted");
+        runPhase("testNetworkFailedRollback_Phase4");
     }
 
     /**
@@ -166,7 +164,7 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
     @Test
     public void testNetworkPassedDoesNotRollback() throws Exception {
         // Remove available rollbacks and uninstall NetworkStack on /data/
-        runPhase("resetNetworkStack");
+        runPhase("testNetworkPassedDoesNotRollback_Phase1");
         // Reduce health check deadline, here unlike the network failed case, we use
         // a longer deadline because joining a network can take a much longer time for
         // reasons external to the device than 'not joining'
@@ -180,10 +178,9 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
         Thread.sleep(5000);
         // Reboot device to activate staged package
         getDevice().reboot();
-        getDevice().waitForDeviceAvailable();
 
         // Verify rollback was enabled
-        runPhase("assertNetworkStackRollbackAvailable");
+        runPhase("testNetworkPassedDoesNotRollback_Phase2");
 
         // Connect to internet so network health check passes
         getDevice().executeShellCommand("svc wifi enable");
@@ -196,7 +193,7 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
         // Sleep for > health check deadline
         Thread.sleep(310000);
         // Verify rollback was not executed after health check deadline
-        runPhase("assertNoNetworkStackRollbackCommitted");
+        runPhase("testNetworkPassedDoesNotRollback_Phase3");
     }
 
     /**
@@ -204,11 +201,11 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
      */
     @Test
     public void testPreviouslyAbandonedRollbacks() throws Exception {
-        runPhase("testPreviouslyAbandonedRollbacksEnableRollback");
+        runPhase("testPreviouslyAbandonedRollbacks_Phase1");
         getDevice().reboot();
-        runPhase("testPreviouslyAbandonedRollbacksCommitRollback");
+        runPhase("testPreviouslyAbandonedRollbacks_Phase2");
         getDevice().reboot();
-        runPhase("testPreviouslyAbandonedRollbacksCheckUserdataRollback");
+        runPhase("testPreviouslyAbandonedRollbacks_Phase3");
     }
 
     private void crashProcess(String processName, int numberOfCrashes) throws Exception {

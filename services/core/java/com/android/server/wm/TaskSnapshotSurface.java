@@ -42,7 +42,7 @@ import static com.android.internal.policy.DecorView.STATUS_BAR_COLOR_VIEW_ATTRIB
 import static com.android.internal.policy.DecorView.getColorViewLeftInset;
 import static com.android.internal.policy.DecorView.getColorViewTopInset;
 import static com.android.internal.policy.DecorView.getNavigationBarRect;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STARTING_WINDOW;
+import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_STARTING_WINDOW;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
@@ -79,6 +79,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.policy.DecorView;
 import com.android.internal.view.BaseIWindow;
 import com.android.server.policy.WindowManagerPolicy.StartingSurface;
+import com.android.server.protolog.common.ProtoLog;
 
 /**
  * This class represents a starting window that shows a snapshot.
@@ -133,8 +134,9 @@ class TaskSnapshotSurface implements StartingSurface {
     private final int mStatusBarColor;
     @VisibleForTesting final SystemBarBackgroundPainter mSystemBarBackgroundPainter;
     private final int mOrientationOnCreation;
+    private final SurfaceControl.Transaction mTransaction;
 
-    static TaskSnapshotSurface create(WindowManagerService service, AppWindowToken token,
+    static TaskSnapshotSurface create(WindowManagerService service, ActivityRecord activity,
             TaskSnapshot snapshot) {
 
         final WindowManager.LayoutParams layoutParams = new WindowManager.LayoutParams();
@@ -157,23 +159,24 @@ class TaskSnapshotSurface implements StartingSurface {
         final int windowPrivateFlags;
         final int currentOrientation;
         synchronized (service.mGlobalLock) {
-            final WindowState mainWindow = token.findMainWindow();
-            final Task task = token.getTask();
+            final WindowState mainWindow = activity.findMainWindow();
+            final Task task = activity.getTask();
             if (task == null) {
-                Slog.w(TAG, "TaskSnapshotSurface.create: Failed to find task for token="
-                        + token);
+                Slog.w(TAG, "TaskSnapshotSurface.create: Failed to find task for activity="
+                        + activity);
                 return null;
             }
-            final AppWindowToken topFullscreenToken = token.getTask().getTopFullscreenAppToken();
-            if (topFullscreenToken == null) {
+            final ActivityRecord topFullscreenActivity =
+                    activity.getTask().getTopFullscreenActivity();
+            if (topFullscreenActivity == null) {
                 Slog.w(TAG, "TaskSnapshotSurface.create: Failed to find top fullscreen for task="
                         + task);
                 return null;
             }
-            final WindowState topFullscreenWindow = topFullscreenToken.getTopFullscreenWindow();
+            final WindowState topFullscreenWindow = topFullscreenActivity.getTopFullscreenWindow();
             if (mainWindow == null || topFullscreenWindow == null) {
-                Slog.w(TAG, "TaskSnapshotSurface.create: Failed to find main window for token="
-                        + token);
+                Slog.w(TAG, "TaskSnapshotSurface.create: Failed to find main window for activity="
+                        + activity);
                 return null;
             }
             sysUiVis = topFullscreenWindow.getSystemUiVisibility();
@@ -189,7 +192,7 @@ class TaskSnapshotSurface implements StartingSurface {
                     | FLAG_NOT_FOCUSABLE
                     | FLAG_NOT_TOUCHABLE;
             layoutParams.privateFlags = windowPrivateFlags & PRIVATE_FLAG_INHERITS;
-            layoutParams.token = token.token;
+            layoutParams.token = activity.token;
             layoutParams.width = LayoutParams.MATCH_PARENT;
             layoutParams.height = LayoutParams.MATCH_PARENT;
             layoutParams.systemUiVisibility = sysUiVis;
@@ -205,7 +208,7 @@ class TaskSnapshotSurface implements StartingSurface {
         }
         try {
             final int res = session.addToDisplay(window, window.mSeq, layoutParams,
-                    View.GONE, token.getDisplayContent().getDisplayId(), tmpFrame, tmpRect, tmpRect,
+                    View.GONE, activity.getDisplayContent().getDisplayId(), tmpFrame, tmpRect, tmpRect,
                     tmpRect, tmpCutout, null, mTmpInsetsState);
             if (res < 0) {
                 Slog.w(TAG, "Failed to add snapshot starting window res=" + res);
@@ -251,6 +254,7 @@ class TaskSnapshotSurface implements StartingSurface {
                 windowPrivateFlags, sysUiVis, taskDescription, 1f);
         mStatusBarColor = taskDescription.getStatusBarColor();
         mOrientationOnCreation = currentOrientation;
+        mTransaction = mService.mTransactionFactory.get();
     }
 
     @Override
@@ -259,14 +263,14 @@ class TaskSnapshotSurface implements StartingSurface {
             final long now = SystemClock.uptimeMillis();
             if (mSizeMismatch && now - mShownTime < SIZE_MISMATCH_MINIMUM_TIME_MS) {
                 mHandler.postAtTime(this::remove, mShownTime + SIZE_MISMATCH_MINIMUM_TIME_MS);
-                if (DEBUG_STARTING_WINDOW) {
-                    Slog.v(TAG, "Defer removing snapshot surface in "  + (now - mShownTime) + "ms");
-                }
+                ProtoLog.v(WM_DEBUG_STARTING_WINDOW,
+                        "Defer removing snapshot surface in %dms", (now - mShownTime));
+
                 return;
             }
         }
         try {
-            if (DEBUG_STARTING_WINDOW) Slog.v(TAG, "Removing snapshot surface");
+            ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Removing snapshot surface");
             mSession.remove(mWindow);
         } catch (RemoteException e) {
             // Local call.
@@ -286,8 +290,8 @@ class TaskSnapshotSurface implements StartingSurface {
     private void drawSnapshot() {
         mSurface.copyFrom(mSurfaceControl);
 
-        if (DEBUG_STARTING_WINDOW) Slog.v(TAG, "Drawing snapshot surface sizeMismatch="
-                + mSizeMismatch);
+        ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Drawing snapshot surface sizeMismatch=%b",
+                mSizeMismatch);
         if (mSizeMismatch) {
             // The dimensions of the buffer and the window don't match, so attaching the buffer
             // will fail. Better create a child window with the exact dimensions and fill the parent
@@ -335,27 +339,23 @@ class TaskSnapshotSurface implements StartingSurface {
         surface.copyFrom(mChildSurfaceControl);
 
         final Rect frame;
-        SurfaceControl.openTransaction();
-        try {
-            // We can just show the surface here as it will still be hidden as the parent is
-            // still hidden.
-            mChildSurfaceControl.show();
-            if (aspectRatioMismatch) {
-                // Clip off ugly navigation bar.
-                final Rect crop = calculateSnapshotCrop();
-                frame = calculateSnapshotFrame(crop);
-                mChildSurfaceControl.setWindowCrop(crop);
-                mChildSurfaceControl.setPosition(frame.left, frame.top);
-            } else {
-                frame = null;
-            }
-
-            // Scale the mismatch dimensions to fill the task bounds
-            final float scale = 1 / mSnapshot.getScale();
-            mChildSurfaceControl.setMatrix(scale, 0, 0, scale);
-        } finally {
-            SurfaceControl.closeTransaction();
+        // We can just show the surface here as it will still be hidden as the parent is
+        // still hidden.
+        mTransaction.show(mChildSurfaceControl);
+        if (aspectRatioMismatch) {
+            // Clip off ugly navigation bar.
+            final Rect crop = calculateSnapshotCrop();
+            frame = calculateSnapshotFrame(crop);
+            mTransaction.setWindowCrop(mChildSurfaceControl, crop);
+            mTransaction.setPosition(mChildSurfaceControl, frame.left, frame.top);
+        } else {
+            frame = null;
         }
+
+        // Scale the mismatch dimensions to fill the task bounds
+        final float scale = 1 / mSnapshot.getScale();
+        mTransaction.setMatrix(mChildSurfaceControl, scale, 0, 0, scale);
+        mTransaction.apply();
         surface.attachAndQueueBufferWithColorSpace(buffer, mSnapshot.getColorSpace());
         surface.release();
 

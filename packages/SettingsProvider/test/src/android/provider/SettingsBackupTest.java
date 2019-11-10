@@ -16,9 +16,10 @@
 
 package android.provider;
 
-import static com.google.android.collect.Sets.newHashSet;
+import static android.provider.settings.backup.DeviceSpecificSettings.DEVICE_SPECIFIC_SETTINGS_TO_BACKUP;
 
-import static junit.framework.Assert.assertTrue;
+import static com.google.android.collect.Sets.newHashSet;
+import static com.google.common.truth.Truth.assertWithMessage;
 
 import static java.lang.reflect.Modifier.isFinal;
 import static java.lang.reflect.Modifier.isPublic;
@@ -558,6 +559,7 @@ public class SettingsBackupTest {
                     Settings.Global.WIFI_WATCHDOG_ON,
                     Settings.Global.WIMAX_NETWORKS_AVAILABLE_NOTIFICATION_ON,
                     Settings.Global.CHARGING_STARTED_SOUND,
+                    Settings.Global.WIRELESS_CHARGING_STARTED_SOUND,
                     Settings.Global.WINDOW_ANIMATION_SCALE,
                     Settings.Global.WTF_IS_FATAL,
                     Settings.Global.ZEN_MODE,
@@ -595,7 +597,10 @@ public class SettingsBackupTest {
                  Settings.Secure.ANR_SHOW_BACKGROUND,
                  Settings.Secure.ASSISTANT,
                  Settings.Secure.ASSIST_DISCLOSURE_ENABLED,
+                 Settings.Secure.ASSIST_GESTURE_ENABLED,
                  Settings.Secure.ASSIST_GESTURE_SENSITIVITY,
+                 Settings.Secure.ASSIST_GESTURE_WAKE_ENABLED,
+                 Settings.Secure.ASSIST_GESTURE_SILENCE_ALERTS_ENABLED,
                  Settings.Secure.ASSIST_GESTURE_SETUP_COMPLETE,
                  Settings.Secure.ASSIST_SCREENSHOT_ENABLED,
                  Settings.Secure.ASSIST_STRUCTURE_ENABLED,
@@ -655,7 +660,6 @@ public class SettingsBackupTest {
                  Settings.Secure.NIGHT_DISPLAY_LAST_ACTIVATED_TIME,
                  Settings.Secure.NUM_ROTATION_SUGGESTIONS_ACCEPTED,
                  Settings.Secure.ODI_CAPTIONS_ENABLED,
-                 Settings.Secure.PACKAGE_VERIFIER_STATE,
                  Settings.Secure.PACKAGE_VERIFIER_USER_CONSENT,
                  Settings.Secure.PARENTAL_CONTROL_LAST_UPDATE,
                  Settings.Secure.PAYMENT_SERVICE_SEARCH_URI,
@@ -721,7 +725,13 @@ public class SettingsBackupTest {
                  Settings.Secure.BIOMETRIC_DEBUG_ENABLED,
                  Settings.Secure.FACE_UNLOCK_ATTENTION_REQUIRED,
                  Settings.Secure.FACE_UNLOCK_DIVERSITY_REQUIRED,
-                 Settings.Secure.MANAGED_PROVISIONING_DPC_DOWNLOADED);
+                 Settings.Secure.MANAGED_PROVISIONING_DPC_DOWNLOADED,
+                 Settings.Secure.AWARE_ENABLED,
+                 Settings.Secure.SKIP_GESTURE,
+                 Settings.Secure.SILENCE_GESTURE,
+                 Settings.Secure.DOZE_WAKE_LOCK_SCREEN_GESTURE,
+                 Settings.Secure.DOZE_WAKE_DISPLAY_GESTURE,
+                 Settings.Secure.FACE_UNLOCK_RE_ENROLL);
 
     @Test
     public void systemSettingsBackedUpOrBlacklisted() {
@@ -743,7 +753,7 @@ public class SettingsBackupTest {
     public void secureSettingsBackedUpOrBlacklisted() {
         HashSet<String> keys = new HashSet<String>();
         Collections.addAll(keys, SecureSettings.SETTINGS_TO_BACKUP);
-        Collections.addAll(keys, Settings.Secure.DEVICE_SPECIFIC_SETTINGS_TO_BACKUP);
+        Collections.addAll(keys, DEVICE_SPECIFIC_SETTINGS_TO_BACKUP);
         checkSettingsBackedUpOrBlacklisted(
                 getCandidateSettings(Settings.Secure.class),
                 keys,
@@ -754,12 +764,11 @@ public class SettingsBackupTest {
             Set<String> settings, Set<String> settingsToBackup, Set<String> blacklist) {
         Set<String> settingsNotBackedUp = difference(settings, settingsToBackup);
         Set<String> settingsNotBackedUpOrBlacklisted = difference(settingsNotBackedUp, blacklist);
-        assertTrue(
-                "Settings not backed up or blacklisted",
-                settingsNotBackedUpOrBlacklisted.isEmpty());
+        assertWithMessage("Settings not backed up or blacklisted")
+                .that(settingsNotBackedUpOrBlacklisted).isEmpty();
 
-        assertTrue(
-                "blacklisted settings backed up", intersect(settingsToBackup, blacklist).isEmpty());
+        assertWithMessage("blacklisted settings backed up")
+                .that(intersect(settingsToBackup, blacklist)).isEmpty();
     }
 
     private static Set<String> getCandidateSettings(

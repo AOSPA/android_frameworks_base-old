@@ -18,7 +18,6 @@ package com.android.systemui.statusbar.policy;
 
 import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
 import static com.android.systemui.DejankUtils.whitelistIpcs;
-import static com.android.systemui.Dependency.MAIN_HANDLER_NAME;
 
 import android.app.ActivityManager;
 import android.app.Dialog;
@@ -58,11 +57,11 @@ import com.android.systemui.Prefs;
 import com.android.systemui.Prefs.Key;
 import com.android.systemui.R;
 import com.android.systemui.SystemUISecondaryUserService;
+import com.android.systemui.dagger.qualifiers.MainHandler;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.qs.DetailAdapter;
 import com.android.systemui.qs.tiles.UserDetailView;
 import com.android.systemui.statusbar.phone.SystemUIDialog;
-import com.android.systemui.statusbar.phone.UnlockMethodCache;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -71,7 +70,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javax.inject.Inject;
-import javax.inject.Named;
 import javax.inject.Singleton;
 
 /**
@@ -93,7 +91,7 @@ public class UserSwitcherController implements Dumpable {
     private final ArrayList<WeakReference<BaseUserAdapter>> mAdapters = new ArrayList<>();
     private final GuestResumeSessionReceiver mGuestResumeSessionReceiver
             = new GuestResumeSessionReceiver();
-    private final KeyguardMonitor mKeyguardMonitor;
+    private final KeyguardStateController mKeyguardStateController;
     protected final Handler mHandler;
     private final ActivityStarter mActivityStarter;
 
@@ -110,13 +108,13 @@ public class UserSwitcherController implements Dumpable {
     private SparseBooleanArray mForcePictureLoadForUserId = new SparseBooleanArray(2);
 
     @Inject
-    public UserSwitcherController(Context context, KeyguardMonitor keyguardMonitor,
-            @Named(MAIN_HANDLER_NAME) Handler handler, ActivityStarter activityStarter) {
+    public UserSwitcherController(Context context, KeyguardStateController keyguardStateController,
+            @MainHandler Handler handler, ActivityStarter activityStarter) {
         mContext = context;
         if (!UserManager.isGuestUserEphemeral()) {
             mGuestResumeSessionReceiver.register(context);
         }
-        mKeyguardMonitor = keyguardMonitor;
+        mKeyguardStateController = keyguardStateController;
         mHandler = handler;
         mActivityStarter = activityStarter;
         mUserManager = UserManager.get(context);
@@ -149,7 +147,7 @@ public class UserSwitcherController implements Dumpable {
         // Fetch initial values.
         mSettingsObserver.onChange(false);
 
-        keyguardMonitor.addCallback(mCallback);
+        keyguardStateController.addCallback(mCallback);
         listenForCallState();
 
         refreshUsers(UserHandle.USER_NULL);
@@ -315,7 +313,6 @@ public class UserSwitcherController implements Dumpable {
         // adb shell settings put system enable_fullscreen_user_switcher 1  # Turn it on.
         // Restart SystemUI or adb reboot.
         final int DEFAULT = -1;
-        // TODO(b/140061064)
         final int overrideUseFullscreenUserSwitcher =
                 whitelistIpcs(() -> Settings.System.getInt(mContext.getContentResolver(),
                         "enable_fullscreen_user_switcher", DEFAULT));
@@ -597,20 +594,18 @@ public class UserSwitcherController implements Dumpable {
     public static abstract class BaseUserAdapter extends BaseAdapter {
 
         final UserSwitcherController mController;
-        private final KeyguardMonitor mKeyguardMonitor;
-        private final UnlockMethodCache mUnlockMethodCache;
+        private final KeyguardStateController mKeyguardStateController;
 
         protected BaseUserAdapter(UserSwitcherController controller) {
             mController = controller;
-            mKeyguardMonitor = controller.mKeyguardMonitor;
-            mUnlockMethodCache = UnlockMethodCache.getInstance(controller.mContext);
+            mKeyguardStateController = controller.mKeyguardStateController;
             controller.addAdapter(new WeakReference<>(this));
         }
 
         public int getUserCount() {
-            boolean secureKeyguardShowing = mKeyguardMonitor.isShowing()
-                    && mKeyguardMonitor.isSecure()
-                    && !mUnlockMethodCache.canSkipBouncer();
+            boolean secureKeyguardShowing = mKeyguardStateController.isShowing()
+                    && mKeyguardStateController.isMethodSecure()
+                    && !mKeyguardStateController.canDismissLockScreen();
             if (!secureKeyguardShowing) {
                 return mController.getUsers().size();
             }
@@ -630,9 +625,9 @@ public class UserSwitcherController implements Dumpable {
 
         @Override
         public int getCount() {
-            boolean secureKeyguardShowing = mKeyguardMonitor.isShowing()
-                    && mKeyguardMonitor.isSecure()
-                    && !mUnlockMethodCache.canSkipBouncer();
+            boolean secureKeyguardShowing = mKeyguardStateController.isShowing()
+                    && mKeyguardStateController.isMethodSecure()
+                    && !mKeyguardStateController.canDismissLockScreen();
             if (!secureKeyguardShowing) {
                 return mController.getUsers().size();
             }
@@ -819,19 +814,21 @@ public class UserSwitcherController implements Dumpable {
         }
     };
 
-    private final KeyguardMonitor.Callback mCallback = new KeyguardMonitor.Callback() {
-        @Override
-        public void onKeyguardShowingChanged() {
+    private final KeyguardStateController.Callback mCallback =
+            new KeyguardStateController.Callback() {
+                @Override
+                public void onKeyguardShowingChanged() {
 
-            // When Keyguard is going away, we don't need to update our items immediately which
-            // helps making the transition faster.
-            if (!mKeyguardMonitor.isShowing()) {
-                mHandler.post(UserSwitcherController.this::notifyAdapters);
-            } else {
-                notifyAdapters();
-            }
-        }
-    };
+                    // When Keyguard is going away, we don't need to update our items immediately
+                    // which
+                    // helps making the transition faster.
+                    if (!mKeyguardStateController.isShowing()) {
+                        mHandler.post(UserSwitcherController.this::notifyAdapters);
+                    } else {
+                        notifyAdapters();
+                    }
+                }
+            };
 
     private final class ExitGuestDialog extends SystemUIDialog implements
             DialogInterface.OnClickListener {

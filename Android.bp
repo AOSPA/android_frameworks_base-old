@@ -112,6 +112,14 @@ filegroup {
 }
 
 filegroup {
+    name: "framework-mime-sources",
+    srcs: [
+        "mime/java/**/*.java",
+    ],
+    path: "mime/java",
+}
+
+filegroup {
     name: "framework-opengl-sources",
     srcs: [
         "opengl/java/**/*.java",
@@ -154,6 +162,23 @@ filegroup {
 }
 
 filegroup {
+    name: "framework-telephony-common-sources",
+    srcs: [
+        "telephony/common/**/*.java",
+    ],
+    path: "telephony/common",
+}
+
+filegroup {
+    name: "framework-mms-sources",
+    srcs: [
+        "mms/java/**/*.java",
+        "mms/java/**/*.aidl",
+    ],
+    path: "mms/java",
+}
+
+filegroup {
     name: "framework-wifi-sources",
     srcs: [
         "wifi/java/**/*.java",
@@ -169,21 +194,28 @@ filegroup {
         ":framework-core-sources",
         ":framework-drm-sources",
         ":framework-graphics-sources",
+        ":framework-jobscheduler-sources", // jobscheduler is not a module for R
         ":framework-keystore-sources",
         ":framework-location-sources",
         ":framework-lowpan-sources",
-        ":framework-media-sources",
         ":framework-mca-effect-sources",
         ":framework-mca-filterfw-sources",
         ":framework-mca-filterpacks-sources",
+        ":framework-media-sources",
+        ":framework-mime-sources",
+        ":framework-mms-sources",
         ":framework-opengl-sources",
         ":framework-rs-sources",
         ":framework-sax-sources",
         ":framework-telecomm-sources",
+        ":framework-telephony-common-sources",
         ":framework-telephony-sources",
         ":framework-wifi-sources",
         ":PacProcessor-aidl-sources",
         ":ProxyHandler-aidl-sources",
+
+        // AIDL from frameworks/base/native/
+        ":platform-compat-native-aidl",
 
         // AIDL sources from external directories
         ":dumpstate_aidl",
@@ -234,6 +266,7 @@ java_defaults {
             "media/mca/effect/java",
             "media/mca/filterfw/java",
             "media/mca/filterpacks/java",
+            "mms/java",
             "opengl/java",
             "rs/java",
             "sax/java",
@@ -244,8 +277,9 @@ java_defaults {
     },
 
     required: [
-        // TODO: remove gps_debug when the build system propagates "required" properly.
+        // TODO: remove gps_debug and protolog.conf.json when the build system propagates "required" properly.
         "gps_debug.conf",
+	"protolog.conf.json.gz",
     ],
 }
 
@@ -315,7 +349,10 @@ java_defaults {
 
     jarjar_rules: ":framework-jarjar-rules",
 
-    static_libs: ["framework-internal-utils"],
+    static_libs: [
+        "framework-internal-utils",
+        "mimemap",
+    ],
 
     dxflags: [
         "--core-library",
@@ -374,12 +411,13 @@ java_library {
     installable: true,
     static_libs: [
         "framework-minus-apex",
-        "jobscheduler-framework",
     ],
     required: [
         "framework-platform-compat-config",
         "libcore-platform-compat-config",
         "services-platform-compat-config",
+        "media-provider-platform-compat-config",
+        "services-devicepolicy-platform-compat-config",
     ],
     sdk_version: "core_platform",
 }
@@ -393,7 +431,7 @@ java_library {
 
 java_library {
     name: "framework-annotation-proc",
-    defaults: ["framework-defaults"],
+    defaults: ["framework-aidl-export-defaults"],
     srcs: [":framework-all-sources"],
     installable: false,
     plugins: [
@@ -419,7 +457,9 @@ java_library {
     srcs: [
         "core/java/android/annotation/IntDef.java",
         "core/java/android/annotation/UnsupportedAppUsage.java",
-        ":unsupportedappusage_annotation_files",
+    ],
+    static_libs: [
+        "art.module.api.annotations",
     ],
 
     sdk_version: "core_current",
@@ -798,9 +838,11 @@ frameworks_base_subdirs = [
     "media/mca/filterfw/java",
     "media/mca/filterpacks/java",
     "drm/java",
+    "mms/java",
     "opengl/java",
     "sax/java",
     "telecomm/java",
+    "telephony/common",
     "telephony/java",
     "wifi/java",
     "lowpan/java",
@@ -899,8 +941,10 @@ metalava_framework_docs_args += " --replace-documentation " +
 
 packages_to_document = [
     "android",
+    "dalvik",
     "java",
     "javax",
+    "junit",
     "org.apache.http",
     "org.json",
     "org.w3c.dom",
@@ -916,11 +960,11 @@ stubs_defaults {
         "test-base/src/**/*.java",
         ":opt-telephony-srcs",
         ":opt-net-voip-srcs",
+        ":core-current-stubs-source",
         ":core_public_api_files",
         ":updatable-media-srcs",
         "test-mock/src/**/*.java",
         "test-runner/src/**/*.java",
-        ":jobscheduler-framework-source",
     ],
     libs: framework_docs_only_libs,
     local_sourcepaths: frameworks_base_subdirs,
@@ -931,7 +975,7 @@ stubs_defaults {
         "sdk-dir",
         "api-versions-jars-dir",
     ],
-    previous_api: ":last-released-public-api",
+    previous_api: ":last-released-public-api-for-metalava-annotations",
     merge_annotations_dirs: [
         "metalava-manual",
         "ojluni-annotated-sdk-stubs",
@@ -980,15 +1024,15 @@ stubs_defaults {
         "core/java/**/*.logtags",
         ":opt-telephony-srcs",
         ":opt-net-voip-srcs",
+        ":core-current-stubs-source",
         ":core_public_api_files",
         ":updatable-media-srcs",
-        ":jobscheduler-framework-source",
     ],
     libs: ["framework-internal-utils"],
     local_sourcepaths: frameworks_base_subdirs,
     installable: false,
     annotations_enabled: true,
-    previous_api: ":last-released-public-api",
+    previous_api: ":last-released-public-api-for-metalava-annotations",
     merge_annotations_dirs: [
         "metalava-manual",
         "ojluni-annotated-sdk-stubs",
@@ -1009,6 +1053,7 @@ droidstubs {
         "core/res/AndroidManifest.xml",
     ],
     args: metalava_framework_docs_args,
+    write_sdk_values: true,
 }
 
 droidstubs {
@@ -1018,6 +1063,7 @@ droidstubs {
         "core/res/AndroidManifest.xml",
     ],
     args: metalava_framework_docs_args + " --show-annotation android.annotation.SystemApi ",
+    write_sdk_values: true,
 }
 
 droiddoc {
@@ -1041,7 +1087,6 @@ droiddoc {
     ],
     proofread_file: "offline-sdk-docs-proofrerad.txt",
     args: framework_docs_only_args + " -offlinemode -title \"Android SDK\"",
-    write_sdk_values: true,
     static_doc_index_redirect: "docs/docs-preview-index.html",
 }
 
@@ -1059,7 +1104,6 @@ droiddoc {
     ],
     proofread_file: "offline-sdk-referenceonly-docs-proofrerad.txt",
     args: framework_docs_only_args + " -offlinemode -title \"Android SDK\" -referenceonly",
-    write_sdk_values: true,
     static_doc_index_redirect: "docs/docs-documentation-redirect.html",
     static_doc_properties: "docs/source.properties",
 }
@@ -1079,7 +1123,6 @@ droiddoc {
     proofread_file: "offline-system-sdk-referenceonly-docs-proofrerad.txt",
     args: framework_docs_only_args + " -hide 101 -hide 104 -hide 108" +
     " -offlinemode -title \"Android System SDK\" -referenceonly",
-    write_sdk_values: true,
     static_doc_index_redirect: "docs/docs-documentation-redirect.html",
     static_doc_properties: "docs/source.properties",
 }
@@ -1324,7 +1367,7 @@ droidstubs {
     installable: false,
     sdk_version: "core_platform",
     annotations_enabled: true,
-    previous_api: ":last-released-public-api",
+    previous_api: ":last-released-public-api-for-metalava-annotations",
     merge_annotations_dirs: [
         "metalava-manual",
         "ojluni-annotated-sdk-stubs",
@@ -1419,6 +1462,11 @@ droidstubs {
             removed_api_file: "api/removed.txt",
             baseline_file: ":public-api-incompatibilities-with-last-released",
         },
+        api_lint: {
+            enabled: true,
+            new_since: ":last-released-public-api",
+            baseline_file: "api/lint-baseline.txt",
+        },
     },
     jdiff_enabled: true,
 }
@@ -1444,6 +1492,11 @@ droidstubs {
             api_file: ":last-released-system-api",
             removed_api_file: "api/system-removed.txt",
             baseline_file: ":system-api-incompatibilities-with-last-released"
+        },
+        api_lint: {
+            enabled: true,
+            new_since: ":last-released-system-api",
+            baseline_file: "api/system-lint-baseline.txt",
         },
     },
     jdiff_enabled: true,
@@ -1510,4 +1563,58 @@ genrule {
     dist: {
         targets: ["droidcore"],
     },
+}
+
+// Avoid including Parcelable classes as we don't want to have two copies of
+// Parcelable cross the process.
+filegroup {
+    name: "framework-telephony-stack-shared-srcs",
+    srcs: [
+        "core/java/android/os/RegistrantList.java",
+        "core/java/android/os/Registrant.java",
+        "core/java/android/util/LocalLog.java",
+        "core/java/android/util/Slog.java",
+        "core/java/android/util/TimeUtils.java",
+        "core/java/com/android/internal/os/SomeArgs.java",
+        "core/java/com/android/internal/util/Preconditions.java",
+        "core/java/com/android/internal/util/State.java",
+        "core/java/com/android/internal/util/StateMachine.java",
+        "core/java/com/android/internal/util/XmlUtils.java",
+        "core/java/com/android/internal/util/HexDump.java",
+        "core/java/com/android/internal/util/IndentingPrintWriter.java",
+        "core/java/com/android/internal/util/DumpUtils.java"
+    ],
+}
+
+// Avoid including Parcelable classes as we don't want to have two copies of
+// Parcelable cross the process.
+filegroup {
+    name: "framework-cellbroadcast-shared-srcs",
+    srcs: [
+        "core/java/android/util/LocalLog.java",
+        "core/java/android/util/Slog.java",
+        "core/java/com/android/internal/util/State.java",
+        "core/java/com/android/internal/util/StateMachine.java",
+    ],
+}
+
+filegroup {
+    name: "framework-wifistack-shared-srcs",
+    srcs: [
+        ":framework-annotations",
+        "core/java/android/util/KeyValueListParser.java",
+        "core/java/android/util/LocalLog.java",
+        "core/java/android/util/Rational.java",
+        "core/java/android/util/proto/ProtoStream.java",
+        "core/java/android/util/proto/ProtoOutputStream.java",
+        "core/java/com/android/internal/util/FastXmlSerializer.java",
+        "core/java/com/android/internal/util/HexDump.java",
+        "core/java/com/android/internal/util/IState.java",
+        "core/java/com/android/internal/util/MessageUtils.java",
+        "core/java/com/android/internal/util/Preconditions.java",
+        "core/java/com/android/internal/util/State.java",
+        "core/java/com/android/internal/util/StateMachine.java",
+        "core/java/com/android/internal/util/WakeupMessage.java",
+        "core/java/com/android/internal/util/XmlUtils.java",
+    ],
 }

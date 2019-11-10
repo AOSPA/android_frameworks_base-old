@@ -117,7 +117,7 @@
 
     <!-- Tiles native to System UI. Order should match "quick_settings_tiles_default" -->
     <string name="quick_settings_tiles_stock" translatable="false">
-        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,location,hotspot,inversion,saver,dark,work,cast,night
+        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,location,hotspot,inversion,saver,dark,work,cast,night,controls
     </string>
 
     <!-- The tiles to display in QuickSettings -->
@@ -279,7 +279,7 @@
         <item>com.android.systemui.recents.Recents</item>
         <item>com.android.systemui.volume.VolumeUI</item>
         <item>com.android.systemui.stackdivider.Divider</item>
-        <item>com.android.systemui.SystemBars</item>
+        <item>com.android.systemui.statusbar.phone.StatusBar</item>
         <item>com.android.systemui.usb.StorageNotification</item>
         <item>com.android.systemui.power.PowerUI</item>
         <item>com.android.systemui.media.RingtonePlayer</item>

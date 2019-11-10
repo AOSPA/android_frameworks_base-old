@@ -328,7 +328,7 @@
     <string name="app_process_limit_title" msgid="4280600650253107163">"Batas proses background"</string>
     <string name="show_all_anrs" msgid="4924885492787069007">"Tampilkan ANR background"</string>
     <string name="show_all_anrs_summary" msgid="6636514318275139826">"Tampilkan dialog Aplikasi Tidak Merespons untuk aplikasi yang berjalan di background"</string>
-    <string name="show_notification_channel_warnings" msgid="1399948193466922683">"Tampilkan peringatan channel notifikasi"</string>
+    <string name="show_notification_channel_warnings" msgid="1399948193466922683">"Tampilkan peringatan saluran notifikasi"</string>
     <string name="show_notification_channel_warnings_summary" msgid="5536803251863694895">"Menampilkan peringatan di layar saat aplikasi memposting notifikasi tanpa channel yang valid"</string>
     <string name="force_allow_on_external" msgid="3215759785081916381">"Paksa izinkan aplikasi di eksternal"</string>
     <string name="force_allow_on_external_summary" msgid="3640752408258034689">"Membuat semua aplikasi dapat ditulis ke penyimpanan eksternal, terlepas dari nilai manifes"</string>
@@ -402,8 +402,8 @@
     <string name="power_remaining_duration_shutdown_imminent" product="tablet" msgid="7466484148515796216">"Tablet mungkin segera dimatikan (<xliff:g id="LEVEL">%1$s</xliff:g>)"</string>
     <string name="power_remaining_duration_shutdown_imminent" product="device" msgid="603933521600231649">"Perangkat mungkin segera dimatikan (<xliff:g id="LEVEL">%1$s</xliff:g>)"</string>
     <string name="power_charging" msgid="1779532561355864267">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
-    <string name="power_remaining_charging_duration_only" msgid="1421102457410268886">"<xliff:g id="TIME">%1$s</xliff:g> lagi hingga terisi penuh"</string>
-    <string name="power_charging_duration" msgid="4676999980973411875">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g> lagi terisi penuh"</string>
+    <string name="power_remaining_charging_duration_only" msgid="6672239353042034265">"Sisa <xliff:g id="TIME">%1$s</xliff:g> hingga terisi penuh"</string>
+    <string name="power_charging_duration" msgid="5850751284103249125">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g> lagi terisi penuh"</string>
     <string name="battery_info_status_unknown" msgid="196130600938058547">"Tidak diketahui"</string>
     <string name="battery_info_status_charging" msgid="1705179948350365604">"Mengisi daya"</string>
     <string name="battery_info_status_charging_lower" msgid="8689770213898117994">"mengisi daya baterai"</string>
@@ -414,7 +414,7 @@
     <string name="disabled" msgid="9206776641295849915">"Dinonaktifkan"</string>
     <string name="external_source_trusted" msgid="2707996266575928037">"Diizinkan"</string>
     <string name="external_source_untrusted" msgid="2677442511837596726">"Tidak diizinkan"</string>
-    <string name="install_other_apps" msgid="6986686991775883017">"Menginstal aplikasi yang tidak dikenal"</string>
+    <string name="install_other_apps" msgid="6986686991775883017">"Instal aplikasi tidak dikenal"</string>
     <string name="home" msgid="3256884684164448244">"Layar Utama Setelan"</string>
   <string-array name="battery_labels">
     <item msgid="8494684293649631252">"0%"</item>

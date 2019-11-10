@@ -22,7 +22,7 @@ import static android.view.SurfaceControl.METADATA_WINDOW_TYPE;
 import static com.android.server.wm.AppWindowThumbnailProto.HEIGHT;
 import static com.android.server.wm.AppWindowThumbnailProto.SURFACE_ANIMATOR;
 import static com.android.server.wm.AppWindowThumbnailProto.WIDTH;
-import static com.android.server.wm.WindowManagerDebugConfig.SHOW_TRANSACTIONS;
+import static com.android.server.wm.ProtoLogGroup.WM_SHOW_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.MAX_ANIMATION_DURATION;
@@ -31,7 +31,6 @@ import android.graphics.GraphicBuffer;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.os.Binder;
-import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 import android.view.Surface;
 import android.view.SurfaceControl;
@@ -39,44 +38,45 @@ import android.view.SurfaceControl.Builder;
 import android.view.SurfaceControl.Transaction;
 import android.view.animation.Animation;
 
+import com.android.server.protolog.common.ProtoLog;
 import com.android.server.wm.SurfaceAnimator.Animatable;
 
 import java.util.function.Supplier;
 
 /**
- * Represents a surface that is displayed over an {@link AppWindowToken}
+ * Represents a surface that is displayed over an {@link ActivityRecord}
  */
 class AppWindowThumbnail implements Animatable {
 
     private static final String TAG = TAG_WITH_CLASS_NAME ? "AppWindowThumbnail" : TAG_WM;
 
-    private final AppWindowToken mAppToken;
+    private final ActivityRecord mActivityRecord;
     private SurfaceControl mSurfaceControl;
     private final SurfaceAnimator mSurfaceAnimator;
     private final int mWidth;
     private final int mHeight;
     private final boolean mRelative;
 
-    AppWindowThumbnail(Supplier<Surface> surfaceFactory, Transaction t, AppWindowToken appToken,
+    AppWindowThumbnail(Supplier<Surface> surfaceFactory, Transaction t, ActivityRecord activity,
             GraphicBuffer thumbnailHeader) {
-        this(surfaceFactory, t, appToken, thumbnailHeader, false /* relative */);
+        this(surfaceFactory, t, activity, thumbnailHeader, false /* relative */);
     }
 
     /**
      * @param t Transaction to create the thumbnail in.
-     * @param appToken {@link AppWindowToken} to associate this thumbnail with.
+     * @param activity {@link ActivityRecord} to associate this thumbnail with.
      * @param thumbnailHeader A thumbnail or placeholder for thumbnail to initialize with.
-     * @param relative Whether this thumbnail will be a child of appToken (and thus positioned
+     * @param relative Whether this thumbnail will be a child of activity (and thus positioned
      *                 relative to it) or not.
      */
-    AppWindowThumbnail(Supplier<Surface> surfaceFactory, Transaction t, AppWindowToken appToken,
+    AppWindowThumbnail(Supplier<Surface> surfaceFactory, Transaction t, ActivityRecord activity,
             GraphicBuffer thumbnailHeader, boolean relative) {
-        this(t, appToken, thumbnailHeader, relative, surfaceFactory.get(), null);
+        this(t, activity, thumbnailHeader, relative, surfaceFactory.get(), null);
     }
 
-    AppWindowThumbnail(Transaction t, AppWindowToken appToken, GraphicBuffer thumbnailHeader,
+    AppWindowThumbnail(Transaction t, ActivityRecord activity, GraphicBuffer thumbnailHeader,
             boolean relative, Surface drawSurface, SurfaceAnimator animator) {
-        mAppToken = appToken;
+        mActivityRecord = activity;
         mRelative = relative;
         if (animator != null) {
             mSurfaceAnimator = animator;
@@ -84,29 +84,27 @@ class AppWindowThumbnail implements Animatable {
             // We can't use a delegating constructor since we need to
             // reference this::onAnimationFinished
             mSurfaceAnimator =
-                new SurfaceAnimator(this, this::onAnimationFinished, appToken.mWmService);
+                new SurfaceAnimator(this, this::onAnimationFinished, activity.mWmService);
         }
         mWidth = thumbnailHeader.getWidth();
         mHeight = thumbnailHeader.getHeight();
 
         // Create a new surface for the thumbnail
-        WindowState window = appToken.findMainWindow();
+        WindowState window = mActivityRecord.findMainWindow();
 
         // TODO: This should be attached as a child to the app token, once the thumbnail animations
         // use relative coordinates. Once we start animating task we can also consider attaching
         // this to the task.
-        mSurfaceControl = appToken.makeSurface()
-                .setName("thumbnail anim: " + appToken.toString())
+        mSurfaceControl = mActivityRecord.makeSurface()
+                .setName("thumbnail anim: " + mActivityRecord.toString())
                 .setBufferSize(mWidth, mHeight)
                 .setFormat(PixelFormat.TRANSLUCENT)
-                .setMetadata(METADATA_WINDOW_TYPE, appToken.windowType)
+                .setMetadata(METADATA_WINDOW_TYPE, mActivityRecord.windowType)
                 .setMetadata(METADATA_OWNER_UID,
                         window != null ? window.mOwnerUid : Binder.getCallingUid())
                 .build();
 
-        if (SHOW_TRANSACTIONS) {
-            Slog.i(TAG, "  THUMBNAIL " + mSurfaceControl + ": CREATE");
-        }
+        ProtoLog.i(WM_SHOW_TRANSACTIONS, "  THUMBNAIL %s: CREATE", mSurfaceControl);
 
         // Transfer the thumbnail to the surface
         drawSurface.copyFrom(mSurfaceControl);
@@ -118,7 +116,7 @@ class AppWindowThumbnail implements Animatable {
         // task.
         t.setLayer(mSurfaceControl, Integer.MAX_VALUE);
         if (relative) {
-            t.reparent(mSurfaceControl, appToken.getSurfaceControl());
+            t.reparent(mSurfaceControl, mActivityRecord.getSurfaceControl());
         }
     }
 
@@ -128,12 +126,12 @@ class AppWindowThumbnail implements Animatable {
 
     void startAnimation(Transaction t, Animation anim, Point position) {
         anim.restrictDuration(MAX_ANIMATION_DURATION);
-        anim.scaleCurrentDuration(mAppToken.mWmService.getTransitionAnimationScaleLocked());
+        anim.scaleCurrentDuration(mActivityRecord.mWmService.getTransitionAnimationScaleLocked());
         mSurfaceAnimator.startAnimation(t, new LocalAnimationAdapter(
                 new WindowAnimationSpec(anim, position,
-                        mAppToken.getDisplayContent().mAppTransition.canSkipFirstFrame(),
-                        mAppToken.getDisplayContent().getWindowCornerRadius()),
-                mAppToken.mWmService.mSurfaceAnimationRunner), false /* hidden */);
+                        mActivityRecord.getDisplayContent().mAppTransition.canSkipFirstFrame(),
+                        mActivityRecord.getDisplayContent().getWindowCornerRadius()),
+                mActivityRecord.mWmService.mSurfaceAnimationRunner), false /* hidden */);
     }
 
     /**
@@ -181,19 +179,19 @@ class AppWindowThumbnail implements Animatable {
 
     @Override
     public Transaction getPendingTransaction() {
-        return mAppToken.getPendingTransaction();
+        return mActivityRecord.getPendingTransaction();
     }
 
     @Override
     public void commitPendingTransaction() {
-        mAppToken.commitPendingTransaction();
+        mActivityRecord.commitPendingTransaction();
     }
 
     @Override
     public void onAnimationLeashCreated(Transaction t, SurfaceControl leash) {
         t.setLayer(leash, Integer.MAX_VALUE);
         if (mRelative) {
-            t.reparent(leash, mAppToken.getSurfaceControl());
+            t.reparent(leash, mActivityRecord.getSurfaceControl());
         }
     }
 
@@ -207,7 +205,7 @@ class AppWindowThumbnail implements Animatable {
 
     @Override
     public Builder makeAnimationLeash() {
-        return mAppToken.makeSurface();
+        return mActivityRecord.makeSurface();
     }
 
     @Override
@@ -217,12 +215,12 @@ class AppWindowThumbnail implements Animatable {
 
     @Override
     public SurfaceControl getAnimationLeashParent() {
-        return mAppToken.getAppAnimationLayer();
+        return mActivityRecord.getAppAnimationLayer();
     }
 
     @Override
     public SurfaceControl getParentSurfaceControl() {
-        return mAppToken.getParentSurfaceControl();
+        return mActivityRecord.getParentSurfaceControl();
     }
 
     @Override

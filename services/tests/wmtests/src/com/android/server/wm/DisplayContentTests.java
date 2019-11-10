@@ -39,6 +39,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
+import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.any;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyBoolean;
@@ -46,8 +47,8 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.never;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.reset;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.same;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
@@ -72,7 +73,6 @@ import android.metrics.LogMaker;
 import android.os.SystemClock;
 import android.platform.test.annotations.Presubmit;
 import android.util.DisplayMetrics;
-import android.util.MutableBoolean;
 import android.view.DisplayCutout;
 import android.view.Gravity;
 import android.view.ISystemGestureExclusionListener;
@@ -88,6 +88,7 @@ import com.android.internal.logging.nano.MetricsProto;
 import com.android.server.wm.utils.WmDisplayCutout;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
@@ -105,19 +106,20 @@ import java.util.List;
  */
 @SmallTest
 @Presubmit
+@RunWith(WindowTestRunner.class)
 public class DisplayContentTests extends WindowTestsBase {
 
     @Test
     public void testForAllWindows() {
         final WindowState exitingAppWindow = createWindow(null, TYPE_BASE_APPLICATION,
                 mDisplayContent, "exiting app");
-        final AppWindowToken exitingAppToken = exitingAppWindow.mAppToken;
+        final ActivityRecord exitingApp = exitingAppWindow.mActivityRecord;
         // Wait until everything in animation handler get executed to prevent the exiting window
         // from being removed during WindowSurfacePlacer Traversal.
         waitUntilHandlersIdle();
 
-        exitingAppToken.mIsExiting = true;
-        exitingAppToken.getTask().mStack.mExitingAppTokens.add(exitingAppToken);
+        exitingApp.mIsExiting = true;
+        exitingApp.getTask().mStack.mExitingActivities.add(exitingApp);
 
         assertForAllWindowsOrder(Arrays.asList(
                 mWallpaperWindow,
@@ -239,11 +241,10 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals(dc, stack.getDisplayContent());
 
         final Task task = createTaskInStack(stack, 0 /* userId */);
-        final WindowTestUtils.TestAppWindowToken token = WindowTestUtils.createTestAppWindowToken(
-                dc);
-        task.addChild(token, 0);
+        final ActivityRecord activity = WindowTestUtils.createTestActivityRecord(dc);
+        task.addChild(activity, 0);
         assertEquals(dc, task.getDisplayContent());
-        assertEquals(dc, token.getDisplayContent());
+        assertEquals(dc, activity.getDisplayContent());
 
         // Move stack to first display.
         mDisplayContent.moveStackToDisplay(stack, true /* onTop */);
@@ -251,7 +252,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals(mDisplayContent, stack.getParent().getParent());
         assertEquals(mDisplayContent, stack.getDisplayContent());
         assertEquals(mDisplayContent, task.getDisplayContent());
-        assertEquals(mDisplayContent, token.getDisplayContent());
+        assertEquals(mDisplayContent, activity.getDisplayContent());
     }
 
     /**
@@ -312,17 +313,17 @@ public class DisplayContentTests extends WindowTestsBase {
         // Add stack with activity.
         final TaskStack stack0 = createTaskStackOnDisplay(dc0);
         final Task task0 = createTaskInStack(stack0, 0 /* userId */);
-        final WindowTestUtils.TestAppWindowToken token =
-                WindowTestUtils.createTestAppWindowToken(dc0);
-        task0.addChild(token, 0);
+        final ActivityRecord activity =
+                WindowTestUtils.createTestActivityRecord(dc0);
+        task0.addChild(activity, 0);
         dc0.configureDisplayPolicy();
         assertNotNull(dc0.mTapDetector);
 
         final TaskStack stack1 = createTaskStackOnDisplay(dc1);
         final Task task1 = createTaskInStack(stack1, 0 /* userId */);
-        final WindowTestUtils.TestAppWindowToken token1 =
-                WindowTestUtils.createTestAppWindowToken(dc0);
-        task1.addChild(token1, 0);
+        final ActivityRecord activity1 =
+                WindowTestUtils.createTestActivityRecord(dc0);
+        task1.addChild(activity1, 0);
         dc1.configureDisplayPolicy();
         assertNotNull(dc1.mTapDetector);
 
@@ -361,7 +362,7 @@ public class DisplayContentTests extends WindowTestsBase {
         // Create a focusable window and check that focus is calculated correctly
         final WindowState window1 =
                 createWindow(null, TYPE_BASE_APPLICATION, mDisplayContent, "window1");
-        window1.mAppToken.mTargetSdk = targetSdk;
+        window1.mActivityRecord.mTargetSdk = targetSdk;
         updateFocusedWindow();
         assertTrue(window1.isFocused());
         assertEquals(window1, mWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
@@ -374,7 +375,7 @@ public class DisplayContentTests extends WindowTestsBase {
 
         // Add a window to the second display, and it should be focused
         final WindowState window2 = createWindow(null, TYPE_BASE_APPLICATION, dc, "window2");
-        window2.mAppToken.mTargetSdk = targetSdk;
+        window2.mActivityRecord.mTargetSdk = targetSdk;
         updateFocusedWindow();
         assertTrue(window2.isFocused());
         assertEquals(perDisplayFocusEnabled && targetSdk >= Q, window1.isFocused());
@@ -388,12 +389,65 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals(window1, mWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
 
         // Make sure top focused display not changed if there is a focused app.
-        window1.mAppToken.hiddenRequested = true;
-        window1.getDisplayContent().setFocusedApp(window1.mAppToken);
+        window1.mActivityRecord.hiddenRequested = true;
+        window1.getDisplayContent().setFocusedApp(window1.mActivityRecord);
         updateFocusedWindow();
         assertTrue(!window1.isFocused());
         assertEquals(window1.getDisplayId(),
                 mWm.mRoot.getTopFocusedDisplayContent().getDisplayId());
+    }
+
+    @Test
+    public void testShouldWaitForSystemDecorWindowsOnBoot_OnDefaultDisplay() {
+        mWm.mSystemBooted = true;
+        final DisplayContent defaultDisplay = mWm.getDefaultDisplayContentLocked();
+        final WindowState[] windows = createNotDrawnWindowsOn(defaultDisplay,
+                TYPE_WALLPAPER, TYPE_APPLICATION);
+
+        // Verify waiting for windows to be drawn.
+        assertTrue(defaultDisplay.shouldWaitForSystemDecorWindowsOnBoot());
+
+        // Verify not waiting for drawn windows.
+        makeWindowsDrawn(windows);
+        assertFalse(defaultDisplay.shouldWaitForSystemDecorWindowsOnBoot());
+    }
+
+    @Test
+    public void testShouldWaitForSystemDecorWindowsOnBoot_OnSecondaryDisplay() {
+        mWm.mSystemBooted = true;
+        final DisplayContent secondaryDisplay = createNewDisplay();
+        final WindowState[] windows = createNotDrawnWindowsOn(secondaryDisplay,
+                TYPE_WALLPAPER, TYPE_APPLICATION);
+
+        // Verify not waiting for display without system decorations.
+        doReturn(false).when(secondaryDisplay).supportsSystemDecorations();
+        assertFalse(secondaryDisplay.shouldWaitForSystemDecorWindowsOnBoot());
+
+        // Verify waiting for non-drawn windows on display with system decorations.
+        reset(secondaryDisplay);
+        doReturn(true).when(secondaryDisplay).supportsSystemDecorations();
+        assertTrue(secondaryDisplay.shouldWaitForSystemDecorWindowsOnBoot());
+
+        // Verify not waiting for drawn windows on display with system decorations.
+        makeWindowsDrawn(windows);
+        assertFalse(secondaryDisplay.shouldWaitForSystemDecorWindowsOnBoot());
+    }
+
+    private WindowState[] createNotDrawnWindowsOn(DisplayContent displayContent, int... types) {
+        final WindowState[] windows = new WindowState[types.length];
+        for (int i = 0; i < types.length; i++) {
+            final int type = types[i];
+            windows[i] = createWindow(null /* parent */, type, displayContent, "window-" + type);
+            windows[i].mHasSurface = false;
+        }
+        return windows;
+    }
+
+    private static void makeWindowsDrawn(WindowState[] windows) {
+        for (WindowState window : windows) {
+            window.mHasSurface = true;
+            window.mWinAnimator.mDrawState = WindowStateAnimator.HAS_DRAWN;
+        }
     }
 
     /**
@@ -435,78 +489,70 @@ public class DisplayContentTests extends WindowTestsBase {
 
     @Test
     public void testDisplayCutout_rot0() {
-        synchronized (mWm.getWindowManagerLock()) {
-            final DisplayContent dc = createNewDisplay();
-            dc.mInitialDisplayWidth = 200;
-            dc.mInitialDisplayHeight = 400;
-            Rect r = new Rect(80, 0, 120, 10);
-            final DisplayCutout cutout = new WmDisplayCutout(
-                    fromBoundingRect(r.left, r.top, r.right, r.bottom, BOUNDS_POSITION_TOP), null)
-                    .computeSafeInsets(200, 400).getDisplayCutout();
+        final DisplayContent dc = createNewDisplay();
+        dc.mInitialDisplayWidth = 200;
+        dc.mInitialDisplayHeight = 400;
+        final Rect r = new Rect(80, 0, 120, 10);
+        final DisplayCutout cutout = new WmDisplayCutout(
+                fromBoundingRect(r.left, r.top, r.right, r.bottom, BOUNDS_POSITION_TOP), null)
+                        .computeSafeInsets(200, 400).getDisplayCutout();
 
-            dc.mInitialDisplayCutout = cutout;
-            dc.getDisplayRotation().setRotation(Surface.ROTATION_0);
-            dc.computeScreenConfiguration(new Configuration()); // recomputes dc.mDisplayInfo.
+        dc.mInitialDisplayCutout = cutout;
+        dc.getDisplayRotation().setRotation(Surface.ROTATION_0);
+        dc.computeScreenConfiguration(new Configuration()); // recomputes dc.mDisplayInfo.
 
-            assertEquals(cutout, dc.getDisplayInfo().displayCutout);
-        }
+        assertEquals(cutout, dc.getDisplayInfo().displayCutout);
     }
 
     @Test
     public void testDisplayCutout_rot90() {
-        synchronized (mWm.getWindowManagerLock()) {
-            // Prevent mInitialDisplayCutout from being updated from real display (e.g. null
-            // if the device has no cutout).
-            final DisplayContent dc = createDisplayNoUpdateDisplayInfo();
-            // Rotation may use real display info to compute bound, so here also uses the
-            // same width and height.
-            final int displayWidth = dc.mInitialDisplayWidth;
-            final int displayHeight = dc.mInitialDisplayHeight;
-            final int cutoutWidth = 40;
-            final int cutoutHeight = 10;
-            final int left = (displayWidth - cutoutWidth) / 2;
-            final int top = 0;
-            final int right = (displayWidth + cutoutWidth) / 2;
-            final int bottom = cutoutHeight;
+        // Prevent mInitialDisplayCutout from being updated from real display (e.g. null
+        // if the device has no cutout).
+        final DisplayContent dc = createDisplayNoUpdateDisplayInfo();
+        // Rotation may use real display info to compute bound, so here also uses the
+        // same width and height.
+        final int displayWidth = dc.mInitialDisplayWidth;
+        final int displayHeight = dc.mInitialDisplayHeight;
+        final int cutoutWidth = 40;
+        final int cutoutHeight = 10;
+        final int left = (displayWidth - cutoutWidth) / 2;
+        final int top = 0;
+        final int right = (displayWidth + cutoutWidth) / 2;
+        final int bottom = cutoutHeight;
 
-            final Rect r1 = new Rect(left, top, right, bottom);
-            final DisplayCutout cutout = new WmDisplayCutout(
-                    fromBoundingRect(r1.left, r1.top, r1.right, r1.bottom, BOUNDS_POSITION_TOP),
-                    null)
-                    .computeSafeInsets(displayWidth, displayHeight).getDisplayCutout();
+        final Rect r1 = new Rect(left, top, right, bottom);
+        final DisplayCutout cutout = new WmDisplayCutout(
+                fromBoundingRect(r1.left, r1.top, r1.right, r1.bottom, BOUNDS_POSITION_TOP), null)
+                        .computeSafeInsets(displayWidth, displayHeight).getDisplayCutout();
 
-            dc.mInitialDisplayCutout = cutout;
-            dc.getDisplayRotation().setRotation(Surface.ROTATION_90);
-            dc.computeScreenConfiguration(new Configuration()); // recomputes dc.mDisplayInfo.
+        dc.mInitialDisplayCutout = cutout;
+        dc.getDisplayRotation().setRotation(Surface.ROTATION_90);
+        dc.computeScreenConfiguration(new Configuration()); // recomputes dc.mDisplayInfo.
 
-            // ----o----------      -------------
-            // |   |     |   |      |
-            // |   ------o   |      o---
-            // |             |      |  |
-            // |             |  ->  |  |
-            // |             |      ---o
-            // |             |      |
-            // |             |      -------------
-            final Rect r = new Rect(top, left, bottom, right);
-            assertEquals(new WmDisplayCutout(
-                    fromBoundingRect(r.left, r.top, r.right, r.bottom, BOUNDS_POSITION_LEFT), null)
-                    .computeSafeInsets(displayHeight, displayWidth)
-                    .getDisplayCutout(), dc.getDisplayInfo().displayCutout);
-        }
+        // ----o----------      -------------
+        // |   |     |   |      |
+        // |   ------o   |      o---
+        // |             |      |  |
+        // |             |  ->  |  |
+        // |             |      ---o
+        // |             |      |
+        // |             |      -------------
+        final Rect r = new Rect(top, left, bottom, right);
+        assertEquals(new WmDisplayCutout(
+                fromBoundingRect(r.left, r.top, r.right, r.bottom, BOUNDS_POSITION_LEFT), null)
+                        .computeSafeInsets(displayHeight, displayWidth).getDisplayCutout(),
+                dc.getDisplayInfo().displayCutout);
     }
 
     @Test
     public void testLayoutSeq_assignedDuringLayout() {
-        synchronized (mWm.getWindowManagerLock()) {
+        final DisplayContent dc = createNewDisplay();
+        final WindowState win = createWindow(null /* parent */, TYPE_BASE_APPLICATION, dc, "w");
 
-            final DisplayContent dc = createNewDisplay();
-            final WindowState win = createWindow(null /* parent */, TYPE_BASE_APPLICATION, dc, "w");
+        dc.setLayoutNeeded();
+        dc.performLayout(true /* initial */, false /* updateImeWindows */);
 
-            dc.setLayoutNeeded();
-            dc.performLayout(true /* initial */, false /* updateImeWindows */);
-
-            assertThat(win.mLayoutSeq, is(dc.mLayoutSeq));
-        }
+        assertThat(win.mLayoutSeq, is(dc.mLayoutSeq));
     }
 
     @Test
@@ -523,7 +569,7 @@ public class DisplayContentTests extends WindowTestsBase {
         // Create a window that requests landscape orientation. It will define device orientation
         // by default.
         final WindowState window = createWindow(null /* parent */, TYPE_BASE_APPLICATION, dc, "w");
-        window.mAppToken.setOrientation(SCREEN_ORIENTATION_LANDSCAPE);
+        window.mActivityRecord.setOrientation(SCREEN_ORIENTATION_LANDSCAPE);
 
         final WindowState keyguard = createWindow(null, TYPE_STATUS_BAR, dc, "keyguard");
         keyguard.mHasSurface = true;
@@ -636,16 +682,15 @@ public class DisplayContentTests extends WindowTestsBase {
         // is appWin & null on the other display.
         mDisplayContent.setInputMethodWindowLocked(mImeWindow);
         newDisplay.setInputMethodWindowLocked(null);
-        assertTrue("appWin should be IME target window",
-                appWin.equals(mDisplayContent.mInputMethodTarget));
+        assertEquals("appWin should be IME target window",
+                appWin, mDisplayContent.mInputMethodTarget);
         assertNull("newDisplay Ime target: ", newDisplay.mInputMethodTarget);
 
         // Switch input method window on new display & make sure the input method target also
         // switched as expected.
         newDisplay.setInputMethodWindowLocked(mImeWindow);
         mDisplayContent.setInputMethodWindowLocked(null);
-        assertTrue("appWin1 should be IME target window",
-                appWin1.equals(newDisplay.mInputMethodTarget));
+        assertEquals("appWin1 should be IME target window", appWin1, newDisplay.mInputMethodTarget);
         assertNull("default display Ime target: ", mDisplayContent.mInputMethodTarget);
     }
 
@@ -660,13 +705,13 @@ public class DisplayContentTests extends WindowTestsBase {
 
         final ActivityStack stack =
                 new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootActivityContainer)
-                        .setDisplay(dc.mAcitvityDisplay).build();
+                        .setDisplay(dc.mActivityDisplay).build();
         final ActivityRecord activity = stack.topTask().getTopActivity();
 
         activity.setRequestedOrientation(newOrientation);
 
         final ArgumentCaptor<Configuration> captor = ArgumentCaptor.forClass(Configuration.class);
-        verify(dc.mAcitvityDisplay).updateDisplayOverrideConfigurationLocked(captor.capture(),
+        verify(dc.mActivityDisplay).updateDisplayOverrideConfigurationLocked(captor.capture(),
                 same(activity), anyBoolean(), same(null));
         final Configuration newDisplayConfig = captor.getValue();
         final int expectedOrientation = newOrientation == SCREEN_ORIENTATION_PORTRAIT
@@ -686,12 +731,12 @@ public class DisplayContentTests extends WindowTestsBase {
 
         final ActivityStack stack =
                 new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootActivityContainer)
-                        .setDisplay(dc.mAcitvityDisplay).build();
+                        .setDisplay(dc.mActivityDisplay).build();
         final ActivityRecord activity = stack.topTask().getTopActivity();
 
         activity.setRequestedOrientation(newOrientation);
 
-        verify(dc.mAcitvityDisplay, never()).updateDisplayOverrideConfigurationLocked(any(),
+        verify(dc.mActivityDisplay, never()).updateDisplayOverrideConfigurationLocked(any(),
                 eq(activity), anyBoolean(), same(null));
         assertEquals(dc.getDisplayRotation().getUserRotation(), dc.getRotation());
     }
@@ -702,7 +747,7 @@ public class DisplayContentTests extends WindowTestsBase {
                      new InsetsModeSession(ViewRootImpl.NEW_INSETS_MODE_IME)) {
             final DisplayContent dc = createNewDisplay();
             dc.mInputMethodTarget = createWindow(null, TYPE_BASE_APPLICATION, "app");
-            assertEquals(dc.mInputMethodTarget.mAppToken.getSurfaceControl(),
+            assertEquals(dc.mInputMethodTarget.mActivityRecord.getSurfaceControl(),
                     dc.computeImeParent());
         }
     }
@@ -721,8 +766,8 @@ public class DisplayContentTests extends WindowTestsBase {
 
     @Test
     public void testComputeImeParent_app_notMatchParentBounds() {
-        spyOn(mAppWindow.mAppToken);
-        doReturn(false).when(mAppWindow.mAppToken).matchParentBounds();
+        spyOn(mAppWindow.mActivityRecord);
+        doReturn(false).when(mAppWindow.mActivityRecord).matchParentBounds();
         mDisplayContent.mInputMethodTarget = mAppWindow;
         // The surface parent of IME should be the display instead of app window.
         assertEquals(mDisplayContent.getWindowingLayer(), mDisplayContent.computeImeParent());
@@ -751,7 +796,7 @@ public class DisplayContentTests extends WindowTestsBase {
         win.setHasSurface(true);
         dc.updateSystemGestureExclusion();
 
-        final MutableBoolean invoked = new MutableBoolean(false);
+        final boolean[] invoked = { false };
         final ISystemGestureExclusionListener.Stub verifier =
                 new ISystemGestureExclusionListener.Stub() {
             @Override
@@ -760,7 +805,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 Region expected = Region.obtain();
                 expected.set(10, 20, 30, 40);
                 assertEquals(expected, actual);
-                invoked.value = true;
+                invoked[0] = true;
             }
         };
         try {
@@ -768,7 +813,7 @@ public class DisplayContentTests extends WindowTestsBase {
         } finally {
             dc.unregisterSystemGestureExclusionListener(verifier);
         }
-        assertTrue("SystemGestureExclusionListener was not invoked", invoked.value);
+        assertTrue("SystemGestureExclusionListener was not invoked", invoked[0]);
     }
 
     @Test
@@ -826,30 +871,28 @@ public class DisplayContentTests extends WindowTestsBase {
 
     @Test
     public void testCalculateSystemGestureExclusion_immersiveStickyLegacyWindow() throws Exception {
-        synchronized (mWm.mGlobalLock) {
-            mWm.mSystemGestureExcludedByPreQStickyImmersive = true;
+        mWm.mSystemGestureExcludedByPreQStickyImmersive = true;
 
-            final DisplayContent dc = createNewDisplay();
-            final WindowState win = createWindow(null, TYPE_BASE_APPLICATION, dc, "win");
-            win.getAttrs().flags |= FLAG_LAYOUT_IN_SCREEN | FLAG_LAYOUT_INSET_DECOR;
-            win.getAttrs().layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-            win.getAttrs().privateFlags |= PRIVATE_FLAG_NO_MOVE_ANIMATION;
-            win.getAttrs().subtreeSystemUiVisibility = win.mSystemUiVisibility =
-                    SYSTEM_UI_FLAG_FULLSCREEN | SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                            | SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
-            win.mAppToken.mTargetSdk = P;
+        final DisplayContent dc = createNewDisplay();
+        final WindowState win = createWindow(null, TYPE_BASE_APPLICATION, dc, "win");
+        win.getAttrs().flags |= FLAG_LAYOUT_IN_SCREEN | FLAG_LAYOUT_INSET_DECOR;
+        win.getAttrs().layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+        win.getAttrs().privateFlags |= PRIVATE_FLAG_NO_MOVE_ANIMATION;
+        win.getAttrs().subtreeSystemUiVisibility = win.mSystemUiVisibility =
+                SYSTEM_UI_FLAG_FULLSCREEN | SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+        win.mActivityRecord.mTargetSdk = P;
 
-            dc.setLayoutNeeded();
-            dc.performLayout(true /* initial */, false /* updateImeWindows */);
+        dc.setLayoutNeeded();
+        dc.performLayout(true /* initial */, false /* updateImeWindows */);
 
-            win.setHasSurface(true);
+        win.setHasSurface(true);
 
-            final Region expected = Region.obtain();
-            expected.set(dc.getBounds());
-            assertEquals(expected, calculateSystemGestureExclusion(dc));
+        final Region expected = Region.obtain();
+        expected.set(dc.getBounds());
+        assertEquals(expected, calculateSystemGestureExclusion(dc));
 
-            win.setHasSurface(false);
-        }
+        win.setHasSurface(false);
     }
 
     @Test
@@ -860,7 +903,7 @@ public class DisplayContentTests extends WindowTestsBase {
 
         Configuration newConfig = new Configuration();
         newConfig.orientation = Configuration.ORIENTATION_PORTRAIT;
-        final DisplayContent displayContent = spy(createNewDisplay());
+        final DisplayContent displayContent = createNewDisplay();
         Mockito.doReturn(mockLogger).when(displayContent).getMetricsLogger();
         Mockito.doReturn(oldConfig).doReturn(newConfig).when(displayContent).getConfiguration();
 
@@ -886,9 +929,7 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     private void updateFocusedWindow() {
-        synchronized (mWm.mGlobalLock) {
-            mWm.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL, false);
-        }
+        mWm.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL, false /* updateInputWindows */);
     }
 
     /**
@@ -896,7 +937,7 @@ public class DisplayContentTests extends WindowTestsBase {
      * the values set by test.
      */
     private DisplayContent createDisplayNoUpdateDisplayInfo() {
-        final DisplayContent displayContent = spy(createNewDisplay());
+        final DisplayContent displayContent = createNewDisplay();
         doNothing().when(displayContent).updateDisplayInfo();
         return displayContent;
     }

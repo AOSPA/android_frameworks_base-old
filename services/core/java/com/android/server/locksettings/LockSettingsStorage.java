@@ -30,7 +30,6 @@ import android.os.Environment;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.ArrayMap;
-import android.util.Log;
 import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -95,8 +94,6 @@ class LockSettingsStorage {
 
     @VisibleForTesting
     public static class CredentialHash {
-        /** Deprecated private static final int VERSION_LEGACY = 0; */
-        private static final int VERSION_GATEKEEPER = 1;
 
         private CredentialHash(byte[] hash, @CredentialType int type) {
             if (type != LockPatternUtils.CREDENTIAL_TYPE_NONE) {
@@ -126,42 +123,6 @@ class LockSettingsStorage {
 
         byte[] hash;
         @CredentialType int type;
-
-        public byte[] toBytes() {
-            try {
-                ByteArrayOutputStream os = new ByteArrayOutputStream();
-                DataOutputStream dos = new DataOutputStream(os);
-                dos.write(VERSION_GATEKEEPER);
-                dos.write(type);
-                if (hash != null && hash.length > 0) {
-                    dos.writeInt(hash.length);
-                    dos.write(hash);
-                } else {
-                    dos.writeInt(0);
-                }
-                dos.close();
-                return os.toByteArray();
-            } catch (IOException e) {
-                throw new IllegalStateException("Fail to serialze credential hash", e);
-            }
-        }
-
-        public static CredentialHash fromBytes(byte[] bytes) {
-            try {
-                DataInputStream is = new DataInputStream(new ByteArrayInputStream(bytes));
-                /* int version = */ is.read();
-                int type = is.read();
-                int hashSize = is.readInt();
-                byte[] hash = null;
-                if (hashSize > 0) {
-                    hash = new byte[hashSize];
-                    is.readFully(hash);
-                }
-                return new CredentialHash(hash, type);
-            } catch (IOException e) {
-                throw new IllegalStateException("Fail to deserialze credential hash", e);
-            }
-        }
     }
 
     public LockSettingsStorage(Context context) {
@@ -252,7 +213,7 @@ class LockSettingsStorage {
     private CredentialHash readPasswordHashIfExists(int userId) {
         byte[] stored = readFile(getLockPasswordFilename(userId));
         if (!ArrayUtils.isEmpty(stored)) {
-            return new CredentialHash(stored, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD);
+            return new CredentialHash(stored, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD_OR_PIN);
         }
         return null;
     }
@@ -306,10 +267,6 @@ class LockSettingsStorage {
 
     public boolean hasPattern(int userId) {
         return hasFile(getLockPatternFilename(userId));
-    }
-
-    public boolean hasCredential(int userId) {
-        return hasPassword(userId) || hasPattern(userId);
     }
 
     private boolean hasFile(String name) {
@@ -398,11 +355,15 @@ class LockSettingsStorage {
     public void writeCredentialHash(CredentialHash hash, int userId) {
         byte[] patternHash = null;
         byte[] passwordHash = null;
-
-        if (hash.type == LockPatternUtils.CREDENTIAL_TYPE_PASSWORD) {
+        if (hash.type == LockPatternUtils.CREDENTIAL_TYPE_PASSWORD_OR_PIN
+                || hash.type == LockPatternUtils.CREDENTIAL_TYPE_PASSWORD
+                || hash.type == LockPatternUtils.CREDENTIAL_TYPE_PIN) {
             passwordHash = hash.hash;
         } else if (hash.type == LockPatternUtils.CREDENTIAL_TYPE_PATTERN) {
             patternHash = hash.hash;
+        } else {
+            Preconditions.checkArgument(hash.type == LockPatternUtils.CREDENTIAL_TYPE_NONE,
+                    "Unknown credential type");
         }
         writeFile(getLockPasswordFilename(userId), passwordHash);
         writeFile(getLockPatternFilename(userId), patternHash);
@@ -561,8 +522,8 @@ class LockSettingsStorage {
         mCache.clear();
     }
 
-    @Nullable
-    public PersistentDataBlockManagerInternal getPersistentDataBlock() {
+    @Nullable @VisibleForTesting
+    PersistentDataBlockManagerInternal getPersistentDataBlockManager() {
         if (mPersistentDataBlockManagerInternal == null) {
             mPersistentDataBlockManagerInternal =
                     LocalServices.getService(PersistentDataBlockManagerInternal.class);
@@ -572,7 +533,7 @@ class LockSettingsStorage {
 
     public void writePersistentDataBlock(int persistentType, int userId, int qualityForUi,
             byte[] payload) {
-        PersistentDataBlockManagerInternal persistentDataBlock = getPersistentDataBlock();
+        PersistentDataBlockManagerInternal persistentDataBlock = getPersistentDataBlockManager();
         if (persistentDataBlock == null) {
             return;
         }
@@ -581,7 +542,7 @@ class LockSettingsStorage {
     }
 
     public PersistentData readPersistentDataBlock() {
-        PersistentDataBlockManagerInternal persistentDataBlock = getPersistentDataBlock();
+        PersistentDataBlockManagerInternal persistentDataBlock = getPersistentDataBlockManager();
         if (persistentDataBlock == null) {
             return PersistentData.NONE;
         }
@@ -737,7 +698,7 @@ class LockSettingsStorage {
             }
 
             if (upgradeVersion != DATABASE_VERSION) {
-                Log.w(TAG, "Failed to upgrade database!");
+                Slog.w(TAG, "Failed to upgrade database!");
             }
         }
     }

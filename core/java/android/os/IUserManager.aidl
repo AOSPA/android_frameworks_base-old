@@ -18,6 +18,7 @@
 package android.os;
 
 import android.os.Bundle;
+import android.os.IUserRestrictionsListener;
 import android.os.PersistableBundle;
 import android.os.UserManager;
 import android.content.pm.UserInfo;
@@ -41,6 +42,7 @@ interface IUserManager {
      */
 
     UserInfo createUser(in String name, int flags);
+    UserInfo preCreateUser(int flags);
     UserInfo createProfileForUser(in String name, int flags, int userHandle,
             in String[] disallowedPackages);
     UserInfo createRestrictedProfile(String name, int parentUserHandle);
@@ -53,7 +55,7 @@ interface IUserManager {
     void setUserIcon(int userHandle, in Bitmap icon);
     ParcelFileDescriptor getUserIcon(int userHandle);
     UserInfo getPrimaryUser();
-    List<UserInfo> getUsers(boolean excludeDying);
+    List<UserInfo> getUsers(boolean excludePartial, boolean excludeDying, boolean excludePreCreated);
     List<UserInfo> getProfiles(int userHandle, boolean enabledOnly);
     int[] getProfileIds(int userId, boolean enabledOnly);
     boolean canAddMoreManagedProfiles(int userHandle, boolean allowedToRemoveOne);
@@ -74,6 +76,8 @@ interface IUserManager {
     boolean hasBaseUserRestriction(String restrictionKey, int userHandle);
     boolean hasUserRestriction(in String restrictionKey, int userHandle);
     boolean hasUserRestrictionOnAnyUser(in String restrictionKey);
+    boolean isSettingRestrictedForUser(in String setting, int userId, in String value, int callingUid);
+    void addUserRestrictionsListener(IUserRestrictionsListener listener);
     void setUserRestriction(String key, boolean value, int userHandle);
     void setApplicationRestrictions(in String packageName, in Bundle restrictions,
             int userHandle);
@@ -92,6 +96,7 @@ interface IUserManager {
     boolean someUserHasSeedAccount(in String accountName, in String accountType);
     boolean isManagedProfile(int userId);
     boolean isDemoUser(int userId);
+    boolean isPreCreated(int userId);
     UserInfo createProfileForUserEvenWhenDisallowed(in String name, int flags, int userHandle,
             in String[] disallowedPackages);
     boolean isUserUnlockingOrUnlocked(int userId);

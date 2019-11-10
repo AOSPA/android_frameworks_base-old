@@ -16,6 +16,8 @@
 
 package com.android.server.rollback;
 
+import static android.os.UserHandle.USER_SYSTEM;
+
 import static com.android.server.rollback.Rollback.rollbackStateFromString;
 
 import android.annotation.NonNull;
@@ -26,6 +28,9 @@ import android.content.rollback.RollbackInfo;
 import android.util.IntArray;
 import android.util.Slog;
 import android.util.SparseLongArray;
+
+import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 
 import libcore.io.IoUtils;
 
@@ -193,18 +198,19 @@ class RollbackStore {
      * Creates a new Rollback instance for a non-staged rollback with
      * backupDir assigned.
      */
-    Rollback createNonStagedRollback(int rollbackId) {
+    Rollback createNonStagedRollback(int rollbackId, int userId, String installerPackageName) {
         File backupDir = new File(mRollbackDataDir, Integer.toString(rollbackId));
-        return new Rollback(rollbackId, backupDir, -1);
+        return new Rollback(rollbackId, backupDir, -1, userId, installerPackageName);
     }
 
     /**
      * Creates a new Rollback instance for a staged rollback with
      * backupDir assigned.
      */
-    Rollback createStagedRollback(int rollbackId, int stagedSessionId) {
+    Rollback createStagedRollback(int rollbackId, int stagedSessionId, int userId,
+            String installerPackageName) {
         File backupDir = new File(mRollbackDataDir, Integer.toString(rollbackId));
-        return new Rollback(rollbackId, backupDir, stagedSessionId);
+        return new Rollback(rollbackId, backupDir, stagedSessionId, userId, installerPackageName);
     }
 
     /**
@@ -250,7 +256,8 @@ class RollbackStore {
     /**
      * Saves the given rollback to persistent storage.
      */
-    void saveRollback(Rollback rollback) throws IOException {
+    @GuardedBy("rollback.mLock")
+    static void saveRollback(Rollback rollback) {
         try {
             JSONObject dataJson = new JSONObject();
             dataJson.put("info", rollbackInfoToJson(rollback.info));
@@ -259,19 +266,21 @@ class RollbackStore {
             dataJson.put("state", rollback.getStateAsString());
             dataJson.put("apkSessionId", rollback.getApkSessionId());
             dataJson.put("restoreUserDataInProgress", rollback.isRestoreUserDataInProgress());
+            dataJson.put("userId", rollback.getUserId());
+            dataJson.putOpt("installerPackageName", rollback.getInstallerPackageName());
 
             PrintWriter pw = new PrintWriter(new File(rollback.getBackupDir(), "rollback.json"));
             pw.println(dataJson.toString());
             pw.close();
-        } catch (JSONException e) {
-            throw new IOException(e);
+        } catch (JSONException | IOException e) {
+            Slog.e(TAG, "Unable to save rollback for: " + rollback.info.getRollbackId(), e);
         }
     }
 
     /**
      * Removes all persistent storage associated with the given rollback.
      */
-    void deleteRollback(Rollback rollback) {
+    static void deleteRollback(Rollback rollback) {
         removeFile(rollback.getBackupDir());
     }
 
@@ -285,17 +294,25 @@ class RollbackStore {
             JSONObject dataJson = new JSONObject(
                     IoUtils.readFileAsString(rollbackJsonFile.getAbsolutePath()));
 
-            return new Rollback(
-                    rollbackInfoFromJson(dataJson.getJSONObject("info")),
-                    backupDir,
-                    Instant.parse(dataJson.getString("timestamp")),
-                    dataJson.getInt("stagedSessionId"),
-                    rollbackStateFromString(dataJson.getString("state")),
-                    dataJson.getInt("apkSessionId"),
-                    dataJson.getBoolean("restoreUserDataInProgress"));
+            return rollbackFromJson(dataJson, backupDir);
         } catch (JSONException | DateTimeParseException | ParseException e) {
             throw new IOException(e);
         }
+    }
+
+    @VisibleForTesting
+    static Rollback rollbackFromJson(JSONObject dataJson, File backupDir)
+            throws JSONException, ParseException {
+        return new Rollback(
+                rollbackInfoFromJson(dataJson.getJSONObject("info")),
+                backupDir,
+                Instant.parse(dataJson.getString("timestamp")),
+                dataJson.getInt("stagedSessionId"),
+                rollbackStateFromString(dataJson.getString("state")),
+                dataJson.getInt("apkSessionId"),
+                dataJson.getBoolean("restoreUserDataInProgress"),
+                dataJson.optInt("userId", USER_SYSTEM),
+                dataJson.optString("installerPackageName", ""));
     }
 
     private static JSONObject toJson(VersionedPackage pkg) throws JSONException {

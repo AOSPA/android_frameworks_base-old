@@ -63,9 +63,16 @@ public interface DozeHost {
     void setDozeScreenBrightness(int value);
 
     /**
-     * Makes scrims black and changes animation durations.
+     * Fade out screen before switching off the display power mode.
+     * @param onDisplayOffCallback Executed when the display is black.
      */
-    default void prepareForGentleWakeUp() {}
+    void prepareForGentleSleep(Runnable onDisplayOffCallback);
+
+    /**
+     * Cancel pending {@code onDisplayOffCallback} callback.
+     * @see #prepareForGentleSleep(Runnable)
+     */
+    void cancelGentleSleep();
 
     void onIgnoreTouchWhilePulsing(boolean ignore);
 

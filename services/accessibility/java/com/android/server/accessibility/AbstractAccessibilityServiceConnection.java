@@ -91,7 +91,7 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
     protected final Context mContext;
     protected final SystemSupport mSystemSupport;
     protected final WindowManagerInternal mWindowManagerService;
-    private final GlobalActionPerformer mGlobalActionPerformer;
+    private final SystemActionPerformer mSystemActionPerformer;
     private final AccessibilityWindowManager mA11yWindowManager;
     private final DisplayManager mDisplayManager;
     private final PowerManager mPowerManager;
@@ -213,7 +213,7 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
             AccessibilityServiceInfo accessibilityServiceInfo, int id, Handler mainHandler,
             Object lock, AccessibilitySecurityPolicy securityPolicy, SystemSupport systemSupport,
             WindowManagerInternal windowManagerInternal,
-            GlobalActionPerformer globalActionPerfomer,
+            SystemActionPerformer systemActionPerfomer,
             AccessibilityWindowManager a11yWindowManager) {
         mContext = context;
         mWindowManagerService = windowManagerInternal;
@@ -222,7 +222,7 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
         mAccessibilityServiceInfo = accessibilityServiceInfo;
         mLock = lock;
         mSecurityPolicy = securityPolicy;
-        mGlobalActionPerformer = globalActionPerfomer;
+        mSystemActionPerformer = systemActionPerfomer;
         mSystemSupport = systemSupport;
         mInvocationHandler = new InvocationHandler(mainHandler.getLooper());
         mA11yWindowManager = a11yWindowManager;
@@ -350,9 +350,9 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
 
     protected abstract boolean hasRightsToCurrentUserLocked();
 
+    @Nullable
     @Override
-    public List<AccessibilityWindowInfo> getWindows() {
-        ensureWindowsAvailableTimed(Display.DEFAULT_DISPLAY);
+    public AccessibilityWindowInfo.WindowListSparseArray getWindows() {
         synchronized (mLock) {
             if (!hasRightsToCurrentUserLocked()) {
                 return null;
@@ -362,38 +362,39 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
             if (!permissionGranted) {
                 return null;
             }
-            List<AccessibilityWindowInfo> internalWindowList =
-                    mA11yWindowManager.getWindowListLocked(Display.DEFAULT_DISPLAY);
-            if (internalWindowList == null) {
-                return null;
-            }
             if (!mSecurityPolicy.checkAccessibilityAccess(this)) {
                 return null;
             }
-            List<AccessibilityWindowInfo> returnedWindowList = new ArrayList<>();
-            final int windowCount = internalWindowList.size();
-            for (int i = 0; i < windowCount; i++) {
-                AccessibilityWindowInfo window = internalWindowList.get(i);
-                AccessibilityWindowInfo windowClone =
-                        AccessibilityWindowInfo.obtain(window);
-                windowClone.setConnectionId(mId);
-                returnedWindowList.add(windowClone);
+            final AccessibilityWindowInfo.WindowListSparseArray allWindows =
+                    new AccessibilityWindowInfo.WindowListSparseArray();
+            final ArrayList<Integer> displayList = mA11yWindowManager.getDisplayListLocked();
+            final int displayListCounts = displayList.size();
+            if (displayListCounts > 0) {
+                for (int i = 0; i < displayListCounts; i++) {
+                    final int displayId = displayList.get(i);
+                    ensureWindowsAvailableTimedLocked(displayId);
+
+                    final List<AccessibilityWindowInfo> windowList = getWindowsByDisplayLocked(
+                            displayId);
+                    if (windowList != null) {
+                        allWindows.put(displayId, windowList);
+                    }
+                }
             }
-            return returnedWindowList;
+            return allWindows;
         }
     }
 
     @Override
     public AccessibilityWindowInfo getWindow(int windowId) {
-        int displayId = Display.INVALID_DISPLAY;
         synchronized (mLock) {
+            int displayId = Display.INVALID_DISPLAY;
             if (windowId != AccessibilityWindowInfo.UNDEFINED_WINDOW_ID) {
                 displayId = mA11yWindowManager.getDisplayIdByUserIdAndWindowIdLocked(
                         mSystemSupport.getCurrentUserIdLocked(), windowId);
             }
-        }
-        ensureWindowsAvailableTimed(displayId);
-        synchronized (mLock) {
+            ensureWindowsAvailableTimedLocked(displayId);
+
             if (!hasRightsToCurrentUserLocked()) {
                 return null;
             }
@@ -759,7 +760,7 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
                 return false;
             }
         }
-        return mGlobalActionPerformer.performGlobalAction(action);
+        return mSystemActionPerformer.performSystemAction(action);
     }
 
     @Override
@@ -1316,35 +1317,33 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
      *
      * @param displayId The logical display id.
      */
-    private void ensureWindowsAvailableTimed(int displayId) {
-        synchronized (mLock) {
-            if (mA11yWindowManager.getWindowListLocked(displayId) != null) {
-                return;
-            }
-            // If we have no registered callback, update the state we
-            // we may have to register one but it didn't happen yet.
-            if (!mA11yWindowManager.isTrackingWindowsLocked(displayId)) {
-                // Invokes client change to make sure tracking window enabled.
-                mSystemSupport.onClientChangeLocked(false);
-            }
-            // We have no windows but do not care about them, done.
-            if (!mA11yWindowManager.isTrackingWindowsLocked(displayId)) {
-                return;
-            }
+    private void ensureWindowsAvailableTimedLocked(int displayId) {
+        if (mA11yWindowManager.getWindowListLocked(displayId) != null) {
+            return;
+        }
+        // If we have no registered callback, update the state we
+        // we may have to register one but it didn't happen yet.
+        if (!mA11yWindowManager.isTrackingWindowsLocked(displayId)) {
+            // Invokes client change to make sure tracking window enabled.
+            mSystemSupport.onClientChangeLocked(false);
+        }
+        // We have no windows but do not care about them, done.
+        if (!mA11yWindowManager.isTrackingWindowsLocked(displayId)) {
+            return;
+        }
 
-            // Wait for the windows with a timeout.
-            final long startMillis = SystemClock.uptimeMillis();
-            while (mA11yWindowManager.getWindowListLocked(displayId) == null) {
-                final long elapsedMillis = SystemClock.uptimeMillis() - startMillis;
-                final long remainMillis = WAIT_WINDOWS_TIMEOUT_MILLIS - elapsedMillis;
-                if (remainMillis <= 0) {
-                    return;
-                }
-                try {
-                    mLock.wait(remainMillis);
-                } catch (InterruptedException ie) {
-                    /* ignore */
-                }
+        // Wait for the windows with a timeout.
+        final long startMillis = SystemClock.uptimeMillis();
+        while (mA11yWindowManager.getWindowListLocked(displayId) == null) {
+            final long elapsedMillis = SystemClock.uptimeMillis() - startMillis;
+            final long remainMillis = WAIT_WINDOWS_TIMEOUT_MILLIS - elapsedMillis;
+            if (remainMillis <= 0) {
+                return;
+            }
+            try {
+                mLock.wait(remainMillis);
+            } catch (InterruptedException ie) {
+                /* ignore */
             }
         }
     }
@@ -1440,6 +1439,24 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
         return new ActionReplacingCallback(originalCallback,
                 pipActionReplacingConnection.getRemote(), interactionId,
                 interrogatingPid, interrogatingTid);
+    }
+
+    private List<AccessibilityWindowInfo> getWindowsByDisplayLocked(int displayId) {
+        final List<AccessibilityWindowInfo> internalWindowList =
+                mA11yWindowManager.getWindowListLocked(displayId);
+        if (internalWindowList == null) {
+            return null;
+        }
+        final List<AccessibilityWindowInfo> returnedWindowList = new ArrayList<>();
+        final int windowCount = internalWindowList.size();
+        for (int i = 0; i < windowCount; i++) {
+            AccessibilityWindowInfo window = internalWindowList.get(i);
+            AccessibilityWindowInfo windowClone =
+                    AccessibilityWindowInfo.obtain(window);
+            windowClone.setConnectionId(mId);
+            returnedWindowList.add(windowClone);
+        }
+        return returnedWindowList;
     }
 
     public ComponentName getComponentName() {

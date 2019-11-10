@@ -341,7 +341,7 @@ private fun ClassPrinter.generateBuilderSetters(visibility: String) {
             }
         }
 
-        if (Type.contains("Map<")) {
+        if (FieldClass.endsWith("Map") && FieldInnerType != null) {
             generateBuilderMethod(
                     name = adderName,
                     defVisibility = visibility,
@@ -417,10 +417,14 @@ fun ClassPrinter.generateParcelable() {
     if (!isMethodGenerationSuppressed("writeToParcel", Parcel, "int")) {
         +"@Override"
         +GENERATED_MEMBER_HEADER
-        "public void writeToParcel($Parcel dest, int flags)" {
+        "public void writeToParcel(@$NonNull $Parcel dest, int flags)" {
             +"// You can override field parcelling by defining methods like:"
             +"// void parcelFieldName(Parcel dest, int flags) { ... }"
             +""
+
+            if (extendsParcelableClass) {
+                +"super.writeToParcel(dest, flags);\n"
+            }
 
             if (booleanFields.isNotEmpty() || nullableFields.isNotEmpty()) {
                 +"$flagStorageType flg = 0;"
@@ -463,6 +467,123 @@ fun ClassPrinter.generateParcelable() {
         +""
     }
 
+    if (!hasMethod(ClassName, Parcel)) {
+        val visibility = if (classAst.isFinal) "/* package-private */" else "protected"
+
+        +"/** @hide */"
+        +"@SuppressWarnings({\"unchecked\", \"RedundantCast\"})"
+        +GENERATED_MEMBER_HEADER
+        "$visibility $ClassName(@$NonNull $Parcel in) {" {
+            +"// You can override field unparcelling by defining methods like:"
+            +"// static FieldType unparcelFieldName(Parcel in) { ... }"
+            +""
+
+            if (extendsParcelableClass) {
+                +"super(in);\n"
+            }
+
+            if (booleanFields.isNotEmpty() || nullableFields.isNotEmpty()) {
+                +"$flagStorageType flg = in.read$FlagStorageType();"
+            }
+            booleanFields.forEachApply {
+                +"$Type $_name = (flg & $fieldBit) != 0;"
+            }
+            nonBooleanFields.forEachApply {
+
+                // Handle customized parceling
+                val customParcellingMethod = "unparcel$NameUpperCamel"
+                if (hasMethod(customParcellingMethod, Parcel)) {
+                    +"$Type $_name = $customParcellingMethod(in);"
+                } else if (customParcellingClass != null) {
+                    +"$Type $_name = $sParcelling.unparcel(in);"
+                } else if (hasAnnotation("@$DataClassEnum")) {
+                    val ordinal = "${_name}Ordinal"
+                    +"int $ordinal = in.readInt();"
+                    +"$Type $_name = $ordinal < 0 ? null : $FieldClass.values()[$ordinal];"
+                } else {
+                    val methodArgs = mutableListOf<String>()
+
+                    // Create container if any
+                    val containerInitExpr = when {
+                        FieldClass.endsWith("Map") -> "new $LinkedHashMap<>()"
+                        FieldClass == "List" || FieldClass == "ArrayList" ->
+                            "new ${classRef("java.util.ArrayList")}<>()"
+                        else -> ""
+                    }
+                    val passContainer = containerInitExpr.isNotEmpty()
+
+                    // nullcheck +
+                    // "FieldType fieldName = (FieldType)"
+                    if (passContainer) {
+                        methodArgs.add(_name)
+                        !"$Type $_name = "
+                        if (mayBeNull) {
+                            +"null;"
+                            !"if ((flg & $fieldBit) != 0) {"
+                            pushIndent()
+                            +""
+                            !"$_name = "
+                        }
+                        +"$containerInitExpr;"
+                    } else {
+                        !"$Type $_name = "
+                        if (mayBeNull) !"(flg & $fieldBit) == 0 ? null : "
+                        if (ParcelMethodsSuffix == "StrongInterface") {
+                            !"$FieldClass.Stub.asInterface("
+                        } else if (Type !in PRIMITIVE_TYPES + "String" + "Bundle" &&
+                                (!isArray || FieldInnerType !in PRIMITIVE_TYPES + "String") &&
+                                ParcelMethodsSuffix != "Parcelable") {
+                            !"($FieldClass) "
+                        }
+                    }
+
+                    // Determine method args
+                    when {
+                        ParcelMethodsSuffix == "Parcelable" ->
+                            methodArgs += "$FieldClass.class.getClassLoader()"
+                        ParcelMethodsSuffix == "SparseArray" ->
+                            methodArgs += "$FieldInnerClass.class.getClassLoader()"
+                        ParcelMethodsSuffix == "TypedObject" ->
+                            methodArgs += "$FieldClass.CREATOR"
+                        ParcelMethodsSuffix == "TypedArray" ->
+                            methodArgs += "$FieldInnerClass.CREATOR"
+                        ParcelMethodsSuffix == "Map" ->
+                            methodArgs += "${fieldTypeGenegicArgs[1].substringBefore("<")}.class.getClassLoader()"
+                        ParcelMethodsSuffix.startsWith("Parcelable")
+                                || (isList || isArray)
+                                && FieldInnerType !in PRIMITIVE_TYPES + "String" ->
+                            methodArgs += "$FieldInnerClass.class.getClassLoader()"
+                    }
+
+                    // ...in.readFieldType(args...);
+                    when {
+                        ParcelMethodsSuffix == "StrongInterface" -> !"in.readStrongBinder"
+                        isArray -> !"in.create$ParcelMethodsSuffix"
+                        else -> !"in.read$ParcelMethodsSuffix"
+                    }
+                    !"(${methodArgs.joinToString(", ")})"
+                    if (ParcelMethodsSuffix == "StrongInterface") !")"
+                    +";"
+
+                    // Cleanup if passContainer
+                    if (passContainer && mayBeNull) {
+                        popIndent()
+                        rmEmptyLine()
+                        +"\n}"
+                    }
+                }
+            }
+
+            +""
+            fields.forEachApply {
+                !"this."
+                generateSetFrom(_name)
+            }
+
+            generateOnConstructedCallback()
+        }
+    }
+
     if (classAst.fields.none { it.variables[0].nameAsString == "CREATOR" }) {
         val Creator = classRef("android.os.Parcelable.Creator")
 
@@ -477,104 +598,8 @@ fun ClassPrinter.generateParcelable() {
             }
 
             +"@Override"
-            +"@SuppressWarnings({\"unchecked\", \"RedundantCast\"})"
-            "public $ClassName createFromParcel($Parcel in)" {
-                +"// You can override field unparcelling by defining methods like:"
-                +"// static FieldType unparcelFieldName(Parcel in) { ... }"
-                +""
-                if (booleanFields.isNotEmpty() || nullableFields.isNotEmpty()) {
-                    +"$flagStorageType flg = in.read$FlagStorageType();"
-                }
-                booleanFields.forEachApply {
-                    +"$Type $_name = (flg & $fieldBit) != 0;"
-                }
-                nonBooleanFields.forEachApply {
-
-                    // Handle customized parceling
-                    val customParcellingMethod = "unparcel$NameUpperCamel"
-                    if (hasMethod(customParcellingMethod, Parcel)) {
-                        +"$Type $_name = $customParcellingMethod(in);"
-                    } else if (customParcellingClass != null) {
-                        +"$Type $_name = $sParcelling.unparcel(in);"
-                    } else if (hasAnnotation("@$DataClassEnum")) {
-                        val ordinal = "${_name}Ordinal"
-                        +"int $ordinal = in.readInt();"
-                        +"$Type $_name = $ordinal < 0 ? null : $FieldClass.values()[$ordinal];"
-                    } else {
-                        val methodArgs = mutableListOf<String>()
-
-                        // Create container if any
-                        val containerInitExpr = when {
-                            FieldClass.endsWith("Map") -> "new $LinkedHashMap<>()"
-                            FieldClass == "List" || FieldClass == "ArrayList" ->
-                                "new ${classRef("java.util.ArrayList")}<>()"
-                            else -> ""
-                        }
-                        val passContainer = containerInitExpr.isNotEmpty()
-
-                        // nullcheck +
-                        // "FieldType fieldName = (FieldType)"
-                        if (passContainer) {
-                            methodArgs.add(_name)
-                            !"$Type $_name = "
-                            if (mayBeNull) {
-                                +"null;"
-                                !"if ((flg & $fieldBit) != 0) {"
-                                pushIndent()
-                                +""
-                                !"$_name = "
-                            }
-                            +"$containerInitExpr;"
-                        } else {
-                            !"$Type $_name = "
-                            if (mayBeNull) !"(flg & $fieldBit) == 0 ? null : "
-                            if (ParcelMethodsSuffix == "StrongInterface") {
-                                !"$FieldClass.Stub.asInterface("
-                            } else if (Type !in PRIMITIVE_TYPES + "String" + "Bundle" &&
-                                    (!isArray || FieldInnerType !in PRIMITIVE_TYPES + "String") &&
-                                    ParcelMethodsSuffix != "Parcelable") {
-                                !"($Type) "
-                            }
-                        }
-
-                        // Determine method args
-                        when {
-                            ParcelMethodsSuffix == "Parcelable" ->
-                                methodArgs += "$FieldClass.class.getClassLoader()"
-                            ParcelMethodsSuffix == "TypedObject" ->
-                                methodArgs += "$FieldClass.CREATOR"
-                            ParcelMethodsSuffix == "TypedArray" ->
-                                methodArgs += "$FieldInnerClass.CREATOR"
-                            ParcelMethodsSuffix.startsWith("Parcelable")
-                                    || FieldClass == "Map"
-                                    || (isList || isArray)
-                                    && FieldInnerType !in PRIMITIVE_TYPES + "String" ->
-                                methodArgs += "$FieldInnerClass.class.getClassLoader()"
-                        }
-
-                        // ...in.readFieldType(args...);
-                        when {
-                            ParcelMethodsSuffix == "StrongInterface" -> !"in.readStrongBinder"
-                            isArray -> !"in.create$ParcelMethodsSuffix"
-                            else -> !"in.read$ParcelMethodsSuffix"
-                        }
-                        !"(${methodArgs.joinToString(", ")})"
-                        if (ParcelMethodsSuffix == "StrongInterface") !")"
-                        +";"
-
-                        // Cleanup if passContainer
-                        if (passContainer && mayBeNull) {
-                            popIndent()
-                            rmEmptyLine()
-                            +"\n}"
-                        }
-                    }
-                }
-                "return new $ClassType(" {
-                    fields.forEachTrimmingTrailingComma {
-                        +"$_name,"
-                    }
-                } + ";"
+            "public $ClassName createFromParcel(@$NonNull $Parcel in)" {
+                +"return new $ClassName(in);"
             }
             rmEmptyLine()
         } + ";"
@@ -586,7 +611,7 @@ fun ClassPrinter.generateEqualsHashcode() {
     if (!isMethodGenerationSuppressed("equals", "Object")) {
         +"@Override"
         +GENERATED_MEMBER_HEADER
-        "public boolean equals(Object o)" {
+        "public boolean equals(@$Nullable Object o)" {
             +"// You can override field equality logic by defining either of the methods like:"
             +"// boolean fieldNameEquals($ClassName other) { ... }"
             +"// boolean fieldNameEquals(FieldType otherValue) { ... }"
@@ -829,6 +854,7 @@ private fun ClassPrinter.generateFieldValidation(field: FieldInfo) = field.run {
         it.nameAsString == intOrStringDef?.AnnotationName
                 || it.nameAsString in knownNonValidationAnnotations
                 || it in perElementValidations
+                || it.args.any { (_, value) -> value is ArrayInitializerExpr }
     }.forEach { annotation ->
         appendValidateCall(annotation,
                 valueToValidate = if (annotation.nameAsString == Size) sizeExpr else name)
@@ -849,14 +875,7 @@ fun ClassPrinter.appendValidateCall(annotation: AnnotationExpr, valueToValidate:
     val validate = memberRef("com.android.internal.util.AnnotationValidations.validate")
     "$validate(" {
         !"${annotation.nameAsString}.class, null, $valueToValidate"
-        val params = when (annotation) {
-            is MarkerAnnotationExpr -> emptyMap()
-            is SingleMemberAnnotationExpr -> mapOf("value" to annotation.memberValue)
-            is NormalAnnotationExpr ->
-                annotation.pairs.map { it.name.asString() to it.value }.toMap()
-            else -> throw IllegalStateException()
-        }
-        params.forEach { name, value ->
+        annotation.args.forEach { name, value ->
             !",\n\"$name\", $value"
         }
     }
@@ -885,7 +904,7 @@ fun ClassPrinter.generateForEachField() {
         usedSpecializationsSet.toList().forEachLastAware { specType, isLast ->
             val SpecType = specType.capitalize()
             val ActionClass = classRef("com.android.internal.util.DataClass.Per${SpecType}FieldAction")
-            +"$ActionClass<$ClassType> action$SpecType${if_(!isLast, ",")}"
+            +"@$NonNull $ActionClass<$ClassType> action$SpecType${if_(!isLast, ",")}"
         }
     }; " {" {
         usedSpecializations.forEachIndexed { i, specType ->
@@ -900,7 +919,7 @@ fun ClassPrinter.generateForEachField() {
         +"/** @deprecated May cause boxing allocations - use with caution! */"
         +"@Deprecated"
         +GENERATED_MEMBER_HEADER
-        "void forEachField($PerObjectFieldAction<$ClassType> action)" {
+        "void forEachField(@$NonNull $PerObjectFieldAction<$ClassType> action)" {
             fields.forEachApply {
                 +"action.acceptObject(this, \"$nameLowerCamel\", $name);"
             }

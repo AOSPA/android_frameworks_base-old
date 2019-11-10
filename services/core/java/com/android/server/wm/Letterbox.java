@@ -20,7 +20,7 @@ import static android.view.SurfaceControl.HIDDEN;
 
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.os.Binder;
+import android.os.IBinder;
 import android.os.Process;
 import android.view.InputChannel;
 import android.view.InputEventReceiver;
@@ -170,20 +170,21 @@ public class Letterbox {
         final InputWindowHandle mWindowHandle;
         final InputEventReceiver mInputEventReceiver;
         final WindowManagerService mWmService;
-        final Binder mToken = new Binder();
+        final IBinder mToken;
 
         InputInterceptor(String namePrefix, WindowState win) {
             mWmService = win.mWmService;
-            final String name = namePrefix + (win.mAppToken != null ? win.mAppToken : win);
+            final String name = namePrefix + (win.mActivityRecord != null ? win.mActivityRecord : win);
             final InputChannel[] channels = InputChannel.openInputChannelPair(name);
             mServerChannel = channels[0];
             mClientChannel = channels[1];
             mInputEventReceiver = new SimpleInputReceiver(mClientChannel);
 
-            mWmService.mInputManager.registerInputChannel(mServerChannel, mToken);
+            mWmService.mInputManager.registerInputChannel(mServerChannel);
+            mToken = mServerChannel.getToken();
 
             mWindowHandle = new InputWindowHandle(null /* inputApplicationHandle */,
-                    null /* clientWindow */, win.getDisplayId());
+                    win.getDisplayId());
             mWindowHandle.name = name;
             mWindowHandle.token = mToken;
             mWindowHandle.layoutParamsFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
@@ -247,12 +248,12 @@ public class Letterbox {
             mLayoutFrameRelative.offset(-surfaceOrigin.x, -surfaceOrigin.y);
         }
 
-        private void createSurface() {
+        private void createSurface(SurfaceControl.Transaction t) {
             mSurface = mSurfaceControlFactory.get().setName("Letterbox - " + mType)
                     .setFlags(HIDDEN).setColorLayer().build();
-            mSurface.setLayer(-1);
-            mSurface.setColor(new float[]{0, 0, 0});
-            mSurface.setColorSpaceAgnostic(true);
+            t.setLayer(mSurface, -1)
+                    .setColor(mSurface, new float[]{0, 0, 0})
+                    .setColorSpaceAgnostic(mSurface, true);
         }
 
         void attachInput(WindowState win) {
@@ -300,7 +301,7 @@ public class Letterbox {
             mSurfaceFrameRelative.set(mLayoutFrameRelative);
             if (!mSurfaceFrameRelative.isEmpty()) {
                 if (mSurface == null) {
-                    createSurface();
+                    createSurface(t);
                 }
                 t.setPosition(mSurface, mSurfaceFrameRelative.left, mSurfaceFrameRelative.top);
                 t.setWindowCrop(mSurface, mSurfaceFrameRelative.width(),
