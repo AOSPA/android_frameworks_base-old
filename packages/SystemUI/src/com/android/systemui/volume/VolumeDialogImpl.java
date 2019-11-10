@@ -57,6 +57,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.os.SystemClock;
+import android.os.UserHandle;
 import android.os.VibrationEffect;
 import android.provider.Settings;
 import android.provider.Settings.Global;
@@ -67,6 +68,7 @@ import android.util.Slog;
 import android.util.SparseBooleanArray;
 import android.view.ContextThemeWrapper;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.AccessibilityDelegate;
@@ -131,6 +133,7 @@ public class VolumeDialogImpl implements VolumeDialog,
 
     private Window mWindow;
     private CustomDialog mDialog;
+    private AudioManager mAudioManager;
     private ViewGroup mDialogView;
     private ViewGroup mDialogRowsView;
     private ViewGroup mRinger;
@@ -182,6 +185,7 @@ public class VolumeDialogImpl implements VolumeDialog,
                 Prefs.getBoolean(context, Prefs.Key.HAS_SEEN_ODI_CAPTIONS_TOOLTIP, false);
         mLeftVolumeRocker = mContext.getResources().getBoolean(R.bool.config_audioPanelOnLeftSide);
         mHasAlertSlider = mContext.getResources().getBoolean(com.android.internal.R.bool.config_hasAlertSlider);
+        mAudioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
     }
 
     @Override
@@ -1423,6 +1427,17 @@ public class VolumeDialogImpl implements VolumeDialog,
                     mController.setActiveStream(mRow.stream);
                     mController.setStreamVolume(mRow.stream, userLevel);
                     mRow.requestedLevel = userLevel;
+                    if (mRow.requestedLevel == 0) {
+                        int mediaAutoPause = Settings.System.getIntForUser(mContext.getContentResolver(),
+                                Settings.System.MEDIA_AUTO_PAUSE, 1, UserHandle.USER_CURRENT);
+                        if (mRow == findRow(STREAM_MUSIC) && mAudioManager.isMusicActive()
+                                && mediaAutoPause == 1) {
+                            mAudioManager.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,
+                                    KeyEvent.KEYCODE_MEDIA_PAUSE));
+                            mAudioManager.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,
+                                    KeyEvent.KEYCODE_MEDIA_PAUSE));
+                        }
+                    }
                     Events.writeEvent(mContext, Events.EVENT_TOUCH_LEVEL_CHANGED, mRow.stream,
                             userLevel);
                 }
