@@ -4659,6 +4659,18 @@ public final class Settings {
         public static final Validator INCALL_FEEDBACK_VIBRATE_VALIDATOR =
                 BOOLEAN_VALIDATOR;
 
+        /** Auto Pause - Automatically pause media when the volume is 0
+         *
+         * @hide
+         */
+        public static final String AUDIO_AUTO_PAUSE = "audio_auto_pause";
+
+        /** Auto Resume - Automatically resume media when the volume is restored
+         *
+         * @hide
+         */
+        public static final String AUDIO_AUTO_RESUME = "audio_auto_resume";
+
         /**
          * Whether allowing pocket service to register sensors and dispatch informations.
          *   0 = disabled

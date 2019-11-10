@@ -52,6 +52,7 @@ import android.service.notification.ZenModeConfig;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityManager;
 
 import com.android.internal.annotations.GuardedBy;
@@ -127,6 +128,9 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     private boolean mShowA11yStream;
     private boolean mShowVolumeDialog;
     private boolean mShowSafetyWarning;
+    private boolean mIsPaused;
+    private Handler mAudioStateHandler;
+
     private long mLastToggledRingerOn;
     private final NotificationManager mNotificationManager;
 
@@ -536,8 +540,31 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
 
     private boolean updateStreamLevelW(int stream, int level) {
         final StreamState ss = streamStateW(stream);
+        int audioAutoPause = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.AUDIO_AUTO_PAUSE, 0, UserHandle.USER_CURRENT);
+        int audioAutoResume = Settings.System.getIntForUser(mContext.getContentResolver(),
+                Settings.System.AUDIO_AUTO_RESUME, 0, UserHandle.USER_CURRENT);
         if (ss.level == level) return false;
         ss.level = level;
+        if (stream == AudioSystem.STREAM_MUSIC && level == 0
+                  && mAudio.isMusicActive() && audioAutoPause == 1) {
+            mAudio.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, 127));
+            mAudio.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, 127));
+            if (audioAutoResume == 1) {
+                mIsPaused = true;
+                mAudioStateHandler = new Handler();
+                    mAudioStateHandler.postDelayed(() -> {
+                        mIsPaused = false;
+                    }, 180000);
+            }
+        }
+        if (stream == AudioSystem.STREAM_MUSIC && level > 0
+                  && mIsPaused && audioAutoResume == 1) {
+            mAudioStateHandler.removeCallbacksAndMessages(null);
+            mIsPaused = false;
+            mAudio.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, 126));
+            mAudio.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, 126));
+        }
         if (isLogWorthy(stream)) {
             Events.writeEvent(mContext, Events.EVENT_LEVEL_CHANGED, stream, level);
         }
