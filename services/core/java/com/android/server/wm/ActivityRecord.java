@@ -4750,6 +4750,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 Slog.v(TAG_STATES, "Moving to STOPPING: " + this + " (stop requested)");
             }
             setState(STOPPING, "stopIfPossible");
+            getActivityStack().onARStopTriggered(this);
             if (DEBUG_VISIBILITY) {
                 Slog.v(TAG_VISIBILITY, "Stopping visibleRequested="
                         + mVisibleRequested + " for " + this);

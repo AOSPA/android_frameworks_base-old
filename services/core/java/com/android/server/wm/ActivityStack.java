@@ -5441,6 +5441,13 @@ public class ActivityStack extends WindowContainer<WindowContainer> implements B
         return task != null ? task.createRemoteAnimationTarget(record) : null;
     }
 
+    public void onARStopTriggered(ActivityRecord r) {
+        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
+                            mActivityPluginDelegate.activitySuspendNotification
+                                (r.info.applicationInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, false);
+                        }
+    }
+
     @Override
     public String toString() {
         return "ActivityStack{" + Integer.toHexString(System.identityHashCode(this))
