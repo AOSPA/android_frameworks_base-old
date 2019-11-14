@@ -871,7 +871,7 @@ public class UserManagerService extends IUserManager.Stub {
                     "target should only be specified when we are disabling quiet mode.");
         }
 
-        ensureCanModifyQuietMode(callingPackage, Binder.getCallingUid(), target != null);
+        ensureCanModifyQuietMode(callingPackage, Binder.getCallingUid(), userId, target != null);
         final long identity = Binder.clearCallingIdentity();
         try {
             boolean result = false;
@@ -903,19 +903,25 @@ public class UserManagerService extends IUserManager.Stub {
      *     <li>Has system UID or root UID</li>
      *     <li>Has {@link Manifest.permission#MODIFY_QUIET_MODE}</li>
      *     <li>Has {@link Manifest.permission#MANAGE_USERS}</li>
+     *     <li>Is the foreground default launcher app</li>
      * </ul>
      * <p>
-     * If caller wants to start an intent after disabling the quiet mode, it must has
+     * If caller wants to start an intent after disabling the quiet mode, or if it is targeting a
+     * user in a different profile group from the caller, it must have
      * {@link Manifest.permission#MANAGE_USERS}.
      */
     private void ensureCanModifyQuietMode(String callingPackage, int callingUid,
-            boolean startIntent) {
+            @UserIdInt int targetUserId, boolean startIntent) {
         if (hasManageUsersPermission()) {
             return;
         }
         if (startIntent) {
             throw new SecurityException("MANAGE_USERS permission is required to start intent "
                     + "after disabling quiet mode.");
+        }
+        if (!isSameProfileGroupNoChecks(UserHandle.getUserId(callingUid), targetUserId)) {
+            throw new SecurityException("MANAGE_USERS permission is required to modify quiet mode "
+                    + "for a different profile group.");
         }
         final boolean hasModifyQuietModePermission = hasPermissionGranted(
                 Manifest.permission.MODIFY_QUIET_MODE, callingUid);
@@ -2986,8 +2992,8 @@ public class UserManagerService extends IUserManager.Stub {
                 // Must start user (which will be stopped right away, through
                 // UserController.finishUserUnlockedCompleted) so services can properly
                 // intialize it.
-                // TODO(b/140750212): in the long-term, we should add a onCreateUser() callback
-                // on SystemService instead.
+                // TODO(b/143092698): in the long-term, it might be better to add a onCreateUser()
+                // callback on SystemService instead.
                 Slog.i(LOG_TAG, "starting pre-created user " + userInfo.toFullString());
                 final IActivityManager am = ActivityManager.getService();
                 try {
@@ -3003,7 +3009,7 @@ public class UserManagerService extends IUserManager.Stub {
             Binder.restoreCallingIdentity(ident);
         }
 
-        // TODO(b/140750212): it's possible to reach "max users overflow" when the user is created
+        // TODO(b/143092698): it's possible to reach "max users overflow" when the user is created
         // "from scratch" (i.e., not from a pre-created user) and reaches the maximum number of
         // users without counting the pre-created one. Then when the pre-created is converted, the
         // "effective" number of max users is exceeds. Example:
@@ -3048,7 +3054,7 @@ public class UserManagerService extends IUserManager.Stub {
      * <p>Should be used only during user creation, so the pre-created user can be used (instead of
      * creating and initializing a new user from scratch).
      */
-    // TODO(b/140750212): add unit test
+    // TODO(b/143092698): add unit test
     @GuardedBy("mUsersLock")
     private @Nullable UserData getPreCreatedUserLU(@UserInfoFlag int flags) {
         if (DBG) {
@@ -3994,9 +4000,14 @@ public class UserManagerService extends IUserManager.Stub {
         long now = System.currentTimeMillis();
         final long nowRealtime = SystemClock.elapsedRealtime();
 
-        final int currentUser = LocalServices.getService(ActivityManagerInternal.class)
-                .getCurrentUserId();
-        pw.print("Current user: "); pw.println(currentUser);
+        final ActivityManagerInternal amInternal = LocalServices
+                .getService(ActivityManagerInternal.class);
+        pw.print("Current user: ");
+        if (amInternal != null) {
+            pw.println(amInternal.getCurrentUserId());
+        } else {
+            pw.println("N/A");
+        }
 
         StringBuilder sb = new StringBuilder();
         synchronized (mPackagesLock) {

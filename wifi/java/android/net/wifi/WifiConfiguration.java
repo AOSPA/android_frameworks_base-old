@@ -34,6 +34,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.BackupUtils;
 import android.util.Log;
@@ -781,10 +782,26 @@ public class WifiConfiguration implements Parcelable {
     public String lastUpdateName;
 
     /**
+     * The carrier ID identifies the operator who provides this network configuration.
+     *    see {@link TelephonyManager#getSimCarrierId()}
+     * @hide
+     */
+    @SystemApi
+    public int carrierId = TelephonyManager.UNKNOWN_CARRIER_ID;
+
+    /**
      * @hide
      * Status of user approval for connection
      */
     public int userApproved = USER_UNSPECIFIED;
+
+    /**
+     * @hide
+     * Auto-join is allowed by user for this network.
+     * Default true.
+     */
+    @SystemApi
+    public boolean allowAutojoin = true;
 
     /** The Below RSSI thresholds are used to configure AutoJoin
      *  - GOOD/LOW/BAD thresholds are used so as to calculate link score
@@ -1095,10 +1112,10 @@ public class WifiConfiguration implements Parcelable {
 
     /**
      * @hide
-     * The wall clock time of when |mRandomizedMacAddress| last changed.
-     * Used to determine when we should re-randomize in aggressive mode.
+     * The wall clock time of when |mRandomizedMacAddress| should be re-randomized in aggressive
+     * randomization mode.
      */
-    public long randomizedMacLastModifiedTimeMs = 0;
+    public long randomizedMacExpirationTimeMs = 0;
 
     /**
      * @hide
@@ -1928,6 +1945,7 @@ public class WifiConfiguration implements Parcelable {
                 .append(" PRIO: ").append(this.priority)
                 .append(" HIDDEN: ").append(this.hiddenSSID)
                 .append(" PMF: ").append(this.requirePMF)
+                .append("CarrierId: ").append(this.carrierId)
                 .append(" OWE Transition mode Iface: ").append(this.oweTransIfaceName)
                 .append('\n');
 
@@ -1989,8 +2007,9 @@ public class WifiConfiguration implements Parcelable {
         }
         sbuf.append(" macRandomizationSetting: ").append(macRandomizationSetting).append("\n");
         sbuf.append(" mRandomizedMacAddress: ").append(mRandomizedMacAddress).append("\n");
-        sbuf.append(" randomizedMacLastModifiedTimeMs: ").append(randomizedMacLastModifiedTimeMs)
-                .append("\n");
+        sbuf.append(" randomizedMacExpirationTimeMs: ")
+                .append(randomizedMacExpirationTimeMs == 0 ? "<none>"
+                        : TimeUtils.logTimeOfDay(randomizedMacExpirationTimeMs)).append("\n");
         sbuf.append(" KeyMgmt:");
         for (int k = 0; k < this.allowedKeyManagement.size(); k++) {
             if (this.allowedKeyManagement.get(k)) {
@@ -2120,6 +2139,7 @@ public class WifiConfiguration implements Parcelable {
         if (updateIdentifier != null) sbuf.append(" updateIdentifier=" + updateIdentifier);
         sbuf.append(" lcuid=" + lastConnectUid);
         sbuf.append(" userApproved=" + userApprovedAsString(userApproved));
+        sbuf.append(" allowAutojoin=" + allowAutojoin);
         sbuf.append(" noInternetAccessExpected=" + noInternetAccessExpected);
         sbuf.append(" ");
 
@@ -2527,6 +2547,7 @@ public class WifiConfiguration implements Parcelable {
             numScorerOverrideAndSwitchedNetwork = source.numScorerOverrideAndSwitchedNetwork;
             numAssociation = source.numAssociation;
             userApproved = source.userApproved;
+            allowAutojoin = source.allowAutojoin;
             numNoInternetAccessReports = source.numNoInternetAccessReports;
             noInternetAccessExpected = source.noInternetAccessExpected;
             creationTime = source.creationTime;
@@ -2540,9 +2561,10 @@ public class WifiConfiguration implements Parcelable {
             dppCsign = source.dppCsign;
 
             macRandomizationSetting = source.macRandomizationSetting;
-            randomizedMacLastModifiedTimeMs = source.randomizedMacLastModifiedTimeMs;
+            randomizedMacExpirationTimeMs = source.randomizedMacExpirationTimeMs;
             requirePMF = source.requirePMF;
             updateIdentifier = source.updateIdentifier;
+            carrierId = source.carrierId;
             oweTransIfaceName = source.oweTransIfaceName;
         }
     }
@@ -2609,6 +2631,7 @@ public class WifiConfiguration implements Parcelable {
         dest.writeInt(numScorerOverrideAndSwitchedNetwork);
         dest.writeInt(numAssociation);
         dest.writeInt(userApproved);
+        dest.writeBoolean(allowAutojoin);
         dest.writeInt(numNoInternetAccessReports);
         dest.writeInt(noInternetAccessExpected ? 1 : 0);
         dest.writeInt(shared ? 1 : 0);
@@ -2621,7 +2644,8 @@ public class WifiConfiguration implements Parcelable {
         dest.writeString(dppCsign);
         dest.writeInt(macRandomizationSetting);
         dest.writeInt(osu ? 1 : 0);
-        dest.writeLong(randomizedMacLastModifiedTimeMs);
+        dest.writeLong(randomizedMacExpirationTimeMs);
+        dest.writeInt(carrierId);
         dest.writeString(oweTransIfaceName);
     }
 
@@ -2690,6 +2714,7 @@ public class WifiConfiguration implements Parcelable {
                 config.numScorerOverrideAndSwitchedNetwork = in.readInt();
                 config.numAssociation = in.readInt();
                 config.userApproved = in.readInt();
+                config.allowAutojoin = in.readBoolean();
                 config.numNoInternetAccessReports = in.readInt();
                 config.noInternetAccessExpected = in.readInt() != 0;
                 config.shared = in.readInt() != 0;
@@ -2702,7 +2727,8 @@ public class WifiConfiguration implements Parcelable {
                 config.dppCsign = in.readString();
                 config.macRandomizationSetting = in.readInt();
                 config.osu = in.readInt() != 0;
-                config.randomizedMacLastModifiedTimeMs = in.readLong();
+                config.randomizedMacExpirationTimeMs = in.readLong();
+                config.carrierId = in.readInt();
                 config.oweTransIfaceName = in.readString();
                 return config;
             }

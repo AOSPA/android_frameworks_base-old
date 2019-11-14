@@ -24,7 +24,7 @@ import android.widget.LinearLayout;
 
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.statusbar.car.CarStatusBar;
+import com.android.systemui.navigationbar.car.CarNavigationBarController.NotificationsShadeController;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 
 /**
@@ -36,7 +36,7 @@ import com.android.systemui.statusbar.phone.StatusBarIconController;
 public class CarNavigationBarView extends LinearLayout {
     private View mNavButtons;
     private CarNavigationButton mNotificationsButton;
-    private CarStatusBar mCarStatusBar;
+    private NotificationsShadeController mNotificationsShadeController;
     private Context mContext;
     private View mLockScreenButtons;
     // used to wire in open/close gestures for notifications
@@ -82,17 +82,28 @@ public class CarNavigationBarView extends LinearLayout {
         return super.onInterceptTouchEvent(ev);
     }
 
-    public void setStatusBar(CarStatusBar carStatusBar) {
-        mCarStatusBar = carStatusBar;
+    /** Sets the notifications panel controller. */
+    public void setNotificationsPanelController(NotificationsShadeController controller) {
+        mNotificationsShadeController = controller;
+    }
+
+    /** Gets the notifications panel controller. */
+    public NotificationsShadeController getNotificationsPanelController() {
+        return mNotificationsShadeController;
     }
 
     /**
-     * Set a touch listener that will be called from onInterceptTouchEvent and onTouchEvent
+     * Sets a touch listener that will be called from onInterceptTouchEvent and onTouchEvent
      *
      * @param statusBarWindowTouchListener The listener to call from touch and intercept touch
      */
     public void setStatusBarWindowTouchListener(OnTouchListener statusBarWindowTouchListener) {
         mStatusBarWindowTouchListener = statusBarWindowTouchListener;
+    }
+
+    /** Gets the touch listener that will be called from onInterceptTouchEvent and onTouchEvent. */
+    public OnTouchListener getStatusBarWindowTouchListener() {
+        return mStatusBarWindowTouchListener;
     }
 
     @Override
@@ -104,7 +115,9 @@ public class CarNavigationBarView extends LinearLayout {
     }
 
     protected void onNotificationsClick(View v) {
-        mCarStatusBar.togglePanel();
+        if (mNotificationsShadeController != null) {
+            mNotificationsShadeController.togglePanel();
+        }
     }
 
     /**
