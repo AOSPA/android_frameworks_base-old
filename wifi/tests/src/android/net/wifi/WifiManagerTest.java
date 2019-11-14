@@ -99,8 +99,7 @@ public class WifiManagerTest {
     private static final String[] TEST_MAC_ADDRESSES = {"da:a1:19:0:0:0"};
 
     @Mock Context mContext;
-    @Mock
-    android.net.wifi.IWifiManager mWifiService;
+    @Mock android.net.wifi.IWifiManager mWifiService;
     @Mock ApplicationInfo mApplicationInfo;
     @Mock WifiConfiguration mApConfig;
     @Mock SoftApCallback mSoftApCallback;
@@ -115,7 +114,8 @@ public class WifiManagerTest {
     private TestLooper mLooper;
     private WifiManager mWifiManager;
 
-    @Before public void setUp() throws Exception {
+    @Before
+    public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
         mLooper = new TestLooper();
         mHandler = spy(new Handler(mLooper.getLooper()));
@@ -173,7 +173,7 @@ public class WifiManagerTest {
     public void testCreationAndCloseOfLocalOnlyHotspotReservation() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString())).thenReturn(REQUEST_REGISTERED);
+                anyString(), eq(null))).thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
 
         callback.onStarted(mWifiManager.new LocalOnlyHotspotReservation(mApConfig));
@@ -191,7 +191,7 @@ public class WifiManagerTest {
             throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString())).thenReturn(REQUEST_REGISTERED);
+                anyString(), eq(null))).thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
 
         callback.onStarted(mWifiManager.new LocalOnlyHotspotReservation(mApConfig));
@@ -210,7 +210,7 @@ public class WifiManagerTest {
     @Test
     public void testCreationOfLocalOnlyHotspotSubscription() throws Exception {
         try (WifiManager.LocalOnlyHotspotSubscription sub =
-                mWifiManager.new LocalOnlyHotspotSubscription()) {
+                     mWifiManager.new LocalOnlyHotspotSubscription()) {
             sub.close();
         }
     }
@@ -351,7 +351,7 @@ public class WifiManagerTest {
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
 
         verify(mWifiService)
-                .startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString());
+                .startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(), eq(null));
     }
 
     /**
@@ -362,7 +362,7 @@ public class WifiManagerTest {
     public void testStartLocalOnlyHotspotThrowsSecurityException() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         doThrow(new SecurityException()).when(mWifiService)
-                .startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString());
+                .startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(), eq(null));
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
     }
 
@@ -374,7 +374,7 @@ public class WifiManagerTest {
     public void testStartLocalOnlyHotspotThrowsIllegalStateException() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         doThrow(new IllegalStateException()).when(mWifiService)
-                .startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString());
+                .startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(), eq(null));
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
     }
 
@@ -385,7 +385,7 @@ public class WifiManagerTest {
     public void testCorrectLooperIsUsedForHandler() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString())).thenReturn(ERROR_INCOMPATIBLE_MODE);
+                anyString(), eq(null))).thenReturn(ERROR_INCOMPATIBLE_MODE);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         mLooper.dispatchAll();
         assertEquals(ERROR_INCOMPATIBLE_MODE, callback.mFailureReason);
@@ -404,7 +404,7 @@ public class WifiManagerTest {
         when(mContext.getMainExecutor()).thenReturn(altLooper.getNewExecutor());
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString())).thenReturn(ERROR_INCOMPATIBLE_MODE);
+                anyString(), eq(null))).thenReturn(ERROR_INCOMPATIBLE_MODE);
         mWifiManager.startLocalOnlyHotspot(callback, null);
         altLooper.dispatchAll();
         assertEquals(ERROR_INCOMPATIBLE_MODE, callback.mFailureReason);
@@ -423,7 +423,7 @@ public class WifiManagerTest {
         Handler callbackHandler = new Handler(callbackLooper.getLooper());
         ArgumentCaptor<ILocalOnlyHotspotCallback> internalCallback =
                 ArgumentCaptor.forClass(ILocalOnlyHotspotCallback.class);
-        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString()))
+        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString(), eq(null)))
                 .thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, callbackHandler);
         callbackLooper.dispatchAll();
@@ -449,7 +449,7 @@ public class WifiManagerTest {
         Handler callbackHandler = new Handler(callbackLooper.getLooper());
         ArgumentCaptor<ILocalOnlyHotspotCallback> internalCallback =
                 ArgumentCaptor.forClass(ILocalOnlyHotspotCallback.class);
-        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString()))
+        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString(), eq(null)))
                 .thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, callbackHandler);
         callbackLooper.dispatchAll();
@@ -474,7 +474,7 @@ public class WifiManagerTest {
         Handler callbackHandler = new Handler(callbackLooper.getLooper());
         ArgumentCaptor<ILocalOnlyHotspotCallback> internalCallback =
                 ArgumentCaptor.forClass(ILocalOnlyHotspotCallback.class);
-        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString()))
+        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString(), eq(null)))
                 .thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, callbackHandler);
         callbackLooper.dispatchAll();
@@ -497,7 +497,7 @@ public class WifiManagerTest {
         Handler callbackHandler = new Handler(callbackLooper.getLooper());
         ArgumentCaptor<ILocalOnlyHotspotCallback> internalCallback =
                 ArgumentCaptor.forClass(ILocalOnlyHotspotCallback.class);
-        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString()))
+        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString(), eq(null)))
                 .thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, callbackHandler);
         callbackLooper.dispatchAll();
@@ -517,7 +517,7 @@ public class WifiManagerTest {
     public void testLocalOnlyHotspotCallbackFullOnIncompatibleMode() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString())).thenReturn(ERROR_INCOMPATIBLE_MODE);
+                anyString(), eq(null))).thenReturn(ERROR_INCOMPATIBLE_MODE);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         mLooper.dispatchAll();
         assertEquals(ERROR_INCOMPATIBLE_MODE, callback.mFailureReason);
@@ -533,7 +533,7 @@ public class WifiManagerTest {
     public void testLocalOnlyHotspotCallbackFullOnTetheringDisallowed() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString())).thenReturn(ERROR_TETHERING_DISALLOWED);
+                anyString(), eq(null))).thenReturn(ERROR_TETHERING_DISALLOWED);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         mLooper.dispatchAll();
         assertEquals(ERROR_TETHERING_DISALLOWED, callback.mFailureReason);
@@ -550,7 +550,7 @@ public class WifiManagerTest {
     public void testLocalOnlyHotspotCallbackFullOnSecurityException() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         doThrow(new SecurityException()).when(mWifiService)
-                .startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString());
+                .startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(), eq(null));
         try {
             mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         } catch (SecurityException e) {
@@ -571,7 +571,7 @@ public class WifiManagerTest {
     public void testLocalOnlyHotspotCallbackFullOnNoChannelError() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString())).thenReturn(REQUEST_REGISTERED);
+                anyString(), eq(null))).thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         mLooper.dispatchAll();
         //assertEquals(ERROR_NO_CHANNEL, callback.mFailureReason);
@@ -587,7 +587,7 @@ public class WifiManagerTest {
     public void testCancelLocalOnlyHotspotRequestCallsStopOnWifiService() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString())).thenReturn(REQUEST_REGISTERED);
+                anyString(), eq(null))).thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         mWifiManager.cancelLocalOnlyHotspotRequest();
         verify(mWifiService).stopLocalOnlyHotspot();
@@ -609,7 +609,7 @@ public class WifiManagerTest {
     public void testCallbackAfterLocalOnlyHotspotWasCancelled() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString())).thenReturn(REQUEST_REGISTERED);
+                anyString(), eq(null))).thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         mWifiManager.cancelLocalOnlyHotspotRequest();
         verify(mWifiService).stopLocalOnlyHotspot();
@@ -628,7 +628,7 @@ public class WifiManagerTest {
     public void testCancelAfterLocalOnlyHotspotCallbackTriggered() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString())).thenReturn(ERROR_INCOMPATIBLE_MODE);
+                anyString(), eq(null))).thenReturn(ERROR_INCOMPATIBLE_MODE);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         mLooper.dispatchAll();
         assertEquals(ERROR_INCOMPATIBLE_MODE, callback.mFailureReason);
@@ -637,6 +637,17 @@ public class WifiManagerTest {
         assertEquals(null, callback.mRes);
         mWifiManager.cancelLocalOnlyHotspotRequest();
         verify(mWifiService, never()).stopLocalOnlyHotspot();
+    }
+
+    @Test
+    public void testStartLocalOnlyHotspotForwardsCustomConfig() throws Exception {
+        SoftApConfiguration customConfig = new SoftApConfiguration.Builder()
+                .setSsid("customSsid")
+                .build();
+        TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
+        mWifiManager.startLocalOnlyHotspot(customConfig, mExecutor, callback);
+        verify(mWifiService).startLocalOnlyHotspot(
+                any(ILocalOnlyHotspotCallback.class), anyString(), eq(customConfig));
     }
 
     /**
@@ -752,17 +763,17 @@ public class WifiManagerTest {
      * Verify client-provided callback is being called through callback proxy
      */
     @Test
-    public void softApCallbackProxyCallsOnNumClientsChanged() throws Exception {
+    public void softApCallbackProxyCallsOnConnectedClientsChanged() throws Exception {
         ArgumentCaptor<ISoftApCallback.Stub> callbackCaptor =
                 ArgumentCaptor.forClass(ISoftApCallback.Stub.class);
         mWifiManager.registerSoftApCallback(mSoftApCallback, mHandler);
         verify(mWifiService).registerSoftApCallback(any(IBinder.class), callbackCaptor.capture(),
                 anyInt());
 
-        final int testNumClients = 3;
-        callbackCaptor.getValue().onNumClientsChanged(testNumClients);
+        final List<WifiClient> testClients = new ArrayList();
+        callbackCaptor.getValue().onConnectedClientsChanged(testClients);
         mLooper.dispatchAll();
-        verify(mSoftApCallback).onNumClientsChanged(testNumClients);
+        verify(mSoftApCallback).onConnectedClientsChanged(testClients);
     }
 
     /*
@@ -776,14 +787,14 @@ public class WifiManagerTest {
         verify(mWifiService).registerSoftApCallback(any(IBinder.class), callbackCaptor.capture(),
                 anyInt());
 
-        final int testNumClients = 5;
+        final List<WifiClient> testClients = new ArrayList();
         callbackCaptor.getValue().onStateChanged(WIFI_AP_STATE_ENABLING, 0);
-        callbackCaptor.getValue().onNumClientsChanged(testNumClients);
+        callbackCaptor.getValue().onConnectedClientsChanged(testClients);
         callbackCaptor.getValue().onStateChanged(WIFI_AP_STATE_FAILED, SAP_START_FAILURE_GENERAL);
 
         mLooper.dispatchAll();
         verify(mSoftApCallback).onStateChanged(WIFI_AP_STATE_ENABLING, 0);
-        verify(mSoftApCallback).onNumClientsChanged(testNumClients);
+        verify(mSoftApCallback).onConnectedClientsChanged(testClients);
         verify(mSoftApCallback).onStateChanged(WIFI_AP_STATE_FAILED, SAP_START_FAILURE_GENERAL);
     }
 
@@ -1020,8 +1031,8 @@ public class WifiManagerTest {
         verifyNoMoreInteractions(mWifiService);
     }
 
-   /**
-i     * Verify that a call to cancel WPS immediately returns a failure.
+    /**
+     * Verify that a call to cancel WPS immediately returns a failure.
      */
     @Test
     public void testCancelWpsImmediatelyFailsWithCallback() {
@@ -1324,7 +1335,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Verify getting the factory MAC address.
-     * @throws Exception
      */
     @Test
     public void testGetFactoryMacAddress() throws Exception {
@@ -1371,7 +1381,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of isEnhancedOpenSupported
-     * @throws Exception
      */
     @Test
     public void testIsEnhancedOpenSupported() throws Exception {
@@ -1385,7 +1394,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of isWpa3SaeSupported
-     * @throws Exception
      */
     @Test
     public void testIsWpa3SaeSupported() throws Exception {
@@ -1399,7 +1407,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of isWpa3SuiteBSupported
-     * @throws Exception
      */
     @Test
     public void testIsWpa3SuiteBSupported() throws Exception {
@@ -1413,7 +1420,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of isEasyConnectSupported
-     * @throws Exception
      */
     @Test
     public void testIsEasyConnectSupported() throws Exception {
@@ -1427,7 +1433,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of {@link WifiManager#addNetwork(WifiConfiguration)}
-     * @throws Exception
      */
     @Test
     public void testAddNetwork() throws Exception {
@@ -1444,7 +1449,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of {@link WifiManager#addNetwork(WifiConfiguration)}
-     * @throws Exception
      */
     @Test
     public void testUpdateNetwork() throws Exception {
@@ -1466,7 +1470,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of {@link WifiManager#enableNetwork(int, boolean)}
-     * @throws Exception
      */
     @Test
     public void testEnableNetwork() throws Exception {
@@ -1478,7 +1481,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of {@link WifiManager#disableNetwork(int)}
-     * @throws Exception
      */
     @Test
     public void testDisableNetwork() throws Exception {
@@ -1489,8 +1491,17 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
     }
 
     /**
-     * Test behavior of {@link WifiManager#disconnect()}
+     * Test behavior of {@link WifiManager#allowAutojoin(int, boolean)}
      * @throws Exception
+     */
+    @Test
+    public void testAllowAutojoin() throws Exception {
+        mWifiManager.allowAutojoin(1, true);
+        verify(mWifiService).allowAutojoin(eq(1), eq(true));
+    }
+
+    /**
+     * Test behavior of {@link WifiManager#disconnect()}
      */
     @Test
     public void testDisconnect() throws Exception {
@@ -1501,7 +1512,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of {@link WifiManager#reconnect()}
-     * @throws Exception
      */
     @Test
     public void testReconnect() throws Exception {
@@ -1512,7 +1522,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of {@link WifiManager#reassociate()}
-     * @throws Exception
      */
     @Test
     public void testReassociate() throws Exception {
@@ -1523,7 +1532,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of {@link WifiManager#getSupportedFeatures()}
-     * @throws Exception
      */
     @Test
     public void testGetSupportedFeatures() throws Exception {
@@ -1550,7 +1558,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of {@link WifiManager#getControllerActivityEnergyInfo()}
-     * @throws Exception
      */
     @Test
     public void testGetControllerActivityEnergyInfo() throws Exception {
@@ -1563,7 +1570,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of {@link WifiManager#getConnectionInfo()}
-     * @throws Exception
      */
     @Test
     public void testGetConnectionInfo() throws Exception {
@@ -1575,7 +1581,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of {@link WifiManager#isDualModeSupported()} ()}
-     * @throws Exception
      */
     @Test
     public void testIsDualModeSupported() throws Exception {
@@ -1586,7 +1591,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of {@link WifiManager#isDualBandSupported()}
-     * @throws Exception
      */
     @Test
     public void testIsDualBandSupported() throws Exception {
@@ -1597,7 +1601,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of {@link WifiManager#getDhcpInfo()}
-     * @throws Exception
      */
     @Test
     public void testGetDhcpInfo() throws Exception {
@@ -1610,7 +1613,6 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
 
     /**
      * Test behavior of {@link WifiManager#setWifiEnabled(boolean)}
-     * @throws Exception
      */
     @Test
     public void testSetWifiEnabled() throws Exception {

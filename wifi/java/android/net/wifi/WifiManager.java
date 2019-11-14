@@ -71,6 +71,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Executor;
 
@@ -558,7 +559,9 @@ public class WifiManager {
     @SystemApi
     public static final String EXTRA_PREVIOUS_WIFI_AP_STATE = "previous_wifi_state";
     /**
-     * The interface used for the softap.
+     * The lookup key for a String extra that stores the interface name used for the Soft AP.
+     * This extra is included in the broadcast {@link #WIFI_AP_STATE_CHANGED_ACTION}.
+     * Retrieve its value with {@link android.content.Intent#getStringExtra(String)}.
      *
      * @hide
      */
@@ -566,9 +569,10 @@ public class WifiManager {
     public static final String EXTRA_WIFI_AP_INTERFACE_NAME =
             "android.net.wifi.extra.WIFI_AP_INTERFACE_NAME";
     /**
-     * The intended ip mode for this softap.
-     * @see #IFACE_IP_MODE_TETHERED
-     * @see #IFACE_IP_MODE_LOCAL_ONLY
+     * The lookup key for an int extra that stores the intended IP mode for this Soft AP.
+     * One of {@link #IFACE_IP_MODE_TETHERED} or {@link #IFACE_IP_MODE_LOCAL_ONLY}.
+     * This extra is included in the broadcast {@link #WIFI_AP_STATE_CHANGED_ACTION}.
+     * Retrieve its value with {@link android.content.Intent#getIntExtra(String, int)}.
      *
      * @hide
      */
@@ -2307,69 +2311,69 @@ public class WifiManager {
     }
 
     /** @hide */
-    public static final int WIFI_FEATURE_INFRA            = 0x0001;  // Basic infrastructure mode
+    public static final long WIFI_FEATURE_INFRA            = 0x0001L;  // Basic infrastructure mode
     /** @hide */
-    public static final int WIFI_FEATURE_INFRA_5G         = 0x0002;  // Support for 5 GHz Band
+    public static final long WIFI_FEATURE_INFRA_5G         = 0x0002L;  // Support for 5 GHz Band
     /** @hide */
-    public static final int WIFI_FEATURE_PASSPOINT        = 0x0004;  // Support for GAS/ANQP
+    public static final long WIFI_FEATURE_PASSPOINT        = 0x0004L;  // Support for GAS/ANQP
     /** @hide */
-    public static final int WIFI_FEATURE_P2P              = 0x0008;  // Wifi-Direct
+    public static final long WIFI_FEATURE_P2P              = 0x0008L;  // Wifi-Direct
     /** @hide */
-    public static final int WIFI_FEATURE_MOBILE_HOTSPOT   = 0x0010;  // Soft AP
+    public static final long WIFI_FEATURE_MOBILE_HOTSPOT   = 0x0010L;  // Soft AP
     /** @hide */
-    public static final int WIFI_FEATURE_SCANNER          = 0x0020;  // WifiScanner APIs
+    public static final long WIFI_FEATURE_SCANNER          = 0x0020L;  // WifiScanner APIs
     /** @hide */
-    public static final int WIFI_FEATURE_AWARE            = 0x0040;  // Wi-Fi AWare networking
+    public static final long WIFI_FEATURE_AWARE            = 0x0040L;  // Wi-Fi AWare networking
     /** @hide */
-    public static final int WIFI_FEATURE_D2D_RTT          = 0x0080;  // Device-to-device RTT
+    public static final long WIFI_FEATURE_D2D_RTT          = 0x0080L;  // Device-to-device RTT
     /** @hide */
-    public static final int WIFI_FEATURE_D2AP_RTT         = 0x0100;  // Device-to-AP RTT
+    public static final long WIFI_FEATURE_D2AP_RTT         = 0x0100L;  // Device-to-AP RTT
     /** @hide */
-    public static final int WIFI_FEATURE_BATCH_SCAN       = 0x0200;  // Batched Scan (deprecated)
+    public static final long WIFI_FEATURE_BATCH_SCAN       = 0x0200L;  // Batched Scan (deprecated)
     /** @hide */
-    public static final int WIFI_FEATURE_PNO              = 0x0400;  // Preferred network offload
+    public static final long WIFI_FEATURE_PNO              = 0x0400L;  // Preferred network offload
     /** @hide */
-    public static final int WIFI_FEATURE_ADDITIONAL_STA   = 0x0800;  // Support for two STAs
+    public static final long WIFI_FEATURE_ADDITIONAL_STA   = 0x0800L;  // Support for two STAs
     /** @hide */
-    public static final int WIFI_FEATURE_TDLS             = 0x1000;  // Tunnel directed link setup
+    public static final long WIFI_FEATURE_TDLS             = 0x1000L;  // Tunnel directed link setup
     /** @hide */
-    public static final int WIFI_FEATURE_TDLS_OFFCHANNEL  = 0x2000;  // Support for TDLS off channel
+    public static final long WIFI_FEATURE_TDLS_OFFCHANNEL  = 0x2000L;  // TDLS off channel
     /** @hide */
-    public static final int WIFI_FEATURE_EPR              = 0x4000;  // Enhanced power reporting
+    public static final long WIFI_FEATURE_EPR              = 0x4000L;  // Enhanced power reporting
     /** @hide */
-    public static final int WIFI_FEATURE_AP_STA           = 0x8000;  // AP STA Concurrency
+    public static final long WIFI_FEATURE_AP_STA           = 0x8000L;  // AP STA Concurrency
     /** @hide */
-    public static final int WIFI_FEATURE_LINK_LAYER_STATS = 0x10000; // Link layer stats collection
+    public static final long WIFI_FEATURE_LINK_LAYER_STATS = 0x10000L; // Link layer stats
     /** @hide */
-    public static final int WIFI_FEATURE_LOGGER           = 0x20000; // WiFi Logger
+    public static final long WIFI_FEATURE_LOGGER           = 0x20000L; // WiFi Logger
     /** @hide */
-    public static final int WIFI_FEATURE_HAL_EPNO         = 0x40000; // Enhanced PNO
+    public static final long WIFI_FEATURE_HAL_EPNO         = 0x40000L; // Enhanced PNO
     /** @hide */
-    public static final int WIFI_FEATURE_RSSI_MONITOR     = 0x80000; // RSSI Monitor
+    public static final long WIFI_FEATURE_RSSI_MONITOR     = 0x80000L; // RSSI Monitor
     /** @hide */
-    public static final int WIFI_FEATURE_MKEEP_ALIVE      = 0x100000; // mkeep_alive
+    public static final long WIFI_FEATURE_MKEEP_ALIVE      = 0x100000L; // mkeep_alive
     /** @hide */
-    public static final int WIFI_FEATURE_CONFIG_NDO       = 0x200000; // ND offload
+    public static final long WIFI_FEATURE_CONFIG_NDO       = 0x200000L; // ND offload
     /** @hide */
-    public static final int WIFI_FEATURE_TRANSMIT_POWER   = 0x400000; // Capture transmit power
+    public static final long WIFI_FEATURE_TRANSMIT_POWER   = 0x400000L; // Capture transmit power
     /** @hide */
-    public static final int WIFI_FEATURE_CONTROL_ROAMING  = 0x800000; // Control firmware roaming
+    public static final long WIFI_FEATURE_CONTROL_ROAMING  = 0x800000L; // Control firmware roaming
     /** @hide */
-    public static final int WIFI_FEATURE_IE_WHITELIST     = 0x1000000; // Probe IE white listing
+    public static final long WIFI_FEATURE_IE_WHITELIST     = 0x1000000L; // Probe IE white listing
     /** @hide */
-    public static final int WIFI_FEATURE_SCAN_RAND        = 0x2000000; // Random MAC & Probe seq
+    public static final long WIFI_FEATURE_SCAN_RAND        = 0x2000000L; // Random MAC & Probe seq
     /** @hide */
-    public static final int WIFI_FEATURE_TX_POWER_LIMIT   = 0x4000000; // Set Tx power limit
+    public static final long WIFI_FEATURE_TX_POWER_LIMIT   = 0x4000000L; // Set Tx power limit
     /** @hide */
-    public static final int WIFI_FEATURE_WPA3_SAE         = 0x8000000; // WPA3-Personal SAE
+    public static final long WIFI_FEATURE_WPA3_SAE         = 0x8000000L; // WPA3-Personal SAE
     /** @hide */
-    public static final int WIFI_FEATURE_WPA3_SUITE_B     = 0x10000000; // WPA3-Enterprise Suite-B
+    public static final long WIFI_FEATURE_WPA3_SUITE_B     = 0x10000000L; // WPA3-Enterprise Suite-B
     /** @hide */
-    public static final int WIFI_FEATURE_OWE              = 0x20000000; // Enhanced Open
+    public static final long WIFI_FEATURE_OWE              = 0x20000000L; // Enhanced Open
     /** @hide */
-    public static final int WIFI_FEATURE_LOW_LATENCY      = 0x40000000; // Low Latency modes
+    public static final long WIFI_FEATURE_LOW_LATENCY      = 0x40000000L; // Low Latency modes
     /** @hide */
-    public static final int WIFI_FEATURE_DPP              = 0x80000000; // DPP (Easy-Connect)
+    public static final long WIFI_FEATURE_DPP              = 0x80000000L; // DPP (Easy-Connect)
     /** @hide */
     public static final long WIFI_FEATURE_P2P_RAND_MAC    = 0x100000000L; // Random P2P MAC
 
@@ -2854,12 +2858,13 @@ public class WifiManager {
     }
 
     /**
-     * Start SoftAp mode with the specified configuration.
-     * Note that starting in access point mode disables station
-     * mode operation
-     * @param wifiConfig SSID, security and channel details as
-     *        part of WifiConfiguration
-     * @return {@code true} if the operation succeeds, {@code false} otherwise
+     * Start Soft AP (hotspot) mode with the specified configuration.
+     * Note that starting Soft AP mode may disable station mode operation if the device does not
+     * support concurrency.
+     * @param wifiConfig SSID, security and channel details as part of WifiConfiguration, or null to
+     *                   use the persisted Soft AP configuration that was previously set using
+     *                   {@link #setWifiApConfiguration(WifiConfiguration)}.
+     * @return {@code true} if the operation succeeded, {@code false} otherwise
      *
      * @hide
      */
@@ -2898,13 +2903,6 @@ public class WifiManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-    }
-
-    private Executor executorForHandler(@Nullable Handler handler) {
-        if (handler == null) {
-            return mContext.getMainExecutor();
-        }
-        return new HandlerExecutor(handler);
     }
 
     /**
@@ -2962,9 +2960,59 @@ public class WifiManager {
      * @param handler Handler to be used for callbacks.  If the caller passes a null Handler, the
      * main thread will be used.
      */
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.CHANGE_WIFI_STATE,
+            android.Manifest.permission.ACCESS_FINE_LOCATION})
     public void startLocalOnlyHotspot(LocalOnlyHotspotCallback callback,
             @Nullable Handler handler) {
-        Executor executor = executorForHandler(handler);
+        Executor executor = handler == null ? null : new HandlerExecutor(handler);
+        startLocalOnlyHotspotInternal(null, executor, callback);
+    }
+
+    /**
+     * Starts a local-only hotspot with a specific configuration applied. See
+     * {@link #startLocalOnlyHotspot(LocalOnlyHotspotCallback, Handler)}.
+     *
+     * Applications need either {@link android.Manifest.permission#NETWORK_SETUP_WIZARD} or
+     * {@link android.Manifest.permission#NETWORK_SETTINGS} to call this method.
+     *
+     * Since custom configuration settings may be incompatible with each other, the hotspot started
+     * through this method cannot coexist with another hotspot created through
+     * startLocalOnlyHotspot. If this is attempted, the first hotspot request wins and others
+     * receive {@link LocalOnlyHotspotCallback#ERROR_GENERIC} through
+     * {@link LocalOnlyHotspotCallback#onFailed}.
+     *
+     * @param config Custom configuration for the hotspot. See {@link SoftApConfiguration}.
+     * @param executor Executor to run callback methods on, or null to use the main thread.
+     * @param callback Callback object for updates about hotspot status, or null for no updates.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_SETTINGS,
+            android.Manifest.permission.NETWORK_SETUP_WIZARD})
+    public void startLocalOnlyHotspot(@NonNull SoftApConfiguration config,
+            @Nullable Executor executor,
+            @Nullable LocalOnlyHotspotCallback callback) {
+        Objects.requireNonNull(config);
+        startLocalOnlyHotspotInternal(config, executor, callback);
+    }
+
+    /**
+     * Common implementation of both configurable and non-configurable LOHS.
+     *
+     * @param config App-specified configuration, or null. When present, additional privileges are
+     *               required, and the hotspot cannot be shared with other clients.
+     * @param executor Executor to run callback methods on, or null to use the main thread.
+     * @param callback Callback object for updates about hotspot status, or null for no updates.
+     */
+    private void startLocalOnlyHotspotInternal(
+            @Nullable SoftApConfiguration config,
+            @Nullable Executor executor,
+            @Nullable LocalOnlyHotspotCallback callback) {
+        if (executor == null) {
+            executor = mContext.getMainExecutor();
+        }
         synchronized (mLock) {
             LocalOnlyHotspotCallbackProxy proxy =
                     new LocalOnlyHotspotCallbackProxy(this, executor, callback);
@@ -2974,7 +3022,7 @@ public class WifiManager {
                     throw new RemoteException("Wifi service is not running");
                 }
                 String packageName = mContext.getOpPackageName();
-                int returnCode = iWifiManager.startLocalOnlyHotspot(proxy, packageName);
+                int returnCode = iWifiManager.startLocalOnlyHotspot(proxy, packageName, config);
                 if (returnCode != LocalOnlyHotspotCallback.REQUEST_REGISTERED) {
                     // Send message to the proxy to make sure we call back on the correct thread
                     proxy.onHotspotFailed(returnCode);
@@ -3055,7 +3103,8 @@ public class WifiManager {
      */
     public void watchLocalOnlyHotspot(LocalOnlyHotspotObserver observer,
             @Nullable Handler handler) {
-        Executor executor = executorForHandler(handler);
+        Executor executor = handler == null ? mContext.getMainExecutor()
+                : new HandlerExecutor(handler);
         synchronized (mLock) {
             mLOHSObserverProxy =
                     new LocalOnlyHotspotObserverProxy(this, executor, observer);
@@ -3407,21 +3456,22 @@ public class WifiManager {
         /**
          * Called when soft AP state changes.
          *
-         * @param state new new AP state. One of {@link #WIFI_AP_STATE_DISABLED},
-         *        {@link #WIFI_AP_STATE_DISABLING}, {@link #WIFI_AP_STATE_ENABLED},
-         *        {@link #WIFI_AP_STATE_ENABLING}, {@link #WIFI_AP_STATE_FAILED}
+         * @param state         new new AP state. One of {@link #WIFI_AP_STATE_DISABLED},
+         *                      {@link #WIFI_AP_STATE_DISABLING}, {@link #WIFI_AP_STATE_ENABLED},
+         *                      {@link #WIFI_AP_STATE_ENABLING}, {@link #WIFI_AP_STATE_FAILED}
          * @param failureReason reason when in failed state. One of
-         *        {@link #SAP_START_FAILURE_GENERAL}, {@link #SAP_START_FAILURE_NO_CHANNEL}
+         *                      {@link #SAP_START_FAILURE_GENERAL},
+         *                      {@link #SAP_START_FAILURE_NO_CHANNEL}
          */
-        public abstract void onStateChanged(@WifiApState int state,
+        void onStateChanged(@WifiApState int state,
                 @SapStartFailure int failureReason);
 
         /**
-         * Called when number of connected clients to soft AP changes.
+         * Called when the connected clients to soft AP changes.
          *
-         * @param numClients number of connected clients
+         * @param clients the currently connected clients
          */
-        public abstract void onNumClientsChanged(int numClients);
+        void onConnectedClientsChanged(@NonNull List<WifiClient> clients);
 
         /**
          * Called when Stations connected to soft AP.
@@ -3460,18 +3510,21 @@ public class WifiManager {
                 Log.v(TAG, "SoftApCallbackProxy: onStateChanged: state=" + state
                         + ", failureReason=" + failureReason);
             }
+
             mHandler.post(() -> {
                 mCallback.onStateChanged(state, failureReason);
             });
         }
 
         @Override
-        public void onNumClientsChanged(int numClients) {
+        public void onConnectedClientsChanged(List<WifiClient> clients) {
             if (mVerboseLoggingEnabled) {
-                Log.v(TAG, "SoftApCallbackProxy: onNumClientsChanged: numClients=" + numClients);
+                Log.v(TAG, "SoftApCallbackProxy: onConnectedClientsChanged: clients="
+                        + clients.size() + " clients");
             }
+
             mHandler.post(() -> {
-                mCallback.onNumClientsChanged(numClients);
+                mCallback.onConnectedClientsChanged(clients);
             });
         }
 
@@ -3665,10 +3718,12 @@ public class WifiManager {
          *
          * @param manager WifiManager
          * @param executor Executor for delivering callbacks.
-         * @param callback LocalOnlyHotspotCallback to notify the calling application.
+         * @param callback LocalOnlyHotspotCallback to notify the calling application, or null.
          */
-        LocalOnlyHotspotCallbackProxy(WifiManager manager, Executor executor,
-                                      LocalOnlyHotspotCallback callback) {
+        LocalOnlyHotspotCallbackProxy(
+                @NonNull WifiManager manager,
+                @NonNull Executor executor,
+                @Nullable LocalOnlyHotspotCallback callback) {
             mWifiManager = new WeakReference<>(manager);
             mExecutor = executor;
             mCallback = callback;
@@ -3686,6 +3741,7 @@ public class WifiManager {
             }
             final LocalOnlyHotspotReservation reservation =
                     manager.new LocalOnlyHotspotReservation(config);
+            if (mCallback == null) return;
             mExecutor.execute(() -> mCallback.onStarted(reservation));
         }
 
@@ -3695,6 +3751,7 @@ public class WifiManager {
             if (manager == null) return;
 
             Log.w(TAG, "LocalOnlyHotspotCallbackProxy: hotspot stopped");
+            if (mCallback == null) return;
             mExecutor.execute(() -> mCallback.onStopped());
         }
 
@@ -3705,6 +3762,7 @@ public class WifiManager {
 
             Log.w(TAG, "LocalOnlyHotspotCallbackProxy: failed to start.  reason: "
                     + reason);
+            if (mCallback == null) return;
             mExecutor.execute(() -> mCallback.onFailed(reason));
         }
     }
@@ -4050,6 +4108,29 @@ public class WifiManager {
             } else {
                 listener.onFailure(ERROR);
             }
+        }
+    }
+
+    /**
+     * Sets the user choice for allowing auto-join to a network.
+     * The updated choice will be made available through the updated config supplied by the
+     * CONFIGURED_NETWORKS_CHANGED broadcast.
+     *
+     * @param netId the id of the network to allow/disallow autojoin for.
+     * @param choice true to allow autojoin, false to disallow autojoin
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void allowAutojoin(int netId, boolean choice) {
+        try {
+            IWifiManager iWifiManager = getIWifiManager();
+            if (iWifiManager == null) {
+                throw new RemoteException("Wifi service is not running");
+            }
+            iWifiManager.allowAutojoin(netId, choice);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 

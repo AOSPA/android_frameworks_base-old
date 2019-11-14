@@ -122,6 +122,7 @@ import android.os.RemoteException;
 import android.os.SimpleClock;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.platform.test.annotations.Presubmit;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.SubscriptionPlan;
@@ -142,6 +143,7 @@ import com.android.internal.util.test.BroadcastInterceptingContext;
 import com.android.internal.util.test.BroadcastInterceptingContext.FutureIntent;
 import com.android.server.DeviceIdleInternal;
 import com.android.server.LocalServices;
+import com.android.server.usage.AppStandbyInternal;
 
 import com.google.common.util.concurrent.AbstractFuture;
 
@@ -196,6 +198,7 @@ import java.util.stream.Collectors;
  */
 @RunWith(AndroidJUnit4.class)
 @MediumTest
+@Presubmit
 public class NetworkPolicyManagerServiceTest {
     private static final String TAG = "NetworkPolicyManagerServiceTest";
 
@@ -295,6 +298,7 @@ public class NetworkPolicyManagerServiceTest {
 
     private void registerLocalServices() {
         addLocalServiceMock(DeviceIdleInternal.class);
+        addLocalServiceMock(AppStandbyInternal.class);
 
         final UsageStatsManagerInternal usageStats =
                 addLocalServiceMock(UsageStatsManagerInternal.class);
@@ -444,6 +448,7 @@ public class NetworkPolicyManagerServiceTest {
         LocalServices.removeServiceForTest(ActivityManagerInternal.class);
         LocalServices.removeServiceForTest(PowerManagerInternal.class);
         LocalServices.removeServiceForTest(DeviceIdleInternal.class);
+        LocalServices.removeServiceForTest(AppStandbyInternal.class);
         LocalServices.removeServiceForTest(UsageStatsManagerInternal.class);
         LocalServices.removeServiceForTest(NetworkStatsManagerInternal.class);
     }

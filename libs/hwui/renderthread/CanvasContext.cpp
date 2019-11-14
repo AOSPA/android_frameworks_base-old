@@ -306,7 +306,6 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
     info.out.canDrawThisFrame = true;
 
     mAnimationContext->startFrame(info.mode);
-    mRenderPipeline->onPrepareTree();
     for (const sp<RenderNode>& node : mRenderNodes) {
         // Only the primary target node will be drawn full - all other nodes would get drawn in
         // real time mode. In case of a window, the primary node is the window content and the other
@@ -565,8 +564,8 @@ SkISize CanvasContext::getNextFrameSize() const {
     ReliableSurface* surface = mNativeSurface.get();
     if (surface) {
         SkISize size;
-        surface->query(NATIVE_WINDOW_WIDTH, &size.fWidth);
-        surface->query(NATIVE_WINDOW_HEIGHT, &size.fHeight);
+        size.fWidth = ANativeWindow_getWidth(surface);
+        size.fHeight = ANativeWindow_getHeight(surface);
         return size;
     }
     return {INT32_MAX, INT32_MAX};

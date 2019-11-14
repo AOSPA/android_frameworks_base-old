@@ -53,8 +53,10 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -262,9 +264,6 @@ public class NotificationEntryManager implements
                     listener.onEntryInflated(entry, inflatedFlags);
                 }
                 mNotificationData.add(entry);
-                for (NotificationEntryListener listener : mNotificationEntryListeners) {
-                    listener.onBeforeNotificationAdded(entry);
-                }
                 updateNotifications("onAsyncInflationFinished");
                 for (NotificationEntryListener listener : mNotificationEntryListeners) {
                     listener.onNotificationAdded(entry);
@@ -561,6 +560,27 @@ public class NotificationEntryManager implements
      */
     public Iterable<NotificationEntry> getPendingNotificationsIterator() {
         return mPendingNotifications.values();
+    }
+
+    /**
+     * @return all notification we're currently aware of (both pending and visible notifications)
+     */
+    public Set<NotificationEntry> getAllNotifs() {
+        Set<NotificationEntry> allNotifs = new HashSet<>(mPendingNotifications.values());
+        allNotifs.addAll(mNotificationData.getActiveNotifications());
+        return allNotifs;
+    }
+
+    /**
+     * Gets the pending or visible notification entry with the given key. Returns null if
+     * notification doesn't exist.
+     */
+    public NotificationEntry getPendingOrCurrentNotif(String key) {
+        if (mPendingNotifications.containsKey(key)) {
+            return mPendingNotifications.get(key);
+        } else {
+            return mNotificationData.get(key);
+        }
     }
 
     private void extendLifetime(NotificationEntry entry, NotificationLifetimeExtender extender) {
