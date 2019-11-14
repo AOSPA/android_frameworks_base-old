@@ -114,7 +114,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
+import java.util.function.Consumer;
 
 
 /**
@@ -124,7 +124,7 @@ class SaveImageInBackgroundData {
     Context context;
     Bitmap image;
     Uri imageUri;
-    Runnable finisher;
+    Consumer<Uri> finisher;
     int iconSize;
     int previewWidth;
     int previewheight;
@@ -526,7 +526,7 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
             mNotificationManager.notify(SystemMessage.NOTE_GLOBAL_SCREENSHOT,
                     mNotificationBuilder.build());
         }
-        mParams.finisher.run();
+        mParams.finisher.accept(mParams.imageUri);
         mParams.clearContext();
     }
 
@@ -535,7 +535,7 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
         // If we are cancelled while the task is running in the background, we may get null params.
         // The finisher is expected to always be called back, so just use the baked-in params from
         // the ctor in any case.
-        mParams.finisher.run();
+        mParams.finisher.accept(null);
         mParams.clearImage();
         mParams.clearContext();
 
@@ -695,7 +695,7 @@ class GlobalScreenshot {
     /**
      * Creates a new worker thread and saves the screenshot to the media store.
      */
-    private void saveScreenshotInWorkerThread(Runnable finisher) {
+    private void saveScreenshotInWorkerThread(Consumer<Uri> finisher) {
         SaveImageInBackgroundData data = new SaveImageInBackgroundData();
         data.context = mContext;
         data.image = mScreenBitmap;
@@ -713,8 +713,8 @@ class GlobalScreenshot {
     /**
      * Takes a screenshot of the current display and shows an animation.
      */
-    private void takeScreenshot(Runnable finisher, boolean statusBarVisible, boolean navBarVisible,
-            Rect crop) {
+    private void takeScreenshot(Consumer<Uri> finisher, boolean statusBarVisible,
+            boolean navBarVisible, Rect crop) {
         int rot = mDisplay.getRotation();
         int width = crop.width();
         int height = crop.height();
@@ -724,7 +724,7 @@ class GlobalScreenshot {
         if (mScreenBitmap == null) {
             notifyScreenshotError(mContext, mNotificationManager,
                     R.string.screenshot_failed_to_capture_text);
-            finisher.run();
+            finisher.accept(null);
             return;
         }
 
@@ -737,7 +737,7 @@ class GlobalScreenshot {
                 statusBarVisible, navBarVisible);
     }
 
-    void takeScreenshot(Runnable finisher, boolean statusBarVisible, boolean navBarVisible) {
+    void takeScreenshot(Consumer<Uri> finisher, boolean statusBarVisible, boolean navBarVisible) {
         mDisplay.getRealMetrics(mDisplayMetrics);
         takeScreenshot(finisher, statusBarVisible, navBarVisible,
                 new Rect(0, 0, mDisplayMetrics.widthPixels, mDisplayMetrics.heightPixels));
@@ -746,7 +746,7 @@ class GlobalScreenshot {
     /**
      * Displays a screenshot selector
      */
-    void takeScreenshotPartial(final Runnable finisher, final boolean statusBarVisible,
+    void takeScreenshotPartial(final Consumer<Uri> finisher, final boolean statusBarVisible,
             final boolean navBarVisible) {
         mWindowManager.addView(mScreenshotLayout, mWindowLayoutParams);
         mScreenshotSelectorView.setOnTouchListener(new View.OnTouchListener() {
@@ -806,8 +806,8 @@ class GlobalScreenshot {
     /**
      * Starts the animation after taking the screenshot
      */
-    private void startAnimation(final Runnable finisher, int w, int h, boolean statusBarVisible,
-            boolean navBarVisible) {
+    private void startAnimation(final Consumer<Uri> finisher, int w, int h,
+            boolean statusBarVisible, boolean navBarVisible) {
         // If power save is on, show a toast so there is some visual indication that a screenshot
         // has been taken.
         PowerManager powerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
