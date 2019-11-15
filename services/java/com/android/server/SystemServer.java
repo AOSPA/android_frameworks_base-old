@@ -1119,6 +1119,8 @@ public final class SystemServer {
             mSystemServiceManager.startService(IorapForwardingService.class);
             t.traceEnd();
 
+            mSystemServiceManager.startService(ActivityTriggerService.class);
+
             t.traceBegin("SignedConfigService");
             SignedConfigService.registerUpdateReceiver(mSystemContext);
             t.traceEnd();
