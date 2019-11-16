@@ -868,7 +868,12 @@ public class Tethering extends BaseNetworkObserver {
         }
 
         if (!TextUtils.isEmpty(ifname)) {
-            maybeTrackNewInterfaceLocked(ifname, TETHERING_WIFI);
+            final int interfaceType = ifaceNameToType(ifname);
+            if (interfaceType == TETHERING_INVALID) {
+                mLog.log(ifname + " is not a tetherable iface, ignoring");
+                return;
+            }
+            maybeTrackNewInterfaceLocked(ifname, interfaceType);
             changeInterfaceState(ifname, ipServingMode);
         } else {
             mLog.e(String.format(
