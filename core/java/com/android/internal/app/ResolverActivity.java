@@ -1407,6 +1407,7 @@ public class ResolverActivity extends Activity {
         private final Intent mResolvedIntent;
         private final List<Intent> mSourceIntents = new ArrayList<>();
         private boolean mIsSuspended;
+        private boolean mPinned = false;
 
         public DisplayResolveInfo(Intent originalIntent, ResolveInfo pri, CharSequence pLabel,
                 CharSequence pInfo, Intent pOrigIntent) {
@@ -1510,6 +1511,15 @@ public class ResolverActivity extends Activity {
         public boolean isSuspended() {
             return mIsSuspended;
         }
+
+        @Override
+        public boolean isPinned() {
+            return mPinned;
+        }
+
+        public void setPinned(boolean pinned) {
+            mPinned = pinned;
+        }
     }
 
     List<DisplayResolveInfo> getDisplayList() {
@@ -1610,6 +1620,11 @@ public class ResolverActivity extends Activity {
           * @return true if this target can be selected by the user
           */
         boolean isSuspended();
+
+        /**
+         * @return true if this target should be pinned to the front by the request of the user
+         */
+        boolean isPinned();
     }
 
     public class ResolveListAdapter extends BaseAdapter {
@@ -1916,6 +1931,10 @@ public class ResolverActivity extends Activity {
             final Intent replaceIntent = getReplacementIntent(add.activityInfo, intent);
             final DisplayResolveInfo dri = new DisplayResolveInfo(intent, add, roLabel,
                     extraInfo, replaceIntent);
+            dri.setPinned(rci.isPinned());
+            if (rci.isPinned()) {
+                Log.i(TAG, "Pinned item: " + rci.name);
+            }
             addResolveInfo(dri);
             if (replaceIntent == intent) {
                 // Only add alternates if we didn't get a specific replacement from
@@ -2082,6 +2101,7 @@ public class ResolverActivity extends Activity {
         public final ComponentName name;
         private final List<Intent> mIntents = new ArrayList<>();
         private final List<ResolveInfo> mResolveInfos = new ArrayList<>();
+        private boolean mPinned;
 
         public ResolvedComponentInfo(ComponentName name, Intent intent, ResolveInfo info) {
             this.name = name;
@@ -2122,6 +2142,15 @@ public class ResolverActivity extends Activity {
             }
             return -1;
         }
+
+        public boolean isPinned() {
+            return mPinned;
+        }
+
+        public void setPinned(boolean pinned) {
+            mPinned = pinned;
+        }
+
     }
 
     static class ViewHolder {
