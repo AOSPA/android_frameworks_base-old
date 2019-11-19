@@ -3615,7 +3615,8 @@ public class WifiManager {
         @Override
         public void onStaConnected(String Macaddr, int numClients) throws RemoteException {
             Log.v(TAG, "SoftApCallbackProxy: [" + numClients + "]onStaConnected Macaddr =" + Macaddr);
-            mHandler.post(() -> {
+            Binder.clearCallingIdentity();
+            mExecutor.execute(() -> {
                 mCallback.onStaConnected(Macaddr, numClients);
             });
         }
@@ -3623,7 +3624,8 @@ public class WifiManager {
         @Override
         public void onStaDisconnected(String Macaddr, int numClients) throws RemoteException {
             Log.v(TAG, "SoftApCallbackProxy: [" + numClients + "]onStaDisconnected Macaddr =" + Macaddr);
-            mHandler.post(() -> {
+            Binder.clearCallingIdentity();
+            mExecutor.execute(() -> {
                 mCallback.onStaDisconnected(Macaddr, numClients);
             });
         }
