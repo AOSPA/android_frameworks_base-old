@@ -4908,6 +4908,8 @@ package android.net.wifi {
   public static interface WifiManager.SoftApCallback {
     method public void onConnectedClientsChanged(@NonNull java.util.List<android.net.wifi.WifiClient>);
     method public default void onInfoChanged(@NonNull android.net.wifi.SoftApInfo);
+    method public void onStaConnected(@NonNull String, int);
+    method public void onStaDisconnected(@NonNull String, int);
     method public void onStateChanged(int, int);
   }
 

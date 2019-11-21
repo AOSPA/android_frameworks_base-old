@@ -1815,6 +1815,8 @@ MissingNullability: android.telephony.ims.stub.ImsSmsImplBase#sendSms(int, int, 
     Missing nullability on parameter `pdu` in method `sendSms`
 MissingNullability: android.telephony.ims.stub.ImsUtImplBase#queryCallForward(int, String) parameter #1:
     Missing nullability on parameter `number` in method `queryCallForward`
+MissingNullability: android.telephony.ims.stub.ImsUtImplBase#queryCFForServiceClass(int, String, int) parameter #1:
+    Missing nullability on parameter `number` in method `queryCFForServiceClass`
 MissingNullability: android.telephony.ims.stub.ImsUtImplBase#setListener(android.telephony.ims.ImsUtListener) parameter #0:
     Missing nullability on parameter `listener` in method `setListener`
 MissingNullability: android.telephony.ims.stub.ImsUtImplBase#transact(android.os.Bundle) parameter #0:
