@@ -350,6 +350,7 @@
   <java-symbol type="bool" name="config_useFixedVolume" />
   <java-symbol type="bool" name="config_wifi_batched_scan_supported" />
   <java-symbol type="bool" name="config_wifi_softap_acs_supported" />
+  <java-symbol type="bool" name="config_wifi_softap_acs_should_exclude_dfs" />
   <java-symbol type="string" name="config_wifi_softap_acs_supported_channel_list" />
   <java-symbol type="bool" name="config_wifi_softap_ieee80211ac_supported" />
   <java-symbol type="bool" name="config_wifi_softap_ieee80211ax_supported" />
