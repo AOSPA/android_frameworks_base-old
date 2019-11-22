@@ -815,9 +815,6 @@ public final class ProcessList {
             case ActivityManager.PROCESS_STATE_TOP:
                 procState = "TOP ";
                 break;
-            case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION:
-                procState = "FGSL";
-                break;
             case ActivityManager.PROCESS_STATE_BOUND_TOP:
                 procState = "BTOP";
                 break;
@@ -887,8 +884,6 @@ public final class ProcessList {
                 return AppProtoEnums.PROCESS_STATE_PERSISTENT_UI;
             case ActivityManager.PROCESS_STATE_TOP:
                 return AppProtoEnums.PROCESS_STATE_TOP;
-            case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION:
-                return AppProtoEnums.PROCESS_STATE_FOREGROUND_SERVICE;
             case ActivityManager.PROCESS_STATE_BOUND_TOP:
                 return AppProtoEnums.PROCESS_STATE_BOUND_TOP;
             case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE:
@@ -1019,7 +1014,6 @@ public final class ProcessList {
         PROC_MEM_PERSISTENT,            // ActivityManager.PROCESS_STATE_PERSISTENT
         PROC_MEM_PERSISTENT,            // ActivityManager.PROCESS_STATE_PERSISTENT_UI
         PROC_MEM_TOP,                   // ActivityManager.PROCESS_STATE_TOP
-        PROC_MEM_IMPORTANT,             // ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE_LOCATION
         PROC_MEM_IMPORTANT,             // ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE
         PROC_MEM_TOP,                   // ActivityManager.PROCESS_STATE_BOUND_TOP
         PROC_MEM_IMPORTANT,             // ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE
@@ -1334,7 +1328,7 @@ public final class ProcessList {
             final int procCount = procs.size();
             for (int i = 0; i < procCount; i++) {
                 final int procUid = procs.keyAt(i);
-                if (UserHandle.isApp(procUid) || !UserHandle.isSameUser(procUid, uid)) {
+                if (!UserHandle.isCore(procUid) || !UserHandle.isSameUser(procUid, uid)) {
                     // Don't use an app process or different user process for system component.
                     continue;
                 }
@@ -1424,15 +1418,11 @@ public final class ProcessList {
 
     /**
      * @return {@code true} if process start is successful, false otherwise.
-     * @param app
-     * @param hostingRecord
-     * @param disableHiddenApiChecks
-     * @param abiOverride
      */
     @GuardedBy("mService")
     boolean startProcessLocked(ProcessRecord app, HostingRecord hostingRecord,
-            boolean disableHiddenApiChecks, boolean mountExtStorageFull,
-            String abiOverride) {
+            boolean disableHiddenApiChecks, boolean disableTestApiChecks,
+            boolean mountExtStorageFull, String abiOverride) {
         if (app.pendingStart) {
             return true;
         }
@@ -1577,6 +1567,10 @@ public final class ProcessList {
                     throw new IllegalStateException("Invalid API policy: " + policy);
                 }
                 runtimeFlags |= policyBits;
+
+                if (disableTestApiChecks) {
+                    runtimeFlags |= Zygote.DISABLE_TEST_API_ENFORCEMENT_POLICY;
+                }
             }
 
             String useAppImageCache = SystemProperties.get(
@@ -1865,7 +1859,8 @@ public final class ProcessList {
     final boolean startProcessLocked(ProcessRecord app, HostingRecord hostingRecord,
             String abiOverride) {
         return startProcessLocked(app, hostingRecord,
-                false /* disableHiddenApiChecks */, false /* mountExtStorageFull */, abiOverride);
+                false /* disableHiddenApiChecks */, false /* disableTestApiChecks */,
+                false /* mountExtStorageFull */, abiOverride);
     }
 
     @GuardedBy("mService")
@@ -2315,7 +2310,8 @@ public final class ProcessList {
             uidRec.updateHasInternetPermission();
             mActiveUids.put(proc.uid, uidRec);
             EventLogTags.writeAmUidRunning(uidRec.uid);
-            mService.noteUidProcessState(uidRec.uid, uidRec.getCurProcState());
+            mService.noteUidProcessState(uidRec.uid, uidRec.getCurProcState(),
+                    uidRec.curCapability);
         }
         proc.uidRecord = uidRec;
 
@@ -2417,7 +2413,8 @@ public final class ProcessList {
                 mService.enqueueUidChangeLocked(old.uidRecord, -1, UidRecord.CHANGE_GONE);
                 EventLogTags.writeAmUidStopped(uid);
                 mActiveUids.remove(uid);
-                mService.noteUidProcessState(uid, ActivityManager.PROCESS_STATE_NONEXISTENT);
+                mService.noteUidProcessState(uid, ActivityManager.PROCESS_STATE_NONEXISTENT,
+                        ActivityManager.PROCESS_CAPABILITY_NONE);
             }
             old.uidRecord = null;
         }

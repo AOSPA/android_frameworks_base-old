@@ -26,17 +26,17 @@ import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityThread;
 import android.app.Application;
 import android.content.Context;
+import android.sysprop.TelephonyProperties;
 import android.text.TextUtils;
 import android.util.Slog;
 import android.view.View;
-
-import com.android.internal.telephony.TelephonyProperties;
 
 import dalvik.system.VMRuntime;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Information about the current build, extracted from system properties.
@@ -99,7 +99,8 @@ public class Build {
      * {@link #getRadioVersion} instead.
      */
     @Deprecated
-    public static final String RADIO = getString(TelephonyProperties.PROPERTY_BASEBAND_VERSION);
+    public static final String RADIO = joinListOrElse(
+            TelephonyProperties.baseband_version(), UNKNOWN);
 
     /** The name of the hardware (from the kernel command line or /proc). */
     public static final String HARDWARE = getString("ro.hardware");
@@ -108,6 +109,7 @@ public class Build {
      * Whether this build was for an emulator device.
      * @hide
      */
+    @UnsupportedAppUsage
     @TestApi
     public static final boolean IS_EMULATOR = getString("ro.kernel.qemu").equals("1");
 
@@ -238,6 +240,13 @@ public class Build {
         public static final String RELEASE = getString("ro.build.version.release");
 
         /**
+         * The version string we show to the user; may be {@link #RELEASE} or
+         * {@link #CODENAME} if not a final release build.
+         */
+        @NonNull public static final String RELEASE_OR_CODENAME = getString(
+                "ro.build.version.release_or_codename");
+
+        /**
          * The base OS build the product is based on.
          */
         public static final String BASE_OS = SystemProperties.get("ro.build.version.base_os", "");
@@ -336,8 +345,8 @@ public class Build {
         /**
          * @hide
          */
-        @TestApi
         @UnsupportedAppUsage
+        @TestApi
         public static final String[] ACTIVE_CODENAMES = "REL".equals(ALL_CODENAMES[0])
                 ? new String[0] : ALL_CODENAMES;
 
@@ -1088,7 +1097,8 @@ public class Build {
         final String requiredBootloader = SystemProperties.get("ro.build.expect.bootloader");
         final String currentBootloader = SystemProperties.get("ro.bootloader");
         final String requiredRadio = SystemProperties.get("ro.build.expect.baseband");
-        final String currentRadio = SystemProperties.get("gsm.version.baseband");
+        final String currentRadio = joinListOrElse(
+                TelephonyProperties.baseband_version(), "");
 
         if (TextUtils.isEmpty(system)) {
             Slog.e(TAG, "Required ro.build.fingerprint is empty!");
@@ -1262,8 +1272,7 @@ public class Build {
      * null (if, for instance, the radio is not currently on).
      */
     public static String getRadioVersion() {
-        String propVal = SystemProperties.get(TelephonyProperties.PROPERTY_BASEBAND_VERSION);
-        return TextUtils.isEmpty(propVal) ? null : propVal;
+        return joinListOrElse(TelephonyProperties.baseband_version(), null);
     }
 
     @UnsupportedAppUsage
@@ -1287,5 +1296,11 @@ public class Build {
         } catch (NumberFormatException e) {
             return -1;
         }
+    }
+
+    private static <T> String joinListOrElse(List<T> list, String defaultValue) {
+        String ret = list.stream().map(elem -> elem == null ? "" : elem.toString())
+                .collect(Collectors.joining(","));
+        return ret.isEmpty() ? defaultValue : ret;
     }
 }

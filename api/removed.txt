@@ -217,11 +217,6 @@ package android.location {
     method @Deprecated public void removeVerticalAccuracy();
   }
 
-  public class LocationManager {
-    method @Deprecated @RequiresPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) public boolean addNmeaListener(android.location.GpsStatus.NmeaListener);
-    method @Deprecated public void removeNmeaListener(android.location.GpsStatus.NmeaListener);
-  }
-
 }
 
 package android.media {
@@ -514,10 +509,6 @@ package android.provider {
     field public static final String[] VOLUME_SETTINGS;
     field public static final String VOLUME_SYSTEM = "volume_system";
     field public static final String VOLUME_VOICE = "volume_voice";
-  }
-
-  public static final class Telephony.Sms.Intents {
-    field public static final String SMS_EMERGENCY_CB_RECEIVED_ACTION = "android.provider.Telephony.SMS_EMERGENCY_CB_RECEIVED";
   }
 
 }

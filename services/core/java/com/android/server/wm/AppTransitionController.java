@@ -410,7 +410,7 @@ public class AppTransitionController {
             ActivityRecord activity = apps.valueAt(i);
             ProtoLog.v(WM_DEBUG_APP_TRANSITIONS, "Now changing app %s", activity);
             activity.cancelAnimationOnly();
-            activity.applyAnimationLocked(null, transit, true, false);
+            activity.applyAnimation(null, transit, true, false);
             activity.updateReportedVisibilityLocked();
             mService.openSurfaceTransaction();
             try {
@@ -688,15 +688,16 @@ public class AppTransitionController {
      * compare z-order.
      *
      * @param apps The list of apps to search.
-     * @param ignoreHidden If set to true, ignores apps that are {@link ActivityRecord#isHidden}.
+     * @param ignoreInvisible If set to true, ignores apps that are not
+     *                        {@link ActivityRecord#isVisible}.
      * @return The top {@link ActivityRecord}.
      */
-    private ActivityRecord getTopApp(ArraySet<ActivityRecord> apps, boolean ignoreHidden) {
+    private ActivityRecord getTopApp(ArraySet<ActivityRecord> apps, boolean ignoreInvisible) {
         int topPrefixOrderIndex = Integer.MIN_VALUE;
         ActivityRecord topApp = null;
         for (int i = apps.size() - 1; i >= 0; i--) {
             final ActivityRecord app = apps.valueAt(i);
-            if (ignoreHidden && app.isHidden()) {
+            if (ignoreInvisible && !app.isVisible()) {
                 continue;
             }
             final int prefixOrderIndex = app.getPrefixOrderIndex();

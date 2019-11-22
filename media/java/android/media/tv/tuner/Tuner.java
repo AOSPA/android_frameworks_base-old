@@ -16,11 +16,11 @@
 
 package android.media.tv.tuner;
 
-import android.annotation.IntDef;
-import android.hardware.tv.tuner.V1_0.Constants;
+import android.annotation.Nullable;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
 
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
 import java.util.List;
 
 /**
@@ -32,40 +32,22 @@ public final class Tuner implements AutoCloseable  {
     private static final String TAG = "MediaTvTuner";
     private static final boolean DEBUG = false;
 
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef({FRONTEND_TYPE_UNDEFINED, FRONTEND_TYPE_ANALOG, FRONTEND_TYPE_ATSC, FRONTEND_TYPE_ATSC3,
-            FRONTEND_TYPE_DVBC, FRONTEND_TYPE_DVBS, FRONTEND_TYPE_DVBT, FRONTEND_TYPE_ISDBS,
-            FRONTEND_TYPE_ISDBS3, FRONTEND_TYPE_ISDBT})
-    public @interface FrontendType {}
-
-    public static final int FRONTEND_TYPE_UNDEFINED = Constants.FrontendType.UNDEFINED;
-    public static final int FRONTEND_TYPE_ANALOG = Constants.FrontendType.ANALOG;
-    public static final int FRONTEND_TYPE_ATSC = Constants.FrontendType.ATSC;
-    public static final int FRONTEND_TYPE_ATSC3 = Constants.FrontendType.ATSC3;
-    public static final int FRONTEND_TYPE_DVBC = Constants.FrontendType.DVBC;
-    public static final int FRONTEND_TYPE_DVBS = Constants.FrontendType.DVBS;
-    public static final int FRONTEND_TYPE_DVBT = Constants.FrontendType.DVBT;
-    public static final int FRONTEND_TYPE_ISDBS = Constants.FrontendType.ISDBS;
-    public static final int FRONTEND_TYPE_ISDBS3 = Constants.FrontendType.ISDBS3;
-    public static final int FRONTEND_TYPE_ISDBT = Constants.FrontendType.ISDBT;
-
-
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef({FRONTEND_EVENT_TYPE_LOCKED, FRONTEND_EVENT_TYPE_NO_SIGNAL,
-            FRONTEND_EVENT_TYPE_LOST_LOCK})
-    public @interface FrontendEventType {}
-
-    public static final int FRONTEND_EVENT_TYPE_LOCKED = Constants.FrontendEventType.LOCKED;
-    public static final int FRONTEND_EVENT_TYPE_NO_SIGNAL = Constants.FrontendEventType.NO_SIGNAL;
-    public static final int FRONTEND_EVENT_TYPE_LOST_LOCK = Constants.FrontendEventType.LOST_LOCK;
+    private static final int MSG_ON_FRONTEND_EVENT = 1;
+    private static final int MSG_ON_FILTER_EVENT = 2;
+    private static final int MSG_ON_FILTER_STATUS = 3;
+    private static final int MSG_ON_LNB_EVENT = 4;
 
     static {
         System.loadLibrary("media_tv_tuner");
         nativeInit();
     }
 
-    private FrontendCallback mFrontendCallback;
     private List<Integer> mFrontendIds;
+    private Frontend mFrontend;
+    private EventHandler mHandler;
+
+    private List<Integer> mLnbIds;
+    private Lnb mLnb;
 
     public Tuner() {
         nativeSetup();
@@ -96,6 +78,10 @@ public final class Tuner implements AutoCloseable  {
      */
     private native Frontend nativeOpenFrontendById(int id);
 
+    private native Filter nativeOpenFilter(int type, int subType, int bufferSize);
+
+    private native List<Integer> nativeGetLnbIds();
+    private native Lnb nativeOpenLnbById(int id);
 
     /**
      * Frontend Callback.
@@ -108,10 +94,97 @@ public final class Tuner implements AutoCloseable  {
         void onEvent(int frontendEventType);
     }
 
-    protected static class Frontend {
-        int mId;
+    /**
+     * LNB Callback.
+     */
+    public interface LnbCallback {
+        /**
+         * Invoked when there is a LNB event.
+         */
+        void onEvent(int lnbEventType);
+    }
+
+    /**
+     * Frontend Callback.
+     */
+    public interface FilterCallback {
+        /**
+         * Invoked when filter status changed.
+         */
+        void onFilterStatus(int status);
+    }
+
+    @Nullable
+    private EventHandler createEventHandler() {
+        Looper looper;
+        if ((looper = Looper.myLooper()) != null) {
+            return new EventHandler(looper);
+        } else if ((looper = Looper.getMainLooper()) != null) {
+            return new EventHandler(looper);
+        }
+        return null;
+    }
+
+    private class EventHandler extends Handler {
+        private EventHandler(Looper looper) {
+            super(looper);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case MSG_ON_FRONTEND_EVENT:
+                    if (mFrontend != null && mFrontend.mCallback != null) {
+                        mFrontend.mCallback.onEvent(msg.arg1);
+                    }
+                    break;
+                case MSG_ON_FILTER_STATUS: {
+                    Filter filter = (Filter) msg.obj;
+                    if (filter.mCallback != null) {
+                        filter.mCallback.onFilterStatus(msg.arg1);
+                    }
+                    break;
+                }
+                case MSG_ON_LNB_EVENT: {
+                    if (mLnb != null && mLnb.mCallback != null) {
+                        mLnb.mCallback.onEvent(msg.arg1);
+                    }
+                }
+                default:
+                    // fall through
+            }
+        }
+    }
+
+    protected class Frontend {
+        private int mId;
+        private FrontendCallback mCallback;
+
         private Frontend(int id) {
             mId = id;
+        }
+
+        public void setCallback(@Nullable FrontendCallback callback, @Nullable Handler handler) {
+            mCallback = callback;
+
+            if (mCallback == null) {
+                return;
+            }
+
+            if (handler == null) {
+                // use default looper if handler is null
+                if (mHandler == null) {
+                    mHandler = createEventHandler();
+                }
+                return;
+            }
+
+            Looper looper = handler.getLooper();
+            if (mHandler != null && mHandler.getLooper() == looper) {
+                // the same looper. reuse mHandler
+                return;
+            }
+            mHandler = new EventHandler(looper);
         }
     }
 
@@ -122,11 +195,103 @@ public final class Tuner implements AutoCloseable  {
 
     private Frontend openFrontendById(int id) {
         if (mFrontendIds == null) {
-            getFrontendIds();
+            mFrontendIds = getFrontendIds();
         }
         if (!mFrontendIds.contains(id)) {
             return null;
         }
-        return nativeOpenFrontendById(id);
+        mFrontend = nativeOpenFrontendById(id);
+        return mFrontend;
+    }
+
+    private void onFrontendEvent(int eventType) {
+        if (mHandler != null) {
+            mHandler.sendMessage(mHandler.obtainMessage(MSG_ON_FRONTEND_EVENT, eventType, 0));
+        }
+    }
+
+    protected class Filter {
+        private long mNativeContext;
+        private FilterCallback mCallback;
+        int mId;
+
+        private native boolean nativeStartFilter();
+        private native boolean nativeStopFilter();
+        private native boolean nativeFlushFilter();
+
+        private Filter(int id) {
+            mId = id;
+        }
+
+        private void onFilterStatus(int status) {
+            if (mHandler != null) {
+                mHandler.sendMessage(
+                        mHandler.obtainMessage(MSG_ON_FILTER_STATUS, status, 0, this));
+            }
+        }
+
+        public boolean start() {
+            return nativeStartFilter();
+        }
+
+        public boolean stop() {
+            return nativeStopFilter();
+        }
+
+        public boolean flush() {
+            return nativeFlushFilter();
+        }
+    }
+
+    private Filter openFilter(int type, int subType, int bufferSize, FilterCallback cb) {
+        Filter filter = nativeOpenFilter(type, subType, bufferSize);
+        if (filter != null) {
+            filter.mCallback = cb;
+            if (mHandler == null) {
+                mHandler = createEventHandler();
+            }
+        }
+        return filter;
+    }
+
+    protected class Lnb {
+        private int mId;
+        private LnbCallback mCallback;
+
+        private Lnb(int id) {
+            mId = id;
+        }
+
+        public void setCallback(@Nullable LnbCallback callback) {
+            mCallback = callback;
+            if (mCallback == null) {
+                return;
+            }
+            if (mHandler == null) {
+                mHandler = createEventHandler();
+            }
+        }
+    }
+
+    private List<Integer> getLnbIds() {
+        mLnbIds = nativeGetLnbIds();
+        return mLnbIds;
+    }
+
+    private Lnb openLnbById(int id) {
+        if (mLnbIds == null) {
+            mLnbIds = getLnbIds();
+        }
+        if (!mLnbIds.contains(id)) {
+            return null;
+        }
+        mLnb = nativeOpenLnbById(id);
+        return mLnb;
+    }
+
+    private void onLnbEvent(int eventType) {
+        if (mHandler != null) {
+            mHandler.sendMessage(mHandler.obtainMessage(MSG_ON_LNB_EVENT, eventType, 0));
+        }
     }
 }

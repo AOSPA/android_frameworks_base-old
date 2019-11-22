@@ -293,7 +293,6 @@ public class SystemServicesTestRule implements TestRule {
         final ActivityStack homeStack = display.getStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME);
         spyOn(homeStack);
-        spyOn(homeStack.mTaskStack);
     }
 
     private void tearDown() {
@@ -311,6 +310,7 @@ public class SystemServicesTestRule implements TestRule {
         DisplayThread.dispose();
         AnimationThread.dispose();
         UiThread.dispose();
+        SurfaceAnimationThread.dispose();
         mInputChannel.dispose();
 
         tearDownLocalServices();
@@ -437,6 +437,10 @@ public class SystemServicesTestRule implements TestRule {
             spyOn(getLockTaskController());
             spyOn(getTaskChangeNotificationController());
             initRootActivityContainerMocks();
+
+            AppWarnings appWarnings = getAppWarningsLocked();
+            spyOn(appWarnings);
+            doNothing().when(appWarnings).onStartActivity(any());
         }
 
         void initRootActivityContainerMocks() {

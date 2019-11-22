@@ -140,6 +140,9 @@ public class ResolverActivity extends Activity implements
 
     private final PackageMonitor mPackageMonitor = createPackageMonitor();
 
+    // Intent extra for connected audio devices
+    public static final String EXTRA_IS_AUDIO_CAPTURE_DEVICE = "is_audio_capture_device";
+
     /**
      * Get the string resource to be used as a label for the link to the resolver activity for an
      * action.
@@ -325,9 +328,8 @@ public class ResolverActivity extends Activity implements
         boolean filterLastUsed = mSupportsAlwaysUseOption && !isVoiceInteraction();
         mAdapter = createAdapter(this, mIntents, initialIntents, rList,
                 filterLastUsed, mUseLayoutForBrowsables);
-        configureContentView();
 
-        if (rebuildList()) {
+        if (configureContentView()) {
             return;
         }
 
@@ -1038,8 +1040,14 @@ public class ResolverActivity extends Activity implements
     public ResolverListAdapter createAdapter(Context context, List<Intent> payloadIntents,
             Intent[] initialIntents, List<ResolveInfo> rList,
             boolean filterLastUsed, boolean useLayoutForBrowsables) {
+
+        Intent startIntent = getIntent();
+        boolean isAudioCaptureDevice =
+                startIntent.getBooleanExtra(EXTRA_IS_AUDIO_CAPTURE_DEVICE, false);
+
         return new ResolverListAdapter(context, payloadIntents, initialIntents, rList,
-                filterLastUsed, createListController(), useLayoutForBrowsables, this);
+                filterLastUsed, createListController(), useLayoutForBrowsables, this,
+                isAudioCaptureDevice);
     }
 
     @VisibleForTesting
@@ -1054,11 +1062,13 @@ public class ResolverActivity extends Activity implements
 
     /**
      * Sets up the content view.
+     * @return <code>true</code> if the activity is finishing and creation should halt.
      */
-    private void configureContentView() {
+    private boolean configureContentView() {
         if (mAdapter == null) {
             throw new IllegalStateException("mAdapter cannot be null.");
         }
+        boolean rebuildCompleted = mAdapter.rebuildList();
         if (useLayoutWithDefault()) {
             mLayoutId = R.layout.resolver_list_with_default;
         } else {
@@ -1066,21 +1076,26 @@ public class ResolverActivity extends Activity implements
         }
         setContentView(mLayoutId);
         mAdapterView = findViewById(R.id.resolver_list);
+        return postRebuildList(rebuildCompleted);
     }
 
     /**
-     * Returns true if the activity is finishing and creation should halt.
-     * </p>Subclasses must call rebuildListInternal at the end of rebuildList.
+     * Finishing procedures to be performed after the list has been rebuilt.
+     * </p>Subclasses must call postRebuildListInternal at the end of postRebuildList.
+     * @param rebuildCompleted
+     * @return <code>true</code> if the activity is finishing and creation should halt.
      */
-    protected boolean rebuildList() {
-        return rebuildListInternal();
+    protected boolean postRebuildList(boolean rebuildCompleted) {
+        return postRebuildListInternal(rebuildCompleted);
     }
 
     /**
-     * Returns true if the activity is finishing and creation should halt.
+     * Finishing procedures to be performed after the list has been rebuilt.
+     * @param rebuildCompleted
+     * @return <code>true</code> if the activity is finishing and creation should halt.
      */
-    final boolean rebuildListInternal() {
-        boolean rebuildCompleted = mAdapter.rebuildList();
+    final boolean postRebuildListInternal(boolean rebuildCompleted) {
+
         int count = mAdapter.getUnfilteredCount();
 
         // We only rebuild asynchronously when we have multiple elements to sort. In the case where

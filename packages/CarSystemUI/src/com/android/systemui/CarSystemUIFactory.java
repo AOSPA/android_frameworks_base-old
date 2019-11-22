@@ -18,46 +18,17 @@ package com.android.systemui;
 
 import android.content.Context;
 
-import com.android.internal.widget.LockPatternUtils;
-import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.dagger.SystemUIRootComponent;
-import com.android.systemui.navigationbar.car.CarFacetButtonController;
-import com.android.systemui.statusbar.car.CarStatusBarKeyguardViewManager;
-import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
-
-import javax.inject.Singleton;
-
-import dagger.Component;
 
 /**
  * Class factory to provide car specific SystemUI components.
  */
 public class CarSystemUIFactory extends SystemUIFactory {
 
-    private CarDependencyComponent mCarDependencyComponent;
-
     @Override
     protected SystemUIRootComponent buildSystemUIRootComponent(Context context) {
-        mCarDependencyComponent = DaggerCarSystemUIFactory_CarDependencyComponent.builder()
-                .contextHolder(new ContextHolder(context))
-                .build();
         return DaggerCarSystemUIRootComponent.builder()
                 .contextHolder(new ContextHolder(context))
                 .build();
-    }
-
-    public CarDependencyComponent getCarDependencyComponent() {
-        return mCarDependencyComponent;
-    }
-
-    public StatusBarKeyguardViewManager createStatusBarKeyguardViewManager(Context context,
-            ViewMediatorCallback viewMediatorCallback, LockPatternUtils lockPatternUtils) {
-        return new CarStatusBarKeyguardViewManager(context, viewMediatorCallback, lockPatternUtils);
-    }
-
-    @Singleton
-    @Component(modules = ContextHolder.class)
-    public interface CarDependencyComponent {
-        CarFacetButtonController getCarFacetButtonController();
     }
 }

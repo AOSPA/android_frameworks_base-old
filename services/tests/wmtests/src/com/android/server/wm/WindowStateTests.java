@@ -222,8 +222,7 @@ public class WindowStateTests extends WindowTestsBase {
         final WindowState appWindow = createWindow(null, TYPE_APPLICATION, "appWindow");
         final WindowState imeWindow = createWindow(null, TYPE_INPUT_METHOD, "imeWindow");
 
-        // Setting FLAG_NOT_FOCUSABLE without FLAG_ALT_FOCUSABLE_IM prevents the window from being
-        // an IME target.
+        // Setting FLAG_NOT_FOCUSABLE prevents the window from being an IME target.
         appWindow.mAttrs.flags |= FLAG_NOT_FOCUSABLE;
         imeWindow.mAttrs.flags |= FLAG_NOT_FOCUSABLE;
 
@@ -231,7 +230,7 @@ public class WindowStateTests extends WindowTestsBase {
         appWindow.setHasSurface(true);
         imeWindow.setHasSurface(true);
 
-        // Windows without flags (FLAG_NOT_FOCUSABLE|FLAG_ALT_FOCUSABLE_IM) can't be IME targets
+        // Windows with FLAG_NOT_FOCUSABLE can't be IME targets
         assertFalse(appWindow.canBeImeTarget());
         assertFalse(imeWindow.canBeImeTarget());
 
@@ -239,10 +238,16 @@ public class WindowStateTests extends WindowTestsBase {
         appWindow.mAttrs.flags |= (FLAG_NOT_FOCUSABLE | FLAG_ALT_FOCUSABLE_IM);
         imeWindow.mAttrs.flags |= (FLAG_NOT_FOCUSABLE | FLAG_ALT_FOCUSABLE_IM);
 
-        // Visible app window with flags can be IME target while an IME window can never be an IME
-        // target regardless of its visibility or flags.
-        assertTrue(appWindow.canBeImeTarget());
+        // Visible app window with flags FLAG_NOT_FOCUSABLE or FLAG_ALT_FOCUSABLE_IM can't be IME
+        // target while an IME window can never be an IME target regardless of its visibility
+        // or flags.
+        assertFalse(appWindow.canBeImeTarget());
         assertFalse(imeWindow.canBeImeTarget());
+
+        appWindow.mAttrs.flags &= ~FLAG_ALT_FOCUSABLE_IM;
+        assertFalse(appWindow.canBeImeTarget());
+        appWindow.mAttrs.flags &= ~FLAG_NOT_FOCUSABLE;
+        assertTrue(appWindow.canBeImeTarget());
 
         // Make windows invisible
         appWindow.hideLw(false /* doAnimation */);
@@ -378,11 +383,11 @@ public class WindowStateTests extends WindowTestsBase {
     @Test
     public void testCanAffectSystemUiFlags() {
         final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
-        app.mToken.setHidden(false);
+        app.mActivityRecord.setVisible(true);
         assertTrue(app.canAffectSystemUiFlags());
-        app.mToken.setHidden(true);
+        app.mActivityRecord.setVisible(false);
         assertFalse(app.canAffectSystemUiFlags());
-        app.mToken.setHidden(false);
+        app.mActivityRecord.setVisible(true);
         app.mAttrs.alpha = 0.0f;
         assertFalse(app.canAffectSystemUiFlags());
     }
@@ -390,7 +395,7 @@ public class WindowStateTests extends WindowTestsBase {
     @Test
     public void testCanAffectSystemUiFlags_disallow() {
         final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
-        app.mToken.setHidden(false);
+        app.mActivityRecord.setVisible(true);
         assertTrue(app.canAffectSystemUiFlags());
         app.getTask().setCanAffectSystemUiFlags(false);
         assertFalse(app.canAffectSystemUiFlags());
@@ -510,12 +515,12 @@ public class WindowStateTests extends WindowTestsBase {
         window.setShowToOwnerOnlyLocked(true);
 
         mWm.mCurrentUserId = 1;
-        window.switchUser();
+        window.switchUser(mWm.mCurrentUserId);
         assertFalse(window.isVisible());
         assertFalse(window.isVisibleByPolicy());
 
         mWm.mCurrentUserId = 0;
-        window.switchUser();
+        window.switchUser(mWm.mCurrentUserId);
         assertTrue(window.isVisible());
         assertTrue(window.isVisibleByPolicy());
     }
@@ -564,7 +569,7 @@ public class WindowStateTests extends WindowTestsBase {
     @Test
     public void testCantReceiveTouchWhenAppTokenHiddenRequested() {
         final WindowState win0 = createWindow(null, TYPE_APPLICATION, "win0");
-        win0.mActivityRecord.hiddenRequested = true;
+        win0.mActivityRecord.mVisibleRequested = false;
         assertTrue(win0.cantReceiveTouchInput());
     }
 

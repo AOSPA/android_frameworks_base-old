@@ -24,7 +24,6 @@ import android.telephony.ServiceState;
 import android.telephony.TelephonyManager;
 import android.view.WindowManagerPolicyConstants;
 
-import com.android.internal.telephony.IccCardConstants;
 import com.android.systemui.statusbar.KeyguardIndicationController;
 
 import java.util.TimeZone;
@@ -137,7 +136,7 @@ public class KeyguardUpdateMonitorCallback {
      * @param slotId
      * @param simState
      */
-    public void onSimStateChanged(int subId, int slotId, IccCardConstants.State simState) { }
+    public void onSimStateChanged(int subId, int slotId, int simState) { }
 
     /**
      * Called when the sevice state changes.

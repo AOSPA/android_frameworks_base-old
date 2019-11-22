@@ -53,8 +53,6 @@ import static com.android.server.wm.ActivityStack.ActivityState.RESUMED;
 import static com.android.server.wm.ActivityStack.ActivityState.STARTED;
 import static com.android.server.wm.ActivityStack.ActivityState.STOPPED;
 import static com.android.server.wm.ActivityStack.ActivityState.STOPPING;
-import static com.android.server.wm.ActivityStack.REMOVE_TASK_MODE_DESTROYING;
-import static com.android.server.wm.ActivityStack.REMOVE_TASK_MODE_MOVING;
 import static com.android.server.wm.ActivityStack.STACK_VISIBILITY_INVISIBLE;
 import static com.android.server.wm.ActivityStack.STACK_VISIBILITY_VISIBLE;
 import static com.android.server.wm.ActivityStack.STACK_VISIBILITY_VISIBLE_BEHIND_TRANSLUCENT;
@@ -115,7 +113,7 @@ import org.mockito.invocation.InvocationOnMock;
 @RunWith(WindowTestRunner.class)
 public class ActivityRecordTests extends ActivityTestsBase {
     private ActivityStack mStack;
-    private TaskRecord mTask;
+    private Task mTask;
     private ActivityRecord mActivity;
 
     @Before
@@ -136,20 +134,20 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
     @Test
     public void testStackCleanupOnActivityRemoval() {
-        mTask.mTask.removeChild(mActivity);
+        mTask.removeChild(mActivity);
         verify(mStack, times(1)).onActivityRemovedFromStack(any());
     }
 
     @Test
     public void testStackCleanupOnTaskRemoval() {
-        mStack.removeTask(mTask, null /*reason*/, REMOVE_TASK_MODE_MOVING);
+        mStack.removeChild(mTask, null /*reason*/);
         // Stack should be gone on task removal.
         assertNull(mService.mRootActivityContainer.getStack(mStack.mStackId));
     }
 
     @Test
     public void testNoCleanupMovingActivityInSameStack() {
-        final TaskRecord newTask = new TaskBuilder(mService.mStackSupervisor).setStack(mStack)
+        final Task newTask = new TaskBuilder(mService.mStackSupervisor).setStack(mStack)
                 .build();
         mActivity.reparent(newTask, 0, null /*reason*/);
         verify(mStack, times(0)).onActivityRemovedFromStack(any());
@@ -223,7 +221,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testRestartProcessIfVisible() {
         doNothing().when(mSupervisor).scheduleRestartTimeout(mActivity);
-        mActivity.visible = true;
+        mActivity.mVisibleRequested = true;
         mActivity.setSavedState(null /* savedState */);
         mActivity.setState(ActivityStack.ActivityState.RESUMED, "testRestart");
         prepareFixedAspectRatioUnresizableActivity();
@@ -257,7 +255,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
         // Set options for two ActivityRecords in separate Tasks. Apply one ActivityRecord options.
         // Pending options should be cleared for only ActivityRecord that was applied
-        TaskRecord task2 = new TaskBuilder(mService.mStackSupervisor).setStack(mStack).build();
+        Task task2 = new TaskBuilder(mService.mStackSupervisor).setStack(mStack).build();
         activity2 = new ActivityBuilder(mService).setTask(task2).build();
         activity2.updateOptionsLocked(activityOptions);
         mActivity.updateOptionsLocked(activityOptions);
@@ -325,7 +323,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
                 : ORIENTATION_PORTRAIT;
         mTask.onRequestedOverrideConfigurationChanged(newConfig);
 
-        doReturn(true).when(mTask.mTask).isDragResizing();
+        doReturn(true).when(mTask).isDragResizing();
 
         mActivity.mRelaunchReason = ActivityTaskManagerService.RELAUNCH_REASON_NONE;
 
@@ -382,7 +380,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         }
 
         // Mimic the behavior that display doesn't handle app's requested orientation.
-        final DisplayContent dc = mTask.mTask.getDisplayContent();
+        final DisplayContent dc = mTask.getDisplayContent();
         doReturn(false).when(dc).onDescendantOrientationChanged(any(), any());
         doReturn(false).when(dc).handlesOrientationChangeFromDescendant();
 
@@ -504,7 +502,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         mTask.setBounds(100, 100, 400, 600);
         mActivity.info.screenOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
         mActivity.info.resizeMode = ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
-        mActivity.visible = true;
+        mActivity.mVisibleRequested = true;
         ensureActivityConfiguration();
 
         final Rect bounds = new Rect(mActivity.getBounds());
@@ -549,7 +547,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
                 .when(mActivity).getRequestedOrientation();
         mActivity.info.resizeMode = RESIZE_MODE_UNRESIZEABLE;
         mActivity.info.minAspectRatio = mActivity.info.maxAspectRatio = 1;
-        mActivity.visible = true;
+        mActivity.mVisibleRequested = true;
         ensureActivityConfiguration();
         // The parent configuration doesn't change since the first resolved configuration, so the
         // activity shouldn't be in the size compatibility mode.
@@ -591,13 +589,13 @@ public class ActivityRecordTests extends ActivityTestsBase {
                 .setResizeMode(RESIZE_MODE_UNRESIZEABLE)
                 .setMaxAspectRatio(1.5f)
                 .build();
-        mActivity.visible = true;
+        mActivity.mVisibleRequested = true;
 
         final Rect originalBounds = new Rect(mActivity.getBounds());
         final int originalDpi = mActivity.getConfiguration().densityDpi;
 
         // Move the non-resizable activity to the new display.
-        mStack.reparent(newDisplay, true /* onTop */, false /* displayRemoved */);
+        mStack.reparent(newDisplay.mDisplayContent, true /* onTop */);
 
         assertEquals(originalBounds.width(),
                 mActivity.getWindowConfiguration().getBounds().width());
@@ -616,7 +614,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         mTask.getRequestedOverrideConfiguration().orientation = Configuration.ORIENTATION_PORTRAIT;
         mActivity.info.screenOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
         mActivity.info.resizeMode = ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
-        mActivity.visible = true;
+        mActivity.mVisibleRequested = true;
 
         ensureActivityConfiguration();
         final Rect originalBounds = new Rect(mActivity.getBounds());
@@ -663,7 +661,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
         prepareFixedAspectRatioUnresizableActivity();
         mActivity.setState(STOPPED, "testSizeCompatMode");
-        mActivity.visible = false;
+        mActivity.mVisibleRequested = false;
         mActivity.app.setReportedProcState(ActivityManager.PROCESS_STATE_CACHED_ACTIVITY);
         // Make the parent bounds to be different so the activity is in size compatibility mode.
         setupDisplayAndParentSize(600, 1200);
@@ -831,7 +829,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         // Prepare the activity record to be ready for immediate removal. It should be invisible and
         // have no process. Otherwise, request to finish it will send a message to client first.
         mActivity.setState(STOPPED, "test");
-        mActivity.visible = false;
+        mActivity.mVisibleRequested = false;
         mActivity.nowVisible = false;
         // Set process to 'null' to allow immediate removal, but don't call mActivity.setProcess() -
         // this will cause NPE when updating task's process.
@@ -840,7 +838,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         // Put a visible activity on top, so the finishing activity doesn't have to wait until the
         // next activity reports idle to destroy it.
         final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        topActivity.visible = true;
+        topActivity.mVisibleRequested = true;
         topActivity.nowVisible = true;
         topActivity.setState(RESUMED, "test");
 
@@ -926,7 +924,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testFinishActivityIfPossible_visibleResumedPreparesAppTransition() {
         mActivity.finishing = false;
-        mActivity.visible = true;
+        mActivity.mVisibleRequested = true;
         mActivity.setState(RESUMED, "test");
         mActivity.finishIfPossible("test", false /* oomAdj */);
 
@@ -942,7 +940,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testFinishActivityIfPossible_visibleNotResumedExecutesAppTransition() {
         mActivity.finishing = false;
-        mActivity.visible = true;
+        mActivity.mVisibleRequested = true;
         mActivity.setState(PAUSED, "test");
         mActivity.finishIfPossible("test", false /* oomAdj */);
 
@@ -960,7 +958,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         // Put an activity on top of test activity to make it invisible and prevent us from
         // accidentally resuming the topmost one again.
         new ActivityBuilder(mService).build();
-        mActivity.visible = false;
+        mActivity.mVisibleRequested = false;
         mActivity.setState(STOPPED, "test");
 
         mActivity.finishIfPossible("test", false /* oomAdj */);
@@ -1012,7 +1010,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testCompleteFinishing_keepStateOfNextInvisible() {
         final ActivityRecord currentTop = mActivity;
-        currentTop.visible = currentTop.nowVisible = true;
+        currentTop.mVisibleRequested = currentTop.nowVisible = true;
 
         // Simulates that {@code currentTop} starts an existing activity from background (so its
         // state is stopped) and the starting flow just goes to place it at top.
@@ -1038,13 +1036,13 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testCompleteFinishing_waitForNextVisible() {
         final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        topActivity.visible = true;
+        topActivity.mVisibleRequested = true;
         topActivity.nowVisible = true;
         topActivity.finishing = true;
         topActivity.setState(PAUSED, "true");
         // Mark the bottom activity as not visible, so that we will wait for it before removing
         // the top one.
-        mActivity.visible = false;
+        mActivity.mVisibleRequested = false;
         mActivity.nowVisible = false;
         mActivity.setState(STOPPED, "test");
 
@@ -1063,13 +1061,13 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testCompleteFinishing_noWaitForNextVisible_alreadyInvisible() {
         final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        topActivity.visible = false;
+        topActivity.mVisibleRequested = false;
         topActivity.nowVisible = false;
         topActivity.finishing = true;
         topActivity.setState(PAUSED, "true");
         // Mark the bottom activity as not visible, so that we would wait for it before removing
         // the top one.
-        mActivity.visible = false;
+        mActivity.mVisibleRequested = false;
         mActivity.nowVisible = false;
         mActivity.setState(STOPPED, "test");
 
@@ -1085,12 +1083,12 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testCompleteFinishing_waitForIdle() {
         final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        topActivity.visible = true;
+        topActivity.mVisibleRequested = true;
         topActivity.nowVisible = true;
         topActivity.finishing = true;
         topActivity.setState(PAUSED, "true");
         // Mark the bottom activity as already visible, so that there is no need to wait for it.
-        mActivity.visible = true;
+        mActivity.mVisibleRequested = true;
         mActivity.nowVisible = true;
         mActivity.setState(RESUMED, "test");
 
@@ -1106,12 +1104,12 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testCompleteFinishing_noWaitForNextVisible_stopped() {
         final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        topActivity.visible = false;
+        topActivity.mVisibleRequested = false;
         topActivity.nowVisible = false;
         topActivity.finishing = true;
         topActivity.setState(STOPPED, "true");
         // Mark the bottom activity as already visible, so that there is no need to wait for it.
-        mActivity.visible = true;
+        mActivity.mVisibleRequested = true;
         mActivity.nowVisible = true;
         mActivity.setState(RESUMED, "test");
 
@@ -1127,12 +1125,12 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testCompleteFinishing_noWaitForNextVisible_nonFocusedStack() {
         final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        topActivity.visible = true;
+        topActivity.mVisibleRequested = true;
         topActivity.nowVisible = true;
         topActivity.finishing = true;
         topActivity.setState(PAUSED, "true");
         // Mark the bottom activity as already visible, so that there is no need to wait for it.
-        mActivity.visible = true;
+        mActivity.mVisibleRequested = true;
         mActivity.nowVisible = true;
         mActivity.setState(RESUMED, "test");
 
@@ -1141,7 +1139,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         final ActivityStack stack = new StackBuilder(mRootActivityContainer).build();
         final ActivityRecord focusedActivity = stack.getChildAt(0).getChildAt(0);
         focusedActivity.nowVisible = true;
-        focusedActivity.visible = true;
+        focusedActivity.mVisibleRequested = true;
         focusedActivity.setState(RESUMED, "test");
         stack.mResumedActivity = focusedActivity;
 
@@ -1173,8 +1171,8 @@ public class ActivityRecordTests extends ActivityTestsBase {
     public void testDestroyIfPossible_lastActivityAboveEmptyHomeStack() {
         // Empty the home stack.
         final ActivityStack homeStack = mActivity.getDisplay().getHomeStack();
-        for (TaskRecord t : homeStack.getAllTasks()) {
-            homeStack.removeTask(t, "test", REMOVE_TASK_MODE_DESTROYING);
+        for (Task t : homeStack.getAllTasks()) {
+            homeStack.removeChild(t, "test");
         }
         mActivity.finishing = true;
         doReturn(false).when(mRootActivityContainer).resumeFocusedStacksTopActivities();
@@ -1199,8 +1197,8 @@ public class ActivityRecordTests extends ActivityTestsBase {
     public void testCompleteFinishing_lastActivityAboveEmptyHomeStack() {
         // Empty the home stack.
         final ActivityStack homeStack = mActivity.getDisplay().getHomeStack();
-        for (TaskRecord t : homeStack.getAllTasks()) {
-            homeStack.removeTask(t, "test", REMOVE_TASK_MODE_DESTROYING);
+        for (Task t : homeStack.getAllTasks()) {
+            homeStack.removeChild(t, "test");
         }
         mActivity.finishing = true;
         spyOn(mStack);
@@ -1246,12 +1244,12 @@ public class ActivityRecordTests extends ActivityTestsBase {
     public void testDestroyImmediately_noApp_finishing() {
         mActivity.app = null;
         mActivity.finishing = true;
-        final TaskRecord task = mActivity.getTaskRecord();
+        final Task task = mActivity.getTask();
 
         mActivity.destroyImmediately(false /* removeFromApp */, "test");
 
         assertEquals(DESTROYED, mActivity.getState());
-        assertNull(mActivity.getTaskRecord());
+        assertNull(mActivity.getTask());
         assertEquals(0, task.getChildCount());
     }
 
@@ -1263,12 +1261,12 @@ public class ActivityRecordTests extends ActivityTestsBase {
     public void testDestroyImmediately_noApp_notFinishing() {
         mActivity.app = null;
         mActivity.finishing = false;
-        final TaskRecord task = mActivity.getTaskRecord();
+        final Task task = mActivity.getTask();
 
         mActivity.destroyImmediately(false /* removeFromApp */, "test");
 
         assertEquals(DESTROYED, mActivity.getState());
-        assertEquals(task, mActivity.getTaskRecord());
+        assertEquals(task, mActivity.getTask());
         assertEquals(1, task.getChildCount());
     }
 
@@ -1299,13 +1297,13 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testRemoveFromHistory() {
         final ActivityStack stack = mActivity.getActivityStack();
-        final TaskRecord task = mActivity.getTaskRecord();
+        final Task task = mActivity.getTask();
 
         mActivity.removeFromHistory("test");
 
         assertEquals(DESTROYED, mActivity.getState());
         assertNull(mActivity.app);
-        assertNull(mActivity.getTaskRecord());
+        assertNull(mActivity.getTask());
         assertEquals(0, task.getChildCount());
         assertNull(task.getStack());
         assertEquals(0, stack.getChildCount());
@@ -1348,7 +1346,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         setupDisplayContentForCompatDisplayInsets();
         mActivity.info.resizeMode = RESIZE_MODE_UNRESIZEABLE;
         mActivity.info.maxAspectRatio = 1.5f;
-        mActivity.visible = true;
+        mActivity.mVisibleRequested = true;
         ensureActivityConfiguration();
     }
 

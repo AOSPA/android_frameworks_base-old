@@ -34,6 +34,7 @@ import android.os.UserManager;
 import android.provider.Settings.Global;
 import android.service.notification.ZenModeConfig;
 import android.telecom.TelecomManager;
+import android.telephony.TelephonyManager;
 import android.text.format.DateFormat;
 import android.util.Log;
 
@@ -41,8 +42,8 @@ import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.UiOffloadThread;
+import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.privacy.PrivacyItem;
 import com.android.systemui.privacy.PrivacyItemController;
 import com.android.systemui.privacy.PrivacyItemControllerKt;
@@ -128,7 +129,7 @@ public class PhoneStatusBarPolicy
 
     // Assume it's all good unless we hear otherwise.  We don't always seem
     // to get broadcasts that it *is* there.
-    IccCardConstants.State mSimState = IccCardConstants.State.READY;
+    int mSimState = TelephonyManager.SIM_STATE_READY;
 
     private boolean mZenVisible;
     private boolean mVolumeVisible;
@@ -140,7 +141,8 @@ public class PhoneStatusBarPolicy
     private AlarmManager.AlarmClockInfo mNextAlarm;
     private WifiManager mWifiManager;
 
-    public PhoneStatusBarPolicy(Context context, StatusBarIconController iconController) {
+    public PhoneStatusBarPolicy(Context context, StatusBarIconController iconController,
+            CommandQueue commandQueue, BroadcastDispatcher broadcastDispatcher) {
         mContext = context;
         mIconController = iconController;
         mCast = Dependency.get(CastController.class);
@@ -187,7 +189,7 @@ public class PhoneStatusBarPolicy
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_REMOVED);
         filter.addAction(Intent.ACTION_BOOT_COMPLETED);
-        mContext.registerReceiver(mIntentReceiver, filter, null, mHandler);
+        broadcastDispatcher.registerReceiver(mIntentReceiver, filter, mHandler);
 
         // listen for user / profile change.
         try {
@@ -259,7 +261,7 @@ public class PhoneStatusBarPolicy
         mSensorPrivacyController.addCallback(mSensorPrivacyListener);
         mLocationController.addCallback(this);
 
-        SysUiServiceProvider.getComponent(mContext, CommandQueue.class).addCallback(this);
+        commandQueue.addCallback(this);
     }
 
     @Override
@@ -304,25 +306,25 @@ public class PhoneStatusBarPolicy
     private final void updateSimState(Intent intent) {
         String stateExtra = intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE);
         if (IccCardConstants.INTENT_VALUE_ICC_ABSENT.equals(stateExtra)) {
-            mSimState = IccCardConstants.State.ABSENT;
+            mSimState = TelephonyManager.SIM_STATE_READY;
         } else if (IccCardConstants.INTENT_VALUE_ICC_CARD_IO_ERROR.equals(stateExtra)) {
-            mSimState = IccCardConstants.State.CARD_IO_ERROR;
+            mSimState = TelephonyManager.SIM_STATE_CARD_IO_ERROR;
         } else if (IccCardConstants.INTENT_VALUE_ICC_CARD_RESTRICTED.equals(stateExtra)) {
-            mSimState = IccCardConstants.State.CARD_RESTRICTED;
+            mSimState = TelephonyManager.SIM_STATE_CARD_RESTRICTED;
         } else if (IccCardConstants.INTENT_VALUE_ICC_READY.equals(stateExtra)) {
-            mSimState = IccCardConstants.State.READY;
+            mSimState = TelephonyManager.SIM_STATE_READY;
         } else if (IccCardConstants.INTENT_VALUE_ICC_LOCKED.equals(stateExtra)) {
             final String lockedReason =
                     intent.getStringExtra(IccCardConstants.INTENT_KEY_LOCKED_REASON);
             if (IccCardConstants.INTENT_VALUE_LOCKED_ON_PIN.equals(lockedReason)) {
-                mSimState = IccCardConstants.State.PIN_REQUIRED;
+                mSimState = TelephonyManager.SIM_STATE_PIN_REQUIRED;
             } else if (IccCardConstants.INTENT_VALUE_LOCKED_ON_PUK.equals(lockedReason)) {
-                mSimState = IccCardConstants.State.PUK_REQUIRED;
+                mSimState = TelephonyManager.SIM_STATE_PUK_REQUIRED;
             } else {
-                mSimState = IccCardConstants.State.NETWORK_LOCKED;
+                mSimState = TelephonyManager.SIM_STATE_NETWORK_LOCKED;
             }
         } else {
-            mSimState = IccCardConstants.State.UNKNOWN;
+            mSimState = TelephonyManager.SIM_STATE_UNKNOWN;
         }
     }
 

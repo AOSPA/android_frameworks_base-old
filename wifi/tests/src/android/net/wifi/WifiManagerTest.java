@@ -34,6 +34,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.anyList;
@@ -61,10 +62,12 @@ import android.net.wifi.WifiManager.NetworkRequestUserSelectionCallback;
 import android.net.wifi.WifiManager.OnWifiUsabilityStatsListener;
 import android.net.wifi.WifiManager.ScanResultsListener;
 import android.net.wifi.WifiManager.SoftApCallback;
+import android.net.wifi.WifiManager.SuggestionConnectionStatusListener;
 import android.net.wifi.WifiManager.TrafficStateCallback;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.test.TestLooper;
@@ -95,8 +98,11 @@ public class WifiManagerTest {
     private static final int TEST_UID = 14553;
     private static final int TEST_NETWORK_ID = 143;
     private static final String TEST_PACKAGE_NAME = "TestPackage";
+    private static final String TEST_FEATURE_ID = "TestFeature";
     private static final String TEST_COUNTRY_CODE = "US";
     private static final String[] TEST_MAC_ADDRESSES = {"da:a1:19:0:0:0"};
+    private static final int TEST_AP_FREQUENCY = 2412;
+    private static final int TEST_AP_BANDWIDTH = SoftApInfo.CHANNEL_WIDTH_20MHZ;
 
     @Mock Context mContext;
     @Mock android.net.wifi.IWifiManager mWifiService;
@@ -107,12 +113,14 @@ public class WifiManagerTest {
     @Mock NetworkRequestMatchCallback mNetworkRequestMatchCallback;
     @Mock OnWifiUsabilityStatsListener mOnWifiUsabilityStatsListener;
     @Mock ScanResultsListener mScanResultListener;
+    @Mock SuggestionConnectionStatusListener mListener;
     @Mock Executor mCallbackExecutor;
     @Mock Executor mExecutor;
 
     private Handler mHandler;
     private TestLooper mLooper;
     private WifiManager mWifiManager;
+    private WifiNetworkSuggestion mWifiNetworkSuggestion;
 
     @Before
     public void setUp() throws Exception {
@@ -122,9 +130,9 @@ public class WifiManagerTest {
         mApplicationInfo.targetSdkVersion = Build.VERSION_CODES.Q;
         when(mContext.getApplicationInfo()).thenReturn(mApplicationInfo);
         when(mContext.getOpPackageName()).thenReturn(TEST_PACKAGE_NAME);
-
         mWifiManager = new WifiManager(mContext, mWifiService, mLooper.getLooper());
         verify(mWifiService).getVerboseLoggingLevel();
+        mWifiNetworkSuggestion = new WifiNetworkSuggestion();
     }
 
     /**
@@ -172,8 +180,8 @@ public class WifiManagerTest {
     @Test
     public void testCreationAndCloseOfLocalOnlyHotspotReservation() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
-        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString(), eq(null))).thenReturn(REQUEST_REGISTERED);
+        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(),
+                nullable(String.class), eq(null))).thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
 
         callback.onStarted(mWifiManager.new LocalOnlyHotspotReservation(mApConfig));
@@ -190,8 +198,8 @@ public class WifiManagerTest {
     public void testLocalOnlyHotspotReservationCallsStopProperlyInTryWithResources()
             throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
-        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString(), eq(null))).thenReturn(REQUEST_REGISTERED);
+        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(),
+                nullable(String.class), eq(null))).thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
 
         callback.onStarted(mWifiManager.new LocalOnlyHotspotReservation(mApConfig));
@@ -350,8 +358,8 @@ public class WifiManagerTest {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
 
-        verify(mWifiService)
-                .startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(), eq(null));
+        verify(mWifiService).startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
+                anyString(), nullable(String.class), eq(null));
     }
 
     /**
@@ -361,8 +369,9 @@ public class WifiManagerTest {
     @Test(expected = SecurityException.class)
     public void testStartLocalOnlyHotspotThrowsSecurityException() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
-        doThrow(new SecurityException()).when(mWifiService)
-                .startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(), eq(null));
+        doThrow(new SecurityException()).when(mWifiService).startLocalOnlyHotspot(
+                any(ILocalOnlyHotspotCallback.class), anyString(), nullable(String.class),
+                eq(null));
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
     }
 
@@ -373,8 +382,9 @@ public class WifiManagerTest {
     @Test(expected = IllegalStateException.class)
     public void testStartLocalOnlyHotspotThrowsIllegalStateException() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
-        doThrow(new IllegalStateException()).when(mWifiService)
-                .startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(), eq(null));
+        doThrow(new IllegalStateException()).when(mWifiService).startLocalOnlyHotspot(
+                any(ILocalOnlyHotspotCallback.class), anyString(), nullable(String.class),
+                eq(null));
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
     }
 
@@ -384,8 +394,8 @@ public class WifiManagerTest {
     @Test
     public void testCorrectLooperIsUsedForHandler() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
-        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString(), eq(null))).thenReturn(ERROR_INCOMPATIBLE_MODE);
+        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(),
+                nullable(String.class), eq(null))).thenReturn(ERROR_INCOMPATIBLE_MODE);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         mLooper.dispatchAll();
         assertEquals(ERROR_INCOMPATIBLE_MODE, callback.mFailureReason);
@@ -403,8 +413,8 @@ public class WifiManagerTest {
         TestLooper altLooper = new TestLooper();
         when(mContext.getMainExecutor()).thenReturn(altLooper.getNewExecutor());
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
-        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString(), eq(null))).thenReturn(ERROR_INCOMPATIBLE_MODE);
+        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(),
+                nullable(String.class), eq(null))).thenReturn(ERROR_INCOMPATIBLE_MODE);
         mWifiManager.startLocalOnlyHotspot(callback, null);
         altLooper.dispatchAll();
         assertEquals(ERROR_INCOMPATIBLE_MODE, callback.mFailureReason);
@@ -423,8 +433,8 @@ public class WifiManagerTest {
         Handler callbackHandler = new Handler(callbackLooper.getLooper());
         ArgumentCaptor<ILocalOnlyHotspotCallback> internalCallback =
                 ArgumentCaptor.forClass(ILocalOnlyHotspotCallback.class);
-        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString(), eq(null)))
-                .thenReturn(REQUEST_REGISTERED);
+        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString(),
+                nullable(String.class), eq(null))).thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, callbackHandler);
         callbackLooper.dispatchAll();
         mLooper.dispatchAll();
@@ -449,8 +459,8 @@ public class WifiManagerTest {
         Handler callbackHandler = new Handler(callbackLooper.getLooper());
         ArgumentCaptor<ILocalOnlyHotspotCallback> internalCallback =
                 ArgumentCaptor.forClass(ILocalOnlyHotspotCallback.class);
-        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString(), eq(null)))
-                .thenReturn(REQUEST_REGISTERED);
+        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString(),
+                nullable(String.class), eq(null))).thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, callbackHandler);
         callbackLooper.dispatchAll();
         mLooper.dispatchAll();
@@ -474,8 +484,8 @@ public class WifiManagerTest {
         Handler callbackHandler = new Handler(callbackLooper.getLooper());
         ArgumentCaptor<ILocalOnlyHotspotCallback> internalCallback =
                 ArgumentCaptor.forClass(ILocalOnlyHotspotCallback.class);
-        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString(), eq(null)))
-                .thenReturn(REQUEST_REGISTERED);
+        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString(),
+                nullable(String.class), eq(null))).thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, callbackHandler);
         callbackLooper.dispatchAll();
         mLooper.dispatchAll();
@@ -497,8 +507,8 @@ public class WifiManagerTest {
         Handler callbackHandler = new Handler(callbackLooper.getLooper());
         ArgumentCaptor<ILocalOnlyHotspotCallback> internalCallback =
                 ArgumentCaptor.forClass(ILocalOnlyHotspotCallback.class);
-        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString(), eq(null)))
-                .thenReturn(REQUEST_REGISTERED);
+        when(mWifiService.startLocalOnlyHotspot(internalCallback.capture(), anyString(),
+                nullable(String.class), eq(null))).thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, callbackHandler);
         callbackLooper.dispatchAll();
         mLooper.dispatchAll();
@@ -516,8 +526,8 @@ public class WifiManagerTest {
     @Test
     public void testLocalOnlyHotspotCallbackFullOnIncompatibleMode() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
-        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString(), eq(null))).thenReturn(ERROR_INCOMPATIBLE_MODE);
+        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(),
+                nullable(String.class), eq(null))).thenReturn(ERROR_INCOMPATIBLE_MODE);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         mLooper.dispatchAll();
         assertEquals(ERROR_INCOMPATIBLE_MODE, callback.mFailureReason);
@@ -532,8 +542,8 @@ public class WifiManagerTest {
     @Test
     public void testLocalOnlyHotspotCallbackFullOnTetheringDisallowed() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
-        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString(), eq(null))).thenReturn(ERROR_TETHERING_DISALLOWED);
+        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(),
+                nullable(String.class), eq(null))).thenReturn(ERROR_TETHERING_DISALLOWED);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         mLooper.dispatchAll();
         assertEquals(ERROR_TETHERING_DISALLOWED, callback.mFailureReason);
@@ -549,8 +559,9 @@ public class WifiManagerTest {
     @Test(expected = SecurityException.class)
     public void testLocalOnlyHotspotCallbackFullOnSecurityException() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
-        doThrow(new SecurityException()).when(mWifiService)
-                .startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(), eq(null));
+        doThrow(new SecurityException()).when(mWifiService).startLocalOnlyHotspot(
+                any(ILocalOnlyHotspotCallback.class), anyString(), nullable(String.class),
+                eq(null));
         try {
             mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         } catch (SecurityException e) {
@@ -570,8 +581,8 @@ public class WifiManagerTest {
     @Test
     public void testLocalOnlyHotspotCallbackFullOnNoChannelError() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
-        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString(), eq(null))).thenReturn(REQUEST_REGISTERED);
+        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(),
+                nullable(String.class), eq(null))).thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         mLooper.dispatchAll();
         //assertEquals(ERROR_NO_CHANNEL, callback.mFailureReason);
@@ -586,8 +597,8 @@ public class WifiManagerTest {
     @Test
     public void testCancelLocalOnlyHotspotRequestCallsStopOnWifiService() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
-        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString(), eq(null))).thenReturn(REQUEST_REGISTERED);
+        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(),
+                nullable(String.class), eq(null))).thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         mWifiManager.cancelLocalOnlyHotspotRequest();
         verify(mWifiService).stopLocalOnlyHotspot();
@@ -608,8 +619,8 @@ public class WifiManagerTest {
     @Test
     public void testCallbackAfterLocalOnlyHotspotWasCancelled() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
-        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString(), eq(null))).thenReturn(REQUEST_REGISTERED);
+        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(),
+                nullable(String.class), eq(null))).thenReturn(REQUEST_REGISTERED);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         mWifiManager.cancelLocalOnlyHotspotRequest();
         verify(mWifiService).stopLocalOnlyHotspot();
@@ -627,8 +638,8 @@ public class WifiManagerTest {
     @Test
     public void testCancelAfterLocalOnlyHotspotCallbackTriggered() throws Exception {
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
-        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
-                anyString(), eq(null))).thenReturn(ERROR_INCOMPATIBLE_MODE);
+        when(mWifiService.startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class), anyString(),
+                nullable(String.class), eq(null))).thenReturn(ERROR_INCOMPATIBLE_MODE);
         mWifiManager.startLocalOnlyHotspot(callback, mHandler);
         mLooper.dispatchAll();
         assertEquals(ERROR_INCOMPATIBLE_MODE, callback.mFailureReason);
@@ -646,8 +657,8 @@ public class WifiManagerTest {
                 .build();
         TestLocalOnlyHotspotCallback callback = new TestLocalOnlyHotspotCallback();
         mWifiManager.startLocalOnlyHotspot(customConfig, mExecutor, callback);
-        verify(mWifiService).startLocalOnlyHotspot(
-                any(ILocalOnlyHotspotCallback.class), anyString(), eq(customConfig));
+        verify(mWifiService).startLocalOnlyHotspot(any(ILocalOnlyHotspotCallback.class),
+                anyString(), nullable(String.class), eq(customConfig));
     }
 
     /**
@@ -691,7 +702,7 @@ public class WifiManagerTest {
     @Test
     public void registerSoftApCallbackThrowsIllegalArgumentExceptionOnNullArgumentForCallback() {
         try {
-            mWifiManager.registerSoftApCallback(null, mHandler);
+            mWifiManager.registerSoftApCallback(null, new HandlerExecutor(mHandler));
             fail("expected IllegalArgumentException");
         } catch (IllegalArgumentException expected) {
         }
@@ -716,7 +727,7 @@ public class WifiManagerTest {
     public void registerSoftApCallbackUsesMainLooperOnNullArgumentForHandler() {
         when(mContext.getMainLooper()).thenReturn(mLooper.getLooper());
         mWifiManager.registerSoftApCallback(mSoftApCallback, null);
-        verify(mContext).getMainLooper();
+        verify(mContext).getMainExecutor();
     }
 
     /**
@@ -724,7 +735,7 @@ public class WifiManagerTest {
      */
     @Test
     public void registerSoftApCallbackCallGoesToWifiServiceImpl() throws Exception {
-        mWifiManager.registerSoftApCallback(mSoftApCallback, mHandler);
+        mWifiManager.registerSoftApCallback(mSoftApCallback, new HandlerExecutor(mHandler));
         verify(mWifiService).registerSoftApCallback(any(IBinder.class),
                 any(ISoftApCallback.Stub.class), anyInt());
     }
@@ -735,7 +746,7 @@ public class WifiManagerTest {
     @Test
     public void unregisterSoftApCallbackCallGoesToWifiServiceImpl() throws Exception {
         ArgumentCaptor<Integer> callbackIdentifier = ArgumentCaptor.forClass(Integer.class);
-        mWifiManager.registerSoftApCallback(mSoftApCallback, mHandler);
+        mWifiManager.registerSoftApCallback(mSoftApCallback, new HandlerExecutor(mHandler));
         verify(mWifiService).registerSoftApCallback(any(IBinder.class),
                 any(ISoftApCallback.Stub.class), callbackIdentifier.capture());
 
@@ -750,7 +761,7 @@ public class WifiManagerTest {
     public void softApCallbackProxyCallsOnStateChanged() throws Exception {
         ArgumentCaptor<ISoftApCallback.Stub> callbackCaptor =
                 ArgumentCaptor.forClass(ISoftApCallback.Stub.class);
-        mWifiManager.registerSoftApCallback(mSoftApCallback, mHandler);
+        mWifiManager.registerSoftApCallback(mSoftApCallback, new HandlerExecutor(mHandler));
         verify(mWifiService).registerSoftApCallback(any(IBinder.class), callbackCaptor.capture(),
                 anyInt());
 
@@ -766,7 +777,7 @@ public class WifiManagerTest {
     public void softApCallbackProxyCallsOnConnectedClientsChanged() throws Exception {
         ArgumentCaptor<ISoftApCallback.Stub> callbackCaptor =
                 ArgumentCaptor.forClass(ISoftApCallback.Stub.class);
-        mWifiManager.registerSoftApCallback(mSoftApCallback, mHandler);
+        mWifiManager.registerSoftApCallback(mSoftApCallback, new HandlerExecutor(mHandler));
         verify(mWifiService).registerSoftApCallback(any(IBinder.class), callbackCaptor.capture(),
                 anyInt());
 
@@ -776,25 +787,50 @@ public class WifiManagerTest {
         verify(mSoftApCallback).onConnectedClientsChanged(testClients);
     }
 
+
+    /*
+     * Verify client-provided callback is being called through callback proxy
+     */
+    @Test
+    public void softApCallbackProxyCallsOnSoftApInfoChanged() throws Exception {
+        SoftApInfo testSoftApInfo = new SoftApInfo();
+        testSoftApInfo.setFrequency(TEST_AP_FREQUENCY);
+        testSoftApInfo.setBandwidth(TEST_AP_BANDWIDTH);
+        ArgumentCaptor<ISoftApCallback.Stub> callbackCaptor =
+                ArgumentCaptor.forClass(ISoftApCallback.Stub.class);
+        mWifiManager.registerSoftApCallback(mSoftApCallback, new HandlerExecutor(mHandler));
+        verify(mWifiService).registerSoftApCallback(any(IBinder.class), callbackCaptor.capture(),
+                anyInt());
+
+        callbackCaptor.getValue().onInfoChanged(testSoftApInfo);
+        mLooper.dispatchAll();
+        verify(mSoftApCallback).onInfoChanged(testSoftApInfo);
+    }
+
     /*
      * Verify client-provided callback is being called through callback proxy on multiple events
      */
     @Test
     public void softApCallbackProxyCallsOnMultipleUpdates() throws Exception {
+        SoftApInfo testSoftApInfo = new SoftApInfo();
+        testSoftApInfo.setFrequency(TEST_AP_FREQUENCY);
+        testSoftApInfo.setBandwidth(TEST_AP_BANDWIDTH);
         ArgumentCaptor<ISoftApCallback.Stub> callbackCaptor =
                 ArgumentCaptor.forClass(ISoftApCallback.Stub.class);
-        mWifiManager.registerSoftApCallback(mSoftApCallback, mHandler);
+        mWifiManager.registerSoftApCallback(mSoftApCallback, new HandlerExecutor(mHandler));
         verify(mWifiService).registerSoftApCallback(any(IBinder.class), callbackCaptor.capture(),
                 anyInt());
 
         final List<WifiClient> testClients = new ArrayList();
         callbackCaptor.getValue().onStateChanged(WIFI_AP_STATE_ENABLING, 0);
         callbackCaptor.getValue().onConnectedClientsChanged(testClients);
+        callbackCaptor.getValue().onInfoChanged(testSoftApInfo);
         callbackCaptor.getValue().onStateChanged(WIFI_AP_STATE_FAILED, SAP_START_FAILURE_GENERAL);
 
         mLooper.dispatchAll();
         verify(mSoftApCallback).onStateChanged(WIFI_AP_STATE_ENABLING, 0);
         verify(mSoftApCallback).onConnectedClientsChanged(testClients);
+        verify(mSoftApCallback).onInfoChanged(testSoftApInfo);
         verify(mSoftApCallback).onStateChanged(WIFI_AP_STATE_FAILED, SAP_START_FAILURE_GENERAL);
     }
 
@@ -807,7 +843,7 @@ public class WifiManagerTest {
                 ArgumentCaptor.forClass(ISoftApCallback.Stub.class);
         TestLooper altLooper = new TestLooper();
         Handler altHandler = new Handler(altLooper.getLooper());
-        mWifiManager.registerSoftApCallback(mSoftApCallback, altHandler);
+        mWifiManager.registerSoftApCallback(mSoftApCallback, new HandlerExecutor(altHandler));
         verify(mWifiService).registerSoftApCallback(any(IBinder.class), callbackCaptor.capture(),
                 anyInt());
 
@@ -821,7 +857,7 @@ public class WifiManagerTest {
      */
     @Test
     public void testCorrectLooperIsUsedForSoftApCallbackHandler() throws Exception {
-        mWifiManager.registerSoftApCallback(mSoftApCallback, mHandler);
+        mWifiManager.registerSoftApCallback(mSoftApCallback, new HandlerExecutor(mHandler));
         mLooper.dispatchAll();
         verify(mWifiService).registerSoftApCallback(any(IBinder.class),
                 any(ISoftApCallback.Stub.class), anyInt());
@@ -1096,10 +1132,12 @@ public class WifiManagerTest {
      */
     @Test
     public void testStartScan() throws Exception {
-        when(mWifiService.startScan(TEST_PACKAGE_NAME)).thenReturn(true);
+        when(mWifiService.startScan(eq(TEST_PACKAGE_NAME), nullable(String.class))).thenReturn(
+                true);
         assertTrue(mWifiManager.startScan());
 
-        when(mWifiService.startScan(TEST_PACKAGE_NAME)).thenReturn(false);
+        when(mWifiService.startScan(eq(TEST_PACKAGE_NAME), nullable(String.class))).thenReturn(
+                false);
         assertFalse(mWifiManager.startScan());
     }
 
@@ -1305,16 +1343,17 @@ public class WifiManagerTest {
     @Test
     public void addGetRemoveNetworkSuggestions() throws Exception {
         List<WifiNetworkSuggestion> testList = new ArrayList<>();
-        when(mWifiService.addNetworkSuggestions(any(List.class), anyString()))
-                .thenReturn(WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS);
-        when(mWifiService.removeNetworkSuggestions(any(List.class), anyString()))
-                .thenReturn(WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS);
+        when(mWifiService.addNetworkSuggestions(any(List.class), anyString(),
+                nullable(String.class))).thenReturn(WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS);
+        when(mWifiService.removeNetworkSuggestions(any(List.class), anyString())).thenReturn(
+                WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS);
         when(mWifiService.getNetworkSuggestions(anyString()))
                 .thenReturn(testList);
 
         assertEquals(WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS,
                 mWifiManager.addNetworkSuggestions(testList));
-        verify(mWifiService).addNetworkSuggestions(anyList(), eq(TEST_PACKAGE_NAME));
+        verify(mWifiService).addNetworkSuggestions(anyList(), eq(TEST_PACKAGE_NAME),
+                nullable(String.class));
 
         assertEquals(testList, mWifiManager.getNetworkSuggestions());
         verify(mWifiService).getNetworkSuggestions(eq(TEST_PACKAGE_NAME));
@@ -1574,7 +1613,8 @@ public class WifiManagerTest {
     @Test
     public void testGetConnectionInfo() throws Exception {
         WifiInfo wifiInfo = new WifiInfo();
-        when(mWifiService.getConnectionInfo(anyString())).thenReturn(wifiInfo);
+        when(mWifiService.getConnectionInfo(anyString(), nullable(String.class))).thenReturn(
+                wifiInfo);
 
         assertEquals(wifiInfo, mWifiManager.getConnectionInfo());
     }
@@ -1776,5 +1816,70 @@ public class WifiManagerTest {
     @Test(expected = IllegalArgumentException.class)
     public void testRemoveScanResultsListenerWithNullListener() throws Exception {
         mWifiManager.removeScanResultsListener(null);
+    }
+
+    /**
+     * Verify an IllegalArgumentException is thrown if executor not provided.
+     */
+    @Test(expected = IllegalArgumentException.class)
+    public void testAddSuggestionConnectionStatusListenerWithNullExecutor() {
+        mWifiManager.addSuggestionConnectionStatusListener(null, mListener);
+    }
+
+    /**
+     * Verify an IllegalArgumentException is thrown if listener is not provided.
+     */
+    @Test(expected = IllegalArgumentException.class)
+    public void testAddSuggestionConnectionStatusListenerWithNullListener() {
+        mWifiManager.addSuggestionConnectionStatusListener(mExecutor, null);
+    }
+
+    /**
+     * Verify client provided listener is being called to the right listener.
+     */
+    @Test
+    public void testAddSuggestionConnectionStatusListenerAndReceiveEvent() throws Exception {
+        int errorCode = WifiManager.STATUS_SUGGESTION_CONNECTION_FAILURE_AUTHENTICATION;
+        ArgumentCaptor<ISuggestionConnectionStatusListener.Stub> callbackCaptor =
+                ArgumentCaptor.forClass(ISuggestionConnectionStatusListener.Stub.class);
+        Executor executor = new SynchronousExecutor();
+        mWifiManager.addSuggestionConnectionStatusListener(executor, mListener);
+        verify(mWifiService).registerSuggestionConnectionStatusListener(any(IBinder.class),
+                callbackCaptor.capture(), anyInt(), anyString(), nullable(String.class));
+        callbackCaptor.getValue().onConnectionStatus(mWifiNetworkSuggestion, errorCode);
+        verify(mListener).onConnectionStatus(any(WifiNetworkSuggestion.class), eq(errorCode));
+    }
+
+    /**
+     * Verify client provided listener is being called to the right executor.
+     */
+    @Test
+    public void testAddSuggestionConnectionStatusListenerWithTheTargetExecutor() throws Exception {
+        int errorCode = WifiManager.STATUS_SUGGESTION_CONNECTION_FAILURE_AUTHENTICATION;
+        ArgumentCaptor<ISuggestionConnectionStatusListener.Stub> callbackCaptor =
+                ArgumentCaptor.forClass(ISuggestionConnectionStatusListener.Stub.class);
+        mWifiManager.addSuggestionConnectionStatusListener(mExecutor, mListener);
+        verify(mWifiService).registerSuggestionConnectionStatusListener(any(IBinder.class),
+                callbackCaptor.capture(), anyInt(), anyString(), nullable(String.class));
+        callbackCaptor.getValue().onConnectionStatus(any(WifiNetworkSuggestion.class), errorCode);
+        verify(mExecutor).execute(any(Runnable.class));
+    }
+
+    /**
+     * Verify an IllegalArgumentException is thrown if listener is not provided.
+     */
+    @Test(expected = IllegalArgumentException.class)
+    public void testRemoveSuggestionConnectionListenerWithNullListener() {
+        mWifiManager.removeSuggestionConnectionStatusListener(null);
+    }
+
+    /**
+     * Verify removeSuggestionConnectionListener.
+     */
+    @Test
+    public void testRemoveSuggestionConnectionListener() throws Exception {
+
+        mWifiManager.removeSuggestionConnectionStatusListener(mListener);
+        verify(mWifiService).unregisterSuggestionConnectionStatusListener(anyInt(), anyString());
     }
 }

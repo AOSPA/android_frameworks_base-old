@@ -21,16 +21,22 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 
 import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.systemui.DumpController;
 import com.android.systemui.assist.AssistModule;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.recents.Recents;
+import com.android.systemui.stackdivider.Divider;
+import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.notification.people.PeopleHubModule;
 import com.android.systemui.statusbar.phone.KeyguardLiftController;
+import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.util.sensors.AsyncSensorManager;
 
 import javax.inject.Singleton;
 
 import dagger.Binds;
+import dagger.BindsOptionalOf;
 import dagger.Module;
 import dagger.Provides;
 
@@ -52,12 +58,13 @@ public abstract class SystemUIModule {
     static KeyguardLiftController provideKeyguardLiftController(Context context,
             StatusBarStateController statusBarStateController,
             AsyncSensorManager asyncSensorManager,
-            KeyguardUpdateMonitor keyguardUpdateMonitor) {
+            KeyguardUpdateMonitor keyguardUpdateMonitor,
+            DumpController dumpController) {
         if (!context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_FACE)) {
             return null;
         }
         return new KeyguardLiftController(statusBarStateController, asyncSensorManager,
-                keyguardUpdateMonitor);
+                keyguardUpdateMonitor, dumpController);
     }
 
     @Singleton
@@ -65,4 +72,16 @@ public abstract class SystemUIModule {
     static SysUiState provideSysUiState() {
         return new SysUiState();
     }
+
+    @BindsOptionalOf
+    abstract CommandQueue optionalCommandQueue();
+
+    @BindsOptionalOf
+    abstract Divider optionalDivider();
+
+    @BindsOptionalOf
+    abstract Recents optionalRecents();
+
+    @BindsOptionalOf
+    abstract StatusBar optionalStatusBar();
 }

@@ -22,6 +22,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.os.FactoryTest.FACTORY_TEST_LOW_LEVEL;
 
+import static com.android.server.wm.ActivityStackSupervisor.ON_TOP;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_ATM;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
 
@@ -178,6 +179,21 @@ public class ActivityStartController {
             options.setLaunchActivityType(ACTIVITY_TYPE_HOME);
         }
         options.setLaunchDisplayId(displayId);
+
+        final ActivityDisplay display =
+                mService.mRootActivityContainer.getActivityDisplay(displayId);
+        // The home activity will be started later, defer resuming to avoid unneccerary operations
+        // (e.g. start home recursively) when creating home stack.
+        mSupervisor.beginDeferResume();
+        final ActivityStack homeStack;
+        try {
+            // Make sure home stack exist on display.
+            homeStack = display.getOrCreateStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME,
+                    ON_TOP);
+        } finally {
+            mSupervisor.endDeferResume();
+        }
+
         mLastHomeActivityStartResult = obtainStarter(intent, "startHomeActivity: " + reason)
                 .setOutActivity(tmpOutRecord)
                 .setCallingUid(0)
@@ -185,10 +201,7 @@ public class ActivityStartController {
                 .setActivityOptions(options.toBundle())
                 .execute();
         mLastHomeActivityStartRecord = tmpOutRecord[0];
-        final ActivityDisplay display =
-                mService.mRootActivityContainer.getActivityDisplay(displayId);
-        final ActivityStack homeStack = display != null ? display.getHomeStack() : null;
-        if (homeStack != null && homeStack.mInResumeTopActivity) {
+        if (homeStack.mInResumeTopActivity) {
             // If we are in resume section already, home activity will be initialized, but not
             // resumed (to avoid recursive resume) and will stay that way until something pokes it
             // again. We need to schedule another resume.
@@ -266,7 +279,7 @@ public class ActivityStartController {
     final int startActivityInPackage(int uid, int realCallingPid, int realCallingUid,
             String callingPackage, Intent intent, String resolvedType, IBinder resultTo,
             String resultWho, int requestCode, int startFlags, SafeActivityOptions options,
-            int userId, TaskRecord inTask, String reason, boolean validateIncomingUser,
+            int userId, Task inTask, String reason, boolean validateIncomingUser,
             PendingIntentRecord originatingPendingIntent, boolean allowBackgroundActivityStart) {
 
         userId = checkTargetUser(userId, validateIncomingUser, realCallingPid, realCallingUid,

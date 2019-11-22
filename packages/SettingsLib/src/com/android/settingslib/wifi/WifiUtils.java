@@ -94,7 +94,7 @@ public class WifiUtils {
             if (bssid != null) {
                 visibility.append(" ").append(bssid);
             }
-            visibility.append(" technology = ").append(info.getWifiTechnology());
+            visibility.append(" standard = ").append(info.getWifiStandard());
             visibility.append(" rssi=").append(info.getRssi());
             visibility.append(" ");
             visibility.append(" score=").append(info.score);

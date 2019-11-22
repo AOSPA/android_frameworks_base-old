@@ -15,32 +15,48 @@
 package com.android.systemui;
 
 import android.annotation.Nullable;
+import android.app.AppOpsManager;
+import android.os.Handler;
 import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
 import android.util.ArraySet;
 import android.util.SparseArray;
 
 import com.android.internal.messages.nano.SystemMessageProto;
+import com.android.systemui.appops.AppOpsController;
+import com.android.systemui.dagger.qualifiers.MainHandler;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
-
 /**
  * Tracks state of foreground services and notifications related to foreground services per user.
  */
 @Singleton
 public class ForegroundServiceController {
+    private static final int[] APP_OPS = new int[] {AppOpsManager.OP_CAMERA,
+            AppOpsManager.OP_SYSTEM_ALERT_WINDOW,
+            AppOpsManager.OP_RECORD_AUDIO,
+            AppOpsManager.OP_COARSE_LOCATION,
+            AppOpsManager.OP_FINE_LOCATION};
 
     private final SparseArray<ForegroundServicesUserState> mUserServices = new SparseArray<>();
     private final Object mMutex = new Object();
     private final NotificationEntryManager mEntryManager;
+    private final Handler mMainHandler;
 
     @Inject
-    public ForegroundServiceController(NotificationEntryManager entryManager) {
+    public ForegroundServiceController(NotificationEntryManager entryManager,
+            AppOpsController appOpsController, @MainHandler Handler mainHandler) {
         mEntryManager = entryManager;
+        mMainHandler = mainHandler;
+        appOpsController.addCallback(APP_OPS, (code, uid, packageName, active) -> {
+            mMainHandler.post(() -> {
+                onAppOpChanged(code, uid, packageName, active);
+            });
+        });
     }
 
     /**
@@ -104,7 +120,7 @@ public class ForegroundServiceController {
      * @param packageName package that created the notification
      * @param active whether the appOpCode is active or not
      */
-    public void onAppOpChanged(int appOpCode, int uid, String packageName, boolean active) {
+    void onAppOpChanged(int appOpCode, int uid, String packageName, boolean active) {
         int userId = UserHandle.getUserId(uid);
         // Record active app ops
         synchronized (mMutex) {
@@ -123,7 +139,8 @@ public class ForegroundServiceController {
         // Update appOp if there's an associated pending or visible notification:
         final String foregroundKey = getStandardLayoutKey(userId, packageName);
         if (foregroundKey != null) {
-            final NotificationEntry entry = mEntryManager.getPendingOrCurrentNotif(foregroundKey);
+            final NotificationEntry entry = mEntryManager.getPendingOrCurrentNotif(
+                    foregroundKey);
             if (entry != null
                     && uid == entry.getSbn().getUid()
                     && packageName.equals(entry.getSbn().getPackageName())) {

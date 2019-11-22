@@ -142,6 +142,7 @@ import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.ConfigurationController.ConfigurationListener;
 import com.android.systemui.statusbar.policy.HeadsUpUtil;
 import com.android.systemui.statusbar.policy.ScrollAdapter;
+import com.android.systemui.statusbar.policy.ZenModeController;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.util.Assert;
 
@@ -344,6 +345,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     private boolean mForceNoOverlappingRendering;
     private final ArrayList<Pair<ExpandableNotificationRow, Boolean>> mTmpList = new ArrayList<>();
     private FalsingManager mFalsingManager;
+    private final ZenModeController mZenController;
     private boolean mAnimationRunning;
     private ViewTreeObserver.OnPreDrawListener mRunningAnimationUpdater
             = new ViewTreeObserver.OnPreDrawListener() {
@@ -520,7 +522,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             NotificationLockscreenUserManager notificationLockscreenUserManager,
             NotificationGutsManager notificationGutsManager,
             NotificationSectionsFeatureManager sectionsFeatureManager,
-            PeopleHubSectionFooterViewAdapter peopleHubViewAdapter) {
+            PeopleHubSectionFooterViewAdapter peopleHubViewAdapter,
+            ZenModeController zenController) {
         super(context, attrs, 0, 0);
         Resources res = getResources();
 
@@ -535,6 +538,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         mHeadsUpManager.setAnimationStateHandler(this::setHeadsUpGoingAwayAnimationsAllowed);
         mKeyguardBypassController = keyguardBypassController;
         mFalsingManager = falsingManager;
+        mZenController = zenController;
 
         int[] buckets = sectionsFeatureManager.getNotificationBuckets();
         mSectionsManager =
@@ -604,10 +608,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
 
         mEntryManager.addNotificationEntryListener(new NotificationEntryListener() {
             @Override
-            public void onPostEntryUpdated(NotificationEntry entry) {
-                if (!entry.getSbn().isClearable()) {
-                    // The user may have performed a dismiss action on the notification, since it's
-                    // not clearable we should snap it back.
+            public void onPreEntryUpdated(NotificationEntry entry) {
+                if (entry.rowExists() && !entry.getSbn().isClearable()) {
+                    // If the row already exists, the user may have performed a dismiss action on
+                    // the notification. Since it's not clearable we should snap it back.
                     snapViewIfNeeded(entry);
                 }
             }
@@ -4882,7 +4886,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         mEmptyShadeView.setVisible(visible, mIsExpanded && mAnimationsEnabled);
 
         int oldTextRes = mEmptyShadeView.getTextResource();
-        int newTextRes = mStatusBar.areNotificationsHidden()
+        int newTextRes = mZenController.areNotificationsHiddenInShade()
                 ? R.string.dnd_suppressing_shade_text : R.string.empty_shade_text;
         if (oldTextRes != newTextRes) {
             mEmptyShadeView.setText(newTextRes);
@@ -4920,7 +4924,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             } else {
                 child.setMinClipTopAmount(0);
             }
-            previousChildWillBeDismissed = StackScrollAlgorithm.canChildBeDismissed(child);
+            previousChildWillBeDismissed = canChildBeDismissed(child);
         }
     }
 
@@ -5523,7 +5527,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
 
         performDismissAllAnimations(viewsToHide, closeShade, () -> {
             for (ExpandableNotificationRow rowToRemove : viewsToRemove) {
-                if (StackScrollAlgorithm.canChildBeDismissed(rowToRemove)) {
+                if (canChildBeDismissed(rowToRemove)) {
                     if (selection == ROWS_ALL) {
                         // TODO: This is a listener method; we shouldn't be calling it. Can we just
                         // call performRemoveNotification as below?
@@ -5552,7 +5556,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     private boolean includeChildInDismissAll(
             ExpandableNotificationRow row,
             @SelectedRows int selection) {
-        return StackScrollAlgorithm.canChildBeDismissed(row) && matchesSelection(row, selection);
+        return canChildBeDismissed(row) && matchesSelection(row, selection);
     }
 
     /**
@@ -6223,7 +6227,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
          */
         @Override
         public void onChildDismissed(View view) {
-            ExpandableNotificationRow row = (ExpandableNotificationRow) view;
+            if (!(view instanceof ActivatableNotificationView)) {
+                return;
+            }
+            ActivatableNotificationView row = (ActivatableNotificationView) view;
             if (!row.isDismissed()) {
                 handleChildViewDismissed(view);
             }
@@ -6259,6 +6266,12 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
                 }
                 isBlockingHelperShown =
                         row.performDismissWithBlockingHelper(false /* fromAccessibility */);
+            }
+
+            if (view instanceof PeopleHubView) {
+                PeopleHubView row = (PeopleHubView) view;
+                row.dismiss(false);
+                mSectionsManager.hidePeopleRow();
             }
 
             if (!isBlockingHelperShown) {
@@ -6349,9 +6362,9 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             return 0;
         }
 
-                @Override
+        @Override
         public boolean canChildBeDismissed(View v) {
-            return StackScrollAlgorithm.canChildBeDismissed(v);
+            return NotificationStackScrollLayout.canChildBeDismissed(v);
         }
 
         @Override
@@ -6360,6 +6373,23 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             return canChildBeDismissed(v);
         }
     };
+
+    private static boolean canChildBeDismissed(View v) {
+        if (v instanceof ExpandableNotificationRow) {
+            ExpandableNotificationRow row = (ExpandableNotificationRow) v;
+            if (row.isBlockingHelperShowingAndTranslationFinished()) {
+                return true;
+            }
+            if (row.areGutsExposed() || !row.getEntry().hasFinishedInitialization()) {
+                return false;
+            }
+            return row.canViewBeDismissed();
+        }
+        if (v instanceof PeopleHubView) {
+            return true;
+        }
+        return false;
+    }
 
     // ---------------------- DragDownHelper.OnDragDownListener ------------------------------------
 

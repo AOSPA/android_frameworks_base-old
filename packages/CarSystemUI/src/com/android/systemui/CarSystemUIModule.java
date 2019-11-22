@@ -28,22 +28,31 @@ import com.android.systemui.dock.DockManager;
 import com.android.systemui.dock.DockManagerImpl;
 import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.EnhancedEstimatesImpl;
+import com.android.systemui.recents.Recents;
+import com.android.systemui.recents.RecentsImplementation;
+import com.android.systemui.stackdivider.Divider;
+import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationLockscreenUserManagerImpl;
 import com.android.systemui.statusbar.car.CarStatusBar;
+import com.android.systemui.statusbar.car.CarStatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
 import com.android.systemui.statusbar.notification.collection.NotificationData;
 import com.android.systemui.statusbar.phone.KeyguardEnvironmentImpl;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.volume.CarVolumeDialogComponent;
 import com.android.systemui.volume.VolumeDialogComponent;
+
+import java.util.Optional;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
 
 import dagger.Binds;
+import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
 
@@ -70,6 +79,12 @@ abstract class CarSystemUIModule {
 
     @Singleton
     @Provides
+    static Divider provideDivider(Context context, Optional<Lazy<Recents>> recentsOptionalLazy) {
+        return new Divider(context, recentsOptionalLazy);
+    }
+
+    @Singleton
+    @Provides
     @Named(LEAK_REPORT_EMAIL_NAME)
     static String provideLeakReportEmail() {
         return "buganizer-system+181579@google.com";
@@ -89,10 +104,14 @@ abstract class CarSystemUIModule {
     abstract NotificationData.KeyguardEnvironment bindKeyguardEnvironment(
             KeyguardEnvironmentImpl keyguardEnvironment);
 
-    @Singleton
+    @Binds
+    abstract ShadeController provideShadeController(CarStatusBar statusBar);
+
     @Provides
-    static ShadeController provideShadeController(Context context) {
-        return SysUiServiceProvider.getComponent(context, StatusBar.class);
+    @Singleton
+    static Recents provideRecents(Context context, RecentsImplementation recentsImplementation,
+            CommandQueue commandQueue) {
+        return new Recents(context, recentsImplementation, commandQueue);
     }
 
     @Binds
@@ -105,4 +124,8 @@ abstract class CarSystemUIModule {
     @Binds
     abstract VolumeDialogComponent bindVolumeDialogComponent(
             CarVolumeDialogComponent carVolumeDialogComponent);
+
+    @Binds
+    abstract StatusBarKeyguardViewManager bindStatusBarKeyguardViewManager(
+            CarStatusBarKeyguardViewManager keyguardViewManager);
 }

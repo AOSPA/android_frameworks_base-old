@@ -66,7 +66,7 @@ public class TaskPositioningControllerTests extends WindowTestsBase {
                 any(InputChannel.class))).thenReturn(true);
 
         mWindow = createWindow(null, TYPE_BASE_APPLICATION, "window");
-        mWindow.getTask().setResizeable(RESIZE_MODE_RESIZEABLE);
+        mWindow.getTask().setResizeMode(RESIZE_MODE_RESIZEABLE);
         mWindow.mInputChannel = new InputChannel();
         mWm.mWindowMap.put(mWindow.mClient.asBinder(), mWindow);
         doReturn(mock(InputMonitor.class)).when(mDisplayContent).getInputMonitor();
@@ -142,7 +142,7 @@ public class TaskPositioningControllerTests extends WindowTestsBase {
         doReturn(mWindow.getTask()).when(content).findTaskForResizePoint(anyInt(), anyInt());
         assertNotNull(mWindow.getTask().getTopVisibleAppMainWindow());
 
-        mWindow.getTask().setResizeable(RESIZE_MODE_UNRESIZEABLE);
+        mWindow.getTask().setResizeMode(RESIZE_MODE_UNRESIZEABLE);
 
         mTarget.handleTapOutsideTask(content, 0, 0);
         // Wait until the looper processes finishTaskPositioning.

@@ -107,7 +107,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
                 mTargetActivityType);
         ActivityRecord targetActivity = getTargetActivity(targetStack);
         if (targetActivity != null) {
-            if (targetActivity.visible || targetActivity.isTopRunningActivity()) {
+            if (targetActivity.mVisibleRequested || targetActivity.isTopRunningActivity()) {
                 // The activity is ready.
                 return;
             }
@@ -189,7 +189,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
 
         // Send launch hint if we are actually launching the target. If it's already visible
         // (shouldn't happen in general) we don't need to send it.
-        if (targetActivity == null || !targetActivity.visible) {
+        if (targetActivity == null || !targetActivity.mVisibleRequested) {
             mService.mRootActivityContainer.sendPowerHintForLaunchStartIfNeeded(
                     true /* forceSend */, targetActivity);
         }
@@ -211,9 +211,9 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
                 // If there are multiple tasks in the target stack (ie. the home stack, with 3p
                 // and default launchers coexisting), then move the task to the top as a part of
                 // moving the stack to the front
-                if (targetStack.topTask() != targetActivity.getTaskRecord()) {
-                    targetStack.addTask(targetActivity.getTaskRecord(), true /* toTop */,
-                            "startRecentsActivity");
+                final Task task = targetActivity.getTask();
+                if (targetStack.topTask() != task) {
+                    targetStack.positionChildAtTop(task);
                 }
             } else {
                 // No recents activity, create the new recents activity bottom most
@@ -328,7 +328,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
                         if (sendUserLeaveHint) {
                             // Setting this allows the previous app to PiP.
                             mStackSupervisor.mUserLeaving = true;
-                            targetStack.moveTaskToFrontLocked(targetActivity.getTaskRecord(),
+                            targetStack.moveTaskToFrontLocked(targetActivity.getTask(),
                                     true /* noAnimation */, null /* activityOptions */,
                                     targetActivity.appTimeTracker,
                                     "RecentsAnimation.onAnimationFinished()");
@@ -428,7 +428,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
         // cases:
         // 1) The next launching task is not being animated by the recents animation
         // 2) The next task is home activity. (i.e. pressing home key to back home in recents).
-        if ((!controller.isAnimatingTask(stack.getTaskStack().getTopChild())
+        if ((!controller.isAnimatingTask(stack.getTopChild())
                 || controller.isTargetApp(stack.getTopActivity()))
                 && controller.shouldDeferCancelUntilNextTransition()) {
             // Always prepare an app transition since we rely on the transition callbacks to cleanup
@@ -491,7 +491,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks,
         }
 
         for (int i = targetStack.getChildCount() - 1; i >= 0; i--) {
-            final TaskRecord task = targetStack.getChildAt(i);
+            final Task task = targetStack.getChildAt(i);
             if (task.mUserId == mUserId
                     && task.getBaseIntent().getComponent().equals(mTargetIntent.getComponent())) {
                 return task.getTopActivity();

@@ -55,6 +55,12 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
+    "-2006946193": {
+      "message": "setClientVisible: %s clientVisible=%b Callers=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_APP_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
     "-2002500255": {
       "message": "Defer removing snapshot surface in %dms",
       "level": "VERBOSE",
@@ -73,17 +79,17 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-1976550065": {
+      "message": "commitVisibility: %s: visible=%b visibleRequested=%b",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_APP_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
     "-1963461591": {
       "message": "Removing %s from %s",
       "level": "VERBOSE",
       "group": "WM_DEBUG_ADD_REMOVE",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
-    },
-    "-1958209312": {
-      "message": "Clear freezing of %s: hidden=%b freezing=%b",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_ORIENTATION",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
     "-1953668890": {
       "message": "Can't start recents animation, nextAppTransition=%s",
@@ -168,12 +174,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_RESIZE",
       "at": "com\/android\/server\/wm\/WindowState.java"
-    },
-    "-1822611824": {
-      "message": "\tRemove token=%s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_REMOTE_ANIMATIONS",
-      "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
     "-1797409732": {
       "message": "Skipping %s because %s",
@@ -307,22 +307,10 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
-    "-1483752006": {
-      "message": "  THUMBNAIL %s: CREATE",
-      "level": "INFO",
-      "group": "WM_SHOW_TRANSACTIONS",
-      "at": "com\/android\/server\/wm\/AppWindowThumbnail.java"
-    },
     "-1471946192": {
       "message": "Marking app token %s with replacing child windows.",
       "level": "DEBUG",
       "group": "WM_DEBUG_ADD_REMOVE",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
-    },
-    "-1456549051": {
-      "message": "setClientHidden: %s clientHidden=%b Callers=%s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_APP_TRANSITIONS",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
     "-1455600136": {
@@ -421,6 +409,12 @@
       "group": "WM_SHOW_TRANSACTIONS",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-1248645819": {
+      "message": "\tAdd container=%s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_REMOTE_ANIMATIONS",
+      "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
+    },
     "-1219773477": {
       "message": "setInputConsumerEnabled(%s): mCanceled=%b",
       "level": "DEBUG",
@@ -493,12 +487,6 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/RootWindowContainer.java"
     },
-    "-1099052739": {
-      "message": "\tAdd token=%s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_REMOTE_ANIMATIONS",
-      "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
-    },
     "-1089874824": {
       "message": "SURFACE SHOW (performLayout): %s",
       "level": "INFO",
@@ -558,12 +546,6 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_STARTING_WINDOW",
       "at": "com\/android\/server\/wm\/WindowState.java"
-    },
-    "-931184679": {
-      "message": "Changing app %s hidden=%b performLayout=%b",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_APP_TRANSITIONS",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
     "-928291778": {
       "message": "applyAnimation: anim=%s nextAppTransition=%d transit=%s Callers=%s",
@@ -721,6 +703,12 @@
       "group": "WM_DEBUG_SCREEN_ON",
       "at": "com\/android\/server\/wm\/DisplayContent.java"
     },
+    "-633961578": {
+      "message": "applyAnimation: transition animation is disabled or skipped. container=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_APP_TRANSITIONS_ANIM",
+      "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
     "-622997754": {
       "message": "postWindowRemoveCleanupLocked: %s",
       "level": "VERBOSE",
@@ -847,6 +835,12 @@
       "group": "WM_DEBUG_APP_TRANSITIONS",
       "at": "com\/android\/server\/wm\/AppTransitionController.java"
     },
+    "-374767836": {
+      "message": "setAppVisibility(%s, visible=%b): %s visible=%b mVisibleRequested=%b Callers=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_APP_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
     "-371630969": {
       "message": "New wallpaper target=%s, oldWallpaper=%s, openingApps=%s, closingApps=%s",
       "level": "VERBOSE",
@@ -883,12 +877,6 @@
       "group": "WM_DEBUG_ADD_REMOVE",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
-    "-253016819": {
-      "message": "applyAnimation: transition animation is disabled or skipped. atoken=%s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_APP_TRANSITIONS_ANIM",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
-    },
     "-251259736": {
       "message": "No longer freezing: %s",
       "level": "VERBOSE",
@@ -918,12 +906,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_APP_TRANSITIONS",
       "at": "com\/android\/server\/wm\/AppTransitionController.java"
-    },
-    "-121104356": {
-      "message": "Remove %s: mSurfaceController=%s mAnimatingExit=%b mRemoveOnExit=%b mHasSurface=%b surfaceShowing=%b animating=%b app-animation=%b mWillReplaceWindow=%b inPendingTransaction=%b mDisplayFrozen=%b callers=%s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_APP_TRANSITIONS",
-      "at": "com\/android\/server\/wm\/WindowState.java"
     },
     "-116086365": {
       "message": "******************** ENABLING SCREEN!",
@@ -960,6 +942,12 @@
       "level": "INFO",
       "group": "WM_SHOW_TRANSACTIONS",
       "at": "com\/android\/server\/wm\/Session.java"
+    },
+    "-33096143": {
+      "message": "applyAnimation: transition animation is disabled or skipped. container=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_APP_TRANSITIONS_ANIM",
+      "at": "com\/android\/server\/wm\/WindowContainer.java"
     },
     "-29233992": {
       "message": "SURFACE CLEAR CROP: %s",
@@ -1105,6 +1093,12 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
+    "200829729": {
+      "message": "ScreenRotationAnimation onAnimationEnd",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_ORIENTATION",
+      "at": "com\/android\/server\/wm\/ScreenRotationAnimation.java"
+    },
     "221540118": {
       "message": "mUserActivityTimeout set to %d",
       "level": "DEBUG",
@@ -1171,6 +1165,12 @@
       "group": "WM_DEBUG_APP_TRANSITIONS",
       "at": "com\/android\/server\/wm\/AppTransitionController.java"
     },
+    "292555239": {
+      "message": "ScreenRotation sill animating: mDisplayAnimator: %s\nmEnterBlackFrameAnimator: %s\nmRotateScreenAnimator: %s\nmScreenshotRotationAnimator: %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_ORIENTATION",
+      "at": "com\/android\/server\/wm\/ScreenRotationAnimation.java"
+    },
     "292904800": {
       "message": "Deferring rotation, animation in progress.",
       "level": "VERBOSE",
@@ -1206,12 +1206,6 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
-    },
-    "358613119": {
-      "message": "setAppVisibility(%s, visible=%b): %s hidden=%b hiddenRequested=%b Callers=%s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_APP_TRANSITIONS",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
     "371641947": {
       "message": "Window Manager Crash %s",
@@ -1273,6 +1267,12 @@
       "group": "WM_DEBUG_SCREEN_ON",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "466506262": {
+      "message": "Clear freezing of %s: visible=%b freezing=%b",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_ORIENTATION",
+      "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
     "474000473": {
       "message": "No stack above target stack=%s",
       "level": "DEBUG",
@@ -1302,6 +1302,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_APP_TRANSITIONS_ANIM",
       "at": "com\/android\/server\/wm\/AppTransition.java"
+    },
+    "531242746": {
+      "message": "  THUMBNAIL %s: CREATE",
+      "level": "INFO",
+      "group": "WM_SHOW_TRANSACTIONS",
+      "at": "com\/android\/server\/wm\/WindowContainerThumbnail.java"
     },
     "539077569": {
       "message": "Clear freezing of %s force=%b",
@@ -1333,6 +1339,12 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
+    "594260654": {
+      "message": "Remove %s: mSurfaceController=%s mAnimatingExit=%b mRemoveOnExit=%b mHasSurface=%b surfaceShowing=%b animating=%b app-animation=%b mWillReplaceWindow=%b mDisplayFrozen=%b callers=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_APP_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/WindowState.java"
+    },
     "600140673": {
       "message": "checkBootAnimationComplete: Waiting for anim complete",
       "level": "INFO",
@@ -1344,12 +1356,6 @@
       "level": "INFO",
       "group": "WM_SHOW_TRANSACTIONS",
       "at": "com\/android\/server\/wm\/Session.java"
-    },
-    "609651209": {
-      "message": "addChild: %s at top.",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_ADD_REMOVE",
-      "at": "com\/android\/server\/wm\/TaskRecord.java"
     },
     "620368427": {
       "message": "******* TELLING SURFACE FLINGER WE ARE BOOTED!",
@@ -1374,6 +1380,12 @@
       "level": "INFO",
       "group": "WM_SHOW_TRANSACTIONS",
       "at": "com\/android\/server\/wm\/WindowSurfaceController.java"
+    },
+    "638429464": {
+      "message": "\tRemove container=%s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_REMOTE_ANIMATIONS",
+      "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
     "644675193": {
       "message": "Real start recents",
@@ -1465,12 +1477,6 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
-    "815803557": {
-      "message": "applyAnimation: atoken=%s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_APP_TRANSITIONS_ANIM",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
-    },
     "829434921": {
       "message": "Draw state now committed in %s",
       "level": "VERBOSE",
@@ -1483,6 +1489,12 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
+    "841702299": {
+      "message": "Changing app %s visible=%b performLayout=%b",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_APP_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
     "845234215": {
       "message": "App is requesting an orientation, return %d for display id=%d",
       "level": "VERBOSE",
@@ -1494,12 +1506,6 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_RECENTS_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RecentsAnimation.java"
-    },
-    "857751535": {
-      "message": "commitVisibility: %s: hidden=%b hiddenRequested=%b",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_APP_TRANSITIONS",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
     "873914452": {
       "message": "goodToGo()",
@@ -1542,6 +1548,12 @@
       "level": "INFO",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
+    "972354148": {
+      "message": "\tcontainer=%s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_REMOTE_ANIMATIONS",
+      "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
     "1001904964": {
       "message": "***** BOOT TIMEOUT: forcing display enabled",
@@ -1663,6 +1675,12 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/WindowState.java"
     },
+    "1330804250": {
+      "message": "addChild: %s at top.",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_ADD_REMOVE",
+      "at": "com\/android\/server\/wm\/Task.java"
+    },
     "1331177619": {
       "message": "Attempted to add a toast window with unknown token %s.  Aborting.",
       "level": "WARN",
@@ -1674,12 +1692,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_FOCUS",
       "at": "com\/android\/server\/wm\/DisplayContent.java"
-    },
-    "1358786604": {
-      "message": "No thumbnail header bitmap for: %d",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_APP_TRANSITIONS",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
     "1364498663": {
       "message": "notifyAppResumed: wasStopped=%b %s",
@@ -1795,11 +1807,11 @@
       "group": "WM_DEBUG_RECENTS_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RecentsAnimationController.java"
     },
-    "1531527061": {
-      "message": "createAnimationAdapter(): token=%s",
+    "1528528509": {
+      "message": "No thumbnail header bitmap for: %s",
       "level": "DEBUG",
-      "group": "WM_DEBUG_REMOTE_ANIMATIONS",
-      "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
+      "group": "WM_DEBUG_APP_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
     "1563755163": {
       "message": "Permission Denial: %s from pid=%d, uid=%d requires %s",
@@ -1818,6 +1830,12 @@
       "level": "ERROR",
       "group": "WM_DEBUG_ADD_REMOVE",
       "at": "com\/android\/server\/wm\/WindowState.java"
+    },
+    "1584270979": {
+      "message": "applyAnimation: container=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_APP_TRANSITIONS_ANIM",
+      "at": "com\/android\/server\/wm\/WindowContainer.java"
     },
     "1589610525": {
       "message": "applyAnimation NEXT_TRANSIT_TYPE_OPEN_CROSS_PROFILE_APPS: anim=%s transit=%s isEntrance=true Callers=%s",
@@ -1885,6 +1903,12 @@
       "group": "WM_DEBUG_STARTING_WINDOW",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
+    "1746778201": {
+      "message": "Set freezing of %s: visible=%b freezing=%b visibleRequested=%b. %s",
+      "level": "INFO",
+      "group": "WM_DEBUG_ORIENTATION",
+      "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
     "1747941491": {
       "message": "SURFACE controller=%s alpha=%f matrix=[%f*%f,%f*%f][%f*%f,%f*%f]: %s",
       "level": "INFO",
@@ -1909,11 +1933,11 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
-    "1804869745": {
+    "1831008694": {
       "message": "Loading animation for app transition. transit=%s enter=%b frame=%s insets=%s surfaceInsets=%s",
       "level": "DEBUG",
       "group": "WM_DEBUG_APP_TRANSITIONS",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
+      "at": "com\/android\/server\/wm\/WindowContainer.java"
     },
     "1836214582": {
       "message": "startingData was nulled out before handling mAddStartingWindow: %s",
@@ -1938,12 +1962,6 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_SCREEN_ON",
       "at": "com\/android\/server\/wm\/DisplayPolicy.java"
-    },
-    "1865246212": {
-      "message": "\tapp=%s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_REMOTE_ANIMATIONS",
-      "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
     "1866772666": {
       "message": "SAFE MODE not enabled",
@@ -1981,12 +1999,6 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
-    "1966564525": {
-      "message": "Set freezing of %s: hidden=%b freezing=%b hiddenRequested=%b. %s",
-      "level": "INFO",
-      "group": "WM_DEBUG_ORIENTATION",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
-    },
     "1984470582": {
       "message": "Creating TaskScreenshotAnimatable: task: %s width: %d height: %d",
       "level": "DEBUG",
@@ -2016,6 +2028,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_STARTING_WINDOW",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
+    "2022422429": {
+      "message": "createAnimationAdapter(): container=%s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_REMOTE_ANIMATIONS",
+      "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
     "2028163120": {
       "message": "applyAnimation: anim=%s nextAppTransition=ANIM_SCALE_UP transit=%s isEntrance=%s Callers=%s",

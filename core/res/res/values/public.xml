@@ -3005,6 +3005,8 @@
     </public-group>
 
     <public-group type="drawable" first-id="0x010800b5">
+      <!-- @hide @SystemApi -->
+      <public name="stat_notify_wifi_in_range" />
     </public-group>
 
     <public-group type="style" first-id="0x010302e5">
@@ -3014,6 +3016,16 @@
     </public-group>
 
     <public-group type="string" first-id="0x01040025">
+      <!-- @hide @SystemApi -->
+      <public name="notification_channel_network_status" />
+      <!-- @hide @SystemApi -->
+      <public name="notification_channel_network_alerts" />
+      <!-- @hide @SystemApi -->
+      <public name="notification_channel_network_available" />
+      <!-- @hide @SystemApi -->
+      <public name="config_defaultCallRedirection" />
+      <!-- @hide @SystemApi -->
+      <public name="config_defaultCallScreening" />
     </public-group>
 
     <public-group type="bool" first-id="0x01110005">
@@ -3025,6 +3037,17 @@
     <public-group type="color" first-id="0x0106001d">
     </public-group>
 
+    <public-group type="id" first-id="0x0102004b">
+      <public name="accessibilitySystemActionBack" />
+      <public name="accessibilitySystemActionHome" />
+      <public name="accessibilitySystemActionRecents" />
+      <public name="accessibilitySystemActionNotifications" />
+      <public name="accessibilitySystemActionQuickSettings" />
+      <public name="accessibilitySystemActionPowerDialog" />
+      <public name="accessibilitySystemActionToggleSplitScreen" />
+      <public name="accessibilitySystemActionLockScreen" />
+      <public name="accessibilitySystemActionTakeScreenshot" />
+    </public-group>
   <!-- ===============================================================
        DO NOT ADD UN-GROUPED ITEMS HERE
 

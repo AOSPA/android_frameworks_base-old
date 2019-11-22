@@ -88,19 +88,22 @@ message ActivityDisplayProto {
 message ActivityStackProto {
     option (.android.msg_privacy).dest = DEST_AUTOMATIC;
 
-    optional .com.android.server.wm.ConfigurationContainerProto configuration_container = 1;
+    // To be removed soon.
+    optional .com.android.server.wm.ConfigurationContainerProto configuration_container = 1 [deprecated=true];
     optional int32 id = 2;
     repeated TaskRecordProto tasks = 3;
     optional .com.android.server.wm.IdentifierProto resumed_activity = 4;
     optional int32 display_id = 5;
     optional bool fullscreen = 6;
     optional .android.graphics.RectProto bounds = 7;
+    optional .com.android.server.wm.StackProto stack = 8;
 }
 
 message TaskRecordProto {
     option (.android.msg_privacy).dest = DEST_AUTOMATIC;
 
-    optional .com.android.server.wm.ConfigurationContainerProto configuration_container = 1;
+    // To be removed soon.
+    optional .com.android.server.wm.ConfigurationContainerProto configuration_container = 1 [deprecated=true];
     optional int32 id = 2;
     repeated ActivityRecordProto activities = 3;
     optional int32 stack_id = 4;
@@ -113,6 +116,7 @@ message TaskRecordProto {
     optional .android.graphics.RectProto bounds = 11;
     optional int32 min_width = 12;
     optional int32 min_height = 13;
+    optional .com.android.server.wm.TaskProto task = 14;
 }
 
 message ActivityRecordProto {
@@ -122,11 +126,12 @@ message ActivityRecordProto {
     optional .com.android.server.wm.ConfigurationContainerProto configuration_container = 1 [deprecated=true];
     optional .com.android.server.wm.IdentifierProto identifier = 2;
     optional string state = 3;
-    optional bool visible = 4;
+    optional bool visible_requested = 4;
     optional bool front_of_task = 5;
     optional int32 proc_id = 6;
     optional bool translucent = 7;
     optional .com.android.server.wm.AppWindowTokenProto app_window_token = 8;
+    optional bool visible = 9;
 }
 
 message KeyguardControllerProto {
@@ -771,10 +776,11 @@ message ActivityManagerServiceDumpProcessesProto {
             option (.android.msg_privacy).dest = DEST_AUTOMATIC;
 
             optional string proc_name = 1;
-            optional string file = 2 [ (.android.privacy).dest = DEST_EXPLICIT ];
+            reserved 2; // file, DEST_EXPLICIT
             optional int32 pid = 3;
             optional int32 uid = 4;
             optional bool is_user_initiated = 5;
+            optional string uri = 6 [ (.android.privacy).dest = DEST_EXPLICIT ];
         }
         optional Dump dump = 2;
     }

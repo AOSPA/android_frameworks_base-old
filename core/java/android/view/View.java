@@ -493,7 +493,7 @@ import java.util.function.Predicate;
  *
  * <p>
  * To initiate a layout, call {@link #requestLayout}. This method is typically
- * called by a view on itself when it believes that is can no longer fit within
+ * called by a view on itself when it believes that it can no longer fit within
  * its current bounds.
  * </p>
  *
@@ -2836,7 +2836,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     /**
      * Default for the root view. The gravity determines the text alignment, ALIGN_NORMAL,
-     * ALIGN_CENTER, or ALIGN_OPPOSITE, which are relative to each paragraph’s text direction.
+     * ALIGN_CENTER, or ALIGN_OPPOSITE, which are relative to each paragraph's text direction.
      *
      * Use with {@link #setTextAlignment(int)}
      */
@@ -2864,7 +2864,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public static final int TEXT_ALIGNMENT_CENTER = 4;
 
     /**
-     * Align to the start of the view, which is ALIGN_LEFT if the view’s resolved
+     * Align to the start of the view, which is ALIGN_LEFT if the view's resolved
      * layoutDirection is LTR, and ALIGN_RIGHT otherwise.
      *
      * Use with {@link #setTextAlignment(int)}
@@ -2872,7 +2872,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public static final int TEXT_ALIGNMENT_VIEW_START = 5;
 
     /**
-     * Align to the end of the view, which is ALIGN_RIGHT if the view’s resolved
+     * Align to the end of the view, which is ALIGN_RIGHT if the view's resolved
      * layoutDirection is LTR, and ALIGN_LEFT otherwise.
      *
      * Use with {@link #setTextAlignment(int)}
@@ -3675,7 +3675,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * if the user swipes from the top of the screen.
      * <p>When system bars are hidden in immersive mode, they can be revealed temporarily with
      * system gestures, such as swiping from the top of the screen.  These transient system bars
-     * will overlay app’s content, may have some degree of transparency, and will automatically
+     * will overlay app's content, may have some degree of transparency, and will automatically
      * hide after a short timeout.
      * </p><p>Since this flag is a modifier for {@link #SYSTEM_UI_FLAG_FULLSCREEN} and
      * {@link #SYSTEM_UI_FLAG_HIDE_NAVIGATION}, it only has an effect when used in combination
@@ -8727,7 +8727,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             structure.setContextClickable(true);
         }
         structure.setClassName(getAccessibilityClassName().toString());
-        structure.setContentDescription(getContentDescription());
+        structure.setContentDescription(mContentDescription);
     }
 
     /**
@@ -9934,8 +9934,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         info.setImportantForAccessibility(isImportantForAccessibility());
         info.setPackageName(mContext.getPackageName());
         info.setClassName(getAccessibilityClassName());
-        info.setStateDescription(getStateDescription());
-        info.setContentDescription(getContentDescription());
+        info.setStateDescription(mStateDescription);
+        info.setContentDescription(mContentDescription);
 
         info.setEnabled(isEnabled());
         info.setClickable(isClickable());
@@ -10295,7 +10295,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Gets the unique identifier of the window in which this View reseides.
+     * Gets the unique identifier of the window in which this View resides.
      *
      * @return The window accessibility id.
      *
@@ -10318,7 +10318,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #setStateDescription(CharSequence)
      */
     @ViewDebug.ExportedProperty(category = "accessibility")
-    public final @Nullable CharSequence getStateDescription() {
+    public @Nullable CharSequence getStateDescription() {
         return mStateDescription;
     }
 
@@ -11287,16 +11287,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public WindowInsets computeSystemWindowInsets(WindowInsets in, Rect outLocalInsets) {
         if ((mViewFlags & OPTIONAL_FITS_SYSTEM_WINDOWS) == 0
                 || mAttachInfo == null
-                || ((mAttachInfo.mSystemUiVisibility & SYSTEM_UI_LAYOUT_FLAGS) == 0
-                && !mAttachInfo.mOverscanRequested)) {
+                || ((mAttachInfo.mSystemUiVisibility & SYSTEM_UI_LAYOUT_FLAGS) == 0)) {
             outLocalInsets.set(in.getSystemWindowInsetsAsRect());
             return in.consumeSystemWindowInsets().inset(outLocalInsets);
         } else {
             // The application wants to take care of fitting system window for
-            // the content...  however we still need to take care of any overscan here.
-            final Rect overscan = mAttachInfo.mOverscanInsets;
-            outLocalInsets.set(overscan);
-            return in.inset(outLocalInsets);
+            // the content.
+            outLocalInsets.setEmpty();
+            return in;
         }
     }
 
@@ -11373,19 +11371,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @UnsupportedAppUsage
     public void makeOptionalFitsSystemWindows() {
         setFlags(OPTIONAL_FITS_SYSTEM_WINDOWS, OPTIONAL_FITS_SYSTEM_WINDOWS);
-    }
-
-    /**
-     * Returns the outsets, which areas of the device that aren't a surface, but we would like to
-     * treat them as such.
-     * @hide
-     */
-    public void getOutsets(Rect outOutsetRect) {
-        if (mAttachInfo != null) {
-            outOutsetRect.set(mAttachInfo.mOutsets);
-        } else {
-            outOutsetRect.setEmpty();
-        }
     }
 
     /**
@@ -13724,7 +13709,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     @UnsupportedAppUsage
     public CharSequence getIterableTextForAccessibility() {
-        return getContentDescription();
+        return mContentDescription;
     }
 
     /**
@@ -24733,6 +24718,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @param isRoot true if the view belongs to the root namespace, false
      *        otherwise
      */
+    @UnsupportedAppUsage
     @TestApi
     public void setIsRootNamespace(boolean isRoot) {
         if (isRoot) {
@@ -26418,7 +26404,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     /**
      * Returns the over-scroll mode for this view. The result will be
-     * one of {@link #OVER_SCROLL_ALWAYS} (default), {@link #OVER_SCROLL_IF_CONTENT_SCROLLS}
+     * one of {@link #OVER_SCROLL_ALWAYS}, {@link #OVER_SCROLL_IF_CONTENT_SCROLLS}
      * (allow over-scrolling only if the view content is larger than the container),
      * or {@link #OVER_SCROLL_NEVER}.
      *
@@ -26435,7 +26421,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     /**
      * Set the over-scroll mode for this view. Valid over-scroll modes are
-     * {@link #OVER_SCROLL_ALWAYS} (default), {@link #OVER_SCROLL_IF_CONTENT_SCROLLS}
+     * {@link #OVER_SCROLL_ALWAYS}, {@link #OVER_SCROLL_IF_CONTENT_SCROLLS}
      * (allow over-scrolling only if the view content is larger than the container),
      * or {@link #OVER_SCROLL_NEVER}.
      *
@@ -28448,13 +28434,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         /**
          * For windows that are full-screen but using insets to layout inside
-         * of the screen areas, these are the current insets to appear inside
-         * the overscan area of the display.
-         */
-        final Rect mOverscanInsets = new Rect();
-
-        /**
-         * For windows that are full-screen but using insets to layout inside
          * of the screen decorations, these are the current insets for the
          * content of the window.
          */
@@ -28479,12 +28458,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         final DisplayCutout.ParcelableWrapper mDisplayCutout =
                 new DisplayCutout.ParcelableWrapper(DisplayCutout.NO_CUTOUT);
-
-        /**
-         * For windows that include areas that are not covered by real surface these are the outsets
-         * for real surface.
-         */
-        final Rect mOutsets = new Rect();
 
         /**
          * In multi-window we force show the system bars. Because we don't want that the surface
@@ -28593,12 +28566,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * attached.
          */
         boolean mHasSystemUiListeners;
-
-        /**
-         * Set if the window has requested to extend into the overscan region
-         * via WindowManager.LayoutParams.FLAG_LAYOUT_IN_OVERSCAN.
-         */
-        boolean mOverscanRequested;
 
         /**
          * Set if the visibility of any views has changed.
@@ -29518,9 +29485,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         stream.addProperty("text:textAlignment", getTextAlignment());
 
         // accessibility
-        CharSequence contentDescription = getContentDescription();
         stream.addProperty("accessibility:contentDescription",
-                contentDescription == null ? "" : contentDescription.toString());
+                mContentDescription == null ? "" : mContentDescription.toString());
+        stream.addProperty("accessibility:stateDescription",
+                mStateDescription == null ? "" : mStateDescription.toString());
         stream.addProperty("accessibility:labelFor", getLabelFor());
         stream.addProperty("accessibility:importantForAccessibility", getImportantForAccessibility());
     }

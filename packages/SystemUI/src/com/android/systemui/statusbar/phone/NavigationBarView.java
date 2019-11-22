@@ -66,7 +66,6 @@ import com.android.systemui.Dependency;
 import com.android.systemui.DockedStackExistsListener;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
-import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.assist.AssistHandleViewController;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.model.SysUiState;
@@ -76,6 +75,7 @@ import com.android.systemui.recents.RecentsOnboarding;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.shared.system.WindowManagerWrapper;
+import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NavigationBarController;
 import com.android.systemui.statusbar.policy.DeadZone;
 import com.android.systemui.statusbar.policy.KeyButtonDrawable;
@@ -213,31 +213,32 @@ public class NavigationBarView extends FrameLayout implements
         }
     };
 
-    private final AccessibilityDelegate mQuickStepAccessibilityDelegate
-            = new AccessibilityDelegate() {
-        private AccessibilityAction mToggleOverviewAction;
+    private final AccessibilityDelegate mQuickStepAccessibilityDelegate =
+            new AccessibilityDelegate() {
+                private AccessibilityAction mToggleOverviewAction;
 
-        @Override
-        public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
-            super.onInitializeAccessibilityNodeInfo(host, info);
-            if (mToggleOverviewAction == null) {
-                mToggleOverviewAction = new AccessibilityAction(R.id.action_toggle_overview,
-                    getContext().getString(R.string.quick_step_accessibility_toggle_overview));
-            }
-            info.addAction(mToggleOverviewAction);
-        }
+                @Override
+                public void onInitializeAccessibilityNodeInfo(View host,
+                        AccessibilityNodeInfo info) {
+                    super.onInitializeAccessibilityNodeInfo(host, info);
+                    if (mToggleOverviewAction == null) {
+                        mToggleOverviewAction = new AccessibilityAction(
+                                R.id.action_toggle_overview, getContext().getString(
+                                R.string.quick_step_accessibility_toggle_overview));
+                    }
+                    info.addAction(mToggleOverviewAction);
+                }
 
-        @Override
-        public boolean performAccessibilityAction(View host, int action, Bundle args) {
-            if (action == R.id.action_toggle_overview) {
-                SysUiServiceProvider.getComponent(getContext(), Recents.class)
-                        .toggleRecentApps();
-            } else {
-                return super.performAccessibilityAction(host, action, args);
-            }
-            return true;
-        }
-    };
+                @Override
+                public boolean performAccessibilityAction(View host, int action, Bundle args) {
+                    if (action == R.id.action_toggle_overview) {
+                        Dependency.get(Recents.class).toggleRecentApps();
+                    } else {
+                        return super.performAccessibilityAction(host, action, args);
+                    }
+                    return true;
+                }
+            };
 
     private final OnComputeInternalInsetsListener mOnComputeInternalInsetsListener = info -> {
         // When the nav bar is in 2-button or 3-button mode, or when IME is visible in fully
@@ -300,7 +301,7 @@ public class NavigationBarView extends FrameLayout implements
         mConfiguration.updateFrom(context.getResources().getConfiguration());
 
         mScreenPinningNotify = new ScreenPinningNotify(mContext);
-        mBarTransitions = new NavigationBarTransitions(this);
+        mBarTransitions = new NavigationBarTransitions(this, Dependency.get(CommandQueue.class));
 
         mButtonDispatchers.put(R.id.back, backButton);
         mButtonDispatchers.put(R.id.home, new ButtonDispatcher(R.id.home));

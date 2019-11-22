@@ -61,6 +61,7 @@ import android.hardware.hdmi.HdmiPlaybackClient;
 import android.hardware.hdmi.HdmiTvClient;
 import android.hardware.input.InputManager;
 import android.hardware.usb.UsbManager;
+import android.hidl.manager.V1_0.IServiceManager;
 import android.media.AudioAttributes;
 import android.media.AudioFocusInfo;
 import android.media.AudioFocusRequest;
@@ -148,10 +149,12 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -584,7 +587,8 @@ public class AudioService extends IAudioService.Stub
     }
 
     final private IUidObserver mUidObserver = new IUidObserver.Stub() {
-        @Override public void onUidStateChanged(int uid, int procState, long procStateSeq) {
+        @Override public void onUidStateChanged(int uid, int procState, long procStateSeq,
+            int capability) {
         }
 
         @Override public void onUidGone(int uid, boolean disabled) {
@@ -725,6 +729,8 @@ public class AudioService extends IAudioService.Stub
 
         AudioSystem.setErrorCallback(mAudioSystemCallback);
 
+        updateAudioHalPids();
+
         boolean cameraSoundForced = readCameraSoundForced();
         mCameraSoundForced = new Boolean(cameraSoundForced);
         sendMsg(mAudioHandler,
@@ -769,6 +775,8 @@ public class AudioService extends IAudioService.Stub
         mRecordMonitor = new RecordingActivityMonitor(mContext);
 
         readAndSetLowRamDevice();
+
+        mIsCallScreeningModeSupported = AudioSystem.isCallScreeningModeSupported();
 
         // Call setRingerModeInt() to apply correct mute
         // state on streams affected by ringer mode.
@@ -953,6 +961,8 @@ public class AudioService extends IAudioService.Stub
         }
         Log.e(TAG, "Audioserver started.");
 
+        updateAudioHalPids();
+
         // indicate to audio HAL that we start the reconfiguration phase after a media
         // server crash
         // Note that we only execute this when the media server
@@ -960,6 +970,8 @@ public class AudioService extends IAudioService.Stub
         AudioSystem.setParameters("restarting=true");
 
         readAndSetLowRamDevice();
+
+        mIsCallScreeningModeSupported = AudioSystem.isCallScreeningModeSupported();
 
         // Restore device connection states, BT state
         mDeviceBroker.onAudioServerDied();
@@ -1465,10 +1477,13 @@ public class AudioService extends IAudioService.Stub
         }
         if (!TextUtils.isEmpty(packageName)) {
             PackageManager pm = mContext.getPackageManager();
+            ActivityManager am =
+                          (ActivityManager) mContext.getSystemService(mContext.ACTIVITY_SERVICE);
+
             if (pm.checkPermission(Manifest.permission.CAPTURE_AUDIO_HOTWORD, packageName)
                     == PackageManager.PERMISSION_GRANTED) {
                 try {
-                    assistantUid = pm.getPackageUid(packageName, 0);
+                    assistantUid = pm.getPackageUidAsUser(packageName, am.getCurrentUser());
                 } catch (PackageManager.NameNotFoundException e) {
                     Log.e(TAG,
                             "updateAssistantUId() could not find UID for package: " + packageName);
@@ -1586,12 +1601,13 @@ public class AudioService extends IAudioService.Stub
         setMicrophoneMuteNoCallerCheck(currentUser);
     }
 
-    private int rescaleIndex(int index, int srcStream, int dstStream) {
-        int srcRange =
-                mStreamStates[srcStream].getMaxIndex() - mStreamStates[srcStream].getMinIndex();
-        int dstRange =
-                mStreamStates[dstStream].getMaxIndex() - mStreamStates[dstStream].getMinIndex();
+    private int getIndexRange(int streamType) {
+        return (mStreamStates[streamType].getMaxIndex() - mStreamStates[streamType].getMinIndex());
+    }
 
+    private int rescaleIndex(int index, int srcStream, int dstStream) {
+        int srcRange = getIndexRange(srcStream);
+        int dstRange = getIndexRange(dstStream);
         if (srcRange == 0) {
             Log.e(TAG, "rescaleIndex : index range should not be zero");
             return mStreamStates[dstStream].getMinIndex();
@@ -1600,6 +1616,17 @@ public class AudioService extends IAudioService.Stub
         return mStreamStates[dstStream].getMinIndex()
                 + ((index - mStreamStates[srcStream].getMinIndex()) * dstRange + srcRange / 2)
                 / srcRange;
+    }
+
+    private int rescaleStep(int step, int srcStream, int dstStream) {
+        int srcRange = getIndexRange(srcStream);
+        int dstRange = getIndexRange(dstStream);
+        if (srcRange == 0) {
+            Log.e(TAG, "rescaleStep : index range should not be zero");
+            return 0;
+        }
+
+        return ((step * dstRange + srcRange / 2) / srcRange);
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -1790,7 +1817,7 @@ public class AudioService extends IAudioService.Stub
             }
         } else {
             // convert one UI step (+/-1) into a number of internal units on the stream alias
-            step = rescaleIndex(10, streamType, streamTypeAlias);
+            step = rescaleStep(10, streamType, streamTypeAlias);
         }
 
         // If either the client forces allowing ringer modes for this adjustment,
@@ -2808,6 +2835,7 @@ public class AudioService extends IAudioService.Stub
     }
 
     public void setMasterMute(boolean mute, int flags, String callingPackage, int userId) {
+        enforceModifyAudioRoutingPermission();
         setMasterMuteInternal(mute, flags, callingPackage, Binder.getCallingUid(),
                 userId);
     }
@@ -3293,6 +3321,12 @@ public class AudioService extends IAudioService.Stub
             return;
         }
 
+        if (mode == AudioSystem.MODE_CALL_SCREENING && !mIsCallScreeningModeSupported) {
+            Log.w(TAG, "setMode(MODE_CALL_SCREENING) not permitted "
+                    + "when call screening is not supported");
+            return;
+        }
+
         if (mode < AudioSystem.MODE_CURRENT || mode >= AudioSystem.NUM_MODES) {
             return;
         }
@@ -3421,6 +3455,14 @@ public class AudioService extends IAudioService.Stub
     /** @see AudioManager#getMode() */
     public int getMode() {
         return mMode;
+    }
+
+    /** cached value read from audiopolicy manager after initialization. */
+    private boolean mIsCallScreeningModeSupported = false;
+
+    /** @see AudioManager#isCallScreeningModeSupported() */
+    public boolean isCallScreeningModeSupported() {
+        return mIsCallScreeningModeSupported;
     }
 
     //==========================================================================================
@@ -3939,8 +3981,7 @@ public class AudioService extends IAudioService.Stub
         final boolean muteSystem = (zenPolicy.priorityCategories
                 & NotificationManager.Policy.PRIORITY_CATEGORY_SYSTEM) == 0;
         final boolean muteNotificationAndRing = ZenModeConfig
-                .areAllPriorityOnlyRingerSoundsMuted(
-                        mNm.getConsolidatedNotificationPolicy());
+                .areAllPriorityOnlyRingerSoundsMuted(zenPolicy);
         return muteAlarms && isAlarm(streamType)
                 || muteMedia && isMedia(streamType)
                 || muteSystem && isSystem(streamType)
@@ -3953,11 +3994,12 @@ public class AudioService extends IAudioService.Stub
 
     /**
      * Notifications, ringer and system sounds are controlled by the ringer:
-     * {@link ZenModeHelper.RingerModeDelegate#getRingerModeAffectedStreams(int)}
+     * {@link ZenModeHelper.RingerModeDelegate#getRingerModeAffectedStreams(int)} but can
+     * also be muted by DND based on the DND mode:
      * DND total silence: media and alarms streams can be muted by DND
      * DND alarms only: no streams additionally controlled by DND
-     * DND priority only: alarms, media, system streams can be muted by DND based on
-     * zenPolicy (this method determines which streams)
+     * DND priority only: alarms, media, system, ringer and notification streams can be muted by
+     * DND.  The current applied zenPolicy determines which streams will be muted by DND.
      * @return true if changed, else false
      */
     private boolean updateZenModeAffectedStreams() {
@@ -3988,6 +4030,11 @@ public class AudioService extends IAudioService.Stub
             if ((zenPolicy.priorityCategories
                     & NotificationManager.Policy.PRIORITY_CATEGORY_SYSTEM) == 0) {
                 zenModeAffectedStreams |= 1 << AudioManager.STREAM_SYSTEM;
+            }
+
+            if (ZenModeConfig.areAllPriorityOnlyRingerSoundsMuted(zenPolicy)) {
+                zenModeAffectedStreams |= 1 << AudioManager.STREAM_NOTIFICATION;
+                zenModeAffectedStreams |= 1 << AudioManager.STREAM_RING;
             }
         }
 
@@ -6213,6 +6260,7 @@ public class AudioService extends IAudioService.Stub
         pw.print("  mHdmiPlaybackClient="); pw.println(mHdmiPlaybackClient);
         pw.print("  mHdmiTvClient="); pw.println(mHdmiTvClient);
         pw.print("  mHdmiSystemAudioSupported="); pw.println(mHdmiSystemAudioSupported);
+        pw.print("  mIsCallScreeningModeSupported="); pw.println(mIsCallScreeningModeSupported);
 
         dumpAudioPolicies(pw);
         mDynPolicyLogger.dump(pw);
@@ -7369,6 +7417,41 @@ public class AudioService extends IAudioService.Stub
     public boolean isAudioServerRunning() {
         checkMonitorAudioServerStatePermission();
         return (AudioSystem.checkAudioFlinger() == AudioSystem.AUDIO_STATUS_OK);
+    }
+
+    //======================
+    // Audio HAL process dump
+    //======================
+
+    private static final String AUDIO_HAL_SERVICE_PREFIX = "android.hardware.audio";
+
+    private Set<Integer> getAudioHalPids() {
+        try {
+            IServiceManager serviceManager = IServiceManager.getService();
+            ArrayList<IServiceManager.InstanceDebugInfo> dump =
+                    serviceManager.debugDump();
+            HashSet<Integer> pids = new HashSet<>();
+            for (IServiceManager.InstanceDebugInfo info : dump) {
+                if (info.pid != IServiceManager.PidConstant.NO_PID
+                        && info.interfaceName != null
+                        && info.interfaceName.startsWith(AUDIO_HAL_SERVICE_PREFIX)) {
+                    pids.add(info.pid);
+                }
+            }
+            return pids;
+        } catch (RemoteException e) {
+            return new HashSet<Integer>();
+        }
+    }
+
+    private void updateAudioHalPids() {
+        Set<Integer> pidsSet = getAudioHalPids();
+        if (pidsSet.isEmpty()) {
+            Slog.w(TAG, "Could not retrieve audio HAL service pids");
+            return;
+        }
+        int[] pidsArray = pidsSet.stream().mapToInt(Integer::intValue).toArray();
+        AudioSystem.setAudioHalPids(pidsArray);
     }
 
     //======================

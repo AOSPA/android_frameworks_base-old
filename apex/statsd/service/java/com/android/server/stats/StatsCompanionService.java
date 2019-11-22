@@ -18,7 +18,6 @@ package com.android.server.stats;
 import static android.app.AppOpsManager.OP_FLAGS_ALL_TRUSTED;
 import static android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED;
 import static android.content.pm.PermissionInfo.PROTECTION_DANGEROUS;
-import static android.os.Process.getPidsForCommands;
 import static android.os.Process.getUidForPid;
 import static android.os.storage.VolumeInfo.TYPE_PRIVATE;
 import static android.os.storage.VolumeInfo.TYPE_PUBLIC;
@@ -27,6 +26,7 @@ import static com.android.internal.util.Preconditions.checkNotNull;
 import static com.android.server.am.MemoryStatUtil.readMemoryStatFromFilesystem;
 import static com.android.server.stats.IonMemoryUtil.readProcessSystemIonHeapSizesFromDebugfs;
 import static com.android.server.stats.IonMemoryUtil.readSystemIonHeapSizeFromDebugfs;
+import static com.android.server.stats.ProcfsMemoryUtil.forEachPid;
 import static com.android.server.stats.ProcfsMemoryUtil.readCmdlineFromProcfs;
 import static com.android.server.stats.ProcfsMemoryUtil.readMemorySnapshotFromProcfs;
 
@@ -76,6 +76,7 @@ import android.os.FileUtils;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.IPullAtomCallback;
 import android.os.IStatsCompanionService;
 import android.os.IStatsManager;
 import android.os.IStoraged;
@@ -144,6 +145,8 @@ import com.android.server.stats.ProcfsMemoryUtil.MemorySnapshot;
 import com.android.server.storage.DiskStatsFileLogger;
 import com.android.server.storage.DiskStatsLoggingService;
 
+import com.google.android.collect.Sets;
+
 import libcore.io.IoUtils;
 
 import org.json.JSONArray;
@@ -163,6 +166,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -216,7 +221,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
      * <p>Processes are matched by their cmdline in procfs. Example: cat /proc/pid/cmdline returns
      * /system/bin/statsd for the stats daemon.
      */
-    private static final String[] MEMORY_INTERESTING_NATIVE_PROCESSES = new String[]{
+    private static final Set<String> MEMORY_INTERESTING_NATIVE_PROCESSES = Sets.newHashSet(
             "/system/bin/statsd",  // Stats daemon.
             "/system/bin/surfaceflinger",
             "/system/bin/apexd",  // APEX daemon.
@@ -239,8 +244,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             "/system/bin/traced_probes",  // Perfetto.
             "webview_zygote",
             "zygote",
-            "zygote64",
-    };
+            "zygote64");
     /**
      * Lowest available uid for apps.
      *
@@ -270,6 +274,72 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private final BroadcastReceiver mAppUpdateReceiver;
     private final BroadcastReceiver mUserUpdateReceiver;
     private final ShutdownEventReceiver mShutdownEventReceiver;
+
+    private static final class PullerKey {
+        private final int mUid;
+        private final int mAtomTag;
+
+        PullerKey(int uid, int atom) {
+            mUid = uid;
+            mAtomTag = atom;
+        }
+
+        public int getUid() {
+            return mUid;
+        }
+
+        public int getAtom() {
+            return mAtomTag;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(mUid, mAtomTag);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj instanceof PullerKey) {
+                PullerKey other = (PullerKey) obj;
+                return this.mUid == other.getUid() && this.mAtomTag == other.getAtom();
+            }
+            return false;
+        }
+    }
+
+    private static final class PullerValue {
+        private final long mCoolDownNs;
+        private final long mTimeoutNs;
+        private int[] mAdditiveFields;
+        private IPullAtomCallback mCallback;
+
+        PullerValue(long coolDownNs, long timeoutNs, int[] additiveFields,
+                IPullAtomCallback callback) {
+            mCoolDownNs = coolDownNs;
+            mTimeoutNs = timeoutNs;
+            mAdditiveFields = additiveFields;
+            mCallback = callback;
+        }
+
+        public long getCoolDownNs() {
+            return mCoolDownNs;
+        }
+
+        public long getTimeoutNs() {
+            return mTimeoutNs;
+        }
+
+        public int[] getAdditiveFields() {
+            return mAdditiveFields;
+        }
+
+        public IPullAtomCallback getCallback() {
+            return mCallback;
+        }
+    }
+
+    private final HashMap<PullerKey, PullerValue> mPullers = new HashMap<>();
+
     private final KernelWakelockReader mKernelWakelockReader = new KernelWakelockReader();
     private final KernelWakelockStats mTmpWakelockStats = new KernelWakelockStats();
     private IWifiManager mWifiManager = null;
@@ -321,7 +391,6 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             @Override
             public void onReceive(Context context, Intent intent) {
                 synchronized (sStatsdLock) {
-                    sStatsd = fetchStatsdService();
                     if (sStatsd == null) {
                         Slog.w(TAG, "Could not access statsd for UserUpdateReceiver");
                         return;
@@ -583,7 +652,11 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                         } catch (IllegalArgumentException e) {
                             installer = "";
                         }
-                        sStatsd.informOnePackage(app, uid, pi.getLongVersionCode(), pi.versionName,
+                        sStatsd.informOnePackage(
+                                app,
+                                uid,
+                                pi.getLongVersionCode(),
+                                pi.versionName == null ? "" : pi.versionName,
                                 installer == null ? "" : installer);
                     }
                 } catch (Exception e) {
@@ -1216,27 +1289,28 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             e.writeInt(snapshot.rssHighWaterMarkInKilobytes);
             pulledData.add(e);
         }
-        int[] pids = getPidsForCommands(MEMORY_INTERESTING_NATIVE_PROCESSES);
-        for (int pid : pids) {
-            final String processName = readCmdlineFromProcfs(pid);
+        forEachPid((pid, cmdLine) -> {
+            if (!MEMORY_INTERESTING_NATIVE_PROCESSES.contains(cmdLine)) {
+                return;
+            }
             final MemorySnapshot snapshot = readMemorySnapshotFromProcfs(pid);
             if (snapshot == null) {
-                continue;
+                return;
             }
             // Sometimes we get here a process that is not included in the whitelist. It comes
             // from forking the zygote for an app. We can ignore that sample because this process
             // is collected by ProcessMemoryState.
             if (isAppUid(snapshot.uid)) {
-                continue;
+                return;
             }
             StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
             e.writeInt(snapshot.uid);
-            e.writeString(processName);
+            e.writeString(cmdLine);
             // RSS high-water mark in bytes.
             e.writeLong((long) snapshot.rssHighWaterMarkInKilobytes * 1024L);
             e.writeInt(snapshot.rssHighWaterMarkInKilobytes);
             pulledData.add(e);
-        }
+        });
         // Invoke rss_hwm_reset binary to reset RSS HWM counters for all processes.
         SystemProperties.set("sys.rss_hwm_reset.on", "1");
     }
@@ -1263,22 +1337,23 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             e.writeInt(snapshot.anonRssInKilobytes + snapshot.swapInKilobytes);
             pulledData.add(e);
         }
-        int[] pids = getPidsForCommands(MEMORY_INTERESTING_NATIVE_PROCESSES);
-        for (int pid : pids) {
-            final String processName = readCmdlineFromProcfs(pid);
+        forEachPid((pid, cmdLine) -> {
+            if (!MEMORY_INTERESTING_NATIVE_PROCESSES.contains(cmdLine)) {
+                return;
+            }
             final MemorySnapshot snapshot = readMemorySnapshotFromProcfs(pid);
             if (snapshot == null) {
-                continue;
+                return;
             }
             // Sometimes we get here a process that is not included in the whitelist. It comes
             // from forking the zygote for an app. We can ignore that sample because this process
             // is collected by ProcessMemoryState.
             if (isAppUid(snapshot.uid)) {
-                continue;
+                return;
             }
             StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
             e.writeInt(snapshot.uid);
-            e.writeString(processName);
+            e.writeString(cmdLine);
             e.writeInt(pid);
             e.writeInt(-1001);  // Placeholder for native processes, OOM_SCORE_ADJ_MIN - 1.
             e.writeInt(snapshot.rssInKilobytes);
@@ -1286,7 +1361,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             e.writeInt(snapshot.swapInKilobytes);
             e.writeInt(snapshot.anonRssInKilobytes + snapshot.swapInKilobytes);
             pulledData.add(e);
-        }
+        });
     }
 
     private static boolean isAppUid(int uid) {
@@ -1727,7 +1802,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         e.writeString(Build.BRAND);
         e.writeString(Build.PRODUCT);
         e.writeString(Build.DEVICE);
-        e.writeString(Build.VERSION.RELEASE);
+        e.writeString(Build.VERSION.RELEASE_OR_CODENAME);
         e.writeString(Build.ID);
         e.writeString(Build.VERSION.INCREMENTAL);
         e.writeString(Build.TYPE);
@@ -2545,10 +2620,40 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         mContext.enforceCallingPermission(android.Manifest.permission.STATSCOMPANION, null);
     }
 
+    @Override
+    public void registerPullAtomCallback(int atomTag, long coolDownNs, long timeoutNs,
+            int[] additiveFields, IPullAtomCallback pullerCallback) {
+        synchronized (sStatsdLock) {
+            // Always cache the puller in SCS.
+            // If statsd is down, we will register it when it comes back up.
+            int callingUid = Binder.getCallingUid();
+            final long token = Binder.clearCallingIdentity();
+            PullerKey key = new PullerKey(callingUid, atomTag);
+            PullerValue val = new PullerValue(
+                    coolDownNs, timeoutNs, additiveFields, pullerCallback);
+            mPullers.put(key, val);
+
+            if (sStatsd == null) {
+                Slog.w(TAG, "Could not access statsd for registering puller for atom " + atomTag);
+                return;
+            }
+            try {
+                sStatsd.registerPullAtomCallback(
+                        callingUid, atomTag, coolDownNs, timeoutNs, additiveFields, pullerCallback);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Failed to access statsd to register puller for atom " + atomTag);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+    }
+
     // Lifecycle and related code
 
     /**
-     * Fetches the statsd IBinder service
+     * Fetches the statsd IBinder service.
+     * Note: This should only be called from sayHiToStatsd. All other clients should use the cached
+     * sStatsd with a null check.
      */
     private static IStatsManager fetchStatsdService() {
         return IStatsManager.Stub.asInterface(ServiceManager.getService("stats"));
@@ -2646,6 +2751,8 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                     // Pull the latest state of UID->app name, version mapping when
                     // statsd starts.
                     informAllUidsLocked(mContext);
+                    // Register all pullers. If SCS has just started, this should be empty.
+                    registerAllPullersLocked();
                 } finally {
                     restoreCallingIdentity(token);
                 }
@@ -2657,10 +2764,21 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         }
     }
 
+    @GuardedBy("sStatsdLock")
+    private void registerAllPullersLocked() throws RemoteException {
+        // TODO: pass in one call, using a file descriptor (similar to uidmap).
+        for (Map.Entry<PullerKey, PullerValue> entry : mPullers.entrySet()) {
+            PullerKey key = entry.getKey();
+            PullerValue val = entry.getValue();
+            sStatsd.registerPullAtomCallback(key.getUid(), key.getAtom(), val.getCoolDownNs(),
+                    val.getTimeoutNs(), val.getAdditiveFields(), val.getCallback());
+        }
+    }
+
     private class StatsdDeathRecipient implements IBinder.DeathRecipient {
         @Override
         public void binderDied() {
-            Slog.i(TAG, "Statsd is dead - erase all my knowledge.");
+            Slog.i(TAG, "Statsd is dead - erase all my knowledge, except pullers");
             synchronized (sStatsdLock) {
                 long now = SystemClock.elapsedRealtime();
                 for (Long timeMillis : mDeathTimeMillis) {
