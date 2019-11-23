@@ -353,11 +353,12 @@ public class Utils {
      * @param level The number of bars to show (0-4)
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
-    public static int getWifiIconResource(int level, int generation, boolean isReady) {
+    public static int getWifiIconResource(int level, int generation, boolean isReady, Context context) {
         if (level < 0 || level >= WIFI_PIE.length) {
             throw new IllegalArgumentException("No Wifi icon found for level: " + level);
         }
 
+        if (context.getBoolean(R.bool.config_show_generation_number)) {
         switch (generation) {
             case 4:
                 return WIFI_4_PIE[level];
@@ -371,6 +372,8 @@ public class Utils {
                 return WIFI_6_PIE[level];
             default:
                 return WIFI_PIE[level];
+       } else {
+         return WIFI_PIE_[level];
        }
     }
 
