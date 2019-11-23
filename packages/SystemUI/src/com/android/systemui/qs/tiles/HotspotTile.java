@@ -139,7 +139,7 @@ public class HotspotTile extends QSTileImpl<BooleanState> {
         if (state.isTransient) {
             state.icon = ResourceIcon.get(
                     com.android.internal.R.drawable.ic_hotspot_transient_animation);
-        } else if (state.value) {
+        } else if (state.value && mContext.getBoolean(R.bool.config_show_generation_number)) {
             int generation = mWifiManager.getSoftApWifiGeneration();
             if (generation == WifiManager.WIFI_GENERATION_6) {
                 state.icon = mWifi6EnabledStatic;
