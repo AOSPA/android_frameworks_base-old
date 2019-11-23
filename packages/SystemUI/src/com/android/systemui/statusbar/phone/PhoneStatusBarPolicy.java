@@ -227,7 +227,8 @@ public class PhoneStatusBarPolicy
         mIconController.setIconVisibility(mSlotCast, false);
 
         // hotspot
-        updateHotspotIcon();
+        mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
+                mContext.getString(R.string.accessibility_status_bar_hotspot));
         mIconController.setIconVisibility(mSlotHotspot, mHotspot.isHotspotEnabled());
 
         // managed profile
@@ -584,7 +585,6 @@ public class PhoneStatusBarPolicy
     private final HotspotController.Callback mHotspotCallback = new HotspotController.Callback() {
         @Override
         public void onHotspotChanged(boolean enabled, int numDevices) {
-            updateHotspotIcon();
             mIconController.setIconVisibility(mSlotHotspot, enabled);
         }
     };
@@ -769,22 +769,5 @@ public class PhoneStatusBarPolicy
             mIconController.setIconVisibility(mSlotCast, false);
         }
     };
-
-    private void updateHotspotIcon() {
-        int generation = mWifiManager.getSoftApWifiGeneration();
-        if (generation == WifiManager.WIFI_GENERATION_6) {
-            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_6_hotspot,
-                mContext.getString(R.string.accessibility_status_bar_hotspot));
-        } else if (generation == WifiManager.WIFI_GENERATION_5) {
-            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_5_hotspot,
-                mContext.getString(R.string.accessibility_status_bar_hotspot));
-        } else if (generation == WifiManager.WIFI_GENERATION_4) {
-            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_4_hotspot,
-                mContext.getString(R.string.accessibility_status_bar_hotspot));
-        } else {
-            mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_hotspot,
-                mContext.getString(R.string.accessibility_status_bar_hotspot));
-        }
-    }
 
 }
