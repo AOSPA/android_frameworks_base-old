@@ -26,4 +26,7 @@
     <!-- Color of the FOD view -->
     <color name="config_fodColor">#00ff00</color>
 
+    <!-- Whether to show WiFi/Hotspot generation number -->
+    <bool name="config_show_generation_number">false</bool>
+
 </resources>
