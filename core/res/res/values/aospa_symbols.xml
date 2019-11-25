@@ -44,6 +44,9 @@
     <!-- Whether to cleanup fingerprints upon connection to the daemon and when user switches -->
     <java-symbol type="bool" name="config_cleanupUnusedFingerprints" />
 
+    <!-- Whether to show WiFi/Hotspot standard -->
+    <java-symbol type="bool" name="config_show_network_standard" />
+
     <!-- Gestures Settings -->
     <java-symbol type="integer" name="config_doubleTapKeyCode" />
     <java-symbol type="integer" name="config_singleTapKeyCode" />
