@@ -451,10 +451,11 @@ public class Utils {
      * Returns the Wifi icon resource for a given RSSI level.
      *
      * @param level The number of bars to show (0-4)
+     * @param context Holds context of activity / preference that called this method
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
-    public static int getWifiIconResource(int level) {
-        return getWifiIconResource(false /* showX */, level, 0 /* standard */);
+    public static int getWifiIconResource(int level, Context context) {
+        return getWifiIconResource(false /* showX */, level, 0 /* standard */, context);
     }
 
     /**
@@ -463,20 +464,23 @@ public class Utils {
      * @param showX True if a connected Wi-Fi network has the problem which should show Pie+x
      *              signal icon to users.
      * @param level The number of bars to show (0-4)
+     * @param context Holds context of activity / preference that called this method
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
-    public static int getWifiIconResource(boolean showX, int level) {
-        return getWifiIconResource(showX, level, 0 /* standard */);
+    public static int getWifiIconResource(boolean showX, int level, Context context) {
+        return getWifiIconResource(showX, level, 0 /* standard */, context);
     }
 
     /**
      * Returns the Wifi icon resource for a given RSSI level.
      *
      * @param level The number of bars to show (0-4)
+     * @param standard Defines number of Wireless network standard (4-6)
+     * @param context Holds context of activity / preference that called this method
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
-    public static int getWifiIconResource(int level, int standard) {
-        return getWifiIconResource(false /* showX */, level,  standard);
+    public static int getWifiIconResource(int level, int standard, Context context) {
+        return getWifiIconResource(false /* showX */, level, standard, context);
     }
 
     /**
@@ -485,25 +489,34 @@ public class Utils {
      * @param showX True if a connected Wi-Fi network has the problem which should show Pie+x
      *              signal icon to users.
      * @param level The number of bars to show (0-4)
+     * @param standard Defines number of Wireless network standard (4-6)
+     * @param context Holds context of activity / preference that called this method
      * @throws IllegalArgumentException if an invalid RSSI level is given.
      */
-    public static int getWifiIconResource(boolean showX, int level, int standard) {
+    public static int getWifiIconResource(boolean showX, int level, int standard, Context context) {
         if (level < 0 || level >= WIFI_PIE.length) {
             throw new IllegalArgumentException("No Wifi icon found for level: " + level);
         }
 
         if (showX) return SHOW_X_WIFI_PIE[level];
 
-        switch (standard) {
-            case 4:
-                return WIFI_4_PIE[level];
-            case 5:
-                return WIFI_5_PIE[level];
-            case 6:
-                return WIFI_6_PIE[level];
-            default:
-                return WIFI_PIE[level];
-       }
+        final boolean showNetworkStandard = context.getResources().getBoolean(
+                com.android.internal.R.bool.config_show_network_standard);
+
+        if (showNetworkStandard) {
+            switch (standard) {
+                case 4:
+                    return WIFI_4_PIE[level];
+                case 5:
+                    return WIFI_5_PIE[level];
+                case 6:
+                    return WIFI_6_PIE[level];
+                default:
+                    return WIFI_PIE[level];
+            }
+        } else {
+            return WIFI_PIE[level];
+        }
     }
 
     public static int getDefaultStorageManagerDaysToRetain(Resources resources) {
