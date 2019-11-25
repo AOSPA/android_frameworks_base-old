@@ -27,7 +27,7 @@
     <!-- Whether device has physical tri state switch -->
     <bool name="config_hasAlertSlider">false</bool>
 
-	<!-- The location of the devices physical tri state switch
+    <!-- The location of the devices physical tri state switch
          0: Left side
          1: Right side -->
     <integer name="config_alertSliderLocation">0</integer>
@@ -121,4 +121,7 @@
         <item>recovery</item>
         <item>bootloader</item>
     </string-array>
+
+    <!-- Whether to show WiFi/Hotspot generation number -->
+    <bool name="config_show_network_generation">false</bool>
 </resources>
