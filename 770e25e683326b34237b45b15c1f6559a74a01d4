@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7ed1bd9d_d36bd33a",
+        "filename": "packages/SystemUI/res/values/pa_config.xml",
+        "patchSetId": 5
+      },
+      "lineNbr": 30,
+      "author": {
+        "id": 1000178
+      },
+      "writtenOn": "2019-11-25T10:37:44Z",
+      "side": 1,
+      "message": "This is too generic imo, should be a bit more straight forward",
+      "revId": "770e25e683326b34237b45b15c1f6559a74a01d4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
