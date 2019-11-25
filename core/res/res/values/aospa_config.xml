@@ -58,6 +58,9 @@
     <!-- Whether to cleanup fingerprints upon connection to the daemon and when user switches -->
     <bool name="config_cleanupUnusedFingerprints">true</bool>
 
+    <!-- Whether to show WiFi/Hotspot standard -->
+    <bool name="config_show_network_standard">false</bool>
+
     <!-- Key codes of gestures. If the gesture is not supported set it to 0. -->
     <integer name="config_doubleTapKeyCode">0</integer>
     <integer name="config_singleTapKeyCode">0</integer>

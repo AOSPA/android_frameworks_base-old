@@ -195,7 +195,7 @@ public class InternetAdapter extends RecyclerView.Adapter<InternetAdapter.Intern
             if (level == WifiEntry.WIFI_LEVEL_UNREACHABLE) {
                 return null;
             }
-            final Drawable drawable = mWifiIconInjector.getIcon(hasNoInternet, level);
+            final Drawable drawable = mWifiIconInjector.getIcon(hasNoInternet, level, mContext);
             if (drawable == null) {
                 return null;
             }
