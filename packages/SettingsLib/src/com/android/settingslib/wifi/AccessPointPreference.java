@@ -361,7 +361,7 @@ public class AccessPointPreference extends Preference {
         }
 
         public Drawable getIcon(int level, int standard, boolean isReady) {
-            return mContext.getDrawable(Utils.getWifiIconResource(level, standard, isReady));
+            return mContext.getDrawable(Utils.getWifiIconResource(level, standard, isReady, mContext));
         }
     }
 }
