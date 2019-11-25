@@ -67,6 +67,29 @@ final class TunerConstants {
     public static final int DATA_FORMAT_ES = Constants.DataFormat.ES;
     public static final int DATA_FORMAT_SHV_TLV = Constants.DataFormat.SHV_TLV;
 
+
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({DEMUX_T_PID, DEMUX_MMPT_PID})
+    public @interface DemuxPidType {}
+
+    public static final int DEMUX_T_PID = 1;
+    public static final int DEMUX_MMPT_PID = 2;
+
+    @IntDef({FRONTEND_SETTINGS_ANALOG, FRONTEND_SETTINGS_ATSC, FRONTEND_SETTINGS_ATSC3,
+            FRONTEND_SETTINGS_DVBS, FRONTEND_SETTINGS_DVBC, FRONTEND_SETTINGS_DVBT,
+            FRONTEND_SETTINGS_ISDBS, FRONTEND_SETTINGS_ISDBS3, FRONTEND_SETTINGS_ISDBT})
+    public @interface FrontendSettingsType {}
+
+    public static final int FRONTEND_SETTINGS_ANALOG = 1;
+    public static final int FRONTEND_SETTINGS_ATSC = 2;
+    public static final int FRONTEND_SETTINGS_ATSC3 = 3;
+    public static final int FRONTEND_SETTINGS_DVBS = 4;
+    public static final int FRONTEND_SETTINGS_DVBC = 5;
+    public static final int FRONTEND_SETTINGS_DVBT = 6;
+    public static final int FRONTEND_SETTINGS_ISDBS = 7;
+    public static final int FRONTEND_SETTINGS_ISDBS3 = 8;
+    public static final int FRONTEND_SETTINGS_ISDBT = 9;
+
     private TunerConstants() {
     }
 }

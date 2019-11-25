@@ -18,24 +18,18 @@ package com.android.server.wm;
 
 import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
-import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.os.Process.NOBODY_UID;
 import static android.view.Display.DEFAULT_DISPLAY;
-import static android.view.Surface.ROTATION_0;
-import static android.view.Surface.ROTATION_90;
 import static android.view.WindowManager.TRANSIT_TASK_CLOSE;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.any;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyInt;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.atLeast;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doAnswer;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.eq;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.reset;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
@@ -61,18 +55,13 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.when;
 
-import android.app.ActivityManager;
-import android.app.ActivityManagerInternal;
 import android.app.ActivityOptions;
-import android.app.WindowConfiguration;
 import android.app.servertransaction.ActivityConfigurationChangeItem;
 import android.app.servertransaction.ClientTransaction;
 import android.app.servertransaction.PauseActivityItem;
@@ -80,13 +69,11 @@ import android.content.ComponentName;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
-import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.PersistableBundle;
 import android.platform.test.annotations.Presubmit;
 import android.util.MergedConfiguration;
 import android.util.MutableBoolean;
-import android.view.DisplayInfo;
 import android.view.IRemoteAnimationFinishedCallback;
 import android.view.IRemoteAnimationRunner.Stub;
 import android.view.RemoteAnimationAdapter;
@@ -120,7 +107,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
     public void setUp() throws Exception {
         mStack = new StackBuilder(mRootActivityContainer).build();
         mTask = mStack.getChildAt(0);
-        mActivity = mTask.getTopActivity();
+        mActivity = mTask.getTopNonFinishingActivity();
 
         doReturn(false).when(mService).isBooting();
         doReturn(true).when(mService).isBooted();
@@ -216,23 +203,6 @@ public class ActivityRecordTests extends ActivityTestsBase {
         assertTrue(activity.canBeLaunchedOnDisplay(DEFAULT_DISPLAY));
         // An activity cannot be launched on a non-existent display.
         assertFalse(activity.canBeLaunchedOnDisplay(DEFAULT_DISPLAY + 1));
-    }
-
-    @Test
-    public void testRestartProcessIfVisible() {
-        doNothing().when(mSupervisor).scheduleRestartTimeout(mActivity);
-        mActivity.mVisibleRequested = true;
-        mActivity.setSavedState(null /* savedState */);
-        mActivity.setState(ActivityStack.ActivityState.RESUMED, "testRestart");
-        prepareFixedAspectRatioUnresizableActivity();
-
-        final Rect originalOverrideBounds = new Rect(mActivity.getBounds());
-        setupDisplayAndParentSize(600, 1200);
-        // The visible activity should recompute configuration according to the last parent bounds.
-        mService.restartActivityProcessIfVisible(mActivity.appToken);
-
-        assertEquals(ActivityStack.ActivityState.RESTARTING_PROCESS, mActivity.getState());
-        assertNotEquals(originalOverrideBounds, mActivity.getBounds());
     }
 
     @Test
@@ -484,214 +454,6 @@ public class ActivityRecordTests extends ActivityTestsBase {
     }
 
     @Test
-    public void testSizeCompatMode_KeepBoundsWhenChangingFromFreeformToFullscreen() {
-        setupDisplayContentForCompatDisplayInsets();
-
-        // put display in freeform mode
-        ActivityDisplay display = mActivity.getDisplay();
-        final Configuration c = new Configuration(display.getRequestedOverrideConfiguration());
-        c.windowConfiguration.setBounds(new Rect(0, 0, 2000, 1000));
-        c.densityDpi = 300;
-        c.windowConfiguration.setWindowingMode(WindowConfiguration.WINDOWING_MODE_FREEFORM);
-        display.onRequestedOverrideConfigurationChanged(c);
-
-        // launch compat activity in freeform and store bounds
-        when(mActivity.getRequestedOrientation()).thenReturn(
-                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-        mTask.getRequestedOverrideConfiguration().orientation = Configuration.ORIENTATION_PORTRAIT;
-        mTask.setBounds(100, 100, 400, 600);
-        mActivity.info.screenOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
-        mActivity.info.resizeMode = ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
-        mActivity.mVisibleRequested = true;
-        ensureActivityConfiguration();
-
-        final Rect bounds = new Rect(mActivity.getBounds());
-        final int density = mActivity.getConfiguration().densityDpi;
-
-        // change display configuration to fullscreen
-        c.windowConfiguration.setWindowingMode(WindowConfiguration.WINDOWING_MODE_FULLSCREEN);
-        display.onRequestedOverrideConfigurationChanged(c);
-
-        // check if dimensions stay the same
-        assertTrue(mActivity.inSizeCompatMode());
-        assertEquals(bounds.width(), mActivity.getBounds().width());
-        assertEquals(bounds.height(), mActivity.getBounds().height());
-        assertEquals(density, mActivity.getConfiguration().densityDpi);
-        assertEquals(WindowConfiguration.WINDOWING_MODE_FULLSCREEN, mActivity.getWindowingMode());
-    }
-
-    @Test
-    public void testSizeCompatMode_FixedAspectRatioBoundsWithDecor() {
-        setupDisplayContentForCompatDisplayInsets();
-        final int decorHeight = 200; // e.g. The device has cutout.
-        final DisplayPolicy policy = setupDisplayAndParentSize(600, 800).getDisplayPolicy();
-        spyOn(policy);
-        doAnswer(invocationOnMock -> {
-            final int rotation = invocationOnMock.<Integer>getArgument(0);
-            final Rect insets = invocationOnMock.<Rect>getArgument(4);
-            if (rotation == ROTATION_0) {
-                insets.top = decorHeight;
-            } else if (rotation == ROTATION_90) {
-                insets.left = decorHeight;
-            }
-            return null;
-        }).when(policy).getNonDecorInsetsLw(anyInt() /* rotation */, anyInt() /* width */,
-                anyInt() /* height */, any() /* displayCutout */, any() /* outInsets */);
-        // set appBounds to incorporate decor
-        final Configuration c =
-                new Configuration(mStack.getDisplay().getRequestedOverrideConfiguration());
-        c.windowConfiguration.getAppBounds().top = decorHeight;
-        mStack.getDisplay().onRequestedOverrideConfigurationChanged(c);
-
-        doReturn(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED)
-                .when(mActivity).getRequestedOrientation();
-        mActivity.info.resizeMode = RESIZE_MODE_UNRESIZEABLE;
-        mActivity.info.minAspectRatio = mActivity.info.maxAspectRatio = 1;
-        mActivity.mVisibleRequested = true;
-        ensureActivityConfiguration();
-        // The parent configuration doesn't change since the first resolved configuration, so the
-        // activity shouldn't be in the size compatibility mode.
-        assertFalse(mActivity.inSizeCompatMode());
-
-        final Rect appBounds = mActivity.getWindowConfiguration().getAppBounds();
-        // Ensure the app bounds keep the declared aspect ratio.
-        assertEquals(appBounds.width(), appBounds.height());
-        // The decor height should be a part of the effective bounds.
-        assertEquals(mActivity.getBounds().height(), appBounds.height() + decorHeight);
-
-        mTask.getConfiguration().windowConfiguration.setRotation(ROTATION_90);
-        mActivity.onConfigurationChanged(mTask.getConfiguration());
-        // After changing orientation, the aspect ratio should be the same.
-        assertEquals(appBounds.width(), appBounds.height());
-        // The decor height will be included in width.
-        assertEquals(mActivity.getBounds().width(), appBounds.width() + decorHeight);
-    }
-
-    @Test
-    public void testSizeCompatMode_FixedScreenConfigurationWhenMovingToDisplay() {
-        // Initialize different bounds on a new display.
-        final Rect newDisplayBounds = new Rect(0, 0, 1000, 2000);
-        DisplayInfo info = new DisplayInfo();
-        mService.mContext.getDisplay().getDisplayInfo(info);
-        info.logicalWidth = newDisplayBounds.width();
-        info.logicalHeight = newDisplayBounds.height();
-        info.logicalDensityDpi = 300;
-
-        final ActivityDisplay newDisplay =
-                addNewActivityDisplayAt(info, ActivityDisplay.POSITION_TOP);
-
-        final Configuration c =
-                new Configuration(mStack.getDisplay().getRequestedOverrideConfiguration());
-        c.densityDpi = 200;
-        mStack.getDisplay().onRequestedOverrideConfigurationChanged(c);
-        mActivity = new ActivityBuilder(mService)
-                .setTask(mTask)
-                .setResizeMode(RESIZE_MODE_UNRESIZEABLE)
-                .setMaxAspectRatio(1.5f)
-                .build();
-        mActivity.mVisibleRequested = true;
-
-        final Rect originalBounds = new Rect(mActivity.getBounds());
-        final int originalDpi = mActivity.getConfiguration().densityDpi;
-
-        // Move the non-resizable activity to the new display.
-        mStack.reparent(newDisplay.mDisplayContent, true /* onTop */);
-
-        assertEquals(originalBounds.width(),
-                mActivity.getWindowConfiguration().getBounds().width());
-        assertEquals(originalBounds.height(),
-                mActivity.getWindowConfiguration().getBounds().height());
-        assertEquals(originalDpi, mActivity.getConfiguration().densityDpi);
-        assertTrue(mActivity.inSizeCompatMode());
-    }
-
-    @Test
-    public void testSizeCompatMode_FixedScreenBoundsWhenDisplaySizeChanged() {
-        setupDisplayContentForCompatDisplayInsets();
-        when(mActivity.getRequestedOrientation()).thenReturn(
-                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-        mTask.getWindowConfiguration().setAppBounds(mStack.getDisplay().getBounds());
-        mTask.getRequestedOverrideConfiguration().orientation = Configuration.ORIENTATION_PORTRAIT;
-        mActivity.info.screenOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
-        mActivity.info.resizeMode = ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
-        mActivity.mVisibleRequested = true;
-
-        ensureActivityConfiguration();
-        final Rect originalBounds = new Rect(mActivity.getBounds());
-
-        // Change the size of current display.
-        setupDisplayAndParentSize(1000, 2000);
-        ensureActivityConfiguration();
-
-        assertEquals(originalBounds.width(),
-                mActivity.getWindowConfiguration().getBounds().width());
-        assertEquals(originalBounds.height(),
-                mActivity.getWindowConfiguration().getBounds().height());
-        assertTrue(mActivity.inSizeCompatMode());
-    }
-
-    @Test
-    public void testSizeCompatMode_FixedScreenLayoutSizeBits() {
-        final int fixedScreenLayout = Configuration.SCREENLAYOUT_LONG_NO
-                | Configuration.SCREENLAYOUT_SIZE_NORMAL;
-        final int layoutMask = Configuration.SCREENLAYOUT_LONG_MASK
-                | Configuration.SCREENLAYOUT_SIZE_MASK
-                | Configuration.SCREENLAYOUT_LAYOUTDIR_MASK;
-        mTask.getRequestedOverrideConfiguration().screenLayout = fixedScreenLayout
-                | Configuration.SCREENLAYOUT_LAYOUTDIR_LTR;
-        prepareFixedAspectRatioUnresizableActivity();
-
-        // The initial configuration should inherit from parent.
-        assertEquals(mTask.getConfiguration().screenLayout & layoutMask,
-                mActivity.getConfiguration().screenLayout & layoutMask);
-
-        mTask.getConfiguration().screenLayout = Configuration.SCREENLAYOUT_LAYOUTDIR_RTL
-                | Configuration.SCREENLAYOUT_LONG_YES | Configuration.SCREENLAYOUT_SIZE_LARGE;
-        mActivity.onConfigurationChanged(mTask.getConfiguration());
-
-        // The size and aspect ratio bits don't change, but the layout direction should be updated.
-        assertEquals(fixedScreenLayout | Configuration.SCREENLAYOUT_LAYOUTDIR_RTL,
-                mActivity.getConfiguration().screenLayout & layoutMask);
-    }
-
-    @Test
-    public void testSizeCompatMode_ResetNonVisibleActivity() {
-        final ActivityDisplay display = mStack.getDisplay();
-        spyOn(display);
-
-        prepareFixedAspectRatioUnresizableActivity();
-        mActivity.setState(STOPPED, "testSizeCompatMode");
-        mActivity.mVisibleRequested = false;
-        mActivity.app.setReportedProcState(ActivityManager.PROCESS_STATE_CACHED_ACTIVITY);
-        // Make the parent bounds to be different so the activity is in size compatibility mode.
-        setupDisplayAndParentSize(600, 1200);
-
-        // Simulate the display changes orientation.
-        doReturn(ActivityInfo.CONFIG_SCREEN_SIZE | CONFIG_ORIENTATION
-                | ActivityInfo.CONFIG_WINDOW_CONFIGURATION)
-                        .when(display).getLastOverrideConfigurationChanges();
-        mActivity.onConfigurationChanged(mTask.getConfiguration());
-        when(display.getLastOverrideConfigurationChanges()).thenCallRealMethod();
-        // The override configuration should not change so it is still in size compatibility mode.
-        assertTrue(mActivity.inSizeCompatMode());
-
-        // Change display density
-        final DisplayContent displayContent = mStack.getDisplay().mDisplayContent;
-        displayContent.mBaseDisplayDensity = (int) (0.7f * displayContent.mBaseDisplayDensity);
-        final Configuration c = new Configuration();
-        displayContent.computeScreenConfiguration(c);
-        mService.mAmInternal = mock(ActivityManagerInternal.class);
-        mStack.getDisplay().onRequestedOverrideConfigurationChanged(c);
-
-        // The override configuration should be reset and the activity's process will be killed.
-        assertFalse(mActivity.inSizeCompatMode());
-        verify(mActivity).restartProcessIfVisible();
-        waitHandlerIdle(mService.mH);
-        verify(mService.mAmInternal).killProcess(
-                eq(mActivity.app.mName), eq(mActivity.app.mUid), anyString());
-    }
-
-    @Test
     public void testTakeOptions() {
         ActivityOptions opts = ActivityOptions.makeRemoteAnimation(
                 new RemoteAnimationAdapter(new Stub() {
@@ -829,7 +591,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         // Prepare the activity record to be ready for immediate removal. It should be invisible and
         // have no process. Otherwise, request to finish it will send a message to client first.
         mActivity.setState(STOPPED, "test");
-        mActivity.mVisibleRequested = false;
+        mActivity.visible = false;
         mActivity.nowVisible = false;
         // Set process to 'null' to allow immediate removal, but don't call mActivity.setProcess() -
         // this will cause NPE when updating task's process.
@@ -838,7 +600,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         // Put a visible activity on top, so the finishing activity doesn't have to wait until the
         // next activity reports idle to destroy it.
         final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        topActivity.mVisibleRequested = true;
+        topActivity.visible = true;
         topActivity.nowVisible = true;
         topActivity.setState(RESUMED, "test");
 
@@ -924,7 +686,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testFinishActivityIfPossible_visibleResumedPreparesAppTransition() {
         mActivity.finishing = false;
-        mActivity.mVisibleRequested = true;
+        mActivity.visible = true;
         mActivity.setState(RESUMED, "test");
         mActivity.finishIfPossible("test", false /* oomAdj */);
 
@@ -940,7 +702,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testFinishActivityIfPossible_visibleNotResumedExecutesAppTransition() {
         mActivity.finishing = false;
-        mActivity.mVisibleRequested = true;
+        mActivity.visible = true;
         mActivity.setState(PAUSED, "test");
         mActivity.finishIfPossible("test", false /* oomAdj */);
 
@@ -958,7 +720,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         // Put an activity on top of test activity to make it invisible and prevent us from
         // accidentally resuming the topmost one again.
         new ActivityBuilder(mService).build();
-        mActivity.mVisibleRequested = false;
+        mActivity.visible = false;
         mActivity.setState(STOPPED, "test");
 
         mActivity.finishIfPossible("test", false /* oomAdj */);
@@ -1010,12 +772,12 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testCompleteFinishing_keepStateOfNextInvisible() {
         final ActivityRecord currentTop = mActivity;
-        currentTop.mVisibleRequested = currentTop.nowVisible = true;
+        currentTop.visible = currentTop.nowVisible = true;
 
         // Simulates that {@code currentTop} starts an existing activity from background (so its
         // state is stopped) and the starting flow just goes to place it at top.
         final ActivityStack nextStack = new StackBuilder(mRootActivityContainer).build();
-        final ActivityRecord nextTop = nextStack.getTopActivity();
+        final ActivityRecord nextTop = nextStack.getTopNonFinishingActivity();
         nextTop.setState(STOPPED, "test");
 
         mStack.mPausingActivity = currentTop;
@@ -1036,13 +798,13 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testCompleteFinishing_waitForNextVisible() {
         final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        topActivity.mVisibleRequested = true;
+        topActivity.visible = true;
         topActivity.nowVisible = true;
         topActivity.finishing = true;
         topActivity.setState(PAUSED, "true");
         // Mark the bottom activity as not visible, so that we will wait for it before removing
         // the top one.
-        mActivity.mVisibleRequested = false;
+        mActivity.visible = false;
         mActivity.nowVisible = false;
         mActivity.setState(STOPPED, "test");
 
@@ -1061,13 +823,13 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testCompleteFinishing_noWaitForNextVisible_alreadyInvisible() {
         final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        topActivity.mVisibleRequested = false;
+        topActivity.visible = false;
         topActivity.nowVisible = false;
         topActivity.finishing = true;
         topActivity.setState(PAUSED, "true");
         // Mark the bottom activity as not visible, so that we would wait for it before removing
         // the top one.
-        mActivity.mVisibleRequested = false;
+        mActivity.visible = false;
         mActivity.nowVisible = false;
         mActivity.setState(STOPPED, "test");
 
@@ -1083,12 +845,12 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testCompleteFinishing_waitForIdle() {
         final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        topActivity.mVisibleRequested = true;
+        topActivity.visible = true;
         topActivity.nowVisible = true;
         topActivity.finishing = true;
         topActivity.setState(PAUSED, "true");
         // Mark the bottom activity as already visible, so that there is no need to wait for it.
-        mActivity.mVisibleRequested = true;
+        mActivity.visible = true;
         mActivity.nowVisible = true;
         mActivity.setState(RESUMED, "test");
 
@@ -1104,12 +866,12 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testCompleteFinishing_noWaitForNextVisible_stopped() {
         final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        topActivity.mVisibleRequested = false;
+        topActivity.visible = false;
         topActivity.nowVisible = false;
         topActivity.finishing = true;
         topActivity.setState(STOPPED, "true");
         // Mark the bottom activity as already visible, so that there is no need to wait for it.
-        mActivity.mVisibleRequested = true;
+        mActivity.visible = true;
         mActivity.nowVisible = true;
         mActivity.setState(RESUMED, "test");
 
@@ -1125,12 +887,12 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testCompleteFinishing_noWaitForNextVisible_nonFocusedStack() {
         final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
-        topActivity.mVisibleRequested = true;
+        topActivity.visible = true;
         topActivity.nowVisible = true;
         topActivity.finishing = true;
         topActivity.setState(PAUSED, "true");
         // Mark the bottom activity as already visible, so that there is no need to wait for it.
-        mActivity.mVisibleRequested = true;
+        mActivity.visible = true;
         mActivity.nowVisible = true;
         mActivity.setState(RESUMED, "test");
 
@@ -1139,7 +901,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         final ActivityStack stack = new StackBuilder(mRootActivityContainer).build();
         final ActivityRecord focusedActivity = stack.getChildAt(0).getChildAt(0);
         focusedActivity.nowVisible = true;
-        focusedActivity.mVisibleRequested = true;
+        focusedActivity.visible = true;
         focusedActivity.setState(RESUMED, "test");
         stack.mResumedActivity = focusedActivity;
 
@@ -1339,34 +1101,5 @@ public class ActivityRecordTests extends ActivityTestsBase {
         mActivity.destroyed("test");
 
         verify(mActivity).removeFromHistory(anyString());
-    }
-
-    /** Setup {@link #mActivity} as a size-compat-mode-able activity without fixed orientation. */
-    private void prepareFixedAspectRatioUnresizableActivity() {
-        setupDisplayContentForCompatDisplayInsets();
-        mActivity.info.resizeMode = RESIZE_MODE_UNRESIZEABLE;
-        mActivity.info.maxAspectRatio = 1.5f;
-        mActivity.mVisibleRequested = true;
-        ensureActivityConfiguration();
-    }
-
-    private void setupDisplayContentForCompatDisplayInsets() {
-        final Rect displayBounds = mStack.getDisplay().getBounds();
-        setupDisplayAndParentSize(displayBounds.width(), displayBounds.height());
-    }
-
-    private DisplayContent setupDisplayAndParentSize(int width, int height) {
-        final DisplayContent displayContent = mStack.getDisplay().mDisplayContent;
-        displayContent.mBaseDisplayWidth = width;
-        displayContent.mBaseDisplayHeight = height;
-        final Configuration c =
-                new Configuration(mStack.getDisplay().getRequestedOverrideConfiguration());
-        c.windowConfiguration.setBounds(new Rect(0, 0, width, height));
-        c.windowConfiguration.setAppBounds(0, 0, width, height);
-        c.windowConfiguration.setRotation(ROTATION_0);
-        c.orientation = width > height
-                ? Configuration.ORIENTATION_LANDSCAPE : Configuration.ORIENTATION_PORTRAIT;
-        mStack.getDisplay().onRequestedOverrideConfigurationChanged(c);
-        return displayContent;
     }
 }

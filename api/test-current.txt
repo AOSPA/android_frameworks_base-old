@@ -420,6 +420,7 @@ package android.app {
   }
 
   public class UiModeManager {
+    method @RequiresPermission("android.permission.ENTER_CAR_MODE_PRIORITIZED") public void enableCarMode(@IntRange(from=0) int, int);
     method public boolean isNightModeLocked();
     method public boolean isUiModeLocked();
   }
@@ -1018,6 +1019,7 @@ package android.hardware.display {
     method @Nullable public android.hardware.display.BrightnessCorrection getCorrectionByCategory(int);
     method @Nullable public android.hardware.display.BrightnessCorrection getCorrectionByPackageName(@NonNull String);
     method public android.util.Pair<float[],float[]> getCurve();
+    method public boolean shouldCollectColorSamples();
     method public void writeToParcel(android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.hardware.display.BrightnessConfiguration> CREATOR;
   }
@@ -1030,6 +1032,7 @@ package android.hardware.display {
     method public int getMaxCorrectionsByCategory();
     method public int getMaxCorrectionsByPackageName();
     method @NonNull public android.hardware.display.BrightnessConfiguration.Builder setDescription(@Nullable String);
+    method @NonNull public android.hardware.display.BrightnessConfiguration.Builder setShouldCollectColorSamples(boolean);
   }
 
   public final class BrightnessCorrection implements android.os.Parcelable {
@@ -4242,6 +4245,25 @@ package android.util {
     field public static final String SCREENRECORD_LONG_PRESS = "settings_screenrecord_long_press";
     field public static final String SEAMLESS_TRANSFER = "settings_seamless_transfer";
     field public static final String SETTINGS_WIFITRACKER2 = "settings_wifitracker2";
+  }
+
+  public class SparseArrayMap<T> {
+    ctor public SparseArrayMap();
+    method public void add(int, @NonNull String, @Nullable T);
+    method public void clear();
+    method public boolean contains(int, @NonNull String);
+    method public void delete(int);
+    method @Nullable public T delete(int, @NonNull String);
+    method public void forEach(@NonNull java.util.function.Consumer<T>);
+    method @Nullable public T get(int, @NonNull String);
+    method @Nullable public T getOrDefault(int, @NonNull String, T);
+    method public int indexOfKey(int);
+    method public int indexOfKey(int, @NonNull String);
+    method public int keyAt(int);
+    method @NonNull public String keyAt(int, int);
+    method public int numElementsForKey(int);
+    method public int numMaps();
+    method @Nullable public T valueAt(int, int);
   }
 
   public class TimeUtils {

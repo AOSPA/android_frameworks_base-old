@@ -68,7 +68,7 @@ import android.hardware.SensorPrivacyManager;
 import android.hardware.SerialManager;
 import android.hardware.SystemSensorManager;
 import android.hardware.biometrics.BiometricManager;
-import android.hardware.biometrics.IBiometricService;
+import android.hardware.biometrics.IAuthService;
 import android.hardware.camera2.CameraManager;
 import android.hardware.display.ColorDisplayManager;
 import android.hardware.display.DisplayManager;
@@ -172,8 +172,6 @@ import android.telephony.TelephonyManager;
 import android.telephony.TelephonyRegistryManager;
 import android.telephony.euicc.EuiccCardManager;
 import android.telephony.euicc.EuiccManager;
-import android.telephony.ims.ImsManager;
-import android.telephony.ims.RcsMessageManager;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
@@ -627,22 +625,6 @@ public final class SystemServiceRegistry {
                 return new SubscriptionManager(ctx.getOuterContext());
             }});
 
-        registerService(Context.TELEPHONY_RCS_MESSAGE_SERVICE, RcsMessageManager.class,
-                new CachedServiceFetcher<RcsMessageManager>() {
-                    @Override
-                    public RcsMessageManager createService(ContextImpl ctx) {
-                        return new RcsMessageManager(ctx.getOuterContext());
-                    }
-                });
-
-        registerService(Context.TELEPHONY_IMS_SERVICE, ImsManager.class,
-                new CachedServiceFetcher<ImsManager>() {
-                    @Override
-                    public ImsManager createService(ContextImpl ctx) {
-                        return new ImsManager(ctx.getOuterContext());
-                    }
-                });
-
         registerService(Context.CARRIER_CONFIG_SERVICE, CarrierConfigManager.class,
                 new CachedServiceFetcher<CarrierConfigManager>() {
             @Override
@@ -675,7 +657,7 @@ public final class SystemServiceRegistry {
                 new CachedServiceFetcher<UiModeManager>() {
             @Override
             public UiModeManager createService(ContextImpl ctx) throws ServiceNotFoundException {
-                return new UiModeManager();
+                return new UiModeManager(ctx.getOuterContext());
             }});
 
         registerService(Context.USB_SERVICE, UsbManager.class,
@@ -965,9 +947,9 @@ public final class SystemServiceRegistry {
                             throws ServiceNotFoundException {
                         if (BiometricManager.hasBiometrics(ctx)) {
                             final IBinder binder =
-                                    ServiceManager.getServiceOrThrow(Context.BIOMETRIC_SERVICE);
-                            final IBiometricService service =
-                                    IBiometricService.Stub.asInterface(binder);
+                                    ServiceManager.getServiceOrThrow(Context.AUTH_SERVICE);
+                            final IAuthService service =
+                                    IAuthService.Stub.asInterface(binder);
                             return new BiometricManager(ctx.getOuterContext(), service);
                         } else {
                             // Allow access to the manager when service is null. This saves memory
@@ -1469,7 +1451,7 @@ public final class SystemServiceRegistry {
         Preconditions.checkNotNull(serviceProducer);
 
         registerService(serviceName, serviceWrapperClass,
-                new StaticServiceFetcher<>() {
+                new StaticServiceFetcher<TServiceClass>() {
                     @Override
                     public TServiceClass createService() throws ServiceNotFoundException {
                         return serviceProducer.createService(
@@ -1493,7 +1475,7 @@ public final class SystemServiceRegistry {
         Preconditions.checkNotNull(serviceProducer);
 
         registerService(serviceName, serviceWrapperClass,
-                new StaticServiceFetcher<>() {
+                new StaticServiceFetcher<TServiceClass>() {
                     @Override
                     public TServiceClass createService() {
                         return serviceProducer.createService();
@@ -1526,7 +1508,7 @@ public final class SystemServiceRegistry {
         Preconditions.checkNotNull(serviceProducer);
 
         registerService(serviceName, serviceWrapperClass,
-                new CachedServiceFetcher<>() {
+                new CachedServiceFetcher<TServiceClass>() {
                     @Override
                     public TServiceClass createService(ContextImpl ctx)
                             throws ServiceNotFoundException {
@@ -1554,7 +1536,7 @@ public final class SystemServiceRegistry {
         Preconditions.checkNotNull(serviceProducer);
 
         registerService(serviceName, serviceWrapperClass,
-                new CachedServiceFetcher<>() {
+                new CachedServiceFetcher<TServiceClass>() {
                     @Override
                     public TServiceClass createService(ContextImpl ctx) {
                         return serviceProducer.createService(ctx.getOuterContext());

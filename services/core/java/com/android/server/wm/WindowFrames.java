@@ -57,7 +57,7 @@ public class WindowFrames {
     public final Rect mParentFrame = new Rect();
 
     /**
-     * The entire screen area of the {@link TaskStack} this window is in. Usually equal to the
+     * The entire screen area of the {@link ActivityStack} this window is in. Usually equal to the
      * screen area of the device.
      *
      * TODO(b/111611553): The name is unclear and most likely should be swapped with
@@ -105,6 +105,16 @@ public class WindowFrames {
      * The last real frame that was reported to the client.
      */
     final Rect mLastFrame = new Rect();
+
+    /**
+     * mFrame but relative to the parent container.
+     */
+    final Rect mRelFrame = new Rect();
+
+    /**
+     * mLastFrame but relative to the parent container
+     */
+    final Rect mLastRelFrame = new Rect();
 
     private boolean mFrameSizeChanged = false;
 

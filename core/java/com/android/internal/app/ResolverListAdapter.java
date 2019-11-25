@@ -376,6 +376,10 @@ public class ResolverListAdapter extends BaseAdapter {
         final DisplayResolveInfo
                 dri = new DisplayResolveInfo(intent, add,
                 replaceIntent != null ? replaceIntent : defaultIntent, makePresentationGetter(add));
+        dri.setPinned(rci.isPinned());
+        if (rci.isPinned()) {
+            Log.i(TAG, "Pinned item: " + rci.name);
+        }
         addResolveInfo(dri);
         if (replaceIntent == intent) {
             // Only add alternates if we didn't get a specific replacement from
@@ -491,7 +495,7 @@ public class ResolverListAdapter extends BaseAdapter {
         return view;
     }
 
-    public View onCreateView(ViewGroup parent) {
+    View onCreateView(ViewGroup parent) {
         return mInflater.inflate(
                 com.android.internal.R.layout.resolve_list_item, parent, false);
     }

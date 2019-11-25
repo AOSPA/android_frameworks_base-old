@@ -793,11 +793,12 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             }
 
             if (r.getActivityStack().checkKeyguardVisibility(r, true /* shouldBeVisible */,
-                    true /* isTop */) && r.allowMoveToFront()) {
-                // We only set the visibility to true if the activity is not being launched in
-                // background, and is allowed to be visible based on keyguard state. This avoids
-                // setting this into motion in window manager that is later cancelled due to later
-                // calls to ensure visible activities that set visibility back to false.
+                    true /* isTop */)) {
+                // We only set the visibility to true if the activity is allowed to be visible
+                // based on
+                // keyguard state. This avoids setting this into motion in window manager that is
+                // later cancelled due to later calls to ensure visible activities that set
+                // visibility back to false.
                 r.setVisibility(true);
             }
 
@@ -1410,7 +1411,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         ActivityStack currentStack = task.getStack();
 
         ActivityStack focusedStack = mRootActivityContainer.getTopDisplayFocusedStack();
-        ActivityRecord top_activity = focusedStack != null ? focusedStack.getTopActivity() : null;
+        ActivityRecord top_activity = focusedStack != null ? focusedStack.getTopNonFinishingActivity() : null;
 
         //top_activity = task.stack.topRunningActivityLocked();
         /* App is launching from recent apps and it's a new process */
@@ -1461,7 +1462,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             moveHomeStackToFrontIfNeeded(flags, currentStack.getDisplay(), reason);
         }
 
-        final ActivityRecord r = task.getTopActivity();
+        final ActivityRecord r = task.getTopNonFinishingActivity();
         currentStack.moveTaskToFrontLocked(task, false /* noAnimation */, options,
                 r == null ? null : r.appTimeTracker, reason);
 
@@ -1739,15 +1740,6 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 mRootActivityContainer.getDefaultDisplay().getPinnedStack();
         if (stack == null) {
             Slog.w(TAG, "resizePinnedStackLocked: pinned stack not found");
-            return;
-        }
-
-        // It is possible for the bounds animation from the WM to call this but be delayed by
-        // another AM call that is holding the AMS lock. In such a case, the pinnedBounds may be
-        // incorrect if AMS.resizeStackWithBoundsFromWindowManager() is already called while waiting
-        // for the AMS lock to be freed. So check and make sure these bounds are still good.
-        // TODO(stack-merge): Is this still relevant?
-        if (stack.pinnedStackResizeDisallowed()) {
             return;
         }
 
@@ -2151,7 +2143,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
         // When launching tasks behind, update the last active time of the top task after the new
         // task has been shown briefly
-        final ActivityRecord top = stack.getTopActivity();
+        final ActivityRecord top = stack.getTopNonFinishingActivity();
         if (top != null) {
             top.getTask().touchActiveTime();
         }
@@ -2532,7 +2524,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
     /** Notifies that the top activity of the task is forced to be resizeable. */
     private void handleForcedResizableTaskIfNeeded(Task task, int reason) {
-        final ActivityRecord topActivity = task.getTopActivity();
+        final ActivityRecord topActivity = task.getTopNonFinishingActivity();
         if (topActivity == null || topActivity.noDisplay
                 || !topActivity.isNonResizableOrForcedResizable(task.getWindowingMode())) {
             return;
@@ -2824,7 +2816,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             // Work Challenge is present) let startActivityInPackage handle the intercepting.
             if (!mService.mAmInternal.shouldConfirmCredentials(task.mUserId)
                     && task.getRootActivity() != null) {
-                final ActivityRecord targetActivity = task.getTopActivity();
+                final ActivityRecord targetActivity = task.getTopNonFinishingActivity();
 
                 mRootActivityContainer.sendPowerHintForLaunchStartIfNeeded(
                         true /* forceSend */, targetActivity);
@@ -2841,7 +2833,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                 }
 
                 mService.getActivityStartController().postStartActivityProcessingForLastStarter(
-                        task.getTopActivity(), ActivityManager.START_TASK_TO_FRONT,
+                        task.getTopNonFinishingActivity(), ActivityManager.START_TASK_TO_FRONT,
                         task.getStack());
                 return ActivityManager.START_TASK_TO_FRONT;
             }

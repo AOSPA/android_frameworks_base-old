@@ -121,7 +121,6 @@ import static com.android.server.am.ActivityRecordProto.PROC_ID;
 import static com.android.server.am.ActivityRecordProto.STATE;
 import static com.android.server.am.ActivityRecordProto.TRANSLUCENT;
 import static com.android.server.am.ActivityRecordProto.VISIBLE;
-import static com.android.server.am.ActivityRecordProto.VISIBLE_REQUESTED;
 import static com.android.server.am.EventLogTags.AM_RELAUNCH_ACTIVITY;
 import static com.android.server.am.EventLogTags.AM_RELAUNCH_RESUME_ACTIVITY;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_ANIM;
@@ -173,10 +172,12 @@ import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_W
 import static com.android.server.wm.ActivityTaskManagerService.getInputDispatchingTimeoutLocked;
 import static com.android.server.wm.AppWindowTokenProto.ALL_DRAWN;
 import static com.android.server.wm.AppWindowTokenProto.APP_STOPPED;
-import static com.android.server.wm.AppWindowTokenProto.CLIENT_VISIBLE;
+import static com.android.server.wm.AppWindowTokenProto.CLIENT_HIDDEN;
 import static com.android.server.wm.AppWindowTokenProto.DEFER_HIDING_CLIENT;
 import static com.android.server.wm.AppWindowTokenProto.FILLS_PARENT;
 import static com.android.server.wm.AppWindowTokenProto.FROZEN_BOUNDS;
+import static com.android.server.wm.AppWindowTokenProto.HIDDEN_REQUESTED;
+import static com.android.server.wm.AppWindowTokenProto.HIDDEN_SET_FROM_TRANSFERRED_STARTING_WINDOW;
 import static com.android.server.wm.AppWindowTokenProto.IS_ANIMATING;
 import static com.android.server.wm.AppWindowTokenProto.IS_WAITING_FOR_TRANSITION_START;
 import static com.android.server.wm.AppWindowTokenProto.LAST_ALL_DRAWN;
@@ -191,7 +192,6 @@ import static com.android.server.wm.AppWindowTokenProto.STARTING_DISPLAYED;
 import static com.android.server.wm.AppWindowTokenProto.STARTING_MOVED;
 import static com.android.server.wm.AppWindowTokenProto.STARTING_WINDOW;
 import static com.android.server.wm.AppWindowTokenProto.THUMBNAIL;
-import static com.android.server.wm.AppWindowTokenProto.VISIBLE_SET_FROM_TRANSFERRED_STARTING_WINDOW;
 import static com.android.server.wm.AppWindowTokenProto.WINDOW_TOKEN;
 import static com.android.server.wm.IdentifierProto.HASH_CODE;
 import static com.android.server.wm.IdentifierProto.TITLE;
@@ -464,16 +464,16 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private boolean keysPaused;     // has key dispatching been paused for it?
     int launchMode;         // the launch mode activity attribute.
     int lockTaskLaunchMode; // the lockTaskMode manifest attribute, subject to override
-    private boolean mVisible;        // Should this token's windows be visible?
+    boolean visible;        // does this activity's window need to be shown?
     boolean visibleIgnoringKeyguard; // is this activity visible, ignoring the fact that Keyguard
                                      // might hide this activity?
-    // True if the visible state of this token was forced to true due to a transferred starting
+    // True if the hidden state of this token was forced to false due to a transferred starting
     // window.
-    private boolean mVisibleSetFromTransferredStartingWindow;
-    // TODO: figure out how to consolidate with the same variable in ActivityRecord.
+    private boolean mHiddenSetFromTransferredStartingWindow;
+    // TODO: figureout how to consolidate with the same variable in ActivityRecord.
     private boolean mDeferHidingClient; // If true we told WM to defer reporting to the client
                                         // process that it is hidden.
-    private boolean mLastDeferHidingClient; // If true we will defer setting mClientVisible to false
+    private boolean mLastDeferHidingClient; // If true we will defer setting mClientHidden to true
                                            // and reporting to the client that it is hidden.
     boolean sleeping;       // have we told the activity to sleep?
     public boolean launching;      // is activity launch in progress?
@@ -542,8 +542,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     private Task mLastParent;
 
-    // Have we told the window clients to show themselves?
-    private boolean mClientVisible;
+    // Have we told the window clients to hide themselves?
+    private boolean mClientHidden;
 
     boolean firstWindowDrawn;
     // Last drawn state we reported to the app token.
@@ -628,11 +628,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     // case do not clear allDrawn until the animation completes.
     boolean deferClearAllDrawn;
 
-    // Is this window's surface needed?  This is almost like visible, except
-    // it will sometimes be true a little earlier: when the activity record has
+    // Is this window's surface needed?  This is almost like hidden, except
+    // it will sometimes be true a little earlier: when the token has
     // been shown, but is still waiting for its app transition to execute
     // before making its windows shown.
-    boolean mVisibleRequested;
+    boolean hiddenRequested;
 
     // Last visibility state we reported to the app token.
     boolean reportedVisible;
@@ -842,6 +842,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 pw.print(" finishing="); pw.println(finishing);
         pw.print(prefix); pw.print("keysPaused="); pw.print(keysPaused);
                 pw.print(" inHistory="); pw.print(inHistory);
+                pw.print(" visible="); pw.print(visible);
                 pw.print(" sleeping="); pw.print(sleeping);
                 pw.print(" idle="); pw.print(idle);
                 pw.print(" mStartingWindowState=");
@@ -860,14 +861,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             pw.println(requestedVrComponent);
         }
         super.dump(pw, prefix, dumpAll);
-        pw.print(" visible="); pw.print(mVisible);
         if (appToken != null) {
             pw.println(prefix + "app=true mVoiceInteraction=" + mVoiceInteraction);
         }
         pw.print(prefix); pw.print(" mOccludesParent="); pw.print(mOccludesParent);
         pw.print(" mOrientation="); pw.println(mOrientation);
-        pw.println(prefix + "mVisibleRequested=" + mVisibleRequested
-                + " mClientVisible=" + mClientVisible
+        pw.println(prefix + "hiddenRequested=" + hiddenRequested + " mClientHidden=" + mClientHidden
                 + ((mDeferHidingClient) ? " mDeferHidingClient=" + mDeferHidingClient : "")
                 + " reportedDrawn=" + reportedDrawn + " reportedVisible=" + reportedVisible);
         if (paused) {
@@ -892,13 +891,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             pw.print(" mIsExiting="); pw.println(mIsExiting);
         }
         if (startingWindow != null || startingSurface != null
-                || startingDisplayed || startingMoved || mVisibleSetFromTransferredStartingWindow) {
+                || startingDisplayed || startingMoved || mHiddenSetFromTransferredStartingWindow) {
             pw.print(prefix); pw.print("startingWindow="); pw.print(startingWindow);
             pw.print(" startingSurface="); pw.print(startingSurface);
             pw.print(" startingDisplayed="); pw.print(startingDisplayed);
             pw.print(" startingMoved="); pw.print(startingMoved);
             pw.println(" mHiddenSetFromTransferredStartingWindow="
-                    + mVisibleSetFromTransferredStartingWindow);
+                    + mHiddenSetFromTransferredStartingWindow);
         }
         if (!mFrozenBounds.isEmpty()) {
             pw.print(prefix); pw.print("mFrozenBounds="); pw.println(mFrozenBounds);
@@ -1166,7 +1165,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         this.task = task;
     }
 
-    TaskStack getStack() {
+    ActivityStack getStack() {
         return task != null ? task.getTaskStack() : null;
     }
 
@@ -1208,7 +1207,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         } else if (mLastParent != null && mLastParent.getTaskStack() != null) {
             task.getTaskStack().mExitingActivities.remove(this);
         }
-        final TaskStack stack = getStack();
+        final ActivityStack stack = getStack();
 
         // If we reparent, make sure to remove ourselves from the old animation registry.
         if (mAnimatingActivityRegistry != null) {
@@ -1272,7 +1271,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         if (prevDc.mFocusedApp == this) {
             prevDc.setFocusedApp(null);
-            final TaskStack stack = dc.getTopStack();
+            final ActivityStack stack = dc.getTopStack();
             if (stack != null) {
                 final Task task = stack.getTopChild();
                 if (task != null && task.getTopChild() == this) {
@@ -1494,8 +1493,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
 
         // Application tokens start out hidden.
-        setVisible(false);
-        mVisibleRequested = false;
+        setHidden(true);
+        hiddenRequested = true;
 
         ColorDisplayService.ColorDisplayServiceInternal cds = LocalServices.getService(
                 ColorDisplayService.ColorDisplayServiceInternal.class);
@@ -1524,9 +1523,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         deferRelaunchUntilPaused = false;
         keysPaused = false;
         inHistory = false;
+        visible = false;
         nowVisible = false;
         mDrawn = false;
-        mClientVisible = true;
         idle = false;
         hasBeenLaunched = false;
         mStackSupervisor = supervisor;
@@ -2210,7 +2209,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * 2. App is delayed closing since it might enter PIP.
      */
     boolean isClosingOrEnteringPip() {
-        return (isAnimating(TRANSITION | PARENTS) && !mVisibleRequested) || mWillCloseOrEnterPip;
+        return (isAnimating(TRANSITION | PARENTS) && hiddenRequested) || mWillCloseOrEnterPip;
     }
     /**
      * @return Whether AppOps allows this package to enter picture-in-picture.
@@ -2469,7 +2468,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     mAtmService.getLockTaskController().clearLockedTask(task);
                 }
             } else if (!isState(PAUSING)) {
-                if (mVisibleRequested) {
+                if (visible) {
                     // Prepare and execute close transition.
                     prepareActivityHideTransitionAnimation(transit);
                 }
@@ -2548,13 +2547,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // TODO(b/137329632): find the next activity directly underneath this one, not just anywhere
         final ActivityRecord next = getDisplay().topRunningActivity(
                 true /* considerKeyguardState */);
-        final boolean isVisible = mVisibleRequested || nowVisible;
+        final boolean isVisible = visible || nowVisible;
         // isNextNotYetVisible is to check if the next activity is invisible, or it has been
         // requested to be invisible but its windows haven't reported as invisible.  If so, it
         // implied that the current finishing activity should be added into stopping list rather
         // than destroy immediately.
-        final boolean isNextNotYetVisible = next != null
-                && (!next.nowVisible || !next.mVisibleRequested);
+        final boolean isNextNotYetVisible = next != null && (!next.nowVisible || !next.visible);
         if (isVisible && isNextNotYetVisible) {
             // Add this activity to the list of stopping activities. It will be processed and
             // destroyed when the next activity reports idle.
@@ -3032,7 +3030,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             getDisplayContent().mNoAnimationNotifyOnTransitionFinished.add(token);
         }
 
-        final TaskStack stack = getStack();
+        final ActivityStack stack = getStack();
         if (delayed && !isEmpty()) {
             // set the token aside because it has an active animation to be finished
             ProtoLog.v(WM_DEBUG_ADD_REMOVE,
@@ -3222,7 +3220,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                         "Removing starting %s from %s", tStartingWindow, fromActivity);
                 fromActivity.removeChild(tStartingWindow);
                 fromActivity.postWindowRemoveStartingWindowCleanup(tStartingWindow);
-                fromActivity.mVisibleSetFromTransferredStartingWindow = false;
+                fromActivity.mHiddenSetFromTransferredStartingWindow = false;
                 addWindow(tStartingWindow);
 
                 // Propagate other interesting state between the tokens. If the old token is displayed,
@@ -3235,12 +3233,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 if (fromActivity.firstWindowDrawn) {
                     firstWindowDrawn = true;
                 }
-                if (fromActivity.isVisible()) {
-                    setVisible(true);
-                    mVisibleRequested = true;
-                    mVisibleSetFromTransferredStartingWindow = true;
+                if (!fromActivity.isHidden()) {
+                    setHidden(false);
+                    hiddenRequested = false;
+                    mHiddenSetFromTransferredStartingWindow = true;
                 }
-                setClientVisible(fromActivity.mClientVisible);
+                setClientHidden(fromActivity.mClientHidden);
 
                 transferAnimation(fromActivity);
 
@@ -3286,7 +3284,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             if (fromActivity == this) {
                 return;
             }
-            if (!fromActivity.mVisibleRequested && transferStartingWindow(fromActivity.token)) {
+            if (fromActivity.hiddenRequested && transferStartingWindow(fromActivity.token)) {
                 return;
             }
         }
@@ -3762,7 +3760,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
                 // Notify the pinned stack upon all windows drawn. If there was an animation in
                 // progress then this signal will resume that animation.
-                final TaskStack pinnedStack = mDisplayContent.getPinnedStack();
+                final ActivityStack pinnedStack = mDisplayContent.getPinnedStack();
                 if (pinnedStack != null) {
                     pinnedStack.onAllWindowsDrawn();
                 }
@@ -3801,10 +3799,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         return opts;
     }
 
-    boolean allowMoveToFront() {
-        return pendingOptions == null || !pendingOptions.getAvoidMoveToFront();
-    }
-
     void removeUriPermissionsLocked() {
         if (uriPermissions != null) {
             uriPermissions.removeUriPermissions();
@@ -3841,7 +3835,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return;
         }
         mDeferHidingClient = deferHidingClient;
-        if (!mDeferHidingClient && !mVisibleRequested) {
+        if (!mDeferHidingClient && !visible) {
             // Hiding the client is no longer deferred and the app isn't visible still, go ahead and
             // update the visibility.
             setVisibility(false);
@@ -3852,14 +3846,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     boolean isVisible() {
         // If the activity isn't hidden then it is considered visible and there is no need to check
         // its children windows to see if they are visible.
-        return mVisible;
-    }
-
-    void setVisible(boolean visible) {
-        if (visible != mVisible) {
-            mVisible = visible;
-            scheduleAnimation();
-        }
+        return !isHidden();
     }
 
     void setVisibility(boolean visible) {
@@ -3868,17 +3855,20 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     + appToken);
             return;
         }
-        if (visible) {
-            mDeferHidingClient = false;
-        }
         setVisibility(visible, mDeferHidingClient);
         mAtmService.addWindowLayoutReasons(
                 ActivityTaskManagerService.LAYOUT_REASON_VISIBILITY_CHANGED);
         mStackSupervisor.getActivityMetricsLogger().notifyVisibilityChanged(this);
+    }
+
+    // TODO: Look into merging with #commitVisibility()
+    void setVisible(boolean newVisible) {
+        visible = newVisible;
+        mDeferHidingClient = !visible && mDeferHidingClient;
+        setVisibility(visible);
         mStackSupervisor.mAppVisibilitiesChangedSinceLastPause = true;
     }
 
-    @VisibleForTesting
     void setVisibility(boolean visible, boolean deferHidingClient) {
         final AppTransition appTransition = getDisplayContent().mAppTransition;
 
@@ -3889,20 +3879,20 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // transition can be selected.
         // TODO: Probably a good idea to separate the concept of opening/closing apps from the
         // concept of setting visibility...
-        if (!visible && !mVisibleRequested) {
+        if (!visible && hiddenRequested) {
 
             if (!deferHidingClient && mLastDeferHidingClient) {
                 // We previously deferred telling the client to hide itself when visibility was
                 // initially set to false. Now we would like it to hide, so go ahead and set it.
                 mLastDeferHidingClient = deferHidingClient;
-                setClientVisible(false);
+                setClientHidden(true);
             }
             return;
         }
 
         ProtoLog.v(WM_DEBUG_APP_TRANSITIONS,
-                "setAppVisibility(%s, visible=%b): %s visible=%b mVisibleRequested=%b Callers=%s",
-                appToken, visible, appTransition, isVisible(), mVisibleRequested,
+                "setAppVisibility(%s, visible=%b): %s hidden=%b hiddenRequested=%b Callers=%s",
+                appToken, visible, appTransition, isHidden(), hiddenRequested,
                 Debug.getCallers(6));
 
         final DisplayContent displayContent = getDisplayContent();
@@ -3913,7 +3903,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
         displayContent.mChangingApps.remove(this);
         waitingToShow = false;
-        mVisibleRequested = visible;
+        hiddenRequested = !visible;
         mLastDeferHidingClient = deferHidingClient;
 
         if (!visible) {
@@ -3932,15 +3922,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             startingMoved = false;
             // If the token is currently hidden (should be the common case), or has been
             // stopped, then we need to set up to wait for its windows to be ready.
-            if (!isVisible() || mAppStopped) {
+            if (isHidden() || mAppStopped) {
                 clearAllDrawn();
 
                 // If the app was already visible, don't reset the waitingToShow state.
-                if (!isVisible()) {
+                if (isHidden()) {
                     waitingToShow = true;
 
                     // If the client isn't hidden, we don't need to reset the drawing state.
-                    if (!isClientVisible()) {
+                    if (isClientHidden()) {
                         // Let's reset the draw state in order to prevent the starting window to be
                         // immediately dismissed when the app still has the surface.
                         forAllWindows(w -> {
@@ -3960,7 +3950,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // we still need to tell the client to make its windows visible so they get drawn.
             // Otherwise, we will wait on performing the transition until all windows have been
             // drawn, they never will be, and we are sad.
-            setClientVisible(true);
+            setClientHidden(false);
 
             requestUpdateWallpaperIfNeeded();
 
@@ -4006,9 +3996,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             boolean visible, int transit, boolean performLayout, boolean isVoiceInteraction) {
 
         boolean delayed = false;
-        // Reset the state of mVisibleSetFromTransferredStartingWindow since visibility is actually
+        // Reset the state of mHiddenSetFromTransferredStartingWindow since visibility is actually
         // been set by the app now.
-        mVisibleSetFromTransferredStartingWindow = false;
+        mHiddenSetFromTransferredStartingWindow = false;
 
         // Allow for state changes and animation to be applied if:
         // * token is transitioning visibility state
@@ -4018,7 +4008,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // * or the token is the opening app and visible while opening task behind existing one.
         final DisplayContent displayContent = getDisplayContent();
         boolean visibilityChanged = false;
-        if (isVisible() != visible || (!isVisible() && mIsExiting)
+        if (isHidden() == visible || (isHidden() && mIsExiting)
                 || (visible && waitingForReplacement())
                 || (visible && displayContent.mOpeningApps.contains(this)
                 && displayContent.mAppTransition.getAppTransition() == TRANSIT_TASK_OPEN_BEHIND)) {
@@ -4026,7 +4016,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     mWmService.mAccessibilityController;
             boolean changed = false;
             ProtoLog.v(WM_DEBUG_APP_TRANSITIONS,
-                    "Changing app %s visible=%b performLayout=%b", this, isVisible(),
+                    "Changing app %s hidden=%b performLayout=%b", this, isHidden(),
                     performLayout);
 
             boolean runningAppAnimation = false;
@@ -4051,8 +4041,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 changed |= win.onAppVisibilityChanged(visible, runningAppAnimation);
             }
 
-            setVisible(visible);
-            mVisibleRequested = visible;
+            setHidden(!visible);
+            hiddenRequested = !visible;
             visibilityChanged = true;
             if (!visible) {
                 stopFreezingScreen(true, true);
@@ -4070,8 +4060,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             }
 
             ProtoLog.v(WM_DEBUG_APP_TRANSITIONS,
-                    "commitVisibility: %s: visible=%b visibleRequested=%b", this,
-                    isVisible(), mVisibleRequested);
+                    "commitVisibility: %s: hidden=%b hiddenRequested=%b", this,
+                    isHidden(), hiddenRequested);
 
             if (changed) {
                 displayContent.getInputMonitor().setUpdateInputWindowsNeededLw();
@@ -4108,7 +4098,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // If we're becoming invisible, update the client visibility if we are not running an
             // animation. Otherwise, we'll update client visibility in onAnimationFinished.
             if (visible || !isAnimating()) {
-                setClientVisible(visible);
+                setClientHidden(!visible);
             }
 
             if (!displayContent.mClosingApps.contains(this)
@@ -4135,7 +4125,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // no animation but there will still be a transition set.
             // We still need to delay hiding the surface such that it
             // can be synchronized with showing the next surface in the transition.
-            if (!isVisible() && !delayed && !displayContent.mAppTransition.isTransitionSet()) {
+            if (isHidden() && !delayed && !displayContent.mAppTransition.isTransitionSet()) {
                 SurfaceControl.openTransaction();
                 for (int i = mChildren.size() - 1; i >= 0; i--) {
                     mChildren.get(i).mWinAnimator.hide("immediately hidden");
@@ -4145,6 +4135,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
 
         return delayed;
+    }
+
+    @Override
+    void setHidden(boolean hidden) {
+        super.setHidden(hidden);
+        scheduleAnimation();
     }
 
     @Override
@@ -4371,7 +4367,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         final boolean isDisplaySleeping = getDisplay().isSleeping()
                 && getDisplayId() != DEFAULT_DISPLAY;
         // Whether this activity is the top activity of this stack.
-        final boolean isTop = this == stack.getTopActivity();
+        final boolean isTop = this == stack.getTopNonFinishingActivity();
         // Exclude the case where this is the top activity in a pinned stack.
         final boolean isTopNotPinnedStack = stack.isAttached()
                 && stack.getDisplay().isTopNotPinnedStack(stack);
@@ -4410,7 +4406,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 updateOptionsLocked(returningOptions);
                 stack.mUndrawnActivitiesBelowTopTranslucent.add(this);
             }
-            setVisibility(true);
+            setVisible(true);
             sleeping = false;
             app.postPendingUiCleanMsg(true);
             if (reportToClient) {
@@ -4446,7 +4442,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     void makeInvisible() {
-        if (!mVisibleRequested) {
+        if (!visible) {
             if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY, "Already invisible: " + this);
             return;
         }
@@ -4468,7 +4464,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             final boolean deferHidingClient = canEnterPictureInPicture
                     && !isState(STOPPING, STOPPED, PAUSED);
             setDeferHidingClient(deferHidingClient);
-            setVisibility(false);
+            setVisible(false);
 
             switch (getState()) {
                 case STOPPING:
@@ -4655,8 +4651,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * state to match that fact.
      */
     void completeResumeLocked() {
-        final boolean wasVisible = mVisibleRequested;
-        setVisibility(true);
+        final boolean wasVisible = visible;
+        setVisible(true);
         if (!wasVisible) {
             // Visibility has changed, so take a note of it so we call the TaskStackChangedListener
             mStackSupervisor.mAppVisibilitiesChangedSinceLastPause = true;
@@ -4746,16 +4742,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             }
             setState(STOPPING, "stopIfPossible");
             if (DEBUG_VISIBILITY) {
-                Slog.v(TAG_VISIBILITY, "Stopping visibleRequested="
-                        + mVisibleRequested + " for " + this);
+                Slog.v(TAG_VISIBILITY, "Stopping visible=" + visible + " for " + this);
             }
-            if (!mVisibleRequested) {
-                setVisibility(false);
+            if (!visible) {
+                setVisible(false);
             }
             EventLogTags.writeAmStopActivity(
                     mUserId, System.identityHashCode(this), shortComponentName);
             mAtmService.getLifecycleManager().scheduleTransaction(app.getThread(), appToken,
-                    StopActivityItem.obtain(mVisibleRequested, configChangeFlags));
+                    StopActivityItem.obtain(visible, configChangeFlags));
             if (stack.shouldSleepOrShutDownActivities()) {
                 setSleeping(true);
             }
@@ -4918,10 +4913,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     void startFreezingScreen() {
         ProtoLog.i(WM_DEBUG_ORIENTATION,
-                "Set freezing of %s: visible=%b freezing=%b visibleRequested=%b. %s",
-                appToken, isVisible(), mFreezingScreen, mVisibleRequested,
+                "Set freezing of %s: hidden=%b freezing=%b hiddenRequested=%b. %s",
+                appToken, isHidden(), mFreezingScreen, hiddenRequested,
                 new RuntimeException().fillInStackTrace());
-        if (mVisibleRequested) {
+        if (!hiddenRequested) {
             if (!mFreezingScreen) {
                 mFreezingScreen = true;
                 mWmService.registerAppFreezeListener(this);
@@ -4957,8 +4952,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 return;
             }
             ProtoLog.v(WM_DEBUG_ORIENTATION,
-                        "Clear freezing of %s: visible=%b freezing=%b", appToken,
-                                isVisible(), isFreezingScreen());
+                        "Clear freezing of %s: hidden=%b freezing=%b", appToken,
+                                isHidden(), isFreezingScreen());
             stopFreezingScreen(true, force);
         }
     }
@@ -5120,7 +5115,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         boolean nowGone = mReportedVisibilityResults.nowGone;
 
         boolean nowDrawn = numInteresting > 0 && numDrawn >= numInteresting;
-        boolean nowVisible = numInteresting > 0 && numVisible >= numInteresting && isVisible();
+        boolean nowVisible = numInteresting > 0 && numVisible >= numInteresting && !isHidden();
         if (!nowGone) {
             // If the app is not yet gone, then it can only become visible/drawn.
             if (!nowDrawn) {
@@ -5148,18 +5143,18 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
     }
 
-    boolean isClientVisible() {
-        return mClientVisible;
+    boolean isClientHidden() {
+        return mClientHidden;
     }
 
-    void setClientVisible(boolean clientVisible) {
-        if (mClientVisible == clientVisible || (!clientVisible && mDeferHidingClient)) {
+    void setClientHidden(boolean hideClient) {
+        if (mClientHidden == hideClient || (hideClient && mDeferHidingClient)) {
             return;
         }
         ProtoLog.v(WM_DEBUG_APP_TRANSITIONS,
-                "setClientVisible: %s clientVisible=%b Callers=%s", this, clientVisible,
+                "setClientHidden: %s clientHidden=%b Callers=%s", this, hideClient,
                 Debug.getCallers(5));
-        mClientVisible = clientVisible;
+        mClientHidden = hideClient;
         sendAppVisibilityToClients();
     }
 
@@ -5202,7 +5197,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     Slog.v(TAG, "Not displayed: s=" + winAnimator.mSurfaceController
                             + " pv=" + w.isVisibleByPolicy()
                             + " mDrawState=" + winAnimator.drawStateToString()
-                            + " ph=" + w.isParentWindowHidden() + " th=" + mVisibleRequested
+                            + " ph=" + w.isParentWindowHidden() + " th=" + hiddenRequested
                             + " a=" + isAnimating(TRANSITION));
                 }
             }
@@ -5310,7 +5305,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * currently pausing, or is resumed.
      */
     public boolean isInterestingToUserLocked() {
-        return mVisibleRequested || nowVisible || mState == PAUSING || mState == RESUMED;
+        return visible || nowVisible || mState == PAUSING || mState == RESUMED;
     }
 
     void setSleeping(boolean _sleeping) {
@@ -5384,7 +5379,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // We're not ready for this kind of thing.
             return false;
         }
-        if (mVisibleRequested) {
+        if (visible) {
             // The user would notice this!
             return false;
         }
@@ -5481,11 +5476,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             // well there is no point now.
             ProtoLog.v(WM_DEBUG_STARTING_WINDOW, "Nulling last startingData");
             mStartingData = null;
-            if (mVisibleSetFromTransferredStartingWindow) {
-                // We set the visible state to true for the token from a transferred starting
-                // window. We now reset it back to false since the starting window was the last
-                // window in the token.
-                setVisible(false);
+            if (mHiddenSetFromTransferredStartingWindow) {
+                // We set the hidden state to false for the token from a transferred starting window.
+                // We now reset it back to true since the starting window was the last window in the
+                // token.
+                setHidden(true);
             }
         } else if (mChildren.size() == 1 && startingSurface != null && !isRelaunching()) {
             // If this is the last window except for a starting transition window,
@@ -5812,7 +5807,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     getTransit(), task)) {
                 task.getBounds(mTmpRect);
             } else {
-                final TaskStack stack = getStack();
+                final ActivityStack stack = getStack();
                 if (stack == null) {
                     return;
                 }
@@ -5832,7 +5827,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @Override
     void prepareSurfaces() {
-        final boolean show = isVisible() || isAnimating();
+        final boolean show = !isHidden() || isAnimating();
 
         if (mSurfaceControl != null) {
             if (show && !mLastSurfaceShowing) {
@@ -5951,7 +5946,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 "AppWindowToken");
 
         clearThumbnail();
-        setClientVisible(isVisible() || mVisibleRequested);
+        setClientHidden(isHidden() && hiddenRequested);
 
         getDisplayContent().computeImeTargetIfNeeded(this);
 
@@ -6202,8 +6197,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // The rest of the condition is that only one side is smaller than the parent, but it still
         // needs to exclude the cases where the size is limited by the fixed aspect ratio.
         if (info.maxAspectRatio > 0) {
-            final float aspectRatio = (0.5f + Math.max(appWidth, appHeight))
-                    / Math.min(appWidth, appHeight);
+            final float aspectRatio = Math.max(appWidth, appHeight) / Math.min(appWidth, appHeight);
             if (aspectRatio >= info.maxAspectRatio) {
                 // The current size has reached the max aspect ratio.
                 return false;
@@ -6548,7 +6542,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (display == null) {
             return;
         }
-        if (mVisibleRequested) {
+        if (visible) {
             // It may toggle the UI for user to restart the size compatibility mode activity.
             display.handleActivitySizeCompatModeIfNeeded(this);
         } else if (mCompatDisplayInsets != null) {
@@ -6572,7 +6566,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     void savePinnedStackBounds() {
         // Leaving PiP to fullscreen, save the snap fraction based on the pre-animation bounds
         // for the next re-entry into PiP (assuming the activity is not hidden or destroyed)
-        final TaskStack pinnedStack = mDisplayContent.getPinnedStack();
+        final ActivityStack pinnedStack = mDisplayContent.getPinnedStack();
         if (pinnedStack == null) return;
         final Rect stackBounds;
         if (pinnedStack.lastAnimatingBoundsWasToFullscreen()) {
@@ -6845,7 +6839,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             } else {
                 if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
                         "Config is relaunching " + this);
-                if (DEBUG_STATES && !mVisibleRequested) {
+                if (DEBUG_STATES && !visible) {
                     Slog.v(TAG_STATES, "Config is relaunching invisible activity " + this
                             + " called by " + Debug.getCallers(4));
                 }
@@ -7031,7 +7025,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // Reset the existing override configuration so it can be updated according to the latest
         // configuration.
         clearSizeCompatMode();
-        if (mVisibleRequested) {
+        if (visible) {
             // Configuration will be ensured when becoming visible, so if it is already visible,
             // then the manual update is needed.
             updateSizeCompatMode();
@@ -7044,7 +7038,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // The restarting state avoids removing this record when process is died.
         setState(RESTARTING_PROCESS, "restartActivityProcess");
 
-        if (!mVisibleRequested || mHaveState) {
+        if (!visible || mHaveState) {
             // Kill its process immediately because the activity should be in background.
             // The activity state will be update to {@link #DESTROYED} in
             // {@link ActivityStack#cleanUp} when handling process died.
@@ -7335,13 +7329,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         writeToProto(proto, APP_WINDOW_TOKEN, WindowTraceLogLevel.ALL);
         writeIdentifierToProto(proto, IDENTIFIER);
         proto.write(STATE, mState.toString());
-        proto.write(VISIBLE_REQUESTED, mVisibleRequested);
+        proto.write(VISIBLE, visible);
         proto.write(FRONT_OF_TASK, isRootOfTask());
         if (hasProcess()) {
             proto.write(PROC_ID, app.getPid());
         }
         proto.write(TRANSLUCENT, !occludesParent());
-        proto.write(VISIBLE, mVisible);
     }
 
     public void writeToProto(ProtoOutputStream proto, long fieldId) {
@@ -7372,8 +7365,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
         proto.write(FILLS_PARENT, mOccludesParent);
         proto.write(APP_STOPPED, mAppStopped);
-        proto.write(com.android.server.wm.AppWindowTokenProto.VISIBLE_REQUESTED, mVisibleRequested);
-        proto.write(CLIENT_VISIBLE, mClientVisible);
+        proto.write(HIDDEN_REQUESTED, hiddenRequested);
+        proto.write(CLIENT_HIDDEN, mClientHidden);
         proto.write(DEFER_HIDING_CLIENT, mDeferHidingClient);
         proto.write(REPORTED_DRAWN, reportedDrawn);
         proto.write(REPORTED_VISIBLE, reportedVisible);
@@ -7387,12 +7380,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
         proto.write(STARTING_DISPLAYED, startingDisplayed);
         proto.write(STARTING_MOVED, startingMoved);
-        proto.write(VISIBLE_SET_FROM_TRANSFERRED_STARTING_WINDOW,
-                mVisibleSetFromTransferredStartingWindow);
+        proto.write(HIDDEN_SET_FROM_TRANSFERRED_STARTING_WINDOW,
+                mHiddenSetFromTransferredStartingWindow);
         for (Rect bounds : mFrozenBounds) {
             bounds.writeToProto(proto, FROZEN_BOUNDS);
         }
-        proto.write(com.android.server.wm.AppWindowTokenProto.VISIBLE, mVisible);
         proto.end(token);
     }
 

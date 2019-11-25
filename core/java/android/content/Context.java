@@ -2072,7 +2072,7 @@ public abstract class Context {
      *               Intent will receive the broadcast.
      * @param receiverPermissions Array of names of permissions that a receiver must hold
      *                            in order to receive your broadcast.
-     *                            If null or empty, no permissions are required.
+     *                            If empty, no permissions are required.
      *
      * @see android.content.BroadcastReceiver
      * @see #registerReceiver
@@ -2081,8 +2081,11 @@ public abstract class Context {
      * @see #sendOrderedBroadcast(Intent, String, BroadcastReceiver, Handler, int, String, Bundle)
      * @hide
      */
-    public abstract void sendBroadcastMultiplePermissions(Intent intent,
-            String[] receiverPermissions);
+    @SystemApi
+    public void sendBroadcastMultiplePermissions(@NonNull Intent intent,
+            @NonNull String[] receiverPermissions) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Broadcast the given intent to all interested BroadcastReceivers, allowing
@@ -3286,6 +3289,7 @@ public abstract class Context {
             WIFI_RTT_RANGING_SERVICE,
             NSD_SERVICE,
             AUDIO_SERVICE,
+            AUTH_SERVICE,
             FINGERPRINT_SERVICE,
             //@hide: FACE_SERVICE,
             BIOMETRIC_SERVICE,
@@ -4004,6 +4008,31 @@ public abstract class Context {
     public static final String AUDIO_SERVICE = "audio";
 
     /**
+     * AuthService orchestrates biometric and PIN/pattern/password authentication.
+     *
+     * BiometricService was split into two services, AuthService and BiometricService, where
+     * AuthService is the high level service that orchestrates all types of authentication, and
+     * BiometricService is a lower layer responsible only for biometric authentication.
+     *
+     * Ideally we should have renamed BiometricManager to AuthManager, because it logically
+     * corresponds to AuthService. However, because BiometricManager is a public API, we kept
+     * the old name but changed the internal implementation to use AuthService.
+     *
+     * As of now, the AUTH_SERVICE constant is only used to identify the service in
+     * SystemServiceRegistry and SELinux. To obtain the manager for AUTH_SERVICE, one should use
+     * BIOMETRIC_SERVICE with {@link #getSystemService(String)} to retrieve a
+     * {@link android.hardware.biometrics.BiometricManager}
+     *
+     * Map of the two services and their managers:
+     * [Service]            [Manager]
+     * AuthService          BiometricManager
+     * BiometricService     N/A
+     *
+     * @hide
+     */
+    public static final String AUTH_SERVICE = "auth";
+
+    /**
      * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.hardware.fingerprint.FingerprintManager} for handling management
      * of fingerprints.
@@ -4037,8 +4066,8 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
-     * {@link android.hardware.biometrics.BiometricManager} for handling management
-     * of face authentication.
+     * {@link android.hardware.biometrics.BiometricManager} for handling
+     * biometric and PIN/pattern/password authentication.
      *
      * @see #getSystemService
      * @see android.hardware.biometrics.BiometricManager
