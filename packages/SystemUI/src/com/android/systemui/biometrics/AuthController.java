@@ -23,7 +23,10 @@ import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
 import android.app.IActivityTaskManager;
 import android.app.TaskStackListener;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.hardware.biometrics.Authenticator;
@@ -47,16 +50,21 @@ import com.android.systemui.statusbar.CommandQueue;
 
 import java.util.List;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
 /**
  * Receives messages sent from {@link com.android.server.biometrics.BiometricService} and shows the
  * appropriate biometric UI (e.g. BiometricDialogView).
  */
+@Singleton
 public class AuthController extends SystemUI implements CommandQueue.Callbacks,
         AuthDialogCallback {
 
     private static final String TAG = "BiometricPrompt/AuthController";
     private static final boolean DEBUG = true;
 
+    private final CommandQueue mCommandQueue;
     private final Injector mInjector;
 
     // TODO: These should just be saved from onSaveState
@@ -79,6 +87,28 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
             mHandler.post(mTaskStackChangedRunnable);
         }
     }
+
+    @VisibleForTesting
+    final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (mCurrentDialog != null
+                    && Intent.ACTION_CLOSE_SYSTEM_DIALOGS.equals(intent.getAction())) {
+                Log.w(TAG, "ACTION_CLOSE_SYSTEM_DIALOGS received");
+                mCurrentDialog.dismissWithoutCallback(true /* animate */);
+                mCurrentDialog = null;
+
+                try {
+                    if (mReceiver != null) {
+                        mReceiver.onDialogDismissed(BiometricPrompt.DISMISSED_REASON_USER_CANCEL);
+                        mReceiver = null;
+                    }
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Remote exception", e);
+                }
+            }
+        }
+    };
 
     private final Runnable mTaskStackChangedRunnable = () -> {
         if (mCurrentDialog != null) {
@@ -189,14 +219,21 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
         }
     }
 
-    public AuthController(Context context) {
-        this(context, new Injector());
+    @Inject
+    public AuthController(Context context, CommandQueue commandQueue) {
+        this(context, commandQueue, new Injector());
     }
 
     @VisibleForTesting
-    AuthController(Context context, Injector injector) {
+    AuthController(Context context, CommandQueue commandQueue, Injector injector) {
         super(context);
+        mCommandQueue = commandQueue;
         mInjector = injector;
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
+
+        context.registerReceiver(mBroadcastReceiver, filter);
     }
 
     @Override
@@ -205,7 +242,7 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
         if (pm.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)
                 || pm.hasSystemFeature(PackageManager.FEATURE_FACE)
                 || pm.hasSystemFeature(PackageManager.FEATURE_IRIS)) {
-            getComponent(CommandQueue.class).addCallback(this);
+            mCommandQueue.addCallback(this);
             mWindowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
             mActivityTaskManager = mInjector.getActivityTaskManager();
 

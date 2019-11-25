@@ -15,6 +15,7 @@
  */
 
 package android.net.wifi;
+import android.net.wifi.SoftApInfo;
 
 import android.net.wifi.WifiClient;
 
@@ -43,6 +44,13 @@ oneway interface ISoftApCallback
      * @param clients the currently connected clients
      */
     void onConnectedClientsChanged(in List<WifiClient> clients);
+
+    /**
+     * Service to manager callback providing information of softap.
+     *
+     * @param softApInfo is the softap information. {@link SoftApInfo}
+     */
+    void onInfoChanged(in SoftApInfo softApInfo);
 
     /**
      * Service to manager callback providing Macaddress of connected stations.

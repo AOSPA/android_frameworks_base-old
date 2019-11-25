@@ -35,10 +35,10 @@ import android.provider.ContactsContract.CommonDataKinds.Callable;
 import android.provider.ContactsContract.CommonDataKinds.Phone;
 import android.provider.ContactsContract.Data;
 import android.provider.ContactsContract.DataUsageFeedback;
+import android.telecom.CallerInfo;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
-import android.telephony.CallerInfo;
 import android.telephony.PhoneNumberUtils;
 import android.text.TextUtils;
 import android.util.Log;
@@ -227,7 +227,7 @@ public class CallLog {
 
         /**
          * Indicates the call underwent Assisted Dialing.
-         * @hide
+         * @see TelecomManager#EXTRA_USE_ASSISTED_DIALING
          */
         public static final int FEATURES_ASSISTED_DIALING_USED = 1 << 4;
 

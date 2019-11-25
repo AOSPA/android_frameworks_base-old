@@ -206,7 +206,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     @Override
-    void onChildPositionChanged() {
+    void onChildPositionChanged(WindowContainer child) {
         mWmService.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL,
                 !mWmService.mPerDisplayFocusEnabled /* updateInputWindows */);
     }
@@ -787,7 +787,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
                 }
             }
 
-            if (curDisplay.mAppTransition.isRunning() && !curDisplay.isAppAnimating()) {
+            if (curDisplay.mAppTransition.isRunning() && !curDisplay.isAppTransitioning()) {
                 // We have finished the animation of an app transition. To do this, we have
                 // delayed a lot of operations like showing and hiding apps, moving apps in
                 // Z-order, etc.
@@ -817,10 +817,6 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
         }
         if (mWmService.mStrictModeFlash != null) {
             mWmService.mStrictModeFlash.positionSurface(defaultDw, defaultDh, mDisplayTransaction);
-        }
-        if (mWmService.mCircularDisplayMask != null) {
-            mWmService.mCircularDisplayMask.positionSurface(defaultDw, defaultDh,
-                    mWmService.getDefaultDisplayRotation(), mDisplayTransaction);
         }
         if (mWmService.mEmulatorDisplayOverlay != null) {
             mWmService.mEmulatorDisplayOverlay.positionSurface(defaultDw, defaultDh,

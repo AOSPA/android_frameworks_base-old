@@ -128,13 +128,13 @@ private:
 
     std::unordered_map<ConfigKey, sp<MetricsManager>> mMetricsManagers;
 
-    std::unordered_map<ConfigKey, long> mLastBroadcastTimes;
+    std::unordered_map<ConfigKey, int64_t> mLastBroadcastTimes;
 
     // Last time we sent a broadcast to this uid that the active configs had changed.
-    std::unordered_map<int, long> mLastActivationBroadcastTimes;
+    std::unordered_map<int, int64_t> mLastActivationBroadcastTimes;
 
     // Tracks when we last checked the bytes consumed for each config key.
-    std::unordered_map<ConfigKey, long> mLastByteSizeTimes;
+    std::unordered_map<ConfigKey, int64_t> mLastByteSizeTimes;
 
     // Tracks which config keys has metric reports on disk
     std::set<ConfigKey> mOnDiskDataConfigs;
@@ -206,7 +206,7 @@ private:
 
     int64_t mLastTimestampSeen = 0;
 
-    long mLastPullerCacheClearTimeSec = 0;
+    int64_t mLastPullerCacheClearTimeSec = 0;
 
     // Last time we wrote data to disk.
     int64_t mLastWriteTimeNs = 0;
@@ -263,9 +263,10 @@ private:
     FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithSameDeactivation);
     FRIEND_TEST(MetricActivationE2eTest, TestCountMetricWithTwoMetricsTwoDeactivations);
 
-    FRIEND_TEST(CountMetricE2eTest, TestWithSimpleState);
-    FRIEND_TEST(CountMetricE2eTest, TestWithMappedState);
-    FRIEND_TEST(CountMetricE2eTest, TestWithMultipleStates);
+    FRIEND_TEST(CountMetricE2eTest, TestSlicedState);
+    FRIEND_TEST(CountMetricE2eTest, TestSlicedStateWithMap);
+    FRIEND_TEST(CountMetricE2eTest, TestMultipleSlicedStates);
+    FRIEND_TEST(CountMetricE2eTest, TestSlicedStateWithPrimaryFields);
 
     FRIEND_TEST(DurationMetricE2eTest, TestOneBucket);
     FRIEND_TEST(DurationMetricE2eTest, TestTwoBuckets);

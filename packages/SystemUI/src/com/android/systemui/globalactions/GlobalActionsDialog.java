@@ -52,6 +52,8 @@ import android.os.Vibrator;
 import android.provider.Settings;
 import android.service.dreams.DreamService;
 import android.service.dreams.IDreamManager;
+import android.sysprop.TelephonyProperties;
+import android.telecom.TelecomManager;
 import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
 import android.telephony.TelephonyManager;
@@ -80,7 +82,6 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.telephony.TelephonyIntents;
-import com.android.internal.telephony.TelephonyProperties;
 import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.util.ScreenRecordHelper;
 import com.android.internal.util.ScreenshotHelper;
@@ -145,6 +146,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     private final DevicePolicyManager mDevicePolicyManager;
     private final LockPatternUtils mLockPatternUtils;
     private final KeyguardManager mKeyguardManager;
+    private final BroadcastDispatcher mBroadcastDispatcher;
 
     private ArrayList<Action> mItems;
     private ActionsDialog mDialog;
@@ -182,13 +184,14 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 Context.DEVICE_POLICY_SERVICE);
         mLockPatternUtils = new LockPatternUtils(mContext);
         mKeyguardManager = (KeyguardManager) mContext.getSystemService(Context.KEYGUARD_SERVICE);
+        mBroadcastDispatcher = Dependency.get(BroadcastDispatcher.class);
 
         // receive broadcasts
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
         filter.addAction(Intent.ACTION_SCREEN_OFF);
         filter.addAction(TelephonyIntents.ACTION_EMERGENCY_CALLBACK_MODE_CHANGED);
-        Dependency.get(BroadcastDispatcher.class).registerReceiver(mBroadcastReceiver, filter);
+        mBroadcastDispatcher.registerReceiver(mBroadcastReceiver, filter);
 
         ConnectivityManager cm = (ConnectivityManager)
                 context.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -307,8 +310,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 R.string.global_actions_airplane_mode_off_status) {
 
             void onToggle(boolean on) {
-                if (mHasTelephony && Boolean.parseBoolean(
-                        SystemProperties.get(TelephonyProperties.PROPERTY_INECM_MODE))) {
+                if (mHasTelephony && TelephonyProperties.in_ecm_mode().orElse(false)) {
                     mIsWaitingForEcmExit = true;
                     // Launch ECM exit dialog
                     Intent ecmDialogIntent =
@@ -325,8 +327,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
                 if (!mHasTelephony) return;
 
                 // In ECM mode airplane state cannot be changed
-                if (!(Boolean.parseBoolean(
-                        SystemProperties.get(TelephonyProperties.PROPERTY_INECM_MODE)))) {
+                if (!TelephonyProperties.in_ecm_mode().orElse(false)) {
                     mState = buttonOn ? State.TurningOn : State.TurningOff;
                     mAirplaneState = mState;
                 }
@@ -563,7 +564,8 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         @Override
         public void onPress() {
             MetricsLogger.action(mContext, MetricsEvent.ACTION_EMERGENCY_DIALER_FROM_POWER_MENU);
-            Intent intent = new Intent(EmergencyDialerConstants.ACTION_DIAL);
+            Intent intent = mContext.getSystemService(TelecomManager.class)
+                    .createLaunchEmergencyDialerIntent(null /* number */);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                     | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
                     | Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -899,7 +901,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         mAdapter.notifyDataSetChanged();
         if (mShowSilentToggle) {
             IntentFilter filter = new IntentFilter(AudioManager.RINGER_MODE_CHANGED_ACTION);
-            mContext.registerReceiver(mRingerModeReceiver, filter);
+            mBroadcastDispatcher.registerReceiver(mRingerModeReceiver, filter);
         }
     }
 
@@ -917,7 +919,7 @@ public class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         mWindowManagerFuncs.onGlobalActionsHidden();
         if (mShowSilentToggle) {
             try {
-                mContext.unregisterReceiver(mRingerModeReceiver);
+                mBroadcastDispatcher.unregisterReceiver(mRingerModeReceiver);
             } catch (IllegalArgumentException ie) {
                 // ignore this
                 Log.w(TAG, ie);

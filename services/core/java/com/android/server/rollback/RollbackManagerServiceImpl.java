@@ -53,6 +53,7 @@ import android.util.Slog;
 import android.util.SparseBooleanArray;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.LocalServices;
 import com.android.server.Watchdog;
@@ -469,44 +470,39 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
             List<Rollback> restoreInProgress = new ArrayList<>();
             Set<String> apexPackageNames = new HashSet<>();
             synchronized (mLock) {
-                for (Rollback rollback : mRollbacks) {
-                    if (rollback.isStaged()) {
+                Iterator<Rollback> iter = mRollbacks.iterator();
+                while (iter.hasNext()) {
+                    Rollback rollback = iter.next();
+                    if (!rollback.isStaged()) {
+                        // We only care about staged rollbacks here
+                        continue;
+                    }
+
+                    PackageInstaller.SessionInfo session = mContext.getPackageManager()
+                            .getPackageInstaller().getSessionInfo(rollback.getStagedSessionId());
+                    if (session == null || session.isStagedSessionFailed()) {
+                        iter.remove();
+                        rollback.delete(mAppDataRollbackHelper);
+                        continue;
+                    }
+
+                    if (session.isStagedSessionApplied()) {
                         if (rollback.isEnabling()) {
                             enabling.add(rollback);
                         } else if (rollback.isRestoreUserDataInProgress()) {
                             restoreInProgress.add(rollback);
                         }
-
-                        apexPackageNames.addAll(rollback.getApexPackageNames());
                     }
+                    apexPackageNames.addAll(rollback.getApexPackageNames());
                 }
             }
 
             for (Rollback rollback : enabling) {
-                PackageInstaller installer = mContext.getPackageManager().getPackageInstaller();
-                PackageInstaller.SessionInfo session =
-                        installer.getSessionInfo(rollback.getStagedSessionId());
-                if (session == null || session.isStagedSessionFailed()) {
-                    // TODO: Do we need to remove this from
-                    // mRollbacks, or is it okay to leave as
-                    // unavailable until the next reboot when it will go
-                    // away on its own?
-                    rollback.delete(mAppDataRollbackHelper);
-                } else if (session.isStagedSessionApplied()) {
-                    makeRollbackAvailable(rollback);
-                }
+                makeRollbackAvailable(rollback);
             }
 
             for (Rollback rollback : restoreInProgress) {
-                PackageInstaller installer = mContext.getPackageManager().getPackageInstaller();
-                PackageInstaller.SessionInfo session =
-                        installer.getSessionInfo(rollback.getStagedSessionId());
-                // TODO: What if session is null?
-                if (session != null) {
-                    if (session.isStagedSessionApplied() || session.isStagedSessionFailed()) {
-                        rollback.setRestoreUserDataInProgress(false);
-                    }
-                }
+                rollback.setRestoreUserDataInProgress(false);
             }
 
             for (String apexPackageName : apexPackageNames) {
@@ -1133,6 +1129,8 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
 
     @Override
     protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
+
         IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ");
         synchronized (mLock) {
             for (Rollback rollback : mRollbacks) {

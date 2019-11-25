@@ -281,6 +281,8 @@ public final class SystemServer {
             "com.android.server.contentsuggestions.ContentSuggestionsManagerService";
     private static final String DEVICE_IDLE_CONTROLLER_CLASS =
             "com.android.server.DeviceIdleController";
+    private static final String BLOB_STORE_MANAGER_SERVICE_CLASS =
+            "com.android.server.blob.BlobStoreManagerService";
 
     private static final String PERSISTENT_DATA_BLOCK_PROP = "ro.frp.pst";
 
@@ -443,7 +445,7 @@ public final class SystemServer {
 
             // In case the runtime switched since last boot (such as when
             // the old runtime was removed in an OTA), set the system
-            // property so that it is in sync. We can | xq oqi't do this in
+            // property so that it is in sync. We can't do this in
             // libnativehelper's JniInvocation::Init code where we already
             // had to fallback to a different runtime because it is
             // running as root and we need to be the system user to set
@@ -1144,7 +1146,6 @@ public final class SystemServer {
 
         StatusBarManagerService statusBar = null;
         INotificationManager notification = null;
-        LocationManagerService location = null;
         CountryDetectorService countryDetector = null;
         ILockSettings lockSettings = null;
         MediaRouterService mediaRouter = null;
@@ -1469,12 +1470,7 @@ public final class SystemServer {
             t.traceEnd();
 
             t.traceBegin("StartLocationManagerService");
-            try {
-                location = new LocationManagerService(context);
-                ServiceManager.addService(Context.LOCATION_SERVICE, location);
-            } catch (Throwable e) {
-                reportWtf("starting Location Manager", e);
-            }
+            mSystemServiceManager.startService(LocationManagerService.Lifecycle.class);
             t.traceEnd();
 
             t.traceBegin("StartCountryDetectorService");
@@ -1945,6 +1941,10 @@ public final class SystemServer {
         mSystemServiceManager.startService(ClipboardService.class);
         t.traceEnd();
 
+        t.traceBegin("StartBlobStoreManagerService");
+        mSystemServiceManager.startService(BLOB_STORE_MANAGER_SERVICE_CLASS);
+        t.traceEnd();
+
         t.traceBegin("AppServiceManager");
         mSystemServiceManager.startService(AppBindingService.Lifecycle.class);
         t.traceEnd();
@@ -2077,7 +2077,6 @@ public final class SystemServer {
         final NetworkStatsService networkStatsF = networkStats;
         final NetworkPolicyManagerService networkPolicyF = networkPolicy;
         final ConnectivityService connectivityF = connectivity;
-        final LocationManagerService locationF = location;
         final CountryDetectorService countryDetectorF = countryDetector;
         final NetworkTimeUpdateService networkTimeUpdaterF = networkTimeUpdater;
         final InputManagerService inputManagerF = inputManager;
@@ -2233,16 +2232,6 @@ public final class SystemServer {
             }
             t.traceEnd();
 
-
-            t.traceBegin("MakeLocationServiceReady");
-            try {
-                if (locationF != null) {
-                    locationF.systemRunning();
-                }
-            } catch (Throwable e) {
-                reportWtf("Notifying Location Service running", e);
-            }
-            t.traceEnd();
             t.traceBegin("MakeCountryDetectionServiceReady");
             try {
                 if (countryDetectorF != null) {

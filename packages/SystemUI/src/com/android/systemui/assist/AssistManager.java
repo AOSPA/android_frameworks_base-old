@@ -42,9 +42,7 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.settingslib.applications.InterestingConfigChanges;
 import com.android.systemui.ConfigurationChangedReceiver;
-import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.assist.ui.DefaultUiController;
 import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.statusbar.CommandQueue;
@@ -130,6 +128,7 @@ public class AssistManager implements ConfigurationChangedReceiver {
 
     private AssistOrbContainer mView;
     private final DeviceProvisionedController mDeviceProvisionedController;
+    private final CommandQueue mCommandQueue;
     protected final AssistUtils mAssistUtils;
     private final boolean mShouldEnableOrb;
 
@@ -160,13 +159,17 @@ public class AssistManager implements ConfigurationChangedReceiver {
             DeviceProvisionedController controller,
             Context context,
             AssistUtils assistUtils,
-            AssistHandleBehaviorController handleController) {
+            AssistHandleBehaviorController handleController,
+            CommandQueue commandQueue,
+            PhoneStateMonitor phoneStateMonitor,
+            OverviewProxyService overviewProxyService) {
         mContext = context;
         mDeviceProvisionedController = controller;
+        mCommandQueue = commandQueue;
         mWindowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
         mAssistUtils = assistUtils;
         mAssistDisclosure = new AssistDisclosure(context, new Handler());
-        mPhoneStateMonitor = new PhoneStateMonitor(context);
+        mPhoneStateMonitor = phoneStateMonitor;
         mHandleController = handleController;
 
         registerVoiceInteractionSessionListener();
@@ -178,8 +181,7 @@ public class AssistManager implements ConfigurationChangedReceiver {
 
         mUiController = new DefaultUiController(mContext);
 
-        OverviewProxyService overviewProxy = Dependency.get(OverviewProxyService.class);
-        overviewProxy.addCallback(new OverviewProxyService.OverviewProxyListener() {
+        overviewProxyService.addCallback(new OverviewProxyService.OverviewProxyListener() {
             @Override
             public void onAssistantProgress(float progress) {
                 // Progress goes from 0 to 1 to indicate how close the assist gesture is to
@@ -339,7 +341,7 @@ public class AssistManager implements ConfigurationChangedReceiver {
         }
 
         // Close Recent Apps if needed
-        SysUiServiceProvider.getComponent(mContext, CommandQueue.class).animateCollapsePanels(
+        mCommandQueue.animateCollapsePanels(
                 CommandQueue.FLAG_EXCLUDE_SEARCH_PANEL | CommandQueue.FLAG_EXCLUDE_RECENTS_PANEL,
                 false /* force */);
 

@@ -49,13 +49,14 @@ import java.util.Set;
  * <p>If {@link #isEnforceMode()} is false, then all system packages are always installed for all
  * users. The following applies when it is true.
  *
- * Any package can be in one of three states in the SystemConfig whitelist
+ * <p>Any package can be in one of three states in the {@code SystemConfig} whitelist
  * <ol>
  *     <li>Explicitly blacklisted for a particular user type</li>
  *     <li>Explicitly whitelisted for a particular user type</li>
  *     <li>Not mentioned at all, for any user type (neither whitelisted nor blacklisted)</li>
  * </ol>
- * Blacklisting always takes precedence - if a package is blacklisted for a particular user,
+ *
+ * <p>Blacklisting always takes precedence - if a package is blacklisted for a particular user,
  * it won't be installed on that type of user (even if it is also whitelisted for that user).
  * Next comes whitelisting - if it is whitelisted for a particular user, it will be installed on
  * that type of user (as long as it isn't blacklisted).
@@ -69,6 +70,12 @@ import java.util.Set;
  *     <li>Either way, for {@link UserHandle#USER_SYSTEM}, the package will be implicitly
  *          whitelisted so that it can be used for local development purposes.</li>
  * </ul>
+ *
+ * <p><b>NOTE:</b> the {@code SystemConfig} state is only updated on first boot or after a system
+ * update. So, to verify changes during development, you can emulate the latter by calling:
+ * <pre><code>
+ * adb shell setprop persist.pm.mock-upgrade true
+ * </code></pre>
  */
 class UserSystemPackageInstaller {
     private static final String TAG = "UserManagerService";
@@ -109,13 +116,13 @@ class UserSystemPackageInstaller {
      * <p>Packages that are whitelisted, but then blacklisted so that they aren't to be installed on
      * any user, are purposefully still present in this list.
      */
-    private final ArrayMap<String, Integer> mWhitelitsedPackagesForUserTypes;
+    private final ArrayMap<String, Integer> mWhitelistedPackagesForUserTypes;
 
     private final UserManagerService mUm;
 
     UserSystemPackageInstaller(UserManagerService ums) {
         mUm = ums;
-        mWhitelitsedPackagesForUserTypes =
+        mWhitelistedPackagesForUserTypes =
                 determineWhitelistedPackagesForUserTypes(SystemConfig.getInstance());
     }
 
@@ -123,7 +130,7 @@ class UserSystemPackageInstaller {
     @VisibleForTesting
     UserSystemPackageInstaller(UserManagerService ums, ArrayMap<String, Integer> whitelist) {
         mUm = ums;
-        mWhitelitsedPackagesForUserTypes = whitelist;
+        mWhitelistedPackagesForUserTypes = whitelist;
     }
 
     /**
@@ -242,7 +249,7 @@ class UserSystemPackageInstaller {
         return (whitelistMode & USER_TYPE_PACKAGE_WHITELIST_MODE_IMPLICIT_WHITELIST) != 0;
     }
 
-    /** Gets the PackageWhitelistMode for use of {@link #mWhitelitsedPackagesForUserTypes}. */
+    /** Gets the PackageWhitelistMode for use of {@link #mWhitelistedPackagesForUserTypes}. */
     private @PackageWhitelistMode int getWhitelistMode() {
         final int runtimeMode = SystemProperties.getInt(
                 PACKAGE_WHITELIST_MODE_PROP, USER_TYPE_PACKAGE_WHITELIST_MODE_DEVICE_DEFAULT);
@@ -283,7 +290,7 @@ class UserSystemPackageInstaller {
             if (!pkg.isSystem()) {
                 return;
             }
-            if (shouldInstallPackage(pkg, mWhitelitsedPackagesForUserTypes,
+            if (shouldInstallPackage(pkg, mWhitelistedPackagesForUserTypes,
                     whitelistedPackages, isImplicitWhitelistMode, isSystemUser)) {
                 // Although the whitelist uses manifest names, this function returns packageNames.
                 installPackages.add(pkg.packageName);
@@ -333,10 +340,10 @@ class UserSystemPackageInstaller {
      */
     @VisibleForTesting
     @NonNull Set<String> getWhitelistedPackagesForUserType(int flags) {
-        Set<String> installablePkgs = new ArraySet<>(mWhitelitsedPackagesForUserTypes.size());
-        for (int i = 0; i < mWhitelitsedPackagesForUserTypes.size(); i++) {
-            String pkgName = mWhitelitsedPackagesForUserTypes.keyAt(i);
-            int whitelistedUserTypes = mWhitelitsedPackagesForUserTypes.valueAt(i);
+        Set<String> installablePkgs = new ArraySet<>(mWhitelistedPackagesForUserTypes.size());
+        for (int i = 0; i < mWhitelistedPackagesForUserTypes.size(); i++) {
+            String pkgName = mWhitelistedPackagesForUserTypes.keyAt(i);
+            int whitelistedUserTypes = mWhitelistedPackagesForUserTypes.valueAt(i);
             if ((flags & whitelistedUserTypes) != 0) {
                 installablePkgs.add(pkgName);
             }
@@ -353,7 +360,7 @@ class UserSystemPackageInstaller {
      * completely blacklists an AOSP app).
      */
     private Set<String> getWhitelistedSystemPackages() {
-        return mWhitelitsedPackagesForUserTypes.keySet();
+        return mWhitelistedPackagesForUserTypes.keySet();
     }
 
     /**
@@ -449,18 +456,28 @@ class UserSystemPackageInstaller {
     }
 
     void dump(PrintWriter pw) {
-        pw.print("Whitelisted packages per user type");
-        final int size = mWhitelitsedPackagesForUserTypes.size();
+        final String prefix = "    ";
+        final int mode = getWhitelistMode();
+        pw.println("Whitelisted packages per user type");
+        pw.print(prefix); pw.print("Mode: ");
+        pw.print(mode);
+        pw.print(isEnforceMode(mode) ? " (enforced)" : "");
+        pw.print(isLogMode(mode) ? " (logged)" : "");
+        pw.print(isImplicitWhitelistMode(mode) ? " (implicit)" : "");
+        pw.println();
+
+        final int size = mWhitelistedPackagesForUserTypes.size();
         if (size == 0) {
-            pw.println(": N/A");
+            pw.print(prefix); pw.println("No packages");
             return;
         }
-        pw.println(" (" + size + " packages)");
+        final String prefix2 = prefix + prefix;
+        pw.print(prefix); pw.print(size); pw.println(" packages:");
         for (int i = 0; i < size; i++) {
-            final String pkgName = mWhitelitsedPackagesForUserTypes.keyAt(i);
+            final String pkgName = mWhitelistedPackagesForUserTypes.keyAt(i);
             final String whitelistedUserTypes =
-                    UserInfo.flagsToString(mWhitelitsedPackagesForUserTypes.valueAt(i));
-            pw.println("    " + pkgName + ": " + whitelistedUserTypes);
+                    UserInfo.flagsToString(mWhitelistedPackagesForUserTypes.valueAt(i));
+            pw.print(prefix2); pw.print(pkgName); pw.print(": "); pw.println(whitelistedUserTypes);
         }
     }
 }

@@ -21,6 +21,7 @@ import android.net.Uri;
 import android.content.ComponentName;
 import android.graphics.Rect;
 import android.os.Bundle;
+import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
 import android.hardware.biometrics.IBiometricServiceReceiverInternal;
 
@@ -76,9 +77,9 @@ interface IStatusBarService
     void onNotificationSmartReplySent(in String key, in int replyIndex, in CharSequence reply,
             in int notificationLocation, boolean modifiedBeforeSending);
     void onNotificationSettingsViewed(String key);
-    void setSystemUiVisibility(int displayId, int vis, int mask, String cause);
     void onNotificationBubbleChanged(String key, boolean isBubble);
-    void grantInlineReplyUriPermission(String key, in Uri uri);
+    void grantInlineReplyUriPermission(String key, in Uri uri, in UserHandle user, String packageName);
+    void clearInlineReplyUriPermissions(String key);
 
     void onGlobalActionsShown();
     void onGlobalActionsHidden();

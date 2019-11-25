@@ -16,12 +16,16 @@
 
 package android.media;
 
-import android.media.MediaRoute2ProviderInfo;
+import android.media.MediaRoute2Info;
+import android.os.Bundle;
 
 /**
  * @hide
  */
 oneway interface IMediaRouter2Client {
     void notifyRestoreRoute();
-    void notifyProviderInfosUpdated(in List<MediaRoute2ProviderInfo> providers);
+    void notifyRoutesAdded(in List<MediaRoute2Info> routes);
+    void notifyRoutesRemoved(in List<MediaRoute2Info> routes);
+    void notifyRoutesChanged(in List<MediaRoute2Info> routes);
+    void notifyRouteSelected(in MediaRoute2Info route, int reason, in Bundle controlHints);
 }

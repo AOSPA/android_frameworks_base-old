@@ -525,6 +525,7 @@
     <protected-broadcast android:name="android.telephony.action.CARRIER_CONFIG_CHANGED" />
     <protected-broadcast android:name="android.telephony.action.DEFAULT_SUBSCRIPTION_CHANGED" />
     <protected-broadcast android:name="android.telephony.action.DEFAULT_SMS_SUBSCRIPTION_CHANGED" />
+    <protected-broadcast android:name="android.telephony.action.OTA_EMERGENCY_NUMBER_DB_INSTALLED" />
     <protected-broadcast android:name="android.telephony.action.SECRET_CODE" />
     <protected-broadcast android:name="android.telephony.action.SHOW_VOICEMAIL_NOTIFICATION" />
     <protected-broadcast android:name="android.telephony.action.SUBSCRIPTION_PLANS_CHANGED" />
@@ -2043,6 +2044,11 @@
     <!-- =========================================== -->
     <eat-comment />
 
+    <!-- @SystemApi Allows granting runtime permissions to telephony related components.
+         @hide -->
+    <permission android:name="android.permission.GRANT_RUNTIME_PERMISSIONS_TO_TELEPHONY_DEFAULTS"
+        android:protectionLevel="signature|telephony" />
+
     <!-- Allows modification of the telephony state - power on, mmi, etc.
          Does not include placing calls.
          <p>Not for use by third-party applications. -->
@@ -2312,7 +2318,7 @@
          types of interactions
          @hide -->
     <permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL"
-        android:protectionLevel="signature|installer|telephony" />
+        android:protectionLevel="signature|installer|telephony|wifi" />
 
     <!-- @SystemApi Allows an application to start its own activities, but on a different profile
          associated with the user. For example, an application running on the main profile of a user
@@ -3585,7 +3591,7 @@
     <!-- Allows an application to manage the companion devices.
          @hide -->
     <permission android:name="android.permission.MANAGE_COMPANION_DEVICES"
-                android:protectionLevel="signature" />
+                android:protectionLevel="signature|wifi" />
 
     <!-- @SystemApi Allows an application to use SurfaceFlinger's low level features.
          <p>Not for use by third-party applications.
@@ -4690,7 +4696,7 @@
         of this permission are REQUIRED to themselves check that the caller has
         PACKAGE_USAGE_STATS and OP_GET_USAGE_STATS. -->
     <permission android:name="android.permission.PEEK_DROPBOX_DATA"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature" />
 
     <application android:process="system"
                  android:persistent="true"
@@ -4773,19 +4779,6 @@
                 android:excludeFromRecents="true"
                 android:process=":ui">
         </activity>
-        <activity android:name="com.android.internal.app.DumpHeapActivity"
-                android:theme="@style/Theme.Translucent.NoTitleBar"
-                android:label="@string/dump_heap_title"
-                android:finishOnCloseSystemDialogs="true"
-                android:noHistory="true"
-                android:excludeFromRecents="true"
-                android:process=":ui">
-        </activity>
-        <provider android:name="com.android.server.am.DumpHeapProvider"
-                android:authorities="com.android.server.heapdump"
-                android:grantUriPermissions="true"
-                android:multiprocess="false"
-                android:singleUser="true" />
 
         <activity android:name="android.accounts.ChooseAccountActivity"
                 android:excludeFromRecents="true"

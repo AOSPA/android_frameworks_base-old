@@ -14,7 +14,6 @@
 
 package com.android.systemui.statusbar.phone;
 
-import static com.android.systemui.SysUiServiceProvider.getComponent;
 import static com.android.systemui.statusbar.phone.StatusBar.CLOSE_PANEL_WHEN_EMPTIED;
 import static com.android.systemui.statusbar.phone.StatusBar.DEBUG;
 import static com.android.systemui.statusbar.phone.StatusBar.MULTIUSER_DEBUG;
@@ -80,7 +79,8 @@ import java.util.ArrayList;
 
 public class StatusBarNotificationPresenter implements NotificationPresenter,
         ConfigurationController.ConfigurationListener,
-        NotificationRowBinderImpl.BindRowCallback {
+        NotificationRowBinderImpl.BindRowCallback,
+        CommandQueue.Callbacks {
 
     private final LockscreenGestureLogger mLockscreenGestureLogger =
             Dependency.get(LockscreenGestureLogger.class);
@@ -139,13 +139,14 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
             DynamicPrivacyController dynamicPrivacyController,
             NotificationAlertingManager notificationAlertingManager,
             NotificationRowBinderImpl notificationRowBinder,
-            KeyguardStateController keyguardStateController) {
+            KeyguardStateController keyguardStateController,
+            CommandQueue commandQueue) {
         mContext = context;
         mKeyguardStateController = keyguardStateController;
         mNotificationPanel = panel;
         mHeadsUpManager = headsUp;
         mDynamicPrivacyController = dynamicPrivacyController;
-        mCommandQueue = getComponent(context, CommandQueue.class);
+        mCommandQueue = commandQueue;
         mAboveShelfObserver = new AboveShelfObserver(stackScroller);
         mActivityLaunchAnimator = activityLaunchAnimator;
         mAboveShelfObserver.setListener(statusBarWindow.findViewById(
@@ -184,17 +185,6 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
         NotificationListContainer notifListContainer = (NotificationListContainer) stackScroller;
         Dependency.get(InitController.class).addPostInitTask(() -> {
             NotificationEntryListener notificationEntryListener = new NotificationEntryListener() {
-                @Override
-                public void onNotificationAdded(NotificationEntry entry) {
-                    // Recalculate the position of the sliding windows and the titles.
-                    mShadeController.updateAreThereNotifications();
-                }
-
-                @Override
-                public void onPostEntryUpdated(NotificationEntry entry) {
-                    mShadeController.updateAreThereNotifications();
-                }
-
                 @Override
                 public void onEntryRemoved(
                         @Nullable NotificationEntry entry,
@@ -333,7 +323,6 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
                 }
             }
         }
-        mShadeController.updateAreThereNotifications();
     }
 
     public boolean hasActiveNotifications() {

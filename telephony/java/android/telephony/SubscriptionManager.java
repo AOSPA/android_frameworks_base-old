@@ -31,6 +31,7 @@ import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SuppressAutoDoc;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.BroadcastOptions;
 import android.app.PendingIntent;
@@ -155,6 +156,7 @@ public class SubscriptionManager {
      */
     @NonNull
     @SystemApi
+    @TestApi
     public static final Uri WFC_ENABLED_CONTENT_URI = Uri.withAppendedPath(CONTENT_URI, "wfc");
 
     /**
@@ -174,6 +176,7 @@ public class SubscriptionManager {
      */
     @NonNull
     @SystemApi
+    @TestApi
     public static final Uri ADVANCED_CALLING_ENABLED_CONTENT_URI = Uri.withAppendedPath(
             CONTENT_URI, "advanced_calling");
 
@@ -192,6 +195,7 @@ public class SubscriptionManager {
      */
     @NonNull
     @SystemApi
+    @TestApi
     public static final Uri WFC_MODE_CONTENT_URI = Uri.withAppendedPath(CONTENT_URI, "wfc_mode");
 
     /**
@@ -209,6 +213,7 @@ public class SubscriptionManager {
      */
     @NonNull
     @SystemApi
+    @TestApi
     public static final Uri WFC_ROAMING_MODE_CONTENT_URI = Uri.withAppendedPath(
             CONTENT_URI, "wfc_roaming_mode");
 
@@ -228,6 +233,7 @@ public class SubscriptionManager {
      */
     @NonNull
     @SystemApi
+    @TestApi
     public static final Uri VT_ENABLED_CONTENT_URI = Uri.withAppendedPath(
             CONTENT_URI, "vt_enabled");
 
@@ -246,6 +252,7 @@ public class SubscriptionManager {
      */
     @NonNull
     @SystemApi
+    @TestApi
     public static final Uri WFC_ROAMING_ENABLED_CONTENT_URI = Uri.withAppendedPath(
             CONTENT_URI, "wfc_roaming_enabled");
 
@@ -1819,17 +1826,40 @@ public class SubscriptionManager {
         return subId;
     }
 
-    /** @hide */
-    public void setDefaultVoiceSubId(int subId) {
-        if (VDBG) logd("setDefaultVoiceSubId sub id = " + subId);
+    /**
+     * Sets the system's default voice subscription id.
+     *
+     * On a data-only device, this is a no-op.
+     *
+     * May throw a {@link RuntimeException} if the provided subscription id is equal to
+     * {@link SubscriptionManager#DEFAULT_SUBSCRIPTION_ID}
+     *
+     * @param subscriptionId A valid subscription ID to set as the system default, or
+     *                       {@link SubscriptionManager#INVALID_SUBSCRIPTION_ID}
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
+    public void setDefaultVoiceSubscriptionId(int subscriptionId) {
+        if (VDBG) logd("setDefaultVoiceSubId sub id = " + subscriptionId);
         try {
             ISub iSub = ISub.Stub.asInterface(ServiceManager.getService("isub"));
             if (iSub != null) {
-                iSub.setDefaultVoiceSubId(subId);
+                iSub.setDefaultVoiceSubId(subscriptionId);
             }
         } catch (RemoteException ex) {
             // ignore it
         }
+    }
+
+    /**
+     * Same as {@link #setDefaultVoiceSubscriptionId(int)}, but preserved for backwards
+     * compatibility.
+     * @hide
+     */
+    public void setDefaultVoiceSubId(int subId) {
+        setDefaultVoiceSubscriptionId(subId);
     }
 
     /**
@@ -2371,12 +2401,10 @@ public class SubscriptionManager {
      * @param plans the list of plans. The first plan is always the primary and
      *            most important plan. Any additional plans are secondary and
      *            may not be displayed or used by decision making logic.
-     *            The list of all plans must meet the requirements defined in
-     *            {@link SubscriptionPlan.Builder#setNetworkTypes(int[])}.
      * @throws SecurityException if the caller doesn't meet the requirements
      *             outlined above.
      * @throws IllegalArgumentException if plans don't meet the requirements
-     *             mentioned above.
+     *             defined in {@link SubscriptionPlan}.
      */
     public void setSubscriptionPlans(int subId, @NonNull List<SubscriptionPlan> plans) {
         try {
@@ -2918,6 +2946,7 @@ public class SubscriptionManager {
      * permission or had carrier privilege permission on the subscription.
      * {@link TelephonyManager#hasCarrierPrivileges()}
      *
+     * @throws IllegalStateException if Telephony service is in bad state.
      * @throws SecurityException if the caller doesn't meet the requirements
      *             outlined above.
      *

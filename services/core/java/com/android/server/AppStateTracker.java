@@ -632,7 +632,7 @@ public class AppStateTracker {
 
     private final class UidObserver extends IUidObserver.Stub {
         @Override
-        public void onUidStateChanged(int uid, int procState, long procStateSeq) {
+        public void onUidStateChanged(int uid, int procState, long procStateSeq, int capability) {
             mHandler.onUidStateChanged(uid, procState);
         }
 
@@ -699,14 +699,16 @@ public class AppStateTracker {
                 Slog.d(TAG,"onAppIdleStateChanged: " + packageName + " u" + userId
                         + (idle ? " idle" : " active") + " " + bucket);
             }
-            final boolean changed;
-            if (bucket == UsageStatsManager.STANDBY_BUCKET_EXEMPTED) {
-                changed = mExemptedPackages.add(userId, packageName);
-            } else {
-                changed = mExemptedPackages.remove(userId, packageName);
-            }
-            if (changed) {
-                mHandler.notifyExemptChanged();
+            synchronized (mLock) {
+                final boolean changed;
+                if (bucket == UsageStatsManager.STANDBY_BUCKET_EXEMPTED) {
+                    changed = mExemptedPackages.add(userId, packageName);
+                } else {
+                    changed = mExemptedPackages.remove(userId, packageName);
+                }
+                if (changed) {
+                    mHandler.notifyExemptChanged();
+                }
             }
         }
     }

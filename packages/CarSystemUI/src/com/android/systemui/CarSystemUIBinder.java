@@ -16,14 +16,22 @@
 
 package com.android.systemui;
 
+import com.android.systemui.biometrics.AuthController;
+import com.android.systemui.globalactions.GlobalActionsComponent;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.navigationbar.car.CarNavigationBar;
 import com.android.systemui.pip.PipUI;
 import com.android.systemui.power.PowerUI;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.RecentsModule;
+import com.android.systemui.shortcut.ShortcutKeyDispatcher;
+import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.car.CarStatusBar;
+import com.android.systemui.statusbar.car.CarStatusBarModule;
+import com.android.systemui.statusbar.notification.InstantAppNotifier;
 import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.tv.TvStatusBar;
+import com.android.systemui.theme.ThemeOverlayController;
 import com.android.systemui.util.leak.GarbageMonitor;
 import com.android.systemui.volume.VolumeUI;
 
@@ -33,8 +41,20 @@ import dagger.multibindings.ClassKey;
 import dagger.multibindings.IntoMap;
 
 /** Binder for car specific {@link SystemUI} modules. */
-@Module(includes = {RecentsModule.class})
+@Module(includes = {RecentsModule.class, CarStatusBarModule.class})
 public abstract class CarSystemUIBinder {
+    /** Inject into AuthController. */
+    @Binds
+    @IntoMap
+    @ClassKey(AuthController.class)
+    public abstract SystemUI bindAuthController(AuthController sysui);
+
+    /** Inject into Divider. */
+    @Binds
+    @IntoMap
+    @ClassKey(Divider.class)
+    public abstract SystemUI bindDivider(Divider sysui);
+
     /** */
     @Binds
     @IntoMap
@@ -45,7 +65,19 @@ public abstract class CarSystemUIBinder {
     @Binds
     @IntoMap
     @ClassKey(GarbageMonitor.Service.class)
-    public abstract SystemUI bindGarbageMonitorService(GarbageMonitor.Service service);
+    public abstract SystemUI bindGarbageMonitorService(GarbageMonitor.Service sysui);
+
+    /** Inject into GlobalActionsComponent. */
+    @Binds
+    @IntoMap
+    @ClassKey(GlobalActionsComponent.class)
+    public abstract SystemUI bindGlobalActionsComponent(GlobalActionsComponent sysui);
+
+    /** Inject into InstantAppNotifier. */
+    @Binds
+    @IntoMap
+    @ClassKey(InstantAppNotifier.class)
+    public abstract SystemUI bindInstantAppNotifier(InstantAppNotifier sysui);
 
     /** Inject into KeyguardViewMediator. */
     @Binds
@@ -83,11 +115,42 @@ public abstract class CarSystemUIBinder {
     @ClassKey(ScreenDecorations.class)
     public abstract SystemUI bindScreenDecorations(ScreenDecorations sysui);
 
+    /** Inject into ShortcutKeyDispatcher. */
+    @Binds
+    @IntoMap
+    @ClassKey(ShortcutKeyDispatcher.class)
+    public abstract SystemUI bindsShortcutKeyDispatcher(ShortcutKeyDispatcher sysui);
+
+    /** Inject into SizeCompatModeActivityController. */
+    @Binds
+    @IntoMap
+    @ClassKey(SizeCompatModeActivityController.class)
+    public abstract SystemUI bindsSizeCompatModeActivityController(
+            SizeCompatModeActivityController sysui);
+
+    /** Inject into SliceBroadcastRelayHandler. */
+    @Binds
+    @IntoMap
+    @ClassKey(SliceBroadcastRelayHandler.class)
+    public abstract SystemUI bindSliceBroadcastRelayHandler(SliceBroadcastRelayHandler sysui);
+
+    /** Inject into ThemeOverlayController. */
+    @Binds
+    @IntoMap
+    @ClassKey(ThemeOverlayController.class)
+    public abstract SystemUI bindThemeOverlayController(ThemeOverlayController sysui);
+
     /** Inject into StatusBar. */
     @Binds
     @IntoMap
     @ClassKey(StatusBar.class)
     public abstract SystemUI bindsStatusBar(CarStatusBar sysui);
+
+    /** Inject into TvStatusBar. */
+    @Binds
+    @IntoMap
+    @ClassKey(TvStatusBar.class)
+    public abstract SystemUI bindsTvStatusBar(TvStatusBar sysui);
 
     /** Inject into StatusBarGoogle. */
     @Binds

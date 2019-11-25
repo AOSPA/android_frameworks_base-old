@@ -35,6 +35,7 @@ import android.app.ActivityManager;
 import android.app.IActivityTaskManager;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.hardware.biometrics.Authenticator;
@@ -88,7 +89,6 @@ public class AuthControllerTest extends SysuiTestCase {
         TestableContext context = spy(mContext);
 
         mContext.putComponent(StatusBar.class, mock(StatusBar.class));
-        mContext.putComponent(CommandQueue.class, mock(CommandQueue.class));
 
         when(context.getPackageManager()).thenReturn(mPackageManager);
         when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_FACE))
@@ -102,7 +102,8 @@ public class AuthControllerTest extends SysuiTestCase {
         when(mDialog1.isAllowDeviceCredentials()).thenReturn(false);
         when(mDialog2.isAllowDeviceCredentials()).thenReturn(false);
 
-        mAuthController = new TestableAuthController(context, new MockInjector());
+        mAuthController = new TestableAuthController(
+                context, mock(CommandQueue.class), new MockInjector());
         mAuthController.mComponents = mContext.getComponents();
 
         mAuthController.start();
@@ -403,6 +404,19 @@ public class AuthControllerTest extends SysuiTestCase {
         mAuthController.onDeviceCredentialPressed();
     }
 
+    @Test
+    public void testActionCloseSystemDialogs_dismissesDialogIfShowing() throws Exception {
+        showDialog(Authenticator.TYPE_BIOMETRIC, BiometricPrompt.TYPE_FACE);
+        Intent intent = new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
+        mAuthController.mBroadcastReceiver.onReceive(mContext, intent);
+        waitForIdleSync();
+
+        assertNull(mAuthController.mCurrentDialog);
+        assertNull(mAuthController.mReceiver);
+        verify(mDialog1).dismissWithoutCallback(true /* animate */);
+        verify(mReceiver).onDialogDismissed(eq(BiometricPrompt.DISMISSED_REASON_USER_CANCEL));
+    }
+
     // Helpers
 
     private void showDialog(int authenticators, int biometricModality) {
@@ -435,8 +449,8 @@ public class AuthControllerTest extends SysuiTestCase {
         private int mBuildCount = 0;
         private Bundle mLastBiometricPromptBundle;
 
-        TestableAuthController(Context context, Injector injector) {
-            super(context, injector);
+        TestableAuthController(Context context, CommandQueue commandQueue, Injector injector) {
+            super(context, commandQueue, injector);
         }
 
         @Override

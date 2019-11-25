@@ -25,17 +25,17 @@ import static android.telephony.SmsCbEtwsInfo.ETWS_WARNING_TYPE_TSUNAMI;
 import android.annotation.NonNull;
 import android.content.Context;
 import android.content.res.Resources;
+import android.telephony.CbGeoUtils;
+import android.telephony.CbGeoUtils.Circle;
+import android.telephony.CbGeoUtils.Geometry;
+import android.telephony.CbGeoUtils.LatLng;
+import android.telephony.CbGeoUtils.Polygon;
 import android.telephony.SmsCbLocation;
 import android.telephony.SmsCbMessage;
 import android.util.Pair;
 import android.util.Slog;
 
 import com.android.internal.R;
-import com.android.internal.telephony.CbGeoUtils;
-import com.android.internal.telephony.CbGeoUtils.Circle;
-import com.android.internal.telephony.CbGeoUtils.Geometry;
-import com.android.internal.telephony.CbGeoUtils.LatLng;
-import com.android.internal.telephony.CbGeoUtils.Polygon;
 import com.android.internal.telephony.GsmAlphabet;
 import com.android.internal.telephony.SmsConstants;
 import com.android.internal.telephony.gsm.GsmSmsCbMessage.GeoFencingTriggerMessage.CellBroadcastIdentity;
@@ -215,7 +215,7 @@ public class GsmSmsCbMessage {
     private static Pair<Integer, List<Geometry>> parseWarningAreaCoordinates(
             byte[] pdu, int wacOffset) {
         // little-endian
-        int wacDataLength = (pdu[wacOffset + 1] << 8) | pdu[wacOffset];
+        int wacDataLength = ((pdu[wacOffset + 1] & 0xff) << 8) | (pdu[wacOffset] & 0xff);
         int offset = wacOffset + 2;
 
         if (offset + wacDataLength > pdu.length) {

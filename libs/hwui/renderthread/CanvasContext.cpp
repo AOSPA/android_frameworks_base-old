@@ -102,13 +102,13 @@ CanvasContext::CanvasContext(RenderThread& thread, bool translucent, RenderNode*
         , mGenerationID(0)
         , mOpaque(!translucent)
         , mAnimationContext(contextFactory->createAnimationContext(mRenderThread.timeLord()))
-        , mJankTracker(&thread.globalProfileData(), DeviceInfo::get()->displayInfo())
+        , mJankTracker(&thread.globalProfileData())
         , mProfiler(mJankTracker.frames(), thread.timeLord().frameIntervalNanos())
         , mContentDrawBounds(0, 0, 0, 0)
         , mRenderPipeline(std::move(renderPipeline)) {
     rootRenderNode->makeRoot();
     mRenderNodes.emplace_back(rootRenderNode);
-    mProfiler.setDensity(DeviceInfo::get()->displayInfo().density);
+    mProfiler.setDensity(DeviceInfo::getDensity());
     setRenderAheadDepth(Properties::defaultRenderAhead);
 }
 
@@ -147,7 +147,6 @@ void CanvasContext::setSurface(sp<Surface>&& surface) {
         mNativeSurface = new ReliableSurface{std::move(surface)};
         // TODO: Fix error handling & re-shorten timeout
         ANativeWindow_setDequeueTimeout(mNativeSurface.get(), 4000_ms);
-        mNativeSurface->enableFrameTimestamps(true);
     } else {
         mNativeSurface = nullptr;
     }
@@ -169,6 +168,10 @@ void CanvasContext::setSurface(sp<Surface>&& surface) {
     if (hasSurface) {
         mHaveNewSurface = true;
         mSwapHistory.clear();
+        // Enable frame stats after the surface has been bound to the appropriate graphics API.
+        // Order is important when new and old surfaces are the same, because old surface has
+        // its frame stats disabled automatically.
+        mNativeSurface->enableFrameTimestamps(true);
     } else {
         mRenderThread.removeFrameCallback(this);
         mGenerationID++;
@@ -303,6 +306,7 @@ void CanvasContext::prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t sy
 
     info.damageAccumulator = &mDamageAccumulator;
     info.layerUpdateQueue = &mLayerUpdateQueue;
+    info.damageGenerationId = mDamageId++;
     info.out.canDrawThisFrame = true;
 
     mAnimationContext->startFrame(info.mode);
@@ -478,7 +482,8 @@ void CanvasContext::draw() {
         if (didDraw) {
             swap.damage = windowDirty;
         } else {
-            swap.damage = SkRect::MakeWH(INT_MAX, INT_MAX);
+            float max = static_cast<float>(INT_MAX);
+            swap.damage = SkRect::MakeWH(max, max);
         }
         swap.swapCompletedTime = systemTime(SYSTEM_TIME_MONOTONIC);
         swap.vsyncTime = mRenderThread.timeLord().latestVsync();
@@ -702,7 +707,7 @@ bool CanvasContext::surfaceRequiresRedraw() {
     surface->query(NATIVE_WINDOW_WIDTH, &width);
     surface->query(NATIVE_WINDOW_HEIGHT, &height);
 
-    return width == mLastFrameWidth && height == mLastFrameHeight;
+    return width != mLastFrameWidth || height != mLastFrameHeight;
 }
 
 void CanvasContext::setRenderAheadDepth(int renderAhead) {

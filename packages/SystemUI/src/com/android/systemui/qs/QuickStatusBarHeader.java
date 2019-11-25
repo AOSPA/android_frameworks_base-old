@@ -17,6 +17,7 @@ package com.android.systemui.qs;
 import static android.app.StatusBarManager.DISABLE2_QUICK_SETTINGS;
 
 import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
+import static com.android.systemui.util.Utils.useQsMediaPlayer;
 
 import android.annotation.ColorInt;
 import android.app.ActivityManager;
@@ -60,6 +61,7 @@ import com.android.settingslib.Utils;
 import com.android.systemui.BatteryMeterView;
 import com.android.systemui.DualToneHandler;
 import com.android.systemui.R;
+import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.plugins.DarkIconDispatcher.DarkReceiver;
@@ -69,6 +71,7 @@ import com.android.systemui.privacy.PrivacyItem;
 import com.android.systemui.privacy.PrivacyItemController;
 import com.android.systemui.privacy.PrivacyItemControllerKt;
 import com.android.systemui.qs.QSDetail.Callback;
+import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.phone.PhoneStatusBarView;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarIconController.TintedIconManager;
@@ -123,6 +126,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     private TouchAnimator mHeaderTextContainerAlphaAnimator;
     private TouchAnimator mPrivacyChipAlphaAnimator;
     private DualToneHandler mDualToneHandler;
+    private final CommandQueue mCommandQueue;
 
     private View mSystemIconsView;
     private View mQuickQsStatusIcons;
@@ -147,6 +151,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     private boolean mPermissionsHubEnabled;
 
     private PrivacyItemController mPrivacyItemController;
+    private BroadcastDispatcher mBroadcastDispatcher;
 
     private final BroadcastReceiver mRingerReceiver = new BroadcastReceiver() {
         @Override
@@ -185,7 +190,8 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     public QuickStatusBarHeader(@Named(VIEW_CONTEXT) Context context, AttributeSet attrs,
             NextAlarmController nextAlarmController, ZenModeController zenModeController,
             StatusBarIconController statusBarIconController,
-            ActivityStarter activityStarter, PrivacyItemController privacyItemController) {
+            ActivityStarter activityStarter, PrivacyItemController privacyItemController,
+            CommandQueue commandQueue, BroadcastDispatcher broadcastDispatcher) {
         super(context, attrs);
         mAlarmController = nextAlarmController;
         mZenController = zenModeController;
@@ -194,6 +200,8 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         mPrivacyItemController = privacyItemController;
         mDualToneHandler = new DualToneHandler(
                 new ContextThemeWrapper(context, R.style.QSHeaderTheme));
+        mBroadcastDispatcher = broadcastDispatcher;
+        mCommandQueue = commandQueue;
     }
 
     @Override
@@ -207,7 +215,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         // Ignore privacy icons because they show in the space above QQS
         iconContainer.addIgnoredSlots(getIgnoredIconSlots());
         iconContainer.setShouldRestrictIcons(false);
-        mIconManager = new TintedIconManager(iconContainer);
+        mIconManager = new TintedIconManager(iconContainer, mCommandQueue);
 
         // Views corresponding to the header info section (e.g. ringer and next alarm).
         mHeaderTextContainerView = findViewById(R.id.header_text_container);
@@ -393,11 +401,10 @@ public class QuickStatusBarHeader extends RelativeLayout implements
 
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) getLayoutParams();
 
-        int flag = Settings.System.getInt(mContext.getContentResolver(), "qs_media_player", 0);
         if (mQsDisabled) {
             lp.height = resources.getDimensionPixelSize(
                     com.android.internal.R.dimen.quick_qs_offset_height);
-        } else if (flag == 1) {
+        } else if (useQsMediaPlayer(mContext)) {
             lp.height = Math.max(getMinimumHeight(),
                     resources.getDimensionPixelSize(
                             com.android.internal.R.dimen.quick_qs_total_height_with_media));
@@ -547,14 +554,14 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         if (listening) {
             mZenController.addCallback(this);
             mAlarmController.addCallback(this);
-            mContext.registerReceiver(mRingerReceiver,
+            mBroadcastDispatcher.registerReceiver(mRingerReceiver,
                     new IntentFilter(AudioManager.INTERNAL_RINGER_MODE_CHANGED_ACTION));
             mPrivacyItemController.addCallback(mPICCallback);
         } else {
             mZenController.removeCallback(this);
             mAlarmController.removeCallback(this);
             mPrivacyItemController.removeCallback(mPICCallback);
-            mContext.unregisterReceiver(mRingerReceiver);
+            mBroadcastDispatcher.unregisterReceiver(mRingerReceiver);
             mPrivacyChipLogged = false;
         }
     }

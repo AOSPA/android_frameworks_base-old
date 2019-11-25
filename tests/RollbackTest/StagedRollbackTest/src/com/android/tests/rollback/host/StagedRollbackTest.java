@@ -19,13 +19,11 @@ package com.android.tests.rollback.host;
 import static org.junit.Assert.assertTrue;
 import static org.testng.Assert.assertThrows;
 
-import com.android.ddmlib.Log.LogLevel;
-import com.android.tradefed.log.LogUtil.CLog;
 import com.android.tradefed.testtype.DeviceJUnit4ClassRunner;
 import com.android.tradefed.testtype.junit4.BaseHostJUnit4Test;
 
-import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -52,16 +50,7 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
 
     @Before
     public void setUp() throws Exception {
-        // Disconnect internet so we can test network health triggered rollbacks
-        getDevice().executeShellCommand("svc wifi disable");
-        getDevice().executeShellCommand("svc data disable");
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        // Reconnect internet after testing network health triggered rollbacks
-        getDevice().executeShellCommand("svc wifi enable");
-        getDevice().executeShellCommand("svc data enable");
+        getDevice().reboot();
     }
 
     /**
@@ -72,17 +61,8 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
         runPhase("testBadApkOnly_Phase1");
         getDevice().reboot();
         runPhase("testBadApkOnly_Phase2");
-        try {
-            // This is expected to fail due to the device being rebooted out
-            // from underneath the test. If this fails for reasons other than
-            // the device reboot, those failures should result in failure of
-            // the testApkOnlyConfirmRollback phase.
-            CLog.logAndDisplay(LogLevel.INFO, "testBadApkOnlyTriggerRollback is expected to fail");
-            runPhase("testBadApkOnly_Phase3");
-        } catch (AssertionError e) {
-            // AssertionError is expected.
-        }
 
+        assertThrows(AssertionError.class, () -> runPhase("testBadApkOnly_Phase3"));
         getDevice().waitForDeviceAvailable();
 
         runPhase("testBadApkOnly_Phase4");
@@ -121,33 +101,34 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
      */
     @Test
     public void testNetworkFailedRollback() throws Exception {
-        // Remove available rollbacks and uninstall NetworkStack on /data/
-        runPhase("testNetworkFailedRollback_Phase1");
-        // Reduce health check deadline
-        getDevice().executeShellCommand("device_config put rollback "
-                + "watchdog_request_timeout_millis 120000");
-        // Simulate re-installation of new NetworkStack with rollbacks enabled
-        getDevice().executeShellCommand("pm install -r --staged --enable-rollback "
-                + "/system/priv-app/NetworkStack/NetworkStack.apk");
+        try {
+            // Disconnect internet so we can test network health triggered rollbacks
+            getDevice().executeShellCommand("svc wifi disable");
+            getDevice().executeShellCommand("svc data disable");
 
-        // Sleep to allow writes to disk before reboot
-        Thread.sleep(5000);
-        // Reboot device to activate staged package
-        getDevice().reboot();
+            runPhase("testNetworkFailedRollback_Phase1");
+            // Reboot device to activate staged package
+            getDevice().reboot();
 
-        // Verify rollback was enabled
-        runPhase("testNetworkFailedRollback_Phase2");
-        assertThrows(AssertionError.class, () -> runPhase("testNetworkFailedRollback_Phase3"));
+            // Verify rollback was enabled
+            runPhase("testNetworkFailedRollback_Phase2");
+            assertThrows(AssertionError.class, () -> runPhase("testNetworkFailedRollback_Phase3"));
 
-        getDevice().waitForDeviceAvailable();
-        // Verify rollback was executed after health check deadline
-        runPhase("testNetworkFailedRollback_Phase4");
+            getDevice().waitForDeviceAvailable();
+            // Verify rollback was executed after health check deadline
+            runPhase("testNetworkFailedRollback_Phase4");
+        } finally {
+            // Reconnect internet again so we won't break tests which assume internet available
+            getDevice().executeShellCommand("svc wifi enable");
+            getDevice().executeShellCommand("svc data enable");
+        }
     }
 
     /**
      * Tests passed network health check does not trigger watchdog staged rollbacks.
      */
     @Test
+    @Ignore("b/143514090")
     public void testNetworkPassedDoesNotRollback() throws Exception {
         // Remove available rollbacks and uninstall NetworkStack on /data/
         runPhase("testNetworkPassedDoesNotRollback_Phase1");
@@ -158,7 +139,7 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
                 + "watchdog_request_timeout_millis 300000");
         // Simulate re-installation of new NetworkStack with rollbacks enabled
         getDevice().executeShellCommand("pm install -r --staged --enable-rollback "
-                + "/system/priv-app/NetworkStack/NetworkStack.apk");
+                + getNetworkStackPath());
 
         // Sleep to allow writes to disk before reboot
         Thread.sleep(5000);
@@ -206,5 +187,10 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
             getDevice().executeShellCommand("kill " + pid);
             lastPid = pid;
         }
+    }
+
+    private String getNetworkStackPath() throws Exception {
+        // Find the NetworkStack path (can be NetworkStack.apk or NetworkStackNext.apk)
+        return getDevice().executeShellCommand("ls /system/priv-app/NetworkStack*/*.apk");
     }
 }

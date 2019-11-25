@@ -29,11 +29,14 @@ import androidx.test.filters.SmallTest;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.classifier.FalsingManagerFake;
+import com.android.systemui.dock.DockManager;
 import com.android.systemui.doze.DozeLog;
 import com.android.systemui.shared.plugins.PluginManager;
+import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.DragDownHelper;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.PulseExpansionHandler;
+import com.android.systemui.statusbar.SuperStatusBarViewFactory;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
@@ -71,6 +74,8 @@ public class StatusBarWindowViewTest extends SysuiTestCase {
     @Mock private StatusBar mStatusBar;
     @Mock private DozeLog mDozeLog;
     @Mock private DozeParameters mDozeParameters;
+    @Mock private SuperStatusBarViewFactory mSuperStatusBarViewFactory;
+    @Mock private DockManager mDockManager;
 
     @Before
     public void setUp() {
@@ -80,6 +85,9 @@ public class StatusBarWindowViewTest extends SysuiTestCase {
         mContext.putComponent(StatusBar.class, mStatusBar);
         when(mStatusBar.isDozing()).thenReturn(false);
         mDependency.injectTestDependency(ShadeController.class, mShadeController);
+
+        when(mSuperStatusBarViewFactory.getStatusBarWindowView()).thenReturn(mView);
+        when(mDockManager.isDocked()).thenReturn(false);
 
         mController = new StatusBarWindowViewController.Builder(
                 new InjectionInflationController(
@@ -96,9 +104,11 @@ public class StatusBarWindowViewTest extends SysuiTestCase {
                 mKeyguardStateController,
                 mStatusBarStateController,
                 mDozeLog,
-                mDozeParameters)
+                mDozeParameters,
+                new CommandQueue(mContext),
+                mSuperStatusBarViewFactory,
+                mDockManager)
                 .setShadeController(mShadeController)
-                .setStatusBarWindowView(mView)
                 .build();
         mController.setService(mStatusBar);
         mController.setDragDownHelper(mDragDownHelper);

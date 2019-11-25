@@ -18,6 +18,7 @@ package com.android.systemui.qs;
 
 import static com.android.systemui.qs.tileimpl.QSTileImpl.getColorForState;
 import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
+import static com.android.systemui.util.Utils.useQsMediaPlayer;
 
 import android.annotation.Nullable;
 import android.content.ComponentName;
@@ -45,10 +46,13 @@ import android.widget.LinearLayout;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.settingslib.Utils;
+import com.android.settingslib.media.LocalMediaManager;
+import com.android.settingslib.media.MediaDevice;
 import com.android.systemui.Dependency;
 import com.android.systemui.DumpController;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
+import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.plugins.qs.DetailAdapter;
 import com.android.systemui.plugins.qs.QSTile;
 import com.android.systemui.plugins.qs.QSTileView;
@@ -68,6 +72,7 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -90,6 +95,8 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
     private final LinearLayout mMediaCarousel;
     private final ArrayList<QSMediaPlayer> mMediaPlayers = new ArrayList<>();
+    private LocalMediaManager mLocalMediaManager;
+    private MediaDevice mDevice;
 
     protected boolean mExpanded;
     protected boolean mListening;
@@ -115,6 +122,31 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     private final PluginManager mPluginManager;
     private NPVPluginManager mNPVPluginManager;
 
+    private final LocalMediaManager.DeviceCallback mDeviceCallback =
+            new LocalMediaManager.DeviceCallback() {
+        @Override
+        public void onDeviceListUpdate(List<MediaDevice> devices) {
+            MediaDevice currentDevice = mLocalMediaManager.getCurrentConnectedDevice();
+            // Check because this can be called several times while changing devices
+            if (mDevice == null || !mDevice.equals(currentDevice)) {
+                mDevice = currentDevice;
+                for (QSMediaPlayer p : mMediaPlayers) {
+                    p.updateChip(mDevice);
+                }
+            }
+        }
+
+        @Override
+        public void onSelectedDeviceStateChanged(MediaDevice device, int state) {
+            if (mDevice == null || !mDevice.equals(device)) {
+                mDevice = device;
+                for (QSMediaPlayer p : mMediaPlayers) {
+                    p.updateChip(mDevice);
+                }
+            }
+        }
+    };
+
     public QSPanel(Context context) {
         this(context, null);
     }
@@ -124,12 +156,13 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     }
 
     public QSPanel(Context context, AttributeSet attrs, DumpController dumpController) {
-        this(context, attrs, dumpController, null);
+        this(context, attrs, dumpController, null, Dependency.get(BroadcastDispatcher.class));
     }
 
     @Inject
     public QSPanel(@Named(VIEW_CONTEXT) Context context, AttributeSet attrs,
-            DumpController dumpController, PluginManager pluginManager) {
+            DumpController dumpController, PluginManager pluginManager,
+            BroadcastDispatcher broadcastDispatcher) {
         super(context, attrs);
         mContext = context;
 
@@ -150,8 +183,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         addDivider();
 
         // Add media carousel
-        int flag = Settings.System.getInt(context.getContentResolver(), "qs_media_player", 0);
-        if (flag == 1) {
+        if (useQsMediaPlayer(context)) {
             HorizontalScrollView mediaScrollView = new HorizontalScrollView(mContext);
             mediaScrollView.setHorizontalScrollBarEnabled(false);
             int playerHeight = (int) getResources().getDimension(R.dimen.qs_media_height);
@@ -175,7 +207,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         addView(mFooter.getView());
 
         mBrightnessController = new BrightnessController(getContext(),
-                findViewById(R.id.brightness_slider));
+                findViewById(R.id.brightness_slider), broadcastDispatcher);
         mDumpController = dumpController;
 
         updateResources();
@@ -202,12 +234,16 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
      */
     public void addMediaSession(MediaSession.Token token, Icon icon, int iconColor, int bgColor,
             View actionsContainer, StatusBarNotification notif) {
-        int flag = Settings.System.getInt(mContext.getContentResolver(), "qs_media_player", 0);
-        if (flag != 1) {
+        if (!useQsMediaPlayer(mContext)) {
             // Shouldn't happen, but just in case
             Log.e(TAG, "Tried to add media session without player!");
             return;
         }
+        if (token == null) {
+            Log.e(TAG, "Media session token was null!");
+            return;
+        }
+
         QSMediaPlayer player = null;
         String packageName = notif.getPackageName();
         for (QSMediaPlayer p : mMediaPlayers) {
@@ -250,10 +286,17 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
         Log.d(TAG, "setting player session");
         player.setMediaSession(token, icon, iconColor, bgColor, actionsContainer,
-                notif.getNotification());
+                notif.getNotification(), mDevice);
 
         if (mMediaPlayers.size() > 0) {
             ((View) mMediaCarousel.getParent()).setVisibility(View.VISIBLE);
+
+            // Set up listener for device changes
+            // TODO: integrate with MediaTransferManager?
+            mLocalMediaManager = new LocalMediaManager(mContext, null, null);
+            mLocalMediaManager.startScan();
+            mDevice = mLocalMediaManager.getCurrentConnectedDevice();
+            mLocalMediaManager.registerCallback(mDeviceCallback);
         }
     }
 
@@ -326,6 +369,10 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
             mBrightnessMirrorController.removeCallback(this);
         }
         if (mDumpController != null) mDumpController.unregisterDumpable(this);
+        if (mLocalMediaManager != null) {
+            mLocalMediaManager.stopScan();
+            mLocalMediaManager.unregisterCallback(mDeviceCallback);
+        }
         super.onDetachedFromWindow();
     }
 

@@ -81,7 +81,7 @@ public final class DozeServiceHost implements DozeHost {
     private final Lazy<BiometricUnlockController> mBiometricUnlockControllerLazy;
     private BiometricUnlockController mBiometricUnlockController;
     private final KeyguardViewMediator mKeyguardViewMediator;
-    private final AssistManager mAssistManager;
+    private final Lazy<AssistManager> mAssistManagerLazy;
     private final DozeScrimController mDozeScrimController;
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private final VisualStabilityManager mVisualStabilityManager;
@@ -105,7 +105,7 @@ public final class DozeServiceHost implements DozeHost {
             ScrimController scrimController,
             Lazy<BiometricUnlockController> biometricUnlockControllerLazy,
             KeyguardViewMediator keyguardViewMediator,
-            AssistManager assistManager,
+            Lazy<AssistManager> assistManagerLazy,
             DozeScrimController dozeScrimController, KeyguardUpdateMonitor keyguardUpdateMonitor,
             VisualStabilityManager visualStabilityManager,
             PulseExpansionHandler pulseExpansionHandler,
@@ -122,7 +122,7 @@ public final class DozeServiceHost implements DozeHost {
         mScrimController = scrimController;
         mBiometricUnlockControllerLazy = biometricUnlockControllerLazy;
         mKeyguardViewMediator = keyguardViewMediator;
-        mAssistManager = assistManager;
+        mAssistManagerLazy = assistManagerLazy;
         mDozeScrimController = dozeScrimController;
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mVisualStabilityManager = visualStabilityManager;
@@ -227,16 +227,12 @@ public final class DozeServiceHost implements DozeHost {
         if (reason == DozeEvent.PULSE_REASON_SENSOR_LONG_PRESS) {
             mPowerManager.wakeUp(SystemClock.uptimeMillis(), PowerManager.WAKE_REASON_GESTURE,
                                  "com.android.systemui:LONG_PRESS");
-            mAssistManager.startAssist(new Bundle());
+            mAssistManagerLazy.get().startAssist(new Bundle());
             return;
         }
 
         if (reason == DozeEvent.PULSE_REASON_SENSOR_WAKE_LOCK_SCREEN) {
             mScrimController.setWakeLockScreenSensorActive(true);
-        }
-
-        if (reason == DozeEvent.PULSE_REASON_DOCKING && mStatusBarWindow != null) {
-            mStatusBarWindowViewController.suppressWakeUpGesture(true);
         }
 
         boolean passiveAuthInterrupt = reason == DozeEvent.PULSE_REASON_SENSOR_WAKE_LOCK_SCREEN
@@ -259,9 +255,6 @@ public final class DozeServiceHost implements DozeHost {
                 callback.onPulseFinished();
                 mStatusBar.updateNotificationPanelTouchState();
                 mScrimController.setWakeLockScreenSensorActive(false);
-                if (mStatusBarWindow != null) {
-                    mStatusBarWindowViewController.suppressWakeUpGesture(false);
-                }
                 setPulsing(false);
             }
 

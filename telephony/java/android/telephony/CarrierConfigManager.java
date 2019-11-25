@@ -836,13 +836,6 @@ public class CarrierConfigManager {
             "disable_severe_when_extreme_disabled_bool";
 
     /**
-     * The message expiration time in milliseconds for duplicate detection purposes.
-     * @hide
-     */
-    public static final String KEY_MESSAGE_EXPIRATION_TIME_LONG =
-            "message_expiration_time_long";
-
-    /**
      * The data call retry configuration for different types of APN.
      * @hide
      */
@@ -1852,6 +1845,13 @@ public class CarrierConfigManager {
             "support_direct_fdn_dialing_bool";
 
     /**
+     * Int indicating the max number length for FDN
+     * @hide
+     */
+    public static final String KEY_FDN_NUMBER_LENGTH_LIMIT_INT =
+            "fdn_number_length_limit_int";
+
+    /**
      * Report IMEI as device id even if it's a CDMA/LTE phone.
      *
      * @hide
@@ -2306,6 +2306,77 @@ public class CarrierConfigManager {
     // all RATs.
     public static final String KEY_USE_ONLY_RSRP_FOR_LTE_SIGNAL_BAR_BOOL =
             "use_only_rsrp_for_lte_signal_bar_bool";
+
+    /**
+     * List of 4 customized 5G SS reference signal received power (SSRSRP) thresholds.
+     *
+     * Reference: 3GPP TS 38.215
+     *
+     * 4 threshold integers must be within the boundaries [-140 dB, -44 dB], and the levels are:
+     *     "NONE: [-140, threshold1]"
+     *     "POOR: (threshold1, threshold2]"
+     *     "MODERATE: (threshold2, threshold3]"
+     *     "GOOD:  (threshold3, threshold4]"
+     *     "EXCELLENT:  (threshold4, -44]"
+     *
+     * This key is considered invalid if the format is violated. If the key is invalid or
+     * not configured, a default value set will apply.
+     */
+    public static final String KEY_5G_NR_SSRSRP_THRESHOLDS_INT_ARRAY =
+            "5g_nr_ssrsrp_thresholds_int_array";
+
+    /**
+     * List of 4 customized 5G SS reference signal received quality (SSRSRQ) thresholds.
+     *
+     * Reference: 3GPP TS 38.215
+     *
+     * 4 threshold integers must be within the boundaries [-20 dB, -3 dB], and the levels are:
+     *     "NONE: [-23, threshold1]"
+     *     "POOR: (threshold1, threshold2]"
+     *     "MODERATE: (threshold2, threshold3]"
+     *     "GOOD:  (threshold3, threshold4]"
+     *     "EXCELLENT:  (threshold4, -3]"
+     *
+     * This key is considered invalid if the format is violated. If the key is invalid or
+     * not configured, a default value set will apply.
+     */
+    public static final String KEY_5G_NR_SSRSRQ_THRESHOLDS_INT_ARRAY =
+            "5g_nr_ssrsrq_thresholds_int_array";
+
+    /**
+     * List of 4 customized 5G SS signal-to-noise and interference ratio (SSSINR) thresholds.
+     *
+     * Reference: 3GPP TS 38.215,
+     *            3GPP TS 38.133 10.1.16.1
+     *
+     * 4 threshold integers must be within the boundaries [-23 dB, 40 dB], and the levels are:
+     *     "NONE: [-23, threshold1]"
+     *     "POOR: (threshold1, threshold2]"
+     *     "MODERATE: (threshold2, threshold3]"
+     *     "GOOD:  (threshold3, threshold4]"
+     *     "EXCELLENT:  (threshold4, 40]"
+     *
+     * This key is considered invalid if the format is violated. If the key is invalid or
+     * not configured, a default value set will apply.
+     */
+    public static final String KEY_5G_NR_SSSINR_THRESHOLDS_INT_ARRAY =
+            "5g_nr_sssinr_thresholds_int_array";
+
+    /**
+     * Bit-field integer to determine whether to use SS reference signal received power (SSRSRP),
+     * SS reference signal received quality (SSRSRQ), or/and SS signal-to-noise and interference
+     * ratio (SSSINR) for the number of 5G NR signal bars. If multiple measures are set bit, the
+     * parameter whose value is smallest is used to indicate the signal bar.
+     *
+     *  SSRSRP = 1 << 0,
+     *  SSRSRQ = 1 << 1,
+     *  SSSINR = 1 << 2,
+     *
+     *  Reference: 3GPP TS 38.215,
+     *             3GPP TS 38.133 10.1.16.1
+     */
+    public static final String KEY_PARAMETERS_USE_FOR_5G_NR_SIGNAL_BAR_INT =
+            "parameters_use_for_5g_nr_signal_bar_int";
 
     /**
      * Key identifying if voice call barring notification is required to be shown to the user.
@@ -2867,6 +2938,27 @@ public class CarrierConfigManager {
      */
     public static final String KEY_5G_WATCHDOG_TIME_MS_LONG =
             "5g_watchdog_time_long";
+    /**
+     * Controls whether to switch data to primary from opportunistic subscription
+     * if primary is out of service. This control only affects system or 1st party app
+     * initiated data switch, but will not override data switch initiated by privileged carrier apps
+     * This carrier config is used to disable this feature.
+     * @hide
+     */
+    public static final String KEY_SWITCH_DATA_TO_PRIMARY_IF_PRIMARY_IS_OOS_BOOL =
+            "switch_data_to_primary_if_primary_is_oos_bool";
+
+    /**
+     * Controls back off time in milli seconds for switching back to
+     * opportunistic subscription. This time will be added to
+     * {@link CarrierConfigManager#KEY_OPPORTUNISTIC_NETWORK_DATA_SWITCH_HYSTERESIS_TIME_LONG} to
+     * determine hysteresis time if there is frequent switching
+     * (determined by system app or 1st party app) between primary and opportunistic
+     * subscription.
+     * @hide
+     */
+    public static final String KEY_OPPORTUNISTIC_NETWORK_BACKOFF_TIME_LONG =
+            "opportunistic_network_backoff_time_long";
 
     /**
      * Indicates zero or more emergency number prefix(es), because some carrier requires
@@ -2906,6 +2998,16 @@ public class CarrierConfigManager {
      */
     public static final String KEY_ALWAYS_SHOW_PRIMARY_SIGNAL_BAR_IN_OPPORTUNISTIC_NETWORK_BOOLEAN =
             "always_show_primary_signal_bar_in_opportunistic_network_boolean";
+
+    /**
+     * Upon data switching between subscriptions within a carrier group, if switch depends on
+     * validation result, this value defines customized value of how long we wait for validation
+     * success before we fail and revoke the switch.
+     * Time out is in milliseconds.
+     * @hide
+     */
+    public static final String KEY_DATA_SWITCH_VALIDATION_TIMEOUT_LONG =
+            "data_switch_validation_timeout_long";
 
     /**
      * GPS configs. See android.hardware.gnss@1.0 IGnssConfiguration.
@@ -3382,7 +3484,6 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_BROADCAST_EMERGENCY_CALL_STATE_CHANGES_BOOL, false);
         sDefaults.putBoolean(KEY_ALWAYS_SHOW_EMERGENCY_ALERT_ONOFF_BOOL, false);
         sDefaults.putBoolean(KEY_DISABLE_SEVERE_WHEN_EXTREME_DISABLED_BOOL, true);
-        sDefaults.putLong(KEY_MESSAGE_EXPIRATION_TIME_LONG, 86400000L);
         sDefaults.putStringArray(KEY_CARRIER_DATA_CALL_RETRY_CONFIG_STRINGS, new String[]{
                 "default:default_randomization=2000,5000,10000,20000,40000,80000:5000,160000:5000,"
                         + "320000:5000,640000:5000,1280000:5000,1800000:5000",
@@ -3463,6 +3564,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CDMA_HOME_REGISTERED_PLMN_NAME_OVERRIDE_BOOL, false);
         sDefaults.putString(KEY_CDMA_HOME_REGISTERED_PLMN_NAME_STRING, "");
         sDefaults.putBoolean(KEY_SUPPORT_DIRECT_FDN_DIALING_BOOL, false);
+        sDefaults.putInt(KEY_FDN_NUMBER_LENGTH_LIMIT_INT, 20);
         sDefaults.putBoolean(KEY_CARRIER_DEFAULT_DATA_ROAMING_ENABLED_BOOL, false);
         sDefaults.putBoolean(KEY_SKIP_CF_FAIL_TO_DISABLE_DIALOG_BOOL, false);
         sDefaults.putBoolean(KEY_SUPPORT_ENHANCED_CALL_BLOCKING_BOOL, true);
@@ -3669,6 +3771,9 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_PING_TEST_BEFORE_DATA_SWITCH_BOOL, true);
         /* Default value is 1 hour. */
         sDefaults.putLong(KEY_5G_WATCHDOG_TIME_MS_LONG, 3600000);
+        sDefaults.putBoolean(KEY_SWITCH_DATA_TO_PRIMARY_IF_PRIMARY_IS_OOS_BOOL, true);
+        /* Default value is 10 seconds. */
+        sDefaults.putLong(KEY_OPPORTUNISTIC_NETWORK_BACKOFF_TIME_LONG, 10000);
         sDefaults.putAll(Gps.getDefaults());
         sDefaults.putAll(Wifi.getDefaults());
         sDefaults.putIntArray(KEY_CDMA_ENHANCED_ROAMING_INDICATOR_FOR_HOME_NETWORK_INT_ARRAY,
@@ -3697,6 +3802,7 @@ public class CarrierConfigManager {
         sDefaults.putIntArray(KEY_DISCONNECT_CAUSE_PLAY_BUSYTONE_INT_ARRAY,
                 new int[] {4 /* BUSY */});
         sDefaults.putBoolean(KEY_PREVENT_CLIR_ACTIVATION_AND_DEACTIVATION_CODE_BOOL, false);
+        sDefaults.putLong(KEY_DATA_SWITCH_VALIDATION_TIMEOUT_LONG, 2000);
     }
 
     /**

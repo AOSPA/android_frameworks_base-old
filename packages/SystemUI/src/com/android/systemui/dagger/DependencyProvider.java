@@ -27,22 +27,28 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Process;
 import android.os.ServiceManager;
+import android.os.UserManager;
 import android.util.DisplayMetrics;
 import android.view.IWindowManager;
+import android.view.LayoutInflater;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.widget.LockPatternUtils;
+import com.android.keyguard.ViewMediatorCallback;
+import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.BgHandler;
 import com.android.systemui.dagger.qualifiers.BgLooper;
 import com.android.systemui.dagger.qualifiers.MainHandler;
 import com.android.systemui.dagger.qualifiers.MainLooper;
 import com.android.systemui.doze.AlwaysOnDisplayPolicy;
+import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.plugins.PluginInitializerImpl;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.plugins.PluginManagerImpl;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.DevicePolicyManagerWrapper;
+import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NavigationBarController;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.phone.AutoHideController;
@@ -152,6 +158,13 @@ public class DependencyProvider {
                 ServiceManager.getService(Context.NOTIFICATION_SERVICE));
     }
 
+    /** */
+    @Singleton
+    @Provides
+    public LayoutInflater providerLayoutInflater(Context context) {
+        return LayoutInflater.from(context);
+    }
+
     @Singleton
     @Provides
     public LeakDetector provideLeakDetector() {
@@ -181,8 +194,8 @@ public class DependencyProvider {
     @Singleton
     @Provides
     public NavigationBarController provideNavigationBarController(Context context,
-            @MainHandler Handler mainHandler) {
-        return new NavigationBarController(context, mainHandler);
+            @MainHandler Handler mainHandler, CommandQueue commandQueue) {
+        return new NavigationBarController(context, mainHandler, commandQueue);
     }
 
     @Singleton
@@ -216,8 +229,8 @@ public class DependencyProvider {
     @Singleton
     @Provides
     public DeviceProvisionedController provideDeviceProvisionedController(Context context,
-            @MainHandler Handler mainHandler) {
-        return new DeviceProvisionedControllerImpl(context, mainHandler);
+            @MainHandler Handler mainHandler, BroadcastDispatcher broadcastDispatcher) {
+        return new DeviceProvisionedControllerImpl(context, mainHandler, broadcastDispatcher);
     }
 
     /** */
@@ -230,5 +243,18 @@ public class DependencyProvider {
     @Provides
     public AlwaysOnDisplayPolicy provideAlwaysOnDisplayPolicy(Context context) {
         return new AlwaysOnDisplayPolicy(context);
+    }
+
+    /** */
+    @Singleton
+    @Provides
+    public UserManager providesUserManager(Context context) {
+        return context.getSystemService(UserManager.class);
+    }
+
+    /** */
+    @Provides
+    public ViewMediatorCallback providesViewMediatorCallback(KeyguardViewMediator viewMediator) {
+        return viewMediator.getViewMediatorCallback();
     }
 }

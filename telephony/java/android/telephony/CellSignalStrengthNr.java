@@ -212,7 +212,7 @@ public final class CellSignalStrengthNr extends CellSignalStrength implements Pa
      *
      * Asu is calculated based on 3GPP RSRP. Refer to 3GPP 27.007 (Ver 10.3.0) Sec 8.69
      *
-     * @return RSCP in ASU 0..97, 255, or UNAVAILABLE
+     * @return RSRP in ASU 0..97, 255, or UNAVAILABLE
      */
     @Override
     public int getAsuLevel() {

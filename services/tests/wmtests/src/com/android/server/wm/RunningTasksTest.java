@@ -20,8 +20,6 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.DEFAULT_DISPLAY;
 
-import static com.android.server.wm.ActivityDisplay.POSITION_BOTTOM;
-
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertEquals;
@@ -66,9 +64,10 @@ public class RunningTasksTest extends ActivityTestsBase {
 
         final int numStacks = 2;
         for (int stackIndex = 0; stackIndex < numStacks; stackIndex++) {
-            final ActivityStack stack =
-                    new StackBuilder(mRootActivityContainer).setCreateActivity(false).build();
-            display.addChild(stack, POSITION_BOTTOM);
+            final ActivityStack stack = new StackBuilder(mRootActivityContainer)
+                    .setCreateActivity(false)
+                    .setOnTop(false)
+                    .build();
         }
 
         final int numTasks = 10;
@@ -104,9 +103,9 @@ public class RunningTasksTest extends ActivityTestsBase {
     /**
      * Create a task with a single activity in it, with the given last active time.
      */
-    private TaskRecord createTask(ActivityStack stack, String className, int taskId,
+    private Task createTask(ActivityStack stack, String className, int taskId,
             int lastActiveTime) {
-        final TaskRecord task = new TaskBuilder(mService.mStackSupervisor)
+        final Task task = new TaskBuilder(mService.mStackSupervisor)
                 .setComponent(new ComponentName(mContext.getPackageName(), className))
                 .setTaskId(taskId)
                 .setStack(stack)

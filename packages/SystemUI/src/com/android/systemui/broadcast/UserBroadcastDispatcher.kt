@@ -27,10 +27,13 @@ import android.os.UserHandle
 import android.util.ArrayMap
 import android.util.ArraySet
 import android.util.Log
+import androidx.annotation.MainThread
+import com.android.internal.util.Preconditions
 import com.android.systemui.Dumpable
 import java.io.FileDescriptor
 import java.io.PrintWriter
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 private const val MSG_REGISTER_RECEIVER = 0
 private const val MSG_UNREGISTER_RECEIVER = 1
@@ -50,6 +53,13 @@ class UserBroadcastDispatcher(
     private val bgLooper: Looper
 ) : BroadcastReceiver(), Dumpable {
 
+    companion object {
+        // Used only for debugging. If not debugging, this variable will not be accessed and all
+        // received broadcasts will be tagged with 0. However, as DEBUG is false, nothing will be
+        // logged
+        val index = AtomicInteger(0)
+    }
+
     private val bgHandler = object : Handler(bgLooper) {
         override fun handleMessage(msg: Message) {
             when (msg.what) {
@@ -64,7 +74,14 @@ class UserBroadcastDispatcher(
 
     internal fun isRegistered() = registered.get()
 
-    private val registerReceiver = Runnable {
+    // Only modify in BG thread
+    private val actionsToReceivers = ArrayMap<String, MutableSet<ReceiverData>>()
+    private val receiverToReceiverData = ArrayMap<BroadcastReceiver, MutableSet<ReceiverData>>()
+
+    // Only call on BG thread as it reads from the maps
+    private fun createFilter(): IntentFilter {
+        Preconditions.checkState(bgHandler.looper.isCurrentThread,
+                "This method should only be called from BG thread")
         val categories = mutableSetOf<String>()
         receiverToReceiverData.values.flatten().forEach {
             it.filter.categoriesIterator()?.asSequence()?.let {
@@ -72,32 +89,18 @@ class UserBroadcastDispatcher(
             }
         }
         val intentFilter = IntentFilter().apply {
-            actionsToReceivers.keys.forEach { addAction(it) }
+            // The keys of the arrayMap are of type String! so null check is needed
+            actionsToReceivers.keys.forEach { if (it != null) addAction(it) else Unit }
             categories.forEach { addCategory(it) }
         }
-
-        if (registered.get()) {
-            context.unregisterReceiver(this)
-            registered.set(false)
-        }
-        // Short interval without receiver, this can be problematic
-        if (intentFilter.countActions() > 0 && !registered.get()) {
-            context.registerReceiverAsUser(
-                    this,
-                    UserHandle.of(userId),
-                    intentFilter,
-                    null,
-                    bgHandler)
-            registered.set(true)
-        }
+        return intentFilter
     }
 
-    // Only modify in BG thread
-    private val actionsToReceivers = ArrayMap<String, MutableSet<ReceiverData>>()
-    private val receiverToReceiverData = ArrayMap<BroadcastReceiver, MutableSet<ReceiverData>>()
-
     override fun onReceive(context: Context, intent: Intent) {
-        bgHandler.post(HandleBroadcastRunnable(actionsToReceivers, context, intent, pendingResult))
+        val id = if (DEBUG) index.getAndIncrement() else 0
+        if (DEBUG) Log.w(TAG, "[$id] Received $intent")
+        bgHandler.post(
+                HandleBroadcastRunnable(actionsToReceivers, context, intent, pendingResult, id))
     }
 
     /**
@@ -115,6 +118,8 @@ class UserBroadcastDispatcher(
     }
 
     private fun handleRegisterReceiver(receiverData: ReceiverData) {
+        Preconditions.checkState(bgHandler.looper.isCurrentThread,
+                "This method should only be called from BG thread")
         if (DEBUG) Log.w(TAG, "Register receiver: ${receiverData.receiver}")
         receiverToReceiverData.getOrPut(receiverData.receiver, { ArraySet() }).add(receiverData)
         var changed = false
@@ -127,11 +132,13 @@ class UserBroadcastDispatcher(
             }.add(receiverData)
         }
         if (changed) {
-            mainHandler.post(registerReceiver)
+            createFilterAndRegisterReceiverBG()
         }
     }
 
     private fun handleUnregisterReceiver(receiver: BroadcastReceiver) {
+        Preconditions.checkState(bgHandler.looper.isCurrentThread,
+                "This method should only be called from BG thread")
         if (DEBUG) Log.w(TAG, "Unregister receiver: $receiver")
         val actions = receiverToReceiverData.getOrElse(receiver) { return }
                 .flatMap { it.filter.actionsIterator().asSequence().asIterable() }.toSet()
@@ -145,15 +152,21 @@ class UserBroadcastDispatcher(
             }
         }
         if (changed) {
-            mainHandler.post(registerReceiver)
+            createFilterAndRegisterReceiverBG()
         }
     }
 
-    override fun dump(fd: FileDescriptor?, pw: PrintWriter?, args: Array<out String>?) {
-        pw?.println("  Registered=${registered.get()}")
+    // Only call this from a BG thread
+    private fun createFilterAndRegisterReceiverBG() {
+        val intentFilter = createFilter()
+        mainHandler.post(RegisterReceiverRunnable(intentFilter))
+    }
+
+    override fun dump(fd: FileDescriptor, pw: PrintWriter, args: Array<out String>) {
+        pw.println("  Registered=${registered.get()}")
         actionsToReceivers.forEach { (action, list) ->
-            pw?.println("    $action:")
-            list.forEach { pw?.println("      ${it.receiver}") }
+            pw.println("    $action:")
+            list.forEach { pw.println("      ${it.receiver}") }
         }
     }
 
@@ -161,21 +174,49 @@ class UserBroadcastDispatcher(
         val actionsToReceivers: Map<String, Set<ReceiverData>>,
         val context: Context,
         val intent: Intent,
-        val pendingResult: PendingResult
+        val pendingResult: PendingResult,
+        val index: Int
     ) : Runnable {
         override fun run() {
-            if (DEBUG) Log.w(TAG, "Dispatching $intent")
+            if (DEBUG) Log.w(TAG, "[$index] Dispatching $intent")
             actionsToReceivers.get(intent.action)
                     ?.filter {
                         it.filter.hasAction(intent.action) &&
                             it.filter.matchCategories(intent.categories) == null }
                     ?.forEach {
                         it.handler.post {
-                            if (DEBUG) Log.w(TAG, "Dispatching to ${it.receiver}")
+                            if (DEBUG) Log.w(TAG,
+                                    "[$index] Dispatching ${intent.action} to ${it.receiver}")
                             it.receiver.pendingResult = pendingResult
                             it.receiver.onReceive(context, intent)
                         }
                     }
+        }
+    }
+
+    private inner class RegisterReceiverRunnable(val intentFilter: IntentFilter) : Runnable {
+
+        /*
+         * Registers and unregisters the BroadcastReceiver
+         *
+         * Must be called from Main Thread
+         */
+        @MainThread
+        override fun run() {
+            if (registered.get()) {
+                context.unregisterReceiver(this@UserBroadcastDispatcher)
+                registered.set(false)
+            }
+            // Short interval without receiver, this can be problematic
+            if (intentFilter.countActions() > 0 && !registered.get()) {
+                context.registerReceiverAsUser(
+                        this@UserBroadcastDispatcher,
+                        UserHandle.of(userId),
+                        intentFilter,
+                        null,
+                        bgHandler)
+                registered.set(true)
+            }
         }
     }
 }

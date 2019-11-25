@@ -613,6 +613,16 @@ public final class Configuration implements Parcelable, Comparable<Configuration
      */
     public int navigationHidden;
 
+    /** @hide **/
+    @IntDef(prefix = {"ORIENTATION_"}, value = {
+            ORIENTATION_UNDEFINED,
+            ORIENTATION_PORTRAIT,
+            ORIENTATION_LANDSCAPE,
+            ORIENTATION_SQUARE
+    })
+    public @interface Orientation {
+    }
+
     /** Constant for {@link #orientation}: a value indicating that no value has been set. */
     public static final int ORIENTATION_UNDEFINED = 0;
     /** Constant for {@link #orientation}, value corresponding to the
@@ -630,6 +640,7 @@ public final class Configuration implements Parcelable, Comparable<Configuration
      * Overall orientation of the screen.  May be one of
      * {@link #ORIENTATION_LANDSCAPE}, {@link #ORIENTATION_PORTRAIT}.
      */
+    @Orientation
     public int orientation;
 
     /** Constant for {@link #uiMode}: bits that encode the mode type. */
@@ -798,6 +809,7 @@ public final class Configuration implements Parcelable, Comparable<Configuration
      * {@link ActivityInfo#CONFIG_ASSETS_PATHS}.
      * @hide
      */
+    @UnsupportedAppUsage
     @TestApi
     public int assetsSeq;
 
@@ -1584,6 +1596,80 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         }
 
         return changed;
+    }
+
+    /**
+     * Copies the fields specified by mask from delta into this Configuration object. This will
+     * copy anything allowed by the mask (including undefined values).
+     * @hide
+     */
+    public void setTo(@NonNull Configuration delta, @Config int mask,
+            @WindowConfiguration.WindowConfig int windowMask) {
+        if ((mask & ActivityInfo.CONFIG_FONT_SCALE) != 0) {
+            fontScale = delta.fontScale;
+        }
+        if ((mask & ActivityInfo.CONFIG_MCC) != 0) {
+            mcc = delta.mcc;
+        }
+        if ((mask & ActivityInfo.CONFIG_MNC) != 0) {
+            mnc = delta.mnc;
+        }
+        if ((mask & ActivityInfo.CONFIG_LOCALE) != 0) {
+            mLocaleList = delta.mLocaleList;
+            if (!mLocaleList.isEmpty()) {
+                locale = (Locale) delta.locale.clone();
+            }
+        }
+        if ((mask & ActivityInfo.CONFIG_LAYOUT_DIRECTION) != 0) {
+            final int deltaScreenLayoutDir = delta.screenLayout & SCREENLAYOUT_LAYOUTDIR_MASK;
+            screenLayout = (screenLayout & ~SCREENLAYOUT_LAYOUTDIR_MASK) | deltaScreenLayoutDir;
+        }
+        if ((mask & ActivityInfo.CONFIG_LOCALE) != 0) {
+            userSetLocale = delta.userSetLocale;
+        }
+        if ((mask & ActivityInfo.CONFIG_TOUCHSCREEN) != 0) {
+            touchscreen = delta.touchscreen;
+        }
+        if ((mask & ActivityInfo.CONFIG_KEYBOARD) != 0) {
+            keyboard = delta.keyboard;
+        }
+        if ((mask & ActivityInfo.CONFIG_KEYBOARD_HIDDEN) != 0) {
+            keyboardHidden = delta.keyboardHidden;
+            hardKeyboardHidden = delta.hardKeyboardHidden;
+            navigationHidden = delta.navigationHidden;
+        }
+        if ((mask & ActivityInfo.CONFIG_NAVIGATION) != 0) {
+            navigation = delta.navigation;
+        }
+        if ((mask & ActivityInfo.CONFIG_ORIENTATION) != 0) {
+            orientation = delta.orientation;
+        }
+        if ((mask & ActivityInfo.CONFIG_SCREEN_LAYOUT) != 0) {
+            // Not enough granularity for each component unfortunately.
+            screenLayout = screenLayout | (delta.screenLayout & ~SCREENLAYOUT_LAYOUTDIR_MASK);
+        }
+        if ((mask & ActivityInfo.CONFIG_COLOR_MODE) != 0) {
+            colorMode = delta.colorMode;
+        }
+        if ((mask & ActivityInfo.CONFIG_UI_MODE) != 0) {
+            uiMode = delta.uiMode;
+        }
+        if ((mask & ActivityInfo.CONFIG_SCREEN_SIZE) != 0) {
+            screenWidthDp = delta.screenWidthDp;
+            screenHeightDp = delta.screenHeightDp;
+        }
+        if ((mask & ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE) != 0) {
+            smallestScreenWidthDp = delta.smallestScreenWidthDp;
+        }
+        if ((mask & ActivityInfo.CONFIG_DENSITY) != 0) {
+            densityDpi = delta.densityDpi;
+        }
+        if ((mask & ActivityInfo.CONFIG_ASSETS_PATHS) != 0) {
+            assetsSeq = delta.assetsSeq;
+        }
+        if ((mask & ActivityInfo.CONFIG_WINDOW_CONFIGURATION) != 0) {
+            windowConfiguration.setTo(delta.windowConfiguration, windowMask);
+        }
     }
 
     /**

@@ -17,7 +17,6 @@
 package android.app;
 
 import static android.annotation.Dimension.DP;
-import static android.graphics.drawable.Icon.TYPE_BITMAP;
 
 import static com.android.internal.util.ContrastColorUtil.satisfiesTextContrast;
 
@@ -2577,10 +2576,12 @@ public class Notification implements Parcelable
             PendingIntent.setOnMarshaledListener(
                     (PendingIntent intent, Parcel out, int outFlags) -> {
                 if (parcel == out) {
-                    if (allPendingIntents == null) {
-                        allPendingIntents = new ArraySet<>();
+                    synchronized (this) {
+                        if (allPendingIntents == null) {
+                            allPendingIntents = new ArraySet<>();
+                        }
+                        allPendingIntents.add(intent);
                     }
-                    allPendingIntents.add(intent);
                 }
             });
         }
@@ -2588,8 +2589,10 @@ public class Notification implements Parcelable
             // IMPORTANT: Add marshaling code in writeToParcelImpl as we
             // want to intercept all pending events written to the parcel.
             writeToParcelImpl(parcel, flags);
-            // Must be written last!
-            parcel.writeArraySet(allPendingIntents);
+            synchronized (this) {
+                // Must be written last!
+                parcel.writeArraySet(allPendingIntents);
+            }
         } finally {
             if (collectPendingIntents) {
                 PendingIntent.setOnMarshaledListener(null);
@@ -3198,6 +3201,14 @@ public class Notification implements Parcelable
     @Nullable
     public BubbleMetadata getBubbleMetadata() {
         return mBubbleMetadata;
+    }
+
+    /**
+     * Sets the {@link BubbleMetadata} for this notification.
+     * @hide
+     */
+    public void setBubbleMetadata(BubbleMetadata data) {
+        mBubbleMetadata = data;
     }
 
     /**
@@ -8741,25 +8752,19 @@ public class Notification implements Parcelable
              * If your app produces multiple bubbles, the image should be unique for each of them.
              * </p>
              *
-             * <p>The shape of a bubble icon is adaptive and can match the device theme.
+             * <p>The shape of a bubble icon is adaptive and will match the device theme.
              *
-             * If your icon is bitmap-based, you should create it using
-             * {@link Icon#createWithAdaptiveBitmap(Bitmap)}, otherwise this method will throw.
-             *
-             * If your icon is not bitmap-based, you should expect that the icon will be tinted.
+             * Ideally your icon should be constructed via
+             * {@link Icon#createWithAdaptiveBitmap(Bitmap)}, otherwise, the icon will be shrunk
+             * and placed on an adaptive shape.
              * </p>
              *
-             * @throws IllegalArgumentException if icon is null or a non-adaptive bitmap
+             * @throws IllegalArgumentException if icon is null.
              */
             @NonNull
             public BubbleMetadata.Builder setIcon(@NonNull Icon icon) {
                 if (icon == null) {
                     throw new IllegalArgumentException("Bubbles require non-null icon");
-                }
-                if (icon.getType() == TYPE_BITMAP) {
-                    throw new IllegalArgumentException("When using bitmap based icons, Bubbles "
-                            + "require TYPE_ADAPTIVE_BITMAP, please use"
-                            + " Icon#createWithAdaptiveBitmap instead");
                 }
                 mIcon = icon;
                 return this;

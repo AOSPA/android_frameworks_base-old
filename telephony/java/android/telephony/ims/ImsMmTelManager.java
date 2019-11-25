@@ -24,6 +24,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.content.Context;
 import android.os.Binder;
 import android.os.RemoteException;
@@ -58,6 +59,7 @@ import java.util.function.Consumer;
  * @hide
  */
 @SystemApi
+@TestApi
 public class ImsMmTelManager implements RegistrationManager {
 
     /**
@@ -254,8 +256,8 @@ public class ImsMmTelManager implements RegistrationManager {
      * the {@link ImsService} associated with the subscription is not available. This can happen if
      * the service crashed, for example. See {@link ImsException#getCode()} for a more detailed
      * reason.
-     * @deprecated Use {@link #registerImsRegistrationCallback(
-     * RegistrationManager.RegistrationCallback, Executor)} instead.
+     * @deprecated Use {@link RegistrationManager#registerImsRegistrationCallback(Executor,
+     * RegistrationManager.RegistrationCallback)} instead.
      */
     @Deprecated
     @RequiresPermission(Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
@@ -285,9 +287,8 @@ public class ImsMmTelManager implements RegistrationManager {
     /**{@inheritDoc}*/
     @Override
     @RequiresPermission(Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    public void registerImsRegistrationCallback(
-            @NonNull RegistrationManager.RegistrationCallback c,
-            @NonNull @CallbackExecutor Executor executor) throws ImsException {
+    public void registerImsRegistrationCallback(@NonNull @CallbackExecutor Executor executor,
+            @NonNull RegistrationManager.RegistrationCallback c) throws ImsException {
         if (c == null) {
             throw new IllegalArgumentException("Must include a non-null RegistrationCallback.");
         }
@@ -348,8 +349,8 @@ public class ImsMmTelManager implements RegistrationManager {
     /**{@inheritDoc}*/
     @Override
     @RequiresPermission(Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    public void getRegistrationState(@NonNull @ImsRegistrationState Consumer<Integer> stateCallback,
-            @NonNull @CallbackExecutor Executor executor) {
+    public void getRegistrationState(@NonNull @CallbackExecutor Executor executor,
+            @NonNull @ImsRegistrationState Consumer<Integer> stateCallback) {
         if (stateCallback == null) {
             throw new IllegalArgumentException("Must include a non-null callback.");
         }
@@ -371,9 +372,9 @@ public class ImsMmTelManager implements RegistrationManager {
     /**{@inheritDoc}*/
     @Override
     @RequiresPermission(Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    public void getRegistrationTransportType(
-            @NonNull @AccessNetworkConstants.TransportType Consumer<Integer> transportTypeCallback,
-            @NonNull @CallbackExecutor Executor executor) {
+    public void getRegistrationTransportType(@NonNull @CallbackExecutor Executor executor,
+            @NonNull @AccessNetworkConstants.TransportType
+                    Consumer<Integer> transportTypeCallback) {
         if (transportTypeCallback == null) {
             throw new IllegalArgumentException("Must include a non-null callback.");
         }
@@ -607,17 +608,17 @@ public class ImsMmTelManager implements RegistrationManager {
      * {@link CarrierConfigManager#ACTION_CARRIER_CONFIG_CHANGED} broadcast for this subscription.
      * @param capability The capability that is being queried for support on the carrier network.
      * @param transportType The transport type of the capability to check support for.
+     * @param executor The executor that the callback will be called with.
      * @param callback A consumer containing a Boolean result specifying whether or not the
      *                 capability is supported on this carrier network for the transport specified.
-     * @param executor The executor that the callback will be called with.
      * @throws ImsException if the subscription is no longer valid or the IMS service is not
      * available.
      */
     @RequiresPermission(Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public void isSupported(@MmTelFeature.MmTelCapabilities.MmTelCapability int capability,
             @AccessNetworkConstants.TransportType int transportType,
-            @NonNull Consumer<Boolean> callback,
-            @NonNull @CallbackExecutor Executor executor) throws ImsException {
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<Boolean> callback) throws ImsException {
         if (callback == null) {
             throw new IllegalArgumentException("Must include a non-null Consumer.");
         }
@@ -978,24 +979,24 @@ public class ImsMmTelManager implements RegistrationManager {
 
     /**
      * Get the status of the MmTel Feature registered on this subscription.
+     * @param executor The executor that will be used to call the callback.
      * @param callback A callback containing an Integer describing the current state of the
      *                 MmTel feature, Which will be one of the following:
      *                 {@link ImsFeature#STATE_UNAVAILABLE},
      *                {@link ImsFeature#STATE_INITIALIZING},
      *                {@link ImsFeature#STATE_READY}. Will be called using the executor
      *                 specified when the service state has been retrieved from the IMS service.
-     * @param executor The executor that will be used to call the callback.
      * @throws ImsException if the IMS service associated with this subscription is not available or
      * the IMS service is not available.
      */
     @RequiresPermission(Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-    public void getFeatureState(@NonNull @ImsFeature.ImsState Consumer<Integer> callback,
-            @NonNull @CallbackExecutor Executor executor) throws ImsException {
-        if (callback == null) {
-            throw new IllegalArgumentException("Must include a non-null Consumer.");
-        }
+    public void getFeatureState(@NonNull @CallbackExecutor Executor executor,
+            @NonNull @ImsFeature.ImsState Consumer<Integer> callback) throws ImsException {
         if (executor == null) {
             throw new IllegalArgumentException("Must include a non-null Executor.");
+        }
+        if (callback == null) {
+            throw new IllegalArgumentException("Must include a non-null Consumer.");
         }
         try {
             getITelephony().getImsMmTelFeatureState(mSubId, new IIntegerConsumer.Stub() {
