@@ -285,7 +285,7 @@ public class WifiEntryPreference extends Preference implements WifiEntry.WifiEnt
         }
 
         public Drawable getIcon(boolean showX, int level, int standard) {
-            return mContext.getDrawable(WifiUtils.getInternetIconResource(level, showX, standard));
+            return mContext.getDrawable(WifiUtils.getInternetIconResource(level, showX, standard, mContext));
         }
     }
 
