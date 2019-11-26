@@ -34,6 +34,7 @@ import com.android.systemui.qs.tiles.CastTile;
 import com.android.systemui.qs.tiles.CellularTile;
 import com.android.systemui.qs.tiles.ColorInversionTile;
 import com.android.systemui.qs.tiles.DataSaverTile;
+import com.android.systemui.qs.tiles.DataSwitchTile;
 import com.android.systemui.qs.tiles.DcDimmingTile;
 import com.android.systemui.qs.tiles.DndTile;
 import com.android.systemui.qs.tiles.FlashlightTile;
@@ -84,6 +85,7 @@ public class QSFactoryImpl implements QSFactory {
     private final Provider<CaffeineTile> mCaffeineTileProvider;
     private final Provider<DcDimmingTile> mDcDimmingTileProvider;
     private final Provider<HeadsUpTile> mHeadsUpTileProvider;
+    private final Provider<DataSwitchTile> mDataSwitchTileProvider;
 
     private final Lazy<QSHost> mQsHostLazy;
 
@@ -111,7 +113,8 @@ public class QSFactoryImpl implements QSFactory {
             Provider<DcDimmingTile> dcDimTileProvider,
             Provider<ScreenRecordTile> screenRecordTileProvider,
             Provider<CaffeineTile> caffeineTileProvider,
-            Provider<HeadsUpTile> headsUpTileProvider) {
+            Provider<HeadsUpTile> headsUpTileProvider,
+            Provider<DataSwitchTile> dataSwitchTileProvider) {
         mQsHostLazy = qsHostLazy;
         mWifiTileProvider = wifiTileProvider;
         mBluetoothTileProvider = bluetoothTileProvider;
@@ -136,6 +139,7 @@ public class QSFactoryImpl implements QSFactory {
         mCaffeineTileProvider = caffeineTileProvider;
         mDcDimmingTileProvider = dcDimTileProvider;
         mHeadsUpTileProvider = headsUpTileProvider;
+        mDataSwitchTileProvider = dataSwitchTileProvider;
     }
 
     public QSTile createTile(String tileSpec) {
@@ -193,6 +197,8 @@ public class QSFactoryImpl implements QSFactory {
                 return mDcDimmingTileProvider.get();
             case "heads_up":
                 return mHeadsUpTileProvider.get();
+            case "dataswitch":
+                return mDataSwitchTileProvider.get();
         }
 
         // Custom tiles
