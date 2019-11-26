@@ -28,6 +28,7 @@ import android.net.wifi.INetworkRequestMatchCallback;
 import android.net.wifi.IOnWifiUsabilityStatsListener;
 import android.net.wifi.IScanResultsListener;
 import android.net.wifi.ISoftApCallback;
+import android.net.wifi.ISuggestionConnectionStatusListener;
 import android.net.wifi.ITrafficStateCallback;
 import android.net.wifi.ITxPacketCountListener;
 import android.net.wifi.IWifiManager;
@@ -86,12 +87,12 @@ public class BaseWifiService extends IWifiManager.Stub {
     }
 
     @Override
-    public ParceledListSlice getConfiguredNetworks(String packageName) {
+    public ParceledListSlice getConfiguredNetworks(String packageName, String featureId) {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public ParceledListSlice getPrivilegedConfiguredNetworks(String packageName) {
+    public ParceledListSlice getPrivilegedConfiguredNetworks(String packageName, String featureId) {
         throw new UnsupportedOperationException();
     }
 
@@ -175,12 +176,12 @@ public class BaseWifiService extends IWifiManager.Stub {
     }
 
     @Override
-    public boolean startScan(String packageName) {
+    public boolean startScan(String packageName, String featureId) {
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public List<ScanResult> getScanResults(String callingPackage) {
+    public List<ScanResult> getScanResults(String callingPackage, String callingFeatureId) {
         throw new UnsupportedOperationException();
     }
 
@@ -200,7 +201,7 @@ public class BaseWifiService extends IWifiManager.Stub {
     }
 
     @Override
-    public WifiInfo getConnectionInfo(String callingPackage) {
+    public WifiInfo getConnectionInfo(String callingPackage, String callingFeatureId) {
         throw new UnsupportedOperationException();
     }
 
@@ -298,12 +299,12 @@ public class BaseWifiService extends IWifiManager.Stub {
     /** @deprecated replaced by newer signature */
     @Deprecated
     public int startLocalOnlyHotspot(ILocalOnlyHotspotCallback callback, String packageName) {
-        return startLocalOnlyHotspot(callback, packageName, null);
+        return startLocalOnlyHotspot(callback, packageName, null, null);
     }
 
     @Override
     public int startLocalOnlyHotspot(ILocalOnlyHotspotCallback callback, String packageName,
-            SoftApConfiguration customConfig) {
+            String featureId, SoftApConfiguration customConfig) {
         throw new UnsupportedOperationException();
     }
 
@@ -449,7 +450,8 @@ public class BaseWifiService extends IWifiManager.Stub {
 
     @Override
     public int addNetworkSuggestions(
-            List<WifiNetworkSuggestion> networkSuggestions, String callingPackageName) {
+            List<WifiNetworkSuggestion> networkSuggestions, String callingPackageName,
+            String callingFeatureId) {
         throw new UnsupportedOperationException();
     }
 
@@ -544,6 +546,19 @@ public class BaseWifiService extends IWifiManager.Stub {
 
     @Override
     public void unregisterScanResultsListener(int listenerIdentifier) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void registerSuggestionConnectionStatusListener(IBinder binder,
+            ISuggestionConnectionStatusListener listener,
+            int listenerIdentifier, String packageName, String featureId) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void unregisterSuggestionConnectionStatusListener(int listenerIdentifier,
+            String packageName) {
         throw new UnsupportedOperationException();
     }
 

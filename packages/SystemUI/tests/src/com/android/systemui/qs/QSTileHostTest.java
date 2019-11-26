@@ -41,12 +41,14 @@ import com.android.internal.util.CollectionUtils;
 import com.android.systemui.DumpController;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.plugins.qs.QSFactory;
 import com.android.systemui.plugins.qs.QSTile;
 import com.android.systemui.qs.tileimpl.QSFactoryImpl;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.statusbar.phone.AutoTileManager;
+import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.tuner.TunerService;
 
@@ -61,6 +63,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import javax.inject.Provider;
 
@@ -84,7 +87,12 @@ public class QSTileHostTest extends SysuiTestCase {
     @Mock
     private DumpController mDumpController;
     @Mock
+    private BroadcastDispatcher mBroadcastDispatcher;
+    @Mock
     private QSTile.State mMockState;
+    @Mock
+    private StatusBar mStatusBar;
+
     private Handler mHandler;
     private TestableLooper mLooper;
     private QSTileHost mQSTileHost;
@@ -96,7 +104,8 @@ public class QSTileHostTest extends SysuiTestCase {
         mHandler = new Handler(mLooper.getLooper());
         mQSTileHost = new TestQSTileHost(mContext, mIconController, mDefaultFactory, mHandler,
                 mLooper.getLooper(),
-                mPluginManager, mTunerService, mAutoTiles, mDumpController);
+                mPluginManager, mTunerService, mAutoTiles, mDumpController, mBroadcastDispatcher,
+                mStatusBar);
         setUpTileFactory();
         Settings.Secure.putStringForUser(mContext.getContentResolver(), QSTileHost.TILES_SETTING,
                 "", ActivityManager.getCurrentUser());
@@ -168,9 +177,11 @@ public class QSTileHostTest extends SysuiTestCase {
         TestQSTileHost(Context context, StatusBarIconController iconController,
                 QSFactoryImpl defaultFactory, Handler mainHandler, Looper bgLooper,
                 PluginManager pluginManager, TunerService tunerService,
-                Provider<AutoTileManager> autoTiles, DumpController dumpController) {
+                Provider<AutoTileManager> autoTiles, DumpController dumpController,
+                BroadcastDispatcher broadcastDispatcher, StatusBar statusBar) {
             super(context, iconController, defaultFactory, mainHandler, bgLooper, pluginManager,
-                    tunerService, autoTiles, dumpController);
+                    tunerService, autoTiles, dumpController, broadcastDispatcher,
+                    Optional.of(statusBar));
         }
 
         @Override

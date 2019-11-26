@@ -35,6 +35,8 @@ import android.util.proto.ProtoOutputStream;
 import android.util.proto.WireTypeMismatchException;
 import android.view.DisplayInfo;
 
+import dalvik.annotation.compat.UnsupportedAppUsage;
+
 import java.io.IOException;
 
 /**
@@ -199,6 +201,7 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
     /** @hide */
     public static final int PINNED_WINDOWING_MODE_ELEVATION_IN_DIP = 5;
 
+    @UnsupportedAppUsage
     public WindowConfiguration() {
         unset();
     }
@@ -437,6 +440,34 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
             setDisplayWindowingMode(delta.mDisplayWindowingMode);
         }
         return changed;
+    }
+
+    /**
+     * Copies the fields specified by mask from delta into this Configuration object.
+     * @hide
+     */
+    public void setTo(@NonNull WindowConfiguration delta, @WindowConfig int mask) {
+        if ((mask & WINDOW_CONFIG_BOUNDS) != 0) {
+            setBounds(delta.mBounds);
+        }
+        if ((mask & WINDOW_CONFIG_APP_BOUNDS) != 0) {
+            setAppBounds(delta.mAppBounds);
+        }
+        if ((mask & WINDOW_CONFIG_WINDOWING_MODE) != 0) {
+            setWindowingMode(delta.mWindowingMode);
+        }
+        if ((mask & WINDOW_CONFIG_ACTIVITY_TYPE) != 0) {
+            setActivityType(delta.mActivityType);
+        }
+        if ((mask & WINDOW_CONFIG_ALWAYS_ON_TOP) != 0) {
+            setAlwaysOnTop(delta.mAlwaysOnTop);
+        }
+        if ((mask & WINDOW_CONFIG_ROTATION) != 0) {
+            setRotation(delta.mRotation);
+        }
+        if ((mask & WINDOW_CONFIG_DISPLAY_WINDOWING_MODE) != 0) {
+            setDisplayWindowingMode(delta.mDisplayWindowingMode);
+        }
     }
 
     /**

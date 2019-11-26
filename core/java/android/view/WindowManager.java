@@ -1181,8 +1181,7 @@ public interface WindowManager extends ViewManager {
          * a soft input method, so it will be Z-ordered and positioned
          * independently of any active input method (typically this means it
          * gets Z-ordered on top of the input method, so it can use the full
-         * screen for its content and cover the input method if needed.  You
-         * can use {@link #FLAG_ALT_FOCUSABLE_IM} to modify this behavior. */
+         * screen for its content and cover the input method if needed.) */
         public static final int FLAG_NOT_FOCUSABLE      = 0x00000008;
 
         /** Window flag: this window can never receive touch events. */
@@ -1288,14 +1287,11 @@ public interface WindowManager extends ViewManager {
          * set for you by Window as described in {@link Window#setFlags}.*/
         public static final int FLAG_LAYOUT_INSET_DECOR = 0x00010000;
 
-        /** Window flag: invert the state of {@link #FLAG_NOT_FOCUSABLE} with
-         * respect to how this window interacts with the current method.  That
-         * is, if FLAG_NOT_FOCUSABLE is set and this flag is set, then the
-         * window will behave as if it needs to interact with the input method
-         * and thus be placed behind/away from it; if FLAG_NOT_FOCUSABLE is
-         * not set and this flag is set, then the window will behave as if it
-         * doesn't need to interact with the input method and can be placed
-         * to use more space and cover the input method.
+        /** Window flag: When set, input method can't interact with the focusable window
+         * and can be placed to use more space and cover the input method.
+         * Note: When combined with {@link #FLAG_NOT_FOCUSABLE}, this flag has no
+         * effect since input method cannot interact with windows having {@link #FLAG_NOT_FOCUSABLE}
+         * flag set.
          */
         public static final int FLAG_ALT_FOCUSABLE_IM = 0x00020000;
 
@@ -1449,7 +1445,10 @@ public interface WindowManager extends ViewManager {
          * position its UI elements with this overscan flag is set:</p>
          *
          * {@sample development/samples/ApiDemos/res/layout/overscan_activity.xml complete}
+         *
+         * @deprecated Overscan areas aren't set by any Android product anymore.
          */
+        @Deprecated
         public static final int FLAG_LAYOUT_IN_OVERSCAN = 0x02000000;
 
         /**
@@ -1689,6 +1688,7 @@ public interface WindowManager extends ViewManager {
          *
          * {@hide}
          */
+        @UnsupportedAppUsage
         @TestApi
         public static final int PRIVATE_FLAG_NO_MOVE_ANIMATION = 0x00000040;
 
@@ -1704,11 +1704,6 @@ public interface WindowManager extends ViewManager {
          * it is created.
          * {@hide} */
         public static final int PRIVATE_FLAG_SYSTEM_ERROR = 0x00000100;
-
-        /** Window flag: maintain the previous translucent decor state when this window
-         * becomes top-most.
-         * {@hide} */
-        public static final int PRIVATE_FLAG_INHERIT_TRANSLUCENT_DECOR = 0x00000200;
 
         /**
          * Flag whether the current window is a keyguard window, meaning that it will hide all other
@@ -1851,6 +1846,7 @@ public interface WindowManager extends ViewManager {
          * Control flags that are private to the platform.
          * @hide
          */
+        @UnsupportedAppUsage
         @ViewDebug.ExportedProperty(flagMapping = {
                 @ViewDebug.FlagToString(
                         mask = PRIVATE_FLAG_FAKE_HARDWARE_ACCELERATED,
@@ -1880,10 +1876,6 @@ public interface WindowManager extends ViewManager {
                         mask = PRIVATE_FLAG_SYSTEM_ERROR,
                         equals = PRIVATE_FLAG_SYSTEM_ERROR,
                         name = "SYSTEM_ERROR"),
-                @ViewDebug.FlagToString(
-                        mask = PRIVATE_FLAG_INHERIT_TRANSLUCENT_DECOR,
-                        equals = PRIVATE_FLAG_INHERIT_TRANSLUCENT_DECOR,
-                        name = "INHERIT_TRANSLUCENT_DECOR"),
                 @ViewDebug.FlagToString(
                         mask = PRIVATE_FLAG_KEYGUARD,
                         equals = PRIVATE_FLAG_KEYGUARD,
@@ -1997,16 +1989,12 @@ public interface WindowManager extends ViewManager {
          *
          * @param flags The current window manager flags.
          *
-         * @return Returns true if such a window should be behind/interact
-         * with an input method, false if not.
+         * @return Returns {@code true} if such a window should be behind/interact
+         * with an input method, (@code false} if not.
          */
         public static boolean mayUseInputMethod(int flags) {
-            switch (flags&(FLAG_NOT_FOCUSABLE|FLAG_ALT_FOCUSABLE_IM)) {
-                case 0:
-                case FLAG_NOT_FOCUSABLE|FLAG_ALT_FOCUSABLE_IM:
-                    return true;
-            }
-            return false;
+            return (flags & FLAG_NOT_FOCUSABLE) != FLAG_NOT_FOCUSABLE
+                    && (flags & FLAG_ALT_FOCUSABLE_IM) != FLAG_ALT_FOCUSABLE_IM;
         }
 
         /**

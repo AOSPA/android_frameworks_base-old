@@ -39,6 +39,7 @@ import android.testing.TestableLooper.RunWithLooper;
 import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.util.sensors.AsyncSensorManager;
@@ -66,10 +67,13 @@ public class DozeTriggersTest extends SysuiTestCase {
     private DozeHost mHost;
     @Mock
     private AlarmManager mAlarmManager;
+    @Mock
+    private BroadcastDispatcher mBroadcastDispatcher;
+    @Mock
+    private DockManager mDockManager;
     private DozeTriggers mTriggers;
     private FakeSensorManager mSensors;
     private Sensor mTapSensor;
-    private DockManager mDockManagerFake;
     private FakeProximitySensor mProximitySensor;
 
     @Before
@@ -80,14 +84,13 @@ public class DozeTriggersTest extends SysuiTestCase {
         mSensors = spy(new FakeSensorManager(mContext));
         mTapSensor = mSensors.getFakeTapSensor().getSensor();
         WakeLock wakeLock = new WakeLockFake();
-        mDockManagerFake = mock(DockManager.class);
         AsyncSensorManager asyncSensorManager =
                 new AsyncSensorManager(mSensors, null, new Handler());
         mProximitySensor = new FakeProximitySensor(getContext().getResources(), asyncSensorManager);
 
         mTriggers = new DozeTriggers(mContext, mMachine, mHost, mAlarmManager, config, parameters,
                 asyncSensorManager, Handler.createAsync(Looper.myLooper()), wakeLock, true,
-                mDockManagerFake, mProximitySensor, mock(DozeLog.class));
+                mDockManager, mProximitySensor, mock(DozeLog.class), mBroadcastDispatcher);
         waitForSensorManager();
     }
 
@@ -139,12 +142,24 @@ public class DozeTriggersTest extends SysuiTestCase {
     }
 
     @Test
+    public void transitionToDockedAod_disablesTouchSensors() {
+        mTriggers.transitionTo(DozeMachine.State.INITIALIZED, DozeMachine.State.DOZE);
+        waitForSensorManager();
+        verify(mSensors).requestTriggerSensor(any(), eq(mTapSensor));
+
+        mTriggers.transitionTo(DozeMachine.State.DOZE, DozeMachine.State.DOZE_AOD_DOCKED);
+        waitForSensorManager();
+
+        verify(mSensors).cancelTriggerSensor(any(), eq(mTapSensor));
+    }
+
+    @Test
     public void testDockEventListener_registerAndUnregister() {
         mTriggers.transitionTo(DozeMachine.State.UNINITIALIZED, DozeMachine.State.INITIALIZED);
-        verify(mDockManagerFake).addListener(any());
+        verify(mDockManager).addListener(any());
 
         mTriggers.transitionTo(DozeMachine.State.DOZE, DozeMachine.State.FINISH);
-        verify(mDockManagerFake).removeListener(any());
+        verify(mDockManager).removeListener(any());
     }
 
     @Test

@@ -35,13 +35,16 @@ import android.view.ViewStub;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.ExpandHelper;
 import com.android.systemui.R;
+import com.android.systemui.dock.DockManager;
 import com.android.systemui.doze.DozeLog;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shared.plugins.PluginManager;
+import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.DragDownHelper;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.PulseExpansionHandler;
+import com.android.systemui.statusbar.SuperStatusBarViewFactory;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
@@ -73,10 +76,10 @@ public class StatusBarWindowViewController {
     private PhoneStatusBarView mStatusBarView;
     private StatusBar mService;
     private DragDownHelper mDragDownHelper;
-    private boolean mSuppressingWakeUpGesture;
     private boolean mDoubleTapEnabled;
     private boolean mSingleTapEnabled;
     private boolean mExpandingBelowNotch;
+    private final DockManager mDockManager;
 
     private StatusBarWindowViewController(
             StatusBarWindowView view,
@@ -94,9 +97,12 @@ public class StatusBarWindowViewController {
             KeyguardStateController keyguardStateController,
             SysuiStatusBarStateController statusBarStateController,
             DozeLog dozeLog,
-            DozeParameters dozeParameters) {
+            DozeParameters dozeParameters,
+            CommandQueue commandQueue,
+            DockManager dockManager) {
         mView = view;
         mFalsingManager = falsingManager;
+        mDockManager = dockManager;
 
         // TODO: create controller for NotificationPanelView
         NotificationPanelView notificationPanelView = new NotificationPanelView(
@@ -115,7 +121,8 @@ public class StatusBarWindowViewController {
                 keyguardStateController,
                 statusBarStateController,
                 dozeLog,
-                dozeParameters);
+                dozeParameters,
+                commandQueue);
         ViewGroup.LayoutParams lp = new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         notificationPanelView.setVisibility(View.INVISIBLE);
@@ -154,7 +161,7 @@ public class StatusBarWindowViewController {
                 new GestureDetector.SimpleOnGestureListener() {
                     @Override
                     public boolean onSingleTapConfirmed(MotionEvent e) {
-                        if (mSingleTapEnabled && !mSuppressingWakeUpGesture) {
+                        if (mSingleTapEnabled && !mDockManager.isDocked()) {
                             mService.wakeUpIfDozing(
                                     SystemClock.uptimeMillis(), mView, "SINGLE_TAP");
                             return true;
@@ -239,7 +246,7 @@ public class StatusBarWindowViewController {
 
             @Override
             public boolean shouldInterceptTouchEvent(MotionEvent ev) {
-                if (mService.isDozing() && !mService.isPulsing()) {
+                if (mService.isDozing() && !mService.isPulsing() && !mDockManager.isDocked()) {
                     // Capture all touch events in always-on.
                     return true;
                 }
@@ -441,10 +448,6 @@ public class StatusBarWindowViewController {
         mDragDownHelper = dragDownHelper;
     }
 
-    public void suppressWakeUpGesture(boolean suppress) {
-        mSuppressingWakeUpGesture = suppress;
-    }
-
     /**
      * When we're launching an affordance, like double pressing power to open camera.
      */
@@ -488,7 +491,10 @@ public class StatusBarWindowViewController {
         private final NotificationEntryManager mNotificationEntryManager;
         private final DozeLog mDozeLog;
         private final DozeParameters mDozeParameters;
-        private StatusBarWindowView mView;
+        private final CommandQueue mCommandQueue;
+        private final SuperStatusBarViewFactory mSuperStatusBarViewFactory;
+        private final StatusBarWindowView mView;
+        private final DockManager mDockManager;
 
         @Inject
         public Builder(
@@ -505,7 +511,10 @@ public class StatusBarWindowViewController {
                 KeyguardStateController keyguardStateController,
                 StatusBarStateController statusBarStateController,
                 DozeLog dozeLog,
-                DozeParameters dozeParameters) {
+                DozeParameters dozeParameters,
+                CommandQueue commandQueue,
+                SuperStatusBarViewFactory superStatusBarViewFactory,
+                DockManager dockManager) {
             mInjectionInflationController = injectionInflationController;
             mCoordinator = coordinator;
             mPulseExpansionHandler = pulseExpansionHandler;
@@ -520,14 +529,10 @@ public class StatusBarWindowViewController {
             mStatusBarStateController = (SysuiStatusBarStateController) statusBarStateController;
             mDozeLog = dozeLog;
             mDozeParameters = dozeParameters;
-        }
-
-        /**
-         * Provide {@link StatusBarWindowView} to attach this controller to.
-         */
-        public Builder setStatusBarWindowView(StatusBarWindowView view) {
-            mView = view;
-            return this;
+            mCommandQueue = commandQueue;
+            mSuperStatusBarViewFactory = superStatusBarViewFactory;
+            mView = mSuperStatusBarViewFactory.getStatusBarWindowView();
+            mDockManager = dockManager;
         }
 
         /**
@@ -558,7 +563,9 @@ public class StatusBarWindowViewController {
                     mKeyguardStateController,
                     mStatusBarStateController,
                     mDozeLog,
-                    mDozeParameters);
+                    mDozeParameters,
+                    mCommandQueue,
+                    mDockManager);
         }
     }
 }

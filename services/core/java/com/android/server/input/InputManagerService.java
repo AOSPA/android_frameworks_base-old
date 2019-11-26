@@ -496,8 +496,6 @@ public class InputManagerService extends IInputManager.Stub
         }
 
         InputChannel[] inputChannels = InputChannel.openInputChannelPair(inputChannelName);
-        // Give the output channel a token just for identity purposes.
-        inputChannels[0].setToken(new Binder());
         nativeRegisterInputMonitor(mPtr, inputChannels[0], displayId, false /*isGestureMonitor*/);
         inputChannels[0].dispose(); // don't need to retain the Java object reference
         return inputChannels[1];
@@ -528,7 +526,6 @@ public class InputManagerService extends IInputManager.Stub
         try {
             InputChannel[] inputChannels = InputChannel.openInputChannelPair(inputChannelName);
             InputMonitorHost host = new InputMonitorHost(inputChannels[0]);
-            inputChannels[0].setToken(host.asBinder());
             nativeRegisterInputMonitor(mPtr, inputChannels[0], displayId,
                     true /*isGestureMonitor*/);
             return new InputMonitor(inputChannels[1], host);
@@ -547,7 +544,6 @@ public class InputManagerService extends IInputManager.Stub
         if (inputChannel == null) {
             throw new IllegalArgumentException("inputChannel must not be null.");
         }
-        inputChannel.setToken(new Binder());
 
         nativeRegisterInputChannel(mPtr, inputChannel);
     }
@@ -1810,8 +1806,9 @@ public class InputManagerService extends IInputManager.Stub
     }
 
     // Native callback.
-    private long notifyANR(IBinder token, String reason) {
-        return mWindowManagerCallbacks.notifyANR(
+    private long notifyANR(InputApplicationHandle inputApplicationHandle, IBinder token,
+            String reason) {
+        return mWindowManagerCallbacks.notifyANR(inputApplicationHandle,
                 token, reason);
     }
 
@@ -2055,7 +2052,12 @@ public class InputManagerService extends IInputManager.Stub
 
         public void notifyInputChannelBroken(IBinder token);
 
-        public long notifyANR(IBinder token, String reason);
+        /**
+         * Notifies the window manager about an application that is not responding.
+         * Returns a new timeout to continue waiting in nanoseconds, or 0 to abort dispatch.
+         */
+        long notifyANR(InputApplicationHandle inputApplicationHandle, IBinder token,
+                String reason);
 
         public int interceptKeyBeforeQueueing(KeyEvent event, int policyFlags);
 
@@ -2182,7 +2184,7 @@ public class InputManagerService extends IInputManager.Stub
 
         @Override
         public void pilferPointers() {
-            nativePilferPointers(mPtr, asBinder());
+            nativePilferPointers(mPtr, mInputChannel.getToken());
         }
 
         @Override

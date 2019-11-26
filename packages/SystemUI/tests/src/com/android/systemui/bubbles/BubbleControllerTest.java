@@ -46,18 +46,19 @@ import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.Resources;
 import android.graphics.drawable.Icon;
 import android.hardware.face.FaceManager;
 import android.service.notification.ZenModeConfig;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.view.WindowManager;
-import android.widget.FrameLayout;
 
 import androidx.test.filters.SmallTest;
 
 import com.android.internal.colorextraction.ColorExtractor;
 import com.android.systemui.R;
+import com.android.systemui.SystemUIFactory;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
@@ -65,6 +66,7 @@ import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoveInterceptor;
 import com.android.systemui.statusbar.NotificationTestHelper;
+import com.android.systemui.statusbar.SuperStatusBarViewFactory;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
@@ -76,11 +78,13 @@ import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
+import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.policy.ZenModeController;
+import com.android.systemui.util.InjectionInflationController;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -89,6 +93,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+
+import dagger.Lazy;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -119,7 +125,6 @@ public class BubbleControllerTest extends SysuiTestCase {
     @Mock
     private KeyguardBypassController mKeyguardBypassController;
 
-    private FrameLayout mStatusBarView;
     @Captor
     private ArgumentCaptor<NotificationEntryListener> mEntryListenerCaptor;
     @Captor
@@ -147,22 +152,29 @@ public class BubbleControllerTest extends SysuiTestCase {
     private SysuiColorExtractor mColorExtractor;
     @Mock
     ColorExtractor.GradientColors mGradientColors;
+    @Mock
+    private Resources mResources;
+    @Mock
+    private Lazy<ShadeController> mShadeController;
 
+    private SuperStatusBarViewFactory mSuperStatusBarViewFactory;
     private BubbleData mBubbleData;
 
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
-        mStatusBarView = new FrameLayout(mContext);
-        mDependency.injectTestDependency(NotificationEntryManager.class, mNotificationEntryManager);
         mContext.addMockSystemService(FaceManager.class, mFaceManager);
         when(mColorExtractor.getNeutralColors()).thenReturn(mGradientColors);
+
+        mSuperStatusBarViewFactory = new SuperStatusBarViewFactory(mContext,
+                new InjectionInflationController(SystemUIFactory.getInstance().getRootComponent()));
 
         // Bubbles get added to status bar window view
         mStatusBarWindowController = new StatusBarWindowController(mContext, mWindowManager,
                 mActivityManager, mDozeParameters, mStatusBarStateController,
-                mConfigurationController, mKeyguardBypassController, mColorExtractor);
-        mStatusBarWindowController.add(mStatusBarView, 120 /* height */);
+                mConfigurationController, mKeyguardBypassController, mColorExtractor,
+                mSuperStatusBarViewFactory, mResources);
+        mStatusBarWindowController.attach();
 
         // Need notifications for bubbles
         mNotificationTestHelper = new NotificationTestHelper(mContext, mDependency);
@@ -191,12 +203,15 @@ public class BubbleControllerTest extends SysuiTestCase {
         mBubbleData = new BubbleData(mContext);
         mBubbleController = new TestableBubbleController(mContext,
                 mStatusBarWindowController,
+                mStatusBarStateController,
+                mShadeController,
                 mBubbleData,
                 mConfigurationController,
                 interruptionStateProvider,
                 mZenModeController,
                 mLockscreenUserManager,
-                mNotificationGroupManager);
+                mNotificationGroupManager,
+                mNotificationEntryManager);
         mBubbleController.setBubbleStateChangeListener(mBubbleStateChangeListener);
         mBubbleController.setExpandListener(mBubbleExpandListener);
 
@@ -678,15 +693,20 @@ public class BubbleControllerTest extends SysuiTestCase {
     static class TestableBubbleController extends BubbleController {
         // Let's assume surfaces can be synchronized immediately.
         TestableBubbleController(Context context,
-                StatusBarWindowController statusBarWindowController, BubbleData data,
+                StatusBarWindowController statusBarWindowController,
+                StatusBarStateController statusBarStateController,
+                Lazy<ShadeController> shadeController,
+                BubbleData data,
                 ConfigurationController configurationController,
                 NotificationInterruptionStateProvider interruptionStateProvider,
                 ZenModeController zenModeController,
                 NotificationLockscreenUserManager lockscreenUserManager,
-                NotificationGroupManager groupManager) {
-            super(context, statusBarWindowController, data, Runnable::run,
-                    configurationController, interruptionStateProvider, zenModeController,
-                    lockscreenUserManager, groupManager);
+                NotificationGroupManager groupManager,
+                NotificationEntryManager entryManager) {
+            super(context,
+                    statusBarWindowController, statusBarStateController, shadeController,
+                    data, Runnable::run, configurationController, interruptionStateProvider,
+                    zenModeController, lockscreenUserManager, groupManager, entryManager);
         }
     }
 

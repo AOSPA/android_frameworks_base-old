@@ -2417,6 +2417,44 @@ public abstract class Context {
             @Nullable String initialData, @Nullable  Bundle initialExtras);
 
     /**
+     * Version of
+     * {@link #sendOrderedBroadcast(Intent, String, BroadcastReceiver, Handler, int, String,
+     * Bundle)} that allows you to specify the App Op to enforce restrictions on which receivers
+     * the broadcast will be sent to.
+     *
+     * <p>See {@link BroadcastReceiver} for more information on Intent broadcasts.
+     *
+     * @param intent The Intent to broadcast; all receivers matching this
+     *               Intent will receive the broadcast.
+     * @param receiverPermission String naming a permissions that
+     *               a receiver must hold in order to receive your broadcast.
+     *               If null, no permission is required.
+     * @param receiverAppOp The app op associated with the broadcast. If null, no appOp is
+     *                      required. If both receiverAppOp and receiverPermission are non-null,
+     *                      a receiver must have both of them to
+     *                      receive the broadcast
+     * @param resultReceiver Your own BroadcastReceiver to treat as the final
+     *                       receiver of the broadcast.
+     * @param scheduler A custom Handler with which to schedule the
+     *                  resultReceiver callback; if null it will be
+     *                  scheduled in the Context's main thread.
+     * @param initialCode An initial value for the result code.  Often
+     *                    Activity.RESULT_OK.
+     * @param initialData An initial value for the result data.  Often
+     *                    null.
+     * @param initialExtras An initial value for the result extras.  Often
+     *                      null.
+     *
+     * @see #sendOrderedBroadcast(Intent, String, BroadcastReceiver, Handler, int, String, Bundle)
+     */
+    public void sendOrderedBroadcast(@RequiresPermission @NonNull Intent intent,
+            @Nullable String receiverPermission, @Nullable String receiverAppOp,
+            @Nullable BroadcastReceiver resultReceiver, @Nullable Handler scheduler,
+            int initialCode, @Nullable String initialData, @Nullable Bundle initialExtras) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
      * <p>Perform a {@link #sendBroadcast(Intent)} that is "sticky," meaning the
      * Intent you are sending stays around after the broadcast is complete,
      * so that others can quickly retrieve that data through the return
@@ -2778,6 +2816,37 @@ public abstract class Context {
     public abstract Intent registerReceiver(BroadcastReceiver receiver,
             IntentFilter filter, @Nullable String broadcastPermission,
             @Nullable Handler scheduler, @RegisterReceiverFlags int flags);
+
+    /**
+     * Same as {@link #registerReceiver(BroadcastReceiver, IntentFilter, String, Handler)}
+     * but this receiver will receive broadcasts that are sent to all users. The receiver can
+     * use {@link BroadcastReceiver#getSendingUser} to determine on which user the broadcast
+     * was sent.
+     *
+     * @param receiver The BroadcastReceiver to handle the broadcast.
+     * @param filter Selects the Intent broadcasts to be received.
+     * @param broadcastPermission String naming a permissions that a
+     *      broadcaster must hold in order to send an Intent to you. If {@code null},
+     *      no permission is required.
+     * @param scheduler Handler identifying the thread that will receive
+     *      the Intent. If {@code null}, the main thread of the process will be used.
+     *
+     * @return The first sticky intent found that matches <var>filter</var>,
+     *         or {@code null} if there are none.
+     *
+     * @see #registerReceiver(BroadcastReceiver, IntentFilter, String, Handler)
+     * @see #sendBroadcast
+     * @see #unregisterReceiver
+     * @hide
+     */
+    @Nullable
+    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
+    @SystemApi
+    public Intent registerReceiverForAllUsers(@Nullable BroadcastReceiver receiver,
+            @NonNull IntentFilter filter, @Nullable String broadcastPermission,
+            @Nullable Handler scheduler) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * @hide
@@ -4724,6 +4793,13 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve an
+     * {@link android.telephony.ims.ImsManager}.
+     * @hide
+     */
+    public static final String TELEPHONY_IMS_SERVICE = "telephony_ims";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve an
      * {@link android.telephony.ims.RcsMessageManager}.
      * @hide
      */
@@ -4735,6 +4811,20 @@ public abstract class Context {
      * @hide
      */
     public static final String DYNAMIC_SYSTEM_SERVICE = "dynamic_system";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a {@link
+     * android.app.blob.BlobStoreManager} for contributing and accessing data blobs
+     * from the blob store maintained by the system.
+     *
+     * @see #getSystemService(String)
+     * @see android.app.blob.BlobStoreManager
+     *
+     * TODO: make this public once BlobStoreManager is ready.
+     * @hide
+     */
+    @TestApi
+    public static final String BLOB_STORE_SERVICE = "blob_store";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve an
@@ -5317,6 +5407,7 @@ public abstract class Context {
      * Get the user associated with this context
      * @hide
      */
+    @UnsupportedAppUsage
     @TestApi
     public @UserIdInt int getUserId() {
         return android.os.UserHandle.myUserId();
@@ -5447,6 +5538,7 @@ public abstract class Context {
      * @return Returns the {@link Display} object this context is associated with.
      * @hide
      */
+    @UnsupportedAppUsage
     @TestApi
     public abstract Display getDisplay();
 

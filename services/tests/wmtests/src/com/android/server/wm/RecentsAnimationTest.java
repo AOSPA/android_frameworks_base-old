@@ -106,12 +106,12 @@ public class RecentsAnimationTest extends ActivityTestsBase {
         RecentsAnimationCallbacks recentsAnimation = startRecentsActivity(
                 mRecentsComponent, true /* getRecentsAnimation */);
         // The launch-behind state should make the recents activity visible.
-        assertTrue(recentActivity.visible);
+        assertTrue(recentActivity.mVisibleRequested);
 
         // Simulate the animation is cancelled without changing the stack order.
         recentsAnimation.onAnimationFinished(REORDER_KEEP_IN_PLACE, false /* sendUserLeaveHint */);
         // The non-top recents activity should be invisible by the restored launch-behind state.
-        assertFalse(recentActivity.visible);
+        assertFalse(recentActivity.mVisibleRequested);
     }
 
     @Test
@@ -158,7 +158,7 @@ public class RecentsAnimationTest extends ActivityTestsBase {
         // The activity is started in background so it should be invisible and will be stopped.
         assertThat(recentsActivity).isNotNull();
         assertThat(mSupervisor.mStoppingActivities).contains(recentsActivity);
-        assertFalse(recentsActivity.visible);
+        assertFalse(recentsActivity.mVisibleRequested);
 
         // Assume it is stopped to test next use case.
         recentsActivity.activityStoppedLocked(null /* newIcicle */, null /* newPersistentState */,
@@ -196,9 +196,6 @@ public class RecentsAnimationTest extends ActivityTestsBase {
         doReturn(app).when(mService).getProcessController(eq(recentActivity.processName), anyInt());
         ClientLifecycleManager lifecycleManager = mService.getLifecycleManager();
         doNothing().when(lifecycleManager).scheduleTransaction(any());
-        AppWarnings appWarnings = mService.getAppWarningsLocked();
-        spyOn(appWarnings);
-        doNothing().when(appWarnings).onStartActivity(any());
 
         startRecentsActivity();
 
@@ -237,7 +234,7 @@ public class RecentsAnimationTest extends ActivityTestsBase {
 
         // Start the recents animation.
         RecentsAnimationCallbacks recentsAnimation = startRecentsActivity(
-                targetActivity.getTaskRecord().getBaseIntent().getComponent(),
+                targetActivity.getTask().getBaseIntent().getComponent(),
                 true /* getRecentsAnimation */);
         // Ensure launch-behind is set for being visible.
         assertTrue(targetActivity.mLaunchTaskBehind);
@@ -328,7 +325,7 @@ public class RecentsAnimationTest extends ActivityTestsBase {
         // Start the recents animation
         startRecentsActivity();
 
-        fullscreenStack.remove();
+        fullscreenStack.removeIfPossible();
 
         // Ensure that the recents animation was NOT canceled
         verify(mService.mWindowManager, times(0)).cancelRecentsAnimation(
@@ -345,7 +342,7 @@ public class RecentsAnimationTest extends ActivityTestsBase {
                 .setCreateTask(true)
                 .setComponent(new ComponentName(mContext.getPackageName(), "Home2"))
                 .build();
-        otherUserHomeActivity.getTaskRecord().mUserId = TEST_USER_ID;
+        otherUserHomeActivity.getTask().mUserId = TEST_USER_ID;
 
         ActivityStack fullscreenStack = display.createStack(WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_STANDARD, true /* onTop */);
@@ -360,11 +357,11 @@ public class RecentsAnimationTest extends ActivityTestsBase {
                 any() /* starting */, anyInt() /* configChanges */,
                 anyBoolean() /* preserveWindows */);
 
-        startRecentsActivity(otherUserHomeActivity.getTaskRecord().getBaseIntent().getComponent(),
+        startRecentsActivity(otherUserHomeActivity.getTask().getBaseIntent().getComponent(),
                 true);
 
         // Ensure we find the task for the right user and it is made visible
-        assertTrue(otherUserHomeActivity.visible);
+        assertTrue(otherUserHomeActivity.mVisibleRequested);
     }
 
     private void startRecentsActivity() {

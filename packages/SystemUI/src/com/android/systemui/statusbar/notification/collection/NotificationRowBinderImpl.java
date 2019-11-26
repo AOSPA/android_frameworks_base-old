@@ -41,8 +41,6 @@ import com.android.systemui.statusbar.NotificationUiAdjustment;
 import com.android.systemui.statusbar.notification.InflationException;
 import com.android.systemui.statusbar.notification.NotificationClicker;
 import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
-import com.android.systemui.statusbar.notification.logging.NotifEvent;
-import com.android.systemui.statusbar.notification.logging.NotifLog;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.NotificationContentInflater;
@@ -74,7 +72,6 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
     private final boolean mAllowLongPress;
     private final KeyguardBypassController mKeyguardBypassController;
     private final StatusBarStateController mStatusBarStateController;
-    private final NotifLog mNotifLog;
 
     private NotificationRemoteInputManager mRemoteInputManager;
     private NotificationPresenter mPresenter;
@@ -88,14 +85,12 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
 
     public NotificationRowBinderImpl(Context context, boolean allowLongPress,
             KeyguardBypassController keyguardBypassController,
-            StatusBarStateController statusBarStateController,
-            NotifLog notifLog) {
+            StatusBarStateController statusBarStateController) {
         mContext = context;
         mMessagingUtil = new NotificationMessagingUtil(context);
         mAllowLongPress = allowLongPress;
         mKeyguardBypassController = keyguardBypassController;
         mStatusBarStateController = statusBarStateController;
-        mNotifLog = notifLog;
     }
 
     private NotificationRemoteInputManager getRemoteInputManager() {
@@ -142,13 +137,13 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
             entry.updateIcons(mContext, sbn);
             entry.reset();
             updateNotification(entry, pmUser, sbn, entry.getRow());
+            entry.getRow().setOnDismissRunnable(onDismissRunnable);
         } else {
             entry.createIcons(mContext, sbn);
             new RowInflaterTask().inflate(mContext, parent, entry,
                     row -> {
                         bindRow(entry, pmUser, sbn, row, onDismissRunnable);
                         updateNotification(entry, pmUser, sbn, row);
-                        mNotifLog.log(NotifEvent.INFLATED, sbn);
                     });
         }
     }

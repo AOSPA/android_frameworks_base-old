@@ -26,6 +26,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 
 import com.android.systemui.SystemUI;
+import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.statusbar.CommandQueue;
 
 import java.io.FileDescriptor;
@@ -40,13 +41,18 @@ import javax.inject.Singleton;
 @Singleton
 public class PipUI extends SystemUI implements CommandQueue.Callbacks {
 
+    private final CommandQueue mCommandQueue;
     private BasePipManager mPipManager;
+    private final BroadcastDispatcher mBroadcastDispatcher;
 
     private boolean mSupportsPip;
 
     @Inject
-    public PipUI(Context context) {
+    public PipUI(Context context, CommandQueue commandQueue,
+            BroadcastDispatcher broadcastDispatcher) {
         super(context);
+        mBroadcastDispatcher = broadcastDispatcher;
+        mCommandQueue = commandQueue;
     }
 
     @Override
@@ -66,9 +72,9 @@ public class PipUI extends SystemUI implements CommandQueue.Callbacks {
         mPipManager = pm.hasSystemFeature(FEATURE_LEANBACK_ONLY)
                 ? com.android.systemui.pip.tv.PipManager.getInstance()
                 : com.android.systemui.pip.phone.PipManager.getInstance();
-        mPipManager.initialize(mContext);
+        mPipManager.initialize(mContext, mBroadcastDispatcher);
 
-        getComponent(CommandQueue.class).addCallback(this);
+        mCommandQueue.addCallback(this);
     }
 
     @Override

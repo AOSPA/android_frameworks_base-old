@@ -16,6 +16,8 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
+
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
@@ -49,7 +51,7 @@ public class TaskTests extends WindowTestsBase {
 
     @Test
     public void testRemoveContainer() {
-        final TaskStack stackController1 = createTaskStackOnDisplay(mDisplayContent);
+        final ActivityStack stackController1 = createTaskStackOnDisplay(mDisplayContent);
         final Task task = createTaskInStack(stackController1, 0 /* userId */);
         final ActivityRecord activity =
                 WindowTestUtils.createActivityRecordInTask(mDisplayContent, task);
@@ -63,7 +65,7 @@ public class TaskTests extends WindowTestsBase {
 
     @Test
     public void testRemoveContainer_deferRemoval() {
-        final TaskStack stackController1 = createTaskStackOnDisplay(mDisplayContent);
+        final ActivityStack stackController1 = createTaskStackOnDisplay(mDisplayContent);
         final Task task = createTaskInStack(stackController1, 0 /* userId */);
         final ActivityRecord activity =
                 WindowTestUtils.createActivityRecordInTask(mDisplayContent, task);
@@ -85,14 +87,14 @@ public class TaskTests extends WindowTestsBase {
 
     @Test
     public void testReparent() {
-        final TaskStack stackController1 = createTaskStackOnDisplay(mDisplayContent);
+        final ActivityStack stackController1 = createTaskStackOnDisplay(mDisplayContent);
         final Task task = createTaskInStack(stackController1, 0 /* userId */);
-        final TaskStack stackController2 = createTaskStackOnDisplay(mDisplayContent);
+        final ActivityStack stackController2 = createTaskStackOnDisplay(mDisplayContent);
         final Task task2 = createTaskInStack(stackController2, 0 /* userId */);
 
         boolean gotException = false;
         try {
-            task.reparent(stackController1, 0, false/* moveParents */);
+            task.reparent(stackController1, 0, false/* moveParents */, "testReparent");
         } catch (IllegalArgumentException e) {
             gotException = true;
         }
@@ -100,14 +102,13 @@ public class TaskTests extends WindowTestsBase {
 
         gotException = false;
         try {
-            task.reparent(null, 0, false/* moveParents */);
-        } catch (IllegalArgumentException e) {
+            task.reparent(null, 0, false/* moveParents */, "testReparent");
+        } catch (Exception e) {
             gotException = true;
         }
-        assertTrue("Should not be able to reparent to a stack that doesn't exist",
-                gotException);
+        assertTrue("Should not be able to reparent to a stack that doesn't exist", gotException);
 
-        task.reparent(stackController2, 0, false/* moveParents */);
+        task.reparent(stackController2, 0, false/* moveParents */, "testReparent");
         assertEquals(stackController2, task.getParent());
         assertEquals(0, task.getParent().mChildren.indexOf(task));
         assertEquals(1, task2.getParent().mChildren.indexOf(task2));
@@ -116,16 +117,16 @@ public class TaskTests extends WindowTestsBase {
     @Test
     public void testReparent_BetweenDisplays() {
         // Create first stack on primary display.
-        final TaskStack stack1 = createTaskStackOnDisplay(mDisplayContent);
+        final ActivityStack stack1 = createTaskStackOnDisplay(mDisplayContent);
         final Task task = createTaskInStack(stack1, 0 /* userId */);
         assertEquals(mDisplayContent, stack1.getDisplayContent());
 
         // Create second display and put second stack on it.
         final DisplayContent dc = createNewDisplay();
-        final TaskStack stack2 = createTaskStackOnDisplay(dc);
+        final ActivityStack stack2 = createTaskStackOnDisplay(dc);
         final Task task2 = createTaskInStack(stack2, 0 /* userId */);
         // Reparent and check state
-        task.reparent(stack2, 0, false /* moveParents */);
+        task.reparent(stack2, 0, false /* moveParents */, "testReparent_BetweenDisplays");
         assertEquals(stack2, task.getParent());
         assertEquals(0, task.getParent().mChildren.indexOf(task));
         assertEquals(1, task2.getParent().mChildren.indexOf(task2));
@@ -134,10 +135,11 @@ public class TaskTests extends WindowTestsBase {
 
     @Test
     public void testBounds() {
-        final TaskStack stack1 = createTaskStackOnDisplay(mDisplayContent);
+        final ActivityStack stack1 = createTaskStackOnDisplay(mDisplayContent);
         final Task task = createTaskInStack(stack1, 0 /* userId */);
 
         // Check that setting bounds also updates surface position
+        task.setWindowingMode(WINDOWING_MODE_FREEFORM);
         Rect bounds = new Rect(10, 10, 100, 200);
         task.setBounds(bounds);
         assertEquals(new Point(bounds.left, bounds.top), task.getLastSurfacePosition());

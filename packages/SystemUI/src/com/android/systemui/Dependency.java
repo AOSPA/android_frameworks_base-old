@@ -59,10 +59,12 @@ import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.PowerUI;
 import com.android.systemui.privacy.PrivacyItemController;
 import com.android.systemui.recents.OverviewProxyService;
+import com.android.systemui.recents.Recents;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.DevicePolicyManagerWrapper;
 import com.android.systemui.shared.system.PackageManagerWrapper;
+import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NavigationBarController;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
@@ -91,6 +93,7 @@ import com.android.systemui.statusbar.phone.NavigationModeController;
 import com.android.systemui.statusbar.phone.NotificationGroupAlertTransferHelper;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.ShadeController;
+import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
 import com.android.systemui.statusbar.policy.AccessibilityController;
@@ -122,6 +125,7 @@ import com.android.systemui.util.leak.GarbageMonitor;
 import com.android.systemui.util.leak.LeakDetector;
 import com.android.systemui.util.leak.LeakReporter;
 import com.android.systemui.util.sensors.AsyncSensorManager;
+import com.android.systemui.wm.DisplayWindowController;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -326,6 +330,10 @@ public class Dependency {
     @Inject Lazy<KeyguardSecurityModel> mKeyguardSecurityModel;
     @Inject Lazy<DozeParameters> mDozeParameters;
     @Inject Lazy<IWallpaperManager> mWallpaperManager;
+    @Inject Lazy<CommandQueue> mCommandQueue;
+    @Inject Lazy<Recents> mRecents;
+    @Inject Lazy<StatusBar> mStatusBar;
+    @Inject Lazy<DisplayWindowController> mDisplayWindowController;
 
     @Inject
     public Dependency() {
@@ -514,6 +522,10 @@ public class Dependency {
         mProviders.put(KeyguardSecurityModel.class, mKeyguardSecurityModel::get);
         mProviders.put(DozeParameters.class, mDozeParameters::get);
         mProviders.put(IWallpaperManager.class, mWallpaperManager::get);
+        mProviders.put(CommandQueue.class, mCommandQueue::get);
+        mProviders.put(Recents.class, mRecents::get);
+        mProviders.put(StatusBar.class, mStatusBar::get);
+        mProviders.put(DisplayWindowController.class, mDisplayWindowController::get);
 
         // TODO(b/118592525): to support multi-display , we start to add something which is
         //                    per-display, while others may be global. I think it's time to add

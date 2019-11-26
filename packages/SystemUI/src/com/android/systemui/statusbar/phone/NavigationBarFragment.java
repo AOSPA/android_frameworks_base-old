@@ -91,7 +91,6 @@ import com.android.internal.util.LatencyTracker;
 import com.android.internal.view.AppearanceRegion;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.assist.AssistHandleViewController;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
@@ -118,9 +117,12 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 import javax.inject.Inject;
+
+import dagger.Lazy;
 
 /**
  * Fragment containing the NavigationBarFragment. Contains logic for what happens
@@ -161,11 +163,13 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
 
     private int mDisabledFlags1;
     private int mDisabledFlags2;
-    private StatusBar mStatusBar;
+    private final Lazy<StatusBar> mStatusBarLazy;
     private Recents mRecents;
-    private Divider mDivider;
+    private StatusBar mStatusBar;
+    private final Divider mDivider;
+    private final Optional<Recents> mRecentsOptional;
     private WindowManager mWindowManager;
-    private CommandQueue mCommandQueue;
+    private final CommandQueue mCommandQueue;
     private long mLastLockToAppLongPress;
 
     private Locale mLocale;
@@ -212,7 +216,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             mNavigationBarView.getRotationButtonController().setRotateSuggestionButtonState(false);
 
             // Hide the notifications panel when quick step starts
-            mStatusBar.collapsePanel(true /* animate */);
+            mStatusBarLazy.get().collapsePanel(true /* animate */);
         }
 
         @Override
@@ -265,18 +269,24 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             NavigationModeController navigationModeController,
             StatusBarStateController statusBarStateController,
             SysUiState sysUiFlagsContainer,
-            BroadcastDispatcher broadcastDispatcher) {
+            BroadcastDispatcher broadcastDispatcher,
+            CommandQueue commandQueue, Divider divider,
+            Optional<Recents> recentsOptional, Lazy<StatusBar> statusBarLazy) {
         mAccessibilityManagerWrapper = accessibilityManagerWrapper;
         mDeviceProvisionedController = deviceProvisionedController;
         mStatusBarStateController = statusBarStateController;
         mMetricsLogger = metricsLogger;
         mAssistManager = assistManager;
         mSysUiFlagsContainer = sysUiFlagsContainer;
+        mStatusBarLazy = statusBarLazy;
         mAssistantAvailable = mAssistManager.getAssistInfoForUser(UserHandle.USER_CURRENT) != null;
         mOverviewProxyService = overviewProxyService;
         mNavigationModeController = navigationModeController;
         mNavBarMode = navigationModeController.addListener(this);
         mBroadcastDispatcher = broadcastDispatcher;
+        mCommandQueue = commandQueue;
+        mDivider = divider;
+        mRecentsOptional = recentsOptional;
     }
 
     // ----- Fragment Lifecycle Callbacks -----
@@ -284,11 +294,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mCommandQueue = SysUiServiceProvider.getComponent(getContext(), CommandQueue.class);
         mCommandQueue.observe(getLifecycle(), this);
-        mStatusBar = SysUiServiceProvider.getComponent(getContext(), StatusBar.class);
-        mRecents = SysUiServiceProvider.getComponent(getContext(), Recents.class);
-        mDivider = SysUiServiceProvider.getComponent(getContext(), Divider.class);
         mWindowManager = getContext().getSystemService(WindowManager.class);
         mAccessibilityManager = getContext().getSystemService(AccessibilityManager.class);
         mContentResolver = getContext().getContentResolver();
@@ -339,7 +345,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             mIsOnDefaultDisplay = mDisplayId == Display.DEFAULT_DISPLAY;
         }
 
-        mNavigationBarView.setComponents(mStatusBar.getPanel(), mAssistManager);
+        mNavigationBarView.setComponents(mStatusBarLazy.get().getPanel(), mAssistManager);
         mNavigationBarView.setDisabledFlags(mDisabledFlags1);
         mNavigationBarView.setOnVerticalChangedListener(this::onVerticalChanged);
         mNavigationBarView.setOnTouchListener(this::onNavigationTouch);
@@ -746,7 +752,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
                 TelecomManager telecomManager =
                         getContext().getSystemService(TelecomManager.class);
                 if (telecomManager != null && telecomManager.isRinging()) {
-                    if (mStatusBar.isKeyguardShowing()) {
+                    if (mStatusBarLazy.get().isKeyguardShowing()) {
                         Log.i(TAG, "Ignoring HOME; there's a ringing incoming call. " +
                                 "No heads up");
                         mHomeBlockedThisTouch = true;
@@ -756,14 +762,14 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
                 break;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
-                mStatusBar.awakenDreams();
+                mStatusBarLazy.get().awakenDreams();
                 break;
         }
         return false;
     }
 
     private void onVerticalChanged(boolean isVertical) {
-        mStatusBar.setQsScrimEnabled(!isVertical);
+        mStatusBarLazy.get().setQsScrimEnabled(!isVertical);
     }
 
     private boolean onNavigationTouch(View v, MotionEvent event) {
@@ -785,7 +791,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         args.putInt(
                 AssistManager.INVOCATION_TYPE_KEY, AssistManager.INVOCATION_HOME_BUTTON_LONG_PRESS);
         mAssistManager.startAssist(args);
-        mStatusBar.awakenDreams();
+        mStatusBarLazy.get().awakenDreams();
 
         if (mNavigationBarView != null) {
             mNavigationBarView.abortCurrentGesture();
@@ -814,7 +820,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             LatencyTracker.getInstance(getContext()).onActionStart(
                     LatencyTracker.ACTION_TOGGLE_RECENTS);
         }
-        mStatusBar.awakenDreams();
+        mStatusBarLazy.get().awakenDreams();
         mCommandQueue.toggleRecentApps();
     }
 
@@ -904,7 +910,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     }
 
     private boolean onLongPressRecents() {
-        if (mRecents == null || !ActivityTaskManager.supportsMultiWindow(getContext())
+        if (mRecentsOptional.isPresent() || !ActivityTaskManager.supportsMultiWindow(getContext())
                 || !mDivider.getView().getSnapAlgorithm().isSplitScreenFeasible()
                 || ActivityManager.isLowRamDeviceStatic()
                 // If we are connected to the overview service, then disable the recents button
@@ -912,7 +918,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             return false;
         }
 
-        return mStatusBar.toggleSplitScreenMode(MetricsEvent.ACTION_WINDOW_DOCK_LONGPRESS,
+        return mStatusBarLazy.get().toggleSplitScreenMode(MetricsEvent.ACTION_WINDOW_DOCK_LONGPRESS,
                 MetricsEvent.ACTION_WINDOW_UNDOCK_LONGPRESS);
     }
 
@@ -1035,7 +1041,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     private void checkBarModes() {
         // We only have status bar on default display now.
         if (mIsOnDefaultDisplay) {
-            mStatusBar.checkBarModes();
+            mStatusBarLazy.get().checkBarModes();
         } else {
             checkNavBarModes();
         }
@@ -1049,7 +1055,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
      * Checks current navigation bar mode and make transitions.
      */
     public void checkNavBarModes() {
-        final boolean anim = mStatusBar.isDeviceInteractive()
+        final boolean anim = mStatusBarLazy.get().isDeviceInteractive()
                 && mNavigationBarWindowState != WINDOW_STATE_HIDDEN;
         mNavigationBarView.getBarTransitions().transitionTo(mNavigationBarMode, anim);
     }

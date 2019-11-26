@@ -752,17 +752,17 @@ public class PackageManagerService extends IPackageManager.Stub
     static final List<SystemPartition> SYSTEM_PARTITIONS = Collections.unmodifiableList(
             Arrays.asList(
                     new SystemPartition(Environment.getRootDirectory(), 0 /* scanFlag */,
-                            true /* hasPriv */, false /* hasOverlays */),
+                            false /* hasOverlays */),
                     new SystemPartition(Environment.getVendorDirectory(), SCAN_AS_VENDOR,
-                            true /* hasPriv */, true /* hasOverlays */),
+                            true /* hasOverlays */),
                     new SystemPartition(Environment.getOdmDirectory(), SCAN_AS_ODM,
-                            true /* hasPriv */, true /* hasOverlays */),
+                            true /* hasOverlays */),
                     new SystemPartition(Environment.getOemDirectory(), SCAN_AS_OEM,
-                            false /* hasPriv */, true /* hasOverlays */),
+                            true /* hasOverlays */),
                     new SystemPartition(Environment.getProductDirectory(), SCAN_AS_PRODUCT,
-                            true /* hasPriv */, true /* hasOverlays */),
+                            true /* hasOverlays */),
                     new SystemPartition(Environment.getSystemExtDirectory(), SCAN_AS_SYSTEM_EXT,
-                            true /* hasPriv */, true /* hasOverlays */)));
+                            true /* hasOverlays */)));
 
     private final List<SystemPartition> mDirsToScanAsSystem;
 
@@ -2429,12 +2429,28 @@ public class PackageManagerService extends IPackageManager.Stub
         @Nullable
         public final File overlayFolder;
 
-        private SystemPartition(File folder, int scanFlag, boolean hasPrivApps,
-                boolean hasOverlays) {
+
+        private static boolean shouldScanPrivApps(@ScanFlags int scanFlags) {
+            if ((scanFlags & SCAN_AS_OEM) != 0) {
+                return false;
+            }
+            if (scanFlags == 0) {  // /system partition
+                return true;
+            }
+            if ((scanFlags
+                    & (SCAN_AS_VENDOR | SCAN_AS_ODM | SCAN_AS_PRODUCT | SCAN_AS_SYSTEM_EXT)) != 0) {
+                return true;
+            }
+            return false;
+        }
+
+        private SystemPartition(File folder, int scanFlag, boolean hasOverlays) {
             this.folder = folder;
             this.scanFlag = scanFlag;
             this.appFolder = toCanonical(new File(folder, "app"));
-            this.privAppFolder = hasPrivApps ? toCanonical(new File(folder, "priv-app")) : null;
+            this.privAppFolder = shouldScanPrivApps(scanFlag)
+                    ? toCanonical(new File(folder, "priv-app"))
+                    : null;
             this.overlayFolder = hasOverlays ? toCanonical(new File(folder, "overlay")) : null;
         }
 
@@ -5709,11 +5725,9 @@ public class PackageManagerService extends IPackageManager.Stub
                     PackageSetting ps = it.next();
                     if (ps.getInstalled(userId)) {
                         res[i++] = ps.name;
-                    } else {
-                        res = ArrayUtils.removeElement(String.class, res, res[i]);
                     }
                 }
-                return res;
+                return ArrayUtils.trimToSize(res, i);
             } else if (obj instanceof PackageSetting) {
                 final PackageSetting ps = (PackageSetting) obj;
                 if (ps.getInstalled(userId)
@@ -8694,6 +8708,16 @@ public class PackageManagerService extends IPackageManager.Stub
             pkgSetting = originalPkgSetting == null ? installedPkgSetting : originalPkgSetting;
             pkgAlreadyExists = pkgSetting != null;
             final String disabledPkgName = pkgAlreadyExists ? pkgSetting.name : pkg.packageName;
+            if (scanSystemPartition && !pkgAlreadyExists
+                    && mSettings.getDisabledSystemPkgLPr(disabledPkgName) != null) {
+                // The updated-package data for /system apk remains inconsistently
+                // after the package data for /data apk is lost accidentally.
+                // To recover it, enable /system apk and install it as non-updated system app.
+                Slog.w(TAG, "Inconsistent package setting of updated system app for "
+                        + disabledPkgName + ". To recover it, enable the system app"
+                        + "and install it as non-updated system app.");
+                mSettings.removeDisabledSystemPackageLPw(disabledPkgName);
+            }
             disabledPkgSetting = mSettings.getDisabledSystemPkgLPr(disabledPkgName);
             isSystemPkgUpdated = disabledPkgSetting != null;
 
@@ -17872,17 +17896,6 @@ public class PackageManagerService extends IPackageManager.Stub
         }
     }
 
-    static boolean locationIsPrivileged(String path) {
-        // TODO(dariofreni): include APEX partitions when they will support priv apps.
-        for (int i = 0, size = SYSTEM_PARTITIONS.size(); i < size; i++) {
-            SystemPartition partition = SYSTEM_PARTITIONS.get(i);
-            if (partition.containsPrivPath(path)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private static @Nullable SystemPartition resolveApexToSystemPartition(
             ApexManager.ActiveApexInfo apexInfo) {
         for (int i = 0, size = SYSTEM_PARTITIONS.size(); i < size; i++) {
@@ -17890,7 +17903,7 @@ public class PackageManagerService extends IPackageManager.Stub
             if (apexInfo.preinstalledApexPath.getAbsolutePath().startsWith(
                     sp.folder.getAbsolutePath())) {
                 return new SystemPartition(apexInfo.apexDirectory, sp.scanFlag,
-                        false /* hasPriv */, false /* hasOverlays */);
+                        false /* hasOverlays */);
             }
         }
         return null;
@@ -19742,6 +19755,12 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     @Override
+    public String[] getSystemTextClassifierPackages() {
+        return mContext.getResources().getStringArray(
+                R.array.config_defaultTextClassifierPackages);
+    }
+
+    @Override
     public @Nullable String getAttentionServicePackageName() {
         final String flattenedComponentName =
                 mContext.getString(R.string.config_defaultAttentionService);
@@ -19830,6 +19849,23 @@ public class PackageManagerService extends IPackageManager.Stub
             telephonyPackageNames = names.trim().split(",");
         }
         return telephonyPackageNames;
+    }
+
+    @Override
+    public String getContentCaptureServicePackageName() {
+        final String flattenedContentCaptureService =
+                mContext.getString(R.string.config_defaultContentCaptureService);
+
+        if (TextUtils.isEmpty(flattenedContentCaptureService)) {
+            return null;
+        }
+
+        final ComponentName contentCaptureServiceComponentName =
+                ComponentName.unflattenFromString(flattenedContentCaptureService);
+        if (contentCaptureServiceComponentName == null) {
+            return null;
+        }
+        return contentCaptureServiceComponentName.getPackageName();
     }
 
     @Override
@@ -22326,8 +22362,9 @@ public class PackageManagerService extends IPackageManager.Stub
                 continue;
             }
             final String packageName = ps.pkg.packageName;
-            // Skip over if system app
-            if ((ps.pkgFlags & ApplicationInfo.FLAG_SYSTEM) != 0) {
+            // Skip over if system app or static shared library
+            if ((ps.pkgFlags & ApplicationInfo.FLAG_SYSTEM) != 0
+                    || !TextUtils.isEmpty(ps.pkg.staticSharedLibName)) {
                 continue;
             }
             if (DEBUG_CLEAN_APKS) {

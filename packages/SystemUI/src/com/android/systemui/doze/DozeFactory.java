@@ -18,7 +18,6 @@ package com.android.systemui.doze;
 
 import android.annotation.Nullable;
 import android.app.AlarmManager;
-import android.app.Application;
 import android.app.IWallpaperManager;
 import android.content.Context;
 import android.hardware.Sensor;
@@ -28,12 +27,13 @@ import android.os.Handler;
 
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.R;
-import com.android.systemui.SystemUIApplication;
+import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.statusbar.phone.BiometricUnlockController;
 import com.android.systemui.statusbar.phone.DozeParameters;
+import com.android.systemui.statusbar.phone.DozeServiceHost;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.util.sensors.AsyncSensorManager;
 import com.android.systemui.util.sensors.ProximitySensor;
@@ -58,6 +58,8 @@ public class DozeFactory {
     private final DelayedWakeLock.Builder mDelayedWakeLockBuilder;
     private final Handler mHandler;
     private final BiometricUnlockController mBiometricUnlockController;
+    private final BroadcastDispatcher mBroadcastDispatcher;
+    private final DozeServiceHost mDozeServiceHost;
 
     @Inject
     public DozeFactory(FalsingManager falsingManager, DozeLog dozeLog,
@@ -67,7 +69,8 @@ public class DozeFactory {
             DockManager dockManager, @Nullable IWallpaperManager wallpaperManager,
             ProximitySensor proximitySensor,
             DelayedWakeLock.Builder delayedWakeLockBuilder, Handler handler,
-            BiometricUnlockController biometricUnlockController) {
+            BiometricUnlockController biometricUnlockController,
+            BroadcastDispatcher broadcastDispatcher, DozeServiceHost dozeServiceHost) {
         mFalsingManager = falsingManager;
         mDozeLog = dozeLog;
         mDozeParameters = dozeParameters;
@@ -82,36 +85,39 @@ public class DozeFactory {
         mDelayedWakeLockBuilder = delayedWakeLockBuilder;
         mHandler = handler;
         mBiometricUnlockController = biometricUnlockController;
+        mBroadcastDispatcher = broadcastDispatcher;
+        mDozeServiceHost = dozeServiceHost;
     }
 
     /** Creates a DozeMachine with its parts for {@code dozeService}. */
     DozeMachine assembleMachine(DozeService dozeService) {
-        DozeHost host = getHost(dozeService);
         AmbientDisplayConfiguration config = new AmbientDisplayConfiguration(dozeService);
         WakeLock wakeLock = mDelayedWakeLockBuilder.setHandler(mHandler).setTag("Doze").build();
 
         DozeMachine.Service wrappedService = dozeService;
-        wrappedService = new DozeBrightnessHostForwarder(wrappedService, host);
+        wrappedService = new DozeBrightnessHostForwarder(wrappedService, mDozeServiceHost);
         wrappedService = DozeScreenStatePreventingAdapter.wrapIfNeeded(
                 wrappedService, mDozeParameters);
         wrappedService = DozeSuspendScreenStatePreventingAdapter.wrapIfNeeded(
                 wrappedService, mDozeParameters);
 
         DozeMachine machine = new DozeMachine(wrappedService, config, wakeLock,
-                                              mWakefulnessLifecycle, mBatteryController, mDozeLog);
+                mWakefulnessLifecycle, mBatteryController, mDozeLog, mDockManager);
         machine.setParts(new DozeMachine.Part[]{
                 new DozePauser(mHandler, machine, mAlarmManager, mDozeParameters.getPolicy()),
                 new DozeFalsingManagerAdapter(mFalsingManager),
-                createDozeTriggers(dozeService, mAsyncSensorManager, host, mAlarmManager, config,
-                        mDozeParameters, mHandler, wakeLock, machine, mDockManager, mDozeLog),
-                createDozeUi(dozeService, host, wakeLock, machine, mHandler, mAlarmManager,
-                        mDozeParameters, mDozeLog),
-                new DozeScreenState(wrappedService, mHandler, host, mDozeParameters, wakeLock),
-                createDozeScreenBrightness(dozeService, wrappedService, mAsyncSensorManager, host,
-                        mDozeParameters, mHandler),
-                new DozeWallpaperState(
-                        mWallpaperManager, mBiometricUnlockController, mDozeParameters),
-                new DozeDockHandler(dozeService, machine, host, config, mHandler, mDockManager),
+                createDozeTriggers(dozeService, mAsyncSensorManager, mDozeServiceHost,
+                        mAlarmManager, config, mDozeParameters, mHandler, wakeLock, machine,
+                        mDockManager, mDozeLog),
+                createDozeUi(dozeService, mDozeServiceHost, wakeLock, machine, mHandler,
+                        mAlarmManager, mDozeParameters, mDozeLog),
+                new DozeScreenState(wrappedService, mHandler, mDozeServiceHost, mDozeParameters,
+                        wakeLock),
+                createDozeScreenBrightness(dozeService, wrappedService, mAsyncSensorManager,
+                        mDozeServiceHost, mDozeParameters, mHandler),
+                new DozeWallpaperState(mWallpaperManager, mBiometricUnlockController,
+                        mDozeParameters),
+                new DozeDockHandler(config, machine, mDockManager),
                 new DozeAuthRemover(dozeService)
         });
 
@@ -123,8 +129,8 @@ public class DozeFactory {
             DozeParameters params, Handler handler) {
         Sensor sensor = DozeSensors.findSensorWithType(sensorManager,
                 context.getString(R.string.doze_brightness_sensor_type));
-        return new DozeScreenBrightness(context, service, sensorManager, sensor, host, handler,
-                params.getPolicy());
+        return new DozeScreenBrightness(context, service, sensorManager, sensor,
+                mBroadcastDispatcher, host, handler, params.getPolicy());
     }
 
     private DozeTriggers createDozeTriggers(Context context, AsyncSensorManager sensorManager,
@@ -134,7 +140,7 @@ public class DozeFactory {
         boolean allowPulseTriggers = true;
         return new DozeTriggers(context, machine, host, alarmManager, config, params,
                 sensorManager, handler, wakeLock, allowPulseTriggers, dockManager,
-                mProximitySensor, dozeLog);
+                mProximitySensor, dozeLog, mBroadcastDispatcher);
 
     }
 
@@ -143,11 +149,5 @@ public class DozeFactory {
             DozeParameters params, DozeLog dozeLog) {
         return new DozeUi(context, alarmManager, machine, wakeLock, host, handler, params,
                           mKeyguardUpdateMonitor, dozeLog);
-    }
-
-    public static DozeHost getHost(DozeService service) {
-        Application appCandidate = service.getApplication();
-        final SystemUIApplication app = (SystemUIApplication) appCandidate;
-        return app.getComponent(DozeHost.class);
     }
 }

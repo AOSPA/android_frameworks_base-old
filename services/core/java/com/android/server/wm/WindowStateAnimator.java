@@ -32,6 +32,8 @@ import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_STARTING_WINDOW;
 import static com.android.server.wm.ProtoLogGroup.WM_SHOW_SURFACE_ALLOC;
 import static com.android.server.wm.ProtoLogGroup.WM_SHOW_TRANSACTIONS;
+import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
+import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT_REPEATS;
@@ -435,7 +437,7 @@ class WindowStateAnimator {
             return;
         }
 
-        if (!mWin.mActivityRecord.isSelfAnimating()) {
+        if (!mWin.mActivityRecord.isAnimating(TRANSITION)) {
             mWin.mActivityRecord.clearAllDrawn();
         } else {
             // Currently animating, persist current state of allDrawn until animation
@@ -890,10 +892,10 @@ class WindowStateAnimator {
 
             int posX = 0;
             int posY = 0;
-            task.mStack.getDimBounds(mTmpStackBounds);
+            task.getTaskStack().getDimBounds(mTmpStackBounds);
 
             boolean allowStretching = false;
-            task.mStack.getFinalAnimationSourceHintBounds(mTmpSourceBounds);
+            task.getTaskStack().getFinalAnimationSourceHintBounds(mTmpSourceBounds);
             // If we don't have source bounds, we can attempt to use the content insets
             // in the following scenario:
             //    1. We have content insets.
@@ -903,8 +905,8 @@ class WindowStateAnimator {
             // because of the force-scale until resize state.
             if (mTmpSourceBounds.isEmpty() && (mWin.mLastRelayoutContentInsets.width() > 0
                     || mWin.mLastRelayoutContentInsets.height() > 0)
-                        && !task.mStack.lastAnimatingBoundsWasToFullscreen()) {
-                mTmpSourceBounds.set(task.mStack.mPreAnimationBounds);
+                        && !task.getTaskStack().lastAnimatingBoundsWasToFullscreen()) {
+                mTmpSourceBounds.set(task.getTaskStack().mPreAnimationBounds);
                 mTmpSourceBounds.inset(mWin.mLastRelayoutContentInsets);
                 allowStretching = true;
             }
@@ -918,7 +920,7 @@ class WindowStateAnimator {
             if (!mTmpSourceBounds.isEmpty()) {
                 // Get the final target stack bounds, if we are not animating, this is just the
                 // current stack bounds
-                task.mStack.getFinalAnimationBounds(mTmpAnimatingBounds);
+                task.getTaskStack().getFinalAnimationBounds(mTmpAnimatingBounds);
 
                 // Calculate the current progress and interpolate the difference between the target
                 // and source bounds
@@ -1169,7 +1171,7 @@ class WindowStateAnimator {
                 w.mToken.hasVisible = true;
             }
         } else {
-            if (DEBUG_ANIM && mWin.isAnimating()) {
+            if (DEBUG_ANIM && mWin.isAnimating(TRANSITION | PARENTS)) {
                 Slog.v(TAG, "prepareSurface: No changes in animation for " + this);
             }
             displayed = true;
@@ -1332,7 +1334,7 @@ class WindowStateAnimator {
      * @return true if an animation has been loaded.
      */
     boolean applyAnimationLocked(int transit, boolean isEntrance) {
-        if (mWin.isSelfAnimating() && mAnimationIsEntrance == isEntrance) {
+        if (mWin.isAnimating() && mAnimationIsEntrance == isEntrance) {
             // If we are trying to apply an animation, but already running
             // an animation of the same type, then just leave that one alone.
             return true;
@@ -1400,7 +1402,7 @@ class WindowStateAnimator {
             mWin.getDisplayContent().adjustForImeIfNeeded();
         }
 
-        return mWin.isAnimating();
+        return mWin.isAnimating(TRANSITION | PARENTS);
     }
 
     void writeToProto(ProtoOutputStream proto, long fieldId) {
@@ -1497,7 +1499,7 @@ class WindowStateAnimator {
      */
     boolean isForceScaled() {
         final Task task = mWin.getTask();
-        if (task != null && task.mStack.isForceScaled()) {
+        if (task != null && task.getTaskStack().isForceScaled()) {
             return true;
         }
         return mForceScaleUntilResize;

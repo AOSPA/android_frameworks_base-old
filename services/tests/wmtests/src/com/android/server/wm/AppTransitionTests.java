@@ -147,8 +147,8 @@ public class AppTransitionTests extends WindowTestsBase {
         // Make sure each display is in animating stage.
         assertTrue(dc1.mOpeningApps.size() > 0);
         assertTrue(dc2.mClosingApps.size() > 0);
-        assertTrue(dc1.isAppAnimating());
-        assertTrue(dc2.isAppAnimating());
+        assertTrue(dc1.isAppTransitioning());
+        assertTrue(dc2.isAppTransitioning());
     }
 
     @Test
@@ -157,7 +157,7 @@ public class AppTransitionTests extends WindowTestsBase {
         final DisplayContent dc1 = createNewDisplay(Display.STATE_ON);
         final DisplayContent dc2 = createNewDisplay(Display.STATE_ON);
 
-        final TaskStack stack1 = createTaskStackOnDisplay(dc1);
+        final ActivityStack stack1 = createTaskStackOnDisplay(dc1);
         final Task task1 = createTaskInStack(stack1, 0 /* userId */);
         final ActivityRecord activity1 =
                 WindowTestUtils.createTestActivityRecord(dc1);
@@ -176,7 +176,7 @@ public class AppTransitionTests extends WindowTestsBase {
         assertTrue(dc1.mOpeningApps.size() > 0);
 
         // Move stack to another display.
-        stack1.reparent(dc2.getDisplayId(),  new Rect(), true);
+        stack1.reparent(dc2, true);
 
         // Verify if token are cleared from both pending transition list in former display.
         assertFalse(dc1.mOpeningApps.contains(activity1));
@@ -219,10 +219,10 @@ public class AppTransitionTests extends WindowTestsBase {
         assertTrue(dc.mClosingApps.size() > 0);
 
         // Make sure window is in animating stage before freeze, and cancel after freeze.
-        assertTrue(dc.isAppAnimating());
+        assertTrue(dc.isAppTransitioning());
         assertFalse(runner.mCancelled);
         dc.mAppTransition.freeze();
-        assertFalse(dc.isAppAnimating());
+        assertFalse(dc.isAppTransitioning());
         assertTrue(runner.mCancelled);
     }
 

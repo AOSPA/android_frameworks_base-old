@@ -127,7 +127,10 @@ public abstract class Window {
     public static final int FEATURE_ACTION_MODE_OVERLAY = 10;
     /**
      * Flag for requesting a decoration-free window that is dismissed by swiping from the left.
+     *
+     * @deprecated Swipe-to-dismiss isn't functional anymore.
      */
+    @Deprecated
     public static final int FEATURE_SWIPE_TO_DISMISS = 11;
     /**
      * Flag for requesting that window content changes should be animated using a
@@ -636,6 +639,16 @@ public abstract class Window {
 
         /** Returns whether the window belongs to the task root. */
         boolean isTaskRoot();
+
+        /**
+         * Update the status bar color to a forced one.
+         */
+        void updateStatusBarColor(int color);
+
+        /**
+         * Update the navigation bar color to a forced one.
+         */
+        void updateNavigationBarColor(int color);
     }
 
     /**
@@ -2510,23 +2523,6 @@ public abstract class Window {
      * @hide
      */
     public abstract void reportActivityRelaunched();
-
-    /**
-     * Called to set flag to check if the close on swipe is enabled. This will only function if
-     * FEATURE_SWIPE_TO_DISMISS has been set.
-     * @hide
-     */
-    public void setCloseOnSwipeEnabled(boolean closeOnSwipeEnabled) {
-        mCloseOnSwipeEnabled = closeOnSwipeEnabled;
-    }
-
-    /**
-     * @return {@code true} if the close on swipe is enabled.
-     * @hide
-     */
-    public boolean isCloseOnSwipeEnabled() {
-        return mCloseOnSwipeEnabled;
-    }
 
     /**
      * @return The {@link WindowInsetsController} associated with this window

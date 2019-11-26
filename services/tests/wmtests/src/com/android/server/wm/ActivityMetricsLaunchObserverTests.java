@@ -78,7 +78,7 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
         // This seems to be the easiest way to create an ActivityRecord.
         mTrampolineActivity = new ActivityBuilder(mService).setCreateTask(true).build();
         mTopActivity = new ActivityBuilder(mService)
-                .setTask(mTrampolineActivity.getTaskRecord())
+                .setTask(mTrampolineActivity.getTask())
                 .build();
     }
 
@@ -149,9 +149,7 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
     public void testOnActivityLaunchFinished() {
         onActivityLaunched();
 
-        mActivityMetricsLogger.notifyTransitionStarting(new SparseIntArray(),
-                SystemClock.elapsedRealtimeNanos());
-
+        notifyTransitionStarting();
         notifyWindowsDrawn(mTopActivity);
 
         verifyAsync(mLaunchObserver).onActivityLaunchFinished(eqProto(mTopActivity), anyLong());
@@ -159,10 +157,10 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
     }
 
     @Test
-    public void testOnActivityLaunchCancelled() {
+    public void testOnActivityLaunchCancelled_hasDrawn() {
         onActivityLaunched();
 
-        mTopActivity.mDrawn = true;
+        mTopActivity.mVisibleRequested = mTopActivity.mDrawn = true;
 
         // Cannot time already-visible activities.
         mActivityMetricsLogger.notifyActivityLaunched(START_TASK_TO_FRONT, mTopActivity);
@@ -172,26 +170,59 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
     }
 
     @Test
+    public void testOnActivityLaunchCancelled_finishedBeforeDrawn() {
+        mTopActivity.mVisibleRequested = mTopActivity.mDrawn = true;
+
+        // Suppress resume when creating the record because we want to notify logger manually.
+        mSupervisor.beginDeferResume();
+        // Create an activity with different process that meets process switch.
+        final ActivityRecord noDrawnActivity = new ActivityBuilder(mService)
+                .setTask(mTopActivity.getTask())
+                .setProcessName("other")
+                .build();
+        mSupervisor.readyToResume();
+
+        mActivityMetricsLogger.notifyActivityLaunching(noDrawnActivity.intent);
+        mActivityMetricsLogger.notifyActivityLaunched(START_SUCCESS, noDrawnActivity);
+
+        noDrawnActivity.destroyIfPossible("test");
+        mActivityMetricsLogger.notifyVisibilityChanged(noDrawnActivity);
+
+        verifyAsync(mLaunchObserver).onActivityLaunchCancelled(eqProto(noDrawnActivity));
+    }
+
+    @Test
     public void testOnReportFullyDrawn() {
         onActivityLaunched();
 
+        // The activity reports fully drawn before windows drawn, then the fully drawn event will
+        // be pending (see {@link WindowingModeTransitionInfo#pendingFullyDrawn}).
         mActivityMetricsLogger.logAppTransitionReportedDrawn(mTopActivity, false);
+        notifyTransitionStarting();
+        // The pending fully drawn event should send when the actual windows drawn event occurs.
+        notifyWindowsDrawn(mTopActivity);
 
         verifyAsync(mLaunchObserver).onReportFullyDrawn(eqProto(mTopActivity), anyLong());
+        verifyAsync(mLaunchObserver).onActivityLaunchFinished(eqProto(mTopActivity), anyLong());
         verifyNoMoreInteractions(mLaunchObserver);
     }
 
     private void onActivityLaunchedTrampoline() {
         onIntentStarted();
 
-        mActivityMetricsLogger.notifyActivityLaunched(START_SUCCESS, mTopActivity);
-
-        verifyAsync(mLaunchObserver).onActivityLaunched(eqProto(mTopActivity), anyInt());
-
-        // A second, distinct, activity launch is coalesced into the the current app launch sequence
         mActivityMetricsLogger.notifyActivityLaunched(START_SUCCESS, mTrampolineActivity);
 
+        verifyAsync(mLaunchObserver).onActivityLaunched(eqProto(mTrampolineActivity), anyInt());
+
+        // A second, distinct, activity launch is coalesced into the current app launch sequence.
+        mActivityMetricsLogger.notifyActivityLaunched(START_SUCCESS, mTopActivity);
+
         verifyNoMoreInteractions(mLaunchObserver);
+    }
+
+    private void notifyTransitionStarting() {
+        mActivityMetricsLogger.notifyTransitionStarting(new SparseIntArray(),
+                SystemClock.elapsedRealtimeNanos());
     }
 
     private void notifyWindowsDrawn(ActivityRecord r) {
@@ -203,15 +234,12 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
     public void testOnActivityLaunchFinishedTrampoline() {
         onActivityLaunchedTrampoline();
 
-        mActivityMetricsLogger.notifyTransitionStarting(new SparseIntArray(),
-                SystemClock.elapsedRealtimeNanos());
-
+        notifyTransitionStarting();
         notifyWindowsDrawn(mTrampolineActivity);
 
         notifyWindowsDrawn(mTopActivity);
 
-        verifyAsync(mLaunchObserver).onActivityLaunchFinished(eqProto(mTrampolineActivity),
-                anyLong());
+        verifyAsync(mLaunchObserver).onActivityLaunchFinished(eqProto(mTopActivity), anyLong());
         verifyNoMoreInteractions(mLaunchObserver);
     }
 
@@ -219,12 +247,12 @@ public class ActivityMetricsLaunchObserverTests extends ActivityTestsBase {
     public void testOnActivityLaunchCancelledTrampoline() {
         onActivityLaunchedTrampoline();
 
-        mTrampolineActivity.mDrawn = true;
+        mTopActivity.mDrawn = true;
 
         // Cannot time already-visible activities.
-        mActivityMetricsLogger.notifyActivityLaunched(START_TASK_TO_FRONT, mTrampolineActivity);
+        mActivityMetricsLogger.notifyActivityLaunched(START_TASK_TO_FRONT, mTopActivity);
 
-        verifyAsync(mLaunchObserver).onActivityLaunchCancelled(eqProto(mTrampolineActivity));
+        verifyAsync(mLaunchObserver).onActivityLaunchCancelled(eqProto(mTopActivity));
         verifyNoMoreInteractions(mLaunchObserver);
     }
 

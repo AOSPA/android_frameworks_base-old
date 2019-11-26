@@ -54,7 +54,6 @@ import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.text.TextUtils;
 
-import com.android.internal.telephony.IccCardConstants;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
@@ -145,6 +144,7 @@ public class CarrierTextControllerTest extends SysuiTestCase {
         mCarrierTextCallbackInfo = new CarrierTextController.CarrierTextCallbackInfo("",
                 new CharSequence[]{}, false, new int[]{});
         when(mTelephonyManager.getSupportedModemCount()).thenReturn(3);
+        when(mTelephonyManager.getActiveModemCount()).thenReturn(3);
 
         mCarrierTextController = new CarrierTextController(mContext, SEPARATOR, true, true);
         // This should not start listening on any of the real dependencies but will test that
@@ -178,7 +178,7 @@ public class CarrierTextControllerTest extends SysuiTestCase {
         List<SubscriptionInfo> list = new ArrayList<>();
         list.add(TEST_SUBSCRIPTION);
         when(mKeyguardUpdateMonitor.getFilteredSubscriptionInfo(anyBoolean())).thenReturn(list);
-        when(mKeyguardUpdateMonitor.getSimState(0)).thenReturn(IccCardConstants.State.READY);
+        when(mKeyguardUpdateMonitor.getSimState(0)).thenReturn(TelephonyManager.SIM_STATE_READY);
         mKeyguardUpdateMonitor.mServiceStates = new HashMap<>();
 
         mCarrierTextController.updateCarrierText();
@@ -198,13 +198,13 @@ public class CarrierTextControllerTest extends SysuiTestCase {
         List<SubscriptionInfo> list = new ArrayList<>();
         list.add(TEST_SUBSCRIPTION);
         when(mKeyguardUpdateMonitor.getFilteredSubscriptionInfo(anyBoolean())).thenReturn(list);
-        when(mKeyguardUpdateMonitor.getSimState(0)).thenReturn(IccCardConstants.State.READY);
+        when(mKeyguardUpdateMonitor.getSimState(0)).thenReturn(TelephonyManager.SIM_STATE_READY);
         when(mKeyguardUpdateMonitor.getSimState(1)).thenReturn(
-                IccCardConstants.State.CARD_IO_ERROR);
+                TelephonyManager.SIM_STATE_CARD_IO_ERROR);
         mKeyguardUpdateMonitor.mServiceStates = new HashMap<>();
 
         mCarrierTextController.mCallback.onSimStateChanged(3, 1,
-                IccCardConstants.State.CARD_IO_ERROR);
+                TelephonyManager.SIM_STATE_CARD_IO_ERROR);
 
         ArgumentCaptor<CarrierTextController.CarrierTextCallbackInfo> captor =
                 ArgumentCaptor.forClass(
@@ -216,6 +216,15 @@ public class CarrierTextControllerTest extends SysuiTestCase {
         // There's only one subscription in the list
         assertEquals(1, captor.getValue().listOfCarriers.length);
         assertEquals(TEST_CARRIER, captor.getValue().listOfCarriers[0]);
+
+        // Now it becomes single SIM active mode.
+        reset(mCarrierTextCallback);
+        when(mTelephonyManager.getActiveModemCount()).thenReturn(1);
+        // Update carrier text. It should ignore error state of subId 3 in inactive slotId.
+        mCarrierTextController.updateCarrierText();
+        mTestableLooper.processAllMessages();
+        verify(mCarrierTextCallback).updateCarrierInfo(captor.capture());
+        assertEquals("TEST_CARRIER", captor.getValue().carrierText);
     }
 
     @Test
@@ -224,11 +233,11 @@ public class CarrierTextControllerTest extends SysuiTestCase {
         when(mKeyguardUpdateMonitor.getFilteredSubscriptionInfo(anyBoolean())).thenReturn(
                 new ArrayList<>());
         when(mKeyguardUpdateMonitor.getSimState(anyInt())).thenReturn(
-                IccCardConstants.State.CARD_IO_ERROR);
+                TelephonyManager.SIM_STATE_CARD_IO_ERROR);
         // This should not produce an out of bounds error, even though there are no subscriptions
         mCarrierTextController.mCallback.onSimStateChanged(0, -3,
-                IccCardConstants.State.CARD_IO_ERROR);
-        mCarrierTextController.mCallback.onSimStateChanged(0, 3, IccCardConstants.State.READY);
+                TelephonyManager.SIM_STATE_CARD_IO_ERROR);
+        mCarrierTextController.mCallback.onSimStateChanged(0, 3, TelephonyManager.SIM_STATE_READY);
         verify(mCarrierTextCallback, never()).updateCarrierInfo(any());
     }
 
@@ -244,10 +253,10 @@ public class CarrierTextControllerTest extends SysuiTestCase {
                 new ArrayList<>());
 
         when(mKeyguardUpdateMonitor.getSimState(anyInt())).thenReturn(
-                IccCardConstants.State.CARD_IO_ERROR);
+                TelephonyManager.SIM_STATE_CARD_IO_ERROR);
         // This should not produce an out of bounds error, even though there are no subscriptions
         mCarrierTextController.mCallback.onSimStateChanged(0, 1,
-                IccCardConstants.State.CARD_IO_ERROR);
+                TelephonyManager.SIM_STATE_CARD_IO_ERROR);
 
         mTestableLooper.processAllMessages();
         verify(mCarrierTextCallback).updateCarrierInfo(
@@ -284,7 +293,8 @@ public class CarrierTextControllerTest extends SysuiTestCase {
         reset(mCarrierTextCallback);
         List<SubscriptionInfo> list = new ArrayList<>();
         list.add(TEST_SUBSCRIPTION);
-        when(mKeyguardUpdateMonitor.getSimState(anyInt())).thenReturn(IccCardConstants.State.READY);
+        when(mKeyguardUpdateMonitor.getSimState(anyInt())).thenReturn(
+                TelephonyManager.SIM_STATE_READY);
         when(mKeyguardUpdateMonitor.getFilteredSubscriptionInfo(anyBoolean())).thenReturn(list);
 
         mKeyguardUpdateMonitor.mServiceStates = new HashMap<>();
@@ -308,7 +318,8 @@ public class CarrierTextControllerTest extends SysuiTestCase {
         reset(mCarrierTextCallback);
         List<SubscriptionInfo> list = new ArrayList<>();
         list.add(TEST_SUBSCRIPTION_ROAMING);
-        when(mKeyguardUpdateMonitor.getSimState(anyInt())).thenReturn(IccCardConstants.State.READY);
+        when(mKeyguardUpdateMonitor.getSimState(anyInt())).thenReturn(
+                TelephonyManager.SIM_STATE_READY);
         when(mKeyguardUpdateMonitor.getFilteredSubscriptionInfo(anyBoolean())).thenReturn(list);
 
         mKeyguardUpdateMonitor.mServiceStates = new HashMap<>();
@@ -332,7 +343,8 @@ public class CarrierTextControllerTest extends SysuiTestCase {
         reset(mCarrierTextCallback);
         List<SubscriptionInfo> list = new ArrayList<>();
         list.add(TEST_SUBSCRIPTION_NULL);
-        when(mKeyguardUpdateMonitor.getSimState(anyInt())).thenReturn(IccCardConstants.State.READY);
+        when(mKeyguardUpdateMonitor.getSimState(anyInt())).thenReturn(
+            TelephonyManager.SIM_STATE_READY);
         when(mKeyguardUpdateMonitor.getFilteredSubscriptionInfo(anyBoolean())).thenReturn(list);
 
         mKeyguardUpdateMonitor.mServiceStates = new HashMap<>();
@@ -356,7 +368,8 @@ public class CarrierTextControllerTest extends SysuiTestCase {
         reset(mCarrierTextCallback);
         List<SubscriptionInfo> list = new ArrayList<>();
         list.add(TEST_SUBSCRIPTION_NULL);
-        when(mKeyguardUpdateMonitor.getSimState(anyInt())).thenReturn(IccCardConstants.State.READY);
+        when(mKeyguardUpdateMonitor.getSimState(anyInt())).thenReturn(
+                TelephonyManager.SIM_STATE_READY);
         when(mKeyguardUpdateMonitor.getFilteredSubscriptionInfo(anyBoolean())).thenReturn(list);
         mockWifi();
 
@@ -412,7 +425,8 @@ public class CarrierTextControllerTest extends SysuiTestCase {
         List<SubscriptionInfo> list = new ArrayList<>();
         list.add(TEST_SUBSCRIPTION);
         list.add(TEST_SUBSCRIPTION);
-        when(mKeyguardUpdateMonitor.getSimState(anyInt())).thenReturn(IccCardConstants.State.READY);
+        when(mKeyguardUpdateMonitor.getSimState(anyInt())).thenReturn(
+            TelephonyManager.SIM_STATE_READY);
         when(mKeyguardUpdateMonitor.getFilteredSubscriptionInfo(anyBoolean())).thenReturn(list);
 
         mKeyguardUpdateMonitor.mServiceStates = new HashMap<>();
@@ -436,8 +450,8 @@ public class CarrierTextControllerTest extends SysuiTestCase {
         list.add(TEST_SUBSCRIPTION);
         list.add(TEST_SUBSCRIPTION);
         when(mKeyguardUpdateMonitor.getSimState(anyInt()))
-                .thenReturn(IccCardConstants.State.READY)
-                .thenReturn(IccCardConstants.State.NOT_READY);
+                .thenReturn(TelephonyManager.SIM_STATE_READY)
+                .thenReturn(TelephonyManager.SIM_STATE_NOT_READY);
         when(mKeyguardUpdateMonitor.getFilteredSubscriptionInfo(anyBoolean())).thenReturn(list);
 
         mKeyguardUpdateMonitor.mServiceStates = new HashMap<>();
@@ -461,8 +475,8 @@ public class CarrierTextControllerTest extends SysuiTestCase {
         list.add(TEST_SUBSCRIPTION);
         list.add(TEST_SUBSCRIPTION);
         when(mKeyguardUpdateMonitor.getSimState(anyInt()))
-                .thenReturn(IccCardConstants.State.NOT_READY)
-                .thenReturn(IccCardConstants.State.READY);
+                .thenReturn(TelephonyManager.SIM_STATE_NOT_READY)
+                .thenReturn(TelephonyManager.SIM_STATE_READY);
         when(mKeyguardUpdateMonitor.getFilteredSubscriptionInfo(anyBoolean())).thenReturn(list);
 
         mKeyguardUpdateMonitor.mServiceStates = new HashMap<>();
@@ -487,9 +501,9 @@ public class CarrierTextControllerTest extends SysuiTestCase {
         list.add(TEST_SUBSCRIPTION);
         list.add(TEST_SUBSCRIPTION);
         when(mKeyguardUpdateMonitor.getSimState(anyInt()))
-                .thenReturn(IccCardConstants.State.READY)
-                .thenReturn(IccCardConstants.State.NOT_READY)
-                .thenReturn(IccCardConstants.State.READY);
+                .thenReturn(TelephonyManager.SIM_STATE_READY)
+                .thenReturn(TelephonyManager.SIM_STATE_NOT_READY)
+                .thenReturn(TelephonyManager.SIM_STATE_READY);
         when(mKeyguardUpdateMonitor.getFilteredSubscriptionInfo(anyBoolean())).thenReturn(list);
         mKeyguardUpdateMonitor.mServiceStates = new HashMap<>();
 

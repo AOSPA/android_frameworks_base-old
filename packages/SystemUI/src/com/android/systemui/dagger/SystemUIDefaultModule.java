@@ -19,12 +19,18 @@ package com.android.systemui.dagger;
 import static com.android.systemui.Dependency.ALLOW_NOTIFICATION_LONG_PRESS_NAME;
 import static com.android.systemui.Dependency.LEAK_REPORT_EMAIL_NAME;
 
+import android.content.Context;
+
 import androidx.annotation.Nullable;
 
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.dock.DockManagerImpl;
 import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.EnhancedEstimatesImpl;
+import com.android.systemui.recents.Recents;
+import com.android.systemui.recents.RecentsImplementation;
+import com.android.systemui.stackdivider.Divider;
+import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationLockscreenUserManagerImpl;
 import com.android.systemui.statusbar.notification.collection.NotificationData;
@@ -32,10 +38,13 @@ import com.android.systemui.statusbar.phone.KeyguardEnvironmentImpl;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBar;
 
+import java.util.Optional;
+
 import javax.inject.Named;
 import javax.inject.Singleton;
 
 import dagger.Binds;
+import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
 
@@ -76,5 +85,18 @@ abstract class SystemUIDefaultModule {
     @Named(ALLOW_NOTIFICATION_LONG_PRESS_NAME)
     static boolean provideAllowNotificationLongPress() {
         return true;
+    }
+
+    @Singleton
+    @Provides
+    static Divider provideDivider(Context context, Optional<Lazy<Recents>> recentsOptionalLazy) {
+        return new Divider(context, recentsOptionalLazy);
+    }
+
+    @Provides
+    @Singleton
+    static Recents provideRecents(Context context, RecentsImplementation recentsImplementation,
+            CommandQueue commandQueue) {
+        return new Recents(context, recentsImplementation, commandQueue);
     }
 }
