@@ -94,6 +94,7 @@ public final class WifiP2pWfdInfo implements Parcelable {
         return mWfdEnabled;
     }
 
+    /** @hide */
     public boolean isWfdR2Supported() {
         return (mR2DeviceInfo<0?false:true);
     }
@@ -107,6 +108,7 @@ public final class WifiP2pWfdInfo implements Parcelable {
         mWfdEnabled = enabled;
     }
 
+    /** @hide */
     public void setWfdR2Device(int r2DeviceInfo) {
         mR2DeviceInfo = r2DeviceInfo;
     }
@@ -183,6 +185,7 @@ public final class WifiP2pWfdInfo implements Parcelable {
                 Locale.US, "%04x%04x%04x", mDeviceInfo, mCtrlPort, mMaxThroughput);
     }
 
+    /** @hide */
     public String getR2DeviceInfoHex() {
         return String.format(
                 Locale.US, "%04x%04x", 2, mR2DeviceInfo);
