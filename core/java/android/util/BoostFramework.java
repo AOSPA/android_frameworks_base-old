@@ -30,6 +30,7 @@
 package android.util;
 
 import android.content.Context;
+import android.os.SystemProperties;
 import android.util.Log;
 
 import java.lang.reflect.Constructor;
@@ -44,6 +45,11 @@ public class BoostFramework {
 
     private static final String UXPERFORMANCE_JAR = "/system/framework/UxPerformance.jar";
     private static final String UXPERFORMANCE_CLASS = "com.qualcomm.qti.UxPerformance";
+
+    public static final boolean PROP_QCOM_IGNORE_QPERF =
+            SystemProperties.getBoolean("debug.qcom_ignore_qperf", false);
+    public static final boolean PROP_QCOM_IGNORE_UXPERF =
+            SystemProperties.getBoolean("debug.qcom_ignore_uxperf", false);
 
 /** @hide */
     private static boolean sIsLoaded = false;
@@ -189,62 +195,67 @@ public class BoostFramework {
     private void initFunctions () {
         synchronized(BoostFramework.class) {
             if (sIsLoaded == false) {
-                try {
-                    sPerfClass = Class.forName(PERFORMANCE_CLASS);
-
-                    Class[] argClasses = new Class[] {int.class, int[].class};
-                    sAcquireFunc = sPerfClass.getMethod("perfLockAcquire", argClasses);
-
-                    argClasses = new Class[] {int.class, String.class, int.class, int.class};
-                    sPerfHintFunc = sPerfClass.getMethod("perfHint", argClasses);
-
-                    argClasses = new Class[] {};
-                    sReleaseFunc = sPerfClass.getMethod("perfLockRelease", argClasses);
-
-                    argClasses = new Class[] {int.class};
-                    sReleaseHandlerFunc = sPerfClass.getDeclaredMethod("perfLockReleaseHandler", argClasses);
-
-                    argClasses = new Class[] {int.class, String.class};
-                    sFeedbackFunc = sPerfClass.getMethod("perfGetFeedback", argClasses);
-
-                    argClasses = new Class[] {int.class, String.class, String.class};
-                    sIOPStart =   sPerfClass.getDeclaredMethod("perfIOPrefetchStart", argClasses);
-
-                    argClasses = new Class[] {};
-                    sIOPStop =  sPerfClass.getDeclaredMethod("perfIOPrefetchStop", argClasses);
-
-                    argClasses = new Class[] {String.class, String.class};
-                    sPerfGetPropFunc = sPerfClass.getMethod("perfGetProp", argClasses);
-
+                if (!PROP_QCOM_IGNORE_QPERF) {
                     try {
-                        argClasses = new Class[] {int.class, int.class, String.class, int.class, String.class};
-                        sUXEngineEvents =  sPerfClass.getDeclaredMethod("perfUXEngine_events",
-                                                                          argClasses);
+                        sPerfClass = Class.forName(PERFORMANCE_CLASS);
+
+                        Class[] argClasses = new Class[] {int.class, int[].class};
+                        sAcquireFunc = sPerfClass.getMethod("perfLockAcquire", argClasses);
+
+                        argClasses = new Class[] {int.class, String.class, int.class, int.class};
+                        sPerfHintFunc = sPerfClass.getMethod("perfHint", argClasses);
+
+                        argClasses = new Class[] {};
+                        sReleaseFunc = sPerfClass.getMethod("perfLockRelease", argClasses);
 
                         argClasses = new Class[] {int.class};
-                        sUXEngineTrigger =  sPerfClass.getDeclaredMethod("perfUXEngine_trigger",
+                        sReleaseHandlerFunc = sPerfClass.getDeclaredMethod("perfLockReleaseHandler", argClasses);
+
+                        argClasses = new Class[] {int.class, String.class};
+                        sFeedbackFunc = sPerfClass.getMethod("perfGetFeedback", argClasses);
+
+                        argClasses = new Class[] {int.class, String.class, String.class};
+                        sIOPStart =   sPerfClass.getDeclaredMethod("perfIOPrefetchStart", argClasses);
+
+                        argClasses = new Class[] {};
+                        sIOPStop =  sPerfClass.getDeclaredMethod("perfIOPrefetchStop", argClasses);
+
+                        argClasses = new Class[] {String.class, String.class};
+                        sPerfGetPropFunc = sPerfClass.getMethod("perfGetProp", argClasses);
+
+                        try {
+                            argClasses = new Class[] {int.class, int.class, String.class, int.class, String.class};
+                            sUXEngineEvents =  sPerfClass.getDeclaredMethod("perfUXEngine_events",
+                                                                          argClasses);
+
+                            argClasses = new Class[] {int.class};
+                            sUXEngineTrigger =  sPerfClass.getDeclaredMethod("perfUXEngine_trigger",
                                                                            argClasses);
-                    } catch (Exception e) {
-                        Log.i(TAG, "BoostFramework() : Exception_4 = PreferredApps not supported");
+                        } catch (Exception e) {
+                            Log.i(TAG, "BoostFramework() : Exception_4 = PreferredApps not supported");
+                        }
+
+                        sIsLoaded = true;
                     }
+                    catch(Exception e) {
+                        Log.e(TAG,"BoostFramework() : Exception_1 = " + e);
+                    }
+                }
 
-                    sIsLoaded = true;
-                }
-                catch(Exception e) {
-                    Log.e(TAG,"BoostFramework() : Exception_1 = " + e);
-                }
-                // Load UXE Class now Adding new try/catch block to avoid
+                // Load UXE Class (if allowed by prop) now Adding new try/catch block to avoid
                 // any interference with Qperformance
-                try {
-                    sUxPerfClass = Class.forName(UXPERFORMANCE_CLASS);
+                if (!PROP_QCOM_IGNORE_UXPERF) {
+                    try {
+                        sUxPerfClass = Class.forName(UXPERFORMANCE_CLASS);
 
-                    Class[] argUxClasses = new Class[] {int.class, String.class, String.class};
-                    sUxIOPStart = sUxPerfClass.getDeclaredMethod("perfIOPrefetchStart", argUxClasses);
+                        Class[] argUxClasses = new Class[] {int.class, String.class, String.class};
+                        sUxIOPStart = sUxPerfClass.getDeclaredMethod("perfIOPrefetchStart", argUxClasses);
 
-                    sUxIsLoaded = true;
-                }
-                catch(Exception e) {
-                    Log.e(TAG,"BoostFramework() Ux Perf: Exception = " + e);
+                        sUxIsLoaded = true;
+                    }
+                    catch(Exception e) {
+                        Log.e(TAG,"BoostFramework() Ux Perf: Exception = " + e);
+                    }
                 }
             }
         }
