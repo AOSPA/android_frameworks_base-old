@@ -779,6 +779,12 @@ public class WifiConfiguration implements Parcelable {
      */
     public int userApproved = USER_UNSPECIFIED;
 
+    /**
+     * @hide
+     * Last WPA2 fallback connection attempted timestamp
+     */
+    public long lastWpa2FallbackAttemptTime = -1L;
+
     /** The Below RSSI thresholds are used to configure AutoJoin
      *  - GOOD/LOW/BAD thresholds are used so as to calculate link score
      *  - UNWANTED_SOFT are used by the blacklisting logic so as to handle
@@ -2554,6 +2560,7 @@ public class WifiConfiguration implements Parcelable {
             updateIdentifier = source.updateIdentifier;
             oweTransIfaceName = source.oweTransIfaceName;
             staId = source.staId;
+            lastWpa2FallbackAttemptTime = source.lastWpa2FallbackAttemptTime;
         }
     }
 
@@ -2632,6 +2639,7 @@ public class WifiConfiguration implements Parcelable {
         dest.writeInt(osu ? 1 : 0);
         dest.writeString(oweTransIfaceName);
         dest.writeInt(staId);
+        dest.writeLong(lastWpa2FallbackAttemptTime);
     }
 
     /** Implement the Parcelable interface {@hide} */
@@ -2712,6 +2720,7 @@ public class WifiConfiguration implements Parcelable {
                 config.osu = in.readInt() != 0;
                 config.oweTransIfaceName = in.readString();
                 config.staId = in.readInt();
+                config.lastWpa2FallbackAttemptTime = in.readLong();
                 return config;
             }
 
