@@ -4921,6 +4921,16 @@ public final class Settings {
         /** @hide */
         private static final Validator NAVIGATION_HANDLE_WIDTH_VALIDATOR = ANY_INTEGER_VALIDATOR;
 
+       /**
+         * Display style of the status bar battery information
+         * 0: Display the battery an icon in portrait mode
+         * 1: Display the battery as a circle
+         * 2: Do not display the battery
+         * default: 0
+         * @hide
+         */
+        public static final String STATUS_BAR_BATTERY_STYLE = "status_bar_battery_style";
+
         /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.

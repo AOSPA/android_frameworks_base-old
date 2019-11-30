@@ -22,17 +22,20 @@ import android.annotation.ColorInt;
 import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.content.BroadcastReceiver;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.database.ContentObserver;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.media.AudioManager;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.UserHandle;
 import android.provider.AlarmClock;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
@@ -123,6 +126,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
     private TouchAnimator mHeaderTextContainerAlphaAnimator;
     private TouchAnimator mPrivacyChipAlphaAnimator;
     private DualToneHandler mDualToneHandler;
+    private SettingObserver mSettingObserver;
 
     private View mSystemIconsView;
     private View mQuickQsStatusIcons;
@@ -193,6 +197,8 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         mPrivacyItemController = privacyItemController;
         mDualToneHandler = new DualToneHandler(
                 new ContextThemeWrapper(context, R.style.QSHeaderTheme));
+        mSettingObserver = new SettingObserver(new Handler(context.getMainLooper()));
+        mSettingObserver.observe();
     }
 
     @Override
@@ -410,6 +416,13 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         updatePrivacyChipAlphaAnimator();
     }
 
+    private void updateBatteryStyle() {
+        mBatteryRemainingIcon.mBatteryStyle = Settings.System.getInt(mContext.getContentResolver(),
+                Settings.System.STATUS_BAR_BATTERY_STYLE, 0);
+        mBatteryRemainingIcon.updateBatteryStyle();
+        mBatteryRemainingIcon.updatePercentView();
+    }
+
     private void updateStatusIconAlphaAnimator() {
         mStatusIconsAlphaAnimator = new TouchAnimator.Builder()
                 .addFloat(mQuickQsStatusIcons, "alpha", 1, 0, 0)
@@ -487,6 +500,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements
         super.onAttachedToWindow();
         mStatusBarIconController.addIconGroup(mIconManager);
         requestApplyInsets();
+        mSettingObserver.observe();
     }
 
     @Override
@@ -659,6 +673,24 @@ public class QuickStatusBarHeader extends RelativeLayout implements
             RelativeLayout.LayoutParams lp = (RelativeLayout.LayoutParams) v.getLayoutParams();
             lp.leftMargin = sideMargins;
             lp.rightMargin = sideMargins;
+        }
+    }
+
+    private class SettingObserver extends ContentObserver {
+        SettingObserver(Handler handler) {
+            super(handler);
+        }
+
+        void observe() {
+            ContentResolver resolver = getContext().getContentResolver();
+            resolver.registerContentObserver(Settings.System.getUriFor(
+                    Settings.System.STATUS_BAR_BATTERY_STYLE),
+                    false, this, UserHandle.USER_ALL);
+        }
+
+        @Override
+        public void onChange(boolean selfChange) {
+            updateBatteryStyle();
         }
     }
 }
