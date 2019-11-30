@@ -62,4 +62,7 @@
     <dimen name="qs_media_action_button_size">40dp</dimen>
     <dimen name="brightness_slider_height">48dp</dimen>
     <dimen name="pa_qs_footer_action_button_size">48dp</dimen>
+
+    <!-- Width of the battery icon in the status bar when set to circle style. -->
+    <dimen name="status_bar_battery_icon_circle_width">13.5dp</dimen>
 </resources>
