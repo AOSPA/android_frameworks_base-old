@@ -4316,4 +4316,8 @@
     <string name="user_authentication_failed"></string>
     <string name="service_not_subscribed"></string>
     <string name="multi_conn_to_same_pdn_not_allowed"></string>
+
+    <!-- Boolean indicating that the system will use autoSuspend. If set to false, autoSuspend
+         is not used and the system will only suspend upon an explicit request. -->
+    <bool translatable="false" name="config_enableAutoSuspend">true</bool>
 </resources>
