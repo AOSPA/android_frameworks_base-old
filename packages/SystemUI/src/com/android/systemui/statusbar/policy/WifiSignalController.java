@@ -185,7 +185,7 @@ public class WifiSignalController extends
     }
 
     public void handleBootCompleted() {
-        mWifiManager.registerTrafficStateCallback(new WifiTrafficStateCallback(), null);
+        mWifiManager.registerTrafficStateCallback(new WifiTrafficStateCallback());
     }
 
     /**

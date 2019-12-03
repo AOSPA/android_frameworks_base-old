@@ -515,7 +515,6 @@ public final class SmsManager {
             throw new IllegalArgumentException("Invalid message body");
         }
 
-        final Context context = ActivityThread.currentApplication().getApplicationContext();
         // We will only show the SMS disambiguation dialog in the case that the message is being
         // persisted. This is for two reasons:
         // 1) Messages that are not persisted are sent by carrier/OEM apps for a specific
@@ -624,7 +623,6 @@ public final class SmsManager {
 
         final int finalPriority = priority;
         final int finalValidity = validityPeriod;
-        final Context context = ActivityThread.currentApplication().getApplicationContext();
         // We will only show the SMS disambiguation dialog in the case that the message is being
         // persisted. This is for two reasons:
         // 1) Messages that are not persisted are sent by carrier/OEM apps for a specific
@@ -734,8 +732,8 @@ public final class SmsManager {
      *  android application framework, or failed. This intent is broadcasted at
      *  the same time an SMS received from radio is acknowledged back.
      *  The result code will be {@link android.provider.Telephony.Sms.Intents#RESULT_SMS_HANDLED}
-     *  for success, or {@link android.provider.Telephony.Sms.Intents#RESULT_SMS_GENERIC_ERROR} for
-     *  error.
+     *  for success, or {@link android.provider.Telephony.Sms.Intents#RESULT_SMS_GENERIC_ERROR} or
+     *  {@link #RESULT_REMOTE_EXCEPTION} for error.
      *
      * @throws IllegalArgumentException if the format is invalid.
      */
@@ -928,7 +926,6 @@ public final class SmsManager {
         }
 
         if (parts.size() > 1) {
-            final Context context = ActivityThread.currentApplication().getApplicationContext();
             // We will only show the SMS disambiguation dialog in the case that the message is being
             // persisted. This is for two reasons:
             // 1) Messages that are not persisted are sent by carrier/OEM apps for a specific
@@ -1169,7 +1166,6 @@ public final class SmsManager {
         if (parts.size() > 1) {
             final int finalPriority = priority;
             final int finalValidity = validityPeriod;
-            final Context context = ActivityThread.currentApplication().getApplicationContext();
             if (persistMessage) {
                 resolveSubscriptionForOperation(new SubscriptionResolverResult() {
                     @Override
@@ -1327,7 +1323,6 @@ public final class SmsManager {
             throw new IllegalArgumentException("Invalid message data");
         }
 
-        final Context context = ActivityThread.currentApplication().getApplicationContext();
         resolveSubscriptionForOperation(new SubscriptionResolverResult() {
             @Override
             public void onSuccess(int subId) {
@@ -2071,7 +2066,36 @@ public final class SmsManager {
             RESULT_INTERNAL_ERROR,
             RESULT_NO_RESOURCES,
             RESULT_CANCELLED,
-            RESULT_REQUEST_NOT_SUPPORTED
+            RESULT_REQUEST_NOT_SUPPORTED,
+            RESULT_NO_BLUETOOTH_SERVICE,
+            RESULT_INVALID_BLUETOOTH_ADDRESS,
+            RESULT_BLUETOOTH_DISCONNECTED,
+            RESULT_UNEXPECTED_EVENT_STOP_SENDING,
+            RESULT_SMS_BLOCKED_DURING_EMERGENCY,
+            RESULT_SMS_SEND_RETRY_FAILED,
+            RESULT_REMOTE_EXCEPTION,
+            RESULT_NO_DEFAULT_SMS_APP,
+            RESULT_RIL_RADIO_NOT_AVAILABLE,
+            RESULT_RIL_SMS_SEND_FAIL_RETRY,
+            RESULT_RIL_NETWORK_REJECT,
+            RESULT_RIL_INVALID_STATE,
+            RESULT_RIL_INVALID_ARGUMENTS,
+            RESULT_RIL_NO_MEMORY,
+            RESULT_RIL_REQUEST_RATE_LIMITED,
+            RESULT_RIL_INVALID_SMS_FORMAT,
+            RESULT_RIL_SYSTEM_ERR,
+            RESULT_RIL_ENCODING_ERR,
+            RESULT_RIL_INVALID_SMSC_ADDRESS,
+            RESULT_RIL_MODEM_ERR,
+            RESULT_RIL_NETWORK_ERR,
+            RESULT_RIL_INTERNAL_ERR,
+            RESULT_RIL_REQUEST_NOT_SUPPORTED,
+            RESULT_RIL_INVALID_MODEM_STATE,
+            RESULT_RIL_NETWORK_NOT_READY,
+            RESULT_RIL_OPERATION_NOT_ALLOWED,
+            RESULT_RIL_NO_RESOURCES,
+            RESULT_RIL_CANCELLED,
+            RESULT_RIL_SIM_ABSENT
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Result {}
@@ -2321,7 +2345,7 @@ public final class SmsManager {
     public static final int RESULT_RIL_OPERATION_NOT_ALLOWED = 117;
 
     /**
-     * There are not sufficient resources to process the request.
+     * There are insufficient resources to process the request.
      */
     public static final int RESULT_RIL_NO_RESOURCES = 118;
 
@@ -2335,6 +2359,45 @@ public final class SmsManager {
      * can be retrieved because the SIM or RUIM is absent.
      */
     public static final int RESULT_RIL_SIM_ABSENT = 120;
+
+    // SMS receiving results sent as a "result" extra in {@link Intents.SMS_REJECTED_ACTION}
+
+    /**
+     * SMS receive dispatch failure.
+     */
+    public static final int RESULT_RECEIVE_DISPATCH_FAILURE = 500;
+
+    /**
+     * SMS receive injected null PDU.
+     */
+    public static final int RESULT_RECEIVE_INJECTED_NULL_PDU = 501;
+
+    /**
+     * SMS receive encountered runtime exception.
+     */
+    public static final int RESULT_RECEIVE_RUNTIME_EXCEPTION = 502;
+
+    /**
+     * SMS received null message from the radio interface layer.
+     */
+    public static final int RESULT_RECEIVE_NULL_MESSAGE_FROM_RIL = 503;
+
+    /**
+     * SMS short code received while the phone is in encrypted state.
+     */
+    public static final int RESULT_RECEIVE_WHILE_ENCRYPTED = 504;
+
+    /**
+     * SMS receive encountered an SQL exception.
+     */
+    public static final int RESULT_RECEIVE_SQL_EXCEPTION = 505;
+
+    /**
+     * SMS receive an exception parsing a uri.
+     */
+    public static final int RESULT_RECEIVE_URI_EXCEPTION = 506;
+
+
 
     /**
      * Send an MMS message
@@ -2683,7 +2746,7 @@ public final class SmsManager {
             ISms iccISms = getISmsServiceOrThrow();
             if (iccISms != null) {
                 return iccISms.checkSmsShortCodeDestination(getSubscriptionId(),
-                        ActivityThread.currentPackageName(), destAddress, countryIso);
+                        ActivityThread.currentPackageName(), null, destAddress, countryIso);
             }
         } catch (RemoteException e) {
             Log.e(TAG, "checkSmsShortCodeDestination() RemoteException", e);

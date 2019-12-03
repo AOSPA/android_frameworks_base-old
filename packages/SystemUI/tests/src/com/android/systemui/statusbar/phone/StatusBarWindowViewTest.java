@@ -82,14 +82,13 @@ public class StatusBarWindowViewTest extends SysuiTestCase {
         MockitoAnnotations.initMocks(this);
 
         mView = new StatusBarWindowView(getContext(), null);
-        mContext.putComponent(StatusBar.class, mStatusBar);
         when(mStatusBar.isDozing()).thenReturn(false);
         mDependency.injectTestDependency(ShadeController.class, mShadeController);
 
         when(mSuperStatusBarViewFactory.getStatusBarWindowView()).thenReturn(mView);
         when(mDockManager.isDocked()).thenReturn(false);
 
-        mController = new StatusBarWindowViewController.Builder(
+        mController = new StatusBarWindowViewController(
                 new InjectionInflationController(
                         SystemUIFactory.getInstance().getRootComponent()),
                 mCoordinator,
@@ -107,9 +106,9 @@ public class StatusBarWindowViewTest extends SysuiTestCase {
                 mDozeParameters,
                 new CommandQueue(mContext),
                 mSuperStatusBarViewFactory,
-                mDockManager)
-                .setShadeController(mShadeController)
-                .build();
+                () -> mShadeController,
+                mDockManager);
+        mController.setupExpandedStatusBar();
         mController.setService(mStatusBar);
         mController.setDragDownHelper(mDragDownHelper);
 

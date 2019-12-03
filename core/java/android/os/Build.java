@@ -161,7 +161,7 @@ public class Build {
         try {
             Application application = ActivityThread.currentApplication();
             String callingPackage = application != null ? application.getPackageName() : null;
-            return service.getSerialForPackage(callingPackage);
+            return service.getSerialForPackage(callingPackage, null);
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
         }
@@ -238,13 +238,6 @@ public class Build {
          * different releases can be somehow ordered.
          */
         public static final String RELEASE = getString("ro.build.version.release");
-
-        /**
-         * The version string we show to the user; may be {@link #RELEASE} or
-         * {@link #CODENAME} if not a final release build.
-         */
-        @NonNull public static final String RELEASE_OR_CODENAME = getString(
-                "ro.build.version.release_or_codename");
 
         /**
          * The base OS build the product is based on.

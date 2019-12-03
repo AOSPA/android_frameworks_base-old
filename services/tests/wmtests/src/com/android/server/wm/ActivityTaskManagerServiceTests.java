@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
@@ -24,6 +25,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.graphics.Rect;
 import android.view.WindowContainerTransaction;
 
@@ -53,7 +55,7 @@ public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
     @Test
     public void testActivityFinish() {
         final ActivityStack stack = new StackBuilder(mRootActivityContainer).build();
-        final ActivityRecord activity = stack.getChildAt(0).getTopActivity();
+        final ActivityRecord activity = stack.getChildAt(0).getTopNonFinishingActivity();
         assertTrue("Activity must be finished", mService.finishActivity(activity.appToken,
                 0 /* resultCode */, null /* resultData */,
                 Activity.DONT_FINISH_TASK_WITH_ACTIVITY));
@@ -75,6 +77,21 @@ public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
         t.setBounds(task.mRemoteToken, new Rect(10, 10, 100, 100));
         mService.applyContainerTransaction(t);
         assertEquals(newBounds, task.getBounds());
+    }
+
+    @Test
+    public void testStackTransaction() {
+        removeGlobalMinSizeRestriction();
+        final ActivityStack stack = new StackBuilder(mRootActivityContainer)
+                .setWindowingMode(WINDOWING_MODE_FREEFORM).build();
+        ActivityManager.StackInfo info =
+                mService.getStackInfo(WINDOWING_MODE_FREEFORM, ACTIVITY_TYPE_STANDARD);
+        WindowContainerTransaction t = new WindowContainerTransaction();
+        assertEquals(stack.mRemoteToken, info.stackToken);
+        Rect newBounds = new Rect(10, 10, 100, 100);
+        t.setBounds(info.stackToken, new Rect(10, 10, 100, 100));
+        mService.applyContainerTransaction(t);
+        assertEquals(newBounds, stack.getBounds());
     }
 }
 

@@ -390,7 +390,7 @@ java_defaults {
 
 filegroup {
     name: "framework-jarjar-rules",
-    srcs: ["jarjar_rules_hidl.txt"],
+    srcs: ["framework_jarjar_rules.txt"],
 }
 
 filegroup {
@@ -467,15 +467,27 @@ java_library {
     srcs: [":framework-all-sources"],
     installable: false,
     libs: ["app-compat-annotations"],
+    static_libs: ["exoplayer2-core"]
+}
+
+java_library {
+    name: "framework-annotation-proc",
+    defaults: ["framework-aidl-export-defaults"],
+    srcs: [":framework-all-sources"],
+    libs: ["app-compat-annotations"],
+    installable: false,
     plugins: [
         "unsupportedappusage-annotation-processor",
         "compat-changeid-annotation-processor",
     ],
+    static_libs: [
+        "exoplayer2-core"
+    ]
 }
 
 platform_compat_config {
     name: "framework-platform-compat-config",
-    src: ":framework-all",
+    src: ":framework-annotation-proc",
 }
 
 // A library including just UnsupportedAppUsage.java classes.
@@ -908,28 +920,6 @@ python_binary_host {
     ],
 }
 
-// TODO: Don't rely on this list by switching package.html into package-info.java
-frameworks_base_subdirs = [
-    "core/java",
-    "graphics/java",
-    "location/java",
-    "media/java",
-    "media/mca/effect/java",
-    "media/mca/filterfw/java",
-    "media/mca/filterpacks/java",
-    "drm/java",
-    "mms/java",
-    "opengl/java",
-    "sax/java",
-    "telecomm/java",
-    "telephony/common",
-    "telephony/java",
-    "wifi/java",
-    "lowpan/java",
-    "keystore/java",
-    "rs/java",
-]
-
 // Make the api/current.txt file available for use by modules in other
 // directories.
 filegroup {
@@ -1034,7 +1024,6 @@ stubs_defaults {
         "test-runner/src/**/*.java",
     ],
     libs: framework_docs_only_libs,
-    local_sourcepaths: frameworks_base_subdirs,
     create_doc_stubs: true,
     annotations_enabled: true,
     api_levels_annotations_enabled: true,
@@ -1095,7 +1084,6 @@ stubs_defaults {
         ":updatable-media-srcs",
     ],
     libs: ["framework-internal-utils"],
-    local_sourcepaths: frameworks_base_subdirs,
     installable: false,
     annotations_enabled: true,
     previous_api: ":last-released-public-api-for-metalava-annotations",
@@ -1600,7 +1588,7 @@ aidl_mapping {
 
 genrule {
     name: "framework-annotation-proc-index",
-    srcs: [":framework-all"],
+    srcs: [":framework-annotation-proc"],
     cmd: "unzip -qp $(in) unsupportedappusage/unsupportedappusage_index.csv > $(out)",
     out: ["unsupportedappusage_index.csv"],
     dist: {

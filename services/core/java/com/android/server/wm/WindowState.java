@@ -212,7 +212,6 @@ import com.android.internal.util.ToBooleanFunction;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.protolog.common.ProtoLog;
 import com.android.server.wm.LocalAnimationAdapter.AnimationSpec;
-import com.android.server.wm.utils.InsetUtils;
 import com.android.server.wm.utils.WmDisplayCutout;
 
 import java.io.PrintWriter;
@@ -1006,7 +1005,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 }
             }
 
-            final TaskStack stack = getStack();
+            final ActivityStack stack = getStack();
             if (inPinnedWindowingMode() && stack != null
                     && stack.lastAnimatingBoundsWasToFullscreen()) {
                 // PIP edge case: When going from pinned to fullscreen, we apply a
@@ -1129,6 +1128,22 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             }
         }
 
+        // Calculate relative frame
+        mWindowFrames.mRelFrame.set(mWindowFrames.mFrame);
+        WindowContainer parent = getParent();
+        int parentLeft = 0;
+        int parentTop = 0;
+        if (mIsChildWindow) {
+            parentLeft = ((WindowState) parent).mWindowFrames.mFrame.left;
+            parentTop = ((WindowState) parent).mWindowFrames.mFrame.top;
+        } else if (parent != null) {
+            final Rect parentBounds = parent.getDisplayedBounds();
+            parentLeft = parentBounds.left;
+            parentTop = parentBounds.top;
+        }
+        mWindowFrames.mRelFrame.offsetTo(mWindowFrames.mFrame.left - parentLeft,
+                mWindowFrames.mFrame.top - parentTop);
+
         if (DEBUG_LAYOUT || DEBUG) {
             Slog.v(TAG, "Resolving (mRequestedWidth="
                             + mRequestedWidth + ", mRequestedheight="
@@ -1152,6 +1167,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     @Override
     public Rect getFrameLw() {
         return mWindowFrames.mFrame;
+    }
+
+    /** Accessor for testing */
+    Rect getRelativeFrameLw() {
+        return mWindowFrames.mRelFrame;
     }
 
     @Override
@@ -1289,6 +1309,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // We update mLastFrame always rather than in the conditional with the last inset
         // variables, because mFrameSizeChanged only tracks the width and height changing.
         mWindowFrames.mLastFrame.set(mWindowFrames.mFrame);
+        mWindowFrames.mLastRelFrame.set(mWindowFrames.mRelFrame);
 
         if (didFrameInsetsChange
                 || winAnimator.mSurfaceResized
@@ -1404,7 +1425,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return mActivityRecord != null ? mActivityRecord.getTask() : null;
     }
 
-    TaskStack getStack() {
+    ActivityStack getStack() {
         Task task = getTask();
         if (task != null) {
             if (task.getTaskStack() != null) {
@@ -1427,7 +1448,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         bounds.setEmpty();
         mTmpRect.setEmpty();
         if (intersectWithStackBounds) {
-            final TaskStack stack = task.getTaskStack();
+            final ActivityStack stack = task.getTaskStack();
             if (stack != null) {
                 stack.getDimBounds(mTmpRect);
             } else {
@@ -1539,7 +1560,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      */
     // TODO: Can we consolidate this with #isVisible() or have a more appropriate name for this?
     boolean isWinVisibleLw() {
-        return (mActivityRecord == null || mActivityRecord.mVisibleRequested
+        return (mActivityRecord == null || !mActivityRecord.hiddenRequested
                 || mActivityRecord.isAnimating(TRANSITION)) && isVisible();
     }
 
@@ -1548,7 +1569,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * not the pending requested hidden state.
      */
     boolean isVisibleNow() {
-        return (mToken.isVisible() || mAttrs.type == TYPE_APPLICATION_STARTING)
+        return (!mToken.isHidden() || mAttrs.type == TYPE_APPLICATION_STARTING)
                 && isVisible();
     }
 
@@ -1570,7 +1591,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final ActivityRecord atoken = mActivityRecord;
         return (mHasSurface || (!mRelayoutCalled && mViewVisibility == View.VISIBLE))
                 && isVisibleByPolicy() && !isParentWindowHidden()
-                && (atoken == null || atoken.mVisibleRequested)
+                && (atoken == null || !atoken.hiddenRequested)
                 && !mAnimatingExit && !mDestroying;
     }
 
@@ -1585,7 +1606,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
         final ActivityRecord atoken = mActivityRecord;
         if (atoken != null) {
-            return ((!isParentWindowHidden() && atoken.mVisibleRequested)
+            return ((!isParentWindowHidden() && !atoken.hiddenRequested)
                     || isAnimating(TRANSITION | PARENTS));
         }
         return !isParentWindowHidden() || isAnimating(TRANSITION | PARENTS);
@@ -1621,7 +1642,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return false;
         }
         final boolean parentAndClientVisible = !isParentWindowHidden()
-                && mViewVisibility == View.VISIBLE && mToken.isVisible();
+                && mViewVisibility == View.VISIBLE && !mToken.isHidden();
         return mHasSurface && isVisibleByPolicy() && !mDestroying
                 && (parentAndClientVisible || isAnimating(TRANSITION | PARENTS));
     }
@@ -1640,7 +1661,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         } else {
             final Task task = getTask();
             final boolean canFromTask = task != null && task.canAffectSystemUiFlags();
-            return canFromTask && mActivityRecord.isVisible();
+            return canFromTask && !mActivityRecord.isHidden();
         }
     }
 
@@ -1652,7 +1673,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     public boolean isDisplayedLw() {
         final ActivityRecord atoken = mActivityRecord;
         return isDrawnLw() && isVisibleByPolicy()
-                && ((!isParentWindowHidden() && (atoken == null || atoken.mVisibleRequested))
+                && ((!isParentWindowHidden() && (atoken == null || !atoken.hiddenRequested))
                         || isAnimating(TRANSITION | PARENTS));
     }
 
@@ -1669,8 +1690,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final ActivityRecord atoken = mActivityRecord;
         return mViewVisibility == View.GONE
                 || !mRelayoutCalled
-                || (atoken == null && !mToken.isVisible())
-                || (atoken != null && !atoken.mVisibleRequested)
+                || (atoken == null && mToken.isHidden())
+                || (atoken != null && atoken.hiddenRequested)
                 || isParentWindowGoneForLayout()
                 || (mAnimatingExit && !isAnimatingLw())
                 || mDestroying;
@@ -1859,8 +1880,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private boolean hasMoved() {
         return mHasSurface && (mWindowFrames.hasContentChanged() || mMovedByResize)
                 && !mAnimatingExit
-                && (mWindowFrames.mFrame.top != mWindowFrames.mLastFrame.top
-                    || mWindowFrames.mFrame.left != mWindowFrames.mLastFrame.left)
+                && (mWindowFrames.mRelFrame.top != mWindowFrames.mLastRelFrame.top
+                    || mWindowFrames.mRelFrame.left != mWindowFrames.mLastRelFrame.left)
                 && (!mIsChildWindow || !getParentWindow().hasMoved());
     }
 
@@ -2135,7 +2156,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return false;
         }
 
-        final TaskStack stack = getStack();
+        final ActivityStack stack = getStack();
         if (stack != null && stack.shouldIgnoreInput()) {
             // Ignore when the stack shouldn't receive input event.
             // (i.e. the minimized stack in split screen mode.)
@@ -2162,8 +2183,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                         + " parentHidden=" + isParentWindowHidden()
                         + " exiting=" + mAnimatingExit + " destroying=" + mDestroying);
                 if (mActivityRecord != null) {
-                    Slog.i(TAG_WM, "  mActivityRecord.visibleRequested="
-                            + mActivityRecord.mVisibleRequested);
+                    Slog.i(TAG_WM, "  mActivityRecord.hiddenRequested=" + mActivityRecord.hiddenRequested);
                 }
             }
         }
@@ -2540,7 +2560,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                             // just in case they have the divider at an unstable position. Better
                             // also reset drag resizing state, because the owner can't do it
                             // anymore.
-                            final TaskStack stack =
+                            final ActivityStack stack =
                                     dc.getSplitScreenPrimaryStackIgnoringVisibility();
                             if (stack != null) {
                                 stack.resetDockedStackToMiddle();
@@ -2574,7 +2594,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * interacts with it.
      */
     private boolean shouldKeepVisibleDeadAppWindow() {
-        if (!isWinVisibleLw() || mActivityRecord == null || !mActivityRecord.isClientVisible()) {
+        if (!isWinVisibleLw() || mActivityRecord == null || mActivityRecord.isClientHidden()) {
             // Not a visible app window or the app isn't dead.
             return false;
         }
@@ -2611,14 +2631,14 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return showBecauseOfActivity || showBecauseOfWindow;
     }
 
-    /** @return {@code false} if this window desires touch events. */
+    /** @return false if this window desires touch events. */
     boolean cantReceiveTouchInput() {
         if (mActivityRecord == null || mActivityRecord.getTask() == null) {
             return false;
         }
 
         return mActivityRecord.getTask().getTaskStack().shouldIgnoreInput()
-                || !mActivityRecord.mVisibleRequested
+                || mActivityRecord.hiddenRequested
                 || isAnimatingToRecents();
     }
 
@@ -2886,13 +2906,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     void sendAppVisibilityToClients() {
         super.sendAppVisibilityToClients();
 
-        final boolean clientVisible = mActivityRecord.isClientVisible();
-        if (mAttrs.type == TYPE_APPLICATION_STARTING && !clientVisible) {
+        final boolean clientHidden = mActivityRecord.isClientHidden();
+        if (mAttrs.type == TYPE_APPLICATION_STARTING && clientHidden) {
             // Don't hide the starting window.
             return;
         }
 
-        if (!clientVisible) {
+        if (clientHidden) {
             // Once we are notifying the client that it's visibility has changed, we need to prevent
             // it from destroying child surfaces until the animation has finished. We do this by
             // detaching any surface control the client added from the client.
@@ -2906,8 +2926,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         try {
             if (DEBUG_VISIBILITY) Slog.v(TAG,
-                    "Setting visibility of " + this + ": " + clientVisible);
-            mClient.dispatchAppVisibility(clientVisible);
+                    "Setting visibility of " + this + ": " + (!clientHidden));
+            mClient.dispatchAppVisibility(!clientHidden);
         } catch (RemoteException e) {
         }
     }
@@ -3137,7 +3157,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return;
         }
 
-        final TaskStack stack = task.getTaskStack();
+        final ActivityStack stack = task.getTaskStack();
         if (stack == null) {
             return;
         }
@@ -3151,7 +3171,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return;
         }
 
-        final TaskStack stack = task.getTaskStack();
+        final ActivityStack stack = task.getTaskStack();
         if (stack == null) {
             return;
         }
@@ -3400,7 +3420,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     private int getStackId() {
-        final TaskStack stack = getStack();
+        final ActivityStack stack = getStack();
         if (stack == null) {
             return INVALID_STACK_ID;
         }
@@ -3631,7 +3651,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     void dump(PrintWriter pw, String prefix, boolean dumpAll) {
-        final TaskStack stack = getStack();
+        final ActivityStack stack = getStack();
         pw.print(prefix + "mDisplayId=" + getDisplayId());
         if (stack != null) {
             pw.print(" stackId=" + stack.mStackId);
@@ -4147,9 +4167,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     + " starting=" + (mAttrs.type == TYPE_APPLICATION_STARTING)
                     + " during animation: policyVis=" + isVisibleByPolicy()
                     + " parentHidden=" + isParentWindowHidden()
-                    + " tok.visibleRequested="
-                    + (mActivityRecord != null && mActivityRecord.mVisibleRequested)
-                    + " tok.visible=" + (mActivityRecord != null && mActivityRecord.isVisible())
+                    + " tok.hiddenRequested="
+                    + (mActivityRecord != null && mActivityRecord.hiddenRequested)
+                    + " tok.hidden=" + (mActivityRecord != null && mActivityRecord.isHidden())
                     + " animating=" + isAnimating(TRANSITION | PARENTS)
                     + " tok animating="
                     + (mActivityRecord != null && mActivityRecord.isAnimating(TRANSITION))
@@ -4556,7 +4576,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                         + " pv=" + isVisibleByPolicy()
                         + " mDrawState=" + mWinAnimator.mDrawState
                         + " ph=" + isParentWindowHidden()
-                        + " th=" + (mActivityRecord != null && mActivityRecord.mVisibleRequested)
+                        + " th=" + (mActivityRecord != null ? mActivityRecord.hiddenRequested : false)
                         + " a=" + isAnimating(TRANSITION | PARENTS));
             }
         }
@@ -5081,7 +5101,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             outPoint.offset(-parentBounds.left, -parentBounds.top);
         }
 
-        TaskStack stack = getStack();
+        ActivityStack stack = getStack();
 
         // If we have stack outsets, that means the top-left
         // will be outset, and we need to inset ourselves

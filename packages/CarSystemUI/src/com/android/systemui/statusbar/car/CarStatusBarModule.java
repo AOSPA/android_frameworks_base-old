@@ -56,12 +56,12 @@ import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.notification.BypassHeadsUpNotifier;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
-import com.android.systemui.statusbar.notification.NewNotifPipeline;
 import com.android.systemui.statusbar.notification.NotificationAlertingManager;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
+import com.android.systemui.statusbar.notification.collection.init.NewNotifPipeline;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.phone.AutoHideController;
@@ -73,12 +73,14 @@ import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.LightBarController;
 import com.android.systemui.statusbar.phone.LightsOutNotifController;
+import com.android.systemui.statusbar.phone.LockscreenLockIconController;
 import com.android.systemui.statusbar.phone.LockscreenWallpaper;
 import com.android.systemui.statusbar.phone.NotificationGroupAlertTransferHelper;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
+import com.android.systemui.statusbar.phone.StatusBarNotificationActivityStarter;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
 import com.android.systemui.statusbar.phone.StatusBarWindowViewController;
 import com.android.systemui.statusbar.policy.BatteryController;
@@ -160,7 +162,8 @@ public class CarStatusBarModule {
             NotificationListener notificationListener,
             ConfigurationController configurationController,
             StatusBarWindowController statusBarWindowController,
-            StatusBarWindowViewController.Builder statusBarWindowViewControllerBuilder,
+            StatusBarWindowViewController statusBarWindowViewController,
+            LockscreenLockIconController lockscreenLockIconController,
             DozeParameters dozeParameters,
             ScrimController scrimController,
             Lazy<LockscreenWallpaper> lockscreenWallpaperLazy,
@@ -177,6 +180,8 @@ public class CarStatusBarModule {
             Optional<Divider> dividerOptional,
             SuperStatusBarViewFactory superStatusBarViewFactory,
             LightsOutNotifController lightsOutNotifController,
+            StatusBarNotificationActivityStarter.Builder
+                    statusBarNotificationActivityStarterBuilder,
             StatusBarKeyguardViewManager statusBarKeyguardViewManager,
             ViewMediatorCallback viewMediatorCallback,
             DismissCallbackRegistry dismissCallbackRegistry,
@@ -235,7 +240,8 @@ public class CarStatusBarModule {
                 notificationListener,
                 configurationController,
                 statusBarWindowController,
-                statusBarWindowViewControllerBuilder,
+                statusBarWindowViewController,
+                lockscreenLockIconController,
                 dozeParameters,
                 scrimController,
                 lockscreenWallpaperLazy,
@@ -252,6 +258,7 @@ public class CarStatusBarModule {
                 dividerOptional,
                 superStatusBarViewFactory,
                 lightsOutNotifController,
+                statusBarNotificationActivityStarterBuilder,
                 statusBarKeyguardViewManager,
                 viewMediatorCallback,
                 dismissCallbackRegistry,

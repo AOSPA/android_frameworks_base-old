@@ -21,6 +21,8 @@ import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
 import com.android.systemui.R;
+import com.android.systemui.statusbar.phone.LockIcon;
+import com.android.systemui.statusbar.phone.NotificationPanelView;
 import com.android.systemui.statusbar.phone.StatusBarWindowView;
 import com.android.systemui.util.InjectionInflationController;
 
@@ -66,6 +68,11 @@ public class SuperStatusBarViewFactory {
         return mStatusBarWindowView;
     }
 
+    /** Gets the {@link LockIcon} inside of {@link R.layout#super_status_bar}. */
+    public LockIcon getLockIcon() {
+        return getStatusBarWindowView().findViewById(R.id.lock_icon);
+    }
+
     /**
      * Gets the inflated {@link NotificationShelf} from
      * {@link R.layout#status_bar_notification_shelf}.
@@ -88,5 +95,14 @@ public class SuperStatusBarViewFactory {
                     "R.layout.status_bar_notification_shelf could not be properly inflated");
         }
         return mNotificationShelf;
+    }
+
+    public NotificationPanelView getNotificationPanelView() {
+        StatusBarWindowView statusBarWindowView = getStatusBarWindowView();
+        if (statusBarWindowView == null) {
+            return null;
+        }
+
+        return mStatusBarWindowView.findViewById(R.id.notification_panel);
     }
 }
