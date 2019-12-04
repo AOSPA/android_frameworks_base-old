@@ -32,8 +32,7 @@ import android.text.format.DateUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewStub;
-import android.view.ViewTreeObserver.OnPreDrawListener;
-
+import android.view.ViewTreeObserver;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
@@ -69,7 +68,6 @@ public class NotificationMediaTemplateViewWrapper extends NotificationTemplateVi
     private View mSeekBarView;
     private Context mContext;
     private MetricsLogger mMetricsLogger;
-    private boolean mOnPreDrawListenerRegistered = false;
 
     @VisibleForTesting
     protected SeekBar.OnSeekBarChangeListener mSeekListener =
@@ -120,16 +118,6 @@ public class NotificationMediaTemplateViewWrapper extends NotificationTemplateVi
                 mMediaMetadata = metadata;
                 updateDuration();
             }
-        }
-    };
-
-    private OnPreDrawListener mPreDrawListener = new OnPreDrawListener(){
-        @Override
-        public boolean onPreDraw(){
-            removeOnPreDrawListener();
-            mHandler.removeCallbacks(mOnUpdateTimerTick);
-            mHandler.postDelayed(mOnUpdateTimerTick,PROGRESS_UPDATE_INTERVAL);
-            return true;
         }
     };
 
@@ -221,23 +209,18 @@ public class NotificationMediaTemplateViewWrapper extends NotificationTemplateVi
 
     private void startTimer() {
         clearTimer();
-        addOnPreDrawListener();
+        updateSeekBarView();
     }
 
-
-    private void addOnPreDrawListener() {
-        if ( !mOnPreDrawListenerRegistered ) {
-            mOnPreDrawListenerRegistered = true;
-            mSeekBarView.getViewTreeObserver().addOnPreDrawListener(mPreDrawListener);
-        }
-    }
-
-    private void removeOnPreDrawListener() {
-        if ( mOnPreDrawListenerRegistered ) {
-            mSeekBarView.getViewTreeObserver().removeOnPreDrawListener(mPreDrawListener);
-            mHandler.postDelayed(mOnUpdateTimerTick, PROGRESS_UPDATE_INTERVAL);
-            mOnPreDrawListenerRegistered = false;
-        }
+    private void updateSeekBarView() {
+        mSeekBarView.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener(){
+            @Override
+            public boolean onPreDraw(){
+                mSeekBarView.getViewTreeObserver().removeOnPreDrawListener(this);
+                mHandler.postDelayed(mOnUpdateTimerTick,PROGRESS_UPDATE_INTERVAL);
+                return true;
+            }
+        });
     }
 
     private void clearTimer() {
@@ -247,7 +230,6 @@ public class NotificationMediaTemplateViewWrapper extends NotificationTemplateVi
             mSeekBarTimer.purge();
             mSeekBarTimer = null;
         }
-        removeOnPreDrawListener();
     }
 
     private boolean canSeekMedia(@Nullable PlaybackState state) {
@@ -285,11 +267,9 @@ public class NotificationMediaTemplateViewWrapper extends NotificationTemplateVi
         public void run() {
             if (mMediaController != null && mSeekBar != null) {
                 PlaybackState playbackState = mMediaController.getPlaybackState();
+                updateSeekBarView();
                 if (playbackState != null) {
                     updatePlaybackUi(playbackState);
-                    if ( playbackState.getState() == PlaybackState.STATE_PLAYING ) {
-                        addOnPreDrawListener();
-                    }
                 } else {
                     clearTimer();
                 }
