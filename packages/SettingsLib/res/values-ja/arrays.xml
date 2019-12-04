@@ -62,6 +62,8 @@
     <item msgid="3966341281672645384">"無効"</item>
     <item msgid="1969681323976948639">"有効（フィルタ済み）"</item>
     <item msgid="8719029132154020716">"有効"</item>
+    <item>"有効（ヘッダーのみ）"</item>
+    <item>"有効（メディアパケット除外）"</item>
   </string-array>
   <string-array name="bluetooth_avrcp_versions">
     <item msgid="5347678900838034763">"AVRCP 1.4（デフォルト）"</item>

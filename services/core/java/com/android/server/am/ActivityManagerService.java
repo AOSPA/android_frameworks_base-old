@@ -369,6 +369,7 @@ import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.ActivityTaskManagerService;
 import com.android.server.wm.WindowManagerService;
 import com.android.server.wm.WindowProcessController;
+import com.android.server.ActivityTriggerService;
 
 import dalvik.system.VMRuntime;
 
@@ -758,6 +759,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             synchronized (this) {
                 mPidMap.put(app.pid, app);
             }
+            ActivityTriggerService atService = LocalServices.getService(ActivityTriggerService.class);
+            if(atService != null) {
+                atService.updateRecord(app.hostingRecord, app.info, app.pid, ActivityTriggerService.PROC_ADDED_NOTIFICATION);
+            }
             mAtmInternal.onProcessMapped(app.pid, app.getWindowProcessController());
         }
 
@@ -776,6 +781,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
             if (removed) {
+                ActivityTriggerService atService = LocalServices.getService(ActivityTriggerService.class);
+                if(atService != null) {
+                    atService.updateRecord(app.hostingRecord, app.info, app.pid, ActivityTriggerService.PROC_REMOVED_NOTIFICATION);
+                }
                 mAtmInternal.onProcessUnMapped(app.pid);
             }
         }
@@ -1555,13 +1564,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     static final String SERVICE_RECORD_KEY = "servicerecord";
 
-    static final ActivityTrigger mActivityTrigger = new ActivityTrigger();
-
     long mLastMemUsageReportTime = 0;
-
-    // Process in same process Group keep in same cgroup
-    boolean mEnableProcessGroupCgroupFollow =
-            SystemProperties.getBoolean("ro.vendor.qti.cgroup_follow.enable",false);
 
     /**
      * Flag whether the current user is a "monkey", i.e. whether
@@ -4923,6 +4926,10 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         EventLog.writeEvent(EventLogTags.AM_PROC_BOUND, app.userId, app.pid, app.processName);
 
+        if (mUxPerf != null && app.hostingRecord != null && "activity".equals(app.hostingRecord.getType())) {
+            mUxPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, app.processName, app.pid, BoostFramework.Launch.TYPE_ATTACH_APPLICATION);
+        }
+
         app.curAdj = app.setAdj = app.verifiedAdj = ProcessList.INVALID_ADJ;
         app.setCurrentSchedulingGroup(app.setSchedGroup = ProcessList.SCHED_GROUP_DEFAULT);
         app.forcingToImportant = null;
@@ -5240,9 +5247,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 (int) (SystemClock.elapsedRealtime() - app.startTime),
                 app.hostingRecord.getType(),
                 (app.hostingRecord.getName() != null ? app.hostingRecord.getName() : ""));
-
-        //send start notification to AT with the starting app's info.
-        mActivityTrigger.activityStartTrigger(app.info, app.pid);
         return true;
     }
 
@@ -5334,7 +5338,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             storageManager.commitChanges();
         } catch (Exception e) {
             PowerManager pm = (PowerManager)
-                     mInjector.getContext().getSystemService(Context.POWER_SERVICE);
+                     mContext.getSystemService(Context.POWER_SERVICE);
             pm.reboot("Checkpoint commit failed");
         }
 
