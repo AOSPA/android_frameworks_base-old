@@ -27,6 +27,7 @@ import com.android.systemui.appops.AppOpsController;
 import com.android.systemui.dagger.qualifiers.MainHandler;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.util.Assert;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -121,6 +122,8 @@ public class ForegroundServiceController {
      * @param active whether the appOpCode is active or not
      */
     void onAppOpChanged(int appOpCode, int uid, String packageName, boolean active) {
+        Assert.isMainThread();
+
         int userId = UserHandle.getUserId(uid);
         // Record active app ops
         synchronized (mMutex) {
@@ -139,8 +142,7 @@ public class ForegroundServiceController {
         // Update appOp if there's an associated pending or visible notification:
         final String foregroundKey = getStandardLayoutKey(userId, packageName);
         if (foregroundKey != null) {
-            final NotificationEntry entry = mEntryManager.getPendingOrCurrentNotif(
-                    foregroundKey);
+            final NotificationEntry entry = mEntryManager.getPendingOrActiveNotif(foregroundKey);
             if (entry != null
                     && uid == entry.getSbn().getUid()
                     && packageName.equals(entry.getSbn().getPackageName())) {

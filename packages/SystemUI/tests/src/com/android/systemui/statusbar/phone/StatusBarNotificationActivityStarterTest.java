@@ -64,11 +64,11 @@ import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationTestHelper;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarState;
+import com.android.systemui.statusbar.SuperStatusBarViewFactory;
 import com.android.systemui.statusbar.notification.ActivityLaunchAnimator;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
-import com.android.systemui.statusbar.notification.collection.NotificationData;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
@@ -117,9 +117,11 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     @Mock
     private Intent mContentIntentInner;
     @Mock
-    private NotificationData mNotificationData;
-
     private NotificationActivityStarter mNotificationActivityStarter;
+    @Mock
+    private SuperStatusBarViewFactory mSuperStatusBarViewFactory;
+    @Mock
+    private NotificationPanelView mNotificationPanelView;
 
     private NotificationTestHelper mNotificationTestHelper;
     private ExpandableNotificationRow mNotificationRow;
@@ -134,7 +136,6 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
         when(mRemoteInputManager.getController()).thenReturn(mRemoteInputController);
-        when(mEntryManager.getNotificationData()).thenReturn(mNotificationData);
 
         when(mContentIntent.isActivity()).thenReturn(true);
         when(mContentIntent.getCreatorUserHandle()).thenReturn(UserHandle.of(1));
@@ -144,34 +145,40 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
 
         // Create standard notification with contentIntent
         mNotificationRow = mNotificationTestHelper.createRow();
-        StatusBarNotification sbn = mNotificationRow.getStatusBarNotification();
+        StatusBarNotification sbn = mNotificationRow.getEntry().getSbn();
         sbn.getNotification().contentIntent = mContentIntent;
         sbn.getNotification().flags |= Notification.FLAG_AUTO_CANCEL;
 
         // Create bubble notification row with contentIntent
         mBubbleNotificationRow = mNotificationTestHelper.createBubble();
-        StatusBarNotification bubbleSbn = mBubbleNotificationRow.getStatusBarNotification();
+        StatusBarNotification bubbleSbn = mBubbleNotificationRow.getEntry().getSbn();
         bubbleSbn.getNotification().contentIntent = mContentIntent;
         bubbleSbn.getNotification().flags |= Notification.FLAG_AUTO_CANCEL;
 
         mActiveNotifications = new ArrayList<>();
         mActiveNotifications.add(mNotificationRow.getEntry());
         mActiveNotifications.add(mBubbleNotificationRow.getEntry());
-        when(mNotificationData.getActiveNotifications()).thenReturn(mActiveNotifications);
+        when(mEntryManager.getVisibleNotifications()).thenReturn(mActiveNotifications);
         when(mStatusBarStateController.getState()).thenReturn(StatusBarState.SHADE);
+        when(mSuperStatusBarViewFactory.getNotificationPanelView())
+                .thenReturn(mNotificationPanelView);
 
-        mNotificationActivityStarter = new StatusBarNotificationActivityStarter(getContext(),
-                mock(CommandQueue.class), mAssistManager, mock(NotificationPanelView.class),
-                mock(NotificationPresenter.class), mEntryManager, mock(HeadsUpManagerPhone.class),
-                mActivityStarter, mock(ActivityLaunchAnimator.class), mStatusBarService,
+        mNotificationActivityStarter = (new StatusBarNotificationActivityStarter.Builder(
+                getContext(), mock(CommandQueue.class), () -> mAssistManager,
+                mEntryManager, mock(HeadsUpManagerPhone.class),
+                mActivityStarter, mStatusBarService,
                 mock(StatusBarStateController.class), mock(KeyguardManager.class),
                 mock(IDreamManager.class), mRemoteInputManager,
                 mock(StatusBarRemoteInputCallback.class), mock(NotificationGroupManager.class),
-                mock(NotificationLockscreenUserManager.class), mShadeController,
+                mock(NotificationLockscreenUserManager.class),
                 mKeyguardStateController,
                 mock(NotificationInterruptionStateProvider.class), mock(MetricsLogger.class),
                 mock(LockPatternUtils.class), mHandler, mHandler, mActivityIntentHelper,
-                mBubbleController);
+                mBubbleController, mSuperStatusBarViewFactory))
+                .setShadeController(mShadeController)
+                .setNotificationPresenter(mock(NotificationPresenter.class))
+                .setActivityLaunchAnimator(mock(ActivityLaunchAnimator.class))
+        .build();
 
         // set up dismissKeyguardThenExecute to synchronously invoke the OnDismissAction arg
         doAnswer(mCallOnDismiss).when(mActivityStarter).dismissKeyguardThenExecute(
@@ -197,7 +204,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     public void testOnNotificationClicked_keyGuardShowing()
             throws PendingIntent.CanceledException, RemoteException {
         // Given
-        StatusBarNotification sbn = mNotificationRow.getStatusBarNotification();
+        StatusBarNotification sbn = mNotificationRow.getEntry().getSbn();
         sbn.getNotification().contentIntent = mContentIntent;
         sbn.getNotification().flags |= Notification.FLAG_AUTO_CANCEL;
 
@@ -231,7 +238,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     @Test
     public void testOnNotificationClicked_bubble_noContentIntent_noKeyGuard()
             throws RemoteException {
-        StatusBarNotification sbn = mBubbleNotificationRow.getStatusBarNotification();
+        StatusBarNotification sbn = mBubbleNotificationRow.getEntry().getSbn();
 
         // Given
         sbn.getNotification().contentIntent = null;
@@ -260,7 +267,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     @Test
     public void testOnNotificationClicked_bubble_noContentIntent_keyGuardShowing()
             throws RemoteException {
-        StatusBarNotification sbn = mBubbleNotificationRow.getStatusBarNotification();
+        StatusBarNotification sbn = mBubbleNotificationRow.getEntry().getSbn();
 
         // Given
         sbn.getNotification().contentIntent = null;
@@ -290,7 +297,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     @Test
     public void testOnNotificationClicked_bubble_withContentIntent_keyGuardShowing()
             throws RemoteException {
-        StatusBarNotification sbn = mBubbleNotificationRow.getStatusBarNotification();
+        StatusBarNotification sbn = mBubbleNotificationRow.getEntry().getSbn();
 
         // Given
         sbn.getNotification().contentIntent = mContentIntent;

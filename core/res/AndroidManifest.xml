@@ -109,6 +109,8 @@
 
     <protected-broadcast android:name="android.app.action.ENTER_CAR_MODE" />
     <protected-broadcast android:name="android.app.action.EXIT_CAR_MODE" />
+    <protected-broadcast android:name="android.app.action.ENTER_CAR_MODE_PRIVILEGED" />
+    <protected-broadcast android:name="android.app.action.EXIT_CAR_MODE_PRIVILEGED" />
     <protected-broadcast android:name="android.app.action.ENTER_DESK_MODE" />
     <protected-broadcast android:name="android.app.action.EXIT_DESK_MODE" />
     <protected-broadcast android:name="android.app.action.NEXT_ALARM_CLOCK_CHANGED" />
@@ -143,7 +145,7 @@
     <protected-broadcast android:name="android.bluetooth.adapter.action.CONNECTION_STATE_CHANGED" />
     <protected-broadcast android:name="android.bluetooth.device.action.UUID" />
     <protected-broadcast android:name="android.bluetooth.device.action.MAS_INSTANCE" />
-    <protected-broadcast android:name="android.bluetooth.device.action.ALIAS_CHANGED" />
+    <protected-broadcast android:name="android.bluetooth.action.ALIAS_CHANGED" />
     <protected-broadcast android:name="android.bluetooth.device.action.FOUND" />
     <protected-broadcast android:name="android.bluetooth.device.action.CLASS_CHANGED" />
     <protected-broadcast android:name="android.bluetooth.device.action.ACL_CONNECTED" />
@@ -400,7 +402,7 @@
     <protected-broadcast android:name="android.net.wifi.p2p.THIS_DEVICE_CHANGED" />
     <protected-broadcast android:name="android.net.wifi.p2p.PEERS_CHANGED" />
     <protected-broadcast android:name="android.net.wifi.p2p.CONNECTION_STATE_CHANGE" />
-    <protected-broadcast android:name="android.net.wifi.p2p.PERSISTENT_GROUPS_CHANGED" />
+    <protected-broadcast android:name="android.net.wifi.p2p.action.WIFI_P2P_PERSISTENT_GROUPS_CHANGED" />
     <protected-broadcast android:name="com.qualcomm.qti.net.wifi.DPP_EVENT" />
     <protected-broadcast android:name="android.net.wifi.COUNTRY_CODE_CHANGED" />
     <protected-broadcast android:name="com.qualcomm.qti.net.wifi.WIFI_DISCONNECT_IN_PROGRESS" />
@@ -693,7 +695,6 @@
         android:icon="@drawable/perm_group_contacts"
         android:label="@string/permgrouplab_contacts"
         android:description="@string/permgroupdesc_contacts"
-        android:request="@string/permgrouprequest_contacts"
         android:priority="100" />
 
     <!-- Allows an application to read the user's contacts data.
@@ -724,7 +725,6 @@
         android:icon="@drawable/perm_group_calendar"
         android:label="@string/permgrouplab_calendar"
         android:description="@string/permgroupdesc_calendar"
-        android:request="@string/permgrouprequest_calendar"
         android:priority="200" />
 
     <!-- Allows an application to read the user's calendar data.
@@ -755,7 +755,6 @@
         android:icon="@drawable/perm_group_sms"
         android:label="@string/permgrouplab_sms"
         android:description="@string/permgroupdesc_sms"
-        android:request="@string/permgrouprequest_sms"
         android:priority="300" />
 
     <!-- Allows an application to send SMS messages.
@@ -874,7 +873,6 @@
         android:icon="@drawable/perm_group_storage"
         android:label="@string/permgrouplab_storage"
         android:description="@string/permgroupdesc_storage"
-        android:request="@string/permgrouprequest_storage"
         android:priority="900" />
 
     <!-- Allows an application to read from external storage.
@@ -963,10 +961,6 @@
         android:icon="@drawable/perm_group_location"
         android:label="@string/permgrouplab_location"
         android:description="@string/permgroupdesc_location"
-        android:request="@string/permgrouprequest_location"
-        android:requestDetail="@string/permgrouprequestdetail_location"
-        android:backgroundRequest="@string/permgroupbackgroundrequest_location"
-        android:backgroundRequestDetail="@string/permgroupbackgroundrequestdetail_location"
         android:priority="400" />
 
     <!-- Allows an app to access precise location.
@@ -1018,7 +1012,6 @@
         android:icon="@drawable/perm_group_call_log"
         android:label="@string/permgrouplab_calllog"
         android:description="@string/permgroupdesc_calllog"
-        android:request="@string/permgrouprequest_calllog"
         android:priority="450" />
 
     <!-- Allows an application to access the IMS call service: making and
@@ -1107,7 +1100,6 @@
         android:icon="@drawable/perm_group_phone_calls"
         android:label="@string/permgrouplab_phone"
         android:description="@string/permgroupdesc_phone"
-        android:request="@string/permgrouprequest_phone"
         android:priority="500" />
 
     <!-- Allows read only access to phone state, including the phone number of the device,
@@ -1228,7 +1220,6 @@
         android:icon="@drawable/perm_group_microphone"
         android:label="@string/permgrouplab_microphone"
         android:description="@string/permgroupdesc_microphone"
-        android:request="@string/permgrouprequest_microphone"
         android:priority="600" />
 
     <!-- Allows an application to record audio.
@@ -1250,7 +1241,6 @@
         android:icon="@drawable/perm_group_activity_recognition"
         android:label="@string/permgrouplab_activityRecognition"
         android:description="@string/permgroupdesc_activityRecognition"
-        android:request="@string/permgrouprequest_activityRecognition"
         android:priority="1000" />
 
     <!-- Allows an application to recognize physical activity.
@@ -1293,7 +1283,6 @@
         android:icon="@drawable/perm_group_camera"
         android:label="@string/permgrouplab_camera"
         android:description="@string/permgroupdesc_camera"
-        android:request="@string/permgrouprequest_camera"
         android:priority="700" />
 
     <!-- Required to be able to access the camera device.
@@ -1332,7 +1321,6 @@
         android:icon="@drawable/perm_group_sensors"
         android:label="@string/permgrouplab_sensors"
         android:description="@string/permgroupdesc_sensors"
-        android:request="@string/permgrouprequest_sensors"
         android:priority="800" />
 
     <!-- Allows an application to access data from sensors that the user uses to
@@ -1653,6 +1641,7 @@
 
     <!-- Allows network stack services (Connectivity and Wifi) to coordinate
          <p>Not for use by third-party or privileged applications.
+         @SystemApi
          @hide This should only be used by Connectivity and Wifi Services.
     -->
     <permission android:name="android.permission.NETWORK_STACK"
@@ -1660,6 +1649,7 @@
 
     <!-- Allows Settings and SystemUI to call methods in Networking services
          <p>Not for use by third-party or privileged applications.
+         @SystemApi
          @hide This should only be used by Settings and SystemUI.
     -->
     <permission android:name="android.permission.NETWORK_SETTINGS"
@@ -3621,7 +3611,8 @@
         android:protectionLevel="signature" />
 
     <!-- Allows an application to configure and connect to Wifi displays
-         @hide -->
+         @hide
+         @SystemApi -->
     <permission android:name="android.permission.CONFIGURE_WIFI_DISPLAY"
         android:protectionLevel="signature" />
 
@@ -4395,6 +4386,21 @@
          it will be ignored.
         @hide -->
     <permission android:name="android.permission.MODIFY_DAY_NIGHT_MODE"
+      android:protectionLevel="signature|privileged" />
+
+    <!-- @SystemApi Allows entering or exiting car mode using a specified priority.
+        This permission is required to use UiModeManager while specifying a priority for the calling
+        app.  A device manufacturer uses this permission to prioritize the apps which can
+        potentially request to enter car-mode on a device to help establish the correct behavior
+        where multiple such apps are active at the same time.
+        @hide -->
+    <permission android:name="android.permission.ENTER_CAR_MODE_PRIORITIZED"
+                android:protectionLevel="signature|privileged" />
+
+    <!-- @SystemApi Required to receive ACTION_ENTER_CAR_MODE_PRIVILEGED or
+        ACTION_EXIT_CAR_MODE_PRIVILEGED.
+        @hide -->
+    <permission android:name="android.permission.HANDLE_CAR_MODE_CHANGES"
                 android:protectionLevel="signature|privileged" />
 
     <!-- The system process is explicitly the only one allowed to launch the

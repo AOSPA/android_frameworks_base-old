@@ -394,7 +394,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals(window1, mWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
 
         // Make sure top focused display not changed if there is a focused app.
-        window1.mActivityRecord.mVisibleRequested = false;
+        window1.mActivityRecord.hiddenRequested = true;
         window1.getDisplayContent().setFocusedApp(window1.mActivityRecord);
         updateFocusedWindow();
         assertTrue(!window1.isFocused());
@@ -711,18 +711,14 @@ public class DisplayContentTests extends WindowTestsBase {
         final ActivityStack stack =
                 new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootActivityContainer)
                         .setDisplay(dc.mActivityDisplay).build();
-        final ActivityRecord activity = stack.topTask().getTopActivity();
+        final ActivityRecord activity = stack.topTask().getTopNonFinishingActivity();
 
         activity.setRequestedOrientation(newOrientation);
 
-        final ArgumentCaptor<Configuration> captor = ArgumentCaptor.forClass(Configuration.class);
-        verify(dc.mActivityDisplay).updateDisplayOverrideConfigurationLocked(captor.capture(),
-                same(activity), anyBoolean(), same(null));
-        final Configuration newDisplayConfig = captor.getValue();
         final int expectedOrientation = newOrientation == SCREEN_ORIENTATION_PORTRAIT
                 ? Configuration.ORIENTATION_PORTRAIT
                 : Configuration.ORIENTATION_LANDSCAPE;
-        assertEquals(expectedOrientation, newDisplayConfig.orientation);
+        assertEquals(expectedOrientation, dc.getConfiguration().orientation);
     }
 
     @Test
@@ -737,7 +733,7 @@ public class DisplayContentTests extends WindowTestsBase {
         final ActivityStack stack =
                 new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootActivityContainer)
                         .setDisplay(dc.mActivityDisplay).build();
-        final ActivityRecord activity = stack.topTask().getTopActivity();
+        final ActivityRecord activity = stack.topTask().getTopNonFinishingActivity();
 
         activity.setRequestedOrientation(newOrientation);
 

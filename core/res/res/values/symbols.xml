@@ -356,6 +356,7 @@
   <java-symbol type="bool" name="config_enableNewAutoSelectNetworkUI"/>
   <java-symbol type="bool" name="config_disableUsbPermissionDialogs"/>
   <java-symbol type="dimen" name="config_fullTaskSnapshotScale" />
+  <java-symbol type="bool" name="config_use16BitTaskSnapshotPixelFormat" />
   <java-symbol type="bool" name="config_lowRamTaskSnapshotsAndRecents" />
   <java-symbol type="bool" name="config_hasRecents" />
   <java-symbol type="string" name="config_recentsComponentName" />
@@ -2132,6 +2133,8 @@
   <java-symbol type="integer" name="config_minimumScreenOffTimeout" />
   <java-symbol type="integer" name="config_maximumScreenDimDuration" />
   <java-symbol type="fraction" name="config_maximumScreenDimRatio" />
+  <java-symbol type="integer" name="config_attentiveTimeout" />
+  <java-symbol type="integer" name="config_attentiveWarningDuration" />
   <java-symbol type="string" name="config_customAdbPublicKeyConfirmationComponent" />
   <java-symbol type="string" name="config_customAdbPublicKeyConfirmationSecondaryUserComponent" />
   <java-symbol type="string" name="config_customVpnConfirmDialogComponent" />
@@ -2955,7 +2958,8 @@
   <java-symbol type="color" name="notification_material_background_color" />
 
   <!-- Resolver target actions -->
-  <java-symbol type="array" name="resolver_target_actions" />
+  <java-symbol type="array" name="resolver_target_actions_pin" />
+  <java-symbol type="array" name="resolver_target_actions_unpin" />
 
   <java-symbol type="array" name="non_removable_euicc_slots" />
 
@@ -3788,6 +3792,8 @@
   <java-symbol type="string" name="accessibility_system_action_recents_label" />
   <java-symbol type="string" name="accessibility_system_action_screenshot_label" />
   <java-symbol type="string" name="accessibility_system_action_toggle_split_screen_label" />
+
+  <java-symbol type="string" name="accessibility_freeform_caption" />
 
   <!-- For Pdn throttle feature -->
   <java-symbol type="bool" name="config_pdp_retry_for_29_33_55_enabled" />

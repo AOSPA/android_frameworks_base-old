@@ -506,6 +506,26 @@ public class ExifInterface {
     public static final int WHITEBALANCE_AUTO = 0;
     public static final int WHITEBALANCE_MANUAL = 1;
 
+    /**
+     * Constant used to indicate that the input stream contains the full image data.
+     * <p>
+     * The format of the image data should follow one of the image formats supported by this class.
+     */
+    public static final int STREAM_TYPE_FULL_IMAGE_DATA = 0;
+    /**
+     * Constant used to indicate that the input stream contains only Exif data.
+     * <p>
+     * The format of the Exif-only data must follow the below structure:
+     *     Exif Identifier Code ("Exif\0\0") + TIFF header + IFD data
+     * See JEITA CP-3451C Section 4.5.2 and 4.5.4 specifications for more details.
+     */
+    public static final int STREAM_TYPE_EXIF_DATA_ONLY = 1;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({STREAM_TYPE_FULL_IMAGE_DATA, STREAM_TYPE_EXIF_DATA_ONLY})
+    public @interface ExifStreamType {}
+
     // Maximum size for checking file type signature (see image_type_recognition_lite.cc)
     private static final int SIGNATURE_CHECK_SIZE = 5000;
 
@@ -1416,14 +1436,16 @@ public class ExifInterface {
     private AssetManager.AssetInputStream mAssetInputStream;
     private boolean mIsInputStream;
     private int mMimeType;
-    private boolean mIsStandalone;
+    private boolean mIsExifDataOnly;
     @UnsupportedAppUsage
     private final HashMap[] mAttributes = new HashMap[EXIF_TAGS.length];
     private Set<Integer> mHandledIfdOffsets = new HashSet<>(EXIF_TAGS.length);
     private ByteOrder mExifByteOrder = ByteOrder.BIG_ENDIAN;
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private boolean mHasThumbnail;
-    // The following values used for indicating a thumbnail position.
+    private boolean mHasThumbnailStrips;
+    private boolean mAreThumbnailStripsConsecutive;
+    // Used to indicate the position of the thumbnail (includes offset to EXIF data segment).
     private int mThumbnailOffset;
     private int mThumbnailLength;
     private byte[] mThumbnailBytes;
@@ -1444,6 +1466,11 @@ public class ExifInterface {
 
     /**
      * Reads Exif tags from the specified image file.
+     *
+     * @param file the file of the image data
+     * @throws NullPointerException if file is null
+     * @throws IOException if an I/O error occurs while retrieving file descriptor via
+     *         {@link FileInputStream#getFD()}.
      */
     public ExifInterface(@NonNull File file) throws IOException {
         if (file == null) {
@@ -1454,6 +1481,11 @@ public class ExifInterface {
 
     /**
      * Reads Exif tags from the specified image file.
+     *
+     * @param filename the name of the file of the image data
+     * @throws NullPointerException if file name is null
+     * @throws IOException if an I/O error occurs while retrieving file descriptor via
+     *         {@link FileInputStream#getFD()}.
      */
     public ExifInterface(@NonNull String filename) throws IOException {
         if (filename == null) {
@@ -1466,6 +1498,11 @@ public class ExifInterface {
      * Reads Exif tags from the specified image file descriptor. Attribute mutation is supported
      * for writable and seekable file descriptors only. This constructor will not rewind the offset
      * of the given file descriptor. Developers should close the file descriptor after use.
+     *
+     * @param fileDescriptor the file descriptor of the image data
+     * @throws NullPointerException if file descriptor is null
+     * @throws IOException if an error occurs while duplicating the file descriptor via
+     *         {@link Os#dup(FileDescriptor)}.
      */
     public ExifInterface(@NonNull FileDescriptor fileDescriptor) throws IOException {
         if (fileDescriptor == null) {
@@ -1504,45 +1541,47 @@ public class ExifInterface {
     /**
      * Reads Exif tags from the specified image input stream. Attribute mutation is not supported
      * for input streams. The given input stream will proceed from its current position. Developers
-     * should close the input stream after use.
+     * should close the input stream after use. This constructor is not intended to be used with an
+     * input stream that performs any networking operations.
+     *
+     * @param inputStream the input stream that contains the image data
+     * @throws NullPointerException if the input stream is null
      */
     public ExifInterface(@NonNull InputStream inputStream) throws IOException {
         this(inputStream, false);
     }
 
     /**
-     * Reads Exif tags from the specified standalone input stream. Standalone data refers to Exif
-     * data that exists by itself and is not contained in a file format such as jpeg or png.
-     * The format of the standalone data must follow the below structure:
-     *     Exif Identifier Code ("Exif\0\0") + TIFF header + IFD data
-     * See JEITA CP-3451C Section 4.5.2 and 4.5.4 specifications for more details.
-     * <p>
-     * Attribute mutation is not supported for this constructor. The given input stream will proceed
-     * from its current position. Developers should close the input stream after use. This
-     * constructor is not intended to be used with an input stream that performs any networking
-     * operations.
+     * Reads Exif tags from the specified image input stream based on the stream type. Attribute
+     * mutation is not supported for input streams. The given input stream will proceed from its
+     * current position. Developers should close the input stream after use. This constructor is not
+     * intended to be used with an input stream that performs any networking operations.
      *
-     * @throws IOException if the data does not follow the aforementioned structure.
+     * @param inputStream the input stream that contains the image data
+     * @param streamType the type of input stream
+     * @throws NullPointerException if the input stream is null
+     * @throws IOException if an I/O error occurs while retrieving file descriptor via
+     *         {@link FileInputStream#getFD()}.
      */
-    @NonNull
-    public static ExifInterface fromStandalone(@NonNull InputStream inputStream)
+    public ExifInterface(@NonNull InputStream inputStream, @ExifStreamType int streamType)
             throws IOException {
-        if (isStandalone(inputStream)) {
-            return new ExifInterface(inputStream, true);
-        }
-        throw new IOException("Given data does not follow the structure of a standalone exif "
-                + "data.");
+        this(inputStream, (streamType == STREAM_TYPE_EXIF_DATA_ONLY) ? true : false);
     }
 
-    private ExifInterface(@NonNull InputStream inputStream, boolean isFromStandalone)
+    private ExifInterface(@NonNull InputStream inputStream, boolean shouldBeExifDataOnly)
             throws IOException {
         if (inputStream == null) {
             throw new NullPointerException("inputStream cannot be null");
         }
         mFilename = null;
 
-        if (isFromStandalone) {
-            mIsStandalone = true;
+        if (shouldBeExifDataOnly) {
+            inputStream = new BufferedInputStream(inputStream, SIGNATURE_CHECK_SIZE);
+            if (!isExifDataOnly((BufferedInputStream) inputStream)) {
+                Log.w(TAG, "Given data does not follow the structure of an Exif-only data.");
+                return;
+            }
+            mIsExifDataOnly = true;
             mAssetInputStream = null;
             mSeekableFileDescriptor = null;
         } else {
@@ -1880,10 +1919,9 @@ public class ExifInterface {
 
     /**
      * This function decides which parser to read the image data according to the given input stream
-     * type and the content of the input stream. In each case, it reads the first three bytes to
-     * determine whether the image data format is JPEG or not.
+     * type and the content of the input stream.
      */
-    private void loadAttributes(@NonNull InputStream in) throws IOException {
+    private void loadAttributes(@NonNull InputStream in) {
         if (in == null) {
             throw new NullPointerException("inputstream shouldn't be null");
         }
@@ -1894,7 +1932,7 @@ public class ExifInterface {
             }
 
             // Check file type
-            if (!mIsStandalone) {
+            if (!mIsExifDataOnly) {
                 in = new BufferedInputStream(in, SIGNATURE_CHECK_SIZE);
                 mMimeType = getMimeType((BufferedInputStream) in);
             }
@@ -1902,7 +1940,7 @@ public class ExifInterface {
             // Create byte-ordered input stream
             ByteOrderedDataInputStream inputStream = new ByteOrderedDataInputStream(in);
 
-            if (!mIsStandalone) {
+            if (!mIsExifDataOnly) {
                 switch (mMimeType) {
                     case IMAGE_TYPE_JPEG: {
                         getJpegAttributes(inputStream, 0, IFD_TYPE_PRIMARY); // 0 is offset
@@ -1969,11 +2007,14 @@ public class ExifInterface {
         }
     }
 
-    private static boolean isSeekableFD(FileDescriptor fd) throws IOException {
+    private static boolean isSeekableFD(FileDescriptor fd) {
         try {
             Os.lseek(fd, 0, OsConstants.SEEK_CUR);
             return true;
         } catch (ErrnoException e) {
+            if (DEBUG) {
+                Log.d(TAG, "The file descriptor for the given input is not seekable");
+            }
             return false;
         }
     }
@@ -2224,10 +2265,12 @@ public class ExifInterface {
 
     /**
      * Returns the offset and length of thumbnail inside the image file, or
-     * {@code null} if there is no thumbnail.
+     * {@code null} if either there is no thumbnail or the thumbnail bytes are stored
+     * non-consecutively.
      *
      * @return two-element array, the offset in the first value, and length in
-     *         the second, or {@code null} if no thumbnail was found.
+     *         the second, or {@code null} if no thumbnail was found or the thumbnail strips are
+     *         not placed consecutively.
      * @throws IllegalStateException if {@link #saveAttributes()} has been
      *             called since the underlying file was initially parsed, since
      *             that means offsets may have changed.
@@ -2239,13 +2282,12 @@ public class ExifInterface {
         }
 
         if (mHasThumbnail) {
-            if (mIsStandalone) {
-                return new long[] { mThumbnailOffset + mExifOffset, mThumbnailLength };
+            if (mHasThumbnailStrips && !mAreThumbnailStripsConsecutive) {
+                return null;
             }
             return new long[] { mThumbnailOffset, mThumbnailLength };
-        } else {
-            return null;
         }
+        return null;
     }
 
     /**
@@ -2703,10 +2745,11 @@ public class ExifInterface {
         return true;
     }
 
-    private static boolean isStandalone(InputStream inputStream) throws IOException {
+    private static boolean isExifDataOnly(BufferedInputStream in) throws IOException {
+        in.mark(IDENTIFIER_EXIF_APP1.length);
         byte[] signatureCheckBytes = new byte[IDENTIFIER_EXIF_APP1.length];
-        inputStream.read(signatureCheckBytes);
-
+        in.read(signatureCheckBytes);
+        in.reset();
         for (int i = 0; i < IDENTIFIER_EXIF_APP1.length; i++) {
             if (signatureCheckBytes[i] != IDENTIFIER_EXIF_APP1[i]) {
                 return false;
@@ -2786,10 +2829,9 @@ public class ExifInterface {
                         final long offset = start + IDENTIFIER_EXIF_APP1.length;
                         final byte[] value = Arrays.copyOfRange(bytes,
                                 IDENTIFIER_EXIF_APP1.length, bytes.length);
-                        readExifSegment(value, imageType);
-
                         // Save offset values for handleThumbnailFromJfif() function
                         mExifOffset = (int) offset;
+                        readExifSegment(value, imageType);
                     } else if (ArrayUtils.startsWith(bytes, IDENTIFIER_XMP_APP1)) {
                         // See XMP Specification Part 3: Storage in Files, 1.1.3 JPEG, Table 6
                         final long offset = start + IDENTIFIER_XMP_APP1.length;
@@ -3094,6 +3136,8 @@ public class ExifInterface {
                 if (in.read(bytes) != length) {
                     throw new IOException("Can't read exif");
                 }
+                // Save offset values for handling thumbnail and attribute offsets.
+                mExifOffset = offset;
                 readExifSegment(bytes, IFD_TYPE_PRIMARY);
             }
 
@@ -3106,13 +3150,13 @@ public class ExifInterface {
     }
 
     private void getStandaloneAttributes(ByteOrderedDataInputStream in) throws IOException {
+        in.skipBytes(IDENTIFIER_EXIF_APP1.length);
         // TODO: Need to handle potential OutOfMemoryError
         byte[] data = new byte[in.available()];
         in.readFully(data);
-        readExifSegment(data, IFD_TYPE_PRIMARY);
-
-        // Save offset values for handleThumbnailFromJfif() function
+        // Save offset values for handling thumbnail and attribute offsets.
         mExifOffset = IDENTIFIER_EXIF_APP1.length;
+        readExifSegment(data, IFD_TYPE_PRIMARY);
     }
 
     /**
@@ -3293,13 +3337,11 @@ public class ExifInterface {
                                 + "\n recorded CRC value: " + dataCrcValue + ", calculated CRC "
                                 + "value: " + crc.getValue());
                     }
-
+                    // Save offset values for handleThumbnailFromJfif() function
+                    mExifOffset = bytesRead;
                     readExifSegment(data, IFD_TYPE_PRIMARY);
 
                     validateImages();
-
-                    // Save offset values for handleThumbnailFromJfif() function
-                    mExifOffset = bytesRead;
                     break;
                 } else {
                     // Skip to next chunk
@@ -3354,6 +3396,8 @@ public class ExifInterface {
                         throw new IOException("Failed to read given length for given PNG chunk "
                                 + "type: " + byteArrayToHexString(code));
                     }
+                    // Save offset values for handling thumbnail and attribute offsets.
+                    mExifOffset = bytesRead;
                     readExifSegment(payload, IFD_TYPE_PRIMARY);
                     break;
                 } else {
@@ -3374,8 +3418,6 @@ public class ExifInterface {
                     bytesRead += skipped;
                 }
             }
-            // Save offset values for handleThumbnailFromJfif() function
-            mExifOffset = bytesRead;
         } catch (EOFException e) {
             // Should not reach here. Will only reach here if the file is corrupted or
             // does not follow the WebP specifications
@@ -3406,7 +3448,7 @@ public class ExifInterface {
         // Write EXIF APP1 segment
         dataOutputStream.writeByte(MARKER);
         dataOutputStream.writeByte(MARKER_APP1);
-        writeExifSegment(dataOutputStream, 6);
+        writeExifSegment(dataOutputStream);
 
         byte[] bytes = new byte[4096];
 
@@ -3523,7 +3565,7 @@ public class ExifInterface {
                     new ByteOrderedDataOutputStream(exifByteArrayOutputStream,
                             ByteOrder.BIG_ENDIAN);
             // Store Exif data in separate byte array
-            writeExifSegment(exifDataOutputStream, 0);
+            writeExifSegment(exifDataOutputStream);
             byte[] exifBytes =
                     ((ByteArrayOutputStream) exifDataOutputStream.mOutputStream).toByteArray();
             // Write EXIF chunk data
@@ -3793,7 +3835,7 @@ public class ExifInterface {
                 continue;
             }
 
-            final int bytesOffset = dataInputStream.peek();
+            final int bytesOffset = dataInputStream.peek() + mExifOffset;
             final byte[] bytes = new byte[(int) byteCount];
             dataInputStream.readFully(bytes);
             ExifAttribute attribute = new ExifAttribute(dataFormat, numberOfComponents,
@@ -3923,29 +3965,17 @@ public class ExifInterface {
             int thumbnailOffset = jpegInterchangeFormatAttribute.getIntValue(mExifByteOrder);
             int thumbnailLength = jpegInterchangeFormatLengthAttribute.getIntValue(mExifByteOrder);
 
-            switch (mMimeType) {
-                case IMAGE_TYPE_JPEG:
-                case IMAGE_TYPE_RAF:
-                case IMAGE_TYPE_RW2:
-                case IMAGE_TYPE_PNG:
-                case IMAGE_TYPE_WEBP:
-                    thumbnailOffset += mExifOffset;
-                    break;
-                case IMAGE_TYPE_ORF:
-                    // Update offset value since RAF files have IFD data preceding MakerNote data.
-                    thumbnailOffset += mOrfMakerNoteOffset;
-                    break;
+            if (mMimeType == IMAGE_TYPE_ORF) {
+                // Update offset value since RAF files have IFD data preceding MakerNote data.
+                thumbnailOffset += mOrfMakerNoteOffset;
             }
             // The following code limits the size of thumbnail size not to overflow EXIF data area.
             thumbnailLength = Math.min(thumbnailLength, in.getLength() - thumbnailOffset);
 
-            if (DEBUG) {
-                Log.d(TAG, "Setting thumbnail attributes with offset: " + thumbnailOffset
-                        + ", length: " + thumbnailLength);
-            }
             if (thumbnailOffset > 0 && thumbnailLength > 0) {
                 mHasThumbnail = true;
-                mThumbnailOffset = thumbnailOffset;
+                // Need to add mExifOffset, which is the offset to the EXIF data segment
+                mThumbnailOffset = thumbnailOffset + mExifOffset;
                 mThumbnailLength = thumbnailLength;
                 mThumbnailCompression = DATA_JPEG;
 
@@ -3953,11 +3983,15 @@ public class ExifInterface {
                         && mSeekableFileDescriptor == null) {
                     // TODO: Need to handle potential OutOfMemoryError
                     // Save the thumbnail in memory if the input doesn't support reading again.
-                    byte[] thumbnailBytes = new byte[thumbnailLength];
-                    in.seek(thumbnailOffset);
+                    byte[] thumbnailBytes = new byte[mThumbnailLength];
+                    in.seek(mThumbnailOffset);
                     in.readFully(thumbnailBytes);
                     mThumbnailBytes = thumbnailBytes;
                 }
+            }
+            if (DEBUG) {
+                Log.d(TAG, "Setting thumbnail attributes with offset: " + thumbnailOffset
+                        + ", length: " + thumbnailLength);
             }
         }
     }
@@ -3976,12 +4010,16 @@ public class ExifInterface {
             long[] stripByteCounts =
                     convertToLongArray(stripByteCountsAttribute.getValue(mExifByteOrder));
 
-            if (stripOffsets == null) {
-                Log.w(TAG, "stripOffsets should not be null.");
+            if (stripOffsets == null || stripOffsets.length == 0) {
+                Log.w(TAG, "stripOffsets should not be null or have zero length.");
                 return;
             }
-            if (stripByteCounts == null) {
-                Log.w(TAG, "stripByteCounts should not be null.");
+            if (stripByteCounts == null || stripByteCounts.length == 0) {
+                Log.w(TAG, "stripByteCounts should not be null or have zero length.");
+                return;
+            }
+            if (stripOffsets.length != stripByteCounts.length) {
+                Log.w(TAG, "stripOffsets and stripByteCounts should have same length.");
                 return;
             }
 
@@ -3992,9 +4030,17 @@ public class ExifInterface {
 
             int bytesRead = 0;
             int bytesAdded = 0;
+            mHasThumbnail = mHasThumbnailStrips = mAreThumbnailStripsConsecutive = true;
             for (int i = 0; i < stripOffsets.length; i++) {
                 int stripOffset = (int) stripOffsets[i];
                 int stripByteCount = (int) stripByteCounts[i];
+
+                // Check if strips are consecutive
+                // TODO: Add test for non-consecutive thumbnail image
+                if (i < stripOffsets.length - 1
+                        && stripOffset + stripByteCount != stripOffsets[i + 1]) {
+                    mAreThumbnailStripsConsecutive = false;
+                }
 
                 // Skip to offset
                 int skipBytes = stripOffset - bytesRead;
@@ -4015,10 +4061,13 @@ public class ExifInterface {
                         stripBytes.length);
                 bytesAdded += stripBytes.length;
             }
-
-            mHasThumbnail = true;
             mThumbnailBytes = totalStripBytes;
-            mThumbnailLength = totalStripBytes.length;
+
+            if (mAreThumbnailStripsConsecutive) {
+                // Need to add mExifOffset, which is the offset to the EXIF data segment
+                mThumbnailOffset = (int) stripOffsets[0] + mExifOffset;
+                mThumbnailLength = totalStripBytes.length;
+            }
         }
     }
 
@@ -4176,8 +4225,7 @@ public class ExifInterface {
     }
 
     // Writes an Exif segment into the given output stream.
-    private int writeExifSegment(ByteOrderedDataOutputStream dataOutputStream,
-            int exifOffsetFromBeginning) throws IOException {
+    private int writeExifSegment(ByteOrderedDataOutputStream dataOutputStream) throws IOException {
         // The following variables are for calculating each IFD tag group size in bytes.
         int[] ifdOffsets = new int[EXIF_TAGS.length];
         int[] ifdDataSizes = new int[EXIF_TAGS.length];
@@ -4236,7 +4284,9 @@ public class ExifInterface {
         }
 
         // Calculate IFD offsets.
-        int position = 8; // 8 bytes are for TIFF headers
+        // 8 bytes are for TIFF headers: 2 bytes (byte order) + 2 bytes (identifier) + 4 bytes
+        // (offset of IFDs)
+        int position = 8;
         for (int ifdType = 0; ifdType < EXIF_TAGS.length; ++ifdType) {
             if (!mAttributes[ifdType].isEmpty()) {
                 ifdOffsets[ifdType] = position;
@@ -4247,7 +4297,8 @@ public class ExifInterface {
             int thumbnailOffset = position;
             mAttributes[IFD_TYPE_THUMBNAIL].put(JPEG_INTERCHANGE_FORMAT_TAG.name,
                     ExifAttribute.createULong(thumbnailOffset, mExifByteOrder));
-            mThumbnailOffset = exifOffsetFromBeginning + thumbnailOffset;
+            // Need to add mExifOffset, which is the offset to the EXIF data segment
+            mThumbnailOffset = thumbnailOffset + mExifOffset;
             position += mThumbnailLength;
         }
 
