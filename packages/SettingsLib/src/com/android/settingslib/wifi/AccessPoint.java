@@ -1866,7 +1866,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
             return SECURITY_DPP;
         } else if (result.capabilities.contains("WEP")) {
             return SECURITY_WEP;
-        } else if (result.capabilities.contains("PSK+SAE")) {
+        } else if (result.capabilities.contains("PSK")
+                   && result.capabilities.contains("SAE")) {
             return SECURITY_PSK_SAE_TRANSITION;
         } else if (result.capabilities.contains("SAE")) {
             return SECURITY_SAE;
