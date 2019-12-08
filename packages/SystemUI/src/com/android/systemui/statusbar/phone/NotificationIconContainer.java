@@ -173,7 +173,7 @@ public class NotificationIconContainer extends AlphaOptimizedFrameLayout {
         mDotPadding = getResources().getDimensionPixelSize(R.dimen.overflow_icon_dot_padding);
         mStaticDotRadius = getResources().getDimensionPixelSize(R.dimen.overflow_dot_radius);
         mStaticDotDiameter = 2 * mStaticDotRadius;
-        MAX_VISIBLE_ICONS_WHEN_DARK = getResources().getInteger(R.integer.config_maxVisibleNotificationIconsWhenDark);
+        MAX_VISIBLE_ICONS_ON_LOCK = getResources().getInteger(R.integer.config_maxVisibleNotificationIconsOnLock);
         MAX_STATIC_ICONS = getResources().getInteger(R.integer.config_maxVisibleNotificationIcons);
     }
 
