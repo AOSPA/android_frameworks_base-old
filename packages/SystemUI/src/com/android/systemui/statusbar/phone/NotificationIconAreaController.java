@@ -77,6 +77,7 @@ public class NotificationIconAreaController implements DarkReceiver,
 
     public NotificationIconAreaController(Context context, StatusBar statusBar,
             StatusBarStateController statusBarStateController,
+            NotificationListener notificationListener,
             NotificationMediaManager notificationMediaManager) {
         mStatusBar = statusBar;
         mContrastColorUtil = ContrastColorUtil.getInstance(context);
@@ -85,6 +86,7 @@ public class NotificationIconAreaController implements DarkReceiver,
         mStatusBarStateController = statusBarStateController;
         mStatusBarStateController.addCallback(this);
         mMediaManager = notificationMediaManager;
+        notificationListener.addNotificationSettingsListener(mSettingsListener);
         mDozeParameters = DozeParameters.getInstance(mContext);
 
         initializeNotificationAreaViews(context);
@@ -272,7 +274,7 @@ public class NotificationIconAreaController implements DarkReceiver,
     private void updateShelfIcons() {
         updateIconsForLayout(entry -> entry.expandedIcon, mShelfIcons,
                 true /* showAmbient */,
-                true /* showLowPriority */,
+                !mFullyDark /* showLowPriority */,
                 false /* hideDismissed */,
                 false /* hideRepliedMessages */,
                 false /* hideCurrentMedia */,
@@ -282,7 +284,7 @@ public class NotificationIconAreaController implements DarkReceiver,
     public void updateStatusBarIcons() {
         updateIconsForLayout(entry -> entry.icon, mNotificationIcons,
                 false /* showAmbient */,
-                true /* showLowPriority */,
+                mShowLowPriority /* showLowPriority */,
                 true /* hideDismissed */,
                 true /* hideRepliedMessages */,
                 false /* hideCurrentMedia */,
@@ -292,7 +294,7 @@ public class NotificationIconAreaController implements DarkReceiver,
     private void updateCenterIcon() {
         updateIconsForLayout(entry -> entry.centeredIcon, mCenteredIcon,
                 false /* showAmbient */,
-                true /* showLowPriority */,
+                !mFullyDark /* showLowPriority */,
                 false /* hideDismissed */,
                 false /* hideRepliedMessages */,
                 false /* hideCurrentMedia */,
@@ -307,6 +309,11 @@ public class NotificationIconAreaController implements DarkReceiver,
                 true /* hideRepliedMessages */,
                 true /* hideCurrentMedia */,
                 true /* hide centered icon */);
+    }
+
+    @VisibleForTesting
+    boolean shouldShouldLowPriorityIcons() {
+        return mShowLowPriority;
     }
 
     /**
