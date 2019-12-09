@@ -7403,6 +7403,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private void handleUpdateActiveDataSubId(int subId) {
         log("Setting mPreferredSubId to " + subId);
         mPreferredSubId = subId;
-        rematchAllNetworksAndRequests(null, 0);
+        rematchAllNetworksAndRequests();
     }
 }
