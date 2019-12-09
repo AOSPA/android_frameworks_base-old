@@ -803,15 +803,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
     }
 
     public boolean isFils256Supported() {
-            IWifiManager wifiManager = IWifiManager.Stub.asInterface(
-                    ServiceManager.getService(Context.WIFI_SERVICE));
-            String capability = "";
-
-            try {
-                   capability = wifiManager.getCapabilities("key_mgmt");
-            } catch (RemoteException e) {
-               Log.w(TAG, "Remote Exception", e);
-	    }
+            WifiManager wifiManager = mContext.getSystemService(WifiManager.class);
+            String capability = wifiManager.getCapabilities("key_mgmt");
 
             if (!capability.contains("FILS-SHA256")) {
                   return false;
@@ -826,15 +819,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
     }
 
     public boolean isSuiteBSupported() {
-            IWifiManager wifiManager = IWifiManager.Stub.asInterface(
-                    ServiceManager.getService(Context.WIFI_SERVICE));
-            String capability = "";
-
-            try {
-                   capability = wifiManager.getCapabilities("key_mgmt");
-            } catch (RemoteException e) {
-               Log.w(TAG, "Remote Exception", e);
-	    }
+            WifiManager wifiManager = mContext.getSystemService(WifiManager.class);
+            String capability = wifiManager.getCapabilities("key_mgmt");
 
             if (!capability.contains("WPA-EAP-SUITE-B-192")) {
                   return false;
@@ -848,15 +834,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
         return false;
     }
     public boolean isFils384Supported() {
-            IWifiManager wifiManager = IWifiManager.Stub.asInterface(
-                    ServiceManager.getService(Context.WIFI_SERVICE));
-            String capability = "";
-
-            try {
-                   capability = wifiManager.getCapabilities("key_mgmt");
-            } catch (RemoteException e) {
-               Log.w(TAG, "Remote Exception", e);
-	    }
+            WifiManager wifiManager = mContext.getSystemService(WifiManager.class);
+            String capability = wifiManager.getCapabilities("key_mgmt");
 
             if (!capability.contains("FILS-SHA384")) {
                   return false;
