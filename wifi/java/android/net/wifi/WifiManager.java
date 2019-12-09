@@ -1557,9 +1557,7 @@ public class WifiManager {
       */
       public boolean isExtendingWifi() {
           try {
-              IWifiManager iWifiManager = getIWifiManager();
-              if (iWifiManager == null) return false;
-              return iWifiManager.isExtendingWifi();
+              return mService.isExtendingWifi();
           } catch (RemoteException e) {
               throw e.rethrowFromSystemServer();
           }
@@ -1574,9 +1572,7 @@ public class WifiManager {
       */
       public boolean isWifiCoverageExtendFeatureEnabled() {
           try {
-              IWifiManager iWifiManager = getIWifiManager();
-              if (iWifiManager == null) return false;
-              return iWifiManager.isWifiCoverageExtendFeatureEnabled();
+              return mService.isWifiCoverageExtendFeatureEnabled();
           } catch (RemoteException e) {
               throw e.rethrowFromSystemServer();
           }
@@ -1589,11 +1585,7 @@ public class WifiManager {
       */
       public void enableWifiCoverageExtendFeature(boolean enable) {
           try {
-              IWifiManager iWifiManager = getIWifiManager();
-              if (iWifiManager == null) {
-                  throw new RemoteException("Wifi service is not running");
-              }
-              iWifiManager.enableWifiCoverageExtendFeature(enable);
+              mService.enableWifiCoverageExtendFeature(enable);
           } catch (RemoteException e) {
               throw e.rethrowFromSystemServer();
           }
@@ -1608,9 +1600,7 @@ public class WifiManager {
       */
       public int getSoftApWifiGeneration() {
           try {
-              IWifiManager iWifiManager = getIWifiManager();
-              if (iWifiManager == null) return -1;
-              return iWifiManager.getSoftApWifiGeneration();
+              return mService.getSoftApWifiGeneration();
           } catch (RemoteException e) {
               throw e.rethrowFromSystemServer();
           }
@@ -4959,9 +4949,7 @@ public class WifiManager {
      */
     public String getCapabilities(String capaType) {
         try {
-            IWifiManager iWifiManager = getIWifiManager();
-            if (iWifiManager == null) return "";
-            return iWifiManager.getCapabilities(capaType);
+            return mService.getCapabilities(capaType);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4978,9 +4966,7 @@ public class WifiManager {
      */
     public int dppAddBootstrapQrCode(String uri) {
         try {
-            IWifiManager iWifiManager = getIWifiManager();
-            if (iWifiManager == null) return -1;
-            return iWifiManager.dppAddBootstrapQrCode(uri);
+            return mService.dppAddBootstrapQrCode(uri);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4998,9 +4984,7 @@ public class WifiManager {
      */
     public int dppBootstrapGenerate(WifiDppConfig config) {
         try {
-            IWifiManager iWifiManager = getIWifiManager();
-            if (iWifiManager == null) return -1;
-            return iWifiManager.dppBootstrapGenerate(config);
+            return mService.dppBootstrapGenerate(config);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5016,9 +5000,7 @@ public class WifiManager {
      */
     public String dppGetUri(int bootstrap_id) {
         try {
-            IWifiManager iWifiManager = getIWifiManager();
-            if (iWifiManager == null) return "-1";
-            return iWifiManager.dppGetUri(bootstrap_id);
+            return mService.dppGetUri(bootstrap_id);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5034,9 +5016,7 @@ public class WifiManager {
      */
     public int dppBootstrapRemove(int bootstrap_id) {
         try {
-            IWifiManager iWifiManager = getIWifiManager();
-            if (iWifiManager == null) return -1;
-            return iWifiManager.dppBootstrapRemove(bootstrap_id);
+            return mService.dppBootstrapRemove(bootstrap_id);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5058,9 +5038,7 @@ public class WifiManager {
     public int dppListen(String frequency, int dpp_role, boolean qr_mutual,
                          boolean netrole_ap) {
         try {
-            IWifiManager iWifiManager = getIWifiManager();
-            if (iWifiManager == null) return -1;
-            return iWifiManager.dppListen(frequency, dpp_role, qr_mutual, netrole_ap);
+            return mService.dppListen(frequency, dpp_role, qr_mutual, netrole_ap);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5073,11 +5051,7 @@ public class WifiManager {
      */
     public void dppStopListen() {
         try {
-            IWifiManager iWifiManager = getIWifiManager();
-            if (iWifiManager == null) {
-                throw new RemoteException("Wifi service is not running");
-            }
-            iWifiManager.dppStopListen();
+            mService.dppStopListen();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5095,9 +5069,7 @@ public class WifiManager {
      */
     public int dppConfiguratorAdd(String curve, String key, int expiry) {
         try {
-            IWifiManager iWifiManager = getIWifiManager();
-            if (iWifiManager == null) return -1;
-            return iWifiManager.dppConfiguratorAdd(curve, key, expiry);
+            return mService.dppConfiguratorAdd(curve, key, expiry);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5113,9 +5085,7 @@ public class WifiManager {
      */
     public int dppConfiguratorRemove(int config_id) {
         try {
-            IWifiManager iWifiManager = getIWifiManager();
-            if (iWifiManager == null) return -1;
-            return iWifiManager.dppConfiguratorRemove(config_id);
+            return mService.dppConfiguratorRemove(config_id);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5133,9 +5103,7 @@ public class WifiManager {
      */
     public int  dppStartAuth(WifiDppConfig config) {
         try {
-            IWifiManager iWifiManager = getIWifiManager();
-            if (iWifiManager == null) return -1;
-            return iWifiManager.dppStartAuth(config);
+            return mService.dppStartAuth(config);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5151,9 +5119,7 @@ public class WifiManager {
      */
     public String dppConfiguratorGetKey(int id) {
         try {
-            IWifiManager iWifiManager = getIWifiManager();
-            if (iWifiManager == null) return "-1";
-            return iWifiManager.dppConfiguratorGetKey(id);
+            return mService.dppConfiguratorGetKey(id);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
