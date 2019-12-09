@@ -341,6 +341,7 @@ public class ExpandedAnimationController
     public void onGestureFinished() {
         mBubbleDraggedOutEnough = false;
         mBubbleDraggingOut = null;
+        updateBubblePositions();
     }
 
     /**
@@ -383,7 +384,7 @@ public class ExpandedAnimationController
         mBubbleSizePx = res.getDimensionPixelSize(R.dimen.individual_bubble_size);
         mStatusBarHeight =
                 res.getDimensionPixelSize(com.android.internal.R.dimen.status_bar_height);
-        mPipDismissHeight = res.getDimensionPixelSize(R.dimen.pip_dismiss_gradient_height);
+        mBubblesMaxRendered = res.getInteger(R.integer.bubbles_max_rendered);
 
         // Ensure that all child views are at 1x scale, and visible, in case they were animating
         // in.
@@ -428,6 +429,7 @@ public class ExpandedAnimationController
         } else if (mAnimatingCollapse) {
             startOrUpdatePathAnimation(false /* expanding */);
         } else {
+            child.setTranslationX(getBubbleLeft(index));
             animationForChild(child)
                     .translationY(
                             getExpandedY() - mBubbleSizePx * ANIMATE_TRANSLATION_FACTOR, /* from */
@@ -548,10 +550,6 @@ public class ExpandedAnimationController
         }
 
         int bubbleCount = mLayout.getChildCount();
-        if (bubbleCount > mBubblesMaxRendered) {
-            // Only rendered bubbles are relevant for calculating row left.
-            bubbleCount = mBubblesMaxRendered;
-        }
 
         final float totalBubbleWidth = bubbleCount * mBubbleSizePx;
         final float totalGapWidth = (bubbleCount - 1) * getSpaceBetweenBubbles();

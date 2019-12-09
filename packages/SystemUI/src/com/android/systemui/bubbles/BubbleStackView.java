@@ -969,8 +969,10 @@ public class BubbleStackView extends FrameLayout {
 
         mBubbleContainer.cancelAllAnimations();
         mExpandedAnimationController.collapseBackToStack(
+                mStackAnimationController.getStackPositionAlongNearestHorizontalEdge()
+                /* collapseTo */,
                 () -> {
-                    mBubbleContainer.setController(mStackAnimationController);
+                    mBubbleContainer.setActiveController(mStackAnimationController);
                     afterExpandedViewAnimation();
                     previouslySelected.setContentVisibility(false);
                 });
@@ -986,14 +988,11 @@ public class BubbleStackView extends FrameLayout {
         mIsExpanded = true;
         beforeExpandedViewAnimation();
 
-        mBubbleContainer.setController(mExpandedAnimationController);
-        mExpandedAnimationController.expandFromStack(
-                mStackAnimationController.getStackPositionAlongNearestHorizontalEdge()
-                /* collapseTo */,
-                () -> {
-                    updatePointerPosition();
-                    afterExpandedViewAnimation();
-                } /* after */);
+        mBubbleContainer.setActiveController(mExpandedAnimationController);
+        mExpandedAnimationController.expandFromStack(() -> {
+            updatePointerPosition();
+            afterExpandedViewAnimation();
+        } /* after */);
 
 
         mExpandedViewContainer.setTranslationX(getCollapsedX());
