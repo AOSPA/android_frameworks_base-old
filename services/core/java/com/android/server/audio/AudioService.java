@@ -4520,7 +4520,7 @@ public class AudioService extends IAudioService.Stub
                     newDevice, AudioSystem.getOutputDeviceName(newDevice)));
        }
         if (mNm.getZenMode() != Settings.Global.ZEN_MODE_NO_INTERRUPTIONS
-                && (newDevice & DEVICE_MEDIA_UNMUTED_ON_PLUG) != 0
+                && DEVICE_MEDIA_UNMUTED_ON_PLUG_SET.contains(newDevice)
                 && !mStreamStates[AudioSystem.STREAM_MUSIC].mIsMuted
                 && (newDevice & AudioSystem.getDevicesForStream(AudioSystem.STREAM_MUSIC)) != 0) {
             if (DEBUG_VOL) {
