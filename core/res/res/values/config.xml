@@ -555,6 +555,9 @@
     <!-- Boolean indicating whether the wifi chipset has dual frequency band support -->
     <bool translatable="false" name="config_wifi_dual_band_support">false</bool>
 
+    <!-- Boolean to provide support to keep wifi5 symbol for 8SS supported device and 11ax AP -->
+    <bool translateble="false" name="config_wifi_report_he_ready">true</bool>
+
     <!-- Maximum number of concurrent WiFi interfaces in AP mode -->
     <integer translatable="false" name="config_wifi_max_ap_interfaces">1</integer>
 
