@@ -1172,14 +1172,15 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             if (newWork != null) {
                 for (int i = 0; i < newWork.size(); i++) {
                     mAppOps.startOpNoThrow(AppOpsManager.OP_GPS,
-                            newWork.get(i), newWork.getName(i));
+                            newWork.getUid(i), newWork.getPackageName(i));
                 }
             }
 
             // Update sources that are no longer tracked.
             if (goneWork != null) {
                 for (int i = 0; i < goneWork.size(); i++) {
-                    mAppOps.finishOp(AppOpsManager.OP_GPS, goneWork.get(i), goneWork.getName(i));
+                    mAppOps.finishOp(AppOpsManager.OP_GPS, goneWork.getUid(i),
+                            goneWork.getPackageName(i));
                 }
             }
         }
@@ -1449,11 +1450,13 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         private float[] mSvElevations;
         private float[] mSvAzimuths;
         private float[] mSvCarrierFreqs;
+        private float[] mBasebandCn0s;
     }
 
     @NativeEntryPoint
     private void reportSvStatus(int svCount, int[] svidWithFlags, float[] cn0s,
-            float[] svElevations, float[] svAzimuths, float[] svCarrierFreqs) {
+            float[] svElevations, float[] svAzimuths, float[] svCarrierFreqs,
+            float[] basebandCn0s) {
         SvStatusInfo svStatusInfo = new SvStatusInfo();
         svStatusInfo.mSvCount = svCount;
         svStatusInfo.mSvidWithFlags = svidWithFlags;
@@ -1461,6 +1464,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         svStatusInfo.mSvElevations = svElevations;
         svStatusInfo.mSvAzimuths = svAzimuths;
         svStatusInfo.mSvCarrierFreqs = svCarrierFreqs;
+        svStatusInfo.mBasebandCn0s = basebandCn0s;
 
         sendMessage(REPORT_SV_STATUS, 0, svStatusInfo);
     }
@@ -1472,7 +1476,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 info.mCn0s,
                 info.mSvElevations,
                 info.mSvAzimuths,
-                info.mSvCarrierFreqs);
+                info.mSvCarrierFreqs,
+                info.mBasebandCn0s);
 
         // Log CN0 as part of GNSS metrics
         mGnssMetrics.logCn0(info.mCn0s, info.mSvCount, info.mSvCarrierFreqs);
@@ -1487,7 +1492,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 info.mCn0s,
                 info.mSvElevations,
                 info.mSvAzimuths,
-                info.mSvCarrierFreqs);
+                info.mSvCarrierFreqs,
+                info.mBasebandCn0s);
         int usedInFixCount = 0;
         int maxCn0 = 0;
         int meanCn0 = 0;
@@ -1503,13 +1509,15 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             if (VERBOSE) {
                 Log.v(TAG, "svid: " + gnssStatus.getSvid(i)
                         + " cn0: " + gnssStatus.getCn0DbHz(i)
+                        + " basebandCn0: " + gnssStatus.getBasebandCn0DbHz(i)
                         + " elev: " + gnssStatus.getElevationDegrees(i)
                         + " azimuth: " + gnssStatus.getAzimuthDegrees(i)
                         + " carrier frequency: " + gnssStatus.getCn0DbHz(i)
                         + (gnssStatus.hasEphemerisData(i) ? " E" : "  ")
                         + (gnssStatus.hasAlmanacData(i) ? " A" : "  ")
                         + (gnssStatus.usedInFix(i) ? "U" : "")
-                        + (gnssStatus.hasCarrierFrequencyHz(i) ? "F" : ""));
+                        + (gnssStatus.hasCarrierFrequencyHz(i) ? "F" : "")
+                        + (gnssStatus.hasBasebandCn0DbHz(i) ? "B" : ""));
             }
         }
         if (usedInFixCount > 0) {

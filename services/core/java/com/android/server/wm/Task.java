@@ -56,8 +56,6 @@ import static android.provider.Settings.Secure.USER_SETUP_COMPLETE;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.SurfaceControl.METADATA_TASK_ID;
 
-import static com.android.server.EventLogTags.WM_TASK_CREATED;
-import static com.android.server.EventLogTags.WM_TASK_REMOVED;
 import static com.android.server.am.TaskRecordProto.ACTIVITIES;
 import static com.android.server.am.TaskRecordProto.ACTIVITY_TYPE;
 import static com.android.server.am.TaskRecordProto.FULLSCREEN;
@@ -128,7 +126,6 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.voice.IVoiceInteractionSession;
 import android.util.DisplayMetrics;
-import android.util.EventLog;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
@@ -251,8 +248,6 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
     String stringName;      // caching of toString() result.
     boolean mUserSetupComplete; // The user set-up is complete as of the last time the task activity
                                 // was changed.
-
-    int numFullscreen;      // Number of fullscreen activities.
 
     /** Can't be put in lockTask mode. */
     final static int LOCK_TASK_AUTH_DONT_LOCK = 0;
@@ -423,8 +418,7 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
             ActivityStack stack) {
         super(atmService.mWindowManager);
 
-        EventLog.writeEvent(WM_TASK_CREATED, _taskId,
-                stack != null ? stack.mStackId : INVALID_STACK_ID);
+        EventLogTags.writeWmTaskCreated(_taskId, stack != null ? stack.mStackId : INVALID_STACK_ID);
         mAtmService = atmService;
         mTaskId = _taskId;
         mUserId = _userId;
@@ -1069,12 +1063,30 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
 
     /** Returns the first non-finishing activity from the bottom. */
     ActivityRecord getRootActivity() {
-        final int rootActivityIndex = findRootIndex(false /* effectiveRoot */);
-        if (rootActivityIndex == -1) {
-            // There are no non-finishing activities in the task.
-            return null;
+        // TODO: Figure out why we historical ignore relinquish identity for this case...
+        return getRootActivity(true /*ignoreRelinquishIdentity*/, false /*setToBottomIfNone*/);
+    }
+
+    ActivityRecord getRootActivity(boolean setToBottomIfNone) {
+        return getRootActivity(false /*ignoreRelinquishIdentity*/, false /*setToBottomIfNone*/);
+    }
+
+    ActivityRecord getRootActivity(boolean ignoreRelinquishIdentity, boolean setToBottomIfNone) {
+        ActivityRecord root;
+        if (ignoreRelinquishIdentity) {
+            root = getActivity((r) -> !r.finishing, false /*traverseTopToBottom*/);
+        } else {
+            root = getActivity((r) ->
+                            !r.finishing && (r.info.flags & FLAG_RELINQUISH_TASK_IDENTITY) == 0,
+                    false /*traverseTopToBottom*/);
         }
-        return getChildAt(rootActivityIndex);
+
+        if (root == null && setToBottomIfNone) {
+            // All activities in the task are either finishing or relinquish task identity.
+            // But we still want to update the intent, so let's use the bottom activity.
+            root = getActivity((r) -> true, false /*traverseTopToBottom*/);
+        }
+        return root;
     }
 
     ActivityRecord getTopNonFinishingActivity() {
@@ -1210,9 +1222,6 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
         ProtoLog.v(WM_DEBUG_ADD_REMOVE, "addChild: %s at top.", this);
         r.inHistory = true;
 
-        if (r.occludesParent()) {
-            numFullscreen++;
-        }
         // Only set this based on the first activity
         if (!hadChild) {
             if (r.getActivityType() == ACTIVITY_TYPE_UNDEFINED) {
@@ -1256,9 +1265,6 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
         }
 
         super.removeChild(r);
-        if (r.occludesParent()) {
-            numFullscreen--;
-        }
         if (r.isPersistable()) {
             mAtmService.notifyTaskPersisterLocked(this, false);
         }
@@ -1291,7 +1297,7 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
         } else if (!mReuseTask) {
             // Remove entire task if it doesn't have any activity left and it isn't marked for reuse
             mStack.removeChild(this, reason);
-            EventLog.writeEvent(WM_TASK_REMOVED, mTaskId,
+            EventLogTags.writeWmTaskRemoved(mTaskId,
                     "removeChild: last r=" + r + " in t=" + this);
             removeIfPossible();
         }
@@ -2054,15 +2060,20 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
             // could never go away in Honeycomb.
             final int compatScreenWidthDp = (int) (mTmpNonDecorBounds.width() / density);
             final int compatScreenHeightDp = (int) (mTmpNonDecorBounds.height() / density);
-            // We're only overriding LONG, SIZE and COMPAT parts of screenLayout, so we start
-            // override calculation with partial default.
             // Reducing the screen layout starting from its parent config.
-            final int sl = parentConfig.screenLayout
-                    & (Configuration.SCREENLAYOUT_LONG_MASK | Configuration.SCREENLAYOUT_SIZE_MASK);
-            final int longSize = Math.max(compatScreenHeightDp, compatScreenWidthDp);
-            final int shortSize = Math.min(compatScreenHeightDp, compatScreenWidthDp);
-            inOutConfig.screenLayout = Configuration.reduceScreenLayout(sl, longSize, shortSize);
+            inOutConfig.screenLayout = computeScreenLayoutOverride(parentConfig.screenLayout,
+                    compatScreenWidthDp, compatScreenHeightDp);
         }
+    }
+
+    /** Computes LONG, SIZE and COMPAT parts of {@link Configuration#screenLayout}. */
+    static int computeScreenLayoutOverride(int sourceScreenLayout, int screenWidthDp,
+            int screenHeightDp) {
+        sourceScreenLayout = sourceScreenLayout
+                & (Configuration.SCREENLAYOUT_LONG_MASK | Configuration.SCREENLAYOUT_SIZE_MASK);
+        final int longSize = Math.max(screenWidthDp, screenHeightDp);
+        final int shortSize = Math.min(screenWidthDp, screenHeightDp);
+        return Configuration.reduceScreenLayout(sourceScreenLayout, longSize, shortSize);
     }
 
     @Override
@@ -2212,7 +2223,7 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
     void addStartingWindowsForVisibleActivities(boolean taskSwitch) {
         for (int activityNdx = getChildCount() - 1; activityNdx >= 0; --activityNdx) {
             final ActivityRecord r = getChildAt(activityNdx);
-            if (r.visible) {
+            if (r.mVisibleRequested) {
                 r.showStartingWindow(null /* prev */, false /* newTask */, taskSwitch);
             }
         }
@@ -2255,7 +2266,7 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
             // We want to place all non-overlay activities below overlays.
             while (maxPosition > 0) {
                 final ActivityRecord current = mChildren.get(maxPosition - 1);
-                if (current.mTaskOverlay && !current.removed) {
+                if (current.mTaskOverlay) {
                     --maxPosition;
                     continue;
                 }
@@ -2266,17 +2277,6 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
             }
         }
 
-        if (suggestedPosition >= maxPosition) {
-            return Math.min(maxPosition, suggestedPosition);
-        }
-
-        for (int pos = 0; pos < maxPosition && pos < suggestedPosition; ++pos) {
-            // TODO: Confirm that this is the behavior we want long term.
-            if (mChildren.get(pos).removed) {
-                // suggestedPosition assumes removed tokens are actually gone.
-                ++suggestedPosition;
-            }
-        }
         return Math.min(maxPosition, suggestedPosition);
     }
 
@@ -2307,7 +2307,7 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
     @Override
     void removeImmediately() {
         if (DEBUG_STACK) Slog.i(TAG, "removeTask: removing taskId=" + mTaskId);
-        EventLog.writeEvent(WM_TASK_REMOVED, mTaskId, "removeTask");
+        EventLogTags.writeWmTaskRemoved(mTaskId, "removeTask");
         super.removeImmediately();
     }
 
@@ -2315,7 +2315,7 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
     void reparent(ActivityStack stack, int position, boolean moveParents, String reason) {
         if (DEBUG_STACK) Slog.i(TAG, "reParentTask: removing taskId=" + mTaskId
                 + " from stack=" + getTaskStack());
-        EventLog.writeEvent(WM_TASK_REMOVED, mTaskId, "reParentTask");
+        EventLogTags.writeWmTaskRemoved(mTaskId, "reParentTask");
 
         final ActivityStack prevStack = getTaskStack();
         final boolean wasTopFocusedStack =
@@ -2337,12 +2337,6 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
         // our insets so that there will not be a jump in the area covered by system decorations.
         // We rely on the pinned animation to later unset this value.
         mPreserveNonFloatingState = stack.inPinnedWindowingMode();
-    }
-
-    void setSendingToBottom(boolean toBottom) {
-        for (int appTokenNdx = 0; appTokenNdx < mChildren.size(); appTokenNdx++) {
-            mChildren.get(appTokenNdx).sendingToBottom = toBottom;
-        }
     }
 
     public int setBounds(Rect bounds, boolean forceResize) {
@@ -2533,7 +2527,7 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
         for (int i = mChildren.size() - 1; i >= 0; i--) {
             final ActivityRecord token = mChildren.get(i);
             // skip hidden (or about to hide) apps
-            if (token.mIsExiting || token.isClientHidden() || token.hiddenRequested) {
+            if (token.mIsExiting || !token.isClientVisible() || !token.mVisibleRequested) {
                 continue;
             }
             final WindowState win = token.findMainWindow();
@@ -2751,10 +2745,9 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
 
     ActivityRecord getTopVisibleActivity() {
         for (int i = mChildren.size() - 1; i >= 0; i--) {
-            final ActivityRecord token = mChildren.get(i);
-            // skip hidden (or about to hide) apps
-            if (!token.mIsExiting && !token.isClientHidden() && !token.hiddenRequested) {
-                return token;
+            final ActivityRecord activity = mChildren.get(i);
+            if (!activity.mIsExiting && activity.isClientVisible() && activity.mVisibleRequested) {
+                return activity;
             }
         }
         return null;
@@ -2981,10 +2974,9 @@ class Task extends WindowContainer<ActivityRecord> implements ConfigurationConta
             pw.print(prefix); pw.print("mActivityComponent=");
             pw.println(realActivity.flattenToShortString());
         }
-        if (autoRemoveRecents || isPersistable || !isActivityTypeStandard() || numFullscreen != 0) {
+        if (autoRemoveRecents || isPersistable || !isActivityTypeStandard()) {
             pw.print(prefix); pw.print("autoRemoveRecents="); pw.print(autoRemoveRecents);
             pw.print(" isPersistable="); pw.print(isPersistable);
-            pw.print(" numFullscreen="); pw.print(numFullscreen);
             pw.print(" activityType="); pw.println(getActivityType());
         }
         if (rootWasReset || mNeverRelinquishIdentity || mReuseTask

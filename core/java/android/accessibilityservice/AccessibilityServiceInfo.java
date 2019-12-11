@@ -18,10 +18,11 @@ package android.accessibilityservice;
 
 import static android.content.pm.PackageManager.FEATURE_FINGERPRINT;
 
-import android.accessibilityservice.AccessibilityButtonController.AccessibilityButtonCallback;
 import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledAfter;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -32,8 +33,10 @@ import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
 import android.hardware.fingerprint.FingerprintManager;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.os.RemoteException;
 import android.util.AttributeSet;
 import android.util.SparseArray;
 import android.util.TypedValue;
@@ -43,6 +46,7 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
 import com.android.internal.R;
+import com.android.internal.compat.IPlatformCompat;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -299,6 +303,11 @@ public class AccessibilityServiceInfo implements Parcelable {
      /**
      * This flag indicates to the system that the accessibility service requests that an
      * accessibility button be shown within the system's navigation area, if available.
+      * <p>
+      *   <strong>Note:</strong> For accessibility services targeting APIs greater than
+      *   {@link Build.VERSION_CODES#Q API 29}, this flag must be specified in the
+      *   accessibility service metadata file. Otherwise, it will be ignored.
+      * </p>
      */
     public static final int FLAG_REQUEST_ACCESSIBILITY_BUTTON = 0x00000100;
 
@@ -322,14 +331,6 @@ public class AccessibilityServiceInfo implements Parcelable {
      * dialog is shown.
      */
     public static final int FLAG_REQUEST_SHORTCUT_WARNING_DIALOG_SPOKEN_FEEDBACK = 0x00000400;
-
-    /**
-     * This flag indicates that the accessibility service will handle the shortcut action itself.
-     * A callback {@link AccessibilityButtonCallback#onClicked(AccessibilityButtonController)} is
-     * called when the user presses the accessibility shortcut. Otherwise, the service is enabled
-     * or disabled by the system instead.
-     */
-    public static final int FLAG_HANDLE_SHORTCUT = 0x00000800;
 
     /** {@hide} */
     public static final int FLAG_FORCE_DIRECT_BOOT_AWARE = 0x00010000;
@@ -422,6 +423,12 @@ public class AccessibilityServiceInfo implements Parcelable {
      * <p>
      *   <strong>Can be dynamically set at runtime.</strong>
      * </p>
+     * <p>
+     *   <strong>Note:</strong> Accessibility services with targetSdkVersion greater than
+     *   {@link Build.VERSION_CODES#Q API 29} cannot dynamically set the
+     *   {@link #FLAG_REQUEST_ACCESSIBILITY_BUTTON} at runtime. It must be specified in the
+     *   accessibility service metadata file.
+     * </p>
      * @see #DEFAULT
      * @see #FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
      * @see #FLAG_REQUEST_TOUCH_EXPLORATION_MODE
@@ -432,7 +439,6 @@ public class AccessibilityServiceInfo implements Parcelable {
      * @see #FLAG_ENABLE_ACCESSIBILITY_VOLUME
      * @see #FLAG_REQUEST_ACCESSIBILITY_BUTTON
      * @see #FLAG_REQUEST_SHORTCUT_WARNING_DIALOG_SPOKEN_FEEDBACK
-     * @see #FLAG_HANDLE_SHORTCUT
      */
     public int flags;
 
@@ -495,6 +501,15 @@ public class AccessibilityServiceInfo implements Parcelable {
      * Non localized description of the accessibility service.
      */
     private String mNonLocalizedDescription;
+
+    /**
+     * For accessibility services targeting APIs greater than {@link Build.VERSION_CODES#Q API 29},
+     * {@link #FLAG_REQUEST_ACCESSIBILITY_BUTTON} must be specified in the accessibility service
+     * metadata file. Otherwise, it will be ignored.
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = android.os.Build.VERSION_CODES.Q)
+    private static final long REQUEST_ACCESSIBILITY_BUTTON_CHANGE = 136293963L;
 
     /**
      * Creates a new instance.
@@ -623,13 +638,23 @@ public class AccessibilityServiceInfo implements Parcelable {
     }
 
     /**
-     * Updates the properties that an AccessibilitySerivice can change dynamically.
+     * Updates the properties that an AccessibilityService can change dynamically.
+     * <p>
+     * Note: A11y services targeting APIs > Q, it cannot update flagRequestAccessibilityButton
+     * dynamically.
+     * </p>
      *
+     * @param platformCompat The platform compat service to check the compatibility change.
      * @param other The info from which to update the properties.
      *
      * @hide
      */
-    public void updateDynamicallyConfigurableProperties(AccessibilityServiceInfo other) {
+    public void updateDynamicallyConfigurableProperties(IPlatformCompat platformCompat,
+            AccessibilityServiceInfo other) {
+        if (isRequestAccessibilityButtonChangeEnabled(platformCompat)) {
+            other.flags &= ~FLAG_REQUEST_ACCESSIBILITY_BUTTON;
+            other.flags |= (flags & FLAG_REQUEST_ACCESSIBILITY_BUTTON);
+        }
         eventTypes = other.eventTypes;
         packageNames = other.packageNames;
         feedbackType = other.feedbackType;
@@ -637,6 +662,20 @@ public class AccessibilityServiceInfo implements Parcelable {
         mNonInteractiveUiTimeout = other.mNonInteractiveUiTimeout;
         mInteractiveUiTimeout = other.mInteractiveUiTimeout;
         flags = other.flags;
+    }
+
+    private boolean isRequestAccessibilityButtonChangeEnabled(IPlatformCompat platformCompat) {
+        if (mResolveInfo == null) {
+            return true;
+        }
+        try {
+            if (platformCompat != null) {
+                return platformCompat.isChangeEnabled(REQUEST_ACCESSIBILITY_BUTTON_CHANGE,
+                        mResolveInfo.serviceInfo.applicationInfo);
+            }
+        } catch (RemoteException ignore) {
+        }
+        return mResolveInfo.serviceInfo.applicationInfo.targetSdkVersion > Build.VERSION_CODES.Q;
     }
 
     /**
@@ -1113,8 +1152,6 @@ public class AccessibilityServiceInfo implements Parcelable {
                 return "FLAG_REQUEST_FINGERPRINT_GESTURES";
             case FLAG_REQUEST_SHORTCUT_WARNING_DIALOG_SPOKEN_FEEDBACK:
                 return "FLAG_REQUEST_SHORTCUT_WARNING_DIALOG_SPOKEN_FEEDBACK";
-            case FLAG_HANDLE_SHORTCUT:
-                return "FLAG_HANDLE_SHORTCUT";
             default:
                 return null;
         }

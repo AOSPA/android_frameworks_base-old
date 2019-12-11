@@ -314,13 +314,22 @@ public final class DeviceConfig {
     public static final String NAMESPACE_SETTINGS_UI = "settings_ui";
 
     /**
-     * Namespace for window manager related features. The names to access the properties in this
-     * namespace should be defined in {@link WindowManager}.
+     * Namespace for android related features, i.e. for flags that affect not just a single
+     * component, but the entire system.
+     *
+     * The keys for this namespace are defined in {@link AndroidDeviceConfig}.
      *
      * @hide
      */
     @TestApi
-    public static final String NAMESPACE_WINDOW_MANAGER = "android:window_manager";
+    public static final String NAMESPACE_ANDROID = "android";
+
+    /**
+     * Namespace for window manager related features.
+     *
+     * @hide
+     */
+    public static final String NAMESPACE_WINDOW_MANAGER = "window_manager";
 
     /**
      * List of namespaces which can be read without READ_DEVICE_CONFIG permission
@@ -347,48 +356,6 @@ public final class DeviceConfig {
     @SystemApi
     @TestApi
     public static final String NAMESPACE_PERMISSIONS = "permissions";
-
-    /**
-     * Interface for accessing keys belonging to {@link #NAMESPACE_WINDOW_MANAGER}.
-     * @hide
-     */
-    @TestApi
-    public interface WindowManager {
-
-        /**
-         * Key for accessing the system gesture exclusion limit (an integer in dp).
-         *
-         * @see android.provider.DeviceConfig#NAMESPACE_WINDOW_MANAGER
-         * @hide
-         */
-        @TestApi
-        String KEY_SYSTEM_GESTURE_EXCLUSION_LIMIT_DP = "system_gesture_exclusion_limit_dp";
-
-        /**
-         * Key for controlling whether system gestures are implicitly excluded by windows requesting
-         * sticky immersive mode from apps that are targeting an SDK prior to Q.
-         *
-         * @see android.provider.DeviceConfig#NAMESPACE_WINDOW_MANAGER
-         * @hide
-         */
-        @TestApi
-        String KEY_SYSTEM_GESTURES_EXCLUDED_BY_PRE_Q_STICKY_IMMERSIVE =
-                "system_gestures_excluded_by_pre_q_sticky_immersive";
-
-        /**
-         * The minimum duration between gesture exclusion logging for a given window in
-         * milliseconds.
-         *
-         * Events that happen in-between will be silently dropped.
-         *
-         * A non-positive value disables logging.
-         *
-         * @see android.provider.DeviceConfig#NAMESPACE_WINDOW_MANAGER
-         * @hide
-         */
-        String KEY_SYSTEM_GESTURE_EXCLUSION_LOG_DEBOUNCE_MILLIS =
-                "system_gesture_exclusion_log_debounce_millis";
-    }
 
     private static final Object sLock = new Object();
     @GuardedBy("sLock")
@@ -424,8 +391,9 @@ public final class DeviceConfig {
      * Look up the values of multiple properties for a particular namespace. The lookup is atomic,
      * such that the values of these properties cannot change between the time when the first is
      * fetched and the time when the last is fetched.
-     *
-     * TODO: reference setProperties when it is added.
+     * <p>
+     * Each call to {@link #setProperties(Properties)} is also atomic and ensures that either none
+     * or all of the change is picked up here, but never only part of it.
      *
      * @param namespace The namespace containing the properties to look up.
      * @param names     The names of properties to look up, or empty to fetch all properties for the
@@ -593,6 +561,27 @@ public final class DeviceConfig {
     }
 
     /**
+     * Set all of the properties for a specific namespace. Pre-existing properties will be updated
+     * and new properties will be added if necessary. Any pre-existing properties for the specific
+     * namespace which are not part of the provided {@link Properties} object will be deleted from
+     * the namespace. These changes are all applied atomically, such that no calls to read or reset
+     * these properties can happen in the middle of this update.
+     * <p>
+     * Each call to {@link #getProperties(String, String...)} is also atomic and ensures that either
+     * none or all of this update is picked up, but never only part of it.
+     *
+     * @param properties the complete set of properties to set for a specific namespace.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(WRITE_DEVICE_CONFIG)
+    public static boolean setProperties(@NonNull Properties properties) {
+        ContentResolver contentResolver = ActivityThread.currentApplication().getContentResolver();
+        return Settings.Config.setStrings(contentResolver, properties.getNamespace(),
+                properties.mMap);
+    }
+
+    /**
      * Reset properties to their default values.
      * <p>
      * The method accepts an optional namespace parameter. If provided, only properties set within
@@ -736,23 +725,26 @@ public final class DeviceConfig {
         List<String> pathSegments = uri.getPathSegments();
         // pathSegments(0) is "config"
         final String namespace = pathSegments.get(1);
-        final String name = pathSegments.get(2);
-        final String value;
+        Map<String, String> propertyMap = new ArrayMap<>();
         try {
-            value = getProperty(namespace, name);
+            Properties allProperties = getProperties(namespace);
+            for (int i = 2; i < pathSegments.size(); ++i) {
+                String key = pathSegments.get(i);
+                propertyMap.put(key, allProperties.getString(key, null));
+            }
         } catch (SecurityException e) {
             // Silently failing to not crash binder or listener threads.
             Log.e(TAG, "OnPropertyChangedListener update failed: permission violation.");
             return;
         }
+        Properties properties = new Properties(namespace, propertyMap);
+
         synchronized (sLock) {
             for (int i = 0; i < sListeners.size(); i++) {
                 if (namespace.equals(sListeners.valueAt(i).first)) {
                     final OnPropertiesChangedListener listener = sListeners.keyAt(i);
                     sListeners.valueAt(i).second.execute(() -> {
-                        Map<String, String> propertyMap = new ArrayMap<>(1);
-                        propertyMap.put(name, value);
-                        listener.onPropertiesChanged(new Properties(namespace, propertyMap));
+                        listener.onPropertiesChanged(properties);
                     });
                 }
             }
@@ -774,7 +766,11 @@ public final class DeviceConfig {
     }
 
     /**
-     * Interface for monitoring changes to properties.
+     * Interface for monitoring changes to properties. Implementations will receive callbacks when
+     * properties change, including a {@link Properties} object which contains a single namespace
+     * and all of the properties which changed for that namespace. This includes properties which
+     * were added, updated, or deleted. This is not necessarily a complete list of all properties
+     * belonging to the namespace, as properties which don't change are omitted.
      * <p>
      * Override {@link #onPropertiesChanged(Properties)} to handle callbacks for changes.
      *
@@ -784,10 +780,13 @@ public final class DeviceConfig {
     @TestApi
     public interface OnPropertiesChangedListener {
         /**
-         * Called when one or more properties have changed.
+         * Called when one or more properties have changed, providing a Properties object with all
+         * of the changed properties. This object will contain only properties which have changed,
+         * not the complete set of all properties belonging to the namespace.
          *
          * @param properties Contains the complete collection of properties which have changed for a
-         *                   single namespace.
+         *                   single namespace. This includes only those which were added, updated,
+         *                   or deleted.
          */
         void onPropertiesChanged(@NonNull Properties properties);
     }

@@ -529,7 +529,7 @@
 
              - TYPE_ETHERNET (9) is prepended to this list, and
 
-             - the return value of TelephonyManager.isTetherApnRequired()
+             - the return value of TelephonyManager.isTetheringApnRequired()
                determines how the array is further modified:
 
                    * TRUE (DUN REQUIRED).
@@ -2366,9 +2366,11 @@
          1 (0b001) - enforce (only install system packages if they are whitelisted)
          2 (0b010) - log (log when a non-whitelisted package is run)
          4 (0b100) - treat any package not mentioned in the whitelist file as implicitly whitelisted
+         8 (0b1000) - ignore OTAs (don't install system packages during OTAs)
         Note: This list must be kept current with PACKAGE_WHITELIST_MODE_PROP in
         frameworks/base/services/core/java/com/android/server/pm/UserSystemPackageInstaller.java -->
-    <integer name="config_userTypePackageWhitelistMode">5</integer> <!-- 0b101 -->
+    <integer name="config_userTypePackageWhitelistMode">13</integer> <!-- 0b1101 -->
+    <!-- TODO(b/143200798): Change to value 5, i.e. 0b0101, when b/143200798 is resolved. -->
 
     <!-- Whether UI for multi user should be shown -->
     <bool name="config_enableMultiUserUI">false</bool>
@@ -3523,6 +3525,7 @@
      -->
     <string name="config_defaultWellbeingPackage" translatable="false"></string>
 
+
     <!-- The package name for the system telephony apps.
          This package must be trusted, as it will be granted with permissions with special telephony
          protection level. Note, framework by default support multiple telephony apps, each package
@@ -3530,13 +3533,6 @@
          Example: "com.android.phone,com.android.stk,com.android.providers.telephony"
      -->
     <string name="config_telephonyPackages" translatable="false">"com.android.phone,com.android.stk,com.android.providers.telephony,com.android.ons,com.android.cellbroadcastservice"</string>
-
-    <!-- The package name for the default system wifi app.
-         This package must be trusted, as it has the permissions to control wifi
-         connectivity on the device.
-         Example: "com.android.wifi"
-     -->
-    <string name="config_wifiPackage" translatable="false">"com.android.wifi"</string>
 
     <!-- The component name for the default system attention service.
          This service must be trusted, as it can be activated without explicit consent of the user.
@@ -4198,6 +4194,12 @@
     <!-- Whether or not to show the built-in charging animation when the device begins charging
          wirelessly. -->
     <bool name="config_showBuiltinWirelessChargingAnim">true</bool>
+
+    <!-- A list of potential packages, in priority order, that can supply rules to
+         AppIntegrityManager. These need to be apps on the system partition. -->
+    <string-array name="config_integrityRuleProviderPackages" translatable="false">
+        <!-- Add packages here -->
+    </string-array>
 
     <!-- pdp data retry for cause 29, 33 and 55-->
     <bool name="config_pdp_retry_for_29_33_55_enabled">false</bool>

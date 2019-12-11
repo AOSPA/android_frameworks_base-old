@@ -87,6 +87,7 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.content.pm.PackageManager.RESTRICTION_NONE;
 import static android.content.pm.PackageParser.isApkFile;
 import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
+import static android.os.incremental.IncrementalManager.isIncrementalPath;
 import static android.os.storage.StorageManager.FLAG_STORAGE_CE;
 import static android.os.storage.StorageManager.FLAG_STORAGE_DE;
 import static android.os.storage.StorageManager.FLAG_STORAGE_EXTERNAL;
@@ -226,6 +227,7 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.UserManagerInternal;
+import android.os.incremental.IncrementalManager;
 import android.os.storage.DiskInfo;
 import android.os.storage.IStorageManager;
 import android.os.storage.StorageEventListener;
@@ -1075,6 +1077,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
     private Future<?> mPrepareAppDataFuture;
 
+    private final IncrementalManager mIncrementalManager;
+
     private static class IFVerificationParams {
         PackageParser.Package pkg;
         boolean replacing;
@@ -1494,7 +1498,6 @@ public class PackageManagerService extends IPackageManager.Stub
     final @Nullable String mAppPredictionServicePackage;
     final @Nullable String mIncidentReportApproverPackage;
     final @Nullable String[] mTelephonyPackages;
-    final @Nullable String mWifiPackage;
     final @NonNull String mServicesSystemSharedLibraryPackageName;
     final @NonNull String mSharedSystemSharedLibraryPackageName;
 
@@ -2512,6 +2515,8 @@ public class PackageManagerService extends IPackageManager.Stub
         mPermissionManager = injector.getPermissionManagerServiceInternal();
         mSettings = injector.getSettings();
         mPermissionManagerService = (IPermissionManager) ServiceManager.getService("permissionmgr");
+        mIncrementalManager =
+                (IncrementalManager) mContext.getSystemService(Context.INCREMENTAL_SERVICE);
 
         // CHECKSTYLE:ON IndentationCheck
         t.traceEnd();
@@ -2976,7 +2981,6 @@ public class PackageManagerService extends IPackageManager.Stub
             mAppPredictionServicePackage = getAppPredictionServicePackageName();
             mIncidentReportApproverPackage = getIncidentReportApproverPackageName();
             mTelephonyPackages = getTelephonyPackageNames();
-            mWifiPackage = mContext.getString(R.string.config_wifiPackage);
 
             // Now that we know all of the shared libraries, update all clients to have
             // the correct library paths.
@@ -8831,6 +8835,7 @@ public class PackageManagerService extends IPackageManager.Stub
         // Full APK verification can be skipped during certificate collection, only if the file is
         // in verified partition, or can be verified on access (when apk verity is enabled). In both
         // cases, only data in Signing Block is verified instead of the whole file.
+        // TODO(b/136132412): skip for Incremental installation
         final boolean skipVerify = scanSystemPartition
                 || (forceCollect && canSkipForcedPackageVerification(pkg));
         collectCertificatesLI(pkgSetting, pkg, forceCollect, skipVerify);
@@ -13249,10 +13254,6 @@ public class PackageManagerService extends IPackageManager.Stub
 
         // Check if installing from ADB
         if ((installFlags & PackageManager.INSTALL_FROM_ADB) != 0) {
-            // Do not run verification in a test harness environment
-            if (ActivityManager.isRunningInTestHarness()) {
-                return false;
-            }
             if (isUserRestricted(userId, UserManager.ENSURE_VERIFY_APPS)) {
                 return true;
             }
@@ -14746,9 +14747,16 @@ public class PackageManagerService extends IPackageManager.Stub
             final File afterCodeFile = getNextCodePath(targetDir, pkg.packageName);
 
             if (DEBUG_INSTALL) Slog.d(TAG, "Renaming " + beforeCodeFile + " to " + afterCodeFile);
+            final boolean onIncremental = mIncrementalManager != null
+                    && isIncrementalPath(beforeCodeFile.getAbsolutePath());
             try {
-                Os.rename(beforeCodeFile.getAbsolutePath(), afterCodeFile.getAbsolutePath());
-            } catch (ErrnoException e) {
+                if (onIncremental) {
+                    mIncrementalManager.rename(beforeCodeFile.getAbsolutePath(),
+                            afterCodeFile.getAbsolutePath());
+                } else {
+                    Os.rename(beforeCodeFile.getAbsolutePath(), afterCodeFile.getAbsolutePath());
+                }
+            } catch (IOException | ErrnoException e) {
                 Slog.w(TAG, "Failed to rename", e);
                 return false;
             }
@@ -14806,6 +14814,11 @@ public class PackageManagerService extends IPackageManager.Stub
         private boolean cleanUp() {
             if (codeFile == null || !codeFile.exists()) {
                 return false;
+            }
+
+            String codePath = codeFile.getAbsolutePath();
+            if (mIncrementalManager != null && isIncrementalPath(codePath)) {
+                mIncrementalManager.closeStorage(codePath);
             }
 
             removeCodePathLI(codeFile);
@@ -16001,6 +16014,8 @@ public class PackageManagerService extends IPackageManager.Stub
                             & PackageManagerService.SCAN_AS_INSTANT_APP) != 0);
             final PackageParser.Package pkg = reconciledPkg.pkgSetting.pkg;
             final String packageName = pkg.packageName;
+            final boolean onIncremental = mIncrementalManager != null
+                    && isIncrementalPath(pkg.codePath);
             prepareAppDataAfterInstallLIF(pkg);
             if (reconciledPkg.prepareResult.clearCodeCache) {
                 clearAppDataLIF(pkg, UserHandle.USER_ALL, FLAG_STORAGE_DE | FLAG_STORAGE_CE
@@ -16031,6 +16046,7 @@ public class PackageManagerService extends IPackageManager.Stub
             // We only need to dexopt if the package meets ALL of the following conditions:
             //   1) it is not an instant app or if it is then dexopt is enabled via gservices.
             //   2) it is not debuggable.
+            //   3) it is not on Incremental File System.
             //
             // Note that we do not dexopt instant apps by default. dexopt can take some time to
             // complete, so we skip this step during installation. Instead, we'll take extra time
@@ -16041,7 +16057,8 @@ public class PackageManagerService extends IPackageManager.Stub
             final boolean performDexopt =
                     (!instantApp || Global.getInt(mContext.getContentResolver(),
                     Global.INSTANT_APP_DEXOPT_ENABLED, 0) != 0)
-                    && ((pkg.applicationInfo.flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0);
+                    && ((pkg.applicationInfo.flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0)
+                    && (!onIncremental);
 
             if (performDexopt) {
                 // Compile the layout resources.
@@ -16273,6 +16290,7 @@ public class PackageManagerService extends IPackageManager.Stub
             if (args.signingDetails != PackageParser.SigningDetails.UNKNOWN) {
                 pkg.setSigningDetails(args.signingDetails);
             } else {
+                // TODO(b/136132412): skip for Incremental installation
                 PackageParser.collectCertificates(pkg, false /* skipVerify */);
             }
         } catch (PackageParserException e) {
@@ -22959,39 +22977,77 @@ public class PackageManagerService extends IPackageManager.Stub
             return pkg == null ? null : pkg.packageName;
         }
 
+        /**
+         * Only keep package names that refer to {@link PackageParser.Package#isSystem system}
+         * packages.
+         *
+         * @param pkgNames The packages to filter
+         *
+         * @return The filtered packages
+         */
+        private @NonNull String[] filterOnlySystemPackages(@Nullable String... pkgNames) {
+            if (pkgNames == null) {
+                return ArrayUtils.emptyArray(String.class);
+            }
+
+            ArrayList<String> systemPackageNames = new ArrayList<>(pkgNames.length);
+
+            for (String pkgName: pkgNames) {
+                synchronized (mPackages) {
+                    if (pkgName == null) {
+                        continue;
+                    }
+
+                    PackageParser.Package pkg = getPackage(pkgName);
+                    if (pkg == null) {
+                        Log.w(TAG, "Could not find package " + pkgName);
+                        continue;
+                    }
+
+                    if (!pkg.isSystem()) {
+                        Log.w(TAG, pkgName + " is not system");
+                        continue;
+                    }
+
+                    systemPackageNames.add(pkgName);
+                }
+            }
+
+            return systemPackageNames.toArray(new String[]{});
+        }
+
         @Override
         public @NonNull String[] getKnownPackageNames(int knownPackage, int userId) {
-            switch(knownPackage) {
+            switch (knownPackage) {
                 case PackageManagerInternal.PACKAGE_BROWSER:
                     return new String[]{mPermissionManager.getDefaultBrowser(userId)};
                 case PackageManagerInternal.PACKAGE_INSTALLER:
-                    return new String[]{mRequiredInstallerPackage};
+                    return filterOnlySystemPackages(mRequiredInstallerPackage);
                 case PackageManagerInternal.PACKAGE_SETUP_WIZARD:
-                    return new String[]{mSetupWizardPackage};
+                    return filterOnlySystemPackages(mSetupWizardPackage);
                 case PackageManagerInternal.PACKAGE_SYSTEM:
                     return new String[]{"android"};
                 case PackageManagerInternal.PACKAGE_VERIFIER:
-                    return new String[]{mRequiredVerifierPackage};
+                    return filterOnlySystemPackages(mRequiredVerifierPackage);
                 case PackageManagerInternal.PACKAGE_SYSTEM_TEXT_CLASSIFIER:
-                    return new String[]{mSystemTextClassifierPackage};
+                    return filterOnlySystemPackages(mSystemTextClassifierPackage);
                 case PackageManagerInternal.PACKAGE_PERMISSION_CONTROLLER:
-                    return new String[]{mRequiredPermissionControllerPackage};
+                    return filterOnlySystemPackages(mRequiredPermissionControllerPackage);
                 case PackageManagerInternal.PACKAGE_WELLBEING:
-                    return new String[]{mWellbeingPackage};
+                    return filterOnlySystemPackages(mWellbeingPackage);
                 case PackageManagerInternal.PACKAGE_DOCUMENTER:
-                    return new String[]{mDocumenterPackage};
+                    return filterOnlySystemPackages(mDocumenterPackage);
                 case PackageManagerInternal.PACKAGE_CONFIGURATOR:
-                    return new String[]{mConfiguratorPackage};
+                    return filterOnlySystemPackages(mConfiguratorPackage);
                 case PackageManagerInternal.PACKAGE_INCIDENT_REPORT_APPROVER:
-                    return new String[]{mIncidentReportApproverPackage};
+                    return filterOnlySystemPackages(mIncidentReportApproverPackage);
                 case PackageManagerInternal.PACKAGE_APP_PREDICTOR:
-                    return new String[]{mAppPredictionServicePackage};
+                    return filterOnlySystemPackages(mAppPredictionServicePackage);
                 case PackageManagerInternal.PACKAGE_TELEPHONY:
-                    return mTelephonyPackages;
-                case PackageManagerInternal.PACKAGE_WIFI:
-                    return new String[]{mWifiPackage};
+                    return filterOnlySystemPackages(mTelephonyPackages);
+                default:
+                    return ArrayUtils.emptyArray(String.class);
             }
-            return ArrayUtils.emptyArray(String.class);
         }
 
         @Override
@@ -23146,8 +23202,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public List<ResolveInfo> queryIntentActivities(
-                Intent intent, int flags, int filterCallingUid, int userId) {
-            final String resolvedType = intent.resolveTypeIfNeeded(mContext.getContentResolver());
+                Intent intent, String resolvedType, int flags, int filterCallingUid, int userId) {
             return PackageManagerService.this
                     .queryIntentActivitiesInternal(intent, resolvedType, flags, filterCallingUid,
                             userId, false /*resolveForStart*/, true /*allowDynamicSplits*/);
@@ -23577,7 +23632,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public void uninstallApex(String packageName, long versionCode, int userId,
-                IntentSender intentSender) {
+                IntentSender intentSender, int flags) {
             final int callerUid = Binder.getCallingUid();
             if (callerUid != Process.ROOT_UID && callerUid != Process.SHELL_UID) {
                 throw new SecurityException("Not allowed to uninstall apexes");
@@ -23586,7 +23641,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     new PackageInstallerService.PackageDeleteObserverAdapter(
                             PackageManagerService.this.mContext, intentSender, packageName,
                             false, userId);
-            if (userId != UserHandle.USER_ALL) {
+            if ((flags & PackageManager.DELETE_ALL_USERS) == 0) {
                 adapter.onPackageDeleted(packageName, PackageManager.DELETE_FAILED_ABORTED,
                         "Can't uninstall an apex for a single user");
                 return;

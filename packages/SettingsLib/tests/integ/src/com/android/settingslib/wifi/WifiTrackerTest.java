@@ -336,7 +336,7 @@ public class WifiTrackerTest {
     private static OsuProvider buildOsuProvider(String friendlyName) {
         Map<String, String> friendlyNames = new HashMap<>();
         friendlyNames.put("en", friendlyName);
-        return new OsuProvider(null, friendlyNames, null, null, null, null, null);
+        return new OsuProvider((WifiSsid) null, friendlyNames, null, null, null, null, null);
     }
 
     private WifiTracker createTrackerWithImmediateBroadcastsAndInjectInitialScanResults(
@@ -494,7 +494,6 @@ public class WifiTrackerTest {
 
         WifiConfiguration selfAddedNoAssociation = new WifiConfiguration();
         selfAddedNoAssociation.ephemeral = true;
-        selfAddedNoAssociation.selfAdded = true;
         selfAddedNoAssociation.numAssociation = 0;
         selfAddedNoAssociation.SSID = SSID_2;
         selfAddedNoAssociation.BSSID = BSSID_2;

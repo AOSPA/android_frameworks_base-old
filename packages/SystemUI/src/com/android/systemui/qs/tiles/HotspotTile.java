@@ -80,7 +80,6 @@ public class HotspotTile extends QSTileImpl<BooleanState> {
         if (listening) {
             refreshState();
         }
-        mHotspotController.handleSetListening(listening);
     }
 
     @Override

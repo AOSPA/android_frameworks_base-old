@@ -16,12 +16,11 @@
 
 package com.android.server.integrity.serializer;
 
+import android.content.integrity.AtomicFormula;
+import android.content.integrity.CompoundFormula;
+import android.content.integrity.Formula;
+import android.content.integrity.Rule;
 import android.util.Xml;
-
-import com.android.server.integrity.model.AtomicFormula;
-import com.android.server.integrity.model.Formula;
-import com.android.server.integrity.model.OpenFormula;
-import com.android.server.integrity.model.Rule;
 
 import org.xmlpull.v1.XmlSerializer;
 
@@ -30,10 +29,9 @@ import java.io.OutputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Optional;
 
-/**
- * A helper class to serialize rules from the {@link Rule} model to Xml representation.
- */
+/** A helper class to serialize rules from the {@link Rule} model to Xml representation. */
 public class RuleXmlSerializer implements RuleSerializer {
 
     public static final String TAG = "RuleXmlSerializer";
@@ -43,14 +41,16 @@ public class RuleXmlSerializer implements RuleSerializer {
     private static final String RULE_TAG = "R";
     private static final String OPEN_FORMULA_TAG = "OF";
     private static final String ATOMIC_FORMULA_TAG = "AF";
-    private static final String EFFECT_TAG = "E";
-    private static final String KEY_TAG = "K";
-    private static final String OPERATOR_TAG = "O";
-    private static final String VALUE_TAG = "V";
-    private static final String CONNECTOR_TAG = "C";
+    private static final String EFFECT_ATTRIBUTE = "E";
+    private static final String KEY_ATTRIBUTE = "K";
+    private static final String OPERATOR_ATTRIBUTE = "O";
+    private static final String VALUE_ATTRIBUTE = "V";
+    private static final String CONNECTOR_ATTRIBUTE = "C";
+    private static final String IS_HASHED_VALUE_ATTRIBUTE = "H";
 
     @Override
-    public void serialize(List<Rule> rules, OutputStream outputStream)
+    public void serialize(
+            List<Rule> rules, Optional<Integer> formatVersion, OutputStream outputStream)
             throws RuleSerializeException {
         try {
             XmlSerializer xmlSerializer = Xml.newSerializer();
@@ -62,7 +62,8 @@ public class RuleXmlSerializer implements RuleSerializer {
     }
 
     @Override
-    public String serialize(List<Rule> rules) throws RuleSerializeException {
+    public String serialize(List<Rule> rules, Optional<Integer> formatVersion)
+            throws RuleSerializeException {
         try {
             XmlSerializer xmlSerializer = Xml.newSerializer();
             StringWriter writer = new StringWriter();
@@ -88,30 +89,31 @@ public class RuleXmlSerializer implements RuleSerializer {
             return;
         }
         xmlSerializer.startTag(NAMESPACE, RULE_TAG);
+        serializeAttributeValue(EFFECT_ATTRIBUTE, String.valueOf(rule.getEffect()), xmlSerializer);
         serializeFormula(rule.getFormula(), xmlSerializer);
-        serializeValue(EFFECT_TAG, String.valueOf(rule.getEffect()), xmlSerializer);
         xmlSerializer.endTag(NAMESPACE, RULE_TAG);
     }
 
     private void serializeFormula(Formula formula, XmlSerializer xmlSerializer) throws IOException {
         if (formula instanceof AtomicFormula) {
             serializeAtomicFormula((AtomicFormula) formula, xmlSerializer);
-        } else if (formula instanceof OpenFormula) {
-            serializeOpenFormula((OpenFormula) formula, xmlSerializer);
+        } else if (formula instanceof CompoundFormula) {
+            serializeOpenFormula((CompoundFormula) formula, xmlSerializer);
         } else {
             throw new IllegalArgumentException(
                     String.format("Invalid formula type: %s", formula.getClass()));
         }
     }
 
-    private void serializeOpenFormula(OpenFormula openFormula, XmlSerializer xmlSerializer)
+    private void serializeOpenFormula(CompoundFormula compoundFormula, XmlSerializer xmlSerializer)
             throws IOException {
-        if (openFormula == null) {
+        if (compoundFormula == null) {
             return;
         }
         xmlSerializer.startTag(NAMESPACE, OPEN_FORMULA_TAG);
-        serializeValue(CONNECTOR_TAG, String.valueOf(openFormula.getConnector()), xmlSerializer);
-        for (Formula formula : openFormula.getFormulas()) {
+        serializeAttributeValue(
+                CONNECTOR_ATTRIBUTE, String.valueOf(compoundFormula.getConnector()), xmlSerializer);
+        for (Formula formula : compoundFormula.getFormulas()) {
             serializeFormula(formula, xmlSerializer);
         }
         xmlSerializer.endTag(NAMESPACE, OPEN_FORMULA_TAG);
@@ -123,19 +125,30 @@ public class RuleXmlSerializer implements RuleSerializer {
             return;
         }
         xmlSerializer.startTag(NAMESPACE, ATOMIC_FORMULA_TAG);
-        serializeValue(KEY_TAG, String.valueOf(atomicFormula.getKey()), xmlSerializer);
+        serializeAttributeValue(
+                KEY_ATTRIBUTE, String.valueOf(atomicFormula.getKey()), xmlSerializer);
         if (atomicFormula instanceof AtomicFormula.StringAtomicFormula) {
-            serializeValue(VALUE_TAG,
-                    ((AtomicFormula.StringAtomicFormula) atomicFormula).getValue(), xmlSerializer);
+            serializeAttributeValue(
+                    VALUE_ATTRIBUTE,
+                    ((AtomicFormula.StringAtomicFormula) atomicFormula).getValue(),
+                    xmlSerializer);
+            serializeAttributeValue(
+                    IS_HASHED_VALUE_ATTRIBUTE,
+                    String.valueOf(
+                            ((AtomicFormula.StringAtomicFormula) atomicFormula).getIsHashedValue()),
+                    xmlSerializer);
         } else if (atomicFormula instanceof AtomicFormula.IntAtomicFormula) {
-            serializeValue(OPERATOR_TAG,
+            serializeAttributeValue(
+                    OPERATOR_ATTRIBUTE,
                     String.valueOf(((AtomicFormula.IntAtomicFormula) atomicFormula).getOperator()),
                     xmlSerializer);
-            serializeValue(VALUE_TAG,
+            serializeAttributeValue(
+                    VALUE_ATTRIBUTE,
                     String.valueOf(((AtomicFormula.IntAtomicFormula) atomicFormula).getValue()),
                     xmlSerializer);
         } else if (atomicFormula instanceof AtomicFormula.BooleanAtomicFormula) {
-            serializeValue(VALUE_TAG,
+            serializeAttributeValue(
+                    VALUE_ATTRIBUTE,
                     String.valueOf(((AtomicFormula.BooleanAtomicFormula) atomicFormula).getValue()),
                     xmlSerializer);
         } else {
@@ -145,13 +158,11 @@ public class RuleXmlSerializer implements RuleSerializer {
         xmlSerializer.endTag(NAMESPACE, ATOMIC_FORMULA_TAG);
     }
 
-    private void serializeValue(String tag, String value, XmlSerializer xmlSerializer)
-            throws IOException {
+    private void serializeAttributeValue(
+            String attribute, String value, XmlSerializer xmlSerializer) throws IOException {
         if (value == null) {
             return;
         }
-        xmlSerializer.startTag(NAMESPACE, tag);
-        xmlSerializer.text(value);
-        xmlSerializer.endTag(NAMESPACE, tag);
+        xmlSerializer.attribute(NAMESPACE, attribute, value);
     }
 }

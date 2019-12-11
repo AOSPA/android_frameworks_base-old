@@ -127,7 +127,6 @@ import android.os.WorkSource;
 import android.provider.MediaStore;
 import android.util.ArrayMap;
 import android.util.ArraySet;
-import android.util.EventLog;
 import android.util.MergedConfiguration;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -144,7 +143,6 @@ import com.android.internal.os.logging.MetricsLoggerWrapper;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.am.ActivityManagerService;
-import com.android.server.am.EventLogTags;
 import com.android.server.am.UserState;
 
 import java.io.FileDescriptor;
@@ -793,12 +791,11 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
             }
 
             if (r.getActivityStack().checkKeyguardVisibility(r, true /* shouldBeVisible */,
-                    true /* isTop */)) {
-                // We only set the visibility to true if the activity is allowed to be visible
-                // based on
-                // keyguard state. This avoids setting this into motion in window manager that is
-                // later cancelled due to later calls to ensure visible activities that set
-                // visibility back to false.
+                    true /* isTop */) && r.allowMoveToFront()) {
+                // We only set the visibility to true if the activity is not being launched in
+                // background, and is allowed to be visible based on keyguard state. This avoids
+                // setting this into motion in window manager that is later cancelled due to later
+                // calls to ensure visible activities that set visibility back to false.
                 r.setVisibility(true);
             }
 
@@ -844,8 +841,8 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
                         "Launching: " + r + " savedState=" + r.getSavedState()
                                 + " with results=" + results + " newIntents=" + newIntents
                                 + " andResume=" + andResume);
-                EventLog.writeEvent(EventLogTags.AM_RESTART_ACTIVITY, r.mUserId,
-                        System.identityHashCode(r), task.mTaskId, r.shortComponentName);
+                EventLogTags.writeWmRestartActivity(r.mUserId, System.identityHashCode(r),
+                        task.mTaskId, r.shortComponentName);
                 if (r.isActivityTypeHome()) {
                     // Home process is the root process of the task.
                     updateHomeProcess(task.getChildAt(0).app);
@@ -996,7 +993,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
         }
     }
 
-    void startSpecificActivityLocked(ActivityRecord r, boolean andResume, boolean checkConfig) {
+    void startSpecificActivity(ActivityRecord r, boolean andResume, boolean checkConfig) {
         // Is this activity's application already running?
         final WindowProcessController wpc =
                 mService.getProcessController(r.processName, r.info.applicationInfo.uid);
@@ -1777,12 +1774,12 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
              * to the fullscreen stack.  This is to guarantee that when we are removing a stack,
              * that the client receives onStop() before it is reparented.  We do this by detaching
              * the stack from the display so that it will be considered invisible when
-             * ensureActivitiesVisibleLocked() is called, and all of its activitys will be marked
+             * ensureActivitiesVisible() is called, and all of its activitys will be marked
              * invisible as well and added to the stopping list.  After which we process the
              * stopping list by handling the idle.
              */
             stack.mForceHidden = true;
-            stack.ensureActivitiesVisibleLocked(null, 0, PRESERVE_WINDOWS);
+            stack.ensureActivitiesVisible(null, 0, PRESERVE_WINDOWS);
             stack.mForceHidden = false;
             activityIdleInternalLocked(null, false /* fromTimeout */,
                     true /* processPausingActivites */, null /* configuration */);
@@ -2139,7 +2136,7 @@ public class ActivityStackSupervisor implements RecentTasks.Callbacks {
 
         mRecentTasks.add(task);
         mService.getTaskChangeNotificationController().notifyTaskStackChanged();
-        stack.ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
+        stack.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
 
         // When launching tasks behind, update the last active time of the top task after the new
         // task has been shown briefly

@@ -77,7 +77,6 @@ import android.util.BoostFramework;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.function.pooled.PooledLambda;
-import com.android.server.am.EventLogTags;
 import com.android.server.protolog.common.ProtoLog;
 
 import java.io.PrintWriter;
@@ -307,7 +306,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack> {
             final ActivityStack currentFocusedStack = getFocusedStack();
             if (currentFocusedStack != prevFocusedStack) {
                 mLastFocusedStack = prevFocusedStack;
-                EventLogTags.writeAmFocusedStack(mRootActivityContainer.mCurrentUser, mDisplayId,
+                EventLogTags.writeWmFocusedStack(mRootActivityContainer.mCurrentUser, mDisplayId,
                         currentFocusedStack == null ? -1 : currentFocusedStack.getStackId(),
                         mLastFocusedStack == null ? -1 : mLastFocusedStack.getStackId(),
                         updateLastFocusedStackReason);
@@ -1135,6 +1134,8 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack> {
                         ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND);
                 mService.mH.sendMessage(msg);
             }
+            mService.mWindowManager.mDisplayNotificationController.dispatchDisplayChanged(
+                    this, getConfiguration());
         }
         return changes;
     }
@@ -1463,7 +1464,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack> {
             boolean preserveWindows, boolean notifyClients) {
         for (int stackNdx = getChildCount() - 1; stackNdx >= 0; --stackNdx) {
             final ActivityStack stack = getChildAt(stackNdx);
-            stack.ensureActivitiesVisibleLocked(starting, configChanges, preserveWindows,
+            stack.ensureActivitiesVisible(starting, configChanges, preserveWindows,
                     notifyClients);
         }
     }

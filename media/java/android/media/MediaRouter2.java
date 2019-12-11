@@ -57,7 +57,8 @@ public class MediaRouter2 {
     @IntDef(value = {
             SELECT_REASON_UNKNOWN,
             SELECT_REASON_USER_SELECTED,
-            SELECT_REASON_FALLBACK})
+            SELECT_REASON_FALLBACK,
+            SELECT_REASON_SYSTEM_SELECTED})
     public @interface SelectReason {}
 
     /**
@@ -79,6 +80,13 @@ public class MediaRouter2 {
      * may be selected as a fallback route.
      */
     public static final int SELECT_REASON_FALLBACK = 2;
+
+    /**
+     * This is passed from {@link com.android.server.media.MediaRouterService} when the route
+     * is selected in response to a request from other apps (e.g. System UI).
+     * @hide
+     */
+    public static final int SELECT_REASON_SYSTEM_SELECTED = 3;
 
     private static final String TAG = "MR2";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
@@ -131,6 +139,25 @@ public class MediaRouter2 {
         mPackageName = mContext.getPackageName();
         //TODO: read control categories from the manifest
         mHandler = new Handler(Looper.getMainLooper());
+
+        List<MediaRoute2Info> currentSystemRoutes = null;
+        try {
+            currentSystemRoutes = mMediaRouterService.getSystemRoutes();
+        } catch (RemoteException ex) {
+            Log.e(TAG, "Unable to get current currentSystemRoutes", ex);
+        }
+
+        if (currentSystemRoutes == null || currentSystemRoutes.isEmpty()) {
+            throw new RuntimeException("Null or empty currentSystemRoutes. Something is wrong.");
+        }
+
+        for (MediaRoute2Info route : currentSystemRoutes) {
+            mRoutes.put(route.getId(), route);
+        }
+        // The first route is the currently selected system route.
+        // For example, if there are two system routes (BT and device speaker),
+        // BT will be the first route in the list.
+        mSelectedRoute = currentSystemRoutes.get(0);
     }
 
     /**
@@ -409,6 +436,10 @@ public class MediaRouter2 {
     }
 
     void addRoutesOnHandler(List<MediaRoute2Info> routes) {
+        // TODO: When onRoutesAdded is first called,
+        //  1) clear mRoutes before adding the routes
+        //  2) Call onRouteSelected(system_route, reason_fallback) if previously selected route
+        //     does not exist anymore. => We may need 'boolean MediaRoute2Info#isSystemRoute()'.
         List<MediaRoute2Info> addedRoutes = new ArrayList<>();
         for (MediaRoute2Info route : routes) {
             mRoutes.put(route.getUniqueId(), route);
@@ -461,6 +492,9 @@ public class MediaRouter2 {
                 }
             }
             mSelectingRoute = null;
+        }
+        if (reason == SELECT_REASON_SYSTEM_SELECTED) {
+            reason = SELECT_REASON_USER_SELECTED;
         }
         mSelectedRoute = route;
         notifyRouteSelected(route, reason, controlHints);

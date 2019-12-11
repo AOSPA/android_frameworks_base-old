@@ -28,7 +28,7 @@ import android.net.wifi.IActionListener;
 import android.net.wifi.IDppCallback;
 import android.net.wifi.ILocalOnlyHotspotCallback;
 import android.net.wifi.INetworkRequestMatchCallback;
-import android.net.wifi.IScanResultsListener;
+import android.net.wifi.IScanResultsCallback;
 import android.net.wifi.ISoftApCallback;
 import android.net.wifi.ISuggestionConnectionStatusListener;
 import android.net.wifi.ITrafficStateCallback;
@@ -162,8 +162,6 @@ interface IWifiManager
 
     boolean setWifiApConfiguration(in WifiConfiguration wifiConfig, String packageName);
 
-    void notifyUserOfApBandConversion(String packageName);
-
     void enableTdls(String remoteIPAddress, boolean enable);
 
     void enableTdlsWithMacAddress(String remoteMacAddress, boolean enable);
@@ -264,13 +262,15 @@ interface IWifiManager
 
     oneway void getTxPacketCount(String packageName, in IBinder binder, in ITxPacketCountListener listener, int callbackIdentifier);
 
-    void registerScanResultsListener(in IBinder binder, in IScanResultsListener Listener, int listenerIdentifier);
+    void registerScanResultsCallback(in IScanResultsCallback callback);
 
-    void unregisterScanResultsListener(int listenerIdentifier);
+    void unregisterScanResultsCallback(in IScanResultsCallback callback);
 
     void registerSuggestionConnectionStatusListener(in IBinder binder, in ISuggestionConnectionStatusListener listener, int listenerIdentifier, String packageName, String featureId);
 
     void unregisterSuggestionConnectionStatusListener(int listenerIdentifier, String packageName);
+
+    int calculateSignalLevel(int rssi);
 
     int getSoftApWifiGeneration();
 }

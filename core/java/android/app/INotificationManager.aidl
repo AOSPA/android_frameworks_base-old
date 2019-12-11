@@ -21,6 +21,7 @@ import android.app.ITransientNotification;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationChannelGroup;
+import android.app.NotificationHistory;
 import android.app.NotificationManager;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -44,6 +45,8 @@ interface INotificationManager
     void cancelAllNotifications(String pkg, int userId);
 
     void clearData(String pkg, int uid, boolean fromApp);
+    // TODO: Replace parameter (ITransientNotification callback) with (CharSequence text)
+    void enqueueTextToast(String pkg, ITransientNotification callback, int duration, int displayId);
     @UnsupportedAppUsage
     void enqueueToast(String pkg, ITransientNotification callback, int duration, int displayId);
     @UnsupportedAppUsage
@@ -116,6 +119,8 @@ interface INotificationManager
     StatusBarNotification[] getActiveNotifications(String callingPkg);
     @UnsupportedAppUsage
     StatusBarNotification[] getHistoricalNotifications(String callingPkg, int count);
+
+    NotificationHistory getNotificationHistory(String callingPkg);
 
     void registerListener(in INotificationListener listener, in ComponentName component, int userid);
     void unregisterListener(in INotificationListener listener, int userid);

@@ -60,7 +60,6 @@ import static android.os.Process.INVALID_UID;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 
-import static com.android.server.am.EventLogTags.AM_NEW_INTENT;
 import static com.android.server.wm.ActivityStack.ActivityState.RESUMED;
 import static com.android.server.wm.ActivityStackSupervisor.DEFER_RESUME;
 import static com.android.server.wm.ActivityStackSupervisor.ON_TOP;
@@ -115,14 +114,12 @@ import android.service.voice.IVoiceInteractionSession;
 import android.text.TextUtils;
 import android.util.BoostFramework;
 import android.util.ArraySet;
-import android.util.EventLog;
 import android.util.Pools.SynchronizedPool;
 import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.HeavyWeightSwitcherActivity;
 import com.android.internal.app.IVoiceInteractor;
-import com.android.server.am.EventLogTags;
 import com.android.server.am.PendingIntentRecord;
 import com.android.server.pm.InstantAppResolver;
 import com.android.server.wm.ActivityStackSupervisor.PendingActivityLaunch;
@@ -153,7 +150,8 @@ class ActivityStarter {
     private final ActivityStartController mController;
 
     // Share state variable among methods when starting an activity.
-    private ActivityRecord mStartActivity;
+    @VisibleForTesting
+    ActivityRecord mStartActivity;
     private Intent mIntent;
     private int mCallingUid;
     private ActivityOptions mOptions;
@@ -177,7 +175,8 @@ class ActivityStarter {
     private int mPreferredDisplayId;
 
     private Task mInTask;
-    private boolean mAddingToTask;
+    @VisibleForTesting
+    boolean mAddingToTask;
     private Task mReuseTask;
 
     private ActivityInfo mNewTaskInfo;
@@ -1560,11 +1559,12 @@ class ActivityStarter {
                 UserHandle.getAppId(mStartActivity.info.applicationInfo.uid)
         );
         if (newTask) {
-            EventLog.writeEvent(EventLogTags.AM_CREATE_TASK, mStartActivity.mUserId,
+            EventLogTags.writeWmCreateTask(mStartActivity.mUserId,
                     mStartActivity.getTask().mTaskId);
         }
         mStartActivity.logStartActivity(
-                EventLogTags.AM_CREATE_ACTIVITY, mStartActivity.getTask());
+                EventLogTags.WM_CREATE_ACTIVITY, mStartActivity.getTask());
+
         mTargetStack.mLastPausedActivity = null;
 
         mRootActivityContainer.sendPowerHintForLaunchStartIfNeeded(
@@ -1584,7 +1584,7 @@ class ActivityStarter {
                 // Also, we don't want to resume activities in a task that currently has an overlay
                 // as the starting activity just needs to be in the visible paused state until the
                 // over is removed.
-                mTargetStack.ensureActivitiesVisibleLocked(mStartActivity, 0, !PRESERVE_WINDOWS);
+                mTargetStack.ensureActivitiesVisible(mStartActivity, 0, !PRESERVE_WINDOWS);
                 // Go ahead and tell window manager to execute app transition for this activity
                 // since the app transition will not be triggered through the resume channel.
                 mTargetStack.getDisplay().mDisplayContent.executeAppTransition();
@@ -1677,7 +1677,16 @@ class ActivityStarter {
      * - Comply to the specified activity launch flags
      * - Determine whether need to add a new activity on top or just brought the task to front.
      */
-    private int recycleTask(Task targetTask, ActivityRecord targetTaskTop, Task reusedTask) {
+    @VisibleForTesting
+    int recycleTask(Task targetTask, ActivityRecord targetTaskTop, Task reusedTask) {
+        // Should not recycle task which is from a different user, just adding the starting
+        // activity to the task.
+        if (targetTask.mUserId != mStartActivity.mUserId) {
+            mTargetStack = targetTask.getStack();
+            mAddingToTask = true;
+            return START_SUCCESS;
+        }
+
         // True if we are clearing top and resetting of a standard (default) launch mode
         // ({@code LAUNCH_MULTIPLE}) activity. The existing activity will be finished.
         final boolean clearTopAndResetStandardLaunchMode =
@@ -1822,7 +1831,7 @@ class ActivityStarter {
         final boolean resetTask =
                 reusedActivity != null && (mLaunchFlags & FLAG_ACTIVITY_RESET_TASK_IF_NEEDED) != 0;
         if (resetTask) {
-            targetTaskTop = mTargetStack.resetTaskIfNeededLocked(targetTaskTop, mStartActivity);
+            targetTaskTop = mTargetStack.resetTaskIfNeeded(targetTaskTop, mStartActivity);
         }
 
         if ((mLaunchFlags & (FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK))
@@ -2415,7 +2424,7 @@ class ActivityStarter {
             return;
         }
 
-        activity.logStartActivity(AM_NEW_INTENT, activity.getTask());
+        activity.logStartActivity(EventLogTags.WM_NEW_INTENT, activity.getTask());
         activity.deliverNewIntentLocked(mCallingUid, mStartActivity.intent,
                 mStartActivity.launchedFromPackage);
         mIntentDelivered = true;

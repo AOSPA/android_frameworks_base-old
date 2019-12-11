@@ -19,7 +19,6 @@ package com.android.server.wm;
 import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
-import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
@@ -35,9 +34,9 @@ import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.FLAG_PRIVATE;
 import static android.view.Display.FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS;
 import static android.view.Display.INVALID_DISPLAY;
-import static android.view.InsetsState.TYPE_IME;
-import static android.view.InsetsState.TYPE_LEFT_GESTURES;
-import static android.view.InsetsState.TYPE_RIGHT_GESTURES;
+import static android.view.InsetsState.ITYPE_IME;
+import static android.view.InsetsState.ITYPE_LEFT_GESTURES;
+import static android.view.InsetsState.ITYPE_RIGHT_GESTURES;
 import static android.view.Surface.ROTATION_0;
 import static android.view.Surface.ROTATION_180;
 import static android.view.Surface.ROTATION_270;
@@ -179,7 +178,7 @@ import android.view.ISystemGestureExclusionListener;
 import android.view.InputChannel;
 import android.view.InputDevice;
 import android.view.InputWindowHandle;
-import android.view.InsetsState.InternalInsetType;
+import android.view.InsetsState.InternalInsetsType;
 import android.view.MagnificationSpec;
 import android.view.RemoteAnimationDefinition;
 import android.view.Surface;
@@ -601,13 +600,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         final ActivityRecord activity = w.mActivityRecord;
 
-        // If this window's application has been removed, just skip it.
-        if (activity!= null && (activity.removed || activity.sendingToBottom)) {
-            ProtoLog.v(WM_DEBUG_FOCUS, "Skipping %s because %s", activity,
-                    (activity.removed ? "removed" : "sendingToBottom"));
-            return false;
-        }
-
         if (focusedApp == null) {
             ProtoLog.v(WM_DEBUG_FOCUS_LIGHT,
                     "findFocusedWindow: focusedApp=null using new focus @ %s", w);
@@ -652,12 +644,12 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                     + " config reported=" + w.isLastConfigReportedToClient());
             final ActivityRecord activity = w.mActivityRecord;
             if (gone) Slog.v(TAG, "  GONE: mViewVisibility=" + w.mViewVisibility
-                    + " mRelayoutCalled=" + w.mRelayoutCalled + " hidden=" + w.mToken.isHidden()
-                    + " hiddenRequested=" + (activity != null && activity.hiddenRequested)
+                    + " mRelayoutCalled=" + w.mRelayoutCalled + " visible=" + w.mToken.isVisible()
+                    + " visibleRequested=" + (activity != null && activity.mVisibleRequested)
                     + " parentHidden=" + w.isParentWindowHidden());
             else Slog.v(TAG, "  VIS: mViewVisibility=" + w.mViewVisibility
-                    + " mRelayoutCalled=" + w.mRelayoutCalled + " hidden=" + w.mToken.isHidden()
-                    + " hiddenRequested=" + (activity != null && activity.hiddenRequested)
+                    + " mRelayoutCalled=" + w.mRelayoutCalled + " visible=" + w.mToken.isVisible()
+                    + " visibleRequested=" + (activity != null && activity.mVisibleRequested)
                     + " parentHidden=" + w.isParentWindowHidden());
         }
 
@@ -865,7 +857,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         mWallpaperController = new WallpaperController(mWmService, this);
         display.getDisplayInfo(mDisplayInfo);
         display.getMetrics(mDisplayMetrics);
-        mSystemGestureExclusionLimit = mWmService.mSystemGestureExclusionLimitDp
+        mSystemGestureExclusionLimit = mWmService.mConstants.mSystemGestureExclusionLimitDp
                 * mDisplayMetrics.densityDpi / DENSITY_DEFAULT;
         isDefaultDisplay = mDisplayId == DEFAULT_DISPLAY;
         mDisplayFrames = new DisplayFrames(mDisplayId, mDisplayInfo,
@@ -1101,7 +1093,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      * @param frameProvider Function to compute the frame, or {@code null} if the just the frame of
      *                      the window should be taken.
      */
-    void setInsetProvider(@InternalInsetType int type, WindowState win,
+    void setInsetProvider(@InternalInsetsType int type, WindowState win,
             @Nullable TriConsumer<DisplayFrames, WindowState, Rect> frameProvider) {
         mInsetsStateController.getSourceProvider(type).setWindow(win, frameProvider);
     }
@@ -2045,7 +2037,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     }
 
     void updateSystemGestureExclusionLimit() {
-        mSystemGestureExclusionLimit = mWmService.mSystemGestureExclusionLimitDp
+        mSystemGestureExclusionLimit = mWmService.mConstants.mSystemGestureExclusionLimitDp
                 * mDisplayMetrics.densityDpi / DENSITY_DEFAULT;
         updateSystemGestureExclusion();
     }
@@ -3061,7 +3053,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 wsa.destroySurface();
                 mWmService.mForceRemoves.add(w);
                 mTmpWindow = w;
-            } else if (w.mActivityRecord != null && w.mActivityRecord.isClientHidden()) {
+            } else if (w.mActivityRecord != null && !w.mActivityRecord.isClientVisible()) {
                 Slog.w(TAG_WM, "LEAKED SURFACE (app token hidden): "
                         + w + " surface=" + wsa.mSurfaceController
                         + " token=" + w.mActivityRecord);
@@ -3096,7 +3088,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                     mInputMethodWindow.getDisplayId());
         }
         computeImeTarget(true /* updateImeTarget */);
-        mInsetsStateController.getSourceProvider(TYPE_IME).setWindow(win,
+        mInsetsStateController.getSourceProvider(ITYPE_IME).setWindow(win,
                 null /* frameProvider */);
     }
 
@@ -4275,12 +4267,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         @Override
         int getOrientation() {
-            if (isStackVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY)
-                    || isStackVisible(WINDOWING_MODE_FREEFORM)) {
+            if (isStackVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY)) {
                 // Apps and their containers are not allowed to specify an orientation while the
-                // docked or freeform stack is visible...except for the home stack if the docked
-                // stack is minimized and it actually set something and the bounds is different from
-                // the display.
+                // docked stack is visible...except for the home stack if the docked stack is
+                // minimized and it actually set something and the bounds is different from  the
+                // display.
                 if (mHomeStack != null && mHomeStack.isVisible()
                         && mDividerControllerLocked.isMinimizedDock()
                         && !(mDividerControllerLocked.isHomeStackResizable()
@@ -4519,6 +4510,12 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         NonAppWindowContainers(String name, WindowManagerService service) {
             super(service);
             mName = name;
+        }
+
+        @Override
+        boolean hasActivity() {
+            // I am a non-app-window-container :P
+            return false;
         }
 
         void addChild(WindowToken token) {
@@ -5008,9 +5005,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         final Region unhandled = Region.obtain();
         unhandled.set(0, 0, mDisplayFrames.mDisplayWidth, mDisplayFrames.mDisplayHeight);
 
-        final Rect leftEdge = mInsetsStateController.getSourceProvider(TYPE_LEFT_GESTURES)
+        final Rect leftEdge = mInsetsStateController.getSourceProvider(ITYPE_LEFT_GESTURES)
                 .getSource().getFrame();
-        final Rect rightEdge = mInsetsStateController.getSourceProvider(TYPE_RIGHT_GESTURES)
+        final Rect rightEdge = mInsetsStateController.getSourceProvider(ITYPE_RIGHT_GESTURES)
                 .getSource().getFrame();
 
         final Region touchableRegion = Region.obtain();
@@ -5103,7 +5100,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      * @return Whether gesture exclusion area should be logged for the given window
      */
     static boolean logsGestureExclusionRestrictions(WindowState win) {
-        if (win.mWmService.mSystemGestureExclusionLogDebounceTimeoutMillis <= 0) {
+        if (win.mWmService.mConstants.mSystemGestureExclusionLogDebounceTimeoutMillis <= 0) {
             return false;
         }
         final WindowManager.LayoutParams attrs = win.getAttrs();

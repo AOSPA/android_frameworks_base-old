@@ -69,9 +69,11 @@ cc_defaults {
         "src/external/GpuStatsPuller.cpp",
         "src/external/Perfetto.cpp",
         "src/external/PowerStatsPuller.cpp",
+        "src/external/PullResultReceiver.cpp",
         "src/external/puller_util.cpp",
         "src/external/ResourceHealthManagerPuller.cpp",
         "src/external/StatsCallbackPuller.cpp",
+        "src/external/StatsCallbackPullerDeprecated.cpp",
         "src/external/StatsCompanionServicePuller.cpp",
         "src/external/StatsPuller.cpp",
         "src/external/StatsPullerManager.cpp",
@@ -113,6 +115,10 @@ cc_defaults {
         "src/subscriber/IncidentdReporter.cpp",
         "src/subscriber/SubscriberReporter.cpp",
         "src/uid_data.proto",
+    ],
+
+    cflags: [
+        // "-DNEW_ENCODING_SCHEME",
     ],
 
     local_include_dirs: [
@@ -280,7 +286,10 @@ cc_test {
         include_dirs: ["external/protobuf/src"],
     },
 
-    shared_libs: ["libprotobuf-cpp-lite"],
+    shared_libs: [
+        "libprotobuf-cpp-lite",
+        "libstatssocket"
+    ],
 
 }
 
@@ -323,7 +332,7 @@ cc_benchmark {
         "-Wno-unused-function",
 
         // Bug: http://b/29823425 Disable -Wvarargs for Clang update to r271374
-        "-Wno-varargs"
+        "-Wno-varargs",
     ],
 
     static_libs: [
@@ -332,8 +341,9 @@ cc_benchmark {
 
     shared_libs: [
         "libgtest_prod",
-        "libstatslog",
         "libprotobuf-cpp-lite",
+        "libstatslog",
+        "libstatssocket",
     ],
 }
 

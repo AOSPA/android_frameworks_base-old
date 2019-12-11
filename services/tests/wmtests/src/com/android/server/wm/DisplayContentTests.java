@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
@@ -394,7 +395,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals(window1, mWm.mRoot.getTopFocusedDisplayContent().mCurrentFocus);
 
         // Make sure top focused display not changed if there is a focused app.
-        window1.mActivityRecord.hiddenRequested = true;
+        window1.mActivityRecord.mVisibleRequested = false;
         window1.getDisplayContent().setFocusedApp(window1.mActivityRecord);
         updateFocusedWindow();
         assertTrue(!window1.isFocused());
@@ -700,6 +701,37 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     @Test
+    public void testAllowsTopmostFullscreenOrientation() {
+        final DisplayContent dc = createNewDisplay();
+        dc.getDisplayRotation().setFixedToUserRotation(
+                DisplayRotation.FIXED_TO_USER_ROTATION_DISABLED);
+
+        final ActivityStack stack =
+                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootActivityContainer)
+                        .setDisplay(dc.mActivityDisplay)
+                        .build();
+        doReturn(true).when(stack).isVisible();
+
+        final ActivityStack freeformStack =
+                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootActivityContainer)
+                        .setDisplay(dc.mActivityDisplay)
+                        .setWindowingMode(WINDOWING_MODE_FREEFORM)
+                        .build();
+        doReturn(true).when(freeformStack).isVisible();
+        freeformStack.getTopChild().setBounds(100, 100, 300, 400);
+
+        assertTrue(dc.isStackVisible(WINDOWING_MODE_FREEFORM));
+
+        freeformStack.getTopNonFinishingActivity().setOrientation(SCREEN_ORIENTATION_LANDSCAPE);
+        stack.getTopNonFinishingActivity().setOrientation(SCREEN_ORIENTATION_PORTRAIT);
+        assertEquals(SCREEN_ORIENTATION_PORTRAIT, dc.getOrientation());
+
+        stack.getTopNonFinishingActivity().setOrientation(SCREEN_ORIENTATION_LANDSCAPE);
+        freeformStack.getTopNonFinishingActivity().setOrientation(SCREEN_ORIENTATION_PORTRAIT);
+        assertEquals(SCREEN_ORIENTATION_LANDSCAPE, dc.getOrientation());
+    }
+
+    @Test
     public void testOnDescendantOrientationRequestChanged() {
         final DisplayContent dc = createNewDisplay();
         dc.getDisplayRotation().setFixedToUserRotation(
@@ -872,7 +904,7 @@ public class DisplayContentTests extends WindowTestsBase {
 
     @Test
     public void testCalculateSystemGestureExclusion_immersiveStickyLegacyWindow() throws Exception {
-        mWm.mSystemGestureExcludedByPreQStickyImmersive = true;
+        mWm.mConstants.mSystemGestureExcludedByPreQStickyImmersive = true;
 
         final DisplayContent dc = createNewDisplay();
         final WindowState win = createWindow(null, TYPE_BASE_APPLICATION, dc, "win");

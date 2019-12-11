@@ -120,7 +120,7 @@ public class AccessPointTest {
     private OsuProvider createOsuProvider() {
         Map<String, String> friendlyNames = new HashMap<>();
         friendlyNames.put("en", OSU_FRIENDLY_NAME);
-        return new OsuProvider(null, friendlyNames, null, null, null, null, null);
+        return new OsuProvider((WifiSsid) null, friendlyNames, null, null, null, null, null);
     }
 
     @Before
@@ -459,10 +459,11 @@ public class AccessPointTest {
 
     @Test
     public void testSummaryString_showsWrongPasswordLabel() {
-        WifiConfiguration configuration = createWifiConfiguration();
-        configuration.getNetworkSelectionStatus().setNetworkSelectionStatus(
-                WifiConfiguration.NetworkSelectionStatus.NETWORK_SELECTION_PERMANENTLY_DISABLED);
-        configuration.getNetworkSelectionStatus().setNetworkSelectionDisableReason(
+        WifiConfiguration configuration = spy(createWifiConfiguration());
+        WifiConfiguration.NetworkSelectionStatus status =
+                mock(WifiConfiguration.NetworkSelectionStatus.class);
+        when(configuration.getNetworkSelectionStatus()).thenReturn(status);
+        when(status.getNetworkSelectionDisableReason()).thenReturn(
                 WifiConfiguration.NetworkSelectionStatus.DISABLED_BY_WRONG_PASSWORD);
         AccessPoint ap = new AccessPoint(mContext, configuration);
 
@@ -549,7 +550,7 @@ public class AccessPointTest {
         WifiInfo wifiInfo = new WifiInfo();
         wifiInfo.setSSID(WifiSsid.createFromAsciiEncoded(TEST_SSID));
         wifiInfo.setEphemeral(true);
-        wifiInfo.setNetworkSuggestionOrSpecifierPackageName(appPackageName);
+        wifiInfo.setAppPackageName(appPackageName);
         wifiInfo.setRssi(rssi);
 
         Context context = mock(Context.class);

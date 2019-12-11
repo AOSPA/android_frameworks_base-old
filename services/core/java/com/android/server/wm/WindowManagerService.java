@@ -36,9 +36,6 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Process.myPid;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
-import static android.provider.DeviceConfig.WindowManager.KEY_SYSTEM_GESTURES_EXCLUDED_BY_PRE_Q_STICKY_IMMERSIVE;
-import static android.provider.DeviceConfig.WindowManager.KEY_SYSTEM_GESTURE_EXCLUSION_LIMIT_DP;
-import static android.provider.DeviceConfig.WindowManager.KEY_SYSTEM_GESTURE_EXCLUSION_LOG_DEBOUNCE_MILLIS;
 import static android.provider.Settings.Global.DEVELOPMENT_ENABLE_FREEFORM_WINDOWS_SUPPORT;
 import static android.provider.Settings.Global.DEVELOPMENT_ENABLE_SIZECOMPAT_FREEFORM;
 import static android.provider.Settings.Global.DEVELOPMENT_FORCE_DESKTOP_MODE_ON_EXTERNAL_DISPLAYS;
@@ -146,6 +143,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.res.Configuration;
+import android.content.res.TypedArray;
 import android.database.ContentObserver;
 import android.graphics.Bitmap;
 import android.graphics.Insets;
@@ -188,7 +186,6 @@ import android.os.SystemService;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.WorkSource;
-import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.service.vr.IVrManager;
 import android.service.vr.IVrStateCallbacks;
@@ -197,7 +194,6 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.BoostFramework;
 import android.util.DisplayMetrics;
-import android.util.EventLog;
 import android.util.Log;
 import android.util.MergedConfiguration;
 import android.util.Slog;
@@ -269,7 +265,6 @@ import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.view.WindowManagerPolicyThread;
 import com.android.server.AnimationThread;
 import com.android.server.DisplayThread;
-import com.android.server.EventLogTags;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.UiThread;
@@ -281,6 +276,7 @@ import com.android.server.power.ShutdownThread;
 import com.android.server.protolog.ProtoLogImpl;
 import com.android.server.protolog.common.ProtoLog;
 import com.android.server.utils.PriorityDump;
+import com.android.server.wm.utils.DeviceConfigInterface;
 
 import java.io.BufferedWriter;
 import java.io.DataInputStream;
@@ -413,7 +409,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
     private static final int ANIMATION_COMPLETED_TIMEOUT_MS = 5000;
 
-    private static final int MIN_GESTURE_EXCLUSION_LIMIT_DP = 200;
+    final WindowManagerConstants mConstants = new WindowManagerConstants(this,
+            DeviceConfigInterface.REAL);
 
     final WindowTracing mWindowTracing;
 
@@ -942,19 +939,6 @@ public class WindowManagerService extends IWindowManager.Stub
     final ArrayList<WindowChangeListener> mWindowChangeListeners = new ArrayList<>();
     boolean mWindowsChanged = false;
 
-    int mSystemGestureExclusionLimitDp;
-    boolean mSystemGestureExcludedByPreQStickyImmersive;
-
-    /**
-     * The minimum duration between gesture exclusion logging for a given window in
-     * milliseconds.
-     *
-     * Events that happen in-between will be silently dropped.
-     *
-     * A non-positive value disables logging.
-     */
-    public long mSystemGestureExclusionLogDebounceTimeoutMillis;
-
     public interface WindowChangeListener {
         public void windowsChanged();
         public void focusChanged();
@@ -1058,9 +1042,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
     final ArrayList<AppFreezeListener> mAppFreezeListeners = new ArrayList<>();
 
-    @VisibleForTesting
-    final DeviceConfig.OnPropertiesChangedListener mPropertiesChangedListener;
-
     interface AppFreezeListener {
         void onAppFreezeTimeout();
     }
@@ -1127,6 +1108,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 com.android.internal.R.bool.config_hasPermanentDpad);
         mInTouchMode = context.getResources().getBoolean(
                 com.android.internal.R.bool.config_defaultInTouchMode);
+        inputManager.setInTouchMode(mInTouchMode);
         mDrawLockTimeoutMillis = context.getResources().getInteger(
                 com.android.internal.R.integer.config_drawLockTimeoutMillis);
         mAllowAnimationsInLowPowerMode = context.getResources().getBoolean(
@@ -1265,41 +1247,24 @@ public class WindowManagerService extends IWindowManager.Stub
 
         mHighRefreshRateBlacklist = HighRefreshRateBlacklist.create(context.getResources());
 
-        mSystemGestureExclusionLimitDp = Math.max(MIN_GESTURE_EXCLUSION_LIMIT_DP,
-                DeviceConfig.getInt(DeviceConfig.NAMESPACE_WINDOW_MANAGER,
-                        KEY_SYSTEM_GESTURE_EXCLUSION_LIMIT_DP, 0));
-        mSystemGestureExclusionLogDebounceTimeoutMillis =
-                DeviceConfig.getInt(DeviceConfig.NAMESPACE_WINDOW_MANAGER,
-                        KEY_SYSTEM_GESTURE_EXCLUSION_LOG_DEBOUNCE_MILLIS, 0);
-        mSystemGestureExcludedByPreQStickyImmersive =
-                DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_WINDOW_MANAGER,
-                        KEY_SYSTEM_GESTURES_EXCLUDED_BY_PRE_Q_STICKY_IMMERSIVE, false);
-
-        mPropertiesChangedListener = properties -> {
-            synchronized (mGlobalLock) {
-                final int exclusionLimitDp = Math.max(MIN_GESTURE_EXCLUSION_LIMIT_DP,
-                        DeviceConfig.getInt(DeviceConfig.NAMESPACE_WINDOW_MANAGER,
-                                KEY_SYSTEM_GESTURE_EXCLUSION_LIMIT_DP, 0));
-                final boolean excludedByPreQSticky = DeviceConfig.getBoolean(
-                        DeviceConfig.NAMESPACE_WINDOW_MANAGER,
-                        KEY_SYSTEM_GESTURES_EXCLUDED_BY_PRE_Q_STICKY_IMMERSIVE, false);
-                if (mSystemGestureExcludedByPreQStickyImmersive != excludedByPreQSticky
-                        || mSystemGestureExclusionLimitDp != exclusionLimitDp) {
-                    mSystemGestureExclusionLimitDp = exclusionLimitDp;
-                    mSystemGestureExcludedByPreQStickyImmersive = excludedByPreQSticky;
-                    mRoot.forAllDisplays(DisplayContent::updateSystemGestureExclusionLimit);
-                }
-
-                mSystemGestureExclusionLogDebounceTimeoutMillis =
-                        DeviceConfig.getInt(DeviceConfig.NAMESPACE_WINDOW_MANAGER,
-                                KEY_SYSTEM_GESTURE_EXCLUSION_LOG_DEBOUNCE_MILLIS, 0);
-            }
-        };
-        DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_WINDOW_MANAGER,
-                new HandlerExecutor(mH), mPropertiesChangedListener);
+        mConstants.start(new HandlerExecutor(mH));
 
         LocalServices.addService(WindowManagerInternal.class, new LocalService());
         mEmbeddedWindowController = new EmbeddedWindowController(mGlobalLock);
+        setGlobalShadowSettings();
+    }
+
+    private void setGlobalShadowSettings() {
+        final TypedArray a = mContext.obtainStyledAttributes(null, R.styleable.Lighting, 0, 0);
+        float lightY = a.getDimension(R.styleable.Lighting_lightY, 0);
+        float lightZ = a.getDimension(R.styleable.Lighting_lightZ, 0);
+        float lightRadius = a.getDimension(R.styleable.Lighting_lightRadius, 0);
+        float ambientShadowAlpha = a.getFloat(R.styleable.Lighting_ambientShadowAlpha, 0);
+        float spotShadowAlpha = a.getFloat(R.styleable.Lighting_spotShadowAlpha, 0);
+        float[] ambientColor = {0.f, 0.f, 0.f, ambientShadowAlpha};
+        float[] spotColor = {0.f, 0.f, 0.f, spotShadowAlpha};
+        SurfaceControl.setGlobalShadowSettings(ambientColor, spotColor, lightY, lightZ,
+                lightRadius);
     }
 
     /**
@@ -1477,7 +1442,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     ProtoLog.w(WM_ERROR, "Attempted to add window with non-application token "
                             + ".%s Aborting.", token);
                     return WindowManagerGlobal.ADD_NOT_APP_TOKEN;
-                } else if (activity.removed) {
+                } else if (activity.getParent() == null) {
                     ProtoLog.w(WM_ERROR, "Attempted to add window with exiting application token "
                             + ".%s Aborting.", token);
                     return WindowManagerGlobal.ADD_APP_EXITING;
@@ -1706,7 +1671,7 @@ public class WindowManagerService extends IWindowManager.Stub
             if (mInTouchMode) {
                 res |= WindowManagerGlobal.ADD_FLAG_IN_TOUCH_MODE;
             }
-            if (win.mActivityRecord == null || !win.mActivityRecord.isClientHidden()) {
+            if (win.mActivityRecord == null || win.mActivityRecord.isClientVisible()) {
                 res |= WindowManagerGlobal.ADD_FLAG_APP_VISIBLE;
             }
 
@@ -2239,7 +2204,7 @@ public class WindowManagerService extends IWindowManager.Stub
             // associated appToken is not hidden.
             final boolean shouldRelayout = viewVisibility == View.VISIBLE &&
                     (win.mActivityRecord == null || win.mAttrs.type == TYPE_APPLICATION_STARTING
-                            || !win.mActivityRecord.isClientHidden());
+                            || win.mActivityRecord.isClientVisible());
 
             // If we are not currently running the exit animation, we need to see about starting
             // one.
@@ -3381,7 +3346,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 ProtoLog.e(WM_ERROR, "Boot completed: SurfaceFlinger is dead!");
             }
 
-            EventLog.writeEvent(EventLogTags.WM_BOOT_ANIMATION_DONE, SystemClock.uptimeMillis());
+            EventLogTags.writeWmBootAnimationDone(SystemClock.uptimeMillis());
             Trace.asyncTraceEnd(TRACE_TAG_WINDOW_MANAGER, "Stop bootanim", 0);
             mDisplayEnabled = true;
             ProtoLog.i(WM_DEBUG_SCREEN_ON, "******************** ENABLING SCREEN!");
@@ -3458,6 +3423,7 @@ public class WindowManagerService extends IWindowManager.Stub
         synchronized (mGlobalLock) {
             mInTouchMode = mode;
         }
+        mInputManager.setInTouchMode(mode);
     }
 
     public void showEmulatorDisplayOverlayIfNeeded() {
@@ -6228,6 +6194,9 @@ public class WindowManagerService extends IWindowManager.Stub
             } else if ("refresh".equals(cmd)) {
                 dumpHighRefreshRateBlacklist(pw);
                 return;
+            } else if ("constants".equals(cmd)) {
+                mConstants.dump(pw);
+                return;
             } else {
                 // Dumping a single name?
                 if (!dumpWindows(pw, cmd, args, opti, dumpAll)) {
@@ -6291,6 +6260,10 @@ public class WindowManagerService extends IWindowManager.Stub
                 pw.println(separator);
             }
             dumpHighRefreshRateBlacklist(pw);
+            if (dumpAll) {
+                pw.println(separator);
+            }
+            mConstants.dump(pw);
         }
     }
 
@@ -6974,6 +6947,14 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     private final class LocalService extends WindowManagerInternal {
+
+        @Override
+        public void clearSnapshotCache() {
+            synchronized (mGlobalLock) {
+                mTaskSnapshotController.clearSnapshotCache();
+            }
+        }
+
         @Override
         public void requestTraversalFromDisplayManager() {
             synchronized (mGlobalLock) {
@@ -7722,19 +7703,17 @@ public class WindowManagerService extends IWindowManager.Stub
      */
     void grantInputChannel(int callingUid, int callingPid, int displayId, SurfaceControl surface,
             IWindow window, IBinder hostInputToken, InputChannel outInputChannel) {
-        final InputApplicationHandle applicationHandle;
+        InputApplicationHandle applicationHandle = null;
         final String name;
         final InputChannel[] inputChannels;
         final InputChannel clientChannel;
         final InputChannel serverChannel;
         synchronized (mGlobalLock) {
             final WindowState hostWindow = mInputToWindowMap.get(hostInputToken);
-            if (hostWindow == null) {
-                Slog.e(TAG, "Failed to grant input channel");
-                return;
-            }
+            final String hostWindowName = (hostWindow != null)
+                    ? hostWindow.getWindowTag().toString() : "Internal";
             name = "EmbeddedWindow{ u" + UserHandle.getUserId(callingUid)
-                    + " " + hostWindow.getWindowTag() + "}";
+                    + " " + hostWindowName + "}";
 
             inputChannels = InputChannel.openInputChannelPair(name);
             serverChannel = inputChannels[0];
@@ -7742,8 +7721,12 @@ public class WindowManagerService extends IWindowManager.Stub
             mInputManager.registerInputChannel(serverChannel);
             mEmbeddedWindowController.add(serverChannel.getToken(), window, hostWindow, callingUid,
                     callingPid);
-            applicationHandle = new InputApplicationHandle(
-                hostWindow.mInputWindowHandle.inputApplicationHandle);
+
+            if (hostWindow != null
+                    && hostWindow.mInputWindowHandle.inputApplicationHandle != null) {
+                applicationHandle = new InputApplicationHandle(
+                        hostWindow.mInputWindowHandle.inputApplicationHandle);
+            }
         }
 
         clientChannel.transferTo(outInputChannel);

@@ -20,7 +20,7 @@ import android.app.ActivityManager;
 import android.app.IActivityManager;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
+import android.content.pm.PackageManagerInternal;
 import android.os.Binder;
 import android.os.RemoteException;
 import android.os.UserHandle;
@@ -32,6 +32,7 @@ import com.android.internal.compat.CompatibilityChangeConfig;
 import com.android.internal.compat.CompatibilityChangeInfo;
 import com.android.internal.compat.IPlatformCompat;
 import com.android.internal.util.DumpUtils;
+import com.android.server.LocalServices;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -107,6 +108,23 @@ public class PlatformCompat extends IPlatformCompat.Stub {
         return enabled;
     }
 
+    /**
+     * Register a listener for change state overrides. Only one listener per change is allowed.
+     *
+     * <p>{@code listener.onCompatChange(String)} method is guaranteed to be called with
+     * packageName before the app is killed upon an override change. The state of a change is not
+     * guaranteed to change when {@code listener.onCompatChange(String)} is called.
+     *
+     * @param changeId to get updates for
+     * @param listener the listener that will be called upon a potential change for package.
+     * @throws IllegalStateException if a listener was already registered for changeId
+     * @returns {@code true} if a change with changeId was already known, or (@code false}
+     * otherwise.
+     */
+    public boolean registerListener(long changeId, CompatChange.ChangeListener listener) {
+        return CompatConfig.get().registerListener(changeId, listener);
+    }
+
     @Override
     public void setOverrides(CompatibilityChangeConfig overrides, String packageName) {
         CompatConfig.get().addOverrides(overrides, packageName);
@@ -123,6 +141,12 @@ public class PlatformCompat extends IPlatformCompat.Stub {
         CompatConfig config = CompatConfig.get();
         config.removePackageOverrides(packageName);
         killPackage(packageName);
+    }
+
+    @Override
+    public void clearOverridesForTest(String packageName) {
+        CompatConfig config = CompatConfig.get();
+        config.removePackageOverrides(packageName);
     }
 
     @Override
@@ -191,12 +215,8 @@ public class PlatformCompat extends IPlatformCompat.Stub {
     }
 
     private ApplicationInfo getApplicationInfo(String packageName, int userId) {
-        try {
-            return mContext.getPackageManager().getApplicationInfoAsUser(packageName, 0, userId);
-        } catch (PackageManager.NameNotFoundException e) {
-            Slog.e(TAG, "No installed package " + packageName);
-        }
-        return null;
+        return LocalServices.getService(PackageManagerInternal.class).getApplicationInfo(
+                packageName, 0, userId, userId);
     }
 
     private void reportChange(long changeId, int uid, int state) {
@@ -204,11 +224,11 @@ public class PlatformCompat extends IPlatformCompat.Stub {
     }
 
     private void killPackage(String packageName) {
-        int uid = -1;
-        try {
-            uid = mContext.getPackageManager().getPackageUid(packageName, 0);
-        } catch (PackageManager.NameNotFoundException e) {
-            Slog.w(TAG, "Didn't find package " + packageName + " on device.", e);
+        int uid = LocalServices.getService(PackageManagerInternal.class).getPackageUid(packageName,
+                    0, UserHandle.myUserId());
+
+        if (uid < 0) {
+            Slog.w(TAG, "Didn't find package " + packageName + " on device.");
             return;
         }
 
