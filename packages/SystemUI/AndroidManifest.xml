@@ -206,6 +206,9 @@
     <!-- shortcut manager -->
     <uses-permission android:name="android.permission.RESET_SHORTCUT_MANAGER_THROTTLING" />
 
+    <!-- launcher apps -->
+    <uses-permission android:name="android.permission.ACCESS_SHORTCUTS" />
+
     <uses-permission android:name="android.permission.MODIFY_THEME_OVERLAY" />
 
     <!-- accessibility -->
@@ -285,6 +288,11 @@
             android:exported="false"
             android:permission="com.android.systemui.permission.SELF" />
 
+        <service android:name=".assist.AssistHandleService"
+            android:exported="true"
+            android:enabled="false"
+        />
+
         <!-- started from PhoneWindowManager
              TODO: Should have an android:permission attribute -->
         <service android:name=".screenshot.TakeScreenshotService"
@@ -316,6 +324,14 @@
         <service android:name=".ImageWallpaper"
                 android:permission="android.permission.BIND_WALLPAPER"
                 android:exported="true" />
+
+        <activity
+            android:name=".bubbles.BubbleOverflowActivity"
+            android:theme="@style/BubbleOverflow"
+            android:excludeFromRecents="true"
+            android:documentLaunchMode="always"
+            android:resizeableActivity="true">
+        </activity>
 
         <activity android:name=".tuner.TunerActivity"
                   android:enabled="false"

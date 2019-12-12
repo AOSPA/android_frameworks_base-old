@@ -25,6 +25,7 @@ import android.net.wifi.IActionListener;
 import android.net.wifi.IDppCallback;
 import android.net.wifi.ILocalOnlyHotspotCallback;
 import android.net.wifi.INetworkRequestMatchCallback;
+import android.net.wifi.IOnWifiActivityEnergyInfoListener;
 import android.net.wifi.IOnWifiUsabilityStatsListener;
 import android.net.wifi.IScanResultsCallback;
 import android.net.wifi.IScanResultsListener;
@@ -35,7 +36,6 @@ import android.net.wifi.ITxPacketCountListener;
 import android.net.wifi.IWifiManager;
 import android.net.wifi.ScanResult;
 import android.net.wifi.SoftApConfiguration;
-import android.net.wifi.WifiActivityEnergyInfo;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiDppConfig;
 import android.net.wifi.WifiInfo;
@@ -47,6 +47,7 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.WorkSource;
+import android.os.connectivity.WifiActivityEnergyInfo;
 
 import java.util.List;
 import java.util.Map;
@@ -76,13 +77,20 @@ public class BaseWifiService extends IWifiManager.Stub {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    /** @deprecated use {@link #getWifiActivityEnergyInfoAsync} instead */
+    @Deprecated
     public WifiActivityEnergyInfo reportActivityInfo() {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    /** @deprecated use {@link #getWifiActivityEnergyInfoAsync} instead */
+    @Deprecated
     public void requestActivityInfo(ResultReceiver result) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void getWifiActivityEnergyInfoAsync(IOnWifiActivityEnergyInfoListener listener) {
         throw new UnsupportedOperationException();
     }
 
@@ -286,6 +294,11 @@ public class BaseWifiService extends IWifiManager.Stub {
     }
 
     @Override
+    public boolean startTetheredHotspot(SoftApConfiguration softApConfig) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public boolean stopSoftAp() {
         throw new UnsupportedOperationException();
     }
@@ -322,10 +335,21 @@ public class BaseWifiService extends IWifiManager.Stub {
     }
 
     @Override
+    public SoftApConfiguration getSoftApConfiguration() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public boolean setWifiApConfiguration(WifiConfiguration wifiConfig, String packageName) {
         throw new UnsupportedOperationException();
     }
 
+    @Override
+    public boolean setSoftApConfiguration(SoftApConfiguration softApConfig, String packageName) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public void notifyUserOfApBandConversion(String packageName) {
         throw new UnsupportedOperationException();
     }
@@ -382,6 +406,16 @@ public class BaseWifiService extends IWifiManager.Stub {
 
     @Override
     public void restoreBackupData(byte[] data) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public byte[] retrieveSoftApBackupData() {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void restoreSoftApBackupData(byte[] data) {
         throw new UnsupportedOperationException();
     }
 
@@ -516,19 +550,6 @@ public class BaseWifiService extends IWifiManager.Stub {
     @Override
     public void getTxPacketCount(String packageName, IBinder binder,
             ITxPacketCountListener callback, int callbackIdentifier) {
-        throw new UnsupportedOperationException();
-    }
-
-    /** @deprecated replaced by {@link #registerScanResultsCallback(IScanResultsCallback)} */
-    @Deprecated
-    public void registerScanResultsListener(
-            IBinder binder, IScanResultsListener listener, int listenerIdentifier) {
-        throw new UnsupportedOperationException();
-    }
-
-    /** @deprecated replaced by {@link #unregisterScanResultsCallback(IScanResultsCallback)} */
-    @Deprecated
-    public void unregisterScanResultsListener(int listenerIdentifier) {
         throw new UnsupportedOperationException();
     }
 

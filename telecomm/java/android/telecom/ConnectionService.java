@@ -1642,7 +1642,8 @@ public abstract class ConnectionService extends Service {
                         connection.getStatusHints(),
                         connection.getDisconnectCause(),
                         createIdList(connection.getConferenceables()),
-                        connection.getExtras()));
+                        connection.getExtras(),
+                        connection.getCallerNumberVerificationStatus()));
 
         if (isIncoming && request.shouldShowIncomingCallUi() && isSelfManaged) {
             // Tell ConnectionService to show its incoming call UX.
@@ -2188,7 +2189,8 @@ public abstract class ConnectionService extends Service {
                     emptyList,
                     connection.getExtras(),
                     conferenceId,
-                    connection.getCallDirection());
+                    connection.getCallDirection(),
+                    Connection.VERIFICATION_STATUS_NOT_VERIFIED);
             mAdapter.addExistingConnection(id, parcelableConnection);
         }
     }

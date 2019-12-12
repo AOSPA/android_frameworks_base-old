@@ -35,6 +35,7 @@ import android.content.Context;
 import android.content.pm.ParceledListSlice;
 import android.net.ConnectivityManager;
 import android.net.DhcpInfo;
+import android.net.MacAddress;
 import android.net.Network;
 import android.net.NetworkStack;
 import android.net.wifi.hotspot2.IProvisioningCallback;
@@ -48,6 +49,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.os.WorkSource;
+import android.os.connectivity.WifiActivityEnergyInfo;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
@@ -146,12 +148,11 @@ public class WifiManager {
     @Deprecated
     public static final int ERROR_AUTH_FAILURE_EAP_FAILURE = 3;
 
-    /**
-     * Maximum number of active network suggestions allowed per app.
-     * @hide
-     */
-    public static final int NETWORK_SUGGESTIONS_MAX_PER_APP =
-            ActivityManager.isLowRamDeviceStatic() ? 256 : 1024;
+    /** @hide */
+    public static final int NETWORK_SUGGESTIONS_MAX_PER_APP_LOW_RAM = 256;
+
+    /** @hide */
+    public static final int NETWORK_SUGGESTIONS_MAX_PER_APP_HIGH_RAM = 1024;
 
     /**
      * Reason code if all of the network suggestions were successfully added or removed.
@@ -752,7 +753,9 @@ public class WifiManager {
      * had been reset.
      * @hide
      */
-    public static final String WIFI_NETWORK_SETTINGS_RESET_ACTION =
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_CARRIER_PROVISIONING)
+    public static final String ACTION_NETWORK_SETTINGS_RESET =
             "android.net.wifi.action.NETWORK_SETTINGS_RESET";
 
     /**
@@ -1142,7 +1145,7 @@ public class WifiManager {
      * @deprecated This API is non-functional and will have no impact.
      */
     @Deprecated
-    public static final int WIFI_MODE_FULL = WifiProtoEnums.WIFI_MODE_FULL; // 1
+    public static final int WIFI_MODE_FULL = 1;
 
     /**
      * In this Wi-Fi lock mode, Wi-Fi will be kept active,
@@ -1156,7 +1159,7 @@ public class WifiManager {
      * @deprecated This API is non-functional and will have no impact.
      */
     @Deprecated
-    public static final int WIFI_MODE_SCAN_ONLY = WifiProtoEnums.WIFI_MODE_SCAN_ONLY; // 2
+    public static final int WIFI_MODE_SCAN_ONLY = 2;
 
     /**
      * In this Wi-Fi lock mode, Wi-Fi will not go to power save.
@@ -1175,7 +1178,7 @@ public class WifiManager {
      * When there is no support from the hardware, the {@link #WIFI_MODE_FULL_HIGH_PERF}
      * lock will have no impact.
      */
-    public static final int WIFI_MODE_FULL_HIGH_PERF = WifiProtoEnums.WIFI_MODE_FULL_HIGH_PERF; // 3
+    public static final int WIFI_MODE_FULL_HIGH_PERF = 3;
 
     /**
      * In this Wi-Fi lock mode, Wi-Fi will operate with a priority to achieve low latency.
@@ -1205,8 +1208,8 @@ public class WifiManager {
      * lock will be effective when app is running in foreground and screen is on,
      * while the {@link #WIFI_MODE_FULL_HIGH_PERF} lock will take effect otherwise.
      */
-    public static final int WIFI_MODE_FULL_LOW_LATENCY =
-            WifiProtoEnums.WIFI_MODE_FULL_LOW_LATENCY; // 4
+    public static final int WIFI_MODE_FULL_LOW_LATENCY = 4;
+
 
     /** Anything worse than or equal to this will show 0 bars. */
     @UnsupportedAppUsage
@@ -1260,6 +1263,10 @@ public class WifiManager {
 
     /** Indicates an invalid SSID. */
     public static final String UNKNOWN_SSID = "<unknown ssid>";
+
+    /** @hide */
+    public static final MacAddress ALL_ZEROS_MAC_ADDRESS =
+            MacAddress.fromString("00:00:00:00:00:00");
 
     /* Number of currently active WifiLocks and MulticastLocks */
     @UnsupportedAppUsage
@@ -1326,6 +1333,7 @@ public class WifiManager {
      * <li>allowedAuthAlgorithms</li>
      * <li>allowedPairwiseCiphers</li>
      * <li>allowedGroupCiphers</li>
+     * <li>status</li>
      * </ul>
      * @return a list of network configurations in the form of a list
      * of {@link WifiConfiguration} objects.
@@ -1976,7 +1984,15 @@ public class WifiManager {
      * @see #removeNetworkSuggestions(List)
      */
     public int getMaxNumberOfNetworkSuggestionsPerApp() {
-        return NETWORK_SUGGESTIONS_MAX_PER_APP;
+        return getMaxNumberOfNetworkSuggestionsPerApp(
+                mContext.getSystemService(ActivityManager.class).isLowRamDevice());
+    }
+
+    /** @hide */
+    public static int getMaxNumberOfNetworkSuggestionsPerApp(boolean isLowRamDevice) {
+        return isLowRamDevice
+                ? NETWORK_SUGGESTIONS_MAX_PER_APP_LOW_RAM
+                : NETWORK_SUGGESTIONS_MAX_PER_APP_HIGH_RAM;
     }
 
     /**
@@ -2509,19 +2525,76 @@ public class WifiManager {
     }
 
     /**
-     * Return the record of {@link WifiActivityEnergyInfo} object that
-     * has the activity and energy info. This can be used to ascertain what
-     * the controller has been up to, since the last sample.
+     * Interface for Wi-Fi activity energy info listener. Should be implemented by applications and
+     * set when calling {@link WifiManager#getWifiActivityEnergyInfoAsync}.
      *
-     * @return a record with {@link WifiActivityEnergyInfo} or null if
-     * report is unavailable or unsupported
      * @hide
      */
-    public WifiActivityEnergyInfo getControllerActivityEnergyInfo() {
-        try {
-            synchronized(this) {
-                return mService.reportActivityInfo();
+    @SystemApi
+    public interface OnWifiActivityEnergyInfoListener {
+        /**
+         * Called when Wi-Fi activity energy info is available.
+         * Note: this listener is triggered at most once for each call to
+         * {@link #getWifiActivityEnergyInfoAsync}.
+         *
+         * @param info the latest {@link WifiActivityEnergyInfo}, or null if unavailable.
+         */
+        void onWifiActivityEnergyInfo(@Nullable WifiActivityEnergyInfo info);
+    }
+
+    private static class OnWifiActivityEnergyInfoProxy
+            extends IOnWifiActivityEnergyInfoListener.Stub {
+        private final Object mLock = new Object();
+        @Nullable @GuardedBy("mLock") private Executor mExecutor;
+        @Nullable @GuardedBy("mLock") private OnWifiActivityEnergyInfoListener mListener;
+
+        OnWifiActivityEnergyInfoProxy(Executor executor,
+                OnWifiActivityEnergyInfoListener listener) {
+            mExecutor = executor;
+            mListener = listener;
+        }
+
+        @Override
+        public void onWifiActivityEnergyInfo(WifiActivityEnergyInfo info) {
+            Executor executor;
+            OnWifiActivityEnergyInfoListener listener;
+            synchronized (mLock) {
+                if (mExecutor == null || mListener == null) {
+                    return;
+                }
+                executor = mExecutor;
+                listener = mListener;
+                // null out to allow garbage collection, prevent triggering listener more than once
+                mExecutor = null;
+                mListener = null;
             }
+            Binder.clearCallingIdentity();
+            executor.execute(() -> listener.onWifiActivityEnergyInfo(info));
+        }
+    }
+
+    /**
+     * Request to get the current {@link WifiActivityEnergyInfo} asynchronously.
+     * Note: This method will return null if {@link #isEnhancedPowerReportingSupported()} returns
+     * false.
+     *
+     * @param executor the executor that the listener will be invoked on
+     * @param listener the listener that will receive the {@link WifiActivityEnergyInfo} object
+     *                 when it becomes available. The listener will be triggered at most once for
+     *                 each call to this method.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(ACCESS_WIFI_STATE)
+    public void getWifiActivityEnergyInfoAsync(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull OnWifiActivityEnergyInfoListener listener) {
+        if (executor == null) throw new IllegalArgumentException("executor cannot be null");
+        if (listener == null) throw new IllegalArgumentException("listener cannot be null");
+        try {
+            mService.getWifiActivityEnergyInfoAsync(
+                    new OnWifiActivityEnergyInfoProxy(executor, listener));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2886,7 +2959,6 @@ public class WifiManager {
      *
      * @hide
      */
-    @SystemApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.NETWORK_STACK,
             NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK
@@ -2898,6 +2970,31 @@ public class WifiManager {
             throw e.rethrowFromSystemServer();
         }
     }
+
+    /**
+     * Start Soft AP (hotspot) mode for tethering purposes with the specified configuration.
+     * Note that starting Soft AP mode may disable station mode operation if the device does not
+     * support concurrency.
+     * @param softApConfig A valid SoftApConfiguration specifying the configuration of the SAP,
+     *                     or null to use the persisted Soft AP configuration that was previously
+     *                     set using {@link #setSoftApConfiguration(softApConfiguration)}.
+     * @return {@code true} if the operation succeeded, {@code false} otherwise
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_STACK,
+            NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK
+    })
+    public boolean startTetheredHotspot(@Nullable SoftApConfiguration softApConfig) {
+        try {
+            return mService.startTetheredHotspot(softApConfig);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
 
     /**
      * Stop SoftAp mode.
@@ -3183,10 +3280,12 @@ public class WifiManager {
      * Gets the Wi-Fi AP Configuration.
      * @return AP details in WifiConfiguration
      *
+     * @deprecated This API is deprecated. Use {@link #getSoftApConfiguration()} instead.
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE)
+    @Deprecated
     public WifiConfiguration getWifiApConfiguration() {
         try {
             return mService.getWifiApConfiguration();
@@ -3196,17 +3295,56 @@ public class WifiManager {
     }
 
     /**
-     * Sets the Wi-Fi AP Configuration.  The AP configuration must either be open or
-     * WPA2 PSK networks.
+     * Gets the Wi-Fi AP Configuration.
+     * @return AP details in {@link SoftApConfiguration}
+     *
+     * @hide
+     */
+    @NonNull
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.ACCESS_WIFI_STATE)
+    public SoftApConfiguration getSoftApConfiguration() {
+        try {
+            return mService.getSoftApConfiguration();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Sets the Wi-Fi AP Configuration.
+     * @return {@code true} if the operation succeeded, {@code false} otherwise
+     *
+     * @deprecated This API is deprecated. Use {@link #setSoftApConfiguration(SoftApConfiguration)}
+     * instead.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.CHANGE_WIFI_STATE)
+    @Deprecated
+    public boolean setWifiApConfiguration(WifiConfiguration wifiConfig) {
+        try {
+            return mService.setWifiApConfiguration(wifiConfig, mContext.getOpPackageName());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Sets the Wi-Fi AP Configuration.
+     *
+     * @param softApConfig  A valid SoftApConfiguration specifying the configuration of the SAP.
+
      * @return {@code true} if the operation succeeded, {@code false} otherwise
      *
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.CHANGE_WIFI_STATE)
-    public boolean setWifiApConfiguration(WifiConfiguration wifiConfig) {
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public boolean setSoftApConfiguration(@NonNull SoftApConfiguration softApConfig) {
         try {
-            return mService.setWifiApConfiguration(wifiConfig, mContext.getOpPackageName());
+            return mService.setSoftApConfiguration(
+                    softApConfig, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4723,6 +4861,36 @@ public class WifiManager {
     public void restoreBackupData(@NonNull byte[] data) {
         try {
             mService.restoreBackupData(data);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Retrieve the soft ap config data to be backed to save current config data.
+     * @hide
+     */
+    @Nullable
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public byte[] retrieveSoftApBackupData() {
+        try {
+            return mService.retrieveSoftApBackupData();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Restore soft ap config from the backed up data.
+     * @hide
+     */
+    @Nullable
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void restoreSoftApBackupData(@NonNull byte[] data) {
+        try {
+            mService.restoreSoftApBackupData(data);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

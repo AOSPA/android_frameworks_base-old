@@ -16,9 +16,10 @@
 
 package com.android.systemui.util.time;
 
-public class FakeSystemClock implements SystemClock {
-    private boolean mAutoIncrement = true;
+import java.util.ArrayList;
+import java.util.List;
 
+public class FakeSystemClock implements SystemClock {
     private long mUptimeMillis;
     private long mElapsedRealtime;
     private long mElapsedRealtimeNanos;
@@ -26,86 +27,118 @@ public class FakeSystemClock implements SystemClock {
     private long mCurrentThreadTimeMicro;
     private long mCurrentTimeMicro;
 
+    List<ClockTickListener> mListeners = new ArrayList<>();
+
     @Override
     public long uptimeMillis() {
         long value = mUptimeMillis;
-        if (mAutoIncrement) {
-            mUptimeMillis++;
-        }
         return value;
     }
 
     @Override
     public long elapsedRealtime() {
         long value = mElapsedRealtime;
-        if (mAutoIncrement) {
-            mElapsedRealtime++;
-        }
         return value;
     }
 
     @Override
     public long elapsedRealtimeNanos() {
         long value = mElapsedRealtimeNanos;
-        if (mAutoIncrement) {
-            mElapsedRealtimeNanos++;
-        }
         return value;
     }
 
     @Override
     public long currentThreadTimeMillis() {
         long value = mCurrentThreadTimeMillis;
-        if (mAutoIncrement) {
-            mCurrentThreadTimeMillis++;
-        }
         return value;
     }
 
     @Override
     public long currentThreadTimeMicro() {
         long value = mCurrentThreadTimeMicro;
-        if (mAutoIncrement) {
-            mCurrentThreadTimeMicro++;
-        }
         return value;
     }
 
     @Override
     public long currentTimeMicro() {
         long value = mCurrentTimeMicro;
-        if (mAutoIncrement) {
-            mCurrentTimeMicro++;
-        }
         return value;
     }
 
     public void setUptimeMillis(long uptimeMillis) {
         mUptimeMillis = uptimeMillis;
+        for (ClockTickListener listener : mListeners) {
+            listener.onUptimeMillis(mUptimeMillis);
+        }
     }
 
     public void setElapsedRealtime(long elapsedRealtime) {
         mElapsedRealtime = elapsedRealtime;
+        for (ClockTickListener listener : mListeners) {
+            listener.onElapsedRealtime(mElapsedRealtime);
+        }
     }
 
     public void setElapsedRealtimeNanos(long elapsedRealtimeNanos) {
         mElapsedRealtimeNanos = elapsedRealtimeNanos;
+        for (ClockTickListener listener : mListeners) {
+            listener.onElapsedRealtimeNanos(mElapsedRealtimeNanos);
+        }
     }
 
     public void setCurrentThreadTimeMillis(long currentThreadTimeMillis) {
         mCurrentThreadTimeMillis = currentThreadTimeMillis;
+        for (ClockTickListener listener : mListeners) {
+            listener.onCurrentThreadTimeMillis(mCurrentThreadTimeMillis);
+        }
     }
 
     public void setCurrentThreadTimeMicro(long currentThreadTimeMicro) {
         mCurrentThreadTimeMicro = currentThreadTimeMicro;
+        for (ClockTickListener listener : mListeners) {
+            listener.onCurrentThreadTimeMicro(mCurrentThreadTimeMicro);
+        }
     }
 
     public void setCurrentTimeMicro(long currentTimeMicro) {
         mCurrentTimeMicro = currentTimeMicro;
+        for (ClockTickListener listener : mListeners) {
+            listener.onCurrentTimeMicro(mCurrentTimeMicro);
+        }
     }
 
-    /** If true, each call to get____ will be one higher than the previous call to that method. */
-    public void setAutoIncrement(boolean autoIncrement) {
-        mAutoIncrement = autoIncrement;
+    public void addListener(ClockTickListener listener) {
+        mListeners.add(listener);
+    }
+
+    public void removeListener(ClockTickListener listener) {
+        mListeners.remove(listener);
+    }
+
+    /** Alert all the listeners about the current time. */
+    public void synchronizeListeners() {
+        for (ClockTickListener listener : mListeners) {
+            listener.onUptimeMillis(mUptimeMillis);
+            listener.onElapsedRealtime(mElapsedRealtime);
+            listener.onElapsedRealtimeNanos(mElapsedRealtimeNanos);
+            listener.onCurrentThreadTimeMillis(mCurrentThreadTimeMillis);
+            listener.onCurrentThreadTimeMicro(mCurrentThreadTimeMicro);
+            listener.onCurrentTimeMicro(mCurrentTimeMicro);
+        }
+    }
+
+
+    public interface ClockTickListener {
+        default void onUptimeMillis(long uptimeMillis) {}
+
+        default void onElapsedRealtime(long elapsedRealtime) {}
+
+        default void onElapsedRealtimeNanos(long elapsedRealtimeNanos) {}
+
+        default void onCurrentThreadTimeMillis(long currentThreadTimeMillis) {}
+
+        default void onCurrentThreadTimeMicro(long currentThreadTimeMicro) {}
+
+        default void onCurrentTimeMicro(long currentTimeMicro) {}
     }
 }

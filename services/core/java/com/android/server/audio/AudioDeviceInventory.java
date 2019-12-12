@@ -23,6 +23,7 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHearingAid;
 import android.bluetooth.BluetoothProfile;
 import android.content.Intent;
+import android.media.AudioDeviceAddress;
 import android.media.AudioDevicePort;
 import android.media.AudioFormat;
 import android.media.AudioManager;
@@ -44,8 +45,11 @@ import android.util.Slog;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -59,7 +63,10 @@ public class AudioDeviceInventory {
 
     // Actual list of connected devices
     // Key for map created from DeviceInfo.makeDeviceListKey()
-    private final ArrayMap<String, DeviceInfo> mConnectedDevices = new ArrayMap<>();
+    private final LinkedHashMap<String, DeviceInfo> mConnectedDevices = new LinkedHashMap<>();
+
+    // List of preferred devices for strategies
+    private final ArrayMap<Integer, AudioDeviceAddress> mPreferredDevices = new ArrayMap<>();
 
     private @NonNull AudioDeviceBroker mDeviceBroker;
 
@@ -141,16 +148,23 @@ public class AudioDeviceInventory {
     }
 
     //------------------------------------------------------------
+    /*package*/ void dump(PrintWriter pw, String prefix) {
+        pw.println("\n" + prefix + "Preferred devices for strategy:");
+        mPreferredDevices.forEach((strategy, device) -> {
+            pw.println("  " + prefix + "strategy:" + strategy + " device:" + device); });
+    }
+
+    //------------------------------------------------------------
     // Message handling from AudioDeviceBroker
 
     /**
      * Restore previously connected devices. Use in case of audio server crash
      * (see AudioService.onAudioServerDied() method)
      */
+    // Always executed on AudioDeviceBroker message queue
     /*package*/ void onRestoreDevices() {
         synchronized (mConnectedDevices) {
-            for (int i = 0; i < mConnectedDevices.size(); i++) {
-                DeviceInfo di = mConnectedDevices.valueAt(i);
+            for (DeviceInfo di : mConnectedDevices.values()) {
                 AudioSystem.setDeviceConnectionState(
                         di.mDeviceType,
                         AudioSystem.DEVICE_STATE_AVAILABLE,
@@ -158,6 +172,11 @@ public class AudioDeviceInventory {
                         di.mDeviceName,
                         di.mDeviceCodecFormat);
             }
+        }
+
+        synchronized (mPreferredDevices) {
+            mPreferredDevices.forEach((strategy, device) -> {
+                AudioSystem.setPreferredDeviceForStrategy(strategy, device); });
         }
     }
 
@@ -445,8 +464,40 @@ public class AudioDeviceInventory {
                     "android"); // reconnect
         }
     }
+
+    /*package*/ void onSaveSetPreferredDevice(int strategy, @NonNull AudioDeviceAddress device) {
+        mPreferredDevices.put(strategy, device);
+    }
+
+    /*package*/ void onSaveRemovePreferredDevice(int strategy) {
+        mPreferredDevices.remove(strategy);
+    }
+
     //------------------------------------------------------------
     //
+
+    /*package*/ int setPreferredDeviceForStrategySync(int strategy,
+                                                      @NonNull AudioDeviceAddress device) {
+        final long identity = Binder.clearCallingIdentity();
+        final int status = AudioSystem.setPreferredDeviceForStrategy(strategy, device);
+        Binder.restoreCallingIdentity(identity);
+
+        if (status == AudioSystem.SUCCESS) {
+            mDeviceBroker.postSaveSetPreferredDeviceForStrategy(strategy, device);
+        }
+        return status;
+    }
+
+    /*package*/ int removePreferredDeviceForStrategySync(int strategy) {
+        final long identity = Binder.clearCallingIdentity();
+        final int status = AudioSystem.removePreferredDeviceForStrategy(strategy);
+        Binder.restoreCallingIdentity(identity);
+
+        if (status == AudioSystem.SUCCESS) {
+            mDeviceBroker.postSaveRemovePreferredDeviceForStrategy(strategy);
+        }
+        return status;
+    }
 
     /**
      * Implements the communication with AudioSystem to (dis)connect a device in the native layers
@@ -645,18 +696,16 @@ public class AudioDeviceInventory {
                      mDeviceBroker.postBluetoothA2dpDeviceConfigChange(device);
                      return;
                  }
-                 for (int i = 0; i < mConnectedDevices.size(); i++) {
-                      deviceInfo = mConnectedDevices.valueAt(i);
-                      if (deviceInfo.mDeviceType != AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP) {
+                 for (Map.Entry<String, DeviceInfo> existingDevice : mConnectedDevices.entrySet()) {
+                      if (existingDevice.getValue().mDeviceType != AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP) {
                           continue;
                       }
                       // A2DP device exists, handle active device change
-                      final String existingDevicekey = mConnectedDevices.keyAt(i);
-                      mConnectedDevices.remove(existingDevicekey);
+                      mConnectedDevices.remove(existingDevice.getKey());
                       mConnectedDevices.put(deviceKey, new DeviceInfo(
                                  AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP, BtHelper.getName(device),
                                  address, a2dpCodec));
-                      if (BtHelper.isTwsPlusSwitch(device, deviceInfo.mDeviceAddress)) {
+                      if (BtHelper.isTwsPlusSwitch(device, existingDevice.getValue().mDeviceAddress)) {
                           if (AudioService.DEBUG_DEVICES) {
                               Log.d(TAG,"TWS+ device switch");
                           }
@@ -865,11 +914,10 @@ public class AudioDeviceInventory {
         }
         int delay = 0;
         Set<Integer> devices = new HashSet<>();
-        for (int i = 0; i < mConnectedDevices.size(); i++) {
-            int dev = mConnectedDevices.valueAt(i).mDeviceType;
-            if (((dev & AudioSystem.DEVICE_BIT_IN) == 0)
-                    && BECOMING_NOISY_INTENT_DEVICES_SET.contains(dev)) {
-                devices.add(dev);
+        for (DeviceInfo di : mConnectedDevices.values()) {
+            if (((di.mDeviceType & AudioSystem.DEVICE_BIT_IN) == 0)
+                    && BECOMING_NOISY_INTENT_DEVICES_SET.contains(di.mDeviceType)) {
+                devices.add(di.mDeviceType);
             }
         }
         if (musicDevice == AudioSystem.DEVICE_NONE) {

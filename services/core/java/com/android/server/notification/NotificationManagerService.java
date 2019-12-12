@@ -171,6 +171,7 @@ import android.os.IDeviceIdleController;
 import android.os.IInterface;
 import android.os.Looper;
 import android.os.Message;
+import android.os.ParcelFileDescriptor;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
@@ -292,6 +293,9 @@ public class NotificationManagerService extends SystemService {
     public static final boolean ENABLE_CHILD_NOTIFICATIONS
             = SystemProperties.getBoolean("debug.child_notifs", true);
 
+    // pullStats report request: undecorated remote view stats
+    public static final int REPORT_REMOTE_VIEWS = 0x01;
+
     static final boolean DEBUG_INTERRUPTIVENESS = SystemProperties.getBoolean(
             "debug.notification.interruptiveness", false);
 
@@ -324,6 +328,7 @@ public class NotificationManagerService extends SystemService {
     static final int VIBRATE_PATTERN_MAXLEN = 8 * 2 + 1; // up to eight bumps
 
     static final int INVALID_UID = -1;
+    static final String ROOT_PKG = "root";
 
     static final boolean ENABLE_BLOCKED_TOASTS = true;
 
@@ -4079,6 +4084,8 @@ public class NotificationManagerService extends SystemService {
             try {
                 if (filter.stats) {
                     dumpJson(pw, filter);
+                } else if (filter.rvStats) {
+                    dumpRemoteViewStats(pw, filter);
                 } else if (filter.proto) {
                     dumpProto(fd, filter);
                 } else if (filter.criticalPriority) {
@@ -4555,6 +4562,49 @@ public class NotificationManagerService extends SystemService {
             new NotificationShellCmd(NotificationManagerService.this)
                     .exec(this, in, out, err, args, callback, resultReceiver);
         }
+
+        /**
+         * Get stats committed after startNs
+         *
+         * @param startNs Report stats committed after this time in nanoseconds.
+         * @param report  Indicatess which section to include in the stats.
+         * @param doAgg   Whether to aggregate the stats or keep them separated.
+         * @param out   List of protos of individual commits or one representing the
+         *                aggregate.
+         * @return the report time in nanoseconds, or 0 on error.
+         */
+        @Override
+        public long pullStats(long startNs, int report, boolean doAgg,
+                List<ParcelFileDescriptor> out) {
+            checkCallerIsSystemOrShell();
+            long startMs = TimeUnit.MILLISECONDS.convert(startNs, TimeUnit.NANOSECONDS);
+
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                switch (report) {
+                    case REPORT_REMOTE_VIEWS:
+                        Slog.e(TAG, "pullStats REPORT_REMOTE_VIEWS from: "
+                                + startMs + "  wtih " + doAgg);
+                        PulledStats stats = mUsageStats.remoteViewStats(startMs, doAgg);
+                        if (stats != null) {
+                            out.add(stats.toParcelFileDescriptor(report));
+                            Slog.e(TAG, "exiting pullStats with: " + out.size());
+                            long endNs = TimeUnit.NANOSECONDS
+                                    .convert(stats.endTimeMs(), TimeUnit.MILLISECONDS);
+                            return endNs;
+                        }
+                        Slog.e(TAG, "null stats for: " + report);
+                }
+            } catch (IOException e) {
+
+                Slog.e(TAG, "exiting pullStats: on error", e);
+                return 0;
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+            Slog.e(TAG, "exiting pullStats: bad request");
+            return 0;
+        }
     };
 
     @VisibleForTesting
@@ -4772,6 +4822,15 @@ public class NotificationManagerService extends SystemService {
         pw.println(dump);
     }
 
+    private void dumpRemoteViewStats(PrintWriter pw, @NonNull DumpFilter filter) {
+        PulledStats stats = mUsageStats.remoteViewStats(filter.since, true);
+        if (stats == null) {
+            pw.println("no remote view stats reported.");
+            return;
+        }
+        stats.dump(REPORT_REMOTE_VIEWS, pw, filter);
+    }
+
     private void dumpProto(FileDescriptor fd, @NonNull DumpFilter filter) {
         final ProtoOutputStream proto = new ProtoOutputStream(fd);
         synchronized (mNotificationLock) {
@@ -4801,7 +4860,7 @@ public class NotificationManagerService extends SystemService {
             long zenLog = proto.start(NotificationServiceDumpProto.ZEN);
             mZenModeHelper.dump(proto);
             for (ComponentName suppressor : mEffectsSuppressors) {
-                suppressor.writeToProto(proto, ZenModeProto.SUPPRESSORS);
+                suppressor.dumpDebug(proto, ZenModeProto.SUPPRESSORS);
             }
             proto.end(zenLog);
 
@@ -4821,7 +4880,7 @@ public class NotificationManagerService extends SystemService {
                     mListenersDisablingEffects.valueAt(i);
                 for (int j = 0; j < listeners.size(); j++) {
                     final ComponentName componentName = listeners.valueAt(j);
-                    componentName.writeToProto(proto,
+                    componentName.dumpDebug(proto,
                             ListenersDisablingEffectsProto.LISTENER_COMPONENTS);
                 }
 
@@ -7779,7 +7838,8 @@ public class NotificationManagerService extends SystemService {
 
     protected boolean isUidSystemOrPhone(int uid) {
         final int appid = UserHandle.getAppId(uid);
-        return (appid == Process.SYSTEM_UID || appid == Process.PHONE_UID || uid == 0);
+        return (appid == Process.SYSTEM_UID || appid == Process.PHONE_UID
+                || uid == Process.ROOT_UID);
     }
 
     // TODO: Most calls should probably move to isCallerSystem.
@@ -7788,7 +7848,8 @@ public class NotificationManagerService extends SystemService {
     }
 
     private void checkCallerIsSystemOrShell() {
-        if (Binder.getCallingUid() == Process.SHELL_UID) {
+        int callingUid = Binder.getCallingUid();
+        if (callingUid == Process.SHELL_UID || callingUid == Process.ROOT_UID) {
             return;
         }
         checkCallerIsSystem();
@@ -7802,7 +7863,8 @@ public class NotificationManagerService extends SystemService {
     }
 
     private void checkCallerIsSystemOrSystemUiOrShell() {
-        if (Binder.getCallingUid() == Process.SHELL_UID) {
+        int callingUid = Binder.getCallingUid();
+        if (callingUid == Process.SHELL_UID || callingUid == Process.ROOT_UID) {
             return;
         }
         if (isCallerSystemOrPhone()) {
@@ -7877,6 +7939,9 @@ public class NotificationManagerService extends SystemService {
     }
 
     private void checkCallerIsSameApp(String pkg, int uid, int userId) {
+        if (uid == Process.ROOT_UID && ROOT_PKG.equals(pkg)) {
+            return;
+        }
         try {
             ApplicationInfo ai = mPackageManager.getApplicationInfo(
                     pkg, 0, userId);
@@ -8268,7 +8333,7 @@ public class NotificationManagerService extends SystemService {
             try {
                 assistant.onAllowedAdjustmentsChanged();
             } catch (RemoteException ex) {
-                Slog.e(TAG, "unable to notify assistant (capabilities): " + assistant, ex);
+                Slog.e(TAG, "unable to notify assistant (capabilities): " + info, ex);
             }
         }
 
@@ -8278,7 +8343,7 @@ public class NotificationManagerService extends SystemService {
             try {
                 assistant.onNotificationsSeen(keys);
             } catch (RemoteException ex) {
-                Slog.e(TAG, "unable to notify assistant (seen): " + assistant, ex);
+                Slog.e(TAG, "unable to notify assistant (seen): " + info, ex);
             }
         }
 
@@ -8584,7 +8649,7 @@ public class NotificationManagerService extends SystemService {
                         listener.onStatusBarIconsBehaviorChanged(hideSilentStatusIcons);
                     } catch (RemoteException ex) {
                         Slog.e(TAG, "unable to notify listener "
-                                + "(hideSilentStatusIcons): " + listener, ex);
+                                + "(hideSilentStatusIcons): " + info, ex);
                     }
                 });
             }
@@ -8877,7 +8942,7 @@ public class NotificationManagerService extends SystemService {
             try {
                 listener.onNotificationPosted(sbnHolder, rankingUpdate);
             } catch (RemoteException ex) {
-                Slog.e(TAG, "unable to notify listener (posted): " + listener, ex);
+                Slog.e(TAG, "unable to notify listener (posted): " + info, ex);
             }
         }
 
@@ -8891,7 +8956,7 @@ public class NotificationManagerService extends SystemService {
             try {
                 listener.onNotificationRemoved(sbnHolder, rankingUpdate, stats, reason);
             } catch (RemoteException ex) {
-                Slog.e(TAG, "unable to notify listener (removed): " + listener, ex);
+                Slog.e(TAG, "unable to notify listener (removed): " + info, ex);
             }
         }
 
@@ -8901,7 +8966,7 @@ public class NotificationManagerService extends SystemService {
             try {
                 listener.onNotificationRankingUpdate(rankingUpdate);
             } catch (RemoteException ex) {
-                Slog.e(TAG, "unable to notify listener (ranking update): " + listener, ex);
+                Slog.e(TAG, "unable to notify listener (ranking update): " + info, ex);
             }
         }
 
@@ -8910,7 +8975,7 @@ public class NotificationManagerService extends SystemService {
             try {
                 listener.onListenerHintsChanged(hints);
             } catch (RemoteException ex) {
-                Slog.e(TAG, "unable to notify listener (listener hints): " + listener, ex);
+                Slog.e(TAG, "unable to notify listener (listener hints): " + info, ex);
             }
         }
 
@@ -8920,7 +8985,7 @@ public class NotificationManagerService extends SystemService {
             try {
                 listener.onInterruptionFilterChanged(interruptionFilter);
             } catch (RemoteException ex) {
-                Slog.e(TAG, "unable to notify listener (interruption filter): " + listener, ex);
+                Slog.e(TAG, "unable to notify listener (interruption filter): " + info, ex);
             }
         }
 
@@ -8931,7 +8996,7 @@ public class NotificationManagerService extends SystemService {
             try {
                 listener.onNotificationChannelModification(pkg, user, channel, modificationType);
             } catch (RemoteException ex) {
-                Slog.e(TAG, "unable to notify listener (channel changed): " + listener, ex);
+                Slog.e(TAG, "unable to notify listener (channel changed): " + info, ex);
             }
         }
 
@@ -8942,7 +9007,7 @@ public class NotificationManagerService extends SystemService {
             try {
                 listener.onNotificationChannelGroupModification(pkg, user, group, modificationType);
             } catch (RemoteException ex) {
-                Slog.e(TAG, "unable to notify listener (channel group changed): " + listener, ex);
+                Slog.e(TAG, "unable to notify listener (channel group changed): " + info, ex);
             }
         }
 
@@ -9077,6 +9142,7 @@ public class NotificationManagerService extends SystemService {
         public boolean zen;
         public long since;
         public boolean stats;
+        public boolean rvStats;
         public boolean redact = true;
         public boolean proto = false;
         public boolean criticalPriority = false;
@@ -9106,6 +9172,14 @@ public class NotificationManagerService extends SystemService {
                     filter.zen = true;
                 } else if ("--stats".equals(a)) {
                     filter.stats = true;
+                    if (ai < args.length-1) {
+                        ai++;
+                        filter.since = Long.parseLong(args[ai]);
+                    } else {
+                        filter.since = 0;
+                    }
+                } else if ("--remote-view-stats".equals(a)) {
+                    filter.rvStats = true;
                     if (ai < args.length-1) {
                         ai++;
                         filter.since = Long.parseLong(args[ai]);

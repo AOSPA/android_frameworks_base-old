@@ -54,6 +54,7 @@ import android.content.IntentSender;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageInstallObserver2;
 import android.content.pm.IPackageInstallerSession;
+import android.content.pm.InstallationFile;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageInstaller.SessionInfo;
@@ -65,6 +66,7 @@ import android.content.pm.PackageParser.ApkLite;
 import android.content.pm.PackageParser.PackageLite;
 import android.content.pm.PackageParser.PackageParserException;
 import android.content.pm.dex.DexMetadataHelper;
+import android.content.pm.parsing.ApkLiteParseUtils;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Binder;
@@ -81,6 +83,8 @@ import android.os.Process;
 import android.os.RevocableFileDescriptor;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.os.incremental.IncrementalFileStorages;
+import android.os.incremental.IncrementalManager;
 import android.os.storage.StorageManager;
 import android.stats.devicepolicy.DevicePolicyEnums;
 import android.system.ErrnoException;
@@ -134,6 +138,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     private static final int MSG_COMMIT = 1;
     private static final int MSG_ON_PACKAGE_INSTALLED = 2;
     private static final int MSG_SEAL = 3;
+    private static final int MSG_TRANSFER = 4;
 
     /** XML constants used for persisting a session */
     static final String TAG_SESSION = "session";
@@ -316,6 +321,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     @GuardedBy("mLock")
     private boolean mVerityFound;
 
+    private IncrementalFileStorages mIncrementalFileStorages;
+
     private static final FileFilter sAddedFilter = new FileFilter() {
         @Override
         public boolean accept(File file) {
@@ -340,6 +347,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     private final Handler.Callback mHandlerCallback = new Handler.Callback() {
         @Override
         public boolean handleMessage(Message msg) {
+            SomeArgs args;
+            String packageName;
+            IntentSender statusReceiver;
             switch (msg.what) {
                 case MSG_SEAL:
                     handleSeal((IntentSender) msg.obj);
@@ -347,12 +357,20 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 case MSG_COMMIT:
                     handleCommit();
                     break;
+                case MSG_TRANSFER:
+                    args = (SomeArgs) msg.obj;
+                    packageName = (String) args.arg1;
+                    statusReceiver = (IntentSender) args.arg2;
+                    args.recycle();
+
+                    handleTransfer(statusReceiver, packageName);
+                    break;
                 case MSG_ON_PACKAGE_INSTALLED:
-                    final SomeArgs args = (SomeArgs) msg.obj;
-                    final String packageName = (String) args.arg1;
+                    args = (SomeArgs) msg.obj;
+                    packageName = (String) args.arg1;
                     final String message = (String) args.arg2;
                     final Bundle extras = (Bundle) args.arg3;
-                    final IntentSender statusReceiver = (IntentSender) args.arg4;
+                    statusReceiver = (IntentSender) args.arg4;
                     final int returnCode = args.argi1;
                     args.recycle();
 
@@ -386,7 +404,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
      * Checks if the permissions still need to be confirmed.
      *
      * <p>This is dependant on the identity of the installer, hence this cannot be cached if the
-     * installer might still {@link #transfer(String) change}.
+     * installer might still {@link #transfer(String, IntentSender) change}.
      *
      * @return {@code true} iff we need to ask to confirm the permissions?
      */
@@ -467,6 +485,18 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         mStagedSessionErrorCode = stagedSessionErrorCode;
         mStagedSessionErrorMessage =
                 stagedSessionErrorMessage != null ? stagedSessionErrorMessage : "";
+
+        // TODO(b/136132412): sanity check if session should not be incremental
+        if (!params.isStaged && params.incrementalParams != null
+                && !params.incrementalParams.getPackageName().isEmpty()) {
+            IncrementalManager incrementalManager = (IncrementalManager) mContext.getSystemService(
+                    Context.INCREMENTAL_SERVICE);
+            if (incrementalManager != null) {
+                mIncrementalFileStorages =
+                        new IncrementalFileStorages(mPackageName, stageDir, incrementalManager,
+                                params.incrementalParams);
+            }
+        }
     }
 
     public SessionInfo generateInfo() {
@@ -882,10 +912,18 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             }
         }
 
+        if (mIncrementalFileStorages != null) {
+            mIncrementalFileStorages.finishSetUp();
+        }
+
         mHandler.obtainMessage(MSG_SEAL, statusReceiver).sendToTarget();
     }
 
     private void handleSeal(@NonNull IntentSender statusReceiver) {
+        // TODO(b/136132412): update with new APIs
+        if (mIncrementalFileStorages != null) {
+            mIncrementalFileStorages.startLoading();
+        }
         if (!markAsCommitted(statusReceiver)) {
             return;
         }
@@ -1203,13 +1241,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
-    @Override
-    public void transfer(String packageName) {
-        Preconditions.checkNotNull(packageName);
-
+    private int assertCanBeTransferredAndReturnNewOwner(String packageName)
+            throws PackageManager.NameNotFoundException {
         ApplicationInfo newOwnerAppInfo = mPm.getApplicationInfo(packageName, 0, userId);
         if (newOwnerAppInfo == null) {
-            throw new ParcelableException(new PackageManager.NameNotFoundException(packageName));
+            throw new PackageManager.NameNotFoundException(packageName);
         }
 
         if (PackageManager.PERMISSION_GRANTED != mPm.checkUidPermission(
@@ -1224,31 +1260,104 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             throw new SecurityException("Can only transfer sessions that use public options");
         }
 
-        List<PackageInstallerSession> childSessions = getChildSessions();
+        return newOwnerAppInfo.uid;
+    }
+
+    @Override
+    public void transfer(String packageName, IntentSender statusReceiver) {
+        Preconditions.checkNotNull(statusReceiver);
+        Preconditions.checkNotNull(packageName);
+
+        try {
+            assertCanBeTransferredAndReturnNewOwner(packageName);
+        } catch (PackageManager.NameNotFoundException e) {
+            throw new ParcelableException(e);
+        }
 
         synchronized (mLock) {
             assertCallerIsOwnerOrRootLocked();
             assertPreparedAndNotSealedLocked("transfer");
+        }
 
-            try {
-                sealAndValidateLocked(childSessions);
-            } catch (PackageManagerException e) {
-                throw new IllegalArgumentException("Package is not valid", e);
+        final SomeArgs args = SomeArgs.obtain();
+        args.arg1 = packageName;
+        args.arg2 = statusReceiver;
+
+        mHandler.obtainMessage(MSG_TRANSFER, args).sendToTarget();
+    }
+
+    private void handleTransfer(IntentSender statusReceiver, String packageName) {
+        List<PackageInstallerSession> childSessions = getChildSessions();
+
+        try {
+            final int uid = assertCanBeTransferredAndReturnNewOwner(packageName);
+
+            synchronized (mLock) {
+                assertPreparedAndNotSealedLocked("transfer");
+
+                try {
+                    sealAndValidateLocked(childSessions);
+                } catch (PackageManagerException e) {
+                    throw new IllegalArgumentException("Package is not valid", e);
+                }
+
+                if (!mPackageName.equals(mInstallSource.installerPackageName)) {
+                    throw new SecurityException(
+                            "Can only transfer sessions that update the original installer");
+                }
+
+                mInstallerUid = uid;
+                mInstallSource = InstallSource.create(packageName, null, packageName, false);
             }
-
-            if (!mPackageName.equals(mInstallSource.installerPackageName)) {
-                throw new SecurityException("Can only transfer sessions that update the original "
-                        + "installer");
-            }
-
-            mInstallerUid = newOwnerAppInfo.uid;
-            mInstallSource = InstallSource.create(packageName, null, packageName, false);
+        } catch (PackageManager.NameNotFoundException e) {
+            onSessionTransferStatus(statusReceiver, packageName,
+                    PackageInstaller.STATUS_FAILURE_NAME_NOT_FOUND, e.getMessage());
+            return;
+        } catch (IllegalStateException e) {
+            onSessionTransferStatus(statusReceiver, packageName,
+                    PackageInstaller.STATUS_FAILURE_ILLEGAL_STATE, e.getMessage());
+            return;
+        } catch (SecurityException e) {
+            onSessionTransferStatus(statusReceiver, packageName,
+                    PackageInstaller.STATUS_FAILURE_SECURITY, e.getMessage());
+            return;
+        } catch (Throwable e) {
+            onSessionTransferStatus(statusReceiver, packageName, PackageInstaller.STATUS_FAILURE,
+                    e.getMessage());
+            return;
         }
 
         // Persist the fact that we've sealed ourselves to prevent
         // mutations of any hard links we create. We do this without holding
         // the session lock, since otherwise it's a lock inversion.
         mCallback.onSessionSealedBlocking(this);
+
+        // Report success.
+        onSessionTransferStatus(statusReceiver, packageName, PackageInstaller.STATUS_SUCCESS, null);
+    }
+
+    private void onSessionTransferStatus(IntentSender statusReceiver, String otherPackageName,
+            int status, String statusMessage) {
+        final String packageName;
+        synchronized (mLock) {
+            packageName = mPackageName;
+        }
+
+        final Intent fillIn = new Intent();
+        fillIn.putExtra(PackageInstaller.EXTRA_PACKAGE_NAME, packageName);
+        fillIn.putExtra(PackageInstaller.EXTRA_SESSION_ID, sessionId);
+        fillIn.putExtra(PackageInstaller.EXTRA_OTHER_PACKAGE_NAME, otherPackageName);
+
+        fillIn.putExtra(PackageInstaller.EXTRA_STATUS, status);
+        if (!TextUtils.isEmpty(statusMessage)) {
+            fillIn.putExtra(PackageInstaller.EXTRA_STATUS_MESSAGE, statusMessage);
+        }
+
+        try {
+            statusReceiver.sendIntent(mContext, 0, fillIn, null, null);
+        } catch (IntentSender.SendIntentException ignored) {
+        }
+
     }
 
     private void handleCommit() {
@@ -1429,6 +1538,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 computeProgressLocked(true);
 
                 // Unpack native libraries
+                // TODO(b/136132412): skip for incremental installation
                 extractNativeLibraries(stageDir, params.abiOverride, mayInheritNativeLibs());
             }
 
@@ -1588,7 +1698,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         for (File addedFile : addedFiles) {
             final ApkLite apk;
             try {
-                apk = PackageParser.parseApkLite(
+                apk = ApkLiteParseUtils.parseApkLite(
                         addedFile, PackageParser.PARSE_COLLECT_CERTIFICATES);
             } catch (PackageParserException e) {
                 throw PackageManagerException.from(e);
@@ -1687,7 +1797,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             ApplicationInfo appInfo = pkgInfo.applicationInfo;
             try {
                 existing = PackageParser.parsePackageLite(new File(appInfo.getCodePath()), 0);
-                existingBase = PackageParser.parseApkLite(new File(appInfo.getBaseCodePath()),
+                existingBase = ApkLiteParseUtils.parseApkLite(new File(appInfo.getBaseCodePath()),
                         PackageParser.PARSE_COLLECT_CERTIFICATES);
             } catch (PackageParserException e) {
                 throw PackageManagerException.from(e);
@@ -2123,7 +2233,6 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             }
             destroyInternal();
         }
-
         dispatchSessionFinished(INSTALL_FAILED_ABORTED, "Session was abandoned", null);
     }
 
@@ -2207,6 +2316,20 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     @Override
     public int getParentSessionId() {
         return mParentSessionId;
+    }
+
+    @Override
+    public void addFile(@NonNull String name, long size, @NonNull byte[] metadata) {
+        if (mIncrementalFileStorages == null) {
+            throw new IllegalStateException(
+                    "Cannot add Incremental File to a non-Incremental session.");
+        }
+        try {
+            mIncrementalFileStorages.addFile(new InstallationFile(name, size, metadata));
+        } catch (IOException ex) {
+            throw new IllegalStateException(
+                    "Failed to add and configure Incremental File: " + name, ex);
+        }
     }
 
     private void dispatchSessionFinished(int returnCode, String msg, Bundle extras) {
@@ -2331,6 +2454,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         // since these packages are supposed to be read on reboot.
         // Those dirs are deleted when the staged session has reached a final state.
         if (stageDir != null && !params.isStaged) {
+            if (mIncrementalFileStorages != null) {
+                mIncrementalFileStorages.cleanUp();
+            }
             try {
                 mPm.mInstaller.rmPackageDir(stageDir.getAbsolutePath());
             } catch (InstallerException ignored) {
@@ -2344,6 +2470,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 mSessionProvider.getSession(childSessionId).cleanStageDir();
             }
         } else {
+            if (mIncrementalFileStorages != null) {
+                mIncrementalFileStorages.cleanUp();
+            }
             try {
                 mPm.mInstaller.rmPackageDir(stageDir.getAbsolutePath());
             } catch (InstallerException ignored) {

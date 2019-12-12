@@ -43,7 +43,6 @@ import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.DragDownHelper;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.PulseExpansionHandler;
-import com.android.systemui.statusbar.SuperStatusBarViewFactory;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
@@ -57,14 +56,13 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
 import dagger.Lazy;
 
 /**
  * Controller for {@link StatusBarWindowView}.
  */
-@Singleton
+//@Singleton
 public class StatusBarWindowViewController {
     private final InjectionInflationController mInjectionInflationController;
     private final NotificationWakeUpCoordinator mCoordinator;
@@ -116,9 +114,9 @@ public class StatusBarWindowViewController {
             DozeLog dozeLog,
             DozeParameters dozeParameters,
             CommandQueue commandQueue,
-            SuperStatusBarViewFactory superStatusBarViewFactory,
             Lazy<ShadeController> shadeControllerLazy,
-            DockManager dockManager) {
+            DockManager dockManager,
+            StatusBarWindowView statusBarWindowView) {
         mInjectionInflationController = injectionInflationController;
         mCoordinator = coordinator;
         mPulseExpansionHandler = pulseExpansionHandler;
@@ -134,7 +132,7 @@ public class StatusBarWindowViewController {
         mDozeLog = dozeLog;
         mDozeParameters = dozeParameters;
         mCommandQueue = commandQueue;
-        mView = superStatusBarViewFactory.getStatusBarWindowView();
+        mView = statusBarWindowView;
         mShadeControllerLazy = shadeControllerLazy;
         mDockManager = dockManager;
 
@@ -265,7 +263,7 @@ public class StatusBarWindowViewController {
                 if (isDown) {
                     mStackScrollLayout.closeControlsIfOutsideTouch(ev);
                 }
-                if (mService.isDozing()) {
+                if (mStatusBarStateController.isDozing()) {
                     mService.mDozeScrimController.extendPulse();
                 }
                 // In case we start outside of the view bounds (below the status bar), we need to
@@ -286,7 +284,8 @@ public class StatusBarWindowViewController {
 
             @Override
             public boolean shouldInterceptTouchEvent(MotionEvent ev) {
-                if (mService.isDozing() && !mService.isPulsing() && !mDockManager.isDocked()) {
+                if (mStatusBarStateController.isDozing() && !mService.isPulsing()
+                        && !mDockManager.isDocked()) {
                     // Capture all touch events in always-on.
                     return true;
                 }
@@ -294,7 +293,7 @@ public class StatusBarWindowViewController {
                 if (notificationPanelView.isFullyExpanded()
                         && mDragDownHelper.isDragDownEnabled()
                         && !mService.isBouncerShowing()
-                        && !mService.isDozing()) {
+                        && !mStatusBarStateController.isDozing()) {
                     intercept = mDragDownHelper.onInterceptTouchEvent(ev);
                 }
 
@@ -314,7 +313,7 @@ public class StatusBarWindowViewController {
             @Override
             public boolean handleTouchEvent(MotionEvent ev) {
                 boolean handled = false;
-                if (mService.isDozing()) {
+                if (mStatusBarStateController.isDozing()) {
                     handled = !mService.isPulsing();
                 }
                 if ((mDragDownHelper.isDragDownEnabled() && !handled)
@@ -360,7 +359,7 @@ public class StatusBarWindowViewController {
                         break;
                     case KeyEvent.KEYCODE_VOLUME_DOWN:
                     case KeyEvent.KEYCODE_VOLUME_UP:
-                        if (mService.isDozing()) {
+                        if (mStatusBarStateController.isDozing()) {
                             MediaSessionLegacyHelper.getHelper(mView.getContext())
                                     .sendVolumeKeyEvent(
                                             event, AudioManager.USE_DEFAULT_STREAM_TYPE, true);

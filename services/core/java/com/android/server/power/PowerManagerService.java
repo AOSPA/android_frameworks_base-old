@@ -203,8 +203,11 @@ public final class PowerManagerService extends SystemService
     // System Property indicating that retail demo mode is currently enabled.
     private static final String SYSTEM_PROPERTY_RETAIL_DEMO_ENABLED = "sys.retaildemo.enabled";
 
-    // Possible reasons for shutting down or reboot for use in REBOOT_PROPERTY(sys.boot.reason)
-    // which is set by bootstat
+    // System property for last reboot reason
+    private static final String SYSTEM_PROPERTY_REBOOT_REASON = "sys.boot.reason";
+
+    // Possible reasons for shutting down or reboot for use in
+    // SYSTEM_PROPERTY_REBOOT_REASON(sys.boot.reason) which is set by bootstat
     private static final String REASON_SHUTDOWN = "shutdown";
     private static final String REASON_REBOOT = "reboot";
     private static final String REASON_USERREQUESTED = "shutdown,userrequested";
@@ -225,9 +228,6 @@ public final class PowerManagerService extends SystemService
     private static final int HALT_MODE_REBOOT = 1;
     private static final int HALT_MODE_REBOOT_SAFE_MODE = 2;
 
-    // property for last reboot reason
-    private static final String REBOOT_PROPERTY = "sys.boot.reason";
-
     private final Context mContext;
     private final ServiceThread mHandlerThread;
     private final PowerManagerHandler mHandler;
@@ -240,6 +240,7 @@ public final class PowerManagerService extends SystemService
     private final BinderService mBinderService;
     private final LocalService mLocalService;
     private final NativeWrapper mNativeWrapper;
+    private final SystemPropertiesWrapper mSystemProperties;
     private final Injector mInjector;
 
     private LightsManager mLightsManager;
@@ -756,6 +757,20 @@ public final class PowerManagerService extends SystemService
         InattentiveSleepWarningController createInattentiveSleepWarningController() {
             return new InattentiveSleepWarningController();
         }
+
+        public SystemPropertiesWrapper createSystemPropertiesWrapper() {
+            return new SystemPropertiesWrapper() {
+                @Override
+                public String get(String key, String def) {
+                    return SystemProperties.get(key, def);
+                }
+
+                @Override
+                public void set(String key, String val) {
+                    SystemProperties.set(key, val);
+                }
+            };
+        }
     }
 
     final Constants mConstants;
@@ -781,6 +796,7 @@ public final class PowerManagerService extends SystemService
         mBinderService = new BinderService();
         mLocalService = new LocalService();
         mNativeWrapper = injector.createNativeWrapper();
+        mSystemProperties = injector.createSystemPropertiesWrapper();
         mInjector = injector;
 
         mHandlerThread = new ServiceThread(TAG,
@@ -816,7 +832,7 @@ public final class PowerManagerService extends SystemService
             mHalInteractiveModeEnabled = true;
 
             mWakefulness = WAKEFULNESS_AWAKE;
-            sQuiescent = SystemProperties.get(SYSTEM_PROPERTY_QUIESCENT, "0").equals("1");
+            sQuiescent = mSystemProperties.get(SYSTEM_PROPERTY_QUIESCENT, "0").equals("1");
 
             mNativeWrapper.nativeInit(this);
             mNativeWrapper.nativeSetAutoSuspend(false);
@@ -1067,8 +1083,9 @@ public final class PowerManagerService extends SystemService
         }
 
         final String retailDemoValue = UserManager.isDeviceInDemoMode(mContext) ? "1" : "0";
-        if (!retailDemoValue.equals(SystemProperties.get(SYSTEM_PROPERTY_RETAIL_DEMO_ENABLED))) {
-            SystemProperties.set(SYSTEM_PROPERTY_RETAIL_DEMO_ENABLED, retailDemoValue);
+        if (!retailDemoValue.equals(
+                mSystemProperties.get(SYSTEM_PROPERTY_RETAIL_DEMO_ENABLED, null))) {
+            mSystemProperties.set(SYSTEM_PROPERTY_RETAIL_DEMO_ENABLED, retailDemoValue);
         }
 
         mScreenBrightnessModeSetting = Settings.System.getIntForUser(resolver,
@@ -2140,9 +2157,11 @@ public final class PowerManagerService extends SystemService
                     nextTimeout = -1;
                 }
 
-                if ((mUserActivitySummary & USER_ACTIVITY_SCREEN_BRIGHT) != 0
+                if (((mUserActivitySummary & USER_ACTIVITY_SCREEN_BRIGHT) != 0
+                        || (mUserActivitySummary & USER_ACTIVITY_SCREEN_DIM) != 0)
                         && (mWakeLockSummary & WAKE_LOCK_STAY_AWAKE) == 0) {
-                    nextTimeout = mAttentionDetector.updateUserActivity(nextTimeout);
+                    nextTimeout = mAttentionDetector.updateUserActivity(nextTimeout,
+                            screenDimDuration);
                 }
 
                 if (nextProfileTimeout > 0) {
@@ -4068,20 +4087,20 @@ public final class PowerManagerService extends SystemService
             mBatterySaverStateMachine.dumpProto(proto,
                     PowerManagerServiceDumpProto.BATTERY_SAVER_STATE_MACHINE);
 
-            mHandler.getLooper().writeToProto(proto, PowerManagerServiceDumpProto.LOOPER);
+            mHandler.getLooper().dumpDebug(proto, PowerManagerServiceDumpProto.LOOPER);
 
             for (WakeLock wl : mWakeLocks) {
-                wl.writeToProto(proto, PowerManagerServiceDumpProto.WAKE_LOCKS);
+                wl.dumpDebug(proto, PowerManagerServiceDumpProto.WAKE_LOCKS);
             }
 
             for (SuspendBlocker sb : mSuspendBlockers) {
-                sb.writeToProto(proto, PowerManagerServiceDumpProto.SUSPEND_BLOCKERS);
+                sb.dumpDebug(proto, PowerManagerServiceDumpProto.SUSPEND_BLOCKERS);
             }
             wcd = mWirelessChargerDetector;
         }
 
         if (wcd != null) {
-            wcd.writeToProto(proto, PowerManagerServiceDumpProto.WIRELESS_CHARGER_DETECTOR);
+            wcd.dumpDebug(proto, PowerManagerServiceDumpProto.WIRELESS_CHARGER_DETECTOR);
         }
         proto.flush();
     }
@@ -4312,7 +4331,7 @@ public final class PowerManagerService extends SystemService
             return sb.toString();
         }
 
-        public void writeToProto(ProtoOutputStream proto, long fieldId) {
+        public void dumpDebug(ProtoOutputStream proto, long fieldId) {
             final long wakeLockToken = proto.start(fieldId);
             proto.write(WakeLockProto.LOCK_LEVEL, (mFlags & PowerManager.WAKE_LOCK_LEVEL_MASK));
             proto.write(WakeLockProto.TAG, mTag);
@@ -4333,7 +4352,7 @@ public final class PowerManagerService extends SystemService
             proto.write(WakeLockProto.PID, mOwnerPid);
 
             if (mWorkSource != null) {
-                mWorkSource.writeToProto(proto, WakeLockProto.WORK_SOURCE);
+                mWorkSource.dumpDebug(proto, WakeLockProto.WORK_SOURCE);
             }
             proto.end(wakeLockToken);
         }
@@ -4436,7 +4455,7 @@ public final class PowerManagerService extends SystemService
             }
         }
 
-        public void writeToProto(ProtoOutputStream proto, long fieldId) {
+        public void dumpDebug(ProtoOutputStream proto, long fieldId) {
             final long sbToken = proto.start(fieldId);
             synchronized (this) {
                 proto.write(SuspendBlockerProto.NAME, mName);
@@ -4818,7 +4837,7 @@ public final class PowerManagerService extends SystemService
 
             final long ident = Binder.clearCallingIdentity();
             try {
-                return getLastShutdownReasonInternal(REBOOT_PROPERTY);
+                return getLastShutdownReasonInternal();
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
@@ -5052,12 +5071,8 @@ public final class PowerManagerService extends SystemService
     }
 
     @VisibleForTesting
-    // lastRebootReasonProperty argument to permit testing
-    int getLastShutdownReasonInternal(String lastRebootReasonProperty) {
-        String line = SystemProperties.get(lastRebootReasonProperty);
-        if (line == null) {
-            return PowerManager.SHUTDOWN_REASON_UNKNOWN;
-        }
+    int getLastShutdownReasonInternal() {
+        String line = mSystemProperties.get(SYSTEM_PROPERTY_REBOOT_REASON, null);
         switch (line) {
             case REASON_SHUTDOWN:
                 return PowerManager.SHUTDOWN_REASON_SHUTDOWN;

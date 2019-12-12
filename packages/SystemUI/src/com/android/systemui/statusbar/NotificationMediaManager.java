@@ -61,7 +61,7 @@ import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.LockscreenWallpaper;
 import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.ScrimState;
-import com.android.systemui.statusbar.phone.ShadeController;
+import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 
@@ -104,9 +104,6 @@ public class NotificationMediaManager implements Dumpable {
 
     private final NotificationEntryManager mEntryManager;
 
-    // Late binding, also @Nullable due to being in com.android.systemui.statusbar.phone package
-    @Nullable
-    private Lazy<ShadeController> mShadeController;
     @Nullable
     private Lazy<StatusBarWindowController> mStatusBarWindowController;
 
@@ -122,6 +119,7 @@ public class NotificationMediaManager implements Dumpable {
     private final Context mContext;
     private final MediaSessionManager mMediaSessionManager;
     private final ArrayList<MediaListener> mMediaListeners;
+    private final Lazy<StatusBar> mStatusBarLazy;
     private final MediaArtworkProcessor mMediaArtworkProcessor;
     private final Set<AsyncTask<?, ?, ?>> mProcessArtworkTasks = new ArraySet<>();
 
@@ -181,7 +179,7 @@ public class NotificationMediaManager implements Dumpable {
     @Inject
     public NotificationMediaManager(
             Context context,
-            Lazy<ShadeController> shadeController,
+            Lazy<StatusBar> statusBarLazy,
             Lazy<StatusBarWindowController> statusBarWindowController,
             NotificationEntryManager notificationEntryManager,
             MediaArtworkProcessor mediaArtworkProcessor,
@@ -190,11 +188,12 @@ public class NotificationMediaManager implements Dumpable {
         mMediaArtworkProcessor = mediaArtworkProcessor;
         mKeyguardBypassController = keyguardBypassController;
         mMediaListeners = new ArrayList<>();
-        mMediaSessionManager
-                = (MediaSessionManager) mContext.getSystemService(Context.MEDIA_SESSION_SERVICE);
         // TODO: use MediaSessionManager.SessionListener to hook us up to future updates
         // in session state
-        mShadeController = shadeController;
+        mMediaSessionManager = (MediaSessionManager) mContext.getSystemService(
+                Context.MEDIA_SESSION_SERVICE);
+        // TODO: use KeyguardStateController#isOccluded to remove this dependency
+        mStatusBarLazy = statusBarLazy;
         mStatusBarWindowController = statusBarWindowController;
         mEntryManager = notificationEntryManager;
         notificationEntryManager.addNotificationEntryListener(new NotificationEntryListener() {
@@ -526,9 +525,8 @@ public class NotificationMediaManager implements Dumpable {
             }
         }
 
-        ShadeController shadeController = mShadeController.get();
         StatusBarWindowController windowController = mStatusBarWindowController.get();
-        boolean hideBecauseOccluded = shadeController != null && shadeController.isOccluded();
+        boolean hideBecauseOccluded = mStatusBarLazy.get().isOccluded();
 
         final boolean hasArtwork = artworkDrawable != null;
         mColorExtractor.setHasMediaArtwork(hasMediaArtwork);
@@ -599,8 +597,7 @@ public class NotificationMediaManager implements Dumpable {
                 if (DEBUG_MEDIA) {
                     Log.v(TAG, "DEBUG_MEDIA: Fading out album artwork");
                 }
-                boolean cannotAnimateDoze = shadeController != null
-                        && shadeController.isDozing()
+                boolean cannotAnimateDoze = mStatusBarStateController.isDozing()
                         && !ScrimState.AOD.getAnimateChange();
                 boolean needsBypassFading = mKeyguardStateController.isBypassFadingAnimation();
                 if (((mBiometricUnlockController != null && mBiometricUnlockController.getMode()

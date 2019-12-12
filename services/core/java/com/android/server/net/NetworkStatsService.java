@@ -17,7 +17,6 @@
 package com.android.server.net;
 
 import static android.Manifest.permission.ACCESS_NETWORK_STATE;
-import static android.Manifest.permission.CONNECTIVITY_INTERNAL;
 import static android.Manifest.permission.READ_NETWORK_USAGE_HISTORY;
 import static android.content.Intent.ACTION_SHUTDOWN;
 import static android.content.Intent.ACTION_UID_REMOVED;
@@ -91,6 +90,7 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkIdentity;
 import android.net.NetworkInfo;
+import android.net.NetworkStack;
 import android.net.NetworkState;
 import android.net.NetworkStats;
 import android.net.NetworkStats.NonMonotonicObserver;
@@ -1020,8 +1020,6 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     private BroadcastReceiver mTetherReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            // on background handler thread, and verified CONNECTIVITY_INTERNAL
-            // permission above.
             performPoll(FLAG_PERSIST_NETWORK);
         }
     };
@@ -1095,7 +1093,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         @Override
         public void limitReached(String limitName, String iface) {
             // only someone like NMS should be calling us
-            mContext.enforceCallingOrSelfPermission(CONNECTIVITY_INTERNAL, TAG);
+            NetworkStack.checkNetworkStackPermission(mContext);
 
             if (LIMIT_GLOBAL_ALERT.equals(limitName)) {
                 // kick off background poll to collect network stats unless there is already
@@ -1611,10 +1609,10 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
 
         dumpInterfaces(proto, NetworkStatsServiceDumpProto.ACTIVE_INTERFACES, mActiveIfaces);
         dumpInterfaces(proto, NetworkStatsServiceDumpProto.ACTIVE_UID_INTERFACES, mActiveUidIfaces);
-        mDevRecorder.writeToProtoLocked(proto, NetworkStatsServiceDumpProto.DEV_STATS);
-        mXtRecorder.writeToProtoLocked(proto, NetworkStatsServiceDumpProto.XT_STATS);
-        mUidRecorder.writeToProtoLocked(proto, NetworkStatsServiceDumpProto.UID_STATS);
-        mUidTagRecorder.writeToProtoLocked(proto, NetworkStatsServiceDumpProto.UID_TAG_STATS);
+        mDevRecorder.dumpDebugLocked(proto, NetworkStatsServiceDumpProto.DEV_STATS);
+        mXtRecorder.dumpDebugLocked(proto, NetworkStatsServiceDumpProto.XT_STATS);
+        mUidRecorder.dumpDebugLocked(proto, NetworkStatsServiceDumpProto.UID_STATS);
+        mUidTagRecorder.dumpDebugLocked(proto, NetworkStatsServiceDumpProto.UID_TAG_STATS);
 
         proto.flush();
     }
@@ -1625,7 +1623,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
             final long start = proto.start(tag);
 
             proto.write(NetworkInterfaceProto.INTERFACE, ifaces.keyAt(i));
-            ifaces.valueAt(i).writeToProto(proto, NetworkInterfaceProto.IDENTITIES);
+            ifaces.valueAt(i).dumpDebug(proto, NetworkInterfaceProto.IDENTITIES);
 
             proto.end(start);
         }

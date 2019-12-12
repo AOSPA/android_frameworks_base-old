@@ -89,8 +89,8 @@ public class SubscriptionInfo implements Parcelable {
     private int mCarrierId;
 
     /**
-     * The source of the name, NAME_SOURCE_DEFAULT_SOURCE, NAME_SOURCE_SIM_SOURCE or
-     * NAME_SOURCE_USER_INPUT.
+     * The source of the name, NAME_SOURCE_DEFAULT_SOURCE, NAME_SOURCE_SIM_SPN,
+     * NAME_SOURCE_SIM_PNN, or NAME_SOURCE_USER_INPUT.
      */
     private int mNameSource;
 
@@ -334,7 +334,7 @@ public class SubscriptionInfo implements Parcelable {
     }
 
     /**
-     * @return the source of the name, eg NAME_SOURCE_DEFAULT_SOURCE, NAME_SOURCE_SIM_SOURCE or
+     * @return the source of the name, eg NAME_SOURCE_DEFAULT_SOURCE, NAME_SOURCE_SIM_SPN or
      * NAME_SOURCE_USER_INPUT.
      * @hide
      */
@@ -665,8 +665,8 @@ public class SubscriptionInfo implements Parcelable {
             int id = source.readInt();
             String iccId = source.readString();
             int simSlotIndex = source.readInt();
-            CharSequence displayName = source.readCharSequence();
-            CharSequence carrierName = source.readCharSequence();
+            CharSequence displayName = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(source);
+            CharSequence carrierName = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(source);
             int nameSource = source.readInt();
             int iconTint = source.readInt();
             String number = source.readString();
@@ -685,8 +685,8 @@ public class SubscriptionInfo implements Parcelable {
             int carrierid = source.readInt();
             int profileClass = source.readInt();
             int subType = source.readInt();
-            String[] ehplmns = source.readStringArray();
-            String[] hplmns = source.readStringArray();
+            String[] ehplmns = source.createStringArray();
+            String[] hplmns = source.createStringArray();
             String groupOwner = source.readString();
             UiccAccessRule[] carrierConfigAccessRules = source.createTypedArray(
                 UiccAccessRule.CREATOR);
@@ -711,8 +711,8 @@ public class SubscriptionInfo implements Parcelable {
         dest.writeInt(mId);
         dest.writeString(mIccId);
         dest.writeInt(mSimSlotIndex);
-        dest.writeCharSequence(mDisplayName);
-        dest.writeCharSequence(mCarrierName);
+        TextUtils.writeToParcel(mDisplayName, dest, 0);
+        TextUtils.writeToParcel(mCarrierName, dest, 0);
         dest.writeInt(mNameSource);
         dest.writeInt(mIconTint);
         dest.writeString(mNumber);

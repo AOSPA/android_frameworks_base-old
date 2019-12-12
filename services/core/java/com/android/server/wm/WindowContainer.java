@@ -288,10 +288,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         final DisplayContent dc = newParent.getDisplayContent();
 
         mReparenting = true;
-        // Oddly enough we add to the new parent before removing from the old parent to avoid
-        // issues...
-        newParent.addChild(this, position);
         oldParent.removeChild(this);
+        newParent.addChild(this, position);
         mReparenting = false;
 
         // Relayout display(s)
@@ -310,6 +308,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     final protected void setParent(WindowContainer<WindowContainer> parent) {
         final WindowContainer oldParent = mParent;
         mParent = parent;
+
+        if (mParent != null) {
+            mParent.onChildAdded(this);
+        }
         if (!mReparenting) {
             onParentChanged(mParent, oldParent);
         }
@@ -389,7 +391,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         } else {
             mChildren.add(positionToAdd, child);
         }
-        onChildAdded(child);
 
         // Set the parent after we've actually added a child in case a subclass depends on this.
         child.setParent(this);
@@ -418,7 +419,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
 
         mChildren.add(index, child);
-        onChildAdded(child);
 
         // Set the parent after we've actually added a child in case a subclass depends on this.
         child.setParent(this);
@@ -1096,11 +1096,22 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     boolean forAllActivities(Function<ActivityRecord, Boolean> callback) {
-        for (int i = mChildren.size() - 1; i >= 0; --i) {
-            if (mChildren.get(i).forAllActivities(callback)) {
-                return true;
+        return forAllActivities(callback, true /*traverseTopToBottom*/);
+    }
+
+    boolean forAllActivities(
+            Function<ActivityRecord, Boolean> callback, boolean traverseTopToBottom) {
+        if (traverseTopToBottom) {
+            for (int i = mChildren.size() - 1; i >= 0; --i) {
+                if (mChildren.get(i).forAllActivities(callback, traverseTopToBottom)) return true;
+            }
+        } else {
+            final int count = mChildren.size();
+            for (int i = 0; i < count; i++) {
+                if (mChildren.get(i).forAllActivities(callback, traverseTopToBottom)) return true;
             }
         }
+
         return false;
     }
 
@@ -1121,6 +1132,61 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
     }
 
+    /**
+     * Process all activities in this branch of the tree.
+     *
+     * @param callback Called for each activity found.
+     * @param boundary We don't return activities via {@param callback} until we get to this node in
+     *                 the tree.
+     * @param includeBoundary If the boundary from be processed to return activities.
+     * @param traverseTopToBottom direction to traverse the tree.
+     * @return {@code true} if we ended the search before reaching the end of the tree.
+     */
+    final boolean forAllActivities(Function<ActivityRecord, Boolean> callback,
+            WindowContainer boundary, boolean includeBoundary, boolean traverseTopToBottom) {
+        return forAllActivities(
+                callback, boundary, includeBoundary, traverseTopToBottom, new boolean[1]);
+    }
+
+    private boolean forAllActivities(Function<ActivityRecord, Boolean> callback,
+            WindowContainer boundary, boolean includeBoundary, boolean traverseTopToBottom,
+            boolean[] boundaryFound) {
+        if (traverseTopToBottom) {
+            for (int i = mChildren.size() - 1; i >= 0; --i) {
+                if (processForAllActivitiesWithBoundary(callback, boundary, includeBoundary,
+                        traverseTopToBottom, boundaryFound, mChildren.get(i))) {
+                    return true;
+                }
+            }
+        } else {
+            final int count = mChildren.size();
+            for (int i = 0; i < count; i++) {
+                if (processForAllActivitiesWithBoundary(callback, boundary, includeBoundary,
+                        traverseTopToBottom, boundaryFound, mChildren.get(i))) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private boolean processForAllActivitiesWithBoundary(Function<ActivityRecord, Boolean> callback,
+            WindowContainer boundary, boolean includeBoundary, boolean traverseTopToBottom,
+            boolean[] boundaryFound, WindowContainer wc) {
+        if (wc == boundary) {
+            boundaryFound[0] = true;
+            if (!includeBoundary) return false;
+        }
+
+        if (boundaryFound[0]) {
+            return wc.forAllActivities(callback, traverseTopToBottom);
+        }
+
+        return wc.forAllActivities(
+                callback, boundary, includeBoundary, traverseTopToBottom, boundaryFound);
+    }
+
     /** @return {@code true} if this node or any of its children contains an activity. */
     boolean hasActivity() {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
@@ -1136,9 +1202,17 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     ActivityRecord getActivity(Predicate<ActivityRecord> callback, boolean traverseTopToBottom) {
+        return getActivity(callback, traverseTopToBottom, null /*boundary*/);
+    }
+
+    ActivityRecord getActivity(Predicate<ActivityRecord> callback, boolean traverseTopToBottom,
+            WindowContainer boundary) {
         if (traverseTopToBottom) {
             for (int i = mChildren.size() - 1; i >= 0; --i) {
-                final ActivityRecord r = mChildren.get(i).getActivity(callback, traverseTopToBottom);
+                final WindowContainer wc = mChildren.get(i);
+                if (wc == boundary) return null;
+
+                final ActivityRecord r = wc.getActivity(callback, traverseTopToBottom, boundary);
                 if (r != null) {
                     return r;
                 }
@@ -1146,7 +1220,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         } else {
             final int count = mChildren.size();
             for (int i = 0; i < count; i++) {
-                final ActivityRecord r = mChildren.get(i).getActivity(callback, traverseTopToBottom);
+                final WindowContainer wc = mChildren.get(i);
+                if (wc == boundary) return null;
+
+                final ActivityRecord r = wc.getActivity(callback, traverseTopToBottom, boundary);
                 if (r != null) {
                     return r;
                 }
@@ -1154,6 +1231,81 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
 
         return null;
+    }
+
+    /**
+     * Gets an activity in a branch of the tree.
+     *
+     * @param callback called to test if this is the activity that should be returned.
+     * @param boundary We don't return activities via {@param callback} until we get to this node in
+     *                 the tree.
+     * @param includeBoundary If the boundary from be processed to return activities.
+     * @param traverseTopToBottom direction to traverse the tree.
+     * @return The activity if found or null.
+     */
+    final ActivityRecord getActivity(Predicate<ActivityRecord> callback,
+            WindowContainer boundary, boolean includeBoundary, boolean traverseTopToBottom) {
+        return getActivity(
+                callback, boundary, includeBoundary, traverseTopToBottom, new boolean[1]);
+    }
+
+    private ActivityRecord getActivity(Predicate<ActivityRecord> callback,
+            WindowContainer boundary, boolean includeBoundary, boolean traverseTopToBottom,
+            boolean[] boundaryFound) {
+        if (traverseTopToBottom) {
+            for (int i = mChildren.size() - 1; i >= 0; --i) {
+                final ActivityRecord r = processGetActivityWithBoundary(callback, boundary,
+                        includeBoundary, traverseTopToBottom, boundaryFound, mChildren.get(i));
+                if (r != null) {
+                    return r;
+                }
+            }
+        } else {
+            final int count = mChildren.size();
+            for (int i = 0; i < count; i++) {
+                final ActivityRecord r = processGetActivityWithBoundary(callback, boundary,
+                        includeBoundary, traverseTopToBottom, boundaryFound, mChildren.get(i));
+                if (r != null) {
+                    return r;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private ActivityRecord processGetActivityWithBoundary(Predicate<ActivityRecord> callback,
+            WindowContainer boundary, boolean includeBoundary, boolean traverseTopToBottom,
+            boolean[] boundaryFound, WindowContainer wc) {
+        if (wc == boundary || boundary == null) {
+            boundaryFound[0] = true;
+            if (!includeBoundary) return null;
+        }
+
+        if (boundaryFound[0]) {
+            return wc.getActivity(callback, traverseTopToBottom);
+        }
+
+        return wc.getActivity(
+                callback, boundary, includeBoundary, traverseTopToBottom, boundaryFound);
+    }
+
+    ActivityRecord getActivityAbove(ActivityRecord r) {
+        return getActivity((above) -> true, r,
+                false /*includeBoundary*/, false /*traverseTopToBottom*/);
+    }
+
+    ActivityRecord getActivityBelow(ActivityRecord r) {
+        return getActivity((below) -> true, r,
+                false /*includeBoundary*/, true /*traverseTopToBottom*/);
+    }
+
+    ActivityRecord getBottomMostActivity() {
+        return getActivity((r) -> true, false /*traverseTopToBottom*/);
+    }
+
+    ActivityRecord getTopMostActivity() {
+        return getActivity((r) -> true, true /*traverseTopToBottom*/);
     }
 
     ActivityRecord getTopActivity(boolean includeFinishing, boolean includeOverlays) {
@@ -1179,27 +1331,136 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     /**
      * For all tasks at or below this container call the callback.
      *
-     * @param callback Callback to be called for every task.
-     */
-    void forAllTasks(Consumer<Task> callback) {
-        for (int i = mChildren.size() - 1; i >= 0; --i) {
-            mChildren.get(i).forAllTasks(callback);
-        }
-    }
-
-    /**
-     * For all tasks at or below this container call the callback.
-     *
      * @param callback Calls the {@link ToBooleanFunction#apply} method for each task found and
      *                 stops the search if {@link ToBooleanFunction#apply} returns {@code true}.
      */
-    boolean forAllTasks(ToBooleanFunction<Task> callback) {
+    boolean forAllTasks(Function<Task, Boolean> callback) {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             if (mChildren.get(i).forAllTasks(callback)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * For all tasks at or below this container call the callback.
+     *
+     * @param callback Callback to be called for every task.
+     */
+    void forAllTasks(Consumer<Task> callback) {
+        forAllTasks(callback, true /*traverseTopToBottom*/);
+    }
+
+    void forAllTasks(Consumer<Task> callback, boolean traverseTopToBottom) {
+        final int count = mChildren.size();
+        if (traverseTopToBottom) {
+            for (int i = count - 1; i >= 0; --i) {
+                mChildren.get(i).forAllTasks(callback, traverseTopToBottom);
+            }
+        } else {
+            for (int i = 0; i < count; i++) {
+                mChildren.get(i).forAllTasks(callback, traverseTopToBottom);
+            }
+        }
+    }
+
+    Task getTaskAbove(Task t) {
+        return getTask(
+                (above) -> true, t, false /*includeBoundary*/, false /*traverseTopToBottom*/);
+    }
+
+    Task getTaskBelow(Task t) {
+        return getTask((below) -> true, t, false /*includeBoundary*/, true /*traverseTopToBottom*/);
+    }
+
+    Task getBottomMostTask() {
+        return getTask((t) -> true, false /*traverseTopToBottom*/);
+    }
+
+    Task getTopMostTask() {
+        return getTask((t) -> true, true /*traverseTopToBottom*/);
+    }
+
+    Task getTask(Predicate<Task> callback) {
+        return getTask(callback, true /*traverseTopToBottom*/);
+    }
+
+    Task getTask(Predicate<Task> callback, boolean traverseTopToBottom) {
+        if (traverseTopToBottom) {
+            for (int i = mChildren.size() - 1; i >= 0; --i) {
+                final Task t = mChildren.get(i).getTask(callback, traverseTopToBottom);
+                if (t != null) {
+                    return t;
+                }
+            }
+        } else {
+            final int count = mChildren.size();
+            for (int i = 0; i < count; i++) {
+                final Task t = mChildren.get(i).getTask(callback, traverseTopToBottom);
+                if (t != null) {
+                    return t;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Gets an task in a branch of the tree.
+     *
+     * @param callback called to test if this is the task that should be returned.
+     * @param boundary We don't return tasks via {@param callback} until we get to this node in
+     *                 the tree.
+     * @param includeBoundary If the boundary from be processed to return tasks.
+     * @param traverseTopToBottom direction to traverse the tree.
+     * @return The task if found or null.
+     */
+    final Task getTask(Predicate<Task> callback, WindowContainer boundary, boolean includeBoundary,
+            boolean traverseTopToBottom) {
+        return getTask(callback, boundary, includeBoundary, traverseTopToBottom, new boolean[1]);
+    }
+
+    private Task getTask(Predicate<Task> callback,
+            WindowContainer boundary, boolean includeBoundary, boolean traverseTopToBottom,
+            boolean[] boundaryFound) {
+        if (traverseTopToBottom) {
+            for (int i = mChildren.size() - 1; i >= 0; --i) {
+                final Task t = processGetTaskWithBoundary(callback, boundary,
+                        includeBoundary, traverseTopToBottom, boundaryFound, mChildren.get(i));
+                if (t != null) {
+                    return t;
+                }
+            }
+        } else {
+            final int count = mChildren.size();
+            for (int i = 0; i < count; i++) {
+                final Task t = processGetTaskWithBoundary(callback, boundary,
+                        includeBoundary, traverseTopToBottom, boundaryFound, mChildren.get(i));
+                if (t != null) {
+                    return t;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private Task processGetTaskWithBoundary(Predicate<Task> callback,
+            WindowContainer boundary, boolean includeBoundary, boolean traverseTopToBottom,
+            boolean[] boundaryFound, WindowContainer wc) {
+        if (wc == boundary || boundary == null) {
+            boundaryFound[0] = true;
+            if (!includeBoundary) return null;
+        }
+
+        if (boundaryFound[0]) {
+            return wc.getTask(callback, traverseTopToBottom);
+        }
+
+        return wc.getTask(
+                callback, boundary, includeBoundary, traverseTopToBottom, boundaryFound);
     }
 
     WindowState getWindow(Predicate<WindowState> callback) {
@@ -1412,7 +1673,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      */
     @CallSuper
     @Override
-    public void writeToProto(ProtoOutputStream proto, long fieldId,
+    public void dumpDebug(ProtoOutputStream proto, long fieldId,
             @WindowTraceLogLevel int logLevel) {
         boolean isVisible = isVisible();
         if (logLevel == WindowTraceLogLevel.CRITICAL && !isVisible) {
@@ -1420,11 +1681,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
 
         final long token = proto.start(fieldId);
-        super.writeToProto(proto, CONFIGURATION_CONTAINER, logLevel);
+        super.dumpDebug(proto, CONFIGURATION_CONTAINER, logLevel);
         proto.write(ORIENTATION, mOrientation);
         proto.write(VISIBLE, isVisible);
         if (mSurfaceAnimator.isAnimating()) {
-            mSurfaceAnimator.writeToProto(proto, SURFACE_ANIMATOR);
+            mSurfaceAnimator.dumpDebug(proto, SURFACE_ANIMATOR);
         }
         proto.end(token);
     }

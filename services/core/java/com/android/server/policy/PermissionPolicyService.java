@@ -29,18 +29,16 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.AppOpsManager;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.PackageManagerInternal.PackageListObserver;
-import android.content.pm.PackageParser;
 import android.content.pm.PermissionInfo;
+import android.content.pm.parsing.AndroidPackage;
 import android.os.Build;
 import android.os.Process;
 import android.os.RemoteException;
@@ -171,23 +169,6 @@ public final class PermissionPolicyService extends SystemService {
         } catch (RemoteException doesNotHappen) {
             Slog.wtf(LOG_TAG, "Cannot set up app-ops listener");
         }
-
-        IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction(Intent.ACTION_PACKAGE_CHANGED);
-        intentFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
-        intentFilter.addDataScheme("package");
-
-        getContext().registerReceiverAsUser(new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                UserHandle user =
-                        UserHandle.getUserHandleForUid(intent.getIntExtra(Intent.EXTRA_UID, -1));
-                new PermissionControllerManager(
-                        getUserContext(getContext(), user), FgThread.getHandler())
-                        .updateUserSensitive();
-            }
-        }, UserHandle.ALL, intentFilter, null, null);
-
     }
 
     /**
@@ -376,10 +357,10 @@ public final class PermissionPolicyService extends SystemService {
                 pkg.sharedUserId, userId);
         if (sharedPkgNames != null) {
             for (String sharedPkgName : sharedPkgNames) {
-                final PackageParser.Package sharedPkg = packageManagerInternal
+                final AndroidPackage sharedPkg = packageManagerInternal
                         .getPackage(sharedPkgName);
                 if (sharedPkg != null) {
-                    synchroniser.addPackage(sharedPkg.packageName);
+                    synchroniser.addPackage(sharedPkg.getPackageName());
                 }
             }
         }
@@ -396,7 +377,8 @@ public final class PermissionPolicyService extends SystemService {
                 PackageManagerInternal.class);
         final PermissionToOpSynchroniser synchronizer = new PermissionToOpSynchroniser(
                 getUserContext(getContext(), UserHandle.of(userId)));
-        packageManagerInternal.forEachPackage((pkg) -> synchronizer.addPackage(pkg.packageName));
+        packageManagerInternal.forEachPackage(
+                (pkg) -> synchronizer.addPackage(pkg.getPackageName()));
         synchronizer.syncPackages();
     }
 
@@ -695,10 +677,19 @@ public final class PermissionPolicyService extends SystemService {
 
         private void setUidMode(int opCode, int uid, int mode,
                 @NonNull String packageName) {
-            final int currentMode = mAppOpsManager.unsafeCheckOpRaw(AppOpsManager
-                    .opToPublicName(opCode), uid, packageName);
-            if (currentMode != mode) {
+            final int oldMode = mAppOpsManager.unsafeCheckOpRaw(AppOpsManager.opToPublicName(
+                    opCode), uid, packageName);
+            if (oldMode != mode) {
                 mAppOpsManager.setUidMode(opCode, uid, mode);
+                final int newMode = mAppOpsManager.unsafeCheckOpRaw(AppOpsManager.opToPublicName(
+                        opCode), uid, packageName);
+                if (newMode != mode) {
+                    // Work around incorrectly-set package mode. It never makes sense for app ops
+                    // related to runtime permissions, but can get in the way and we have to reset
+                    // it.
+                    mAppOpsManager.setMode(opCode, uid, packageName, AppOpsManager.opToDefaultMode(
+                            opCode));
+                }
             }
         }
 

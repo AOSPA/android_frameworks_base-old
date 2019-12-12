@@ -24,6 +24,7 @@ import android.bluetooth.BluetoothProfile;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioDeviceAddress;
 import android.media.AudioManager;
 import android.media.AudioRoutesInfo;
 import android.media.AudioSystem;
@@ -434,6 +435,15 @@ import java.io.PrintWriter;
         }
     }
 
+    /*package*/ int setPreferredDeviceForStrategySync(int strategy,
+                                                      @NonNull AudioDeviceAddress device) {
+        return mDeviceInventory.setPreferredDeviceForStrategySync(strategy, device);
+    }
+
+    /*package*/ int removePreferredDeviceForStrategySync(int strategy) {
+        return mDeviceInventory.removePreferredDeviceForStrategySync(strategy);
+    }
+
     //---------------------------------------------------------------------
     // Communication with (to) AudioService
     //TODO check whether the AudioService methods are candidates to move here
@@ -571,6 +581,15 @@ import java.io.PrintWriter;
         sendLMsgNoDelay(MSG_L_SCOCLIENT_DIED, SENDMSG_QUEUE, obj);
     }
 
+    /*package*/ void postSaveSetPreferredDeviceForStrategy(int strategy, AudioDeviceAddress device)
+    {
+        sendILMsgNoDelay(MSG_IL_SAVE_PREF_DEVICE_FOR_STRATEGY, SENDMSG_QUEUE, strategy, device);
+    }
+
+    /*package*/ void postSaveRemovePreferredDeviceForStrategy(int strategy) {
+        sendIMsgNoDelay(MSG_I_SAVE_REMOVE_PREF_DEVICE_FOR_STRATEGY, SENDMSG_QUEUE, strategy);
+    }
+
     //---------------------------------------------------------------------
     // Method forwarding between the helper classes (BtHelper, AudioDeviceInventory)
     // only call from a "handle"* method or "on"* method
@@ -669,6 +688,7 @@ import java.io.PrintWriter;
         } else {
             pw.println("Message handler is null");
         }
+        mDeviceInventory.dump(pw, prefix);
     }
 
     //---------------------------------------------------------------------
@@ -944,6 +964,15 @@ import java.io.PrintWriter;
                                 info.mSupprNoisy, info.mVolume);
                     }
                 } break;
+                case MSG_IL_SAVE_PREF_DEVICE_FOR_STRATEGY: {
+                    final int strategy = msg.arg1;
+                    final AudioDeviceAddress device = (AudioDeviceAddress) msg.obj;
+                    mDeviceInventory.onSaveSetPreferredDevice(strategy, device);
+                } break;
+                case MSG_I_SAVE_REMOVE_PREF_DEVICE_FOR_STRATEGY: {
+                    final int strategy = msg.arg1;
+                    mDeviceInventory.onSaveRemovePreferredDevice(strategy);
+                } break;
                 default:
                     Log.wtf(TAG, "Invalid message " + msg.what);
             }
@@ -997,6 +1026,8 @@ import java.io.PrintWriter;
     private static final int MSG_L_A2DP_ACTIVE_DEVICE_CHANGE_EXT = 32;
     // a ScoClient died in BtHelper
     private static final int MSG_L_SCOCLIENT_DIED = 33;
+    private static final int MSG_IL_SAVE_PREF_DEVICE_FOR_STRATEGY = 34;
+    private static final int MSG_I_SAVE_REMOVE_PREF_DEVICE_FOR_STRATEGY = 35;
 
 
     private static boolean isMessageHandledUnderWakelock(int msgId) {

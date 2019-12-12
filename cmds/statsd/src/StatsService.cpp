@@ -1275,7 +1275,7 @@ Status StatsService::sendAppBreadcrumbAtom(int32_t label, int32_t state) {
     // Permission check not necessary as it's meant for applications to write to
     // statsd.
     android::util::stats_write(util::APP_BREADCRUMB_REPORTED,
-                               IPCThreadState::self()->getCallingUid(), label,
+                               (int32_t) IPCThreadState::self()->getCallingUid(), label,
                                state);
     return Status::ok();
 }
@@ -1295,7 +1295,18 @@ Status StatsService::registerPullAtomCallback(int32_t uid, int32_t atomTag, int6
                                     const sp<android::os::IPullAtomCallback>& pullerCallback) {
     ENFORCE_UID(AID_SYSTEM);
 
-    VLOG("StatsService::registerPuller called.");
+    VLOG("StatsService::registerPullAtomCallback called.");
+    mPullerManager->RegisterPullAtomCallback(uid, atomTag, coolDownNs, timeoutNs, additiveFields,
+                                             pullerCallback);
+    return Status::ok();
+}
+
+Status StatsService::registerNativePullAtomCallback(int32_t atomTag, int64_t coolDownNs,
+                                    int64_t timeoutNs, const std::vector<int32_t>& additiveFields,
+                                    const sp<android::os::IPullAtomCallback>& pullerCallback) {
+
+    VLOG("StatsService::registerNativePullAtomCallback called.");
+    int32_t uid = IPCThreadState::self()->getCallingUid();
     mPullerManager->RegisterPullAtomCallback(uid, atomTag, coolDownNs, timeoutNs, additiveFields,
                                              pullerCallback);
     return Status::ok();
@@ -1406,7 +1417,10 @@ Status StatsService::sendBinaryPushStateChangedAtom(const android::String16& tra
 
 Status StatsService::sendWatchdogRollbackOccurredAtom(const int32_t rollbackTypeIn,
                                                       const android::String16& packageNameIn,
-                                                      const int64_t packageVersionCodeIn) {
+                                                      const int64_t packageVersionCodeIn,
+                                                      const int32_t rollbackReasonIn,
+                                                      const android::String16&
+                                                       failingPackageNameIn) {
     // Note: We skip the usage stats op check here since we do not have a package name.
     // This is ok since we are overloading the usage_stats permission.
     // This method only sends data, it does not receive it.
@@ -1428,7 +1442,8 @@ Status StatsService::sendWatchdogRollbackOccurredAtom(const int32_t rollbackType
     }
 
     android::util::stats_write(android::util::WATCHDOG_ROLLBACK_OCCURRED,
-            rollbackTypeIn, String8(packageNameIn).string(), packageVersionCodeIn);
+            rollbackTypeIn, String8(packageNameIn).string(), packageVersionCodeIn,
+            rollbackReasonIn, String8(failingPackageNameIn).string());
 
     // Fast return to save disk read.
     if (rollbackTypeIn != android::util::WATCHDOG_ROLLBACK_OCCURRED__ROLLBACK_TYPE__ROLLBACK_SUCCESS

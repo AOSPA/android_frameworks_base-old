@@ -331,9 +331,6 @@ class ProcessRecord implements WindowProcessListener {
 
     boolean mReachable; // Whether or not this process is reachable from given process
 
-    // A callback that should be executed on app died; after that it'll be set to null
-    Runnable mAppDiedCallback;
-
     void setStartParams(int startUid, HostingRecord hostingRecord, String seInfo,
             long startTime) {
         this.startUid = startUid;
@@ -840,11 +837,11 @@ class ProcessRecord implements WindowProcessListener {
     }
 
     @Override
-    public void writeToProto(ProtoOutputStream proto, long fieldId) {
-        writeToProto(proto, fieldId, -1);
+    public void dumpDebug(ProtoOutputStream proto, long fieldId) {
+        dumpDebug(proto, fieldId, -1);
     }
 
-    public void writeToProto(ProtoOutputStream proto, long fieldId, int lruIndex) {
+    public void dumpDebug(ProtoOutputStream proto, long fieldId, int lruIndex) {
         long token = proto.start(fieldId);
         proto.write(ProcessRecordProto.PID, pid);
         proto.write(ProcessRecordProto.PROCESS_NAME, processName);

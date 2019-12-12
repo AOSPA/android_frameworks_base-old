@@ -196,8 +196,7 @@ class KeyguardController {
             // Some stack visibility might change (e.g. docked stack)
             mRootActivityContainer.resumeFocusedStacksTopActivities();
             mRootActivityContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
-            mRootActivityContainer.addStartingWindowsForVisibleActivities(
-                    true /* taskSwitch */);
+            mRootActivityContainer.addStartingWindowsForVisibleActivities();
             mWindowManager.executeAppTransition();
         } finally {
             mService.continueWindowLayout();
@@ -495,7 +494,7 @@ class KeyguardController {
             if (stack != null) {
                 final ActivityRecord topDismissing = stack.getTopDismissingKeyguardActivity();
                 mOccluded = stack.topActivityOccludesKeyguard() || (topDismissing != null
-                        && stack.topRunningActivityLocked() == topDismissing
+                        && stack.topRunningActivity() == topDismissing
                         && controller.canShowWhileOccluded(
                                 true /* dismissKeyguard */,
                                 false /* showWhenLocked */));
@@ -532,8 +531,8 @@ class KeyguardController {
          * occlusion state.
          */
         private ActivityStack getStackForControllingOccluding(ActivityDisplay display) {
-            for (int stackNdx = display.getChildCount() - 1; stackNdx >= 0; --stackNdx) {
-                final ActivityStack stack = display.getChildAt(stackNdx);
+            for (int stackNdx = display.getStackCount() - 1; stackNdx >= 0; --stackNdx) {
+                final ActivityStack stack = display.getStackAt(stackNdx);
                 if (stack != null && stack.isFocusableAndVisible()
                         && !stack.inPinnedWindowingMode()) {
                     return stack;
@@ -553,7 +552,7 @@ class KeyguardController {
             pw.println(sb.toString());
         }
 
-        void writeToProto(ProtoOutputStream proto, long fieldId) {
+        void dumpDebug(ProtoOutputStream proto, long fieldId) {
             final long token = proto.start(fieldId);
             proto.write(DISPLAY_ID, mDisplayId);
             proto.write(KEYGUARD_OCCLUDED, mOccluded);
@@ -571,7 +570,7 @@ class KeyguardController {
         pw.println(prefix + "  mVisibilityTransactionDepth=" + mVisibilityTransactionDepth);
     }
 
-    void writeToProto(ProtoOutputStream proto, long fieldId) {
+    void dumpDebug(ProtoOutputStream proto, long fieldId) {
         final long token = proto.start(fieldId);
         proto.write(AOD_SHOWING, mAodShowing);
         proto.write(KEYGUARD_SHOWING, mKeyguardShowing);
@@ -587,7 +586,7 @@ class KeyguardController {
 
     private void writeDisplayStatesToProto(ProtoOutputStream proto, long fieldId) {
         for (int i = 0; i < mDisplayStates.size(); i++) {
-            mDisplayStates.valueAt(i).writeToProto(proto, fieldId);
+            mDisplayStates.valueAt(i).dumpDebug(proto, fieldId);
         }
     }
 }

@@ -20,12 +20,8 @@ import android.annotation.Nullable;
 import android.app.AlarmManager;
 import android.content.ContentResolver;
 import android.content.Context;
-import android.content.Intent;
 import android.os.SystemProperties;
-import android.os.UserHandle;
 import android.provider.Settings;
-
-import com.android.internal.telephony.TelephonyIntents;
 
 /**
  * The real implementation of {@link TimeZoneDetectorStrategy.Callback}.
@@ -43,7 +39,7 @@ public final class TimeZoneDetectorCallbackImpl implements TimeZoneDetectorStrat
     }
 
     @Override
-    public boolean isTimeZoneDetectionEnabled() {
+    public boolean isAutoTimeZoneDetectionEnabled() {
         return Settings.Global.getInt(mCr, Settings.Global.AUTO_TIME_ZONE, 1 /* default */) > 0;
     }
 
@@ -69,11 +65,5 @@ public final class TimeZoneDetectorCallbackImpl implements TimeZoneDetectorStrat
     public void setDeviceTimeZone(String zoneId) {
         AlarmManager alarmManager = mContext.getSystemService(AlarmManager.class);
         alarmManager.setTimeZone(zoneId);
-
-        // TODO Nothing in the platform appears to listen for this. Remove it.
-        Intent intent = new Intent(TelephonyIntents.ACTION_NETWORK_SET_TIMEZONE);
-        intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING);
-        intent.putExtra("time-zone", zoneId);
-        mContext.sendStickyBroadcastAsUser(intent, UserHandle.ALL);
     }
 }

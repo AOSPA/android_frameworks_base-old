@@ -42,6 +42,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.FastXmlSerializer;
+import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.XmlUtils;
 
 import libcore.io.IoUtils;
@@ -56,6 +57,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -79,6 +81,22 @@ public class PackageWatchdog {
             "watchdog_trigger_failure_count";
     static final String PROPERTY_WATCHDOG_EXPLICIT_HEALTH_CHECK_ENABLED =
             "watchdog_explicit_health_check_enabled";
+
+    public static final int FAILURE_REASON_UNKNOWN = 0;
+    public static final int FAILURE_REASON_NATIVE_CRASH = 1;
+    public static final int FAILURE_REASON_EXPLICIT_HEALTH_CHECK = 2;
+    public static final int FAILURE_REASON_APP_CRASH = 3;
+    public static final int FAILURE_REASON_APP_NOT_RESPONDING = 4;
+
+    @IntDef(prefix = { "FAILURE_REASON_" }, value = {
+            FAILURE_REASON_UNKNOWN,
+            FAILURE_REASON_NATIVE_CRASH,
+            FAILURE_REASON_EXPLICIT_HEALTH_CHECK,
+            FAILURE_REASON_APP_CRASH,
+            FAILURE_REASON_APP_NOT_RESPONDING
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface FailureReasons {}
 
     // Duration to count package failures before it resets to 0
     @VisibleForTesting
@@ -200,7 +218,8 @@ public class PackageWatchdog {
     }
 
     /**
-     * Registers {@code observer} to listen for package failures
+     * Registers {@code observer} to listen for package failures. Add a new ObserverInternal for
+     * this observer if it does not already exist.
      *
      * <p>Observers are expected to call this on boot. It does not specify any packages but
      * it will resume observing any packages requested from a previous boot.
@@ -210,6 +229,11 @@ public class PackageWatchdog {
             ObserverInternal internalObserver = mAllObservers.get(observer.getName());
             if (internalObserver != null) {
                 internalObserver.registeredObserver = observer;
+            } else {
+                internalObserver = new ObserverInternal(observer.getName(), new ArrayList<>());
+                internalObserver.registeredObserver = observer;
+                mAllObservers.put(observer.getName(), internalObserver);
+                syncState("added new observer");
             }
         }
     }
@@ -298,14 +322,15 @@ public class PackageWatchdog {
     }
 
     /**
-     * Called when a process fails either due to a crash or ANR.
+     * Called when a process fails due to a crash, ANR or explicit health check.
      *
      * <p>For each package contained in the process, one registered observer with the least user
      * impact will be notified for mitigation.
      *
      * <p>This method could be called frequently if there is a severe problem on the device.
      */
-    public void onPackageFailure(List<VersionedPackage> packages) {
+    public void onPackageFailure(List<VersionedPackage> packages,
+            @FailureReasons int failureReason) {
         mLongTaskHandler.post(() -> {
             synchronized (mLock) {
                 if (mAllObservers.isEmpty()) {
@@ -336,7 +361,7 @@ public class PackageWatchdog {
 
                     // Execute action with least user impact
                     if (currentObserverToNotify != null) {
-                        currentObserverToNotify.execute(versionedPackage);
+                        currentObserverToNotify.execute(versionedPackage, failureReason);
                     }
                 }
             }
@@ -407,7 +432,7 @@ public class PackageWatchdog {
          *
          * @return {@code true} if action was executed successfully, {@code false} otherwise
          */
-        boolean execute(VersionedPackage versionedPackage);
+        boolean execute(VersionedPackage versionedPackage, @FailureReasons int failureReason);
 
         // TODO(b/120598832): Ensure uniqueness?
         /**
@@ -415,6 +440,14 @@ public class PackageWatchdog {
          * watchdog may drop observing packages with the old name.
          */
         String getName();
+
+        /**
+         * An observer will not be pruned if this is set, even if the observer is not explicitly
+         * monitoring any packages.
+         */
+        default boolean isPersistent() {
+            return false;
+        }
     }
 
     long getTriggerFailureCount() {
@@ -626,7 +659,8 @@ public class PackageWatchdog {
             if (!failedPackages.isEmpty()) {
                 onHealthCheckFailed(observer, failedPackages);
             }
-            if (observer.packages.isEmpty()) {
+            if (observer.packages.isEmpty() && (observer.registeredObserver == null
+                    || !observer.registeredObserver.isPersistent())) {
                 Slog.i(TAG, "Discarding observer " + observer.name + ". All packages expired");
                 it.remove();
             }
@@ -643,7 +677,8 @@ public class PackageWatchdog {
                     while (it.hasNext()) {
                         VersionedPackage versionedPkg = it.next().mPackage;
                         Slog.i(TAG, "Explicit health check failed for package " + versionedPkg);
-                        registeredObserver.execute(versionedPkg);
+                        registeredObserver.execute(versionedPkg,
+                                PackageWatchdog.FAILURE_REASON_EXPLICIT_HEALTH_CHECK);
                     }
                 }
             }
@@ -754,7 +789,7 @@ public class PackageWatchdog {
                     final List<VersionedPackage> pkgList = Collections.singletonList(pkg);
                     final long failureCount = getTriggerFailureCount();
                     for (int i = 0; i < failureCount; i++) {
-                        onPackageFailure(pkgList);
+                        onPackageFailure(pkgList, FAILURE_REASON_EXPLICIT_HEALTH_CHECK);
                     }
                 });
     }
@@ -799,6 +834,21 @@ public class PackageWatchdog {
     private void saveToFileAsync() {
         if (!mLongTaskHandler.hasCallbacks(mSaveToFile)) {
             mLongTaskHandler.post(mSaveToFile);
+        }
+    }
+
+    /** Dump status of every observer in mAllObservers. */
+    public void dump(IndentingPrintWriter pw) {
+        pw.println("Package Watchdog status");
+        pw.increaseIndent();
+        synchronized (mLock) {
+            for (String observerName : mAllObservers.keySet()) {
+                pw.println("Observer name: " + observerName);
+                pw.increaseIndent();
+                ObserverInternal observerInternal = mAllObservers.get(observerName);
+                observerInternal.dump(pw);
+                pw.decreaseIndent();
+            }
         }
     }
 
@@ -943,6 +993,22 @@ public class PackageWatchdog {
                 return null;
             }
             return new ObserverInternal(observerName, packages);
+        }
+
+        /** Dumps information about this observer and the packages it watches. */
+        public void dump(IndentingPrintWriter pw) {
+            boolean isPersistent = registeredObserver != null && registeredObserver.isPersistent();
+            pw.println("Persistent: " + isPersistent);
+            for (String packageName : packages.keySet()) {
+                MonitoredPackage p = packages.get(packageName);
+                pw.println(packageName +  ": ");
+                pw.increaseIndent();
+                pw.println("# Failures: " + p.mFailureHistory.size());
+                pw.println("Monitoring duration remaining: " + p.mDurationMs + "ms");
+                pw.println("Explicit health check duration: " + p.mHealthCheckDurationMs + "ms");
+                pw.println("Health check state: " + p.toString(p.mHealthCheckState));
+                pw.decreaseIndent();
+            }
         }
     }
 

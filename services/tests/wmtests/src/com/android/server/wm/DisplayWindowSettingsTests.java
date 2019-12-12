@@ -18,6 +18,9 @@ package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
+import static android.view.IWindowManager.FIXED_TO_USER_ROTATION_DEFAULT;
+import static android.view.IWindowManager.FIXED_TO_USER_ROTATION_DISABLED;
+import static android.view.IWindowManager.FIXED_TO_USER_ROTATION_ENABLED;
 import static android.view.WindowManager.REMOVE_CONTENT_MODE_DESTROY;
 import static android.view.WindowManager.REMOVE_CONTENT_MODE_MOVE_TO_PRIMARY;
 
@@ -28,9 +31,6 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
-import static com.android.server.wm.DisplayRotation.FIXED_TO_USER_ROTATION_DEFAULT;
-import static com.android.server.wm.DisplayRotation.FIXED_TO_USER_ROTATION_DISABLED;
-import static com.android.server.wm.DisplayRotation.FIXED_TO_USER_ROTATION_ENABLED;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -79,6 +79,9 @@ import java.nio.charset.StandardCharsets;
 @Presubmit
 @RunWith(WindowTestRunner.class)
 public class DisplayWindowSettingsTests extends WindowTestsBase {
+
+    private static final byte DISPLAY_PORT = (byte) 0xFF;
+    private static final long DISPLAY_MODEL = 0xEEEEEEEEL;
 
     private static final File TEST_FOLDER = getInstrumentation().getTargetContext().getCacheDir();
     private DisplayWindowSettings mTarget;
@@ -479,10 +482,11 @@ public class DisplayWindowSettingsTests extends WindowTestsBase {
 
     @Test
     public void testReadingDisplaySettingsFromStorage_UsePortAsId() {
-        final DisplayAddress.Physical displayAddress = DisplayAddress.fromPhysicalDisplayId(123456);
+        final DisplayAddress.Physical displayAddress =
+                DisplayAddress.fromPortAndModel(DISPLAY_PORT, DISPLAY_MODEL);
         mPrimaryDisplay.getDisplayInfo().address = displayAddress;
 
-        final String displayIdentifier = "port:" + displayAddress.getPort();
+        final String displayIdentifier = "port:" + Byte.toUnsignedInt(DISPLAY_PORT);
         prepareDisplaySettings(displayIdentifier, true /* usePortAsId */);
 
         readAndAssertDisplaySettings(mPrimaryDisplay);
@@ -521,7 +525,8 @@ public class DisplayWindowSettingsTests extends WindowTestsBase {
     @Test
     public void testWritingDisplaySettingsToStorage_UsePortAsId() throws Exception {
         // Store config to use port as identifier.
-        final DisplayAddress.Physical displayAddress = DisplayAddress.fromPhysicalDisplayId(123456);
+        final DisplayAddress.Physical displayAddress =
+                DisplayAddress.fromPortAndModel(DISPLAY_PORT, DISPLAY_MODEL);
         mSecondaryDisplay.getDisplayInfo().address = displayAddress;
         prepareDisplaySettings(null /* displayIdentifier */, true /* usePortAsId */);
 
@@ -532,7 +537,7 @@ public class DisplayWindowSettingsTests extends WindowTestsBase {
         assertTrue(mStorage.wasWriteSuccessful());
 
         // Verify that settings were stored correctly.
-        assertEquals("Attribute value must be stored", "port:" + displayAddress.getPort(),
+        assertEquals("Attribute value must be stored", "port:" + Byte.toUnsignedInt(DISPLAY_PORT),
                 getStoredDisplayAttributeValue("name"));
         assertEquals("Attribute value must be stored", "true",
                 getStoredDisplayAttributeValue("shouldShowSystemDecors"));

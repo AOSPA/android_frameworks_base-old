@@ -65,14 +65,17 @@ public class WifiScanner {
     /** @hide */
     public static final int WIFI_BAND_INDEX_5_GHZ_DFS_ONLY = 2;
     /** @hide */
-    public static final int WIFI_BAND_COUNT = 3;
+    public static final int WIFI_BAND_INDEX_6_GHZ = 3;
+    /** @hide */
+    public static final int WIFI_BAND_COUNT = 4;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = {"WIFI_BAND_INDEX_"}, value = {
             WIFI_BAND_INDEX_24_GHZ,
             WIFI_BAND_INDEX_5_GHZ,
-            WIFI_BAND_INDEX_5_GHZ_DFS_ONLY})
+            WIFI_BAND_INDEX_5_GHZ_DFS_ONLY,
+            WIFI_BAND_INDEX_6_GHZ})
     public @interface WifiBandIndex {}
 
     /** no band specified; use channel list instead */
@@ -83,6 +86,8 @@ public class WifiScanner {
     public static final int WIFI_BAND_5_GHZ = 1 << WIFI_BAND_INDEX_5_GHZ;
     /** DFS channels from 5 GHz band only */
     public static final int WIFI_BAND_5_GHZ_DFS_ONLY  = 1 << WIFI_BAND_INDEX_5_GHZ_DFS_ONLY;
+    /** 6 GHz band */
+    public static final int WIFI_BAND_6_GHZ = 1 << WIFI_BAND_INDEX_6_GHZ;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -90,7 +95,8 @@ public class WifiScanner {
             WIFI_BAND_UNSPECIFIED,
             WIFI_BAND_24_GHZ,
             WIFI_BAND_5_GHZ,
-            WIFI_BAND_5_GHZ_DFS_ONLY})
+            WIFI_BAND_5_GHZ_DFS_ONLY,
+            WIFI_BAND_6_GHZ})
     public @interface WifiBandBasic {}
 
     /**
@@ -111,6 +117,11 @@ public class WifiScanner {
     /** Both 2.4 GHz band and 5 GHz band; with DFS channels */
     public static final int WIFI_BAND_BOTH_WITH_DFS =
             WIFI_BAND_24_GHZ | WIFI_BAND_5_GHZ | WIFI_BAND_5_GHZ_DFS_ONLY;
+    /** 2.4 GHz band and 5 GHz band (no DFS channels) and 6 GHz */
+    public static final int WIFI_BAND_24_5_6_GHZ = WIFI_BAND_BOTH | WIFI_BAND_6_GHZ;
+    /** 2.4 GHz band and 5 GHz band; with DFS channels and 6 GHz */
+    public static final int WIFI_BAND_24_5_WITH_DFS_6_GHZ =
+            WIFI_BAND_BOTH_WITH_DFS | WIFI_BAND_6_GHZ;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -122,14 +133,17 @@ public class WifiScanner {
             WIFI_BAND_5_GHZ_DFS_ONLY,
             WIFI_BAND_24_GHZ_WITH_5GHZ_DFS,
             WIFI_BAND_5_GHZ_WITH_DFS,
-            WIFI_BAND_BOTH_WITH_DFS})
+            WIFI_BAND_BOTH_WITH_DFS,
+            WIFI_BAND_6_GHZ,
+            WIFI_BAND_24_5_6_GHZ,
+            WIFI_BAND_24_5_WITH_DFS_6_GHZ})
     public @interface WifiBand {}
 
     /**
      * Max band value
      * @hide
      */
-    public static final int WIFI_BAND_MAX = 8;
+    public static final int WIFI_BAND_MAX = 0x10;
 
     /** Minimum supported scanning period */
     public static final int MIN_SCAN_PERIOD_MS = 1000;
@@ -174,7 +188,7 @@ public class WifiScanner {
     @SystemApi
     @NonNull
     @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE)
-    public List<Integer> getAvailableChannels(@WifiBand int band) {
+    public List<Integer> getAvailableChannels(int band) {
         try {
             Bundle bundle = mService.getAvailableChannels(band, mContext.getOpPackageName(),
                     mContext.getFeatureId());
@@ -726,6 +740,8 @@ public class WifiScanner {
         public int min5GHzRssi;
         /** Minimum 2.4GHz RSSI for a BSSID to be considered */
         public int min24GHzRssi;
+        /** Minimum 6GHz RSSI for a BSSID to be considered */
+        public int min6GHzRssi;
         /** Maximum score that a network can have before bonuses */
         public int initialScoreMax;
         /**
@@ -739,6 +755,8 @@ public class WifiScanner {
         public int secureBonus;
         /** 5GHz RSSI score bonus (applied to all 5GHz networks) */
         public int band5GHzBonus;
+        /** 6GHz RSSI score bonus (applied to all 5GHz networks) */
+        public int band6GHzBonus;
         /** Pno Network filter list */
         public PnoNetwork[] networkList;
 
@@ -752,11 +770,13 @@ public class WifiScanner {
             dest.writeInt(isConnected ? 1 : 0);
             dest.writeInt(min5GHzRssi);
             dest.writeInt(min24GHzRssi);
+            dest.writeInt(min6GHzRssi);
             dest.writeInt(initialScoreMax);
             dest.writeInt(currentConnectionBonus);
             dest.writeInt(sameNetworkBonus);
             dest.writeInt(secureBonus);
             dest.writeInt(band5GHzBonus);
+            dest.writeInt(band6GHzBonus);
             if (networkList != null) {
                 dest.writeInt(networkList.length);
                 for (int i = 0; i < networkList.length; i++) {
@@ -778,11 +798,13 @@ public class WifiScanner {
                         settings.isConnected = in.readInt() == 1;
                         settings.min5GHzRssi = in.readInt();
                         settings.min24GHzRssi = in.readInt();
+                        settings.min6GHzRssi = in.readInt();
                         settings.initialScoreMax = in.readInt();
                         settings.currentConnectionBonus = in.readInt();
                         settings.sameNetworkBonus = in.readInt();
                         settings.secureBonus = in.readInt();
                         settings.band5GHzBonus = in.readInt();
+                        settings.band6GHzBonus = in.readInt();
                         int numNetworks = in.readInt();
                         settings.networkList = new PnoNetwork[numNetworks];
                         for (int i = 0; i < numNetworks; i++) {

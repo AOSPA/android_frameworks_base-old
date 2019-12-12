@@ -410,6 +410,9 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                 final DisplayAddress.Physical physicalAddress =
                         DisplayAddress.fromPhysicalDisplayId(mPhysicalDisplayId);
                 mInfo.address = physicalAddress;
+                mInfo.densityDpi = (int) (phys.density * 160 + 0.5f);
+                mInfo.xDpi = phys.xDpi;
+                mInfo.yDpi = phys.yDpi;
 
                 // Assume that all built-in displays that have secure output (eg. HDCP) also
                 // support compositing from gralloc protected buffers.
@@ -438,9 +441,6 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                     mInfo.displayCutout = DisplayCutout.fromResourcesRectApproximation(res,
                             mInfo.width, mInfo.height);
                     mInfo.type = Display.TYPE_BUILT_IN;
-                    mInfo.densityDpi = (int)(phys.density * 160 + 0.5f);
-                    mInfo.xDpi = phys.xDpi;
-                    mInfo.yDpi = phys.yDpi;
                     mInfo.touch = DisplayDeviceInfo.TOUCH_INTERNAL;
                 } else if (isBuiltIn) {
                     mInfo.type = Display.TYPE_BUILT_IN;
@@ -469,7 +469,6 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                     mInfo.name = getContext().getResources().getString(
                             com.android.internal.R.string.display_manager_hdmi_display_name);
                     mInfo.touch = DisplayDeviceInfo.TOUCH_EXTERNAL;
-                    mInfo.setAssumedDensityForExternalDisplay(phys.width, phys.height);
 
                     // For demonstration purposes, allow rotation of the external display.
                     // In the future we might allow the user to configure this directly.
@@ -715,8 +714,9 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             }
 
             final IBinder token = getDisplayTokenLocked();
-            SurfaceControl.setDesiredDisplayConfigSpecs(token, defaultModeId, minRefreshRate,
-                    maxRefreshRate);
+            SurfaceControl.setDesiredDisplayConfigSpecs(token,
+                    new SurfaceControl.DesiredDisplayConfigSpecs(
+                            defaultModeId, minRefreshRate, maxRefreshRate));
             int activePhysIndex = SurfaceControl.getActiveConfig(token);
             return updateActiveModeLocked(activePhysIndex);
         }
@@ -872,7 +872,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             int[] ports = res.getIntArray(
                     com.android.internal.R.array.config_localPrivateDisplayPorts);
             if (ports != null) {
-                int port = physicalAddress.getPort();
+                int port = Byte.toUnsignedInt(physicalAddress.getPort());
                 for (int p : ports) {
                     if (p == port) {
                         return true;

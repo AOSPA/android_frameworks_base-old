@@ -236,10 +236,10 @@ class PinnedStackController {
     /**
      * Saves the current snap fraction for re-entry of the current activity into PiP.
      */
-    void saveReentrySnapFraction(final ComponentName componentName, final Rect stackBounds) {
+    void saveReentryBounds(final ComponentName componentName, final Rect stackBounds) {
         if (mPinnedStackListener == null) return;
         try {
-            mPinnedStackListener.onSaveReentrySnapFraction(componentName, stackBounds);
+            mPinnedStackListener.onSaveReentryBounds(componentName, stackBounds);
         } catch (RemoteException e) {
             Slog.e(TAG_WM, "Error delivering save reentry fraction event.", e);
         }
@@ -248,10 +248,10 @@ class PinnedStackController {
     /**
      * Resets the last saved snap fraction so that the default bounds will be returned.
      */
-    void resetReentrySnapFraction(ComponentName componentName) {
+    void resetReentryBounds(ComponentName componentName) {
         if (mPinnedStackListener == null) return;
         try {
-            mPinnedStackListener.onResetReentrySnapFraction(componentName);
+            mPinnedStackListener.onResetReentryBounds(componentName);
         } catch (RemoteException e) {
             Slog.e(TAG_WM, "Error delivering reset reentry fraction event.", e);
         }
@@ -604,11 +604,11 @@ class PinnedStackController {
         pw.println(prefix + "  mDisplayInfo=" + mDisplayInfo);
     }
 
-    void writeToProto(ProtoOutputStream proto, long fieldId) {
+    void dumpDebug(ProtoOutputStream proto, long fieldId) {
         final long token = proto.start(fieldId);
-        getDefaultBounds(INVALID_SNAP_FRACTION).writeToProto(proto, DEFAULT_BOUNDS);
+        getDefaultBounds(INVALID_SNAP_FRACTION).dumpDebug(proto, DEFAULT_BOUNDS);
         mService.getStackBounds(WINDOWING_MODE_PINNED, ACTIVITY_TYPE_STANDARD, mTmpRect);
-        getMovementBounds(mTmpRect).writeToProto(proto, MOVEMENT_BOUNDS);
+        getMovementBounds(mTmpRect).dumpDebug(proto, MOVEMENT_BOUNDS);
         proto.end(token);
     }
 }

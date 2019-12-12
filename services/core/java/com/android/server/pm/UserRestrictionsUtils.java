@@ -20,7 +20,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.AppGlobals;
-import android.app.admin.DevicePolicyManager;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
@@ -578,10 +577,6 @@ public class UserRestrictionsUtils {
                     if (newValue) {
                         android.provider.Settings.Global.putStringForUser(
                                 context.getContentResolver(),
-                                android.provider.Settings.Global.PACKAGE_VERIFIER_ENABLE, "1",
-                                userId);
-                        android.provider.Settings.Global.putStringForUser(
-                                context.getContentResolver(),
                                 android.provider.Settings.Global.PACKAGE_VERIFIER_INCLUDE_ADB, "1",
                                 userId);
                     }
@@ -717,7 +712,6 @@ public class UserRestrictionsUtils {
                 restriction = UserManager.DISALLOW_DEBUGGING_FEATURES;
                 break;
 
-            case android.provider.Settings.Global.PACKAGE_VERIFIER_ENABLE:
             case android.provider.Settings.Global.PACKAGE_VERIFIER_INCLUDE_ADB:
                 if ("1".equals(value)) {
                     return false;
@@ -782,16 +776,6 @@ public class UserRestrictionsUtils {
                 break;
 
             case android.provider.Settings.Global.AUTO_TIME:
-                DevicePolicyManager dpm = context.getSystemService(DevicePolicyManager.class);
-                if (dpm != null && dpm.getAutoTimeRequired()
-                        && "0".equals(value)) {
-                    return true;
-                } else if (callingUid == Process.SYSTEM_UID) {
-                    return false;
-                }
-                restriction = UserManager.DISALLOW_CONFIG_DATE_TIME;
-                break;
-
             case android.provider.Settings.Global.AUTO_TIME_ZONE:
                 if (callingUid == Process.SYSTEM_UID) {
                     return false;

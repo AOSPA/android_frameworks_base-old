@@ -53,9 +53,12 @@ import java.util.LinkedList;
 @SmallTest
 @RunWith(AndroidJUnit4.class)
 public class LocalDisplayAdapterTest {
-    private static final long HANDLER_WAIT_MS = 100;
+    private static final Long DISPLAY_MODEL = Long.valueOf(0xAAAAAAAAL);
+    private static final int PORT_A = 0;
+    private static final int PORT_B = 0x80;
+    private static final int PORT_C = 0xFF;
 
-    private static final int PHYSICAL_DISPLAY_ID_MODEL_SHIFT = 8;
+    private static final long HANDLER_WAIT_MS = 100;
 
     private StaticMockitoSession mMockitoSession;
 
@@ -74,7 +77,7 @@ public class LocalDisplayAdapterTest {
 
     private TestListener mListener = new TestListener();
 
-    private LinkedList<Long> mDisplayIds = new LinkedList<>();
+    private LinkedList<DisplayAddress.Physical> mAddresses = new LinkedList<>();
 
     @Before
     public void setUp() throws Exception {
@@ -106,30 +109,25 @@ public class LocalDisplayAdapterTest {
      */
     @Test
     public void testPrivateDisplay() throws Exception {
-        // needs default one always
-        final long displayId0 = 0;
-        setUpDisplay(new DisplayConfig(displayId0, createDummyDisplayInfo()));
-        final long displayId1 = 1;
-        setUpDisplay(new DisplayConfig(displayId1, createDummyDisplayInfo()));
-        final long displayId2 = 2;
-        setUpDisplay(new DisplayConfig(displayId2, createDummyDisplayInfo()));
+        setUpDisplay(new DisplayConfig(createDisplayAddress(PORT_A), createDummyDisplayInfo()));
+        setUpDisplay(new DisplayConfig(createDisplayAddress(PORT_B), createDummyDisplayInfo()));
+        setUpDisplay(new DisplayConfig(createDisplayAddress(PORT_C), createDummyDisplayInfo()));
         updateAvailableDisplays();
-        // display 1 should be marked as private while display 2 is not.
-        doReturn(new int[]{(int) displayId1}).when(mMockedResources)
+        doReturn(new int[]{ PORT_B }).when(mMockedResources)
                 .getIntArray(com.android.internal.R.array.config_localPrivateDisplayPorts);
         mAdapter.registerLocked();
 
         waitForHandlerToComplete(mHandler, HANDLER_WAIT_MS);
 
         // This should be public
-        assertDisplay(mListener.addedDisplays.get(0).getDisplayDeviceInfoLocked(), displayId0,
-                false);
-        // This should be private
-        assertDisplay(mListener.addedDisplays.get(1).getDisplayDeviceInfoLocked(), displayId1,
-                true);
+        assertDisplayPrivateFlag(mListener.addedDisplays.get(0).getDisplayDeviceInfoLocked(),
+                PORT_A, false);
         // This should be public
-        assertDisplay(mListener.addedDisplays.get(2).getDisplayDeviceInfoLocked(), displayId2,
-                false);
+        assertDisplayPrivateFlag(mListener.addedDisplays.get(1).getDisplayDeviceInfoLocked(),
+                PORT_B, true);
+        // This should be public
+        assertDisplayPrivateFlag(mListener.addedDisplays.get(2).getDisplayDeviceInfoLocked(),
+                PORT_C, false);
     }
 
     /**
@@ -137,11 +135,8 @@ public class LocalDisplayAdapterTest {
      */
     @Test
     public void testPublicDisplaysForNoConfigLocalPrivateDisplayPorts() throws Exception {
-        // needs default one always
-        final long displayId0 = 0;
-        setUpDisplay(new DisplayConfig(displayId0, createDummyDisplayInfo()));
-        final long displayId1 = 1;
-        setUpDisplay(new DisplayConfig(displayId1, createDummyDisplayInfo()));
+        setUpDisplay(new DisplayConfig(createDisplayAddress(PORT_A), createDummyDisplayInfo()));
+        setUpDisplay(new DisplayConfig(createDisplayAddress(PORT_C), createDummyDisplayInfo()));
         updateAvailableDisplays();
         // config_localPrivateDisplayPorts is null
         mAdapter.registerLocked();
@@ -149,35 +144,71 @@ public class LocalDisplayAdapterTest {
         waitForHandlerToComplete(mHandler, HANDLER_WAIT_MS);
 
         // This should be public
-        assertDisplay(mListener.addedDisplays.get(0).getDisplayDeviceInfoLocked(), displayId0,
-                false);
+        assertDisplayPrivateFlag(mListener.addedDisplays.get(0).getDisplayDeviceInfoLocked(),
+                PORT_A, false);
         // This should be public
-        assertDisplay(mListener.addedDisplays.get(1).getDisplayDeviceInfoLocked(), displayId1,
-                false);
+        assertDisplayPrivateFlag(mListener.addedDisplays.get(1).getDisplayDeviceInfoLocked(),
+                PORT_C, false);
     }
 
-    private void assertDisplay(DisplayDeviceInfo info, long expectedPort, boolean shouldBePrivate) {
-        DisplayAddress.Physical physical = (DisplayAddress.Physical) info.address;
-        assertNotNull(physical);
-        assertEquals(expectedPort, physical.getPort());
+    private static void assertDisplayPrivateFlag(
+            DisplayDeviceInfo info, int expectedPort, boolean shouldBePrivate) {
+        final DisplayAddress.Physical address = (DisplayAddress.Physical) info.address;
+        assertNotNull(address);
+        assertEquals((byte) expectedPort, address.getPort());
+        assertEquals(DISPLAY_MODEL, address.getModel());
         assertEquals(shouldBePrivate, (info.flags & DisplayDeviceInfo.FLAG_PRIVATE) != 0);
     }
 
+    /**
+     * Confirm that external display uses physical density.
+     */
+    @Test
+    public void testDpiValues() throws Exception {
+        // needs default one always
+        setUpDisplay(new DisplayConfig(createDisplayAddress(PORT_A), createDummyDisplayInfo()));
+        setUpDisplay(new DisplayConfig(createDisplayAddress(PORT_B), createDummyDisplayInfo()));
+        updateAvailableDisplays();
+        mAdapter.registerLocked();
+
+        waitForHandlerToComplete(mHandler, HANDLER_WAIT_MS);
+
+        assertDisplayDpi(
+                mListener.addedDisplays.get(0).getDisplayDeviceInfoLocked(), PORT_A, 100, 100,
+                16000);
+        assertDisplayDpi(
+                mListener.addedDisplays.get(1).getDisplayDeviceInfoLocked(), PORT_B, 100, 100,
+                16000);
+    }
+
+    private void assertDisplayDpi(DisplayDeviceInfo info, int expectedPort,
+                                  float expectedXdpi,
+                                  float expectedYDpi,
+                                  int expectedDensityDpi) {
+        final DisplayAddress.Physical physical = (DisplayAddress.Physical) info.address;
+        assertNotNull(physical);
+        assertEquals((byte) expectedPort, physical.getPort());
+        assertEquals(expectedXdpi, info.xDpi, 0.01);
+        assertEquals(expectedYDpi, info.yDpi, 0.01);
+        assertEquals(expectedDensityDpi, info.densityDpi);
+    }
+
     private class DisplayConfig {
-        public final long displayId;
+        public final DisplayAddress.Physical address;
         public final IBinder displayToken = new Binder();
         public final SurfaceControl.PhysicalDisplayInfo displayInfo;
 
-        private DisplayConfig(long displayId, SurfaceControl.PhysicalDisplayInfo displayInfo) {
-            this.displayId = displayId | (0x1 << PHYSICAL_DISPLAY_ID_MODEL_SHIFT);
+        private DisplayConfig(
+                DisplayAddress.Physical address, SurfaceControl.PhysicalDisplayInfo displayInfo) {
+            this.address = address;
             this.displayInfo = displayInfo;
         }
     }
 
     private void setUpDisplay(DisplayConfig config) {
-        mDisplayIds.add(config.displayId);
-        doReturn(config.displayToken).when(
-                () -> SurfaceControl.getPhysicalDisplayToken(config.displayId));
+        mAddresses.add(config.address);
+        doReturn(config.displayToken).when(() ->
+                SurfaceControl.getPhysicalDisplayToken(config.address.getPhysicalDisplayId()));
         doReturn(new SurfaceControl.PhysicalDisplayInfo[]{
                 config.displayInfo
         }).when(() -> SurfaceControl.getDisplayConfigs(config.displayToken));
@@ -192,16 +223,20 @@ public class LocalDisplayAdapterTest {
     }
 
     private void updateAvailableDisplays() {
-        long[] ids = new long[mDisplayIds.size()];
+        long[] ids = new long[mAddresses.size()];
         int i = 0;
-        for (long id : mDisplayIds) {
-            ids[i] = id;
+        for (DisplayAddress.Physical address : mAddresses) {
+            ids[i] = address.getPhysicalDisplayId();
             i++;
         }
         doReturn(ids).when(() -> SurfaceControl.getPhysicalDisplayIds());
     }
 
-    private SurfaceControl.PhysicalDisplayInfo createDummyDisplayInfo() {
+    private static DisplayAddress.Physical createDisplayAddress(int port) {
+        return DisplayAddress.fromPortAndModel((byte) port, DISPLAY_MODEL);
+    }
+
+    private static SurfaceControl.PhysicalDisplayInfo createDummyDisplayInfo() {
         SurfaceControl.PhysicalDisplayInfo info = new SurfaceControl.PhysicalDisplayInfo();
         info.density = 100;
         info.xDpi = 100;

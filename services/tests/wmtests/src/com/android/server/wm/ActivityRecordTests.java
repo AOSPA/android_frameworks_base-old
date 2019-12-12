@@ -107,7 +107,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Before
     public void setUp() throws Exception {
         mStack = new StackBuilder(mRootActivityContainer).build();
-        mTask = mStack.getChildAt(0);
+        mTask = mStack.getBottomMostTask();
         mActivity = mTask.getTopNonFinishingActivity();
 
         doReturn(false).when(mService).isBooting();
@@ -203,7 +203,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         // An activity can be launched on default display.
         assertTrue(activity.canBeLaunchedOnDisplay(DEFAULT_DISPLAY));
         // An activity cannot be launched on a non-existent display.
-        assertFalse(activity.canBeLaunchedOnDisplay(DEFAULT_DISPLAY + 1));
+        assertFalse(activity.canBeLaunchedOnDisplay(Integer.MAX_VALUE));
     }
 
     @Test
@@ -455,7 +455,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
             verify(mService.getLifecycleManager()).scheduleTransaction(
                     eq(mActivity.app.getThread()), eq(mActivity.appToken), eq(expected));
         } finally {
-            stack.getDisplay().removeChild(stack);
+            stack.getDisplay().removeStack(stack);
         }
     }
 
@@ -640,7 +640,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         // stacks. Then when mActivity is finishing, its stack will be invisible (no running
         // activities in the stack) that is the key condition to verify.
         final ActivityStack stack2 = new StackBuilder(mRootActivityContainer).build();
-        stack2.moveToBack("test", stack2.getChildAt(0));
+        stack2.moveToBack("test", stack2.getBottomMostTask());
 
         assertTrue(mStack.isTopStackOnDisplay());
 
@@ -914,7 +914,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         // Add another stack to become focused and make the activity there visible. This way it
         // simulates finishing in non-focused stack in split-screen.
         final ActivityStack stack = new StackBuilder(mRootActivityContainer).build();
-        final ActivityRecord focusedActivity = stack.getChildAt(0).getChildAt(0);
+        final ActivityRecord focusedActivity = stack.getTopMostActivity();
         focusedActivity.nowVisible = true;
         focusedActivity.mVisibleRequested = true;
         focusedActivity.setState(RESUMED, "test");
@@ -948,9 +948,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
     public void testDestroyIfPossible_lastActivityAboveEmptyHomeStack() {
         // Empty the home stack.
         final ActivityStack homeStack = mActivity.getDisplay().getHomeStack();
-        for (Task t : homeStack.getAllTasks()) {
-            homeStack.removeChild(t, "test");
-        }
+        homeStack.forAllTasks((t) -> { homeStack.removeChild(t, "test"); });
         mActivity.finishing = true;
         doReturn(false).when(mRootActivityContainer).resumeFocusedStacksTopActivities();
         spyOn(mStack);
@@ -974,9 +972,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
     public void testCompleteFinishing_lastActivityAboveEmptyHomeStack() {
         // Empty the home stack.
         final ActivityStack homeStack = mActivity.getDisplay().getHomeStack();
-        for (Task t : homeStack.getAllTasks()) {
-            homeStack.removeChild(t, "test");
-        }
+        homeStack.forAllTasks((t) -> { homeStack.removeChild(t, "test"); });
         mActivity.finishing = true;
         spyOn(mStack);
 

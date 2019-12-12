@@ -1425,7 +1425,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     @Override
     public Network getActiveNetworkForUid(int uid, boolean ignoreBlocked) {
-        enforceConnectivityInternalPermission();
+        NetworkStack.checkNetworkStackPermission(mContext);
         return getActiveNetworkForUidInternal(uid, ignoreBlocked);
     }
 
@@ -1467,7 +1467,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     @Override
     public NetworkInfo getActiveNetworkInfoForUid(int uid, boolean ignoreBlocked) {
-        enforceConnectivityInternalPermission();
+        NetworkStack.checkNetworkStackPermission(mContext);
         final NetworkState state = getUnfilteredActiveNetworkState(uid);
         filterNetworkStateForUid(state, uid, ignoreBlocked);
         return state.networkInfo;
@@ -1686,8 +1686,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     @Override
     public NetworkState[] getAllNetworkState() {
-        // Require internal since we're handing out IMSI details
-        enforceConnectivityInternalPermission();
+        // This contains IMSI details, so make sure the caller is privileged.
+        NetworkStack.checkNetworkStackPermission(mContext);
 
         final ArrayList<NetworkState> result = Lists.newArrayList();
         for (Network network : getAllNetworks()) {
@@ -1765,7 +1765,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
         enforceChangePermission();
         if (mProtectedNetworks.contains(networkType)) {
-            enforceConnectivityInternalPermission();
+            enforceConnectivityRestrictedNetworksPermission();
         }
 
         InetAddress addr;
@@ -2035,6 +2035,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK);
     }
 
+    private void enforceNetworkFactoryPermission() {
+        mContext.enforceCallingOrSelfPermission(
+                android.Manifest.permission.NETWORK_FACTORY,
+                "ConnectivityService");
+    }
+
     private boolean checkSettingsPermission() {
         return checkAnyPermissionOf(
                 android.Manifest.permission.NETWORK_SETTINGS,
@@ -2054,16 +2060,17 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 "ConnectivityService");
     }
 
-    private void enforceConnectivityInternalPermission() {
-        enforceAnyPermissionOf(
-                android.Manifest.permission.CONNECTIVITY_INTERNAL,
-                NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK);
-    }
-
     private void enforceControlAlwaysOnVpnPermission() {
         mContext.enforceCallingOrSelfPermission(
                 android.Manifest.permission.CONTROL_ALWAYS_ON_VPN,
                 "ConnectivityService");
+    }
+
+    private void enforceNetworkStackOrSettingsPermission() {
+        enforceAnyPermissionOf(
+                android.Manifest.permission.NETWORK_SETTINGS,
+                android.Manifest.permission.NETWORK_STACK,
+                NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK);
     }
 
     private void enforceNetworkStackSettingsOrSetup() {
@@ -2093,7 +2100,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     "ConnectivityService");
             return;
         } catch (SecurityException e) { /* fallback to ConnectivityInternalPermission */ }
-        enforceConnectivityInternalPermission();
+        //  TODO: Remove this fallback check after all apps have declared
+        //   CONNECTIVITY_USE_RESTRICTED_NETWORKS.
+        mContext.enforceCallingOrSelfPermission(
+                android.Manifest.permission.CONNECTIVITY_INTERNAL,
+                "ConnectivityService");
     }
 
     private void enforceKeepalivePermission() {
@@ -2102,7 +2113,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     // Public because it's used by mLockdownTracker.
     public void sendConnectedBroadcast(NetworkInfo info) {
-        enforceConnectivityInternalPermission();
+        NetworkStack.checkNetworkStackPermission(mContext);
         sendGeneralBroadcast(info, CONNECTIVITY_ACTION);
     }
 
@@ -3635,7 +3646,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     @Override
     public void startCaptivePortalApp(Network network) {
-        enforceConnectivityInternalPermission();
+        enforceNetworkStackOrSettingsPermission();
         mHandler.post(() -> {
             NetworkAgentInfo nai = getNetworkAgentInfoForNetwork(network);
             if (nai == null) return;
@@ -4133,7 +4144,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     @Override
     public String[] getTetheredDhcpRanges() {
-        enforceConnectivityInternalPermission();
+        enforceSettingsPermission();
         return mTetheringManager.getTetheredDhcpRanges();
     }
 
@@ -4357,7 +4368,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     @Override
     public void setGlobalProxy(final ProxyInfo proxyProperties) {
-        enforceConnectivityInternalPermission();
+        NetworkStack.checkNetworkStackPermission(mContext);
         mProxyTracker.setGlobalProxy(proxyProperties);
     }
 
@@ -4896,7 +4907,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     @Override
     public String getMobileProvisioningUrl() {
-        enforceConnectivityInternalPermission();
+        enforceSettingsPermission();
         String url = getProvisioningUrlBaseFromFile();
         if (TextUtils.isEmpty(url)) {
             url = mContext.getResources().getString(R.string.mobile_provisioning_url);
@@ -4922,7 +4933,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     @Override
     public void setProvisioningNotificationVisible(boolean visible, int networkType,
             String action) {
-        enforceConnectivityInternalPermission();
+        enforceSettingsPermission();
         if (!ConnectivityManager.isNetworkTypeValid(networkType)) {
             return;
         }
@@ -5510,7 +5521,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     @Override
     public int registerNetworkFactory(Messenger messenger, String name) {
-        enforceConnectivityInternalPermission();
+        enforceNetworkFactoryPermission();
         NetworkFactoryInfo nfi = new NetworkFactoryInfo(name, messenger, new AsyncChannel(),
                 NetworkFactory.SerialNumber.nextSerialNumber());
         mHandler.sendMessage(mHandler.obtainMessage(EVENT_REGISTER_NETWORK_FACTORY, nfi));
@@ -5525,7 +5536,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     @Override
     public void unregisterNetworkFactory(Messenger messenger) {
-        enforceConnectivityInternalPermission();
+        enforceNetworkFactoryPermission();
         mHandler.sendMessage(mHandler.obtainMessage(EVENT_UNREGISTER_NETWORK_FACTORY, messenger));
     }
 
@@ -5624,7 +5635,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     public int registerNetworkAgent(Messenger messenger, NetworkInfo networkInfo,
             LinkProperties linkProperties, NetworkCapabilities networkCapabilities,
             int currentScore, NetworkMisc networkMisc, int factorySerialNumber) {
-        enforceConnectivityInternalPermission();
+        enforceNetworkFactoryPermission();
 
         LinkProperties lp = new LinkProperties(linkProperties);
         lp.ensureDirectlyConnectedRoutes();
@@ -5638,7 +5649,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 ns, mContext, mTrackerHandler, new NetworkMisc(networkMisc), this, mNetd,
                 mDnsResolver, mNMS, factorySerialNumber);
         // Make sure the network capabilities reflect what the agent info says.
-        nai.setNetworkCapabilities(mixInCapabilities(nai, nc));
+        nai.getAndSetNetworkCapabilities(mixInCapabilities(nai, nc));
         final String extraInfo = networkInfo.getExtraInfo();
         final String name = TextUtils.isEmpty(extraInfo)
                 ? nai.networkCapabilities.getSSID() : extraInfo;
@@ -5992,11 +6003,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             }
         }
 
-        final NetworkCapabilities prevNc;
-        synchronized (nai) {
-            prevNc = nai.networkCapabilities;
-            nai.setNetworkCapabilities(newNc);
-        }
+        final NetworkCapabilities prevNc = nai.getAndSetNetworkCapabilities(newNc);
 
         updateUids(nai, prevNc, newNc);
 
@@ -6005,7 +6012,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // the change we're processing can't affect any requests, it can only affect the listens
             // on this network. We might have been called by rematchNetworkAndRequests when a
             // network changed foreground state.
-            processListenRequests(nai, true);
+            processListenRequests(nai);
         } else {
             // If the requestable capabilities have changed or the score changed, we can't have been
             // called by rematchNetworkAndRequests, so it's safe to start a rematch.
@@ -6313,8 +6320,14 @@ public class ConnectivityService extends IConnectivityManager.Stub
         updateAllVpnsCapabilities();
     }
 
-    private void processListenRequests(NetworkAgentInfo nai, boolean capabilitiesChanged) {
+    private void processListenRequests(@NonNull final NetworkAgentInfo nai) {
         // For consistency with previous behaviour, send onLost callbacks before onAvailable.
+        processNewlyLostListenRequests(nai);
+        notifyNetworkCallbacks(nai, ConnectivityManager.CALLBACK_CAP_CHANGED);
+        processNewlySatisfiedListenRequests(nai);
+    }
+
+    private void processNewlyLostListenRequests(@NonNull final NetworkAgentInfo nai) {
         for (NetworkRequestInfo nri : mNetworkRequests.values()) {
             NetworkRequest nr = nri.request;
             if (!nr.isListen()) continue;
@@ -6323,11 +6336,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 callCallbackForRequest(nri, nai, ConnectivityManager.CALLBACK_LOST, 0);
             }
         }
+    }
 
-        if (capabilitiesChanged) {
-            notifyNetworkCallbacks(nai, ConnectivityManager.CALLBACK_CAP_CHANGED);
-        }
-
+    private void processNewlySatisfiedListenRequests(@NonNull final NetworkAgentInfo nai) {
         for (NetworkRequestInfo nri : mNetworkRequests.values()) {
             NetworkRequest nr = nri.request;
             if (!nr.isListen()) continue;
@@ -6521,17 +6532,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
                    newNetwork.name(), score, newNetwork.getCurrentScore()));
         }
 
-        // Second pass: process all listens.
-        if (wasBackgroundNetwork != newNetwork.isBackgroundNetwork()) {
-            // If the network went from background to foreground or vice versa, we need to update
-            // its foreground state. It is safe to do this after rematching the requests because
-            // NET_CAPABILITY_FOREGROUND does not affect requests, as is not a requestable
-            // capability and does not affect the network's score (see the Slog.wtf call above).
-            updateCapabilities(score, newNetwork, newNetwork.networkCapabilities);
-        } else {
-            processListenRequests(newNetwork, false);
-        }
-
         if ((satisfiesMobileNetworkDataCheck(newNetwork.networkCapabilities) == false) &&
              !newNetwork.isVPN()) {
             // Force trigger permission change on non-DDS network to close all live connections
@@ -6542,9 +6542,36 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 loge("Exception in setNetworkPermission: " + e);
             }
         }
-        // do this after the default net is switched, but
+        // Notify requested networks are available after the default net is switched, but
         // before LegacyTypeTracker sends legacy broadcasts
         for (NetworkRequestInfo nri : addedRequests) notifyNetworkAvailable(newNetwork, nri);
+
+        // Finally, process listen requests and update capabilities if the background state has
+        // changed for this network. For consistency with previous behavior, send onLost callbacks
+        // before onAvailable.
+        processNewlyLostListenRequests(newNetwork);
+
+        // Maybe the network changed background states. Update its capabilities.
+        final boolean backgroundChanged = wasBackgroundNetwork != newNetwork.isBackgroundNetwork();
+        if (backgroundChanged) {
+            final NetworkCapabilities newNc = mixInCapabilities(newNetwork,
+                    newNetwork.networkCapabilities);
+
+            final int oldPermission = getNetworkPermission(newNetwork.networkCapabilities);
+            final int newPermission = getNetworkPermission(newNc);
+            if (oldPermission != newPermission) {
+                try {
+                    mNMS.setNetworkPermission(newNetwork.network.netId, newPermission);
+                } catch (RemoteException e) {
+                    loge("Exception in setNetworkPermission: " + e);
+                }
+            }
+
+            newNetwork.getAndSetNetworkCapabilities(newNc);
+            notifyNetworkCallbacks(newNetwork, ConnectivityManager.CALLBACK_CAP_CHANGED);
+        }
+
+        processNewlySatisfiedListenRequests(newNetwork);
     }
 
     /**
@@ -6729,9 +6756,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
             // NetworkCapabilities need to be set before sending the private DNS config to
             // NetworkMonitor, otherwise NetworkMonitor cannot determine if validation is required.
-            synchronized (networkAgent) {
-                networkAgent.setNetworkCapabilities(networkAgent.networkCapabilities);
-            }
+            networkAgent.getAndSetNetworkCapabilities(networkAgent.networkCapabilities);
+
             handlePerNetworkPrivateDnsConfig(networkAgent, mDnsManager.getPrivateDnsConfig());
             updateLinkProperties(networkAgent, new LinkProperties(networkAgent.linkProperties),
                     null);
@@ -7033,7 +7059,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     @Override
     public String getCaptivePortalServerUrl() {
-        enforceConnectivityInternalPermission();
+        enforceNetworkStackOrSettingsPermission();
         String settingUrl = mContext.getResources().getString(
                 R.string.config_networkCaptivePortalServerUrl);
 
@@ -7086,7 +7112,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     @Override
     public void factoryReset() {
-        enforceConnectivityInternalPermission();
+        enforceSettingsPermission();
 
         if (mUserManager.hasUserRestriction(UserManager.DISALLOW_NETWORK_RESET)) {
             return;
