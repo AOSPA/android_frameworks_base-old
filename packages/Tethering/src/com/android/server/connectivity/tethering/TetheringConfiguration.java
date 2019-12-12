@@ -39,6 +39,7 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.net.ConnectivityManager;
 import android.os.SystemProperties;
+import android.net.TetheringConfigurationParcel;
 import android.net.util.SharedLog;
 import android.provider.Settings;
 import android.telephony.SubscriptionManager;
@@ -265,7 +266,7 @@ public class TetheringConfiguration {
     /** Check whether dun is required. */
     public static boolean checkDunRequired(Context ctx, int id) {
         final TelephonyManager tm = (TelephonyManager) ctx.getSystemService(TELEPHONY_SERVICE);
-        return (tm != null) ? tm.isTetherApnRequired(id) : false;
+        return (tm != null) ? tm.isTetheringApnRequired(id) : false;
     }
 
     private static Collection<Integer> getUpstreamIfaceTypes(Resources res, boolean dunRequired) {
@@ -397,5 +398,33 @@ public class TetheringConfiguration {
             if (list.contains(value)) return true;
         }
         return false;
+    }
+
+    /**
+     * Convert this TetheringConfiguration to a TetheringConfigurationParcel.
+     */
+    public TetheringConfigurationParcel toStableParcelable() {
+        final TetheringConfigurationParcel parcel = new TetheringConfigurationParcel();
+        parcel.subId = subId;
+        parcel.tetherableUsbRegexs = tetherableUsbRegexs;
+        parcel.tetherableWifiRegexs = tetherableWifiRegexs;
+        parcel.tetherableBluetoothRegexs = tetherableBluetoothRegexs;
+        parcel.isDunRequired = isDunRequired;
+        parcel.chooseUpstreamAutomatically = chooseUpstreamAutomatically;
+
+        int[] preferredTypes = new int[preferredUpstreamIfaceTypes.size()];
+        int index = 0;
+        for (Integer type : preferredUpstreamIfaceTypes) {
+            preferredTypes[index++] = type;
+        }
+        parcel.preferredUpstreamIfaceTypes = preferredTypes;
+
+        parcel.legacyDhcpRanges = legacyDhcpRanges;
+        parcel.defaultIPv4DNS = defaultIPv4DNS;
+        parcel.enableLegacyDhcpServer = enableLegacyDhcpServer;
+        parcel.provisioningApp = provisioningApp;
+        parcel.provisioningAppNoUi = provisioningAppNoUi;
+        parcel.provisioningCheckPeriod = provisioningCheckPeriod;
+        return parcel;
     }
 }

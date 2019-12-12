@@ -60,7 +60,6 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.settingslib.net.DataUsageController;
-import com.android.systemui.ConfigurationChangedReceiver;
 import com.android.systemui.DemoMode;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
@@ -87,8 +86,7 @@ import javax.inject.Singleton;
 /** Platform implementation of the network controller. **/
 @Singleton
 public class NetworkControllerImpl extends BroadcastReceiver
-        implements NetworkController, DemoMode, DataUsageController.NetworkNameProvider,
-        ConfigurationChangedReceiver, Dumpable {
+        implements NetworkController, DemoMode, DataUsageController.NetworkNameProvider, Dumpable {
     // debug
     static final String TAG = "NetworkController";
     static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
@@ -169,6 +167,15 @@ public class NetworkControllerImpl extends BroadcastReceiver
 
     @VisibleForTesting
     FiveGServiceClient mFiveGServiceClient;
+
+    private ConfigurationController.ConfigurationListener mConfigurationListener =
+            new ConfigurationController.ConfigurationListener() {
+                @Override
+                public void onConfigChanged(Configuration newConfig) {
+                    mConfig = Config.readConfig(mContext);
+                    mReceiverHandler.post(() -> handleConfigurationChanged());
+                }
+            };
     /**
      * Construct this controller object and register for updates.
      */
@@ -322,7 +329,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
         filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
         filter.addAction(ConnectivityManager.INET_CONDITION_ACTION);
         filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
-        filter.addAction(Intent.ACTION_BOOT_COMPLETED);
         filter.addAction(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED);
         filter.addAction(TelephonyIntents.ACTION_ANY_DATA_CONNECTION_STATE_CHANGED);
         mBroadcastDispatcher.registerReceiver(this, filter, mReceiverHandler);
@@ -542,9 +548,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
                     recalculateEmergency();
                 }
                 break;
-            case Intent.ACTION_BOOT_COMPLETED:
-                mWifiSignalController.handleBootCompleted();
-                break;
             case CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED:
                 mConfig = Config.readConfig(mContext);
                 mReceiverHandler.post(this::handleConfigurationChanged);
@@ -565,16 +568,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 }
                 break;
         }
-    }
-
-    public void onConfigurationChanged(Configuration newConfig) {
-        mConfig = Config.readConfig(mContext);
-        mReceiverHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                handleConfigurationChanged();
-            }
-        });
     }
 
     @VisibleForTesting

@@ -89,7 +89,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -1960,6 +1959,11 @@ public final class Settings {
      */
     public static final String CALL_METHOD_PREFIX_KEY = "_prefix";
 
+    /**
+     * @hide - String argument extra to the fast-path call()-based requests
+     */
+    public static final String CALL_METHOD_FLAGS_KEY = "_flags";
+
     /** @hide - Private call() method to write to 'system' table */
     public static final String CALL_METHOD_PUT_SYSTEM = "PUT_system";
 
@@ -1971,6 +1975,9 @@ public final class Settings {
 
     /** @hide - Private call() method to write to 'configuration' table */
     public static final String CALL_METHOD_PUT_CONFIG = "PUT_config";
+
+    /** @hide - Private call() method to write to and delete from the 'configuration' table */
+    public static final String CALL_METHOD_SET_ALL_CONFIG = "SET_ALL_config";
 
     /** @hide - Private call() method to delete from the 'system' table */
     public static final String CALL_METHOD_DELETE_SYSTEM = "DELETE_system";
@@ -2304,21 +2311,23 @@ public final class Settings {
         private final String mCallGetCommand;
         private final String mCallSetCommand;
         private final String mCallListCommand;
+        private final String mCallSetAllCommand;
 
         @GuardedBy("this")
         private GenerationTracker mGenerationTracker;
 
         public NameValueCache(Uri uri, String getCommand, String setCommand,
                 ContentProviderHolder providerHolder) {
-            this(uri, getCommand, setCommand, null, providerHolder);
+            this(uri, getCommand, setCommand, null, null, providerHolder);
         }
 
         NameValueCache(Uri uri, String getCommand, String setCommand, String listCommand,
-                ContentProviderHolder providerHolder) {
+                String setAllCommand, ContentProviderHolder providerHolder) {
             mUri = uri;
             mCallGetCommand = getCommand;
             mCallSetCommand = setCommand;
             mCallListCommand = listCommand;
+            mCallSetAllCommand = setAllCommand;
             mProviderHolder = providerHolder;
         }
 
@@ -2339,6 +2348,26 @@ public final class Settings {
                         mProviderHolder.mUri.getAuthority(), mCallSetCommand, name, arg);
             } catch (RemoteException e) {
                 Log.w(TAG, "Can't set key " + name + " in " + mUri, e);
+                return false;
+            }
+            return true;
+        }
+
+        public boolean setStringsForPrefix(ContentResolver cr, String prefix,
+                HashMap<String, String> keyValues) {
+            if (mCallSetAllCommand == null) {
+                // This NameValueCache does not support atomically setting multiple flags
+                return false;
+            }
+            try {
+                Bundle args = new Bundle();
+                args.putString(CALL_METHOD_PREFIX_KEY, prefix);
+                args.putSerializable(CALL_METHOD_FLAGS_KEY, keyValues);
+                IContentProvider cp = mProviderHolder.getProvider(cr);
+                cp.call(cr.getPackageName(), cr.getFeatureId(), mProviderHolder.mUri.getAuthority(),
+                        mCallSetAllCommand, null, args);
+            } catch (RemoteException e) {
+                // Not supported by the remote side
                 return false;
             }
             return true;
@@ -5689,6 +5718,18 @@ public final class Settings {
                 "managed_provisioning_dpc_downloaded";
 
         /**
+         * Indicates whether the device is under restricted secure FRP mode.
+         * Secure FRP mode is enabled when the device is under FRP. On solving of FRP challenge,
+         * device is removed from this mode.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         *
+         * @hide
+         */
+        @SystemApi
+        public static final String SECURE_FRP_MODE = "secure_frp_mode";
+
+        /**
          * Indicates whether the current user has completed setup via the setup wizard.
          * <p>
          * Type: int (0 for false, 1 for true)
@@ -6172,8 +6213,12 @@ public final class Settings {
                 "accessibility_shortcut_dialog_shown";
 
         /**
-         * Setting specifying the accessibility service to be toggled via the accessibility
-         * shortcut. Must be its flattened {@link ComponentName}.
+         * Setting specifying the accessibility services, accessibility shortcut targets,
+         * or features to be toggled via the accessibility shortcut.
+         *
+         * <p> This is a colon-separated string list which contains the flattened
+         * {@link ComponentName} and the class name of a system class implementing a supported
+         * accessibility feature.
          * @hide
          */
         @UnsupportedAppUsage
@@ -6182,9 +6227,11 @@ public final class Settings {
                 "accessibility_shortcut_target_service";
 
         /**
-         * Setting specifying the accessibility service or feature to be toggled via the
-         * accessibility button in the navigation bar. This is either a flattened
-         * {@link ComponentName} or the class name of a system class implementing a supported
+         * Setting specifying the accessibility services, accessibility shortcut targets,
+         * or features to be toggled via the accessibility button in the navigation bar.
+         *
+         * <p> This is a colon-separated string list which contains the flattened
+         * {@link ComponentName} and the class name of a system class implementing a supported
          * accessibility feature.
          * @hide
          */
@@ -6345,6 +6392,9 @@ public final class Settings {
          * zoom in the display content and is targeted to low vision users. The current
          * magnification scale is controlled by {@link #ACCESSIBILITY_DISPLAY_MAGNIFICATION_SCALE}.
          *
+         * @deprecated Use {@link #ACCESSIBILITY_BUTTON_TARGET_COMPONENT} instead.
+         * {@link #ACCESSIBILITY_BUTTON_TARGET_COMPONENT} holds the magnification system class name
+         * when navigation bar magnification is enabled.
          * @hide
          */
         @SystemApi
@@ -7149,16 +7199,6 @@ public final class Settings {
          */
         @UnsupportedAppUsage
         public static final String VOICE_RECOGNITION_SERVICE = "voice_recognition_service";
-
-        /**
-         * Stores whether an user has consented to have apps verified through PAM.
-         * The value is boolean (1 or 0).
-         *
-         * @hide
-         */
-        @UnsupportedAppUsage
-        public static final String PACKAGE_VERIFIER_USER_CONSENT =
-            "package_verifier_user_consent";
 
         /**
          * The {@link ComponentName} string of the selected spell checker service which is
@@ -8136,6 +8176,15 @@ public final class Settings {
         @UnsupportedAppUsage
         @TestApi
         public static final String NOTIFICATION_BADGING = "notification_badging";
+
+        /**
+         * When enabled the system will maintain a rolling history of received notifications. When
+         * disabled the history will be disabled and deleted.
+         *
+         * The value 1 - enable, 0 - disable
+         * @hide
+         */
+        public static final String NOTIFICATION_HISTORY_ENABLED = "notification_history_enabled";
 
         /**
          * Whether notifications are dismissed by a right-to-left swipe (instead of a left-to-right
@@ -10617,6 +10666,7 @@ public final class Settings {
         /** {@hide} */
         public static final String
                 BLUETOOTH_HEARING_AID_PRIORITY_PREFIX = "bluetooth_hearing_aid_priority_";
+
         /**
          * Enable/disable radio bug detection
          *
@@ -11434,105 +11484,6 @@ public final class Settings {
                 "adb_allowed_connection_time";
 
         /**
-         * Get the key that retrieves a bluetooth headset's priority.
-         * @hide
-         */
-        public static final String getBluetoothHeadsetPriorityKey(String address) {
-            return BLUETOOTH_HEADSET_PRIORITY_PREFIX + address.toUpperCase(Locale.ROOT);
-        }
-
-        /**
-         * Get the key that retrieves a bluetooth a2dp sink's priority.
-         * @hide
-         */
-        public static final String getBluetoothA2dpSinkPriorityKey(String address) {
-            return BLUETOOTH_A2DP_SINK_PRIORITY_PREFIX + address.toUpperCase(Locale.ROOT);
-        }
-
-        /**
-         * Get the key that retrieves a bluetooth a2dp src's priority.
-         * @hide
-         */
-        public static final String getBluetoothA2dpSrcPriorityKey(String address) {
-            return BLUETOOTH_A2DP_SRC_PRIORITY_PREFIX + address.toUpperCase(Locale.ROOT);
-        }
-
-        /**
-         * Get the key that retrieves a bluetooth a2dp device's ability to support optional codecs.
-         * @hide
-         */
-        public static final String getBluetoothA2dpSupportsOptionalCodecsKey(String address) {
-            return BLUETOOTH_A2DP_SUPPORTS_OPTIONAL_CODECS_PREFIX +
-                    address.toUpperCase(Locale.ROOT);
-        }
-
-        /**
-         * Get the key that retrieves whether a bluetooth a2dp device should have optional codecs
-         * enabled.
-         * @hide
-         */
-        public static final String getBluetoothA2dpOptionalCodecsEnabledKey(String address) {
-            return BLUETOOTH_A2DP_OPTIONAL_CODECS_ENABLED_PREFIX +
-                    address.toUpperCase(Locale.ROOT);
-        }
-
-        /**
-         * Get the key that retrieves a bluetooth Input Device's priority.
-         * @hide
-         */
-        public static final String getBluetoothHidHostPriorityKey(String address) {
-            return BLUETOOTH_INPUT_DEVICE_PRIORITY_PREFIX + address.toUpperCase(Locale.ROOT);
-        }
-
-        /**
-         * Get the key that retrieves a bluetooth pan client priority.
-         * @hide
-         */
-        public static final String getBluetoothPanPriorityKey(String address) {
-            return BLUETOOTH_PAN_PRIORITY_PREFIX + address.toUpperCase(Locale.ROOT);
-        }
-
-        /**
-         * Get the key that retrieves a bluetooth hearing aid priority.
-         * @hide
-         */
-        public static final String getBluetoothHearingAidPriorityKey(String address) {
-            return BLUETOOTH_HEARING_AID_PRIORITY_PREFIX + address.toUpperCase(Locale.ROOT);
-        }
-
-        /**
-         * Get the key that retrieves a bluetooth map priority.
-         * @hide
-         */
-        public static final String getBluetoothMapPriorityKey(String address) {
-            return BLUETOOTH_MAP_PRIORITY_PREFIX + address.toUpperCase(Locale.ROOT);
-        }
-
-        /**
-         * Get the key that retrieves a bluetooth map client priority.
-         * @hide
-         */
-        public static final String getBluetoothMapClientPriorityKey(String address) {
-            return BLUETOOTH_MAP_CLIENT_PRIORITY_PREFIX + address.toUpperCase(Locale.ROOT);
-        }
-
-        /**
-         * Get the key that retrieves a bluetooth pbap client priority.
-         * @hide
-         */
-        public static final String getBluetoothPbapClientPriorityKey(String address) {
-            return BLUETOOTH_PBAP_CLIENT_PRIORITY_PREFIX + address.toUpperCase(Locale.ROOT);
-        }
-
-        /**
-         * Get the key that retrieves a bluetooth sap priority.
-         * @hide
-         */
-        public static final String getBluetoothSapPriorityKey(String address) {
-            return BLUETOOTH_SAP_PRIORITY_PREFIX + address.toUpperCase(Locale.ROOT);
-        }
-
-        /**
          * Scaling factor for normal window animations. Setting to 0 will
          * disable window animations.
          */
@@ -11910,6 +11861,7 @@ public final class Settings {
          * as if they had been accepted by the user.
          * @hide
          */
+        @TestApi
         public static final String HIDE_ERROR_DIALOGS = "hide_error_dialogs";
 
         /**
@@ -13739,6 +13691,7 @@ public final class Settings {
                 CALL_METHOD_GET_CONFIG,
                 CALL_METHOD_PUT_CONFIG,
                 CALL_METHOD_LIST_CONFIG,
+                CALL_METHOD_SET_ALL_CONFIG,
                 sProviderHolder);
 
         /**
@@ -13810,6 +13763,29 @@ public final class Settings {
                 @NonNull String name, @Nullable String value, boolean makeDefault) {
             return sNameValueCache.putStringForUser(resolver, createCompositeName(namespace, name),
                     value, null, makeDefault, resolver.getUserId());
+        }
+
+        /**
+         * Clear all name/value pairs for the provided namespace and save new name/value pairs in
+         * their place.
+         *
+         * @param resolver to access the database with.
+         * @param namespace to which the names should be set.
+         * @param keyValues map of key names (without the prefix) to values.
+         * @return
+         *
+         * @hide
+         */
+        @RequiresPermission(Manifest.permission.WRITE_DEVICE_CONFIG)
+        static boolean setStrings(@NonNull ContentResolver resolver, @NonNull String namespace,
+                @NonNull Map<String, String> keyValues) {
+            HashMap<String, String> compositeKeyValueMap = new HashMap<>(keyValues.keySet().size());
+            for (Map.Entry<String, String> entry : keyValues.entrySet()) {
+                compositeKeyValueMap.put(
+                        createCompositeName(namespace, entry.getKey()), entry.getValue());
+            }
+            return sNameValueCache.setStringsForPrefix(resolver, createPrefix(namespace),
+                    compositeKeyValueMap);
         }
 
         /**

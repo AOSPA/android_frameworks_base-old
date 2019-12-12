@@ -77,10 +77,28 @@ class MediaRouter2ServiceImpl {
     @GuardedBy("mLock")
     private int mCurrentUserId = -1;
     @GuardedBy("mLock")
-    private int mSelectRouteRequestSequenceNumber = 0;
+    private int mSelectRouteRequestSequenceNumber = 1;
 
     MediaRouter2ServiceImpl(Context context) {
         mContext = context;
+    }
+
+    @NonNull
+    public List<MediaRoute2Info> getSystemRoutes() {
+        final int uid = Binder.getCallingUid();
+        final int userId = UserHandle.getUserId(uid);
+
+        Collection<MediaRoute2Info> systemRoutes;
+        synchronized (mLock) {
+            UserRecord userRecord = mUserRecords.get(userId);
+            if (userRecord == null) {
+                userRecord = new UserRecord(userId);
+                mUserRecords.put(userId, userRecord);
+                initializeUserLocked(userRecord);
+            }
+            systemRoutes = userRecord.mHandler.mSystemProvider.getProviderInfo().getRoutes();
+        }
+        return new ArrayList<>(systemRoutes);
     }
 
     public void registerClient(@NonNull IMediaRouter2Client client,
@@ -200,7 +218,7 @@ class MediaRouter2ServiceImpl {
         final long token = Binder.clearCallingIdentity();
         try {
             synchronized (mLock) {
-                requestSelectRoute2Locked(mAllClientRecords.get(client.asBinder()), route);
+                requestSelectRoute2Locked(mAllClientRecords.get(client.asBinder()), false, route);
             }
         } finally {
             Binder.restoreCallingIdentity(token);
@@ -381,10 +399,12 @@ class MediaRouter2ServiceImpl {
         }
     }
 
-    private void requestSelectRoute2Locked(ClientRecord clientRecord, MediaRoute2Info route) {
+    private void requestSelectRoute2Locked(ClientRecord clientRecord, boolean selectedByManager,
+            MediaRoute2Info route) {
         if (clientRecord != null) {
             MediaRoute2Info oldRoute = clientRecord.mSelectedRoute;
             clientRecord.mSelectingRoute = route;
+            clientRecord.mIsManagerSelecting = selectedByManager;
 
             UserHandler handler = clientRecord.mUserRecord.mHandler;
             //TODO: Handle transfer instead of unselect and select
@@ -399,7 +419,6 @@ class MediaRouter2ServiceImpl {
                 handler.sendMessage(obtainMessage(
                         UserHandler::requestSelectRoute, handler, clientRecord.mPackageName,
                         route, seq));
-
                 // Remove all previous timeout messages
                 for (int previousSeq : clientRecord.mSelectRouteSequenceNumbers) {
                     clientRecord.mUserRecord.mHandler.removeMessages(previousSeq);
@@ -525,7 +544,7 @@ class MediaRouter2ServiceImpl {
                 Slog.w(TAG, "Ignoring route selection for unknown client.");
             }
             if (clientRecord != null && managerRecord.mTrusted) {
-                requestSelectRoute2Locked(clientRecord, route);
+                requestSelectRoute2Locked(clientRecord, true, route);
             }
         }
     }
@@ -638,7 +657,9 @@ class MediaRouter2ServiceImpl {
         public final UserRecord mUserRecord;
         public final String mPackageName;
         public final List<Integer> mSelectRouteSequenceNumbers;
+
         public List<String> mControlCategories;
+        public boolean mIsManagerSelecting;
         public MediaRoute2Info mSelectingRoute;
         public MediaRoute2Info mSelectedRoute;
 
@@ -728,14 +749,15 @@ class MediaRouter2ServiceImpl {
 
     static final class UserHandler extends Handler implements
             MediaRoute2ProviderWatcher.Callback,
-            MediaRoute2ProviderProxy.Callback {
+            MediaRoute2Provider.Callback {
 
         private final WeakReference<MediaRouter2ServiceImpl> mServiceRef;
         private final UserRecord mUserRecord;
         private final MediaRoute2ProviderWatcher mWatcher;
 
         //TODO: Make this thread-safe.
-        private final ArrayList<MediaRoute2ProviderProxy> mMediaProviders =
+        private final SystemMediaRoute2Provider mSystemProvider;
+        private final ArrayList<MediaRoute2Provider> mMediaProviders =
                 new ArrayList<>();
         private final List<MediaRoute2ProviderInfo> mProviderInfos = new ArrayList<>();
 
@@ -746,6 +768,8 @@ class MediaRouter2ServiceImpl {
             super(Looper.getMainLooper(), null, true);
             mServiceRef = new WeakReference<>(service);
             mUserRecord = userRecord;
+            mSystemProvider = new SystemMediaRoute2Provider(service.mContext, this);
+            mMediaProviders.add(mSystemProvider);
             mWatcher = new MediaRoute2ProviderWatcher(service.mContext, this,
                     this, mUserRecord.mUserId);
         }
@@ -777,20 +801,19 @@ class MediaRouter2ServiceImpl {
         }
 
         @Override
-        public void onProviderStateChanged(@NonNull MediaRoute2ProviderProxy provider) {
+        public void onProviderStateChanged(@NonNull MediaRoute2Provider provider) {
             sendMessage(PooledLambda.obtainMessage(UserHandler::updateProvider, this, provider));
         }
 
-        // TODO: When introducing MediaRoute2ProviderService#sendControlHints(),
-        // Make this method to be called.
-        public void onRouteSelectionRequestHandled(@NonNull MediaRoute2ProviderProxy provider,
+        @Override
+        public void onRouteSelected(@NonNull MediaRoute2ProviderProxy provider,
                 String clientPackageName, MediaRoute2Info route, Bundle controlHints, int seq) {
             sendMessage(PooledLambda.obtainMessage(
                     UserHandler::updateSelectedRoute, this, provider, clientPackageName, route,
                     controlHints, seq));
         }
 
-        private void updateProvider(MediaRoute2ProviderProxy provider) {
+        private void updateProvider(MediaRoute2Provider provider) {
             int providerIndex = getProviderInfoIndex(provider.getUniqueId());
             MediaRoute2ProviderInfo providerInfo = provider.getProviderInfo();
             MediaRoute2ProviderInfo prevInfo =
@@ -896,6 +919,8 @@ class MediaRouter2ServiceImpl {
                 return;
             }
 
+            //TODO: handle a case such that controlHints is null. (How should we notify MR2?)
+
             if (clientRecord.mSelectingRoute == null || !TextUtils.equals(
                     clientRecord.mSelectingRoute.getUniqueId(), selectedRoute.getUniqueId())) {
                 Log.w(TAG, "Ignoring invalid updateSelectedRoute call. selectingRoute="
@@ -908,7 +933,9 @@ class MediaRouter2ServiceImpl {
 
             notifyRouteSelectedToClient(((Client2Record) clientRecord).mClient,
                     selectedRoute,
-                    MediaRouter2.SELECT_REASON_USER_SELECTED,
+                    clientRecord.mIsManagerSelecting
+                            ? MediaRouter2.SELECT_REASON_SYSTEM_SELECTED :
+                            MediaRouter2.SELECT_REASON_USER_SELECTED,
                     controlHints);
             updateClientUsage(clientRecord);
 
@@ -954,7 +981,7 @@ class MediaRouter2ServiceImpl {
 
         private void requestSelectRoute(String clientPackageName, MediaRoute2Info route, int seq) {
             if (route != null) {
-                MediaRoute2ProviderProxy provider = findProvider(route.getProviderId());
+                MediaRoute2Provider provider = findProvider(route.getProviderId());
                 if (provider == null) {
                     Slog.w(TAG, "Ignoring to select route of unknown provider " + route);
                 } else {
@@ -965,7 +992,7 @@ class MediaRouter2ServiceImpl {
 
         private void unselectRoute(String clientPackageName, MediaRoute2Info route) {
             if (route != null) {
-                MediaRoute2ProviderProxy provider = findProvider(route.getProviderId());
+                MediaRoute2Provider provider = findProvider(route.getProviderId());
                 if (provider == null) {
                     Slog.w(TAG, "Ignoring to unselect route of unknown provider " + route);
                 } else {
@@ -975,21 +1002,21 @@ class MediaRouter2ServiceImpl {
         }
 
         private void sendControlRequest(MediaRoute2Info route, Intent request) {
-            final MediaRoute2ProviderProxy provider = findProvider(route.getProviderId());
+            final MediaRoute2Provider provider = findProvider(route.getProviderId());
             if (provider != null) {
                 provider.sendControlRequest(route, request);
             }
         }
 
         private void requestSetVolume(MediaRoute2Info route, int volume) {
-            final MediaRoute2ProviderProxy provider = findProvider(route.getProviderId());
+            final MediaRoute2Provider provider = findProvider(route.getProviderId());
             if (provider != null) {
                 provider.requestSetVolume(route, volume);
             }
         }
 
         private void requestUpdateVolume(MediaRoute2Info route, int delta) {
-            final MediaRoute2ProviderProxy provider = findProvider(route.getProviderId());
+            final MediaRoute2Provider provider = findProvider(route.getProviderId());
             if (provider != null) {
                 provider.requestUpdateVolume(route, delta);
             }
@@ -1153,8 +1180,8 @@ class MediaRouter2ServiceImpl {
             }
         }
 
-        private MediaRoute2ProviderProxy findProvider(String providerId) {
-            for (MediaRoute2ProviderProxy provider : mMediaProviders) {
+        private MediaRoute2Provider findProvider(String providerId) {
+            for (MediaRoute2Provider provider : mMediaProviders) {
                 if (TextUtils.equals(provider.getUniqueId(), providerId)) {
                     return provider;
                 }

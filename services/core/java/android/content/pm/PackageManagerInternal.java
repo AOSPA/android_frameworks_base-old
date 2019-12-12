@@ -22,6 +22,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.content.ComponentName;
+import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.PackageManager.ApplicationInfoFlags;
@@ -60,7 +61,6 @@ public abstract class PackageManagerInternal {
     public static final int PACKAGE_INCIDENT_REPORT_APPROVER = 10;
     public static final int PACKAGE_APP_PREDICTOR = 11;
     public static final int PACKAGE_TELEPHONY = 12;
-    public static final int PACKAGE_WIFI = 13;
     @IntDef(value = {
         PACKAGE_SYSTEM,
         PACKAGE_SETUP_WIZARD,
@@ -75,7 +75,6 @@ public abstract class PackageManagerInternal {
         PACKAGE_INCIDENT_REPORT_APPROVER,
         PACKAGE_APP_PREDICTOR,
         PACKAGE_TELEPHONY,
-        PACKAGE_WIFI,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface KnownPackage {}
@@ -244,12 +243,16 @@ public abstract class PackageManagerInternal {
 
     /**
      * Retrieve all activities that can be performed for the given intent.
+     * @param resolvedType the resolved type of the intent, which should be resolved via
+     * {@link Intent#resolveTypeIfNeeded(ContentResolver)} before passing to {@link PackageManager}
      * @param filterCallingUid The results will be filtered in the context of this UID instead
      * of the calling UID.
      * @see PackageManager#queryIntentActivities(Intent, int)
      */
-    public abstract List<ResolveInfo> queryIntentActivities(Intent intent,
-            @ResolveInfoFlags int flags, int filterCallingUid, int userId);
+    public abstract List<ResolveInfo> queryIntentActivities(
+            Intent intent, @Nullable String resolvedType, @ResolveInfoFlags int flags,
+            int filterCallingUid, int userId);
+
 
     /**
      * Retrieve all services that can be performed for the given intent.
@@ -765,9 +768,10 @@ public abstract class PackageManagerInternal {
      * @param userId user to uninstall apex package for. Must be
      *               {@link android.os.UserHandle#USER_ALL}, otherwise failure will be reported.
      * @param intentSender a {@link IntentSender} to send result of an uninstall to.
+     * @param flags flags about the uninstall.
      */
     public abstract void uninstallApex(String packageName, long versionCode, int userId,
-            IntentSender intentSender);
+            IntentSender intentSender, int flags);
 
     /**
      * Get fingerprint of build that updated the runtime permissions for a user.

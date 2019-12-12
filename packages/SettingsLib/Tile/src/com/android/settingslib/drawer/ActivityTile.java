@@ -18,6 +18,7 @@ package com.android.settingslib.drawer;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ComponentInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -33,7 +34,7 @@ import java.util.Objects;
 public class ActivityTile extends Tile {
     private static final String TAG = "ActivityTile";
 
-    public ActivityTile(ComponentInfo info, String category) {
+    public ActivityTile(ActivityInfo info, String category) {
         super(info, category);
         setMetaData(info.metaData);
     }
@@ -53,15 +54,6 @@ public class ActivityTile extends Tile {
     }
 
     @Override
-    protected CharSequence getComponentLabel(Context context) {
-        final PackageManager pm = context.getPackageManager();
-        final ComponentInfo info = getComponentInfo(context);
-        return info == null
-                ? null
-                : info.loadLabel(pm);
-    }
-
-    @Override
     protected ComponentInfo getComponentInfo(Context context) {
         if (mComponentInfo == null) {
             final PackageManager pm = context.getApplicationContext().getPackageManager();
@@ -77,5 +69,19 @@ public class ActivityTile extends Tile {
             }
         }
         return mComponentInfo;
+    }
+
+    @Override
+    protected CharSequence getComponentLabel(Context context) {
+        final PackageManager pm = context.getPackageManager();
+        final ComponentInfo info = getComponentInfo(context);
+        return info == null
+                ? null
+                : info.loadLabel(pm);
+    }
+
+    @Override
+    protected int getComponentIcon(ComponentInfo componentInfo) {
+        return componentInfo.icon;
     }
 }

@@ -20,11 +20,13 @@ import static com.android.systemui.Dependency.ALLOW_NOTIFICATION_LONG_PRESS_NAME
 
 import android.content.ContentProvider;
 
+import com.android.systemui.BootCompleteCacheImpl;
 import com.android.systemui.Dependency;
 import com.android.systemui.SystemUIAppComponentFactory;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.util.InjectionInflationController;
 
 import javax.inject.Named;
@@ -45,6 +47,18 @@ import dagger.Component;
         SystemUIModule.class,
         SystemUIDefaultModule.class})
 public interface SystemUIRootComponent {
+
+    /**
+     * Provides a BootCompleteCache.
+     */
+    @Singleton
+    BootCompleteCacheImpl provideBootCacheImpl();
+
+    /**
+     * Creates a ContextComponentHelper.
+     */
+    @Singleton
+    ConfigurationController getConfigurationController();
 
     /**
      * Creates a ContextComponentHelper.

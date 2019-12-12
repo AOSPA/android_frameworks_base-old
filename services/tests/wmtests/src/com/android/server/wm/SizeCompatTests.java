@@ -84,7 +84,7 @@ public class SizeCompatTests extends ActivityTestsBase {
     public void testRestartProcessIfVisible() {
         setUpApp(new TestActivityDisplay.Builder(mService, 1000, 2500).build());
         doNothing().when(mSupervisor).scheduleRestartTimeout(mActivity);
-        mActivity.visible = true;
+        mActivity.mVisibleRequested = true;
         mActivity.setSavedState(null /* savedState */);
         mActivity.setState(ActivityStack.ActivityState.RESUMED, "testRestart");
         prepareUnresizable(1.5f /* maxAspect */, SCREEN_ORIENTATION_UNSPECIFIED);
@@ -167,7 +167,7 @@ public class SizeCompatTests extends ActivityTestsBase {
                 .setResizeMode(RESIZE_MODE_UNRESIZEABLE)
                 .setMaxAspectRatio(1.5f)
                 .build();
-        mActivity.visible = true;
+        mActivity.mVisibleRequested = true;
 
         final Rect originalBounds = new Rect(mActivity.getBounds());
         final int originalDpi = mActivity.getConfiguration().densityDpi;
@@ -290,10 +290,12 @@ public class SizeCompatTests extends ActivityTestsBase {
     public void testFixedScreenLayoutSizeBits() {
         setUpApp(new TestActivityDisplay.Builder(mService, 1000, 2500).build());
         final int fixedScreenLayout = Configuration.SCREENLAYOUT_LONG_NO
-                | Configuration.SCREENLAYOUT_SIZE_NORMAL;
+                | Configuration.SCREENLAYOUT_SIZE_NORMAL
+                | Configuration.SCREENLAYOUT_COMPAT_NEEDED;
         final int layoutMask = Configuration.SCREENLAYOUT_LONG_MASK
                 | Configuration.SCREENLAYOUT_SIZE_MASK
-                | Configuration.SCREENLAYOUT_LAYOUTDIR_MASK;
+                | Configuration.SCREENLAYOUT_LAYOUTDIR_MASK
+                | Configuration.SCREENLAYOUT_COMPAT_NEEDED;
         Configuration c = new Configuration(mTask.getRequestedOverrideConfiguration());
         c.screenLayout = fixedScreenLayout | Configuration.SCREENLAYOUT_LAYOUTDIR_LTR;
         mTask.onRequestedOverrideConfigurationChanged(c);
@@ -320,7 +322,7 @@ public class SizeCompatTests extends ActivityTestsBase {
 
         prepareUnresizable(1.5f, SCREEN_ORIENTATION_UNSPECIFIED);
         mActivity.setState(STOPPED, "testSizeCompatMode");
-        mActivity.visible = false;
+        mActivity.mVisibleRequested = false;
         mActivity.app.setReportedProcState(ActivityManager.PROCESS_STATE_CACHED_ACTIVITY);
         // Make the parent bounds to be different so the activity is in size compatibility mode.
         mTask.getWindowConfiguration().setAppBounds(new Rect(0, 0, 600, 1200));
@@ -383,7 +385,7 @@ public class SizeCompatTests extends ActivityTestsBase {
         compatTokens.clear();
         // Make the activity resizable again by restarting it
         activity.info.resizeMode = ActivityInfo.RESIZE_MODE_RESIZEABLE;
-        activity.visible = true;
+        activity.mVisibleRequested = true;
         activity.restartProcessIfVisible();
         // The full lifecycle isn't hooked up so manually set state to resumed
         activity.setState(ActivityStack.ActivityState.RESUMED, "testHandleActivitySizeCompatMode");
@@ -400,7 +402,7 @@ public class SizeCompatTests extends ActivityTestsBase {
      */
     private void prepareUnresizable(float maxAspect, int screenOrientation) {
         mActivity.info.resizeMode = RESIZE_MODE_UNRESIZEABLE;
-        mActivity.visible = true;
+        mActivity.mVisibleRequested = true;
         if (maxAspect >= 0) {
             mActivity.info.maxAspectRatio = maxAspect;
         }

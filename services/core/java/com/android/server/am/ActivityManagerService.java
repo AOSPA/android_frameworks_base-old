@@ -575,6 +575,11 @@ public class ActivityManagerService extends IActivityManager.Stub
     private static final int NATIVE_DUMP_TIMEOUT_MS = 2000; // 2 seconds;
     private static final int JAVA_DUMP_MINIMUM_SIZE = 100; // 100 bytes.
 
+    /**
+     * How long between a process kill and we actually receive its death recipient
+     */
+    private static final long PROC_KILL_TIMEOUT = 5000; // 5 seconds;
+
     /* Freq Aggr boost objects */
     public static BoostFramework mPerfServiceStartHint = null;
     /* UX perf event object */
@@ -2806,8 +2811,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                         int total = user + system + iowait + irq + softIrq + idle;
                         if (total == 0) total = 1;
 
-                        EventLog.writeEvent(EventLogTags.CPU,
-                                ((user+system+iowait+irq+softIrq) * 100) / total,
+                        EventLogTags.writeCpu(
+                                ((user + system + iowait + irq + softIrq) * 100) / total,
                                 (user * 100) / total,
                                 (system * 100) / total,
                                 (iowait * 100) / total,
@@ -3716,7 +3721,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             final ArrayList<ProcessMemInfo> memInfos
                     = doReport ? new ArrayList<ProcessMemInfo>(mProcessList.getLruSizeLocked())
                     : null;
-            EventLog.writeEvent(EventLogTags.AM_LOW_MEMORY, mProcessList.getLruSizeLocked());
+            EventLogTags.writeAmLowMemory(mProcessList.getLruSizeLocked());
             long now = SystemClock.uptimeMillis();
             for (int i = mProcessList.mLruProcesses.size() - 1; i >= 0; i--) {
                 ProcessRecord rec = mProcessList.mLruProcesses.get(i);
@@ -3803,11 +3808,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mUxPerf.perfHint(BoostFramework.VENDOR_HINT_KILL, app.processName, pid, 0);
             }
 
-            EventLog.writeEvent(EventLogTags.AM_PROC_DIED, app.userId, app.pid, app.processName,
-                    app.setAdj, app.setProcState);
+            EventLogTags.writeAmProcDied(app.userId, app.pid, app.processName, app.setAdj,
+                    app.setProcState);
             if (DEBUG_CLEANUP) Slog.v(TAG_CLEANUP,
                 "Dying app: " + app + ", pid: " + pid + ", thread: " + thread.asBinder());
             handleAppDiedLocked(app, false, true);
+
+            // Execute the callback if there is any.
+            doAppDiedCallbackLocked(app);
 
             if (doOomAdj) {
                 updateOomAdjLocked(OomAdjuster.OOM_ADJ_REASON_PROCESS_END);
@@ -3820,7 +3828,12 @@ public class ActivityManagerService extends IActivityManager.Stub
             reportUidInfoMessageLocked(TAG,
                     "Process " + app.processName + " (pid " + pid
                             + ") has died and restarted (pid " + app.pid + ").", app.info.uid);
-            EventLog.writeEvent(EventLogTags.AM_PROC_DIED, app.userId, app.pid, app.processName);
+
+            // Execute the callback if there is any.
+            doAppDiedCallbackLocked(app);
+
+            EventLogTags.writeAmProcDied(app.userId, app.pid, app.processName, app.setAdj,
+                    app.setProcState);
         } else if (DEBUG_PROCESSES) {
             Slog.d(TAG_PROCESSES, "Received spurious death notification for thread "
                     + thread.asBinder());
@@ -3830,6 +3843,39 @@ public class ActivityManagerService extends IActivityManager.Stub
         // for pulling memory stats of other running processes when this process died.
         if (!hasMemcg()) {
             StatsLog.write(StatsLog.APP_DIED, SystemClock.elapsedRealtime());
+        }
+    }
+
+    @GuardedBy("this")
+    private void doAppDiedCallbackLocked(final ProcessRecord app) {
+        if (app.mAppDiedCallback != null) {
+            app.mAppDiedCallback.run();
+            app.mAppDiedCallback = null;
+        }
+    }
+
+    @GuardedBy("this")
+    private void waitForProcKillLocked(final ProcessRecord app, final String formatString,
+            final long startTime) {
+        app.mAppDiedCallback = () -> {
+            synchronized (ActivityManagerService.this) {
+                // called when this app receives appDiedLocked()
+                ActivityManagerService.this.notifyAll();
+            }
+        };
+        checkTime(startTime, String.format(formatString, "before appDied"));
+        long now = SystemClock.uptimeMillis();
+        long timeout = PROC_KILL_TIMEOUT + now;
+        while (app.mAppDiedCallback != null && timeout > now) {
+            try {
+                wait(timeout - now);
+            } catch (InterruptedException e) {
+            }
+            now = SystemClock.uptimeMillis();
+        }
+        checkTime(startTime, String.format(formatString, "after appDied"));
+        if (app.mAppDiedCallback != null) {
+            Slog.w(TAG, String.format(formatString, "waiting for app killing timed out"));
         }
     }
 
@@ -4785,8 +4831,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         if (gone) {
             Slog.w(TAG, "Process " + app + " failed to attach");
-            EventLog.writeEvent(EventLogTags.AM_PROCESS_START_TIMEOUT, app.userId,
-                    pid, app.uid, app.processName);
+            EventLogTags.writeAmProcessStartTimeout(app.userId, pid, app.uid, app.processName);
             mProcessList.removeProcessNameLocked(app.processName, app.uid);
             mAtmInternal.clearHeavyWeightProcessIfEquals(app.getWindowProcessController());
             mBatteryStatsService.noteProcessFinish(app.processName, app.info.uid);
@@ -4877,7 +4922,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (app == null) {
             Slog.w(TAG, "No pending application record for pid " + pid
                     + " (IApplicationThread " + thread + "); dropping process");
-            EventLog.writeEvent(EventLogTags.AM_DROP_PROCESS, pid);
+            EventLogTags.writeAmDropProcess(pid);
             if (pid > 0 && pid != MY_PID) {
                 killProcessQuiet(pid);
                 //TODO: killProcessGroup(app.info.uid, pid);
@@ -4915,7 +4960,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             return false;
         }
 
-        EventLog.writeEvent(EventLogTags.AM_PROC_BOUND, app.userId, app.pid, app.processName);
+        EventLogTags.writeAmProcBound(app.userId, app.pid, app.processName);
 
         if (mUxPerf != null && app.hostingRecord != null && "activity".equals(app.hostingRecord.getType())) {
             mUxPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, app.processName, app.pid, BoostFramework.Launch.TYPE_ATTACH_APPLICATION);
@@ -6858,18 +6903,12 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                 // Note if killedByAm is also set, this means the provider process has just been
                 // killed by AM (in ProcessRecord.kill()), but appDiedLocked() hasn't been called
-                // yet. So we need to call appDiedLocked() here and let it clean up.
+                // yet. So we need to wait for appDiedLocked() here and let it clean up.
                 // (See the commit message on I2c4ba1e87c2d47f2013befff10c49b3dc337a9a7 to see
                 // how to test this case.)
                 if (cpr.proc.killed && cpr.proc.killedByAm) {
-                    checkTime(startTime, "getContentProviderImpl: before appDied (killedByAm)");
-                    final long iden = Binder.clearCallingIdentity();
-                    try {
-                        appDiedLocked(cpr.proc);
-                    } finally {
-                        Binder.restoreCallingIdentity(iden);
-                    }
-                    checkTime(startTime, "getContentProviderImpl: after appDied (killedByAm)");
+                    waitForProcKillLocked(cpr.proc, "getContentProviderImpl: %s (killedByAm)",
+                            startTime);
                 }
             }
 
@@ -6973,9 +7012,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     Slog.i(TAG, "Existing provider " + cpr.name.flattenToShortString()
                             + " is crashing; detaching " + r);
                     boolean lastRef = decProviderCountLocked(conn, cpr, token, stable);
-                    checkTime(startTime, "getContentProviderImpl: before appDied");
-                    appDiedLocked(cpr.proc);
-                    checkTime(startTime, "getContentProviderImpl: after appDied");
+                    waitForProcKillLocked(cpr.proc, "getContentProviderImpl: %s", startTime);
                     if (!lastRef) {
                         // This wasn't the last ref our process had on
                         // the provider...  we have now been killed, bail.
@@ -7205,7 +7242,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             + cpi.applicationInfo.packageName + "/"
                             + cpi.applicationInfo.uid + " for provider "
                             + name + ": launching app became null");
-                    EventLog.writeEvent(EventLogTags.AM_PROVIDER_LOST_PROCESS,
+                    EventLogTags.writeAmProviderLostProcess(
                             UserHandle.getUserId(cpi.applicationInfo.uid),
                             cpi.applicationInfo.packageName,
                             cpi.applicationInfo.uid, name);
@@ -8728,7 +8765,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         mBatteryStatsService.noteWakupAlarm(sourcePkg, sourceUid, workSource, tag);
         if (workSource != null) {
-            String workSourcePackage = workSource.getName(0);
+            String workSourcePackage = workSource.getPackageName(0);
             int workSourceUid = workSource.getAttributionUid();
             if (workSourcePackage == null) {
                 workSourcePackage = sourcePkg;
@@ -9198,7 +9235,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         t.traceEnd(); // KillProcesses
 
         Slog.i(TAG, "System now ready");
-        EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_AMS_READY, SystemClock.uptimeMillis());
+
+        EventLogTags.writeBootProgressAmsReady(SystemClock.uptimeMillis());
 
         t.traceBegin("updateTopComponentForFactoryTest");
         mAtmInternal.updateTopComponentForFactoryTest();
@@ -9452,7 +9490,8 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     void handleApplicationCrashInner(String eventType, ProcessRecord r, String processName,
             ApplicationErrorReport.CrashInfo crashInfo) {
-        EventLog.writeEvent(EventLogTags.AM_CRASH, Binder.getCallingPid(),
+
+        EventLogTags.writeAmCrash(Binder.getCallingPid(),
                 UserHandle.getUserId(Binder.getCallingUid()), processName,
                 r == null ? -1 : r.info.flags,
                 crashInfo.exceptionClassName,
@@ -9655,7 +9694,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         final String processName = app == null ? "system_server"
                 : (r == null ? "unknown" : r.processName);
 
-        EventLog.writeEvent(EventLogTags.AM_WTF, UserHandle.getUserId(callingUid), callingPid,
+        EventLogTags.writeAmWtf(UserHandle.getUserId(callingUid), callingPid,
                 processName, r == null ? -1 : r.info.flags, tag, crashInfo.exceptionMessage);
 
         StatsLog.write(StatsLog.WTF_OCCURRED, callingUid, tag, processName,
@@ -10158,6 +10197,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 pw.println("-------------------------------------------------------------------------------");
             }
             dumpProcessesLocked(fd, pw, args, opti, dumpAll, dumpPackage, dumpAppId);
+            pw.println();
+            if (dumpAll) {
+                pw.println("-------------------------------------------------------------------------------");
+            }
+            dumpUsersLocked(pw);
         }
     }
 
@@ -10446,6 +10490,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             } else if ("locks".equals(cmd)) {
                 LockGuard.dump(fd, pw, args);
+            } else if ("users".equals(cmd)) {
+                synchronized (this) {
+                    dumpUsersLocked(pw);
+                }
             } else {
                 // Dumping a single activity?
                 if (!mAtmInternal.dumpActivity(fd, pw, cmd, args, opti, dumpAll,
@@ -10920,12 +10968,6 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         needSep = mAppErrors.dumpLocked(fd, pw, needSep, dumpPackage);
 
-        if (dumpPackage == null) {
-            pw.println();
-            needSep = false;
-            mUserController.dump(pw, dumpAll);
-        }
-
         needSep = mAtmInternal.dumpForProcesses(fd, pw, dumpAll, dumpPackage, dumpAppId, needSep,
                 mTestPssMode, mWakefulness);
 
@@ -11132,6 +11174,12 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
         pw.println("  mForceBackgroundCheck=" + mForceBackgroundCheck);
+    }
+
+    @GuardedBy("this")
+    private void dumpUsersLocked(PrintWriter pw) {
+        pw.println("ACTIVITY MANAGER USERS (dumpsys activity users)");
+        mUserController.dump(pw);
     }
 
     @GuardedBy("this")

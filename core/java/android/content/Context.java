@@ -2081,10 +2081,36 @@ public abstract class Context {
      * @see #sendOrderedBroadcast(Intent, String, BroadcastReceiver, Handler, int, String, Bundle)
      * @hide
      */
-    @SystemApi
     public void sendBroadcastMultiplePermissions(@NonNull Intent intent,
             @NonNull String[] receiverPermissions) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * Broadcast the given intent to all interested BroadcastReceivers, allowing
+     * an array of required permissions to be enforced.  This call is asynchronous; it returns
+     * immediately, and you will continue executing while the receivers are run.  No results are
+     * propagated from receivers and receivers can not abort the broadcast. If you want to allow
+     * receivers to propagate results or abort the broadcast, you must send an ordered broadcast
+     * using {@link #sendOrderedBroadcast(Intent, String)}.
+     *
+     * <p>See {@link BroadcastReceiver} for more information on Intent broadcasts.
+     *
+     * @param intent The Intent to broadcast; all receivers matching this
+     *               Intent will receive the broadcast.
+     * @param receiverPermissions Array of names of permissions that a receiver must hold
+     *                            in order to receive your broadcast.
+     *                            If empty, no permissions are required.
+     *
+     * @see android.content.BroadcastReceiver
+     * @see #registerReceiver
+     * @see #sendBroadcast(Intent)
+     * @see #sendOrderedBroadcast(Intent, String)
+     * @see #sendOrderedBroadcast(Intent, String, BroadcastReceiver, Handler, int, String, Bundle)
+     */
+    public void sendBroadcastWithMultiplePermissions(@NonNull Intent intent,
+            @NonNull String[] receiverPermissions) {
+        sendBroadcastMultiplePermissions(intent, receiverPermissions);
     }
 
     /**
@@ -2450,10 +2476,52 @@ public abstract class Context {
      *
      * @see #sendOrderedBroadcast(Intent, String, BroadcastReceiver, Handler, int, String, Bundle)
      */
+    public void sendOrderedBroadcast(@NonNull Intent intent, @Nullable String receiverPermission,
+            @Nullable String receiverAppOp, @Nullable BroadcastReceiver resultReceiver,
+            @Nullable Handler scheduler, int initialCode, @Nullable String initialData,
+            @Nullable Bundle initialExtras) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * Version of
+     * {@link #sendOrderedBroadcast(Intent, String, BroadcastReceiver, Handler, int, String,
+     * Bundle)} that allows you to specify the App Op to enforce restrictions on which receivers
+     * the broadcast will be sent to as well as supply an optional sending options
+     *
+     * <p>See {@link BroadcastReceiver} for more information on Intent broadcasts.
+     *
+     * @param intent The Intent to broadcast; all receivers matching this
+     *               Intent will receive the broadcast.
+     * @param receiverPermission String naming a permissions that
+     *               a receiver must hold in order to receive your broadcast.
+     *               If null, no permission is required.
+     * @param receiverAppOp The app op associated with the broadcast. If null, no appOp is
+     *                      required. If both receiverAppOp and receiverPermission are non-null,
+     *                      a receiver must have both of them to
+     *                      receive the broadcast
+     * @param options (optional) Additional sending options, generated from a
+     * {@link android.app.BroadcastOptions}.
+     * @param resultReceiver Your own BroadcastReceiver to treat as the final
+     *                       receiver of the broadcast.
+     * @param scheduler A custom Handler with which to schedule the
+     *                  resultReceiver callback; if null it will be
+     *                  scheduled in the Context's main thread.
+     * @param initialCode An initial value for the result code.  Often
+     *                    Activity.RESULT_OK.
+     * @param initialData An initial value for the result data.  Often
+     *                    null.
+     * @param initialExtras An initial value for the result extras.  Often
+     *                      null.
+     *
+     * @see #sendOrderedBroadcast(Intent, String, BroadcastReceiver, Handler, int, String, Bundle)
+     * @see android.app.BroadcastOptions
+     */
     public void sendOrderedBroadcast(@RequiresPermission @NonNull Intent intent,
             @Nullable String receiverPermission, @Nullable String receiverAppOp,
-            @Nullable BroadcastReceiver resultReceiver, @Nullable Handler scheduler,
-            int initialCode, @Nullable String initialData, @Nullable Bundle initialExtras) {
+            @Nullable Bundle options, @Nullable BroadcastReceiver resultReceiver,
+            @Nullable Handler scheduler, int initialCode, @Nullable String initialData,
+            @Nullable Bundle initialExtras) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 
@@ -3309,6 +3377,7 @@ public abstract class Context {
             ROLLBACK_SERVICE,
             DROPBOX_SERVICE,
             //@hide: DEVICE_IDLE_CONTROLLER,
+            //@hide: POWER_WHITELIST_MANAGER,
             DEVICE_POLICY_SERVICE,
             UI_MODE_SERVICE,
             DOWNLOAD_SERVICE,
@@ -3356,7 +3425,9 @@ public abstract class Context {
             CROSS_PROFILE_APPS_SERVICE,
             //@hide: SYSTEM_UPDATE_SERVICE,
             //@hide: TIME_DETECTOR_SERVICE,
+            //@hide: TIME_ZONE_DETECTOR_SERVICE,
             PERMISSION_SERVICE,
+            INCREMENTAL_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -3837,14 +3908,6 @@ public abstract class Context {
     public static final String NETWORK_STACK_SERVICE = "network_stack";
 
     /**
-     * Use with {@link android.os.ServiceManager.getService()} to retrieve a
-     * {@link android.net.WifiStackClient} IBinder for communicating with the network stack
-     * @hide
-     * @see android.net.WifiStackClient
-     */
-    public static final String WIFI_STACK_SERVICE = "wifi_stack";
-
-    /**
      * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.net.IpSecManager} for encrypting Sockets or Networks with
      * IPSec.
@@ -4317,6 +4380,15 @@ public abstract class Context {
      */
     @TestApi
     public static final String DEVICE_IDLE_CONTROLLER = "deviceidle";
+
+    /**
+     * System service name for the PowerWhitelistManager.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    @TestApi
+    public static final String POWER_WHITELIST_MANAGER = "power_whitelist";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
@@ -4807,12 +4879,21 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve an
-     * {@link android.app.timedetector.ITimeDetectorService}.
+     * {@link android.app.timedetector.TimeDetector}.
      * @hide
      *
      * @see #getSystemService(String)
      */
     public static final String TIME_DETECTOR_SERVICE = "time_detector";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve an
+     * {@link android.app.timezonedetector.TimeZoneDetector}.
+     * @hide
+     *
+     * @see #getSystemService(String)
+     */
+    public static final String TIME_ZONE_DETECTOR_SERVICE = "time_zone_detector";
 
     /**
      * Binder service name for {@link AppBindingService}.
@@ -4870,6 +4951,30 @@ public abstract class Context {
      */
     @SystemApi
     public static final String BATTERY_STATS_SERVICE = "batterystats";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve an
+     * AppSearchManager for indexing and querying app data managed
+     * by the system.
+     *
+     * @see #getSystemService(String)
+     */
+    public static final String APP_SEARCH_SERVICE = "app_search";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve an
+     * {@link android.content.integrity.AppIntegrityManager}.
+     * @hide
+     */
+    @SystemApi
+    public static final String APP_INTEGRITY_SERVICE = "app_integrity";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve an
+     * {@link android.os.incremental.IncrementalManager}.
+     * @hide
+     */
+    public static final String INCREMENTAL_SERVICE = "incremental";
 
     /**
      * Determine whether the given permission is allowed for a particular

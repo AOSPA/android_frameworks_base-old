@@ -16,17 +16,20 @@
 
 package android.app.job;
 
+import android.annotation.SystemApi;
 import android.app.JobSchedulerImpl;
 import android.app.SystemServiceRegistry;
 import android.content.Context;
 import android.os.DeviceIdleManager;
 import android.os.IDeviceIdleController;
+import android.os.PowerWhitelistManager;
 
 /**
  * Class holding initialization code for the job scheduler module.
  *
  * @hide
  */
+@SystemApi
 public class JobSchedulerFrameworkInitializer {
     private JobSchedulerFrameworkInitializer() {
     }
@@ -37,8 +40,6 @@ public class JobSchedulerFrameworkInitializer {
      * {@link Context#getSystemService} can return them.
      *
      * <p>If this is called from other places, it throws a {@link IllegalStateException).
-     *
-     * TODO Make it a system API
      */
     public static void registerServiceWrappers() {
         SystemServiceRegistry.registerStaticService(
@@ -48,5 +49,8 @@ public class JobSchedulerFrameworkInitializer {
                 Context.DEVICE_IDLE_CONTROLLER, DeviceIdleManager.class,
                 (context, b) -> new DeviceIdleManager(
                         context, IDeviceIdleController.Stub.asInterface(b)));
+        SystemServiceRegistry.registerContextAwareService(
+                Context.POWER_WHITELIST_MANAGER, PowerWhitelistManager.class,
+                PowerWhitelistManager::new);
     }
 }

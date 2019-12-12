@@ -16,12 +16,11 @@
 
 package com.android.server.integrity.parser;
 
+import android.content.integrity.AtomicFormula;
+import android.content.integrity.CompoundFormula;
+import android.content.integrity.Formula;
+import android.content.integrity.Rule;
 import android.util.Xml;
-
-import com.android.server.integrity.model.AtomicFormula;
-import com.android.server.integrity.model.Formula;
-import com.android.server.integrity.model.OpenFormula;
-import com.android.server.integrity.model.Rule;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -32,24 +31,24 @@ import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
-/**
- * A helper class to parse rules into the {@link Rule} model from Xml representation.
- */
+/** A helper class to parse rules into the {@link Rule} model from Xml representation. */
 public final class RuleXmlParser implements RuleParser {
 
     public static final String TAG = "RuleXmlParser";
 
-    // TODO: Use XML attributes
+    private static final String NAMESPACE = "";
     private static final String RULE_LIST_TAG = "RL";
     private static final String RULE_TAG = "R";
     private static final String OPEN_FORMULA_TAG = "OF";
     private static final String ATOMIC_FORMULA_TAG = "AF";
-    private static final String EFFECT_TAG = "E";
-    private static final String KEY_TAG = "K";
-    private static final String OPERATOR_TAG = "O";
-    private static final String VALUE_TAG = "V";
-    private static final String CONNECTOR_TAG = "C";
+    private static final String EFFECT_ATTRIBUTE = "E";
+    private static final String KEY_ATTRIBUTE = "K";
+    private static final String OPERATOR_ATTRIBUTE = "O";
+    private static final String VALUE_ATTRIBUTE = "V";
+    private static final String CONNECTOR_ATTRIBUTE = "C";
+    private static final String IS_HASHED_VALUE_ATTRIBUTE = "H";
 
     @Override
     public List<Rule> parse(String ruleText) throws RuleParseException {
@@ -88,7 +87,8 @@ public final class RuleXmlParser implements RuleParser {
         // corrupt in the XML, it will be skipped to the next rule.
         if (!nodeName.equals(RULE_LIST_TAG)) {
             throw new RuntimeException(
-                    String.format("Rules must start with RuleList <RL> tag. Found: %s at %s",
+                    String.format(
+                            "Rules must start with RuleList <RL> tag. Found: %s at %s",
                             nodeName, parser.getPositionDescription()));
         }
 
@@ -106,7 +106,7 @@ public final class RuleXmlParser implements RuleParser {
 
     private static Rule parseRule(XmlPullParser parser) throws IOException, XmlPullParserException {
         Formula formula = null;
-        @Rule.Effect int effect = 0;
+        int effect = Integer.parseInt(extractAttributeValue(parser, EFFECT_ATTRIBUTE).orElse("-1"));
 
         int eventType;
         while ((eventType = parser.next()) != XmlPullParser.END_DOCUMENT) {
@@ -124,9 +124,6 @@ public final class RuleXmlParser implements RuleParser {
                     case ATOMIC_FORMULA_TAG:
                         formula = parseAtomicFormula(parser);
                         break;
-                    case EFFECT_TAG:
-                        effect = Integer.parseInt(extractValue(parser));
-                        break;
                     default:
                         throw new RuntimeException(
                                 String.format("Found unexpected tag: %s", nodeName));
@@ -142,7 +139,8 @@ public final class RuleXmlParser implements RuleParser {
 
     private static Formula parseOpenFormula(XmlPullParser parser)
             throws IOException, XmlPullParserException {
-        @OpenFormula.Connector int connector = 0;
+        int connector =
+                Integer.parseInt(extractAttributeValue(parser, CONNECTOR_ATTRIBUTE).orElse("-1"));
         List<Formula> formulas = new ArrayList<>();
 
         int eventType;
@@ -155,9 +153,6 @@ public final class RuleXmlParser implements RuleParser {
 
             if (eventType == XmlPullParser.START_TAG) {
                 switch (nodeName) {
-                    case CONNECTOR_TAG:
-                        connector = Integer.parseInt(extractValue(parser));
-                        break;
                     case ATOMIC_FORMULA_TAG:
                         formulas.add(parseAtomicFormula(parser));
                         break;
@@ -174,54 +169,39 @@ public final class RuleXmlParser implements RuleParser {
             }
         }
 
-        return new OpenFormula(connector, formulas);
+        return new CompoundFormula(connector, formulas);
     }
 
     private static Formula parseAtomicFormula(XmlPullParser parser)
             throws IOException, XmlPullParserException {
-        @AtomicFormula.Key int key = 0;
-        @AtomicFormula.Operator int operator = 0;
-        String value = null;
+        int key = Integer.parseInt(extractAttributeValue(parser, KEY_ATTRIBUTE).orElse("-1"));
+        int operator =
+                Integer.parseInt(extractAttributeValue(parser, OPERATOR_ATTRIBUTE).orElse("-1"));
+        String value = extractAttributeValue(parser, VALUE_ATTRIBUTE).orElse(null);
+        String isHashedValue =
+                extractAttributeValue(parser, IS_HASHED_VALUE_ATTRIBUTE).orElse(null);
 
         int eventType;
         while ((eventType = parser.next()) != XmlPullParser.END_DOCUMENT) {
-            String nodeName = parser.getName();
-
             if (eventType == XmlPullParser.END_TAG && parser.getName().equals(ATOMIC_FORMULA_TAG)) {
                 break;
             }
-
-            if (eventType == XmlPullParser.START_TAG) {
-                switch (nodeName) {
-                    case KEY_TAG:
-                        key = Integer.parseInt(extractValue(parser));
-                        break;
-                    case OPERATOR_TAG:
-                        operator = Integer.parseInt(extractValue(parser));
-                        break;
-                    case VALUE_TAG:
-                        value = extractValue(parser);
-                        break;
-                    default:
-                        throw new RuntimeException(
-                                String.format("Found unexpected tag: %s", nodeName));
-                }
-            } else {
-                throw new RuntimeException(
-                        String.format("Found unexpected event type: %d", eventType));
-            }
         }
-        return constructAtomicFormulaBasedOnKey(key, operator, value);
+        return constructAtomicFormulaBasedOnKey(key, operator, value, isHashedValue);
     }
 
-    private static Formula constructAtomicFormulaBasedOnKey(@AtomicFormula.Key int key,
-            @AtomicFormula.Operator int operator, String value) {
+    private static Formula constructAtomicFormulaBasedOnKey(
+            @AtomicFormula.Key int key,
+            @AtomicFormula.Operator int operator,
+            String value,
+            String isHashedValue) {
         switch (key) {
             case AtomicFormula.PACKAGE_NAME:
             case AtomicFormula.INSTALLER_NAME:
             case AtomicFormula.APP_CERTIFICATE:
             case AtomicFormula.INSTALLER_CERTIFICATE:
-                return new AtomicFormula.StringAtomicFormula(key, value);
+                return new AtomicFormula.StringAtomicFormula(
+                        key, value, Boolean.parseBoolean(isHashedValue));
             case AtomicFormula.PRE_INSTALLED:
                 return new AtomicFormula.BooleanAtomicFormula(key, Boolean.parseBoolean(value));
             case AtomicFormula.VERSION_CODE:
@@ -231,17 +211,7 @@ public final class RuleXmlParser implements RuleParser {
         }
     }
 
-    private static String extractValue(XmlPullParser parser)
-            throws IOException, XmlPullParserException {
-        String value;
-        int eventType = parser.next();
-        if (eventType == XmlPullParser.TEXT) {
-            value = parser.getText();
-            eventType = parser.next();
-            if (eventType == XmlPullParser.END_TAG) {
-                return value;
-            }
-        }
-        throw new RuntimeException(String.format("Found unexpected event type: %d", eventType));
+    private static Optional<String> extractAttributeValue(XmlPullParser parser, String attribute) {
+        return Optional.ofNullable(parser.getAttributeValue(NAMESPACE, attribute));
     }
 }

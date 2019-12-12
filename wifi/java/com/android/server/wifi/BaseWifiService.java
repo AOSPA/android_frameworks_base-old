@@ -26,6 +26,7 @@ import android.net.wifi.IDppCallback;
 import android.net.wifi.ILocalOnlyHotspotCallback;
 import android.net.wifi.INetworkRequestMatchCallback;
 import android.net.wifi.IOnWifiUsabilityStatsListener;
+import android.net.wifi.IScanResultsCallback;
 import android.net.wifi.IScanResultsListener;
 import android.net.wifi.ISoftApCallback;
 import android.net.wifi.ISuggestionConnectionStatusListener;
@@ -43,7 +44,6 @@ import android.net.wifi.hotspot2.IProvisioningCallback;
 import android.net.wifi.hotspot2.OsuProvider;
 import android.net.wifi.hotspot2.PasspointConfiguration;
 import android.os.IBinder;
-import android.os.Messenger;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.WorkSource;
@@ -326,7 +326,6 @@ public class BaseWifiService extends IWifiManager.Stub {
         throw new UnsupportedOperationException();
     }
 
-    @Override
     public void notifyUserOfApBandConversion(String packageName) {
         throw new UnsupportedOperationException();
     }
@@ -520,14 +519,26 @@ public class BaseWifiService extends IWifiManager.Stub {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    /** @deprecated replaced by {@link #registerScanResultsCallback(IScanResultsCallback)} */
+    @Deprecated
     public void registerScanResultsListener(
             IBinder binder, IScanResultsListener listener, int listenerIdentifier) {
         throw new UnsupportedOperationException();
     }
 
-    @Override
+    /** @deprecated replaced by {@link #unregisterScanResultsCallback(IScanResultsCallback)} */
+    @Deprecated
     public void unregisterScanResultsListener(int listenerIdentifier) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void registerScanResultsCallback(IScanResultsCallback callback) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void unregisterScanResultsCallback(IScanResultsCallback callback) {
         throw new UnsupportedOperationException();
     }
 
@@ -541,6 +552,11 @@ public class BaseWifiService extends IWifiManager.Stub {
     @Override
     public void unregisterSuggestionConnectionStatusListener(int listenerIdentifier,
             String packageName) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public int calculateSignalLevel(int rssi) {
         throw new UnsupportedOperationException();
     }
 

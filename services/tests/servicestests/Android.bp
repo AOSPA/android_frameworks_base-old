@@ -8,6 +8,7 @@ android_test {
     // Include all test java files.
     srcs: [
         "src/**/*.java",
+        "src/**/*.kt",
 
         "aidl/com/android/servicestests/aidl/INetworkStateObserver.aidl",
         "aidl/com/android/servicestests/aidl/ICmdReceiverService.aidl",
@@ -40,7 +41,8 @@ android_test {
         "hamcrest-library",
         "servicestests-utils",
         "xml-writer-device-lib",
-        "jobscheduler-service",
+        "service-appsearch",
+        "service-jobscheduler",
     ],
 
     aidl: {

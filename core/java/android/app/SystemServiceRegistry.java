@@ -19,9 +19,11 @@ package android.app;
 import android.accounts.AccountManager;
 import android.accounts.IAccountManager;
 import android.annotation.NonNull;
+import android.annotation.SystemApi;
 import android.app.ContextImpl.ServiceInitializationState;
 import android.app.admin.DevicePolicyManager;
 import android.app.admin.IDevicePolicyManager;
+import android.app.appsearch.AppSearchManagerFrameworkInitializer;
 import android.app.blob.BlobStoreManagerFrameworkInitializer;
 import android.app.contentsuggestions.ContentSuggestionsManager;
 import android.app.contentsuggestions.IContentSuggestionsManager;
@@ -32,6 +34,7 @@ import android.app.role.RoleManager;
 import android.app.slice.SliceManager;
 import android.app.timedetector.TimeDetector;
 import android.app.timezone.RulesManager;
+import android.app.timezonedetector.TimeZoneDetector;
 import android.app.trust.TrustManager;
 import android.app.usage.IStorageStatsManager;
 import android.app.usage.IUsageStatsManager;
@@ -115,16 +118,7 @@ import android.net.lowpan.ILowpanManager;
 import android.net.lowpan.LowpanManager;
 import android.net.nsd.INsdManager;
 import android.net.nsd.NsdManager;
-import android.net.wifi.IWifiScanner;
-import android.net.wifi.RttManager;
-import android.net.wifi.WifiManager;
-import android.net.wifi.WifiScanner;
-import android.net.wifi.aware.IWifiAwareManager;
-import android.net.wifi.aware.WifiAwareManager;
-import android.net.wifi.p2p.IWifiP2pManager;
-import android.net.wifi.p2p.WifiP2pManager;
-import android.net.wifi.rtt.IWifiRttManager;
-import android.net.wifi.rtt.WifiRttManager;
+import android.net.wifi.WifiFrameworkInitializer;
 import android.nfc.NfcManager;
 import android.os.BatteryManager;
 import android.os.BatteryStats;
@@ -166,12 +160,8 @@ import android.service.persistentdata.IPersistentDataBlockService;
 import android.service.persistentdata.PersistentDataBlockManager;
 import android.service.vr.IVrManager;
 import android.telecom.TelecomManager;
-import android.telephony.CarrierConfigManager;
-import android.telephony.SubscriptionManager;
-import android.telephony.TelephonyManager;
+import android.telephony.TelephonyFrameworkInitializer;
 import android.telephony.TelephonyRegistryManager;
-import android.telephony.euicc.EuiccCardManager;
-import android.telephony.euicc.EuiccManager;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
@@ -205,6 +195,7 @@ import java.util.Map;
  *
  * @hide
  */
+@SystemApi
 public final class SystemServiceRegistry {
     private static final String TAG = "SystemServiceRegistry";
 
@@ -604,13 +595,6 @@ public final class SystemServiceRegistry {
                         return new SystemUpdateManager(service);
                     }});
 
-        registerService(Context.TELEPHONY_SERVICE, TelephonyManager.class,
-                new CachedServiceFetcher<TelephonyManager>() {
-            @Override
-            public TelephonyManager createService(ContextImpl ctx) {
-                return new TelephonyManager(ctx.getOuterContext());
-            }});
-
         registerService(Context.TELEPHONY_REGISTRY_SERVICE, TelephonyRegistryManager.class,
             new CachedServiceFetcher<TelephonyRegistryManager>() {
                 @Override
@@ -618,40 +602,12 @@ public final class SystemServiceRegistry {
                     return new TelephonyRegistryManager(ctx);
                 }});
 
-        registerService(Context.TELEPHONY_SUBSCRIPTION_SERVICE, SubscriptionManager.class,
-                new CachedServiceFetcher<SubscriptionManager>() {
-            @Override
-            public SubscriptionManager createService(ContextImpl ctx) throws ServiceNotFoundException {
-                return new SubscriptionManager(ctx.getOuterContext());
-            }});
-
-        registerService(Context.CARRIER_CONFIG_SERVICE, CarrierConfigManager.class,
-                new CachedServiceFetcher<CarrierConfigManager>() {
-            @Override
-            public CarrierConfigManager createService(ContextImpl ctx) {
-                return new CarrierConfigManager(ctx.getOuterContext());
-            }});
-
         registerService(Context.TELECOM_SERVICE, TelecomManager.class,
                 new CachedServiceFetcher<TelecomManager>() {
             @Override
             public TelecomManager createService(ContextImpl ctx) {
                 return new TelecomManager(ctx.getOuterContext());
             }});
-
-        registerService(Context.EUICC_SERVICE, EuiccManager.class,
-                new CachedServiceFetcher<EuiccManager>() {
-            @Override
-            public EuiccManager createService(ContextImpl ctx) {
-                return new EuiccManager(ctx.getOuterContext());
-            }});
-
-        registerService(Context.EUICC_CARD_SERVICE, EuiccCardManager.class,
-                new CachedServiceFetcher<EuiccCardManager>() {
-                    @Override
-                    public EuiccCardManager createService(ContextImpl ctx) {
-                        return new EuiccCardManager(ctx.getOuterContext());
-                    }});
 
         registerService(Context.UI_MODE_SERVICE, UiModeManager.class,
                 new CachedServiceFetcher<UiModeManager>() {
@@ -728,66 +684,6 @@ public final class SystemServiceRegistry {
                 return new LowpanManager(ctx.getOuterContext(), service,
                         ConnectivityThread.getInstanceLooper());
             }});
-
-        registerService(Context.WIFI_SERVICE, WifiManager.class,
-                new CachedServiceFetcher<WifiManager>() {
-            @Override
-            public WifiManager createService(ContextImpl ctx) {
-                return new WifiManager(ctx.getOuterContext(),
-                        ConnectivityThread.getInstanceLooper());
-            }});
-
-        registerService(Context.WIFI_P2P_SERVICE, WifiP2pManager.class,
-                new StaticServiceFetcher<WifiP2pManager>() {
-            @Override
-            public WifiP2pManager createService() throws ServiceNotFoundException {
-                IBinder b = ServiceManager.getServiceOrThrow(Context.WIFI_P2P_SERVICE);
-                IWifiP2pManager service = IWifiP2pManager.Stub.asInterface(b);
-                return new WifiP2pManager(service);
-            }});
-
-        registerService(Context.WIFI_AWARE_SERVICE, WifiAwareManager.class,
-                new CachedServiceFetcher<WifiAwareManager>() {
-            @Override
-            public WifiAwareManager createService(ContextImpl ctx) throws ServiceNotFoundException {
-                IBinder b = ServiceManager.getServiceOrThrow(Context.WIFI_AWARE_SERVICE);
-                IWifiAwareManager service = IWifiAwareManager.Stub.asInterface(b);
-                if (service == null) {
-                    return null;
-                }
-                return new WifiAwareManager(ctx.getOuterContext(), service);
-            }});
-
-        registerService(Context.WIFI_SCANNING_SERVICE, WifiScanner.class,
-                new CachedServiceFetcher<WifiScanner>() {
-            @Override
-            public WifiScanner createService(ContextImpl ctx) throws ServiceNotFoundException {
-                IBinder b = ServiceManager.getServiceOrThrow(Context.WIFI_SCANNING_SERVICE);
-                IWifiScanner service = IWifiScanner.Stub.asInterface(b);
-                return new WifiScanner(ctx.getOuterContext(), service,
-                        ConnectivityThread.getInstanceLooper());
-            }});
-
-        registerService(Context.WIFI_RTT_SERVICE, RttManager.class,
-                new CachedServiceFetcher<RttManager>() {
-                @Override
-                public RttManager createService(ContextImpl ctx) throws ServiceNotFoundException {
-                    IBinder b = ServiceManager.getServiceOrThrow(Context.WIFI_RTT_RANGING_SERVICE);
-                    IWifiRttManager service = IWifiRttManager.Stub.asInterface(b);
-                    return new RttManager(ctx.getOuterContext(),
-                            new WifiRttManager(ctx.getOuterContext(), service));
-                }});
-
-        registerService(Context.WIFI_RTT_RANGING_SERVICE, WifiRttManager.class,
-                new CachedServiceFetcher<WifiRttManager>() {
-                    @Override
-                    public WifiRttManager createService(ContextImpl ctx)
-                            throws ServiceNotFoundException {
-                        IBinder b = ServiceManager.getServiceOrThrow(
-                                Context.WIFI_RTT_RANGING_SERVICE);
-                        IWifiRttManager service = IWifiRttManager.Stub.asInterface(b);
-                        return new WifiRttManager(ctx.getOuterContext(), service);
-                    }});
 
         registerService(Context.ETHERNET_SERVICE, EthernetManager.class,
                 new CachedServiceFetcher<EthernetManager>() {
@@ -1230,6 +1126,14 @@ public final class SystemServiceRegistry {
                         return new TimeDetector();
                     }});
 
+        registerService(Context.TIME_ZONE_DETECTOR_SERVICE, TimeZoneDetector.class,
+                new CachedServiceFetcher<TimeZoneDetector>() {
+                    @Override
+                    public TimeZoneDetector createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        return new TimeZoneDetector();
+                    }});
+
         registerService(Context.PERMISSION_SERVICE, PermissionManager.class,
                 new CachedServiceFetcher<PermissionManager>() {
                     @Override
@@ -1298,9 +1202,11 @@ public final class SystemServiceRegistry {
         try {
             // Note: the following functions need to be @SystemApis, once they become mainline
             // modules.
-
             JobSchedulerFrameworkInitializer.registerServiceWrappers();
             BlobStoreManagerFrameworkInitializer.initialize();
+            TelephonyFrameworkInitializer.registerServiceWrappers();
+            AppSearchManagerFrameworkInitializer.initialize();
+            WifiFrameworkInitializer.registerServiceWrappers();
         } finally {
             // If any of the above code throws, we're in a pretty bad shape and the process
             // will likely crash, but we'll reset it just in case there's an exception handler...
@@ -1350,18 +1256,20 @@ public final class SystemServiceRegistry {
 
     /**
      * Callback interface used as a parameter to {@link #registerStaticService(
-     * String, Class, StaticServiceProducerNoBinder)}, which generates a service wrapper instance
-     * that's not tied to any context and does not take a service binder object in the constructor.
+     * String, Class, StaticServiceProducerWithoutBinder)}, which generates a service wrapper
+     * instance that's not tied to any context and does not take a service binder object in the
+     * constructor.
      *
      * @param <TServiceClass> type of the service wrapper class.
      *
      * @hide
      */
-    //@SystemApi TODO Make it a system API.
-    public interface StaticServiceProducerNoBinder<TServiceClass> {
+    @SystemApi
+    public interface StaticServiceProducerWithoutBinder<TServiceClass> {
         /**
          * Return a new service wrapper of type {@code TServiceClass}.
          */
+        @NonNull
         TServiceClass createService();
     }
 
@@ -1374,18 +1282,19 @@ public final class SystemServiceRegistry {
      *
      * @hide
      */
-    //@SystemApi TODO Make it a system API.
+    @SystemApi
     public interface StaticServiceProducerWithBinder<TServiceClass> {
         /**
          * Return a new service wrapper of type {@code TServiceClass} backed by a given
          * service binder object.
          */
-        TServiceClass createService(IBinder serviceBinder);
+        @NonNull
+        TServiceClass createService(@NonNull IBinder serviceBinder);
     }
 
     /**
      * Callback interface used as a parameter to {@link #registerContextAwareService(
-     * String, Class, ContextAwareServiceProducerNoBinder)},
+     * String, Class, ContextAwareServiceProducerWithoutBinder)},
      * which generates a service wrapper instance
      * that's tied to a specific context and does not take a service binder object in the
      * constructor.
@@ -1394,15 +1303,15 @@ public final class SystemServiceRegistry {
      *
      * @hide
      */
-    //@SystemApi TODO Make it a system API.
-    public interface ContextAwareServiceProducerNoBinder<TServiceClass> {
+    @SystemApi
+    public interface ContextAwareServiceProducerWithoutBinder<TServiceClass> {
         /**
          * Return a new service wrapper of type {@code TServiceClass} tied to a given
          * {@code context}.
-         *
-         * TODO Do we need to pass the "base context" too?
          */
-        TServiceClass createService(Context context);
+        @NonNull
+        //TODO Do we need to pass the "base context" too?
+        TServiceClass createService(@NonNull Context context);
     }
 
     /**
@@ -1415,15 +1324,15 @@ public final class SystemServiceRegistry {
      *
      * @hide
      */
-    //@SystemApi TODO Make it a system API.
+    @SystemApi
     public interface ContextAwareServiceProducerWithBinder<TServiceClass> {
         /**
          * Return a new service wrapper of type {@code TServiceClass} backed by a given
          * service binder object that's tied to a given {@code context}.
-         *
-         * TODO Do we need to pass the "base context" too?
          */
-        TServiceClass createService(Context context, IBinder serviceBinder);
+        @NonNull
+        //TODO Do we need to pass the "base context" too?
+        TServiceClass createService(@NonNull Context context, @NonNull IBinder serviceBinder);
     }
 
     /**
@@ -1441,7 +1350,7 @@ public final class SystemServiceRegistry {
      *
      * @hide
      */
-    //@SystemApi TODO Make it a system API.
+    @SystemApi
     public static <TServiceClass> void registerStaticService(
             @NonNull String serviceName, @NonNull Class<TServiceClass> serviceWrapperClass,
             @NonNull StaticServiceProducerWithBinder<TServiceClass> serviceProducer) {
@@ -1465,10 +1374,10 @@ public final class SystemServiceRegistry {
      *
      * @hide
      */
-    //@SystemApi TODO Make it a system API.
+    @SystemApi
     public static <TServiceClass> void registerStaticService(
             @NonNull String serviceName, @NonNull Class<TServiceClass> serviceWrapperClass,
-            @NonNull StaticServiceProducerNoBinder<TServiceClass> serviceProducer) {
+            @NonNull StaticServiceProducerWithoutBinder<TServiceClass> serviceProducer) {
         ensureInitializing("registerStaticService");
         Preconditions.checkStringNotEmpty(serviceName);
         Preconditions.checkNotNull(serviceWrapperClass);
@@ -1498,7 +1407,7 @@ public final class SystemServiceRegistry {
      *
      * @hide
      */
-    //@SystemApi TODO Make it a system API.
+    @SystemApi
     public static <TServiceClass> void registerContextAwareService(
             @NonNull String serviceName, @NonNull Class<TServiceClass> serviceWrapperClass,
             @NonNull ContextAwareServiceProducerWithBinder<TServiceClass> serviceProducer) {
@@ -1526,10 +1435,10 @@ public final class SystemServiceRegistry {
      *
      * @hide
      */
-    //@SystemApi TODO Make it a system API.
+    @SystemApi
     public static <TServiceClass> void registerContextAwareService(
             @NonNull String serviceName, @NonNull Class<TServiceClass> serviceWrapperClass,
-            @NonNull ContextAwareServiceProducerNoBinder<TServiceClass> serviceProducer) {
+            @NonNull ContextAwareServiceProducerWithoutBinder<TServiceClass> serviceProducer) {
         ensureInitializing("registerContextAwareService");
         Preconditions.checkStringNotEmpty(serviceName);
         Preconditions.checkNotNull(serviceWrapperClass);

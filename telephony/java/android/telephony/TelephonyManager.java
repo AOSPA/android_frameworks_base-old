@@ -86,7 +86,6 @@ import android.util.Pair;
 
 import com.android.ims.internal.IImsServiceFeatureCallback;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.telecom.ITelecomService;
 import com.android.internal.telephony.CellNetworkScanResult;
 import com.android.internal.telephony.INumberVerificationCallback;
 import com.android.internal.telephony.IOns;
@@ -5182,13 +5181,11 @@ public class TelephonyManager {
      * @return the current call state.
      */
     public @CallState int getCallState() {
-        try {
-            ITelecomService telecom = getTelecomService();
-            if (telecom != null) {
-                return telecom.getCallState();
+        if (mContext != null) {
+            TelecomManager telecomManager = mContext.getSystemService(TelecomManager.class);
+            if (telecomManager != null) {
+                return telecomManager.getCallState();
             }
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error calling ITelecomService#getCallState", e);
         }
         return CALL_STATE_IDLE;
     }
@@ -5345,13 +5342,6 @@ public class TelephonyManager {
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     private ITelephony getITelephony() {
         return ITelephony.Stub.asInterface(ServiceManager.getService(Context.TELEPHONY_SERVICE));
-    }
-
-    /**
-    * @hide
-    */
-    private ITelecomService getTelecomService() {
-        return ITelecomService.Stub.asInterface(ServiceManager.getService(TELECOM_SERVICE));
     }
 
     private ITelephonyRegistry getTelephonyRegistry() {
@@ -5688,16 +5678,24 @@ public class TelephonyManager {
                     new ICellInfoCallback.Stub() {
                         @Override
                         public void onCellInfo(List<CellInfo> cellInfo) {
-                            Binder.withCleanCallingIdentity(() ->
-                                    executor.execute(() -> callback.onCellInfo(cellInfo)));
+                            final long identity = Binder.clearCallingIdentity();
+                            try {
+                                executor.execute(() -> callback.onCellInfo(cellInfo));
+                            } finally {
+                                Binder.restoreCallingIdentity(identity);
+                            }
                         }
 
                         @Override
                         public void onError(int errorCode, String exceptionName, String message) {
-                            Binder.withCleanCallingIdentity(() ->
-                                    executor.execute(() -> callback.onError(
-                                            errorCode,
-                                            createThrowableByClassName(exceptionName, message))));
+                            final long identity = Binder.clearCallingIdentity();
+                            try {
+                                executor.execute(() -> callback.onError(
+                                        errorCode,
+                                        createThrowableByClassName(exceptionName, message)));
+                            } finally {
+                                Binder.restoreCallingIdentity(identity);
+                            }
                         }
                     }, getOpPackageName(), getFeatureId());
         } catch (RemoteException ex) {
@@ -5730,16 +5728,25 @@ public class TelephonyManager {
                     new ICellInfoCallback.Stub() {
                         @Override
                         public void onCellInfo(List<CellInfo> cellInfo) {
-                            Binder.withCleanCallingIdentity(() ->
-                                    executor.execute(() -> callback.onCellInfo(cellInfo)));
+                            final long identity = Binder.clearCallingIdentity();
+                            try {
+                                executor.execute(() -> callback.onCellInfo(cellInfo));
+                            } finally {
+                                Binder.restoreCallingIdentity(identity);
+                            }
+
                         }
 
                         @Override
                         public void onError(int errorCode, String exceptionName, String message) {
-                            Binder.withCleanCallingIdentity(() ->
-                                    executor.execute(() -> callback.onError(
-                                            errorCode,
-                                            createThrowableByClassName(exceptionName, message))));
+                            final long identity = Binder.clearCallingIdentity();
+                            try {
+                                executor.execute(() -> callback.onError(
+                                        errorCode,
+                                        createThrowableByClassName(exceptionName, message)));
+                            } finally {
+                                Binder.restoreCallingIdentity(identity);
+                            }
                         }
                     }, getOpPackageName(), getFeatureId(), workSource);
         } catch (RemoteException ex) {
@@ -6604,16 +6611,24 @@ public class TelephonyManager {
         INumberVerificationCallback internalCallback = new INumberVerificationCallback.Stub() {
             @Override
             public void onCallReceived(String phoneNumber) {
-                Binder.withCleanCallingIdentity(() ->
-                        executor.execute(() ->
-                                callback.onCallReceived(phoneNumber)));
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() ->
+                            callback.onCallReceived(phoneNumber));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
             }
 
             @Override
             public void onVerificationFailed(int reason) {
-                Binder.withCleanCallingIdentity(() ->
-                        executor.execute(() ->
-                                callback.onVerificationFailed(reason)));
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() ->
+                            callback.onVerificationFailed(reason));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
             }
         };
 
@@ -7753,20 +7768,20 @@ public class TelephonyManager {
      * {@link CarrierConfigManager#KEY_EMERGENCY_SMS_MODE_TIMER_MS_INT}. If
      * the carrier does not support this mode, this function will always return false.
      *
-     * @return true if this device is in emergency SMS mode, false otherwise.
+     * @return {@code true} if this device is in emergency SMS mode, {@code false} otherwise.
      *
      * @hide
      */
+    @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public boolean isInEmergencySmsMode() {
-
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
                 return telephony.isInEmergencySmsMode();
             }
         } catch (RemoteException ex) {
-            Rlog.e(TAG, "getNetworkSelectionMode RemoteException", ex);
+            Rlog.e(TAG, "isInEmergencySmsMode RemoteException", ex);
         }
         return false;
     }
@@ -7859,8 +7874,8 @@ public class TelephonyManager {
      */
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     @SystemApi
-    public boolean isTetherApnRequired() {
-        return isTetherApnRequired(getSubId(SubscriptionManager.getActiveDataSubscriptionId()));
+    public boolean isTetheringApnRequired() {
+        return isTetheringApnRequired(getSubId(SubscriptionManager.getActiveDataSubscriptionId()));
     }
 
     /**
@@ -7870,11 +7885,11 @@ public class TelephonyManager {
      * @return {@code true} if DUN APN is required for tethering.
      * @hide
      */
-    public boolean isTetherApnRequired(int subId) {
+    public boolean isTetheringApnRequired(int subId) {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null)
-                return telephony.isTetherApnRequiredForSubscriber(subId);
+                return telephony.isTetheringApnRequiredForSubscriber(subId);
         } catch (RemoteException ex) {
             Rlog.e(TAG, "hasMatchedTetherApnSetting RemoteException", ex);
         } catch (NullPointerException ex) {
@@ -8994,7 +9009,10 @@ public class TelephonyManager {
     @Deprecated
     public boolean isTtyModeSupported() {
         try {
-            TelecomManager telecomManager = TelecomManager.from(mContext);
+            TelecomManager telecomManager = null;
+            if (mContext != null) {
+                telecomManager = mContext.getSystemService(TelecomManager.class);
+            }
             if (telecomManager != null) {
                 return telecomManager.isTtySupported();
             }
@@ -11094,14 +11112,66 @@ public class TelephonyManager {
     }
 
     /**
-     * Broadcast intent action for Ota emergency number database installation complete.
+     * Indicates Emergency number database version is invalid.
      *
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @TestApi
     @SystemApi
-    public static final String ACTION_OTA_EMERGENCY_NUMBER_DB_INSTALLED =
-            "android.telephony.action.OTA_EMERGENCY_NUMBER_DB_INSTALLED";
+    public static final int INVALID_EMERGENCY_NUMBER_DB_VERSION = -1;
+
+    /**
+     * Notify Telephony for OTA emergency number database installation complete.
+     *
+     * <p> Requires permission:
+     * {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE}
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    @SystemApi
+    public void notifyOtaEmergencyNumberDbInstalled() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                telephony.notifyOtaEmergencyNumberDbInstalled();
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            Log.e(TAG, "notifyOtaEmergencyNumberDatabaseInstalled RemoteException", ex);
+            ex.rethrowAsRuntimeException();
+        }
+    }
+
+    /**
+     * Override the file path for testing OTA emergency number database in a file partition.
+     *
+     * @param otaFilePath The test OTA emergency number database file path;
+     *                    if "RESET", recover the original database file partition.
+     *                    Format: <root file folder>@<file path>
+     *
+     * <p> Requires permission:
+     * {@link android.Manifest.permission#READ_ACTIVE_EMERGENCY_SESSION}
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.READ_ACTIVE_EMERGENCY_SESSION)
+    @SystemApi
+    @TestApi
+    public void updateTestOtaEmergencyNumberDbFilePath(@NonNull String otaFilePath) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                telephony.updateTestOtaEmergencyNumberDbFilePath(otaFilePath);
+            } else {
+                throw new IllegalStateException("telephony service is null.");
+            }
+        } catch (RemoteException ex) {
+            Log.e(TAG, "notifyOtaEmergencyNumberDatabaseInstalled RemoteException", ex);
+            ex.rethrowAsRuntimeException();
+        }
+    }
 
     /**
      * Returns whether {@link TelephonyManager#ACTION_EMERGENCY_ASSISTANCE emergency assistance} is
@@ -11299,12 +11369,37 @@ public class TelephonyManager {
         return false;
     }
 
+    /**
+     * A test API to return the emergency number db version.
+     *
+     * <p>Requires Permission:
+     *   {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE READ_PRIVILEGED_PHONE_STATE}
+     *
+     * @hide
+     */
+    @TestApi
+    @SystemApi
+    public int getEmergencyNumberDbVersion() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.getEmergencyNumberDbVersion(getSubId());
+            }
+        } catch (RemoteException ex) {
+            Log.e(TAG, "getEmergencyNumberDbVersion RemoteException", ex);
+            ex.rethrowAsRuntimeException();
+        }
+        return INVALID_EMERGENCY_NUMBER_DB_VERSION;
+    }
+
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = {"SET_OPPORTUNISTIC_SUB"}, value = {
             SET_OPPORTUNISTIC_SUB_SUCCESS,
             SET_OPPORTUNISTIC_SUB_VALIDATION_FAILED,
-            SET_OPPORTUNISTIC_SUB_INACTIVE_SUBSCRIPTION})
+            SET_OPPORTUNISTIC_SUB_INACTIVE_SUBSCRIPTION,
+            SET_OPPORTUNISTIC_SUB_NO_OPPORTUNISTIC_SUB_AVAILABLE,
+            SET_OPPORTUNISTIC_SUB_REMOTE_SERVICE_EXCEPTION})
     public @interface SetOpportunisticSubscriptionResult {}
 
     /**
@@ -11322,6 +11417,17 @@ public class TelephonyManager {
      */
     public static final int SET_OPPORTUNISTIC_SUB_INACTIVE_SUBSCRIPTION = 2;
 
+    /**
+     * The subscription is not valid. It must be an opportunistic subscription.
+     */
+    public static final int SET_OPPORTUNISTIC_SUB_NO_OPPORTUNISTIC_SUB_AVAILABLE = 3;
+
+    /**
+     * Subscription service happened remote exception.
+     */
+    public static final int SET_OPPORTUNISTIC_SUB_REMOTE_SERVICE_EXCEPTION = 4;
+
+
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = {"UPDATE_AVAILABLE_NETWORKS"}, value = {
@@ -11329,7 +11435,13 @@ public class TelephonyManager {
             UPDATE_AVAILABLE_NETWORKS_UNKNOWN_FAILURE,
             UPDATE_AVAILABLE_NETWORKS_ABORTED,
             UPDATE_AVAILABLE_NETWORKS_INVALID_ARGUMENTS,
-            UPDATE_AVAILABLE_NETWORKS_NO_CARRIER_PRIVILEGE})
+            UPDATE_AVAILABLE_NETWORKS_NO_CARRIER_PRIVILEGE,
+            UPDATE_AVAILABLE_NETWORKS_DISABLE_MODEM_FAIL,
+            UPDATE_AVAILABLE_NETWORKS_ENABLE_MODEM_FAIL,
+            UPDATE_AVAILABLE_NETWORKS_MULTIPLE_NETWORKS_NOT_SUPPORTED,
+            UPDATE_AVAILABLE_NETWORKS_NO_OPPORTUNISTIC_SUB_AVAILABLE,
+            UPDATE_AVAILABLE_NETWORKS_REMOTE_SERVICE_EXCEPTION,
+            UPDATE_AVAILABLE_NETWORKS_SERVICE_IS_DISABLED})
     public @interface UpdateAvailableNetworksResult {}
 
     /**
@@ -11356,6 +11468,36 @@ public class TelephonyManager {
      * No carrier privilege.
      */
     public static final int UPDATE_AVAILABLE_NETWORKS_NO_CARRIER_PRIVILEGE = 4;
+
+    /**
+     * Disable modem fail.
+     */
+    public static final int UPDATE_AVAILABLE_NETWORKS_DISABLE_MODEM_FAIL = 5;
+
+    /**
+     * Enable modem fail.
+     */
+    public static final int UPDATE_AVAILABLE_NETWORKS_ENABLE_MODEM_FAIL = 6;
+
+    /**
+     * Carrier app does not support multiple available networks.
+     */
+    public static final int UPDATE_AVAILABLE_NETWORKS_MULTIPLE_NETWORKS_NOT_SUPPORTED = 7;
+
+    /**
+     * The subscription is not valid. It must be an opportunistic subscription.
+     */
+    public static final int UPDATE_AVAILABLE_NETWORKS_NO_OPPORTUNISTIC_SUB_AVAILABLE = 8;
+
+    /**
+     * There is no OpportunisticNetworkService.
+     */
+    public static final int UPDATE_AVAILABLE_NETWORKS_REMOTE_SERVICE_EXCEPTION = 9;
+
+    /**
+     * OpportunisticNetworkService is disabled.
+     */
+    public static final int UPDATE_AVAILABLE_NETWORKS_SERVICE_IS_DISABLED = 10;
 
     /**
      * Set preferred opportunistic data subscription id.
@@ -11386,9 +11528,14 @@ public class TelephonyManager {
                 if (executor == null || callback == null) {
                     return;
                 }
-                Binder.withCleanCallingIdentity(() -> executor.execute(() -> {
-                    callback.accept(SET_OPPORTUNISTIC_SUB_INACTIVE_SUBSCRIPTION);
-                }));
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> {
+                        callback.accept(SET_OPPORTUNISTIC_SUB_REMOTE_SERVICE_EXCEPTION);
+                    });
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
                 return;
             }
             ISetOpportunisticDataCallback callbackStub = new ISetOpportunisticDataCallback.Stub() {
@@ -11397,9 +11544,14 @@ public class TelephonyManager {
                     if (executor == null || callback == null) {
                         return;
                     }
-                    Binder.withCleanCallingIdentity(() -> executor.execute(() -> {
-                        callback.accept(result);
-                    }));
+                    final long identity = Binder.clearCallingIdentity();
+                    try {
+                        executor.execute(() -> {
+                            callback.accept(result);
+                        });
+                    } finally {
+                        Binder.restoreCallingIdentity(identity);
+                    }
                 }
             };
 
@@ -11473,14 +11625,23 @@ public class TelephonyManager {
                     return;
                 }
                 if (iOpportunisticNetworkService == null) {
-                    /* Todo<b/130595455> passing unknown due to lack of good error codes */
-                    Binder.withCleanCallingIdentity(() -> executor.execute(() -> {
-                        callback.accept(UPDATE_AVAILABLE_NETWORKS_UNKNOWN_FAILURE);
-                    }));
+                    final long identity = Binder.clearCallingIdentity();
+                    try {
+                        executor.execute(() -> {
+                            callback.accept(UPDATE_AVAILABLE_NETWORKS_REMOTE_SERVICE_EXCEPTION);
+                        });
+                    } finally {
+                        Binder.restoreCallingIdentity(identity);
+                    }
                 } else {
-                    Binder.withCleanCallingIdentity(() -> executor.execute(() -> {
-                        callback.accept(UPDATE_AVAILABLE_NETWORKS_INVALID_ARGUMENTS);
-                    }));
+                    final long identity = Binder.clearCallingIdentity();
+                    try {
+                        executor.execute(() -> {
+                            callback.accept(UPDATE_AVAILABLE_NETWORKS_INVALID_ARGUMENTS);
+                        });
+                    } finally {
+                        Binder.restoreCallingIdentity(identity);
+                    }
                 }
                 return;
             }
@@ -11491,9 +11652,14 @@ public class TelephonyManager {
                             if (executor == null || callback == null) {
                                 return;
                             }
-                            Binder.withCleanCallingIdentity(() -> executor.execute(() -> {
-                                callback.accept(result);
-                            }));
+                            final long identity = Binder.clearCallingIdentity();
+                            try {
+                                executor.execute(() -> {
+                                    callback.accept(result);
+                                });
+                            } finally {
+                                Binder.restoreCallingIdentity(identity);
+                            }
                         }
                     };
             iOpportunisticNetworkService.updateAvailableNetworks(availableNetworks, callbackStub,

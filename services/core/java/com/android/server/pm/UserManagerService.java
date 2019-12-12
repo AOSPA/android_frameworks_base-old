@@ -564,7 +564,7 @@ public class UserManagerService extends IUserManager.Stub {
             readUserListLP();
             sInstance = this;
         }
-        mSystemPackageInstaller = new UserSystemPackageInstaller(this);
+        mSystemPackageInstaller = new UserSystemPackageInstaller(this, mUserTypes);
         mLocalService = new LocalService();
         LocalServices.addService(UserManagerInternal.class, mLocalService);
         mLockPatternUtils = new LockPatternUtils(mContext);
@@ -1205,6 +1205,24 @@ public class UserManagerService extends IUserManager.Stub {
         }
     }
 
+    /** Returns whether the given user type is one of the FULL user types. */
+    boolean isUserTypeSubtypeOfFull(String userType) {
+        UserTypeDetails userTypeDetails = mUserTypes.get(userType);
+        return userTypeDetails != null && userTypeDetails.isFull();
+    }
+
+    /** Returns whether the given user type is one of the PROFILE user types. */
+    boolean isUserTypeSubtypeOfProfile(String userType) {
+        UserTypeDetails userTypeDetails = mUserTypes.get(userType);
+        return userTypeDetails != null && userTypeDetails.isProfile();
+    }
+
+    /** Returns whether the given user type is one of the SYSTEM user types. */
+    boolean isUserTypeSubtypeOfSystem(String userType) {
+        UserTypeDetails userTypeDetails = mUserTypes.get(userType);
+        return userTypeDetails != null && userTypeDetails.isSystem();
+    }
+
     @Override
     public boolean hasBadge(@UserIdInt int userId) {
         checkManageOrInteractPermIfCallerInOtherProfileGroup(userId, "hasBadge");
@@ -1616,13 +1634,14 @@ public class UserManagerService extends IUserManager.Stub {
      * See {@link UserManagerInternal#setDevicePolicyUserRestrictions}
      */
     private void setDevicePolicyUserRestrictionsInner(@UserIdInt int userId,
-            @Nullable Bundle restrictions, boolean isDeviceOwner, int cameraRestrictionScope) {
+            @Nullable Bundle restrictions,
+            @UserManagerInternal.OwnerType int restrictionOwnerType) {
         final Bundle global = new Bundle();
         final Bundle local = new Bundle();
 
         // Sort restrictions into local and global ensuring they don't overlap.
-        UserRestrictionsUtils.sortToGlobalAndLocal(restrictions, isDeviceOwner,
-                cameraRestrictionScope, global, local);
+        UserRestrictionsUtils.sortToGlobalAndLocal(restrictions, restrictionOwnerType, global,
+                local);
 
         boolean globalChanged, localChanged;
         synchronized (mRestrictionsLock) {
@@ -1632,7 +1651,7 @@ public class UserManagerService extends IUserManager.Stub {
             localChanged = updateRestrictionsIfNeededLR(
                     userId, local, mDevicePolicyLocalUserRestrictions);
 
-            if (isDeviceOwner) {
+            if (restrictionOwnerType == UserManagerInternal.OWNER_TYPE_DEVICE_OWNER) {
                 // Remember the global restriction owner userId to be able to make a distinction
                 // in getUserRestrictionSource on who set local policies.
                 mDeviceOwnerUserId = userId;
@@ -3191,6 +3210,13 @@ public class UserManagerService extends IUserManager.Stub {
                         flags |= UserInfo.FLAG_EPHEMERAL;
                     }
 
+                    // Always clear EPHEMERAL for pre-created users, otherwise the storage key
+                    // won't be persisted. The flag will be re-added (if needed) when the
+                    // pre-created user is "converted" to a normal user.
+                    if (preCreate) {
+                        flags &= ~UserInfo.FLAG_EPHEMERAL;
+                    }
+
                     userInfo = new UserInfo(userId, name, null, flags, userType);
                     userInfo.serialNumber = mNextSerialNumber++;
                     userInfo.creationTime = getCreationTime();
@@ -3233,8 +3259,8 @@ public class UserManagerService extends IUserManager.Stub {
                     StorageManager.FLAG_STORAGE_DE | StorageManager.FLAG_STORAGE_CE);
             t.traceEnd();
 
-            final Set<String> installablePackages = // TODO(b/142482943): use userType
-                    mSystemPackageInstaller.getInstallablePackagesForUserType(flags);
+            final Set<String> installablePackages =
+                    mSystemPackageInstaller.getInstallablePackagesForUserType(userType);
             t.traceBegin("PM.createNewUser");
             mPm.createNewUser(userId, installablePackages, disallowedPackages);
             t.traceEnd();
@@ -4409,6 +4435,7 @@ public class UserManagerService extends IUserManager.Stub {
         pw.println("  Supports switchable users: " + UserManager.supportsMultipleUsers());
         pw.println("  All guests ephemeral: " + Resources.getSystem().getBoolean(
                 com.android.internal.R.bool.config_guestUserEphemeral));
+        pw.println("  Force ephemeral users: " + mForceEphemeralUsers);
         pw.println("  Is split-system user: " + UserManager.isSplitSystemUser());
         pw.println("  Is headless-system mode: " + UserManager.isHeadlessSystemUserMode());
         pw.println("  User version: " + mUserVersion);
@@ -4466,9 +4493,9 @@ public class UserManagerService extends IUserManager.Stub {
     private class LocalService extends UserManagerInternal {
         @Override
         public void setDevicePolicyUserRestrictions(@UserIdInt int userId,
-                @Nullable Bundle restrictions, boolean isDeviceOwner, int cameraRestrictionScope) {
-            UserManagerService.this.setDevicePolicyUserRestrictionsInner(userId, restrictions,
-                isDeviceOwner, cameraRestrictionScope);
+                @Nullable Bundle restrictions, @OwnerType int restrictionOwnerType) {
+            UserManagerService.this.setDevicePolicyUserRestrictionsInner(userId,
+                    restrictions, restrictionOwnerType);
         }
 
         @Override

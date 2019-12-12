@@ -125,7 +125,7 @@
 
     <!-- The tiles to display in QuickSettings in retail mode -->
     <string name="quick_settings_tiles_retail_mode" translatable="false">
-        cell,battery,dnd,flashlight,rotation,location
+        night,dark,dnd,flashlight,rotation,location
     </string>
 
     <!-- Whether or not the RSSI tile is capitalized or not. -->
@@ -281,7 +281,6 @@
         <item>com.android.systemui.statusbar.phone.StatusBar</item>
         <item>com.android.systemui.usb.StorageNotification</item>
         <item>com.android.systemui.power.PowerUI</item>
-        <item>com.android.systemui.power.InattentiveSleepWarningController</item>
         <item>com.android.systemui.media.RingtonePlayer</item>
         <item>com.android.systemui.keyboard.KeyboardUI</item>
         <item>com.android.systemui.pip.PipUI</item>

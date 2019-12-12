@@ -21,10 +21,10 @@ import static android.app.StatusBarManager.WINDOW_STATE_SHOWING;
 import static android.app.StatusBarManager.WindowType;
 import static android.app.StatusBarManager.WindowVisibleState;
 import static android.app.StatusBarManager.windowStateToString;
-import static android.view.InsetsState.TYPE_NAVIGATION_BAR;
+import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.containsType;
 import static android.view.WindowInsetsController.APPEARANCE_LOW_PROFILE_BARS;
-import static android.view.WindowInsetsController.APPEARANCE_OPAQUE_SIDE_BARS;
+import static android.view.WindowInsetsController.APPEARANCE_OPAQUE_NAVIGATION_BARS;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON;
 
 import static com.android.systemui.recents.OverviewProxyService.OverviewProxyListener;
@@ -69,7 +69,7 @@ import android.telecom.TelecomManager;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.Display;
-import android.view.InsetsState.InternalInsetType;
+import android.view.InsetsState.InternalInsetsType;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -89,11 +89,11 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.LatencyTracker;
 import com.android.internal.view.AppearanceRegion;
-import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.assist.AssistHandleViewController;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.dagger.qualifiers.MainHandler;
 import com.android.systemui.fragments.FragmentHostManager;
 import com.android.systemui.fragments.FragmentHostManager.FragmentListener;
 import com.android.systemui.model.SysUiState;
@@ -196,7 +196,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     @Nullable
     private AssistHandleViewController mAssistHandlerViewController;
 
-    private Handler mHandler = Dependency.get(Dependency.MAIN_HANDLER);
+    private final Handler mHandler;
 
     private final OverviewProxyListener mOverviewProxyListener = new OverviewProxyListener() {
         @Override
@@ -271,7 +271,8 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
             SysUiState sysUiFlagsContainer,
             BroadcastDispatcher broadcastDispatcher,
             CommandQueue commandQueue, Divider divider,
-            Optional<Recents> recentsOptional, Lazy<StatusBar> statusBarLazy) {
+            Optional<Recents> recentsOptional, Lazy<StatusBar> statusBarLazy,
+            @MainHandler Handler mainHandler) {
         mAccessibilityManagerWrapper = accessibilityManagerWrapper;
         mDeviceProvisionedController = deviceProvisionedController;
         mStatusBarStateController = statusBarStateController;
@@ -287,6 +288,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         mCommandQueue = commandQueue;
         mDivider = divider;
         mRecentsOptional = recentsOptional;
+        mHandler = mainHandler;
     }
 
     // ----- Fragment Lifecycle Callbacks -----
@@ -565,11 +567,11 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     }
 
     @Override
-    public void showTransient(int displayId, @InternalInsetType int[] types) {
+    public void showTransient(int displayId, @InternalInsetsType int[] types) {
         if (displayId != mDisplayId) {
             return;
         }
-        if (!containsType(types, TYPE_NAVIGATION_BAR)) {
+        if (!containsType(types, ITYPE_NAVIGATION_BAR)) {
             return;
         }
         if (!mTransientShown) {
@@ -579,11 +581,11 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     }
 
     @Override
-    public void abortTransient(int displayId, @InternalInsetType int[] types) {
+    public void abortTransient(int displayId, @InternalInsetsType int[] types) {
         if (displayId != mDisplayId) {
             return;
         }
-        if (!containsType(types, TYPE_NAVIGATION_BAR)) {
+        if (!containsType(types, ITYPE_NAVIGATION_BAR)) {
             return;
         }
         clearTransient();
@@ -625,14 +627,14 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     }
 
     private static @TransitionMode int barMode(boolean isTransient, int appearance) {
-        final int lightsOutOpaque = APPEARANCE_LOW_PROFILE_BARS | APPEARANCE_OPAQUE_SIDE_BARS;
+        final int lightsOutOpaque = APPEARANCE_LOW_PROFILE_BARS | APPEARANCE_OPAQUE_NAVIGATION_BARS;
         if (isTransient) {
             return MODE_SEMI_TRANSPARENT;
         } else if ((appearance & lightsOutOpaque) == lightsOutOpaque) {
             return MODE_LIGHTS_OUT;
         } else if ((appearance & APPEARANCE_LOW_PROFILE_BARS) != 0) {
             return MODE_LIGHTS_OUT_TRANSPARENT;
-        } else if ((appearance & APPEARANCE_OPAQUE_SIDE_BARS) != 0) {
+        } else if ((appearance & APPEARANCE_OPAQUE_NAVIGATION_BARS) != 0) {
             return MODE_OPAQUE;
         } else {
             return MODE_TRANSPARENT;

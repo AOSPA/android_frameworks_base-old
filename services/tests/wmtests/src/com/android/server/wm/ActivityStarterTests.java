@@ -765,8 +765,9 @@ public class ActivityStarterTests extends ActivityTestsBase {
                 false /* mockGetLaunchStack */);
 
         // Create a secondary display at bottom.
-        final TestActivityDisplay secondaryDisplay = createNewActivityDisplay();
-        mRootActivityContainer.addChild(secondaryDisplay, POSITION_BOTTOM);
+        final TestActivityDisplay secondaryDisplay =
+                new TestActivityDisplay.Builder(mService, 1000, 1500)
+                        .setPosition(POSITION_BOTTOM).build();
         final ActivityStack stack = secondaryDisplay.createStack(WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
@@ -803,7 +804,8 @@ public class ActivityStarterTests extends ActivityTestsBase {
                 false /* mockGetLaunchStack */);
 
         // Create a secondary display with an activity.
-        final TestActivityDisplay secondaryDisplay = createNewActivityDisplay();
+        final TestActivityDisplay secondaryDisplay =
+                new TestActivityDisplay.Builder(mService, 1000, 1500).build();
         mRootActivityContainer.addChild(secondaryDisplay, POSITION_TOP);
         final ActivityRecord singleTaskActivity = createSingleTaskActivityOn(
                 secondaryDisplay.createStack(WINDOWING_MODE_FULLSCREEN,
@@ -964,5 +966,20 @@ public class ActivityStarterTests extends ActivityTestsBase {
             exceptionCaught = true;
         }
         assertThat(exceptionCaught).isTrue();
+    }
+
+    @Test
+    public void testRecycleTaskFromAnotherUser() {
+        final ActivityStarter starter = prepareStarter(0 /* flags */);
+        starter.mStartActivity = new ActivityBuilder(mService).build();
+        final Task task = new TaskBuilder(mService.mStackSupervisor)
+                .setStack(mService.mRootActivityContainer.getDefaultDisplay().createStack(
+                        WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */))
+                .setUserId(10)
+                .build();
+
+        final int result = starter.recycleTask(task, null, null);
+        assertThat(result == START_SUCCESS).isTrue();
+        assertThat(starter.mAddingToTask).isTrue();
     }
 }

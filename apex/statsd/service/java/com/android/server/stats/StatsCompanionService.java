@@ -18,6 +18,7 @@ package com.android.server.stats;
 import static android.app.AppOpsManager.OP_FLAGS_ALL_TRUSTED;
 import static android.content.pm.PackageInfo.REQUESTED_PERMISSION_GRANTED;
 import static android.content.pm.PermissionInfo.PROTECTION_DANGEROUS;
+import static android.os.Process.THREAD_PRIORITY_BACKGROUND;
 import static android.os.Process.getUidForPid;
 import static android.os.storage.VolumeInfo.TYPE_PRIVATE;
 import static android.os.storage.VolumeInfo.TYPE_PUBLIC;
@@ -115,7 +116,6 @@ import android.util.proto.ProtoStream;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.procstats.IProcessStats;
 import com.android.internal.app.procstats.ProcessStats;
-import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.BatterySipper;
 import com.android.internal.os.BatteryStatsHelper;
 import com.android.internal.os.BinderCallsStats.ExportedCallStat;
@@ -535,7 +535,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
 
     // Assumes that sStatsdLock is held.
     @GuardedBy("sStatsdLock")
-    private final void informAllUidsLocked(Context context) throws RemoteException {
+    private void informAllUidsLocked(Context context) throws RemoteException {
         UserManager um = (UserManager) context.getSystemService(Context.USER_SERVICE);
         PackageManager pm = context.getPackageManager();
         final List<UserInfo> users = um.getUsers(true);
@@ -557,7 +557,11 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             Slog.e(TAG, "Failed to close the read side of the pipe.", e);
         }
         final ParcelFileDescriptor writeFd = fds[1];
-        BackgroundThread.getHandler().post(() -> {
+        HandlerThread backgroundThread = new HandlerThread(
+                "statsCompanionService.bg", THREAD_PRIORITY_BACKGROUND);
+        backgroundThread.start();
+        Handler handler = new Handler(backgroundThread.getLooper());
+        handler.post(() -> {
             FileOutputStream fout = new ParcelFileDescriptor.AutoCloseOutputStream(writeFd);
             try {
                 ProtoOutputStream output = new ProtoOutputStream(fout);
@@ -565,7 +569,8 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 // Add in all the apps for every user/profile.
                 for (UserInfo profile : users) {
                     List<PackageInfo> pi =
-                            pm.getInstalledPackagesAsUser(PackageManager.MATCH_KNOWN_PACKAGES,
+                            pm.getInstalledPackagesAsUser(PackageManager.MATCH_UNINSTALLED_PACKAGES
+                                            | PackageManager.MATCH_ANY_USER,
                                     profile.id);
                     for (int j = 0; j < pi.size(); j++) {
                         if (pi.get(j).applicationInfo != null) {
@@ -606,6 +611,8 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 }
             } finally {
                 IoUtils.closeQuietly(fout);
+                backgroundThread.quit();
+                backgroundThread.interrupt();
             }
         });
     }
@@ -2076,6 +2083,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private void pullDangerousPermissionState(long elapsedNanos, final long wallClockNanos,
             List<StatsLogEventWrapper> pulledData) {
         long token = Binder.clearCallingIdentity();
+        Set<Integer> reportedUids = new HashSet<>();
         try {
             PackageManager pm = mContext.getPackageManager();
 
@@ -2095,6 +2103,12 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                     if (pkg.requestedPermissions == null) {
                         continue;
                     }
+
+                    if (reportedUids.contains(pkg.applicationInfo.uid)) {
+                        // do not report same uid twice
+                        continue;
+                    }
+                    reportedUids.add(pkg.applicationInfo.uid);
 
                     int numPerms = pkg.requestedPermissions.length;
                     for (int permNum  = 0; permNum < numPerms; permNum++) {
@@ -2120,7 +2134,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
 
                         e.writeString(permName);
                         e.writeInt(pkg.applicationInfo.uid);
-                        e.writeString(pkg.packageName);
+                        e.writeString(null);
                         e.writeBoolean((pkg.requestedPermissionsFlags[permNum]
                                 & REQUESTED_PERMISSION_GRANTED) != 0);
                         e.writeInt(permissionFlags);
@@ -2729,23 +2743,20 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 filter.addAction(Intent.ACTION_PACKAGE_ADDED);
                 filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
                 filter.addDataScheme("package");
-                mContext.registerReceiverAsUser(mAppUpdateReceiver, UserHandle.ALL, filter,
-                        null,
-                        null);
+                mContext.registerReceiverForAllUsers(mAppUpdateReceiver, filter, null, null);
 
                 // Setup receiver for user initialize (which happens once for a new user)
                 // and
                 // if a user is removed.
                 filter = new IntentFilter(Intent.ACTION_USER_INITIALIZE);
                 filter.addAction(Intent.ACTION_USER_REMOVED);
-                mContext.registerReceiverAsUser(mUserUpdateReceiver, UserHandle.ALL,
-                        filter, null, null);
+                mContext.registerReceiverForAllUsers(mUserUpdateReceiver, filter, null, null);
 
                 // Setup receiver for device reboots or shutdowns.
                 filter = new IntentFilter(Intent.ACTION_REBOOT);
                 filter.addAction(Intent.ACTION_SHUTDOWN);
-                mContext.registerReceiverAsUser(
-                        mShutdownEventReceiver, UserHandle.ALL, filter, null, null);
+                mContext.registerReceiverForAllUsers(
+                        mShutdownEventReceiver, filter, null, null);
                 final long token = Binder.clearCallingIdentity();
                 try {
                     // Pull the latest state of UID->app name, version mapping when

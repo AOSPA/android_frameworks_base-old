@@ -698,7 +698,12 @@ public class PhoneStatusBarPolicy
     };
 
     private void updateHotspotIcon() {
-        int generation = mWifiManager.getSoftApWifiGeneration();
+        int generation;
+        if (mWifiManager != null) {
+            generation = mWifiManager.getSoftApWifiGeneration();
+        } else {
+            generation = WifiManager.WIFI_GENERATION_DEFAULT; // boot not completed yet
+        }
         if (generation == WifiManager.WIFI_GENERATION_6) {
             mIconController.setIcon(mSlotHotspot, R.drawable.stat_sys_wifi_6_hotspot,
                 mContext.getString(R.string.accessibility_status_bar_hotspot));

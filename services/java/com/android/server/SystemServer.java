@@ -43,7 +43,7 @@ import android.database.sqlite.SQLiteGlobal;
 import android.hardware.display.DisplayManagerInternal;
 import android.net.ConnectivityModuleConnector;
 import android.net.NetworkStackClient;
-import android.net.wifi.WifiStackClient;
+import android.net.TetheringManager;
 import android.os.BaseBundle;
 import android.os.Binder;
 import android.os.Build;
@@ -138,6 +138,7 @@ import com.android.server.policy.role.LegacyRoleResolutionPolicy;
 import com.android.server.power.PowerManagerService;
 import com.android.server.power.ShutdownThread;
 import com.android.server.power.ThermalManagerService;
+import com.android.server.recoverysystem.RecoverySystemService;
 import com.android.server.restrictions.RestrictionsManagerService;
 import com.android.server.role.RoleManagerService;
 import com.android.server.rollback.RollbackManagerService;
@@ -272,6 +273,8 @@ public final class SystemServer {
             "com.android.internal.car.CarServiceHelperService";
     private static final String TIME_DETECTOR_SERVICE_CLASS =
             "com.android.server.timedetector.TimeDetectorService$Lifecycle";
+    private static final String TIME_ZONE_DETECTOR_SERVICE_CLASS =
+            "com.android.server.timezonedetector.TimeZoneDetectorService$Lifecycle";
     private static final String ACCESSIBILITY_MANAGER_SERVICE_CLASS =
             "com.android.server.accessibility.AccessibilityManagerService$Lifecycle";
     private static final String ADB_SERVICE_CLASS =
@@ -284,7 +287,8 @@ public final class SystemServer {
             "com.android.server.DeviceIdleController";
     private static final String BLOB_STORE_MANAGER_SERVICE_CLASS =
             "com.android.server.blob.BlobStoreManagerService";
-
+    private static final String APP_SEARCH_MANAGER_SERVICE_CLASS =
+            "com.android.server.appsearch.AppSearchManagerService";
     private static final String PERSISTENT_DATA_BLOCK_PROP = "ro.frp.pst";
 
     private static final String UNCRYPT_PACKAGE_FILE = "/cache/recovery/uncrypt_file";
@@ -389,15 +393,6 @@ public final class SystemServer {
 
             EventLog.writeEvent(EventLogTags.SYSTEM_SERVER_START,
                     mStartCount, mRuntimeStartUptime, mRuntimeStartElapsedTime);
-
-            // If a device's clock is before 1970 (before 0), a lot of
-            // APIs crash dealing with negative numbers, notably
-            // java.io.File#setLastModified, so instead we fake it and
-            // hope that time from cell towers or NTP fixes it shortly.
-            if (System.currentTimeMillis() < EARLIEST_SUPPORTED_TIME) {
-                Slog.w(TAG, "System clock is before 1970; setting to 1970.");
-                SystemClock.setCurrentTimeMillis(EARLIEST_SUPPORTED_TIME);
-            }
 
             //
             // Default the timezone property to GMT if not set.
@@ -707,7 +702,7 @@ public final class SystemServer {
 
         // Bring up recovery system in case a rescue party needs a reboot
         t.traceBegin("StartRecoverySystemService");
-        mSystemServiceManager.startService(RecoverySystemService.class);
+        mSystemServiceManager.startService(RecoverySystemService.Lifecycle.class);
         t.traceEnd();
 
         // Now that we have the bare essentials of the OS up and running, take
@@ -1128,9 +1123,10 @@ public final class SystemServer {
             SignedConfigService.registerUpdateReceiver(mSystemContext);
             t.traceEnd();
 
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
             Slog.e("System", "******************************************");
-            Slog.e("System", "************ Failure starting core service", e);
+            Slog.e("System", "************ Failure starting core service");
+            throw e;
         }
 
         // Before things start rolling, be sure we have decided whether
@@ -1376,6 +1372,40 @@ public final class SystemServer {
             t.traceEnd();
 
             if (context.getPackageManager().hasSystemFeature(
+                    PackageManager.FEATURE_WIFI)) {
+                // Wifi Service must be started first for wifi-related services.
+                t.traceBegin("StartWifi");
+                mSystemServiceManager.startService(WIFI_SERVICE_CLASS);
+                t.traceEnd();
+                t.traceBegin("StartWifiScanning");
+                mSystemServiceManager.startService(
+                        "com.android.server.wifi.scanner.WifiScanningService");
+                t.traceEnd();
+            }
+
+            if (context.getPackageManager().hasSystemFeature(
+                    PackageManager.FEATURE_WIFI_RTT)) {
+                t.traceBegin("StartRttService");
+                mSystemServiceManager.startService(
+                        "com.android.server.wifi.rtt.RttService");
+                t.traceEnd();
+            }
+
+            if (context.getPackageManager().hasSystemFeature(
+                    PackageManager.FEATURE_WIFI_AWARE)) {
+                t.traceBegin("StartWifiAware");
+                mSystemServiceManager.startService(WIFI_AWARE_SERVICE_CLASS);
+                t.traceEnd();
+            }
+
+            if (context.getPackageManager().hasSystemFeature(
+                    PackageManager.FEATURE_WIFI_DIRECT)) {
+                t.traceBegin("StartWifiP2P");
+                mSystemServiceManager.startService(WIFI_P2P_SERVICE_CLASS);
+                t.traceEnd();
+            }
+
+            if (context.getPackageManager().hasSystemFeature(
                     PackageManager.FEATURE_LOWPAN)) {
                 t.traceBegin("StartLowpan");
                 mSystemServiceManager.startService(LOWPAN_SERVICE_CLASS);
@@ -1488,6 +1518,14 @@ public final class SystemServer {
                 mSystemServiceManager.startService(TIME_DETECTOR_SERVICE_CLASS);
             } catch (Throwable e) {
                 reportWtf("starting StartTimeDetectorService service", e);
+            }
+            t.traceEnd();
+
+            t.traceBegin("StartTimeZoneDetectorService");
+            try {
+                mSystemServiceManager.startService(TIME_ZONE_DETECTOR_SERVICE_CLASS);
+            } catch (Throwable e) {
+                reportWtf("starting StartTimeZoneDetectorService service", e);
             }
             t.traceEnd();
 
@@ -2078,6 +2116,10 @@ public final class SystemServer {
         mSystemServiceManager.startBootPhase(t, SystemService.PHASE_DEVICE_SPECIFIC_SERVICES_READY);
         t.traceEnd();
 
+        t.traceBegin("AppSearchManagerService");
+        mSystemServiceManager.startService(APP_SEARCH_MANAGER_SERVICE_CLASS);
+        t.traceEnd();
+
         // These are needed to propagate to the runnable below.
         final NetworkManagementService networkManagementF = networkManagement;
         final NetworkStatsService networkStatsF = networkStats;
@@ -2230,11 +2272,12 @@ public final class SystemServer {
             }
             t.traceEnd();
 
-            t.traceBegin("StartWifiStack");
+            t.traceBegin("StartTethering");
             try {
-                WifiStackClient.getInstance().start();
+                // Tethering must start after ConnectivityService and NetworkStack.
+                TetheringManager.getInstance().start();
             } catch (Throwable e) {
-                reportWtf("starting Wifi Stack", e);
+                reportWtf("starting Tethering", e);
             }
             t.traceEnd();
 

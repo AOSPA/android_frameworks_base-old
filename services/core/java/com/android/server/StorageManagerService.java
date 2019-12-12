@@ -80,6 +80,7 @@ import android.os.IBinder;
 import android.os.IStoraged;
 import android.os.IVold;
 import android.os.IVoldListener;
+import android.os.IVoldMountCallback;
 import android.os.IVoldTaskListener;
 import android.os.Looper;
 import android.os.Message;
@@ -117,6 +118,7 @@ import android.text.format.DateUtils;
 import android.util.ArrayMap;
 import android.util.AtomicFile;
 import android.util.DataUnit;
+import android.util.FeatureFlagUtils;
 import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
@@ -349,10 +351,6 @@ class StorageManagerService extends IStorageManager.Stub
     @GuardedBy("mLock")
     private ArrayMap<String, CountDownLatch> mDiskScanLatches = new ArrayMap<>();
 
-    /** Map from volume ID to latches */
-    @GuardedBy("mLock")
-    private ArrayMap<String, CountDownLatch> mFuseVolumeReadyLatches = new ArrayMap<>();
-
     @GuardedBy("mLock")
     private IPackageMoveObserver mMoveCallback;
     @GuardedBy("mLock")
@@ -460,17 +458,6 @@ class StorageManagerService extends IStorageManager.Stub
             if (latch == null) {
                 latch = new CountDownLatch(1);
                 mDiskScanLatches.put(diskId, latch);
-            }
-            return latch;
-        }
-    }
-
-    private CountDownLatch findOrCreateFuseVolumeReadyLatch(String volId) {
-        synchronized (mLock) {
-            CountDownLatch latch = mFuseVolumeReadyLatches.get(volId);
-            if (latch == null) {
-                latch = new CountDownLatch(1);
-                mFuseVolumeReadyLatches.put(volId, latch);
             }
             return latch;
         }
@@ -613,7 +600,6 @@ class StorageManagerService extends IStorageManager.Stub
     private static final int H_ABORT_IDLE_MAINT = 12;
     private static final int H_BOOT_COMPLETED = 13;
     private static final int H_COMPLETE_UNLOCK_USER = 14;
-    private static final int H_VOLUME_READY = 15;
 
     class StorageManagerServiceHandler extends Handler {
         public StorageManagerServiceHandler(Looper looper) {
@@ -671,22 +657,6 @@ class StorageManagerService extends IStorageManager.Stub
                             obs.onShutDownComplete(success ? 0 : -1);
                         } catch (Exception ignored) {
                         }
-                    }
-                    break;
-                }
-                case H_VOLUME_READY: {
-                    final VolumeInfo vol = (VolumeInfo) msg.obj;
-                    try {
-                        mStorageSessionController.onVolumeReady(vol);
-
-                        synchronized (mLock) {
-                            CountDownLatch latch = mFuseVolumeReadyLatches.remove(vol.id);
-                            if (latch != null) {
-                                latch.countDown();
-                            }
-                        }
-                    } catch (IllegalStateException | ExternalStorageServiceException e) {
-                        Slog.i(TAG, "Failed to initialise volume " + vol, e);
                     }
                     break;
                 }
@@ -851,7 +821,6 @@ class StorageManagerService extends IStorageManager.Stub
                     refreshFuseSettings();
                 });
         refreshIsolatedStorageSettings();
-        refreshFuseSettings();
     }
 
     /**
@@ -915,16 +884,25 @@ class StorageManagerService extends IStorageManager.Stub
         SystemProperties.set(StorageManager.PROP_ISOLATED_STORAGE, Boolean.toString(res));
     }
 
+    /**
+     * The most recent flag change takes precedence. Change fuse Settings flag if Device Config is
+     * changed. Settings flag change will in turn change fuse system property (persist.sys.fuse)
+     * whenever the user reboots.
+     */
     private void refreshFuseSettings() {
         int isFuseEnabled = DeviceConfig.getInt(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
                 FUSE_ENABLED, 0);
         if (isFuseEnabled == 1) {
-            SystemProperties.set(StorageManager.PROP_FUSE, "true");
+            Slog.d(TAG, "Device Config flag for FUSE is enabled, turn Settings fuse flag on");
+            SystemProperties.set(FeatureFlagUtils.PERSIST_PREFIX
+                    + FeatureFlagUtils.SETTINGS_FUSE_FLAG, "true");
         } else if (isFuseEnabled == -1) {
-            SystemProperties.set(StorageManager.PROP_FUSE, "false");
+            Slog.d(TAG, "Device Config flag for FUSE is disabled, turn Settings fuse flag off");
+            SystemProperties.set(FeatureFlagUtils.PERSIST_PREFIX
+                    + FeatureFlagUtils.SETTINGS_FUSE_FLAG, "false");
         }
         // else, keep the build config.
-        // This can be overridden be direct adjustment of persist.sys.prop
+        // This can be overridden by direct adjustment of persist.sys.fflag.override.settings_fuse
     }
 
     /**
@@ -1432,13 +1410,6 @@ class StorageManagerService extends IStorageManager.Stub
             writeSettingsLocked();
         }
 
-        if (mIsFuseEnabled && newState == VolumeInfo.STATE_MOUNTED
-                && (vol.type == VolumeInfo.TYPE_PUBLIC || vol.type == VolumeInfo.TYPE_EMULATED)) {
-            Slog.i(TAG, "Initialising volume " + vol + " ...");
-            // TODO(b/144275217): Delay broadcasts till mount is really ready
-            mHandler.obtainMessage(H_VOLUME_READY, vol).sendToTarget();
-        }
-
         mCallbacks.notifyVolumeStateChanged(vol, oldState, newState);
 
         // Do not broadcast before boot has completed to avoid launching the
@@ -1587,6 +1558,8 @@ class StorageManagerService extends IStorageManager.Stub
     public StorageManagerService(Context context) {
         sSelf = this;
 
+        updateFusePropFromSettings();
+
         // Snapshot feature flag used for this boot
         SystemProperties.set(StorageManager.PROP_ISOLATED_STORAGE_SNAPSHOT, Boolean.toString(
                 SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, true)));
@@ -1645,6 +1618,23 @@ class StorageManagerService extends IStorageManager.Stub
         // Add ourself to the Watchdog monitors if enabled.
         if (WATCHDOG_ENABLE) {
             Watchdog.getInstance().addMonitor(this);
+        }
+    }
+
+    /**
+     *  Checks if user changed the persistent settings_fuse flag from Settings UI
+     *  and updates PROP_FUSE (reboots if changed).
+     */
+    private void updateFusePropFromSettings() {
+        Boolean settingsFuseFlag = SystemProperties.getBoolean((FeatureFlagUtils.PERSIST_PREFIX
+                + FeatureFlagUtils.SETTINGS_FUSE_FLAG), false);
+        Slog.d(TAG, "The value of Settings Fuse Flag is " + settingsFuseFlag);
+        if (SystemProperties.getBoolean(StorageManager.PROP_FUSE, false) != settingsFuseFlag) {
+            Slog.d(TAG, "Set persist.sys.fuse to " + settingsFuseFlag);
+            SystemProperties.set(StorageManager.PROP_FUSE, Boolean.toString(settingsFuseFlag));
+            // Perform hard reboot to kick policy into place
+            mContext.getSystemService(PowerManager.class).reboot("Reboot device for FUSE system"
+                    + "property change to take effect");
         }
     }
 
@@ -1913,33 +1903,29 @@ class StorageManagerService extends IStorageManager.Stub
             throw new SecurityException("Mounting " + volId + " restricted by policy");
         }
 
-        CountDownLatch latch = null;
-        if (mIsFuseEnabled && StorageSessionController.isEmulatedOrPublic(vol)) {
-            latch = findOrCreateFuseVolumeReadyLatch(volId);
-        }
-
         mount(vol);
-
-        if (latch != null) {
-            try {
-                waitForLatch(latch, "mount " + volId, 3 * DateUtils.MINUTE_IN_MILLIS);
-            } catch (TimeoutException e) {
-                Slog.wtf(TAG, e);
-            } finally {
-                synchronized (mLock) {
-                    mFuseVolumeReadyLatches.remove(volId);
-                }
-            }
-        }
     }
 
     private void mount(VolumeInfo vol) {
         try {
             // TODO(b/135341433): Remove paranoid logging when FUSE is stable
             Slog.i(TAG, "Mounting volume " + vol);
-            FileDescriptor fd = mVold.mount(vol.id, vol.mountFlags, vol.mountUserId);
+            mVold.mount(vol.id, vol.mountFlags, vol.mountUserId, new IVoldMountCallback.Stub() {
+                    @Override
+                    public boolean onVolumeChecking(FileDescriptor deviceFd, String path,
+                            String internalPath) {
+                        vol.path = path;
+                        vol.internalPath = internalPath;
+                        try {
+                            mStorageSessionController.onVolumeMount(deviceFd, vol);
+                            return true;
+                        } catch (ExternalStorageServiceException e) {
+                            Slog.i(TAG, "Failed to mount volume " + vol, e);
+                            return false;
+                        }
+                    }
+                });
             Slog.i(TAG, "Mounted volume " + vol);
-            mStorageSessionController.onVolumeMount(fd, vol);
         } catch (Exception e) {
             Slog.wtf(TAG, e);
         }
@@ -2786,11 +2772,6 @@ class StorageManagerService extends IStorageManager.Stub
      */
     @Override
     public boolean supportsCheckpoint() throws RemoteException {
-        // Only the system process is permitted to start checkpoints
-        if (Binder.getCallingUid() != android.os.Process.SYSTEM_UID) {
-            throw new SecurityException("no permission to check filesystem checkpoint support");
-        }
-
         return mVold.supportsCheckpoint();
     }
 
@@ -2959,12 +2940,6 @@ class StorageManagerService extends IStorageManager.Stub
         enforcePermission(android.Manifest.permission.STORAGE_INTERNAL);
 
         if (StorageManager.isFileEncryptedNativeOrEmulated()) {
-            // When a user has secure lock screen, require secret to actually unlock.
-            // This check is mostly in place for emulation mode.
-            if (mLockPatternUtils.isSecure(userId) && ArrayUtils.isEmpty(secret)) {
-                throw new IllegalStateException("Secret required to unlock secure user " + userId);
-            }
-
             try {
                 mVold.unlockUserKey(userId, serialNumber, encodeBytes(token),
                         encodeBytes(secret));
@@ -3681,7 +3656,7 @@ class StorageManagerService extends IStorageManager.Stub
             try {
                 mObbState.volId = mVold.createObb(mObbState.canonicalPath, binderKey,
                         mObbState.ownerGid);
-                mVold.mount(mObbState.volId, 0, -1);
+                mVold.mount(mObbState.volId, 0, -1, null);
 
                 if (DEBUG_OBB)
                     Slog.d(TAG, "Successfully mounted OBB " + mObbState.canonicalPath);
