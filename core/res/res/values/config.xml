@@ -758,6 +758,9 @@
     <!-- Indicates that wifi link probing is supported on this device -->
     <bool translatable="false" name="config_wifi_link_probing_supported">false</bool>
 
+    <!-- Wifi framework supports secondary sta supported -->
+    <bool translatable="false" name="config_wifi_framework_secondary_sta_supported">false</bool>
+
     <!-- Flag indicating whether we should enable the automatic brightness.
          Software implementation will be used if config_hardware_auto_brightness_available is not set -->
     <bool name="config_automatic_brightness_available">false</bool>
