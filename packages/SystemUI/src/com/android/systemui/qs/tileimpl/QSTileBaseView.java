@@ -15,6 +15,7 @@ package com.android.systemui.qs.tileimpl;
 
 import static com.android.systemui.qs.tileimpl.QSIconViewImpl.QS_ANIM_LENGTH;
 
+import android.annotation.ColorInt;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.ColorStateList;
@@ -119,9 +120,9 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
         setBackground(mTileBackground);
 
-        mColorActive = Utils.getColorAttrDefaultColor(context, android.R.attr.colorAccent);
-        mColorDisabled = Utils.getDisabled(context,
-                Utils.getColorAttrDefaultColor(context, android.R.attr.textColorTertiary));
+        mColorActive = adjustAlpha(Utils.getColorAttrDefaultColor(context,
+                android.R.attr.colorAccent), 0.2f);
+        mColorDisabled = context.getResources().getColor(R.color.qs_tile_background_color_disabled);
         mColorInactive = Utils.getColorAttrDefaultColor(context, android.R.attr.textColorSecondary);
 
         setPadding(0, 0, 0, 0);
@@ -222,6 +223,15 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
                 }
                 break;
         }
+    }
+
+    @ColorInt
+    private static int adjustAlpha(@ColorInt int color, float factor) {
+        int alpha = Math.round(Color.alpha(color) * factor);
+        int red = Color.red(color);
+        int green = Color.green(color);
+        int blue = Color.blue(color);
+        return Color.argb(alpha, red, green, blue);
     }
 
     protected void handleStateChanged(QSTile.State state) {
