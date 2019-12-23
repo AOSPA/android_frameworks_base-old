@@ -29,6 +29,7 @@ import android.content.Context;
 import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.util.BoostFramework;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
@@ -84,6 +85,7 @@ class ScreenRotationAnimation {
     private static final int SCREEN_FREEZE_LAYER_SCREENSHOT = SCREEN_FREEZE_LAYER_BASE + 1;
     private static final int SCREEN_FREEZE_LAYER_EXIT = SCREEN_FREEZE_LAYER_BASE + 2;
 
+    private BoostFramework mPerf = null;
     private boolean mIsPerfLockAcquired = false;
 
     private final Context mContext;
@@ -131,6 +133,8 @@ class ScreenRotationAnimation {
         mContext = context;
         mDisplayContent = displayContent;
         displayContent.getBounds(mOriginalDisplayRect);
+
+        mPerf = new BoostFramework();
 
         // Screenshot does NOT include rotation!
         final Display display = displayContent.getDisplay();
@@ -469,6 +473,10 @@ class ScreenRotationAnimation {
         if (!mStarted) {
             startAnimation(t, maxAnimationDuration, animationScale, finalWidth, finalHeight,
                     exitAnim, enterAnim);
+            if (mPerf != null && !mIsPerfLockAcquired) {
+                mPerf.perfHint(BoostFramework.VENDOR_HINT_ROTATION_ANIM_BOOST, null);
+                mIsPerfLockAcquired = true;
+            }
         }
         if (!mStarted) {
             return false;
@@ -519,6 +527,11 @@ class ScreenRotationAnimation {
         if (mRotateAlphaAnimation != null) {
             mRotateAlphaAnimation.cancel();
             mRotateAlphaAnimation = null;
+        }
+
+        if (mPerf != null && mIsPerfLockAcquired) {
+            mPerf.perfLockRelease();
+            mIsPerfLockAcquired = false;
         }
     }
 
