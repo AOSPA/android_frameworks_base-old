@@ -62,6 +62,8 @@
     <item msgid="3966341281672645384">"사용 중지됨"</item>
     <item msgid="1969681323976948639">"필터링 사용 설정됨"</item>
     <item msgid="8719029132154020716">"사용 설정됨"</item>
+    <item>"헤더 필터링 사용 설정됨"</item>
+    <item>"미디어 패킷 필터링 사용 설정됨"</item>
   </string-array>
   <string-array name="bluetooth_avrcp_versions">
     <item msgid="5347678900838034763">"AVRCP 1.4(기본)"</item>

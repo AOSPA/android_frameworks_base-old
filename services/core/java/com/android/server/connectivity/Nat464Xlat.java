@@ -126,13 +126,15 @@ public class Nat464Xlat extends BaseNetworkObserver {
         // If the network tells us it doesn't use clat, respect that.
         final boolean skip464xlat = (nai.netMisc() != null) && nai.netMisc().skip464xlat;
 
-        boolean androidXlatEnabled = false;
-        final String xlatConfigValue = NetPluginDelegate.getConfig(xlatRequired, "true");
-        if(xlatConfigValue != null && xlatConfigValue.equals("true")){
-            Slog.e(TAG, "getConfig: For config := " + xlatRequired +
-                    " returned value := " + xlatConfigValue);
-            androidXlatEnabled = true;
+        boolean androidXlatEnabled = true;
+        if(netType == ConnectivityManager.TYPE_MOBILE) {
+            final String xlatConfigValue = NetPluginDelegate.getConfig(xlatRequired, "true");
+            if(xlatConfigValue != null && xlatConfigValue.equals("false")){
+                Slog.i(TAG, "Android Xlat is disabled");
+                androidXlatEnabled = false;
+            }
         }
+
         return supported && connected && isIpv6OnlyNetwork &&
                 !skip464xlat && androidXlatEnabled;
     }
