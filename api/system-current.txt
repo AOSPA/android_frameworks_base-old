@@ -5478,6 +5478,8 @@ package android.net.wifi {
     field public static final int BAND_ANY = -1; // 0xffffffff
     field @NonNull public static final android.os.Parcelable.Creator<android.net.wifi.SoftApConfiguration> CREATOR;
     field public static final int SECURITY_TYPE_OPEN = 0; // 0x0
+    field public static final int SECURITY_TYPE_OWE = 2; // 0x2
+    field public static final int SECURITY_TYPE_SAE = 3; // 0x3
     field public static final int SECURITY_TYPE_WPA2_PSK = 1; // 0x1
   }
 

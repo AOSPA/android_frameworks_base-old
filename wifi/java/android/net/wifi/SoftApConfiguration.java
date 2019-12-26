@@ -136,17 +136,32 @@ public final class SoftApConfiguration implements Parcelable {
     public static final int SECURITY_TYPE_WPA2_PSK = 1;
 
     /** @hide */
+    @SystemApi
+    public static final int SECURITY_TYPE_OWE = 2;
+
+    /** @hide */
+    @SystemApi
+    public static final int SECURITY_TYPE_SAE = 3;
+
+    /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = { "SECURITY_TYPE" }, value = {
         SECURITY_TYPE_OPEN,
         SECURITY_TYPE_WPA2_PSK,
+        SECURITY_TYPE_OWE,
+        SECURITY_TYPE_SAE,
     })
     public @interface SecurityType {}
+
+    /**
+     * Iface name for OWE transition mode.
+     */
+    private final @Nullable String mOweTransIfaceName;
 
     /** Private constructor for Builder and Parcelable implementation. */
     private SoftApConfiguration(@Nullable String ssid, @Nullable MacAddress bssid,
             @Nullable String wpa2Passphrase, boolean hiddenSsid, @BandType int band, int channel,
-            @SecurityType int securityType) {
+            @SecurityType int securityType, @Nullable String oweTransIfaceName) {
         mSsid = ssid;
         mBssid = bssid;
         mWpa2Passphrase = wpa2Passphrase;
@@ -154,6 +169,7 @@ public final class SoftApConfiguration implements Parcelable {
         mBand = band;
         mChannel = channel;
         mSecurityType = securityType;
+        mOweTransIfaceName = oweTransIfaceName;
     }
 
     @Override
@@ -171,13 +187,14 @@ public final class SoftApConfiguration implements Parcelable {
                 && mHiddenSsid == other.mHiddenSsid
                 && mBand == other.mBand
                 && mChannel == other.mChannel
-                && mSecurityType == other.mSecurityType;
+                && mSecurityType == other.mSecurityType
+                && mOweTransIfaceName == other.mOweTransIfaceName;
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(mSsid, mBssid, mWpa2Passphrase, mHiddenSsid,
-                mBand, mChannel, mSecurityType);
+                mBand, mChannel, mSecurityType, mOweTransIfaceName);
     }
 
     @Override
@@ -191,6 +208,7 @@ public final class SoftApConfiguration implements Parcelable {
         sbuf.append(" \n Band =").append(mBand);
         sbuf.append(" \n Channel =").append(mChannel);
         sbuf.append(" \n SecurityType=").append(getSecurityType());
+        sbuf.append(" \n OWE Transition mode Iface =").append(mOweTransIfaceName);
         return sbuf.toString();
     }
 
@@ -203,6 +221,7 @@ public final class SoftApConfiguration implements Parcelable {
         dest.writeInt(mBand);
         dest.writeInt(mChannel);
         dest.writeInt(mSecurityType);
+        dest.writeString(mOweTransIfaceName);
     }
 
     @Override
@@ -217,7 +236,8 @@ public final class SoftApConfiguration implements Parcelable {
             return new SoftApConfiguration(
                     in.readString(),
                     in.readParcelable(MacAddress.class.getClassLoader()),
-                    in.readString(), in.readBoolean(), in.readInt(), in.readInt(), in.readInt());
+                    in.readString(), in.readBoolean(), in.readInt(), in.readInt(), in.readInt(),
+                    in.readString());
         }
 
         @Override
@@ -288,6 +308,17 @@ public final class SoftApConfiguration implements Parcelable {
     }
 
     /**
+     * Return the iface name for OWE transition mode for the AP.
+     * {@link #setOweTransIfaceName(String)}.
+     *
+     * @hide
+     */
+    @Nullable
+    public String getOweTransIfaceName() {
+      return mOweTransIfaceName;
+    }
+
+    /**
      * Builds a {@link SoftApConfiguration}, which allows an app to configure various aspects of a
      * Soft AP.
      *
@@ -301,6 +332,7 @@ public final class SoftApConfiguration implements Parcelable {
         private boolean mHiddenSsid;
         private int mBand;
         private int mChannel;
+        private String mOweTransIfaceName;
 
         private int setSecurityType() {
             int securityType = SECURITY_TYPE_OPEN;
@@ -324,6 +356,7 @@ public final class SoftApConfiguration implements Parcelable {
             mHiddenSsid = false;
             mBand = BAND_2GHZ;
             mChannel = 0;
+            mOweTransIfaceName = null;
         }
 
         /**
@@ -338,6 +371,7 @@ public final class SoftApConfiguration implements Parcelable {
             mHiddenSsid = other.mHiddenSsid;
             mBand = other.mBand;
             mChannel = other.mChannel;
+            mOweTransIfaceName = other.mOweTransIfaceName;
         }
 
         /**
@@ -348,7 +382,7 @@ public final class SoftApConfiguration implements Parcelable {
         @NonNull
         public SoftApConfiguration build() {
             return new SoftApConfiguration(mSsid, mBssid, mWpa2Passphrase,
-                mHiddenSsid, mBand, mChannel, setSecurityType());
+                mHiddenSsid, mBand, mChannel, setSecurityType(), mOweTransIfaceName);
         }
 
         /**
@@ -473,6 +507,22 @@ public final class SoftApConfiguration implements Parcelable {
         @NonNull
         public Builder setChannel(int channel) {
             mChannel = channel;
+            return this;
+        }
+
+        /**
+         * Specifies an iface name for OWE transition mode for the AP.
+         * <p>
+         * <li>If not set, defaults to null.</li>
+         *
+         * @param oweTransIfaceName iface name for OWE transition mode.
+         * @return Builder for chaining.
+         *
+         * @hide
+         */
+        @NonNull
+        public Builder setOweTransIfaceName(@Nullable String oweTransIfaceName) {
+            mOweTransIfaceName = oweTransIfaceName;
             return this;
         }
     }
