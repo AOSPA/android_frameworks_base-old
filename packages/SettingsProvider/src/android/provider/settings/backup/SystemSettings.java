@@ -75,6 +75,7 @@ public class SystemSettings {
         Settings.System.VIBRATE_WHEN_RINGING,
         Settings.System.RINGTONE,
         Settings.System.LOCK_TO_APP_ENABLED,
+        Settings.System.GESTURE_PILL_TOGGLE,
         Settings.System.NOTIFICATION_SOUND,
         Settings.System.ACCELEROMETER_ROTATION,
         Settings.System.SHOW_BATTERY_PERCENT,
