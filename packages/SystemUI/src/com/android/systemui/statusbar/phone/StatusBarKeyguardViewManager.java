@@ -105,6 +105,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
 
         @Override
         public void onStartingToShow() {
+            updateStates();
             updateLockIcon();
         }
 
@@ -759,7 +760,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         int vis = mContainer.getSystemUiVisibility();
         boolean showing = mShowing;
         boolean occluded = mOccluded;
-        boolean bouncerShowing = mBouncer.isShowing();
+        boolean bouncerShowing = bouncerIsOrWillBeShowing();
         boolean bouncerDismissible = !mBouncer.isFullscreenBouncer();
         boolean remoteInputActive = mRemoteInputActive;
 
