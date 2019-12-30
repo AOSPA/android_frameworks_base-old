@@ -200,8 +200,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
     public static final int SECURITY_OWE = 4;
     public static final int SECURITY_SAE = 5;
     public static final int SECURITY_EAP_SUITE_B = 6;
-    public static final int SECURITY_PSK_SAE_TRANSITION = 7;
-    public static final int SECURITY_OWE_TRANSITION = 8;
+    public static final int SECURITY_PSK_SAE_TRANSITION = 7; //deprecated
+    public static final int SECURITY_OWE_TRANSITION = 8;  // deprecated
     public static final int SECURITY_DPP = 9;
     public static final int SECURITY_MAX_VAL = 10; // Has to be the last
 
@@ -747,18 +747,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         }
 
         final int configSecurity = getSecurity(config);
-        final WifiManager wifiManager = getWifiManager();
-        switch (security) {
-            case SECURITY_PSK_SAE_TRANSITION:
-                return configSecurity == SECURITY_PSK
-                        || (wifiManager.isWpa3SaeSupported() && configSecurity == SECURITY_SAE);
-            case SECURITY_OWE_TRANSITION:
-                return configSecurity == SECURITY_NONE
-                        || (wifiManager.isEnhancedOpenSupported()
-                                && configSecurity == SECURITY_OWE);
-            default:
-                return security == configSecurity;
-        }
+        return security == configSecurity;
     }
 
     public WifiConfiguration getConfig() {
@@ -840,6 +829,37 @@ public class AccessPoint implements Comparable<AccessPoint> {
                 }
             }
         return false;
+    }
+
+    private static boolean isWpa3SaeSupported() {
+        IWifiManager wifiManager = IWifiManager.Stub.asInterface(
+                        ServiceManager.getService(Context.WIFI_SERVICE));
+        long supportedFeature = 0;
+        long feature = WifiManager.WIFI_FEATURE_WPA3_SAE;
+
+        try {
+            supportedFeature = wifiManager.getSupportedFeatures();
+        } catch (RemoteException e) {
+            Log.w(TAG, "Remote Exception", e);
+        }
+
+        return (supportedFeature & feature) == feature;
+    }
+
+    private static boolean isEnhancedOpenSupported() {
+        IWifiManager wifiManager = IWifiManager.Stub.asInterface(
+                        ServiceManager.getService(Context.WIFI_SERVICE));
+        long supportedFeature = 0;
+        long feature = WifiManager.WIFI_FEATURE_OWE;
+
+        try {
+            supportedFeature = wifiManager.getSupportedFeatures();
+        } catch (RemoteException e) {
+            Log.w(TAG, "Remote Exception", e);
+        }
+
+        return (supportedFeature & feature) == feature;
+
     }
 
     public WifiInfo getInfo() {
@@ -1809,7 +1829,11 @@ public class AccessPoint implements Comparable<AccessPoint> {
             return SECURITY_WEP;
         } else if (result.capabilities.contains("PSK")
                    && result.capabilities.contains("SAE")) {
-            return SECURITY_PSK_SAE_TRANSITION;
+            if (isWpa3SaeSupported()) {
+                return SECURITY_SAE;
+            } else {
+                return SECURITY_PSK;
+            }
         } else if (result.capabilities.contains("SAE")) {
             return SECURITY_SAE;
         } else if (result.capabilities.contains("PSK")) {
@@ -1819,7 +1843,11 @@ public class AccessPoint implements Comparable<AccessPoint> {
         } else if (result.capabilities.contains("EAP")) {
             return SECURITY_EAP;
         } else if (result.capabilities.contains("OWE_TRANSITION")) {
-            return SECURITY_OWE_TRANSITION;
+            if (isEnhancedOpenSupported()) {
+                return SECURITY_OWE;
+            } else {
+                return SECURITY_NONE;
+            }
         } else if (result.capabilities.contains("OWE")) {
             return SECURITY_OWE;
         }
