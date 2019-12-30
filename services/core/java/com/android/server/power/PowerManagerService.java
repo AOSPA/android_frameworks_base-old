@@ -1145,7 +1145,7 @@ public final class PowerManagerService extends SystemService
         mAlwaysOnEnabled = mAmbientDisplayConfiguration.alwaysOnEnabled(UserHandle.USER_CURRENT);
 
         boolean gesturesEnabled = Settings.System.getIntForUser(resolver,
-                Settings.System.GESTURES_ENABLED, 0, UserHandle.USER_CURRENT) != 0;
+                Settings.System.GESTURES_ENABLED, 1, UserHandle.USER_CURRENT) != 0;
         if (gesturesEnabled != mGesturesEnabled) {
             mGesturesEnabled = gesturesEnabled;
             nativeSetFeature(POWER_FEATURE_GESTURES, mGesturesEnabled ? 1 : 0);

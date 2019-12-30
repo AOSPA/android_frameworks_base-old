@@ -80,7 +80,7 @@ public class KeyHandler {
 
     // Default value for gesture enabled state.
     // 1 = enabled, 0 = disabled.
-    private static final int GESTURES_DEFAULT = 0; // 0 = disabled, 1 = enabled
+    private static final int GESTURES_DEFAULT = 1; // 0 = disabled, 1 = enabled
 
     // Dummy camera id for CameraManager.
     private static final String DUMMY_CAMERA_ID = "";
