@@ -814,7 +814,8 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
             if (mLeftIsVoiceAssist) {
                 mIconState.isVisible = mUserSetupComplete && showAffordance;
                 if (mLeftAssistIcon == null) {
-                    mIconState.drawable = mContext.getDrawable(R.drawable.ic_mic_26dp);
+                    mIconState.drawable = mContext.getDrawable(
+                            com.android.internal.R.drawable.ic_mic);
                 } else {
                     mIconState.drawable = mLeftAssistIcon;
                 }
@@ -847,7 +848,8 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
             mIconState.isVisible = !isCameraDisabled && resolved != null
                     && getResources().getBoolean(R.bool.config_keyguardShowCameraAffordance)
                     && mUserSetupComplete;
-            mIconState.drawable = mContext.getDrawable(R.drawable.ic_camera_alt_24dp);
+            mIconState.drawable = mContext.getDrawable(
+                    com.android.internal.R.drawable.ic_camera);
             mIconState.contentDescription =
                     mContext.getString(R.string.accessibility_camera_button);
             return mIconState;
