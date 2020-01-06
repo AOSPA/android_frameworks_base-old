@@ -47,6 +47,7 @@ import android.net.TetheringManager;
 import android.os.BaseBundle;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Debug;
 import android.os.Environment;
 import android.os.FactoryTest;
 import android.os.FileUtils;
@@ -109,6 +110,7 @@ import com.android.server.input.InputManagerService;
 import com.android.server.inputmethod.InputMethodManagerService;
 import com.android.server.inputmethod.InputMethodSystemProperty;
 import com.android.server.inputmethod.MultiClientInputMethodManagerService;
+import com.android.server.integrity.AppIntegrityManagerService;
 import com.android.server.lights.LightsService;
 import com.android.server.media.MediaResourceMonitorService;
 import com.android.server.media.MediaRouterService;
@@ -451,10 +453,6 @@ public final class SystemServer {
             // Mmmmmm... more memory!
             VMRuntime.getRuntime().clearGrowthLimit();
 
-            // The system server has to run all of the time, so it needs to be
-            // as efficient as possible with its memory usage.
-            VMRuntime.getRuntime().setTargetHeapUtilization(0.8f);
-
             // Some devices rely on runtime fingerprint generation, so make sure
             // we've defined it before booting further.
             Build.ensureFingerprintProperty();
@@ -506,6 +504,24 @@ public final class SystemServer {
             LocalServices.addService(SystemServiceManager.class, mSystemServiceManager);
             // Prepare the thread pool for init tasks that can be parallelized
             SystemServerInitThreadPool.start();
+            // Attach JVMTI agent if this is a debuggable build and the system property is set.
+            if (Build.IS_DEBUGGABLE) {
+                // Property is of the form "library_path=parameters".
+                String jvmtiAgent = SystemProperties.get("persist.sys.dalvik.jvmtiagent");
+                if (!jvmtiAgent.isEmpty()) {
+                    int equalIndex = jvmtiAgent.indexOf('=');
+                    String libraryPath = jvmtiAgent.substring(0, equalIndex);
+                    String parameterList =
+                            jvmtiAgent.substring(equalIndex + 1, jvmtiAgent.length());
+                    // Attach the agent.
+                    try {
+                        Debug.attachJvmtiAgent(libraryPath, parameterList, null);
+                    } catch (Exception e) {
+                        Slog.e("System", "*************************************************");
+                        Slog.e("System", "********** Failed to load jvmti plugin: " + jvmtiAgent);
+                    }
+                }
+            }
         } finally {
             t.traceEnd();  // InitBeforeStartServices
         }
@@ -1121,6 +1137,10 @@ public final class SystemServer {
 
             t.traceBegin("SignedConfigService");
             SignedConfigService.registerUpdateReceiver(mSystemContext);
+            t.traceEnd();
+
+            t.traceBegin("AppIntegrityService");
+            mSystemServiceManager.startService(AppIntegrityManagerService.class);
             t.traceEnd();
 
         } catch (Throwable e) {

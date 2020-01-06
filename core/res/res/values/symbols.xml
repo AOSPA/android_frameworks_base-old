@@ -247,6 +247,7 @@
   <java-symbol type="id" name="mic" />
   <java-symbol type="id" name="overlay" />
   <java-symbol type="id" name="app_ops" />
+  <java-symbol type="id" name="profile_pager" />
 
   <java-symbol type="attr" name="actionModeShareDrawable" />
   <java-symbol type="attr" name="alertDialogCenterButtons" />
@@ -294,7 +295,6 @@
   <java-symbol type="bool" name="config_hotswapCapable" />
   <java-symbol type="bool" name="config_mms_content_disposition_support" />
   <java-symbol type="string" name="config_ims_package" />
-  <java-symbol type="bool" name="config_dynamic_bind_ims" />
   <java-symbol type="string" name="config_wwan_network_service_package" />
   <java-symbol type="string" name="config_wlan_network_service_package" />
   <java-symbol type="string" name="config_wwan_network_service_class" />
@@ -1549,6 +1549,8 @@
   <java-symbol type="layout" name="user_switching_dialog" />
   <java-symbol type="layout" name="common_tab_settings" />
   <java-symbol type="layout" name="notification_material_media_seekbar" />
+  <java-symbol type="layout" name="resolver_list_per_profile" />
+  <java-symbol type="layout" name="chooser_list_per_profile" />
 
   <java-symbol type="anim" name="slide_in_child_bottom" />
   <java-symbol type="anim" name="slide_in_right" />
@@ -1908,9 +1910,6 @@
   <java-symbol type="drawable" name="stat_sys_battery_charge" />
   <java-symbol type="drawable" name="stat_sys_battery_unknown" />
   <java-symbol type="drawable" name="stat_sys_data_usb" />
-  <java-symbol type="drawable" name="stat_sys_tether_bluetooth" />
-  <java-symbol type="drawable" name="stat_sys_tether_general" />
-  <java-symbol type="drawable" name="stat_sys_tether_usb" />
   <java-symbol type="drawable" name="stat_sys_throttled" />
   <java-symbol type="drawable" name="vpn_connected" />
   <java-symbol type="drawable" name="vpn_disconnected" />
@@ -2087,10 +2086,6 @@
   <java-symbol type="string" name="select_keyboard_layout_notification_message" />
   <java-symbol type="string" name="smv_application" />
   <java-symbol type="string" name="smv_process" />
-  <java-symbol type="string" name="tethered_notification_message" />
-  <java-symbol type="string" name="tethered_notification_title" />
-  <java-symbol type="string" name="disable_tether_notification_message" />
-  <java-symbol type="string" name="disable_tether_notification_title" />
   <java-symbol type="string" name="adb_debugging_notification_channel_tv" />
   <java-symbol type="string" name="usb_accessory_notification_title" />
   <java-symbol type="string" name="usb_mtp_notification_title" />
@@ -3680,7 +3675,6 @@
 
   <!-- For Attention Service -->
   <java-symbol type="integer" name="config_attentionMaximumExtension" />
-  <java-symbol type="integer" name="config_attentionApiTimeout" />
 
   <java-symbol type="string" name="config_incidentReportApproverPackage" />
   <java-symbol type="array" name="config_restrictedImagesServices" />
@@ -3787,6 +3781,10 @@
 
   <java-symbol type="bool" name="config_showBuiltinWirelessChargingAnim" />
 
+  <!-- For bug report handler -->
+  <java-symbol type="bool" name="config_bugReportHandlerEnabled" />
+  <java-symbol type="string" name="config_defaultBugReportHandlerApp" />
+
   <java-symbol type="string" name="usb_device_resolve_prompt_warn" />
 
   <!-- For Accessibility system actions -->
@@ -3801,6 +3799,10 @@
   <java-symbol type="string" name="accessibility_system_action_toggle_split_screen_label" />
 
   <java-symbol type="string" name="accessibility_freeform_caption" />
+
+  <!-- For contacts provider. -->
+  <java-symbol type="string" name="config_rawContactsLocalAccountName" />
+  <java-symbol type="string" name="config_rawContactsLocalAccountType" />
 
   <!-- For Pdn throttle feature -->
   <java-symbol type="bool" name="config_pdp_retry_for_29_33_55_enabled" />

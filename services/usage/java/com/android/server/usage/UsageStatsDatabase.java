@@ -29,6 +29,7 @@ import android.util.SparseArray;
 import android.util.TimeUtils;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.IndentingPrintWriter;
 
 import libcore.io.IoUtils;
@@ -52,6 +53,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -122,6 +124,7 @@ public class UsageStatsDatabase {
     private int mCurrentVersion;
     private boolean mFirstUpdate;
     private boolean mNewUpdate;
+    private boolean mUpgradePerformed;
 
     // The obfuscated packages to tokens mappings file
     private final File mPackageMappingsFile;
@@ -226,14 +229,14 @@ public class UsageStatsDatabase {
             }
 
             try {
-                IntervalStats stats = new IntervalStats();
                 for (int i = start; i < fileCount - 1; i++) {
+                    final IntervalStats stats = new IntervalStats();
                     readLocked(files.valueAt(i), stats);
                     if (!checkinAction.checkin(stats)) {
                         return false;
                     }
                 }
-            } catch (IOException e) {
+            } catch (Exception e) {
                 Slog.e(TAG, "Failed to check-in", e);
                 return false;
             }
@@ -325,6 +328,13 @@ public class UsageStatsDatabase {
         return mNewUpdate;
     }
 
+    /**
+     * Was an upgrade performed when this database was initialized?
+     */
+    boolean wasUpgradePerformed() {
+        return mUpgradePerformed;
+    }
+
     private void checkVersionAndBuildLocked() {
         int version;
         String buildFingerprint;
@@ -397,6 +407,8 @@ public class UsageStatsDatabase {
         if (mUpdateBreadcrumb.exists()) {
             // Files should be up to date with current version. Clear the version update breadcrumb
             mUpdateBreadcrumb.delete();
+            // update mUpgradePerformed after breadcrumb is deleted to indicate a successful upgrade
+            mUpgradePerformed = true;
         }
 
         if (mBackupsDir.exists() && !KEEP_BACKUP_DIR) {
@@ -545,10 +557,125 @@ public class UsageStatsDatabase {
         }
     }
 
-    void onPackageRemoved(String packageName, long timeRemoved) {
+    /**
+     * Returns the token mapped to the package removed or {@code PackagesTokenData.UNASSIGNED_TOKEN}
+     * if not mapped.
+     */
+    int onPackageRemoved(String packageName, long timeRemoved) {
         synchronized (mLock) {
-            mPackagesTokenData.removePackage(packageName, timeRemoved);
+            final int tokenRemoved = mPackagesTokenData.removePackage(packageName, timeRemoved);
+            try {
+                writeMappingsLocked();
+            } catch (Exception e) {
+                Slog.w(TAG, "Unable to update package mappings on disk after removing token "
+                        + tokenRemoved);
+            }
+            return tokenRemoved;
         }
+    }
+
+    /**
+     * Reads all the usage stats data on disk and rewrites it with any data related to uninstalled
+     * packages omitted. Returns {@code true} on success, {@code false} otherwise.
+     */
+    boolean pruneUninstalledPackagesData() {
+        synchronized (mLock) {
+            for (int i = 0; i < mIntervalDirs.length; i++) {
+                final File[] files = mIntervalDirs[i].listFiles();
+                if (files == null) {
+                    continue;
+                }
+                for (int j = 0; j < files.length; j++) {
+                    try {
+                        final IntervalStats stats = new IntervalStats();
+                        final AtomicFile atomicFile = new AtomicFile(files[j]);
+                        if (!readLocked(atomicFile, stats, mCurrentVersion, mPackagesTokenData)) {
+                            continue; // no data was omitted when read so no need to rewrite
+                        }
+                        // Any data related to packages that have been removed would have failed
+                        // the deobfuscation step on read so the IntervalStats object here only
+                        // contains data for packages that are currently installed - all we need
+                        // to do here is write the data back to disk.
+                        writeLocked(atomicFile, stats, mCurrentVersion, mPackagesTokenData);
+                    } catch (Exception e) {
+                        Slog.e(TAG, "Failed to prune data from: " + files[j].toString());
+                        return false;
+                    }
+                }
+            }
+
+            try {
+                writeMappingsLocked();
+            } catch (IOException e) {
+                Slog.e(TAG, "Failed to write package mappings after pruning data.");
+                return false;
+            }
+            return true;
+        }
+    }
+
+    /**
+     * Iterates through all the files on disk and prunes any data that belongs to packages that have
+     * been uninstalled (packages that are not in the given list).
+     * Note: this should only be called once, when there has been a database upgrade.
+     *
+     * @param installedPackages map of installed packages (package_name:package_install_time)
+     */
+    void prunePackagesDataOnUpgrade(HashMap<String, Long> installedPackages) {
+        if (ArrayUtils.isEmpty(installedPackages)) {
+            return;
+        }
+        synchronized (mLock) {
+            for (int i = 0; i < mIntervalDirs.length; i++) {
+                final File[] files = mIntervalDirs[i].listFiles();
+                if (files == null) {
+                    continue;
+                }
+                for (int j = 0; j < files.length; j++) {
+                    try {
+                        final IntervalStats stats = new IntervalStats();
+                        final AtomicFile atomicFile = new AtomicFile(files[j]);
+                        readLocked(atomicFile, stats, mCurrentVersion, mPackagesTokenData);
+                        if (!pruneStats(installedPackages, stats)) {
+                            continue; // no stats were pruned so no need to rewrite
+                        }
+                        writeLocked(atomicFile, stats, mCurrentVersion, mPackagesTokenData);
+                    } catch (Exception e) {
+                        Slog.e(TAG, "Failed to prune data from: " + files[j].toString());
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean pruneStats(HashMap<String, Long> installedPackages, IntervalStats stats) {
+        boolean dataPruned = false;
+
+        // prune old package usage stats
+        for (int i = stats.packageStats.size() - 1; i >= 0; i--) {
+            final UsageStats usageStats = stats.packageStats.valueAt(i);
+            final Long timeInstalled = installedPackages.get(usageStats.mPackageName);
+            if (timeInstalled == null || timeInstalled > usageStats.mEndTimeStamp) {
+                stats.packageStats.removeAt(i);
+                dataPruned = true;
+            }
+        }
+        if (dataPruned) {
+            // ensure old stats don't linger around during the obfuscation step on write
+            stats.packageStatsObfuscated.clear();
+        }
+
+        // prune old events
+        for (int i = stats.events.size() - 1; i >= 0; i--) {
+            final UsageEvents.Event event = stats.events.get(i);
+            final Long timeInstalled = installedPackages.get(event.mPackage);
+            if (timeInstalled == null || timeInstalled > event.mTimeStamp) {
+                stats.events.remove(i);
+                dataPruned = true;
+            }
+        }
+
+        return dataPruned;
     }
 
     public void onTimeChanged(long timeDiffMillis) {
@@ -617,7 +744,7 @@ public class UsageStatsDatabase {
                 IntervalStats stats = new IntervalStats();
                 readLocked(f, stats);
                 return stats;
-            } catch (IOException e) {
+            } catch (Exception e) {
                 Slog.e(TAG, "Failed to read usage stats file", e);
             }
         }
@@ -645,7 +772,6 @@ public class UsageStatsDatabase {
         }
 
         // filter out events
-        final int eventsSize = stats.events.size();
         for (int i = stats.events.size() - 1; i >= 0; i--) {
             final UsageEvents.Event event = stats.events.get(i);
             final Long timeRemoved = removedPackagesMap.get(event.mPackage);
@@ -722,10 +848,10 @@ public class UsageStatsDatabase {
                 }
             }
 
-            final IntervalStats stats = new IntervalStats();
             final ArrayList<T> results = new ArrayList<>();
             for (int i = startIndex; i <= endIndex; i++) {
                 final AtomicFile f = intervalStats.valueAt(i);
+                final IntervalStats stats = new IntervalStats();
 
                 if (DEBUG) {
                     Slog.d(TAG, "Reading stat file " + f.getBaseFile().getAbsolutePath());
@@ -736,7 +862,7 @@ public class UsageStatsDatabase {
                     if (beginTime < stats.endTime) {
                         combiner.combine(stats, false, results);
                     }
-                } catch (IOException e) {
+                } catch (Exception e) {
                     Slog.e(TAG, "Failed to read usage stats file", e);
                     // We continue so that we return results that are not
                     // corrupt.
@@ -883,7 +1009,8 @@ public class UsageStatsDatabase {
         }
     }
 
-    private void writeLocked(AtomicFile file, IntervalStats stats) throws IOException {
+    private void writeLocked(AtomicFile file, IntervalStats stats)
+            throws IOException, RuntimeException {
         if (mCurrentVersion <= 3) {
             Slog.wtf(TAG, "Attempting to write UsageStats as XML with version " + mCurrentVersion);
             return;
@@ -892,7 +1019,7 @@ public class UsageStatsDatabase {
     }
 
     private static void writeLocked(AtomicFile file, IntervalStats stats, int version,
-            PackagesTokenData packagesTokenData) throws IOException {
+            PackagesTokenData packagesTokenData) throws IOException, RuntimeException {
         FileOutputStream fos = file.startWrite();
         try {
             writeLocked(fos, stats, version, packagesTokenData);
@@ -905,7 +1032,7 @@ public class UsageStatsDatabase {
     }
 
     private static void writeLocked(OutputStream out, IntervalStats stats, int version,
-            PackagesTokenData packagesTokenData) throws IOException {
+            PackagesTokenData packagesTokenData) throws RuntimeException {
         switch (version) {
             case 1:
             case 2:
@@ -915,7 +1042,7 @@ public class UsageStatsDatabase {
             case 4:
                 try {
                     UsageStatsProto.write(out, stats);
-                } catch (IOException | IllegalArgumentException e) {
+                } catch (Exception e) {
                     Slog.e(TAG, "Unable to write interval stats to proto.", e);
                 }
                 break;
@@ -923,7 +1050,7 @@ public class UsageStatsDatabase {
                 stats.obfuscateData(packagesTokenData);
                 try {
                     UsageStatsProtoV2.write(out, stats);
-                } catch (IOException | IllegalArgumentException e) {
+                } catch (Exception e) {
                     Slog.e(TAG, "Unable to write interval stats to proto.", e);
                 }
                 break;
@@ -934,7 +1061,13 @@ public class UsageStatsDatabase {
         }
     }
 
-    private void readLocked(AtomicFile file, IntervalStats statsOut) throws IOException {
+    /**
+     * Note: the data read from the given file will add to the IntervalStats object passed into this
+     * method. It is up to the caller to ensure that this is the desired behavior - if not, the
+     * caller should ensure that the data in the reused object is being cleared.
+     */
+    private void readLocked(AtomicFile file, IntervalStats statsOut)
+            throws IOException, RuntimeException {
         if (mCurrentVersion <= 3) {
             Slog.wtf(TAG, "Reading UsageStats as XML; current database version: "
                     + mCurrentVersion);
@@ -942,13 +1075,21 @@ public class UsageStatsDatabase {
         readLocked(file, statsOut, mCurrentVersion, mPackagesTokenData);
     }
 
-    private static void readLocked(AtomicFile file, IntervalStats statsOut, int version,
-            PackagesTokenData packagesTokenData) throws IOException {
+    /**
+     * Returns {@code true} if any stats were omitted while reading, {@code false} otherwise.
+     * <p/>
+     * Note: the data read from the given file will add to the IntervalStats object passed into this
+     * method. It is up to the caller to ensure that this is the desired behavior - if not, the
+     * caller should ensure that the data in the reused object is being cleared.
+     */
+    private static boolean readLocked(AtomicFile file, IntervalStats statsOut, int version,
+            PackagesTokenData packagesTokenData) throws IOException, RuntimeException {
+        boolean dataOmitted = false;
         try {
             FileInputStream in = file.openRead();
             try {
                 statsOut.beginTime = parseBeginTime(file);
-                readLocked(in, statsOut, version, packagesTokenData);
+                dataOmitted = readLocked(in, statsOut, version, packagesTokenData);
                 statsOut.lastTimeSaved = file.getLastModifiedTime();
             } finally {
                 try {
@@ -961,10 +1102,19 @@ public class UsageStatsDatabase {
             Slog.e(TAG, "UsageStatsDatabase", e);
             throw e;
         }
+        return dataOmitted;
     }
 
-    private static void readLocked(InputStream in, IntervalStats statsOut, int version,
-            PackagesTokenData packagesTokenData) throws IOException {
+    /**
+     * Returns {@code true} if any stats were omitted while reading, {@code false} otherwise.
+     * <p/>
+     * Note: the data read from the given file will add to the IntervalStats object passed into this
+     * method. It is up to the caller to ensure that this is the desired behavior - if not, the
+     * caller should ensure that the data in the reused object is being cleared.
+     */
+    private static boolean readLocked(InputStream in, IntervalStats statsOut, int version,
+            PackagesTokenData packagesTokenData) throws RuntimeException {
+        boolean dataOmitted = false;
         switch (version) {
             case 1:
             case 2:
@@ -979,24 +1129,24 @@ public class UsageStatsDatabase {
             case 4:
                 try {
                     UsageStatsProto.read(in, statsOut);
-                } catch (IOException e) {
+                } catch (Exception e) {
                     Slog.e(TAG, "Unable to read interval stats from proto.", e);
                 }
                 break;
             case 5:
                 try {
                     UsageStatsProtoV2.read(in, statsOut);
-                } catch (IOException e) {
+                } catch (Exception e) {
                     Slog.e(TAG, "Unable to read interval stats from proto.", e);
                 }
-                statsOut.deobfuscateData(packagesTokenData);
+                dataOmitted = statsOut.deobfuscateData(packagesTokenData);
                 break;
             default:
                 throw new RuntimeException(
                         "Unhandled UsageStatsDatabase version: " + Integer.toString(version)
                                 + " on read.");
         }
-
+        return dataOmitted;
     }
 
     /**
@@ -1010,7 +1160,7 @@ public class UsageStatsDatabase {
 
         try (FileInputStream in = new AtomicFile(mPackageMappingsFile).openRead()) {
             UsageStatsProtoV2.readObfuscatedData(in, mPackagesTokenData);
-        } catch (IOException e) {
+        } catch (Exception e) {
             Slog.e(TAG, "Failed to read the obfuscated packages mapping file.", e);
             return;
         }
@@ -1039,7 +1189,7 @@ public class UsageStatsDatabase {
             UsageStatsProtoV2.writeObfuscatedData(fos, mPackagesTokenData);
             file.finishWrite(fos);
             fos = null;
-        } catch (IOException | IllegalArgumentException e) {
+        } catch (Exception e) {
             Slog.e(TAG, "Unable to write obfuscated data to proto.", e);
         } finally {
             file.failWrite(fos);
@@ -1279,8 +1429,8 @@ public class UsageStatsDatabase {
         try {
             stats.beginTime = in.readLong();
             readLocked(in, stats, version, mPackagesTokenData);
-        } catch (IOException ioe) {
-            Slog.d(TAG, "DeSerializing IntervalStats Failed", ioe);
+        } catch (Exception e) {
+            Slog.d(TAG, "DeSerializing IntervalStats Failed", e);
             stats = null;
         }
         return stats;

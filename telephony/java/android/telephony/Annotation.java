@@ -1,6 +1,7 @@
 package android.telephony;
 
 import android.annotation.IntDef;
+import android.telecom.Connection;
 import android.telephony.data.ApnSetting;
 
 import java.lang.annotation.Retention;
@@ -462,9 +463,7 @@ public class Annotation {
             DataFailCause.UNKNOWN,
             DataFailCause.RADIO_NOT_AVAILABLE,
             DataFailCause.UNACCEPTABLE_NETWORK_PARAMETER,
-            DataFailCause.CONNECTION_TO_DATACONNECTIONAC_BROKEN,
             DataFailCause.LOST_CONNECTION,
-            DataFailCause.RESET_BY_FRAMEWORK
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface DataFailureCause {
@@ -509,4 +508,30 @@ public class Annotation {
             ServiceState.RIL_RADIO_TECHNOLOGY_LTE_CA,
             ServiceState.RIL_RADIO_TECHNOLOGY_NR})
     public @interface RilRadioTechnology {}
+
+    @IntDef({
+            Connection.AUDIO_CODEC_NONE,
+            Connection.AUDIO_CODEC_AMR,
+            Connection.AUDIO_CODEC_AMR_WB,
+            Connection.AUDIO_CODEC_QCELP13K,
+            Connection.AUDIO_CODEC_EVRC,
+            Connection.AUDIO_CODEC_EVRC_B,
+            Connection.AUDIO_CODEC_EVRC_WB,
+            Connection.AUDIO_CODEC_EVRC_NW,
+            Connection.AUDIO_CODEC_GSM_EFR,
+            Connection.AUDIO_CODEC_GSM_FR,
+            Connection.AUDIO_CODEC_G711U,
+            Connection.AUDIO_CODEC_G723,
+            Connection.AUDIO_CODEC_G711A,
+            Connection.AUDIO_CODEC_G722,
+            Connection.AUDIO_CODEC_G711AB,
+            Connection.AUDIO_CODEC_G729,
+            Connection.AUDIO_CODEC_EVS_NB,
+            Connection.AUDIO_CODEC_EVS_WB,
+            Connection.AUDIO_CODEC_EVS_SWB,
+            Connection.AUDIO_CODEC_EVS_FB
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ImsAudioCodec {
+    }
 }

@@ -74,6 +74,7 @@ import com.android.server.pm.UserRestrictionsUtils;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Locale;
 import java.util.Map;
@@ -617,22 +618,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     }
 
     public boolean isEnabled() {
-        if ((Binder.getCallingUid() != Process.SYSTEM_UID) && (!checkIfCallerIsForegroundUser())) {
-            Slog.w(TAG, "isEnabled(): not allowed for non-active and non system user");
-            return false;
-        }
-
-        try {
-            mBluetoothLock.readLock().lock();
-            if (mBluetooth != null) {
-                return mBluetooth.isEnabled();
-            }
-        } catch (RemoteException e) {
-            Slog.e(TAG, "isEnabled()", e);
-        } finally {
-            mBluetoothLock.readLock().unlock();
-        }
-        return false;
+        return getState() == BluetoothAdapter.STATE_ON;
     }
 
     public int getState() {
@@ -697,6 +683,35 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     @Override
     public boolean isHearingAidProfileSupported() {
         return mIsHearingAidProfileSupported;
+    }
+
+    @Override
+    /** @hide */
+    public java.util.List<String> getSystemConfigEnabledProfilesForPackage(String packageName) {
+        if (Binder.getCallingUid() != Process.BLUETOOTH_UID) {
+            Slog.w(TAG, "getSystemConfigEnabledProfilesForPackage(): not allowed for non-bluetooth");
+            return null;
+        }
+
+        SystemConfig systemConfig = SystemConfig.getInstance();
+        if (systemConfig == null) {
+            return null;
+        }
+
+        android.util.ArrayMap<String, Boolean> componentEnabledStates =
+                systemConfig.getComponentsEnabledStates(packageName);
+        if (componentEnabledStates == null) {
+            return null;
+        }
+
+        ArrayList enabledProfiles = new ArrayList<String>();
+        for (Map.Entry<String, Boolean> entry : componentEnabledStates.entrySet()) {
+            if (entry.getValue()) {
+                enabledProfiles.add(entry.getKey());
+            }
+        }
+
+        return enabledProfiles;
     }
 
     // Monitor change of BLE scan only mode settings.
@@ -1949,14 +1964,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
                         //Do enable request
                         try {
-                            if (!mQuietEnable) {
-                                if (!mBluetooth.enable()) {
-                                    Slog.e(TAG, "IBluetooth.enable() returned false");
-                                }
-                            } else {
-                                if (!mBluetooth.enableNoAutoConnect()) {
-                                    Slog.e(TAG, "IBluetooth.enableNoAutoConnect() returned false");
-                                }
+                            if (!mBluetooth.enable(mQuietEnable)) {
+                                Slog.e(TAG, "IBluetooth.enable() returned false");
                             }
                         } catch (RemoteException e) {
                             Slog.e(TAG, "Unable to call enable()", e);
@@ -2244,14 +2253,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             } else if (mBluetooth != null) {
                 //Enable bluetooth
                 try {
-                    if (!mQuietEnable) {
-                        if (!mBluetooth.enable()) {
-                            Slog.e(TAG, "IBluetooth.enable() returned false");
-                        }
-                    } else {
-                        if (!mBluetooth.enableNoAutoConnect()) {
-                            Slog.e(TAG, "IBluetooth.enableNoAutoConnect() returned false");
-                        }
+                    if (!mBluetooth.enable(mQuietEnable)) {
+                        Slog.e(TAG, "IBluetooth.enable() returned false");
                     }
                 } catch (RemoteException e) {
                     Slog.e(TAG, "Unable to call enable()", e);

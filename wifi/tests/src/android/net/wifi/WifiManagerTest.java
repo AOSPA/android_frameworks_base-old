@@ -16,15 +16,31 @@
 
 package android.net.wifi;
 
+import static android.net.wifi.WifiManager.ActionListener;
+import static android.net.wifi.WifiManager.BUSY;
+import static android.net.wifi.WifiManager.ERROR;
 import static android.net.wifi.WifiManager.LocalOnlyHotspotCallback.ERROR_GENERIC;
 import static android.net.wifi.WifiManager.LocalOnlyHotspotCallback.ERROR_INCOMPATIBLE_MODE;
 import static android.net.wifi.WifiManager.LocalOnlyHotspotCallback.ERROR_NO_CHANNEL;
 import static android.net.wifi.WifiManager.LocalOnlyHotspotCallback.ERROR_TETHERING_DISALLOWED;
 import static android.net.wifi.WifiManager.LocalOnlyHotspotCallback.REQUEST_REGISTERED;
+import static android.net.wifi.WifiManager.NOT_AUTHORIZED;
+import static android.net.wifi.WifiManager.OnWifiActivityEnergyInfoListener;
 import static android.net.wifi.WifiManager.SAP_START_FAILURE_GENERAL;
+import static android.net.wifi.WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS;
+import static android.net.wifi.WifiManager.STATUS_SUGGESTION_CONNECTION_FAILURE_AUTHENTICATION;
+import static android.net.wifi.WifiManager.TxPacketCountListener;
 import static android.net.wifi.WifiManager.WIFI_AP_STATE_ENABLED;
 import static android.net.wifi.WifiManager.WIFI_AP_STATE_ENABLING;
 import static android.net.wifi.WifiManager.WIFI_AP_STATE_FAILED;
+import static android.net.wifi.WifiManager.WIFI_FEATURE_DPP;
+import static android.net.wifi.WifiManager.WIFI_FEATURE_OWE;
+import static android.net.wifi.WifiManager.WIFI_FEATURE_P2P;
+import static android.net.wifi.WifiManager.WIFI_FEATURE_PASSPOINT;
+import static android.net.wifi.WifiManager.WIFI_FEATURE_SCANNER;
+import static android.net.wifi.WifiManager.WIFI_FEATURE_WPA3_SAE;
+import static android.net.wifi.WifiManager.WIFI_FEATURE_WPA3_SUITE_B;
+import static android.net.wifi.WifiManager.WpsCallback;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -50,6 +66,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
+import android.app.ActivityManager;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.net.DhcpInfo;
@@ -70,6 +87,7 @@ import android.os.Handler;
 import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.os.connectivity.WifiActivityEnergyInfo;
 import android.os.test.TestLooper;
 
 import androidx.test.filters.SmallTest;
@@ -112,16 +130,19 @@ public class WifiManagerTest {
     @Mock TrafficStateCallback mTrafficStateCallback;
     @Mock NetworkRequestMatchCallback mNetworkRequestMatchCallback;
     @Mock OnWifiUsabilityStatsListener mOnWifiUsabilityStatsListener;
+    @Mock OnWifiActivityEnergyInfoListener mOnWifiActivityEnergyInfoListener;
     @Mock SuggestionConnectionStatusListener mListener;
     @Mock Runnable mRunnable;
     @Mock Executor mExecutor;
     @Mock Executor mAnotherExecutor;
+    @Mock ActivityManager mActivityManager;
 
     private Handler mHandler;
     private TestLooper mLooper;
     private WifiManager mWifiManager;
     private WifiNetworkSuggestion mWifiNetworkSuggestion;
     private ScanResultsCallback mScanResultsCallback;
+    private WifiActivityEnergyInfo mWifiActivityEnergyInfo;
 
     @Before
     public void setUp() throws Exception {
@@ -140,6 +161,7 @@ public class WifiManagerTest {
                 mRunnable.run();
             }
         };
+        mWifiActivityEnergyInfo = new WifiActivityEnergyInfo(0, 0, 0, 0, 0, 0);
     }
 
     /**
@@ -178,6 +200,33 @@ public class WifiManagerTest {
 
         when(mWifiService.stopSoftAp()).thenReturn(false);
         assertFalse(mWifiManager.stopSoftAp());
+    }
+
+    /**
+     * Check the call to startSoftAp calls WifiService to startSoftAp with the provided
+     * WifiConfiguration.  Verify that the return value is propagated to the caller.
+     */
+    @Test
+    public void testStartTetheredHotspotCallsServiceWithSoftApConfig() throws Exception {
+        SoftApConfiguration mSoftApConfig = new SoftApConfiguration.Builder().build();
+        when(mWifiService.startTetheredHotspot(eq(mSoftApConfig))).thenReturn(true);
+        assertTrue(mWifiManager.startTetheredHotspot(mSoftApConfig));
+
+        when(mWifiService.startTetheredHotspot(eq(mSoftApConfig))).thenReturn(false);
+        assertFalse(mWifiManager.startTetheredHotspot(mSoftApConfig));
+    }
+
+    /**
+     * Check the call to startSoftAp calls WifiService to startSoftAp with a null config.  Verify
+     * that the return value is propagated to the caller.
+     */
+    @Test
+    public void testStartTetheredHotspotCallsServiceWithNullConfig() throws Exception {
+        when(mWifiService.startTetheredHotspot(eq(null))).thenReturn(true);
+        assertTrue(mWifiManager.startTetheredHotspot(null));
+
+        when(mWifiService.startTetheredHotspot(eq(null))).thenReturn(false);
+        assertFalse(mWifiManager.startTetheredHotspot(null));
     }
 
     /**
@@ -1040,7 +1089,7 @@ public class WifiManagerTest {
     }
 
 
-    class WpsCallbackTester extends WifiManager.WpsCallback {
+    class WpsCallbackTester extends WpsCallback {
         public boolean mStarted = false;
         public boolean mSucceeded = false;
         public boolean mFailed = false;
@@ -1072,7 +1121,7 @@ public class WifiManagerTest {
         WpsCallbackTester wpsCallback = new WpsCallbackTester();
         mWifiManager.startWps(null, wpsCallback);
         assertTrue(wpsCallback.mFailed);
-        assertEquals(WifiManager.ERROR, wpsCallback.mFailureCode);
+        assertEquals(ERROR, wpsCallback.mFailureCode);
         assertFalse(wpsCallback.mStarted);
         assertFalse(wpsCallback.mSucceeded);
         verifyNoMoreInteractions(mWifiService);
@@ -1095,7 +1144,7 @@ public class WifiManagerTest {
         WpsCallbackTester wpsCallback = new WpsCallbackTester();
         mWifiManager.cancelWps(wpsCallback);
         assertTrue(wpsCallback.mFailed);
-        assertEquals(WifiManager.ERROR, wpsCallback.mFailureCode);
+        assertEquals(ERROR, wpsCallback.mFailureCode);
         assertFalse(wpsCallback.mStarted);
         assertFalse(wpsCallback.mSucceeded);
         verifyNoMoreInteractions(mWifiService);
@@ -1143,6 +1192,43 @@ public class WifiManagerTest {
 
         try {
             mWifiManager.setWifiApConfiguration(new WifiConfiguration());
+            fail("setWifiApConfiguration should rethrow Exceptions from WifiService");
+        } catch (SecurityException e) { }
+    }
+
+    /**
+     * Verify that a successful call properly returns true.
+     */
+    @Test
+    public void testSetSoftApConfigurationSuccessReturnsTrue() throws Exception {
+        SoftApConfiguration apConfig = new SoftApConfiguration.Builder().build();
+
+        when(mWifiService.setSoftApConfiguration(eq(apConfig), eq(TEST_PACKAGE_NAME)))
+                .thenReturn(true);
+        assertTrue(mWifiManager.setSoftApConfiguration(apConfig));
+    }
+
+    /**
+     * Verify that a failed call properly returns false.
+     */
+    @Test
+    public void testSetSoftApConfigurationFailureReturnsFalse() throws Exception {
+        SoftApConfiguration apConfig = new SoftApConfiguration.Builder().build();
+
+        when(mWifiService.setSoftApConfiguration(eq(apConfig), eq(TEST_PACKAGE_NAME)))
+                .thenReturn(false);
+        assertFalse(mWifiManager.setSoftApConfiguration(apConfig));
+    }
+
+    /**
+     * Verify Exceptions are rethrown when underlying calls to WifiService throw exceptions.
+     */
+    @Test
+    public void testSetSoftApConfigurationRethrowsException() throws Exception {
+        doThrow(new SecurityException()).when(mWifiService).setSoftApConfiguration(any(), any());
+
+        try {
+            mWifiManager.setSoftApConfiguration(new SoftApConfiguration.Builder().build());
             fail("setWifiApConfiguration should rethrow Exceptions from WifiService");
         } catch (SecurityException e) { }
     }
@@ -1371,13 +1457,13 @@ public class WifiManagerTest {
     public void addGetRemoveNetworkSuggestions() throws Exception {
         List<WifiNetworkSuggestion> testList = new ArrayList<>();
         when(mWifiService.addNetworkSuggestions(any(List.class), anyString(),
-                nullable(String.class))).thenReturn(WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS);
+                nullable(String.class))).thenReturn(STATUS_NETWORK_SUGGESTIONS_SUCCESS);
         when(mWifiService.removeNetworkSuggestions(any(List.class), anyString())).thenReturn(
-                WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS);
+                STATUS_NETWORK_SUGGESTIONS_SUCCESS);
         when(mWifiService.getNetworkSuggestions(anyString()))
                 .thenReturn(testList);
 
-        assertEquals(WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS,
+        assertEquals(STATUS_NETWORK_SUGGESTIONS_SUCCESS,
                 mWifiManager.addNetworkSuggestions(testList));
         verify(mWifiService).addNetworkSuggestions(anyList(), eq(TEST_PACKAGE_NAME),
                 nullable(String.class));
@@ -1385,7 +1471,7 @@ public class WifiManagerTest {
         assertEquals(testList, mWifiManager.getNetworkSuggestions());
         verify(mWifiService).getNetworkSuggestions(eq(TEST_PACKAGE_NAME));
 
-        assertEquals(WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS,
+        assertEquals(STATUS_NETWORK_SUGGESTIONS_SUCCESS,
                 mWifiManager.removeNetworkSuggestions(new ArrayList<>()));
         verify(mWifiService).removeNetworkSuggestions(anyList(), eq(TEST_PACKAGE_NAME));
     }
@@ -1395,8 +1481,15 @@ public class WifiManagerTest {
      */
     @Test
     public void getMaxNumberOfNetworkSuggestionsPerApp() {
-        assertEquals(WifiManager.NETWORK_SUGGESTIONS_MAX_PER_APP,
-                mWifiManager.getMaxNumberOfNetworkSuggestionsPerApp());
+        when(mContext.getSystemServiceName(ActivityManager.class))
+                .thenReturn(Context.ACTIVITY_SERVICE);
+        when(mContext.getSystemService(Context.ACTIVITY_SERVICE))
+                .thenReturn(mActivityManager);
+        when(mActivityManager.isLowRamDevice()).thenReturn(true);
+        assertEquals(256, mWifiManager.getMaxNumberOfNetworkSuggestionsPerApp());
+
+        when(mActivityManager.isLowRamDevice()).thenReturn(false);
+        assertEquals(1024, mWifiManager.getMaxNumberOfNetworkSuggestionsPerApp());
     }
 
     /**
@@ -1442,10 +1535,10 @@ public class WifiManagerTest {
     @Test
     public void testIsEnhancedOpenSupported() throws Exception {
         when(mWifiService.getSupportedFeatures())
-                .thenReturn(new Long(WifiManager.WIFI_FEATURE_OWE));
+                .thenReturn(new Long(WIFI_FEATURE_OWE));
         assertTrue(mWifiManager.isEnhancedOpenSupported());
         when(mWifiService.getSupportedFeatures())
-                .thenReturn(new Long(~WifiManager.WIFI_FEATURE_OWE));
+                .thenReturn(new Long(~WIFI_FEATURE_OWE));
         assertFalse(mWifiManager.isEnhancedOpenSupported());
     }
 
@@ -1455,10 +1548,10 @@ public class WifiManagerTest {
     @Test
     public void testIsWpa3SaeSupported() throws Exception {
         when(mWifiService.getSupportedFeatures())
-                .thenReturn(new Long(WifiManager.WIFI_FEATURE_WPA3_SAE));
+                .thenReturn(new Long(WIFI_FEATURE_WPA3_SAE));
         assertTrue(mWifiManager.isWpa3SaeSupported());
         when(mWifiService.getSupportedFeatures())
-                .thenReturn(new Long(~WifiManager.WIFI_FEATURE_WPA3_SAE));
+                .thenReturn(new Long(~WIFI_FEATURE_WPA3_SAE));
         assertFalse(mWifiManager.isWpa3SaeSupported());
     }
 
@@ -1468,10 +1561,10 @@ public class WifiManagerTest {
     @Test
     public void testIsWpa3SuiteBSupported() throws Exception {
         when(mWifiService.getSupportedFeatures())
-                .thenReturn(new Long(WifiManager.WIFI_FEATURE_WPA3_SUITE_B));
+                .thenReturn(new Long(WIFI_FEATURE_WPA3_SUITE_B));
         assertTrue(mWifiManager.isWpa3SuiteBSupported());
         when(mWifiService.getSupportedFeatures())
-                .thenReturn(new Long(~WifiManager.WIFI_FEATURE_WPA3_SUITE_B));
+                .thenReturn(new Long(~WIFI_FEATURE_WPA3_SUITE_B));
         assertFalse(mWifiManager.isWpa3SuiteBSupported());
     }
 
@@ -1481,10 +1574,10 @@ public class WifiManagerTest {
     @Test
     public void testIsEasyConnectSupported() throws Exception {
         when(mWifiService.getSupportedFeatures())
-                .thenReturn(new Long(WifiManager.WIFI_FEATURE_DPP));
+                .thenReturn(new Long(WIFI_FEATURE_DPP));
         assertTrue(mWifiManager.isEasyConnectSupported());
         when(mWifiService.getSupportedFeatures())
-                .thenReturn(new Long(~WifiManager.WIFI_FEATURE_DPP));
+                .thenReturn(new Long(~WIFI_FEATURE_DPP));
         assertFalse(mWifiManager.isEasyConnectSupported());
     }
 
@@ -1593,9 +1686,9 @@ public class WifiManagerTest {
     @Test
     public void testGetSupportedFeatures() throws Exception {
         long supportedFeatures =
-                WifiManager.WIFI_FEATURE_SCANNER
-                        | WifiManager.WIFI_FEATURE_PASSPOINT
-                        | WifiManager.WIFI_FEATURE_P2P;
+                WIFI_FEATURE_SCANNER
+                        | WIFI_FEATURE_PASSPOINT
+                        | WIFI_FEATURE_P2P;
         when(mWifiService.getSupportedFeatures())
                 .thenReturn(Long.valueOf(supportedFeatures));
 
@@ -1615,15 +1708,55 @@ public class WifiManagerTest {
     }
 
     /**
-     * Test behavior of {@link WifiManager#getControllerActivityEnergyInfo()}
+     * Tests that passing a null Executor to {@link WifiManager#getWifiActivityEnergyInfoAsync}
+     * throws an exception.
      */
-    @Test
-    public void testGetControllerActivityEnergyInfo() throws Exception {
-        WifiActivityEnergyInfo activityEnergyInfo =
-                new WifiActivityEnergyInfo(5, 3, 3, new long[]{5L, 5L, 5L}, 5, 5, 5, 5);
-        when(mWifiService.reportActivityInfo()).thenReturn(activityEnergyInfo);
+    @Test(expected = IllegalArgumentException.class)
+    public void testGetWifiActivityInfoNullExecutor() throws Exception {
+        mWifiManager.getWifiActivityEnergyInfoAsync(null, mOnWifiActivityEnergyInfoListener);
+    }
 
-        assertEquals(activityEnergyInfo, mWifiManager.getControllerActivityEnergyInfo());
+    /**
+     * Tests that passing a null listener to {@link WifiManager#getWifiActivityEnergyInfoAsync}
+     * throws an exception.
+     */
+    @Test(expected = IllegalArgumentException.class)
+    public void testGetWifiActivityInfoNullListener() throws Exception {
+        mWifiManager.getWifiActivityEnergyInfoAsync(mExecutor, null);
+    }
+
+    /** Tests that the listener runs on the correct Executor. */
+    @Test
+    public void testGetWifiActivityInfoRunsOnCorrectExecutor() throws Exception {
+        mWifiManager.getWifiActivityEnergyInfoAsync(mExecutor, mOnWifiActivityEnergyInfoListener);
+        ArgumentCaptor<IOnWifiActivityEnergyInfoListener> listenerCaptor =
+                ArgumentCaptor.forClass(IOnWifiActivityEnergyInfoListener.class);
+        verify(mWifiService).getWifiActivityEnergyInfoAsync(listenerCaptor.capture());
+        IOnWifiActivityEnergyInfoListener listener = listenerCaptor.getValue();
+        listener.onWifiActivityEnergyInfo(mWifiActivityEnergyInfo);
+        verify(mExecutor).execute(any());
+
+        // ensure that the executor is only triggered once
+        listener.onWifiActivityEnergyInfo(mWifiActivityEnergyInfo);
+        verify(mExecutor).execute(any());
+    }
+
+    /** Tests that the correct listener runs. */
+    @Test
+    public void testGetWifiActivityInfoRunsCorrectListener() throws Exception {
+        int[] flag = {0};
+        mWifiManager.getWifiActivityEnergyInfoAsync(
+                new SynchronousExecutor(), info -> flag[0]++);
+        ArgumentCaptor<IOnWifiActivityEnergyInfoListener> listenerCaptor =
+                ArgumentCaptor.forClass(IOnWifiActivityEnergyInfoListener.class);
+        verify(mWifiService).getWifiActivityEnergyInfoAsync(listenerCaptor.capture());
+        IOnWifiActivityEnergyInfoListener listener = listenerCaptor.getValue();
+        listener.onWifiActivityEnergyInfo(mWifiActivityEnergyInfo);
+        assertEquals(1, flag[0]);
+
+        // ensure that the listener is only triggered once
+        listener.onWifiActivityEnergyInfo(mWifiActivityEnergyInfo);
+        assertEquals(1, flag[0]);
     }
 
     /**
@@ -1683,11 +1816,11 @@ public class WifiManagerTest {
     }
 
     /**
-     * Test behavior of {@link WifiManager#connect(int, WifiManager.ActionListener)}
+     * Test behavior of {@link WifiManager#connect(int, ActionListener)}
      */
     @Test
     public void testConnectWithListener() throws Exception {
-        WifiManager.ActionListener externalListener = mock(WifiManager.ActionListener.class);
+        ActionListener externalListener = mock(ActionListener.class);
         mWifiManager.connect(TEST_NETWORK_ID, externalListener);
 
         ArgumentCaptor<IActionListener> binderListenerCaptor =
@@ -1702,43 +1835,43 @@ public class WifiManagerTest {
         verify(externalListener).onSuccess();
 
         // Trigger on failure.
-        binderListenerCaptor.getValue().onFailure(WifiManager.BUSY);
+        binderListenerCaptor.getValue().onFailure(BUSY);
         mLooper.dispatchAll();
-        verify(externalListener).onFailure(WifiManager.BUSY);
+        verify(externalListener).onFailure(BUSY);
     }
 
     /**
-     * Test behavior of {@link WifiManager#connect(int, WifiManager.ActionListener)}
+     * Test behavior of {@link WifiManager#connect(int, ActionListener)}
      */
     @Test
     public void testConnectWithListenerHandleSecurityException() throws Exception {
         doThrow(new SecurityException()).when(mWifiService)
                 .connect(eq(null), anyInt(), any(IBinder.class),
                         any(IActionListener.class), anyInt());
-        WifiManager.ActionListener externalListener = mock(WifiManager.ActionListener.class);
+        ActionListener externalListener = mock(ActionListener.class);
         mWifiManager.connect(TEST_NETWORK_ID, externalListener);
 
         mLooper.dispatchAll();
-        verify(externalListener).onFailure(WifiManager.NOT_AUTHORIZED);
+        verify(externalListener).onFailure(NOT_AUTHORIZED);
     }
 
     /**
-     * Test behavior of {@link WifiManager#connect(int, WifiManager.ActionListener)}
+     * Test behavior of {@link WifiManager#connect(int, ActionListener)}
      */
     @Test
     public void testConnectWithListenerHandleRemoteException() throws Exception {
         doThrow(new RemoteException()).when(mWifiService)
                 .connect(eq(null), anyInt(), any(IBinder.class),
                         any(IActionListener.class), anyInt());
-        WifiManager.ActionListener externalListener = mock(WifiManager.ActionListener.class);
+        ActionListener externalListener = mock(ActionListener.class);
         mWifiManager.connect(TEST_NETWORK_ID, externalListener);
 
         mLooper.dispatchAll();
-        verify(externalListener).onFailure(WifiManager.ERROR);
+        verify(externalListener).onFailure(ERROR);
     }
 
     /**
-     * Test behavior of {@link WifiManager#connect(int, WifiManager.ActionListener)}
+     * Test behavior of {@link WifiManager#connect(int, ActionListener)}
      */
     @Test
     public void testConnectWithoutListener() throws Exception {
@@ -1750,12 +1883,12 @@ public class WifiManagerTest {
     }
 
     /**
-     * Test behavior of {@link WifiManager#getTxPacketCount(WifiManager.TxPacketCountListener)}
+     * Test behavior of {@link WifiManager#getTxPacketCount(TxPacketCountListener)}
      */
     @Test
     public void testGetTxPacketCount() throws Exception {
-        WifiManager.TxPacketCountListener externalListener =
-                mock(WifiManager.TxPacketCountListener.class);
+        TxPacketCountListener externalListener =
+                mock(TxPacketCountListener.class);
         mWifiManager.getTxPacketCount(externalListener);
 
         ArgumentCaptor<ITxPacketCountListener> binderListenerCaptor =
@@ -1770,9 +1903,9 @@ public class WifiManagerTest {
         verify(externalListener).onSuccess(6);
 
         // Trigger on failure.
-        binderListenerCaptor.getValue().onFailure(WifiManager.BUSY);
+        binderListenerCaptor.getValue().onFailure(BUSY);
         mLooper.dispatchAll();
-        verify(externalListener).onFailure(WifiManager.BUSY);
+        verify(externalListener).onFailure(BUSY);
     }
 
     /**
@@ -1874,7 +2007,7 @@ public class WifiManagerTest {
      */
     @Test
     public void testAddSuggestionConnectionStatusListenerAndReceiveEvent() throws Exception {
-        int errorCode = WifiManager.STATUS_SUGGESTION_CONNECTION_FAILURE_AUTHENTICATION;
+        int errorCode = STATUS_SUGGESTION_CONNECTION_FAILURE_AUTHENTICATION;
         ArgumentCaptor<ISuggestionConnectionStatusListener.Stub> callbackCaptor =
                 ArgumentCaptor.forClass(ISuggestionConnectionStatusListener.Stub.class);
         Executor executor = new SynchronousExecutor();
@@ -1890,7 +2023,7 @@ public class WifiManagerTest {
      */
     @Test
     public void testAddSuggestionConnectionStatusListenerWithTheTargetExecutor() throws Exception {
-        int errorCode = WifiManager.STATUS_SUGGESTION_CONNECTION_FAILURE_AUTHENTICATION;
+        int errorCode = STATUS_SUGGESTION_CONNECTION_FAILURE_AUTHENTICATION;
         ArgumentCaptor<ISuggestionConnectionStatusListener.Stub> callbackCaptor =
                 ArgumentCaptor.forClass(ISuggestionConnectionStatusListener.Stub.class);
         mWifiManager.addSuggestionConnectionStatusListener(mExecutor, mListener);

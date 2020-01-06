@@ -452,6 +452,9 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         if ((diff & ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE) != 0) {
             list.add("CONFIG_SMALLEST_SCREEN_SIZE");
         }
+        if ((diff & ActivityInfo.CONFIG_DENSITY) != 0) {
+            list.add("CONFIG_DENSITY");
+        }
         if ((diff & ActivityInfo.CONFIG_LAYOUT_DIRECTION) != 0) {
             list.add("CONFIG_LAYOUT_DIRECTION");
         }
@@ -460,6 +463,9 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         }
         if ((diff & ActivityInfo.CONFIG_ASSETS_PATHS) != 0) {
             list.add("CONFIG_ASSETS_PATHS");
+        }
+        if ((diff & ActivityInfo.CONFIG_WINDOW_CONFIGURATION) != 0) {
+            list.add("CONFIG_WINDOW_CONFIGURATION");
         }
         StringBuilder builder = new StringBuilder("{");
         for (int i = 0, n = list.size(); i < n; i++) {
@@ -1115,7 +1121,7 @@ public final class Configuration implements Parcelable, Comparable<Configuration
      * @param critical          If true, reduce amount of data written.
      * @hide
      */
-    public void writeToProto(ProtoOutputStream protoOutputStream, long fieldId, boolean persisted,
+    public void dumpDebug(ProtoOutputStream protoOutputStream, long fieldId, boolean persisted,
             boolean critical) {
         final long token = protoOutputStream.start(fieldId);
         if (!critical) {
@@ -1138,7 +1144,7 @@ public final class Configuration implements Parcelable, Comparable<Configuration
             protoOutputStream.write(DENSITY_DPI, densityDpi);
             // For persistence, we do not care about window configuration
             if (!persisted && windowConfiguration != null) {
-                windowConfiguration.writeToProto(protoOutputStream, WINDOW_CONFIGURATION);
+                windowConfiguration.dumpDebug(protoOutputStream, WINDOW_CONFIGURATION);
             }
         }
         protoOutputStream.write(ORIENTATION, orientation);
@@ -1155,8 +1161,8 @@ public final class Configuration implements Parcelable, Comparable<Configuration
      * @param fieldId           Field Id of the Configuration as defined in the parent message
      * @hide
      */
-    public void writeToProto(ProtoOutputStream protoOutputStream, long fieldId) {
-        writeToProto(protoOutputStream, fieldId, false /* persisted */, false /* critical */);
+    public void dumpDebug(ProtoOutputStream protoOutputStream, long fieldId) {
+        dumpDebug(protoOutputStream, fieldId, false /* persisted */, false /* critical */);
     }
 
     /**
@@ -1168,8 +1174,8 @@ public final class Configuration implements Parcelable, Comparable<Configuration
      * @param critical          If true, reduce amount of data written.
      * @hide
      */
-    public void writeToProto(ProtoOutputStream protoOutputStream, long fieldId, boolean critical) {
-        writeToProto(protoOutputStream, fieldId, false /* persisted */, critical);
+    public void dumpDebug(ProtoOutputStream protoOutputStream, long fieldId, boolean critical) {
+        dumpDebug(protoOutputStream, fieldId, false /* persisted */, critical);
     }
 
     /**
@@ -1338,7 +1344,7 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         }
 
         final long token = protoOutputStream.start(fieldId);
-        writeToProto(protoOutputStream, CONFIGURATION);
+        dumpDebug(protoOutputStream, CONFIGURATION);
         protoOutputStream.write(SDK_VERSION, Build.VERSION.RESOURCES_SDK_INT);
         protoOutputStream.write(SCREEN_WIDTH_PX, width);
         protoOutputStream.write(SCREEN_HEIGHT_PX, height);

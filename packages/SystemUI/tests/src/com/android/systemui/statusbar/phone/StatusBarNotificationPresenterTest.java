@@ -39,6 +39,7 @@ import com.android.systemui.InitController;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
+import com.android.systemui.statusbar.KeyguardIndicationController;
 import com.android.systemui.statusbar.NotificationEntryBuilder;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationMediaManager;
@@ -71,10 +72,11 @@ import java.util.ArrayList;
 public class StatusBarNotificationPresenterTest extends SysuiTestCase {
 
 
-    private StatusBarNotificationPresenter mStatusBar;
+    private StatusBarNotificationPresenter mStatusBarNotificationPresenter;
     private CommandQueue mCommandQueue;
     private FakeMetricsLogger mMetricsLogger;
     private ShadeController mShadeController = mock(ShadeController.class);
+    private StatusBar mStatusBar = mock(StatusBar.class);
 
     @Before
     public void setup() {
@@ -105,14 +107,15 @@ public class StatusBarNotificationPresenterTest extends SysuiTestCase {
 
         StatusBarWindowView statusBarWindowView = mock(StatusBarWindowView.class);
         when(statusBarWindowView.getResources()).thenReturn(mContext.getResources());
-        mStatusBar = new StatusBarNotificationPresenter(mContext,
+        mStatusBarNotificationPresenter = new StatusBarNotificationPresenter(mContext,
                 mock(NotificationPanelView.class), mock(HeadsUpManagerPhone.class),
                 statusBarWindowView, mock(NotificationListContainerViewGroup.class),
                 mock(DozeScrimController.class), mock(ScrimController.class),
                 mock(ActivityLaunchAnimator.class), mock(DynamicPrivacyController.class),
                 mock(NotificationAlertingManager.class),
                 mock(NotificationRowBinderImpl.class), mock(KeyguardStateController.class),
-                mCommandQueue);
+                mock(KeyguardIndicationController.class),
+                mStatusBar, mCommandQueue);
     }
 
     @Test
@@ -129,7 +132,7 @@ public class StatusBarNotificationPresenterTest extends SysuiTestCase {
         TestableLooper.get(this).processAllMessages();
 
         assertFalse("The panel shouldn't allow heads up while disabled",
-                mStatusBar.canHeadsUp(entry, entry.getSbn()));
+                mStatusBarNotificationPresenter.canHeadsUp(entry, entry.getSbn()));
     }
 
     @Test
@@ -146,13 +149,13 @@ public class StatusBarNotificationPresenterTest extends SysuiTestCase {
         TestableLooper.get(this).processAllMessages();
 
         assertFalse("The panel shouldn't allow heads up while notitifcation shade disabled",
-                mStatusBar.canHeadsUp(entry, entry.getSbn()));
+                mStatusBarNotificationPresenter.canHeadsUp(entry, entry.getSbn()));
     }
 
     @Test
     public void onActivatedMetrics() {
         ActivatableNotificationView view =  mock(ActivatableNotificationView.class);
-        mStatusBar.onActivated(view);
+        mStatusBarNotificationPresenter.onActivated(view);
 
         MetricsAsserts.assertHasLog("missing lockscreen note tap log",
                 mMetricsLogger.getLogs(),

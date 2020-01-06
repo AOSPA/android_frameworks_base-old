@@ -17,24 +17,39 @@
 package android.os.ext;
 
 import android.annotation.IntDef;
+import android.annotation.SystemApi;
 import android.os.Build.VERSION_CODES;
 import android.os.SystemProperties;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
-/** @hide */
+/**
+ * Methods for interacting with the extension SDK.
+ *
+ * This class provides information about the extension SDK version present
+ * on this device. Use the {@link #getExtensionVersion(int) getExtension} to
+ * query for the extension version for the given SDK version.
+
+ * @hide
+ */
+@SystemApi
 public class SdkExtensions {
 
     private static final int R_EXTENSION_INT;
     static {
-        R_EXTENSION_INT = SystemProperties.getInt("persist.com.android.sdkext.sdk_info", 0);
+        R_EXTENSION_INT = SystemProperties.getInt("ro.build.version.extensions.r", 0);
     }
 
-    /** Values suitable as parameters for {@link #getExtensionVersion(int)}. */
+    /**
+     * Values suitable as parameters for {@link #getExtensionVersion(int)}.
+     * @hide
+     */
     @IntDef(value = { VERSION_CODES.R })
     @Retention(RetentionPolicy.SOURCE)
     public @interface SdkVersion {}
+
+    private SdkExtensions() { }
 
     /**
      * Return the version of the extension to the given SDK.

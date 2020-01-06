@@ -20,6 +20,7 @@ import static android.Manifest.permission.INSTALL_PACKAGES;
 import static android.Manifest.permission.READ_EXTERNAL_STORAGE;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 import static android.Manifest.permission.WRITE_MEDIA_STORAGE;
+import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.OP_LEGACY_STORAGE;
 import static android.app.AppOpsManager.OP_READ_EXTERNAL_STORAGE;
@@ -49,6 +50,7 @@ import static org.xmlpull.v1.XmlPullParser.START_TAG;
 import android.Manifest;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
+import android.app.ActivityManagerInternal;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
 import android.app.KeyguardManager;
@@ -254,6 +256,11 @@ class StorageManagerService extends IStorageManager.Stub
         public void onCleanupUser(int userHandle) {
             mStorageManagerService.onCleanupUser(userHandle);
         }
+
+        @Override
+        public void onStopUser(int userHandle) {
+            mStorageManagerService.onStopUser(userHandle);
+        }
     }
 
     private static final boolean DEBUG_EVENTS = false;
@@ -356,8 +363,7 @@ class StorageManagerService extends IStorageManager.Stub
     @GuardedBy("mLock")
     private String mMoveTargetUuid;
 
-    @Nullable
-    private volatile String mMediaStoreAuthorityPackageName = null;
+    private volatile int mMediaStoreAuthorityAppId = -1;
 
     private volatile int mCurrentUserId = UserHandle.USER_SYSTEM;
 
@@ -1077,6 +1083,15 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    private void onStopUser(int userId) {
+        Slog.i(TAG, "onStopUser " + userId);
+        try {
+            mStorageSessionController.onUserStopping(userId);
+        } catch (Exception e) {
+            Slog.wtf(TAG, e);
+        }
+    }
+
     private boolean supportsBlockCheckpoint() throws RemoteException {
         enforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS);
         return mVold.supportsBlockCheckpoint();
@@ -1309,6 +1324,15 @@ class StorageManagerService extends IStorageManager.Stub
     private void onVolumeCreatedLocked(VolumeInfo vol) {
         if (mPmInternal.isOnlyCoreApps()) {
             Slog.d(TAG, "System booted in core-only mode; ignoring volume " + vol.getId());
+            return;
+        }
+        final ActivityManagerInternal amInternal =
+                LocalServices.getService(ActivityManagerInternal.class);
+
+        if (mIsFuseEnabled && vol.mountUserId >= 0
+                && !amInternal.isUserRunning(vol.mountUserId, 0)) {
+            Slog.d(TAG, "Ignoring volume " + vol.getId() + " because user "
+                    + Integer.toString(vol.mountUserId) + " is no longer running.");
             return;
         }
 
@@ -1558,8 +1582,6 @@ class StorageManagerService extends IStorageManager.Stub
     public StorageManagerService(Context context) {
         sSelf = this;
 
-        updateFusePropFromSettings();
-
         // Snapshot feature flag used for this boot
         SystemProperties.set(StorageManager.PROP_ISOLATED_STORAGE_SNAPSHOT, Boolean.toString(
                 SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, true)));
@@ -1726,7 +1748,7 @@ class StorageManagerService extends IStorageManager.Stub
                 | PackageManager.MATCH_DIRECT_BOOT_UNAWARE,
                 UserHandle.getUserId(UserHandle.USER_SYSTEM));
         if (provider != null) {
-            mMediaStoreAuthorityPackageName = provider.packageName;
+            mMediaStoreAuthorityAppId = UserHandle.getAppId(provider.applicationInfo.uid);
         }
 
         try {
@@ -1759,6 +1781,7 @@ class StorageManagerService extends IStorageManager.Stub
     private void bootCompleted() {
         mBootCompleted = true;
         mHandler.obtainMessage(H_BOOT_COMPLETED).sendToTarget();
+        updateFusePropFromSettings();
     }
 
     private void handleBootCompleted() {
@@ -2232,6 +2255,11 @@ class StorageManagerService extends IStorageManager.Stub
     }
 
     private void remountUidExternalStorage(int uid, int mode) {
+        if (uid == Process.SYSTEM_UID) {
+            // No need to remount uid for system because it has all access anyways
+            return;
+        }
+
         try {
             mVold.remountUid(uid, mode);
         } catch (Exception e) {
@@ -3434,7 +3462,13 @@ class StorageManagerService extends IStorageManager.Stub
         public void opChanged(int op, int uid, String packageName) throws RemoteException {
             if (!ENABLE_ISOLATED_STORAGE) return;
 
-            remountUidExternalStorage(uid, getMountMode(uid, packageName));
+            int mountMode = getMountMode(uid, packageName);
+            boolean isUidActive = LocalServices.getService(ActivityManagerInternal.class)
+                    .getUidProcessState(uid) != PROCESS_STATE_NONEXISTENT;
+
+            if (isUidActive) {
+                remountUidExternalStorage(uid, mountMode);
+            }
         }
     };
 
@@ -3785,8 +3819,10 @@ class StorageManagerService extends IStorageManager.Stub
                 return Zygote.MOUNT_EXTERNAL_NONE;
             }
 
-            if (mIsFuseEnabled && packageName.equals(mMediaStoreAuthorityPackageName)) {
-                // Determine if caller requires pass_through mount
+            if (mIsFuseEnabled && mMediaStoreAuthorityAppId == UserHandle.getAppId(uid)) {
+                // Determine if caller requires pass_through mount; note that we do this for
+                // all processes that share a UID with MediaProvider; but this is fine, since
+                // those processes anyway share the same rights as MediaProvider.
                 return Zygote.MOUNT_EXTERNAL_PASS_THROUGH;
             }
 
@@ -4123,6 +4159,13 @@ class StorageManagerService extends IStorageManager.Stub
                     listener.onReset(vold);
                 }
             }
+        }
+
+        @Override
+        public void resetUser(int userId) {
+            // TODO(b/145931219): ideally, we only reset storage for the user in question,
+            // but for now, reset everything.
+            mHandler.obtainMessage(H_RESET).sendToTarget();
         }
 
         public boolean hasExternalStorage(int uid, String packageName) {

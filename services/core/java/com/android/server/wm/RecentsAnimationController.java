@@ -16,7 +16,6 @@
 
 package com.android.server.wm;
 
-import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.RemoteAnimationTarget.MODE_CLOSING;
@@ -42,10 +41,10 @@ import android.os.Binder;
 import android.os.IBinder.DeathRecipient;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Slog;
 import android.util.SparseBooleanArray;
-import android.util.SparseIntArray;
 import android.util.proto.ProtoOutputStream;
 import android.view.IRecentsAnimationController;
 import android.view.IRecentsAnimationRunner;
@@ -55,6 +54,9 @@ import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.function.pooled.PooledConsumer;
+import com.android.internal.util.function.pooled.PooledFunction;
+import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
 import com.android.server.inputmethod.InputMethodManagerInternal;
 import com.android.server.protolog.common.ProtoLog;
@@ -369,13 +371,13 @@ public class RecentsAnimationController implements DeathRecipient {
         final ActivityStack targetStack = mDisplayContent.getStack(WINDOWING_MODE_UNDEFINED,
                 targetActivityType);
         if (targetStack != null) {
-            for (int i = targetStack.getChildCount() - 1; i >= 0; i--) {
-                final Task t = targetStack.getChildAt(i);
-                if (!visibleTasks.contains(t)) {
-                    visibleTasks.add(t);
-                }
-            }
+            final PooledConsumer c = PooledLambda.obtainConsumer((t, outList) ->
+	            { if (!outList.contains(t)) outList.add(t); }, PooledLambda.__(Task.class),
+                    visibleTasks);
+            targetStack.forAllTasks(c);
+            c.recycle();
         }
+
         final int taskCount = visibleTasks.size();
         for (int i = 0; i < taskCount; i++) {
             final Task task = visibleTasks.get(i);
@@ -499,10 +501,13 @@ public class RecentsAnimationController implements DeathRecipient {
         } catch (RemoteException e) {
             Slog.e(TAG, "Failed to start recents animation", e);
         }
-        final SparseIntArray reasons = new SparseIntArray();
-        reasons.put(WINDOWING_MODE_FULLSCREEN, APP_TRANSITION_RECENTS_ANIM);
-        mService.mAtmInternal
-            .notifyAppTransitionStarting(reasons, SystemClock.elapsedRealtimeNanos());
+
+        if (mTargetActivityRecord != null) {
+            final ArrayMap<ActivityRecord, Integer> reasons = new ArrayMap<>(1);
+            reasons.put(mTargetActivityRecord, APP_TRANSITION_RECENTS_ANIM);
+            mService.mAtmService.mStackSupervisor.getActivityMetricsLogger()
+                    .notifyTransitionStarting(reasons);
+        }
     }
 
     private RemoteAnimationTarget[] createAppAnimations() {
@@ -800,12 +805,12 @@ public class RecentsAnimationController implements DeathRecipient {
     private boolean isAnimatingApp(ActivityRecord activity) {
         for (int i = mPendingAnimations.size() - 1; i >= 0; i--) {
             final Task task = mPendingAnimations.get(i).mTask;
-            for (int j = task.getChildCount() - 1; j >= 0; j--) {
-                final ActivityRecord app = task.getChildAt(j);
-                if (app == activity) {
-                    return true;
-                }
-            }
+            final PooledFunction f = PooledLambda.obtainFunction(
+                    (a, b) -> a == b, activity,
+                    PooledLambda.__(ActivityRecord.class));
+            boolean isAnimatingApp = task.forAllActivities(f);
+            f.recycle();
+            return isAnimatingApp;
         }
         return false;
     }
@@ -905,10 +910,10 @@ public class RecentsAnimationController implements DeathRecipient {
         }
 
         @Override
-        public void writeToProto(ProtoOutputStream proto) {
+        public void dumpDebug(ProtoOutputStream proto) {
             final long token = proto.start(REMOTE);
             if (mTarget != null) {
-                mTarget.writeToProto(proto, TARGET);
+                mTarget.dumpDebug(proto, TARGET);
             }
             proto.end(token);
         }

@@ -48,7 +48,6 @@ import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManagerInternal;
-import android.content.pm.PackageParser;
 import android.content.pm.PackageParser.ApkLite;
 import android.content.pm.PackageParser.PackageLite;
 import android.content.pm.PackageParser.PackageParserException;
@@ -62,6 +61,7 @@ import android.content.pm.VersionedPackage;
 import android.content.pm.dex.ArtManager;
 import android.content.pm.dex.DexMetadataHelper;
 import android.content.pm.dex.ISnapshotRuntimeProfileCallback;
+import android.content.pm.parsing.ApkLiteParseUtils;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.content.rollback.IRollbackManager;
@@ -453,7 +453,7 @@ class PackageManagerShellCommand extends ShellCommand {
                 throw new IllegalArgumentException("Error: Can't open file: " + inPath);
             }
             try {
-                ApkLite baseApk = PackageParser.parseApkLite(fd.getFileDescriptor(), inPath, 0);
+                ApkLite baseApk = ApkLiteParseUtils.parseApkLite(fd.getFileDescriptor(), inPath, 0);
                 PackageLite pkgLite = new PackageLite(null, baseApk, null, null, null, null,
                         null, null);
                 sessionSize += PackageHelper.calculateInstalledSize(pkgLite,
@@ -1854,22 +1854,23 @@ class PackageManagerShellCommand extends ShellCommand {
         if (internal.isApexPackage(packageName)) {
             internal.uninstallApex(
                     packageName, versionCode, translatedUserId, receiver.getIntentSender(), flags);
-        } else if ((flags & PackageManager.DELETE_ALL_USERS) != 0) {
-            final PackageInfo info = mInterface.getPackageInfo(packageName,
-                    PackageManager.MATCH_STATIC_SHARED_LIBRARIES, translatedUserId);
-            if (info == null) {
-                pw.println("Failure [not installed for " + translatedUserId + "]");
-                return 1;
+        } else {
+            if ((flags & PackageManager.DELETE_ALL_USERS) == 0) {
+                final PackageInfo info = mInterface.getPackageInfo(packageName,
+                        PackageManager.MATCH_STATIC_SHARED_LIBRARIES, translatedUserId);
+                if (info == null) {
+                    pw.println("Failure [not installed for " + translatedUserId + "]");
+                    return 1;
+                }
+                final boolean isSystem =
+                        (info.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+                // If we are being asked to delete a system app for just one
+                // user set flag so it disables rather than reverting to system
+                // version of the app.
+                if (isSystem) {
+                    flags |= PackageManager.DELETE_SYSTEM_APP;
+                }
             }
-            final boolean isSystem =
-                    (info.applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
-            // If we are being asked to delete a system app for just one
-            // user set flag so it disables rather than reverting to system
-            // version of the app.
-            if (isSystem) {
-                flags |= PackageManager.DELETE_SYSTEM_APP;
-            }
-
             mInterface.getPackageInstaller().uninstall(new VersionedPackage(packageName,
                             versionCode), null /*callerPackageName*/, flags,
                     receiver.getIntentSender(), translatedUserId);
@@ -3279,7 +3280,7 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("       [--user USER_ID] INTENT");
         pw.println("    Prints all broadcast receivers that can handle the given INTENT.");
         pw.println("");
-        pw.println("  install [-rtsfdgw] [-i PACKAGE] [--user USER_ID|all|current]");
+        pw.println("  install [-rtfdgw] [-i PACKAGE] [--user USER_ID|all|current]");
         pw.println("       [-p INHERIT_PACKAGE] [--install-location 0/1/2]");
         pw.println("       [--install-reason 0/1/2/3/4] [--originating-uri URI]");
         pw.println("       [--referrer URI] [--abi ABI_NAME] [--force-sdk]");
@@ -3293,7 +3294,6 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("      -R: disallow replacement of existing application");
         pw.println("      -t: allow test packages");
         pw.println("      -i: specify package name of installer owning the app");
-        pw.println("      -s: install application on sdcard");
         pw.println("      -f: install application on internal flash");
         pw.println("      -d: allow version code downgrade (debuggable packages only)");
         pw.println("      -p: partial application install (new split on top of existing pkg)");

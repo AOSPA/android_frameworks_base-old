@@ -187,6 +187,13 @@ public:
             const sp<android::os::IPullAtomCallback>& pullerCallback) override;
 
     /**
+     * Binder call to register a callback function for a pulled atom.
+     */
+    virtual Status registerNativePullAtomCallback(int32_t atomTag, int64_t coolDownNs,
+            int64_t timeoutNs, const std::vector<int32_t>& additiveFields,
+            const sp<android::os::IPullAtomCallback>& pullerCallback) override;
+
+    /**
      * Binder call to unregister any existing callback function for a vendor pulled atom.
      */
     virtual Status unregisterPullerCallback(int32_t atomTag, const String16& packageName) override;
@@ -207,7 +214,9 @@ public:
     virtual Status sendWatchdogRollbackOccurredAtom(
             const int32_t rollbackTypeIn,
             const android::String16& packageNameIn,
-            const int64_t packageVersionCodeIn) override;
+            const int64_t packageVersionCodeIn,
+            const int32_t rollbackReasonIn,
+            const android::String16& failingPackageNameIn) override;
 
     /**
      * Binder call to get registered experiment IDs.

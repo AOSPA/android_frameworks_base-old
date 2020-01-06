@@ -3742,17 +3742,35 @@ public class DevicePolicyManager {
     /**
      * Force a new password for device unlock (the password needed to access the entire device) or
      * the work profile challenge on the current user. This takes effect immediately.
-     * <p>
-     * <em>For device owner and profile owners targeting SDK level
-     * {@link android.os.Build.VERSION_CODES#O} or above, this API is no longer available and will
-     * throw {@link SecurityException}. Please use the new API {@link #resetPasswordWithToken}
-     * instead. </em>
-     * <p>
-     * <em>Note: This API has been limited as of {@link android.os.Build.VERSION_CODES#N} for
-     * device admins that are not device owner and not profile owner.
-     * The password can now only be changed if there is currently no password set.  Device owner
-     * and profile owner can still do this when user is unlocked and does not have a managed
-     * profile.</em>
+     *
+     * <p> Before {@link android.os.Build.VERSION_CODES#N}, this API is available to device admin,
+     * profile owner and device owner. Starting from {@link android.os.Build.VERSION_CODES#N},
+     * legacy device admin (who is not also profile owner or device owner) can only call this
+     * API to set a new password if there is currently no password set. Profile owner and device
+     * owner can continue to force change an existing password as long as the target user is
+     * unlocked, although device owner will not be able to call this API at all if there is also a
+     * managed profile on the device.
+     *
+     * <p> Between {@link android.os.Build.VERSION_CODES#O},
+     * {@link android.os.Build.VERSION_CODES#P} and {@link android.os.Build.VERSION_CODES#Q},
+     * profile owner and devices owner targeting SDK level {@link android.os.Build.VERSION_CODES#O}
+     * or above who attempt to call this API will receive {@link SecurityException}; they are
+     * encouraged to migrate to the new {@link #resetPasswordWithToken} API instead.
+     * Profile owner and device owner targeting older SDK levels are not affected: they continue
+     * to experience the existing behaviour described in the previous paragraph.
+     *
+     * <p><em>Starting from {@link android.os.Build.VERSION_CODES#R}, this API is no longer
+     * supported in most cases.</em> Device owner and profile owner calling
+     * this API will receive {@link SecurityException} if they target SDK level
+     * {@link android.os.Build.VERSION_CODES#O} or above, or they will receive a silent failure
+     * (API returning {@code false}) if they target lower SDK level.
+     * For legacy device admins, this API throws {@link SecurityException} if they target SDK level
+     * {@link android.os.Build.VERSION_CODES#N} or above, and returns {@code false} otherwise. Only
+     * privileged apps holding RESET_PASSWORD permission which are part of
+     * the system factory image can still call this API to set a new password if there is currently
+     * no password set. In this case, if the device already has a password, this API will throw
+     * {@link SecurityException}.
+     *
      * <p>
      * The given password must be sufficient for the current password quality and length constraints
      * as returned by {@link #getPasswordQuality(ComponentName)} and
@@ -3760,12 +3778,7 @@ public class DevicePolicyManager {
      * it will be rejected and false returned. Note that the password may be a stronger quality
      * (containing alphanumeric characters when the requested quality is only numeric), in which
      * case the currently active quality will be increased to match.
-     * <p>
-     * Calling with a null or empty password will clear any existing PIN, pattern or password if the
-     * current password constraints allow it. <em>Note: This will not work in
-     * {@link android.os.Build.VERSION_CODES#N} and later for managed profiles, or for device admins
-     * that are not device owner or profile owner.  Once set, the password cannot be changed to null
-     * or empty except by these admins.</em>
+     *
      * <p>On devices not supporting {@link PackageManager#FEATURE_SECURE_LOCK_SCREEN} feature, this
      * methods does nothing.
      * <p>
@@ -3777,11 +3790,13 @@ public class DevicePolicyManager {
      * @param flags May be 0 or combination of {@link #RESET_PASSWORD_REQUIRE_ENTRY} and
      *            {@link #RESET_PASSWORD_DO_NOT_ASK_CREDENTIALS_ON_BOOT}.
      * @return Returns true if the password was applied, or false if it is not acceptable for the
-     *         current constraints or if the user has not been decrypted yet.
+     *         current constraints.
      * @throws SecurityException if the calling application does not own an active administrator
      *             that uses {@link DeviceAdminInfo#USES_POLICY_RESET_PASSWORD}
      * @throws IllegalStateException if the calling user is locked or has a managed profile.
+     * @deprecated Please use {@link #resetPasswordWithToken} instead.
      */
+    @Deprecated
     @RequiresFeature(PackageManager.FEATURE_SECURE_LOCK_SCREEN)
     public boolean resetPassword(String password, int flags) {
         throwIfParentInstance("resetPassword");
@@ -5001,14 +5016,15 @@ public class DevicePolicyManager {
      * <p>Device owner, profile owner and their delegated certificate installer can use
      * {@link #ID_TYPE_BASE_INFO} to request inclusion of the general device information
      * including manufacturer, model, brand, device and product in the attestation record.
-     * Only device owner and their delegated certificate installer can use
-     * {@link #ID_TYPE_SERIAL}, {@link #ID_TYPE_IMEI} and {@link #ID_TYPE_MEID} to request
-     * unique device identifiers to be attested (the serial number, IMEI and MEID correspondingly),
-     * if supported by the device (see {@link #isDeviceIdAttestationSupported()}).
-     * Additionally, device owner and their delegated certificate installer can also request the
-     * attestation record to be signed using an individual attestation certificate by specifying
-     * the {@link #ID_TYPE_INDIVIDUAL_ATTESTATION} flag (if supported by the device, see
-     * {@link #isUniqueDeviceAttestationSupported()}).
+     * Only device owner, profile owner on an organization-owned device and their delegated
+     * certificate installers can use {@link #ID_TYPE_SERIAL}, {@link #ID_TYPE_IMEI} and
+     * {@link #ID_TYPE_MEID} to request unique device identifiers to be attested (the serial number,
+     * IMEI and MEID correspondingly), if supported by the device
+     * (see {@link #isDeviceIdAttestationSupported()}).
+     * Additionally, device owner, profile owner on an organization-owned device and their delegated
+     * certificate installers can also request the attestation record to be signed using an
+     * individual attestation certificate by specifying the {@link #ID_TYPE_INDIVIDUAL_ATTESTATION}
+     * flag (if supported by the device, see {@link #isUniqueDeviceAttestationSupported()}).
      * <p>
      * If any of {@link #ID_TYPE_SERIAL}, {@link #ID_TYPE_IMEI} and {@link #ID_TYPE_MEID}
      * is set, it is implicitly assumed that {@link #ID_TYPE_BASE_INFO} is also set.
@@ -5554,7 +5570,12 @@ public class DevicePolicyManager {
      * device, for this user. After setting this, no applications running as this user will be able
      * to access any cameras on the device.
      * <p>
-     * If the caller is device owner, then the restriction will be applied to all users.
+     * This method can be called on the {@link DevicePolicyManager} instance,
+     * returned by {@link #getParentProfileInstance(ComponentName)}, where the caller must be
+     * the profile owner of an organization-owned managed profile.
+     * <p>
+     * If the caller is device owner or called on the parent instance, then the
+     * restriction will be applied to all users.
      * <p>
      * The calling device admin must have requested
      * {@link DeviceAdminInfo#USES_POLICY_DISABLE_CAMERA} to be able to call this method; if it has
@@ -5566,10 +5587,9 @@ public class DevicePolicyManager {
      *             {@link DeviceAdminInfo#USES_POLICY_DISABLE_CAMERA}.
      */
     public void setCameraDisabled(@NonNull ComponentName admin, boolean disabled) {
-        throwIfParentInstance("setCameraDisabled");
         if (mService != null) {
             try {
-                mService.setCameraDisabled(admin, disabled);
+                mService.setCameraDisabled(admin, disabled, mParentInstance);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -5579,11 +5599,15 @@ public class DevicePolicyManager {
     /**
      * Determine whether or not the device's cameras have been disabled for this user,
      * either by the calling admin, if specified, or all admins.
+     * <p>
+     * This method can be called on the {@link DevicePolicyManager} instance,
+     * returned by {@link #getParentProfileInstance(ComponentName)}, where the caller must be
+     * the profile owner of an organization-owned managed profile.
+     *
      * @param admin The name of the admin component to check, or {@code null} to check whether any admins
      * have disabled the camera
      */
     public boolean getCameraDisabled(@Nullable ComponentName admin) {
-        throwIfParentInstance("getCameraDisabled");
         return getCameraDisabled(admin, myUserId());
     }
 
@@ -5592,7 +5616,7 @@ public class DevicePolicyManager {
     public boolean getCameraDisabled(@Nullable ComponentName admin, int userHandle) {
         if (mService != null) {
             try {
-                return mService.getCameraDisabled(admin, userHandle);
+                return mService.getCameraDisabled(admin, userHandle, mParentInstance);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -5696,11 +5720,21 @@ public class DevicePolicyManager {
      * <p>
      * The calling device admin must be a device owner, or alternatively a profile owner from
      * Android 8.0 (API level 26) or higher. If it is not, a security exception will be thrown.
+     * <p>
+     * Staring from Android 11, this API switches to use
+     * {@link UserManager#DISALLOW_CONFIG_DATE_TIME} to enforce the auto time settings. Calling
+     * this API to enforce auto time will result in
+     * {@link UserManager#DISALLOW_CONFIG_DATE_TIME} being set, while calling this API to lift
+     * the requirement will result in {@link UserManager#DISALLOW_CONFIG_DATE_TIME} being cleared.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param required Whether auto time is set required or not.
      * @throws SecurityException if {@code admin} is not a device owner.
+     * @deprecated From {@link android.os.Build.VERSION_CODES#R}. Use {@link #setAutoTime}
+     * to turn auto time on or off and use {@link UserManager#DISALLOW_CONFIG_DATE_TIME}
+     * to prevent the user from changing this setting.
      */
+    @Deprecated
     public void setAutoTimeRequired(@NonNull ComponentName admin, boolean required) {
         throwIfParentInstance("setAutoTimeRequired");
         if (mService != null) {
@@ -5714,12 +5748,55 @@ public class DevicePolicyManager {
 
     /**
      * @return true if auto time is required.
+     * @deprecated From {@link android.os.Build.VERSION_CODES#R}. Use {@link #getAutoTime}
      */
+    @Deprecated
     public boolean getAutoTimeRequired() {
         throwIfParentInstance("getAutoTimeRequired");
         if (mService != null) {
             try {
                 return mService.getAutoTimeRequired();
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Called by a device owner, a profile owner for the primary user or a profile
+     * owner of an organization-owned managed profile to turn auto time on and off.
+     * Callers are recommended to use {@link UserManager#DISALLOW_CONFIG_DATE_TIME}
+     * to prevent the user from changing this setting.
+     * <p>
+     * If user restriction {@link UserManager#DISALLOW_CONFIG_DATE_TIME} is used,
+     * no user will be able set the date and time. Instead, the network date
+     * and time will be used.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param enabled Whether time should be obtained automatically from the network or not.
+     * @throws SecurityException if caller is not a device owner, a profile owner for the
+     * primary user, or a profile owner of an organization-owned managed profile.
+     */
+    public void setAutoTime(@NonNull ComponentName admin, boolean enabled) {
+        if (mService != null) {
+            try {
+                mService.setAutoTime(admin, enabled);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * @return true if auto time is enabled on the device.
+     * @throws SecurityException if caller is not a device owner, a profile owner for the
+     * primary user, or a profile owner of an organization-owned managed profile.
+     */
+    public boolean getAutoTime(@NonNull ComponentName admin) {
+        if (mService != null) {
+            try {
+                return mService.getAutoTime(admin);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -7839,7 +7916,8 @@ public class DevicePolicyManager {
      *            for the list of keys.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
      */
-    public void addUserRestriction(@NonNull ComponentName admin, String key) {
+    public void addUserRestriction(@NonNull ComponentName admin,
+            @UserManager.UserRestrictionKey String key) {
         throwIfParentInstance("addUserRestriction");
         if (mService != null) {
             try {
@@ -7861,7 +7939,8 @@ public class DevicePolicyManager {
      *            for the list of keys.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
      */
-    public void clearUserRestriction(@NonNull ComponentName admin, String key) {
+    public void clearUserRestriction(@NonNull ComponentName admin,
+            @UserManager.UserRestrictionKey String key) {
         throwIfParentInstance("clearUserRestriction");
         if (mService != null) {
             try {
@@ -9081,7 +9160,14 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by device owner to get the MAC address of the Wi-Fi device.
+     * Called by device owner, or profile owner on organization-owned device, to get the MAC
+     * address of the Wi-Fi device.
+     *
+     * NOTE: The MAC address returned here should only be used for inventory management and is
+     * not likely to be the MAC address used by the device to connect to Wi-Fi networks: MAC
+     * addresses used for scanning and connecting to Wi-Fi networks are randomized by default.
+     * To get the randomized MAC address used, call
+     * {@link android.net.wifi.WifiConfiguration#getRandomizedMacAddress}.
      *
      * @param admin Which device owner this request is associated with.
      * @return the MAC address of the Wi-Fi device, or null when the information is not available.
@@ -9283,7 +9369,6 @@ public class DevicePolicyManager {
      * <li>{@link #setPasswordExpirationTimeout}</li>
      * <li>{@link #getPasswordExpiration}</li>
      * <li>{@link #getPasswordMaximumLength}</li>
-     * <li>{@link #getPasswordComplexity}</li>
      * <li>{@link #isActivePasswordSufficient}</li>
      * <li>{@link #getCurrentFailedPasswordAttempts}</li>
      * <li>{@link #getMaximumFailedPasswordsForWipe}</li>
@@ -9297,6 +9382,14 @@ public class DevicePolicyManager {
      * <li>{@link #setTrustAgentConfiguration}</li>
      * <li>{@link #getRequiredStrongAuthTimeout}</li>
      * <li>{@link #setRequiredStrongAuthTimeout}</li>
+     * </ul>
+     * <p>
+     * The following methods are supported for the parent instance but can only be called by the
+     * profile owner of a managed profile that was created during the device provisioning flow:
+     * <ul>
+     * <li>{@link #getPasswordComplexity}</li>
+     * <li>{@link #setCameraDisabled}</li>
+     * <li>{@link #getCameraDisabled}</li>
      * </ul>
      *
      * <p>The following methods can be called by the profile owner of a managed profile

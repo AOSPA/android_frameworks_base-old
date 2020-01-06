@@ -41,6 +41,7 @@ import android.app.AppOpsManager.HistoricalOps;
 import android.app.AppOpsManager.HistoricalOpsRequest;
 import android.app.AppOpsManager.HistoricalPackageOps;
 import android.app.AppOpsManager.HistoricalUidOps;
+import android.app.INotificationManager;
 import android.app.ProcessMemoryState;
 import android.app.StatsManager;
 import android.bluetooth.BluetoothActivityEnergyInfo;
@@ -64,8 +65,7 @@ import android.net.INetworkStatsService;
 import android.net.Network;
 import android.net.NetworkRequest;
 import android.net.NetworkStats;
-import android.net.wifi.IWifiManager;
-import android.net.wifi.WifiActivityEnergyInfo;
+import android.net.wifi.WifiManager;
 import android.os.BatteryStats;
 import android.os.BatteryStatsInternal;
 import android.os.Binder;
@@ -98,6 +98,7 @@ import android.os.SystemProperties;
 import android.os.Temperature;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.os.connectivity.WifiActivityEnergyInfo;
 import android.os.storage.DiskInfo;
 import android.os.storage.StorageManager;
 import android.os.storage.VolumeInfo;
@@ -139,6 +140,7 @@ import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.SystemServiceManager;
 import com.android.server.am.MemoryStatUtil.MemoryStat;
+import com.android.server.notification.NotificationManagerService;
 import com.android.server.role.RoleManagerInternal;
 import com.android.server.stats.IonMemoryUtil.IonAllocations;
 import com.android.server.stats.ProcfsMemoryUtil.MemorySnapshot;
@@ -170,6 +172,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -342,7 +345,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
 
     private final KernelWakelockReader mKernelWakelockReader = new KernelWakelockReader();
     private final KernelWakelockStats mTmpWakelockStats = new KernelWakelockStats();
-    private IWifiManager mWifiManager = null;
+    private WifiManager mWifiManager = null;
     private TelephonyManager mTelephony = null;
     @GuardedBy("sStatsdLock")
     private final HashSet<Long> mDeathTimeMillis = new HashSet<>();
@@ -1148,35 +1151,48 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private void pullWifiActivityInfo(
             int tagId, long elapsedNanos, long wallClockNanos,
             List<StatsLogEventWrapper> pulledData) {
-        long token = Binder.clearCallingIdentity();
+        WifiManager wifiManager;
         synchronized (this) {
             if (mWifiManager == null) {
-                mWifiManager =
-                        IWifiManager.Stub.asInterface(
-                                ServiceManager.getService(Context.WIFI_SERVICE));
+                mWifiManager = mContext.getSystemService(WifiManager.class);
             }
+            wifiManager = mWifiManager;
         }
-        if (mWifiManager != null) {
-            try {
-                SynchronousResultReceiver wifiReceiver = new SynchronousResultReceiver("wifi");
-                mWifiManager.requestActivityInfo(wifiReceiver);
-                final WifiActivityEnergyInfo wifiInfo = awaitControllerInfo(wifiReceiver);
-                StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos,
-                        wallClockNanos);
-                e.writeLong(wifiInfo.getTimeStamp());
-                e.writeInt(wifiInfo.getStackState());
-                e.writeLong(wifiInfo.getControllerTxTimeMillis());
-                e.writeLong(wifiInfo.getControllerRxTimeMillis());
-                e.writeLong(wifiInfo.getControllerIdleTimeMillis());
-                e.writeLong(wifiInfo.getControllerEnergyUsed());
-                pulledData.add(e);
-            } catch (RemoteException e) {
-                Slog.e(TAG,
-                        "Pulling wifiManager for wifi controller activity energy info has error",
-                        e);
-            } finally {
-                Binder.restoreCallingIdentity(token);
+        if (wifiManager == null) {
+            return;
+        }
+        long token = Binder.clearCallingIdentity();
+        try {
+            SynchronousResultReceiver wifiReceiver = new SynchronousResultReceiver("wifi");
+            wifiManager.getWifiActivityEnergyInfoAsync(
+                    new Executor() {
+                        @Override
+                        public void execute(Runnable runnable) {
+                            // run the listener on the binder thread, if it was run on the main
+                            // thread it would deadlock since we would be waiting on ourselves
+                            runnable.run();
+                        }
+                    },
+                    info -> {
+                        Bundle bundle = new Bundle();
+                        bundle.putParcelable(BatteryStats.RESULT_RECEIVER_CONTROLLER_KEY, info);
+                        wifiReceiver.send(0, bundle);
+                    }
+            );
+            final WifiActivityEnergyInfo wifiInfo = awaitControllerInfo(wifiReceiver);
+            if (wifiInfo == null) {
+                return;
             }
+            StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+            e.writeLong(wifiInfo.getTimeSinceBootMillis());
+            e.writeInt(wifiInfo.getStackState());
+            e.writeLong(wifiInfo.getControllerTxDurationMillis());
+            e.writeLong(wifiInfo.getControllerRxDurationMillis());
+            e.writeLong(wifiInfo.getControllerIdleDurationMillis());
+            e.writeLong(wifiInfo.getControllerEnergyUsedMicroJoules());
+            pulledData.add(e);
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
     }
 
@@ -1736,14 +1752,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 if (statsFiles.size() != 1) {
                     return;
                 }
-                InputStream stream = new ParcelFileDescriptor.AutoCloseInputStream(
-                        statsFiles.get(0));
-                int[] len = new int[1];
-                byte[] stats = readFully(stream, len);
-                StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos,
-                        wallClockNanos);
-                e.writeStorage(Arrays.copyOf(stats, len[0]));
-                pulledData.add(e);
+                unpackStreamedData(tagId, elapsedNanos, wallClockNanos, pulledData, statsFiles);
                 new File(mBaseDir.getAbsolutePath() + "/" + section + "_"
                         + lastHighWaterMark).delete();
                 new File(
@@ -1757,6 +1766,52 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 Log.e(TAG, "Getting procstats failed: ", e);
             }
         }
+    }
+
+    private INotificationManager mNotificationManager =
+            INotificationManager.Stub.asInterface(
+                    ServiceManager.getService(Context.NOTIFICATION_SERVICE));
+
+    private void pullNotificationStats(int reportId, int tagId, long elapsedNanos,
+            long wallClockNanos,
+            List<StatsLogEventWrapper> pulledData) {
+        final long callingToken = Binder.clearCallingIdentity();
+        try {
+            // determine last pull tine. Copy file trick from pullProcessStats?
+            long lastNotificationStatsNs = wallClockNanos -
+                    TimeUnit.NANOSECONDS.convert(1, TimeUnit.DAYS);
+
+            List<ParcelFileDescriptor> statsFiles = new ArrayList<>();
+            long notificationStatsNs = mNotificationManager.pullStats(
+                    lastNotificationStatsNs, reportId, true, statsFiles);
+            if (statsFiles.size() != 1) {
+                return;
+            }
+            unpackStreamedData(tagId, elapsedNanos, wallClockNanos, pulledData, statsFiles);
+        } catch (IOException e) {
+            Log.e(TAG, "Getting notistats failed: ", e);
+
+        } catch (RemoteException e) {
+            Log.e(TAG, "Getting notistats failed: ", e);
+        } catch (SecurityException e) {
+            Log.e(TAG, "Getting notistats failed: ", e);
+        } finally {
+            Binder.restoreCallingIdentity(callingToken);
+        }
+
+    }
+
+    static void unpackStreamedData(int tagId, long elapsedNanos, long wallClockNanos,
+            List<StatsLogEventWrapper> pulledData, List<ParcelFileDescriptor> statsFiles)
+            throws IOException {
+        InputStream stream = new ParcelFileDescriptor.AutoCloseInputStream(
+                statsFiles.get(0));
+        int[] len = new int[1];
+        byte[] stats = readFully(stream, len);
+        StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos,
+                wallClockNanos);
+        e.writeStorage(Arrays.copyOf(stats, len[0]));
+        pulledData.add(e);
     }
 
     static byte[] readFully(InputStream stream, int[] outLen) throws IOException {
@@ -1796,7 +1851,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos,
                 wallClockNanos);
         ProtoOutputStream proto = new ProtoOutputStream();
-        powerProfile.writeToProto(proto);
+        powerProfile.dumpDebug(proto);
         proto.flush();
         e.writeStorage(proto.getBytes());
         pulledData.add(e);
@@ -2183,6 +2238,20 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                         e.writeLong(op.getBackgroundRejectCount(OP_FLAGS_ALL_TRUSTED));
                         e.writeLong(op.getForegroundAccessDuration(OP_FLAGS_ALL_TRUSTED));
                         e.writeLong(op.getBackgroundAccessDuration(OP_FLAGS_ALL_TRUSTED));
+
+                        String perm = AppOpsManager.opToPermission(op.getOpCode());
+                        if (perm == null) {
+                            e.writeBoolean(false);
+                        } else {
+                            PermissionInfo permInfo;
+                            try {
+                                permInfo = mContext.getPackageManager().getPermissionInfo(perm, 0);
+                                e.writeBoolean(permInfo.getProtection() == PROTECTION_DANGEROUS);
+                            } catch (PackageManager.NameNotFoundException exception) {
+                                e.writeBoolean(false);
+                            }
+                        }
+
                         pulledData.add(e);
                     }
                 }
@@ -2591,6 +2660,11 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             }
             case StatsLog.APP_OPS: {
                 pullAppOps(elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.NOTIFICATION_REMOTE_VIEWS: {
+                pullNotificationStats(NotificationManagerService.REPORT_REMOTE_VIEWS,
+                        tagId, elapsedNanos, wallClockNanos, ret);
                 break;
             }
             default:

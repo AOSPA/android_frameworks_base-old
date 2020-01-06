@@ -27,6 +27,8 @@ import android.util.Log;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
+import com.android.systemui.statusbar.notification.collection.NotifCollection;
+import com.android.systemui.statusbar.notification.collection.NotifCollectionListener;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 
 import javax.inject.Inject;
@@ -46,9 +48,13 @@ public class ForegroundServiceNotificationListener {
     @Inject
     public ForegroundServiceNotificationListener(Context context,
             ForegroundServiceController foregroundServiceController,
-            NotificationEntryManager notificationEntryManager) {
+            NotificationEntryManager notificationEntryManager,
+            NotifCollection notifCollection) {
         mContext = context;
         mForegroundServiceController = foregroundServiceController;
+
+        // TODO: (b/145659174) remove mEntryManager when moving to NewNotifPipeline. Replaced by
+        //  ForegroundCoordinator
         mEntryManager = notificationEntryManager;
         mEntryManager.addNotificationEntryListener(new NotificationEntryListener() {
             @Override
@@ -69,8 +75,24 @@ public class ForegroundServiceNotificationListener {
                 removeNotification(entry.getSbn());
             }
         });
-
         mEntryManager.addNotificationLifetimeExtender(new ForegroundServiceLifetimeExtender());
+
+        notifCollection.addCollectionListener(new NotifCollectionListener() {
+            @Override
+            public void onEntryAdded(NotificationEntry entry) {
+                addNotification(entry, entry.getImportance());
+            }
+
+            @Override
+            public void onEntryUpdated(NotificationEntry entry) {
+                updateNotification(entry, entry.getImportance());
+            }
+
+            @Override
+            public void onEntryRemoved(NotificationEntry entry, int reason, boolean removedByUser) {
+                removeNotification(entry.getSbn());
+            }
+        });
     }
 
     /**
@@ -152,6 +174,8 @@ public class ForegroundServiceNotificationListener {
                 true /* create if not found */);
     }
 
+    // TODO: (b/145659174) remove when moving to NewNotifPipeline. Replaced by
+    //  ForegroundCoordinator
     private void tagForeground(NotificationEntry entry) {
         final StatusBarNotification sbn = entry.getSbn();
         ArraySet<Integer> activeOps = mForegroundServiceController.getAppOps(

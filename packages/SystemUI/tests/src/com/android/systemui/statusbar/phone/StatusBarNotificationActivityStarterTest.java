@@ -98,11 +98,13 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     @Mock
     private StatusBarStateController mStatusBarStateController;
     @Mock
+    private StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
+    @Mock
     private NotificationRemoteInputManager mRemoteInputManager;
     @Mock
     private RemoteInputController mRemoteInputController;
     @Mock
-    private ShadeController mShadeController;
+    private StatusBar mStatusBar;
     @Mock
     private KeyguardStateController mKeyguardStateController;
     @Mock
@@ -167,7 +169,8 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
                 getContext(), mock(CommandQueue.class), () -> mAssistManager,
                 mEntryManager, mock(HeadsUpManagerPhone.class),
                 mActivityStarter, mStatusBarService,
-                mock(StatusBarStateController.class), mock(KeyguardManager.class),
+                mock(StatusBarStateController.class), mStatusBarKeyguardViewManager,
+                mock(KeyguardManager.class),
                 mock(IDreamManager.class), mRemoteInputManager,
                 mock(StatusBarRemoteInputCallback.class), mock(NotificationGroupManager.class),
                 mock(NotificationLockscreenUserManager.class),
@@ -175,7 +178,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
                 mock(NotificationInterruptionStateProvider.class), mock(MetricsLogger.class),
                 mock(LockPatternUtils.class), mHandler, mHandler, mActivityIntentHelper,
                 mBubbleController, mSuperStatusBarViewFactory))
-                .setShadeController(mShadeController)
+                .setStatusBar(mStatusBar)
                 .setNotificationPresenter(mock(NotificationPresenter.class))
                 .setActivityLaunchAnimator(mock(ActivityLaunchAnimator.class))
         .build();
@@ -186,11 +189,12 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
 
         // set up addAfterKeyguardGoneRunnable to synchronously invoke the Runnable arg
         doAnswer(answerVoid(Runnable::run))
-                .when(mShadeController).addAfterKeyguardGoneRunnable(any(Runnable.class));
+                .when(mStatusBarKeyguardViewManager)
+                .addAfterKeyguardGoneRunnable(any(Runnable.class));
 
         // set up addPostCollapseAction to synchronously invoke the Runnable arg
         doAnswer(answerVoid(Runnable::run))
-                .when(mShadeController).addPostCollapseAction(any(Runnable.class));
+                .when(mStatusBar).addPostCollapseAction(any(Runnable.class));
 
         // set up Handler to synchronously invoke the Runnable arg
         doAnswer(answerVoid(Runnable::run))
@@ -209,13 +213,13 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         sbn.getNotification().flags |= Notification.FLAG_AUTO_CANCEL;
 
         when(mKeyguardStateController.isShowing()).thenReturn(true);
-        when(mShadeController.isOccluded()).thenReturn(true);
+        when(mStatusBar.isOccluded()).thenReturn(true);
 
         // When
         mNotificationActivityStarter.onNotificationClicked(sbn, mNotificationRow);
 
         // Then
-        verify(mShadeController, atLeastOnce()).collapsePanel();
+        verify(mStatusBar, atLeastOnce()).collapsePanel();
 
         verify(mContentIntent).sendAndReturnResult(
                 any(Context.class),
@@ -250,7 +254,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         verify(mBubbleController).expandStackAndSelectBubble(eq(sbn.getKey()));
 
         // This is called regardless, and simply short circuits when there is nothing to do.
-        verify(mShadeController, atLeastOnce()).collapsePanel();
+        verify(mStatusBar, atLeastOnce()).collapsePanel();
 
         verify(mAssistManager).hideAssist();
 
@@ -272,7 +276,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         // Given
         sbn.getNotification().contentIntent = null;
         when(mKeyguardStateController.isShowing()).thenReturn(true);
-        when(mShadeController.isOccluded()).thenReturn(true);
+        when(mStatusBar.isOccluded()).thenReturn(true);
 
         // When
         mNotificationActivityStarter.onNotificationClicked(sbn, mBubbleNotificationRow);
@@ -280,7 +284,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         // Then
         verify(mBubbleController).expandStackAndSelectBubble(eq(sbn.getKey()));
 
-        verify(mShadeController, atLeastOnce()).collapsePanel();
+        verify(mStatusBar, atLeastOnce()).collapsePanel();
 
         verify(mAssistManager).hideAssist();
 
@@ -302,7 +306,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         // Given
         sbn.getNotification().contentIntent = mContentIntent;
         when(mKeyguardStateController.isShowing()).thenReturn(true);
-        when(mShadeController.isOccluded()).thenReturn(true);
+        when(mStatusBar.isOccluded()).thenReturn(true);
 
         // When
         mNotificationActivityStarter.onNotificationClicked(sbn, mBubbleNotificationRow);
@@ -310,7 +314,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         // Then
         verify(mBubbleController).expandStackAndSelectBubble(eq(sbn.getKey()));
 
-        verify(mShadeController, atLeastOnce()).collapsePanel();
+        verify(mStatusBar, atLeastOnce()).collapsePanel();
 
         verify(mAssistManager).hideAssist();
 

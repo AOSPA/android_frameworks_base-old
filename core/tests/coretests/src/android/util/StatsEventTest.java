@@ -44,7 +44,7 @@ public class StatsEventTest {
     @Test
     public void testNoFields() {
         final long minTimestamp = SystemClock.elapsedRealtimeNanos();
-        final StatsEvent statsEvent = StatsEvent.newBuilder().build();
+        final StatsEvent statsEvent = StatsEvent.newBuilder().usePooledBuffer().build();
         final long maxTimestamp = SystemClock.elapsedRealtimeNanos();
 
         final int expectedAtomId = 0;
@@ -53,8 +53,8 @@ public class StatsEventTest {
         final ByteBuffer buffer =
                 ByteBuffer.wrap(statsEvent.getBytes()).order(ByteOrder.LITTLE_ENDIAN);
 
-        assertWithMessage("Root element in buffer is not TYPE_ERRORS")
-                .that(buffer.get()).isEqualTo(StatsEvent.TYPE_ERRORS);
+        assertWithMessage("Root element in buffer is not TYPE_OBJECT")
+                .that(buffer.get()).isEqualTo(StatsEvent.TYPE_OBJECT);
 
         assertWithMessage("Incorrect number of elements in root object")
                 .that(buffer.get()).isEqualTo(3);
@@ -70,6 +70,9 @@ public class StatsEventTest {
 
         assertWithMessage("Incorrect atom id")
                 .that(buffer.getInt()).isEqualTo(expectedAtomId);
+
+        assertWithMessage("Third element is not errors type")
+                .that(buffer.get()).isEqualTo(StatsEvent.TYPE_ERRORS);
 
         final int errorMask = buffer.getInt();
 
@@ -96,6 +99,7 @@ public class StatsEventTest {
                 .writeBoolean(field2)
                 .writeInt(field3)
                 .writeInt(field4)
+                .usePooledBuffer()
                 .build();
         final long maxTimestamp = SystemClock.elapsedRealtimeNanos();
 
@@ -164,6 +168,7 @@ public class StatsEventTest {
                 .writeString(field1)
                 .writeFloat(field2)
                 .writeByteArray(field3)
+                .usePooledBuffer()
                 .build();
         final long maxTimestamp = SystemClock.elapsedRealtimeNanos();
 
@@ -227,6 +232,7 @@ public class StatsEventTest {
                 .setAtomId(expectedAtomId)
                 .writeAttributionChain(uids, tags)
                 .writeLong(field2)
+                .usePooledBuffer()
                 .build();
         final long maxTimestamp = SystemClock.elapsedRealtimeNanos();
 
@@ -296,6 +302,7 @@ public class StatsEventTest {
         final StatsEvent statsEvent = StatsEvent.newBuilder()
                 .setAtomId(expectedAtomId)
                 .writeKeyValuePairs(intMap, longMap, stringMap, floatMap)
+                .usePooledBuffer()
                 .build();
         final long maxTimestamp = SystemClock.elapsedRealtimeNanos();
 
@@ -389,6 +396,7 @@ public class StatsEventTest {
                 .addBooleanAnnotation(field1AnnotationId, field1AnnotationValue)
                 .writeBoolean(field2)
                 .addIntAnnotation(field2AnnotationId, field2AnnotationValue)
+                .usePooledBuffer()
                 .build();
         final long maxTimestamp = SystemClock.elapsedRealtimeNanos();
 

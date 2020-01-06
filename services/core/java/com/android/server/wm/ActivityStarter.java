@@ -122,6 +122,7 @@ import com.android.internal.app.HeavyWeightSwitcherActivity;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.server.am.PendingIntentRecord;
 import com.android.server.pm.InstantAppResolver;
+import com.android.server.wm.ActivityMetricsLogger.LaunchingState;
 import com.android.server.wm.ActivityStackSupervisor.PendingActivityLaunch;
 import com.android.server.wm.LaunchParamsController.LaunchParams;
 
@@ -576,15 +577,16 @@ class ActivityStarter {
             IVoiceInteractionSession voiceSession, IVoiceInteractor voiceInteractor,
             int startFlags, boolean doResume, ActivityOptions options, Task inTask) {
         try {
-            mSupervisor.getActivityMetricsLogger().notifyActivityLaunching(r.intent);
+            final LaunchingState launchingState = mSupervisor.getActivityMetricsLogger()
+                    .notifyActivityLaunching(r.intent, r.resultTo);
             mLastStartReason = "startResolvedActivity";
             mLastStartActivityTimeMs = System.currentTimeMillis();
             mLastStartActivityRecord = r;
             mLastStartActivityResult = startActivityUnchecked(r, sourceRecord, voiceSession,
                     voiceInteractor, startFlags, doResume, options, inTask,
                     false /* restrictedBgActivity */);
-            mSupervisor.getActivityMetricsLogger().notifyActivityLaunched(mLastStartActivityResult,
-                    mLastStartActivityRecord);
+            mSupervisor.getActivityMetricsLogger().notifyActivityLaunched(launchingState,
+                    mLastStartActivityResult, mLastStartActivityRecord);
         } finally {
             onExecutionComplete();
         }
@@ -602,8 +604,14 @@ class ActivityStarter {
                 throw new IllegalArgumentException("File descriptors passed in Intent");
             }
 
-            mSupervisor.getActivityMetricsLogger().notifyActivityLaunching(mRequest.intent);
+            final LaunchingState launchingState;
+            synchronized (mService.mGlobalLock) {
+                final ActivityRecord caller = ActivityRecord.forTokenLocked(mRequest.resultTo);
+                launchingState = mSupervisor.getActivityMetricsLogger().notifyActivityLaunching(
+                        mRequest.intent, caller);
+            }
 
+            // Do not lock the resolving to avoid potential deadlock.
             if (mRequest.activityInfo == null) {
                 mRequest.resolveActivity(mSupervisor);
             }
@@ -647,7 +655,7 @@ class ActivityStarter {
                 // Notify ActivityMetricsLogger that the activity has launched.
                 // ActivityMetricsLogger will then wait for the windows to be drawn and populate
                 // WaitResult.
-                mSupervisor.getActivityMetricsLogger().notifyActivityLaunched(res,
+                mSupervisor.getActivityMetricsLogger().notifyActivityLaunched(launchingState, res,
                         mLastStartActivityRecord);
                 return getExternalResult(mRequest.waitResult == null ? res
                         : waitForResult(res, mLastStartActivityRecord));
@@ -1128,7 +1136,7 @@ class ActivityStarter {
             request.outActivity[0] = mLastStartActivityRecord;
         }
 
-        return getExternalResult(mLastStartActivityResult);
+        return mLastStartActivityResult;
     }
 
     /**
@@ -1430,7 +1438,7 @@ class ActivityStarter {
                 // If there is no state change (e.g. a resumed activity is reparented to top of
                 // another display) to trigger a visibility/configuration checking, we have to
                 // update the configuration for changing to different display.
-                final ActivityRecord currentTop = startedActivityStack.topRunningActivityLocked();
+                final ActivityRecord currentTop = startedActivityStack.topRunningActivity();
                 if (currentTop != null && currentTop.shouldUpdateConfigForDisplayChanged()) {
                     mRootActivityContainer.ensureVisibilityAndConfig(
                             currentTop, currentTop.getDisplayId(),
@@ -1450,7 +1458,7 @@ class ActivityStarter {
 
         // Stack should also be detached from display and be removed if it's empty.
         if (startedActivityStack != null && startedActivityStack.isAttached()
-                && startedActivityStack.numActivities() == 0
+                && !startedActivityStack.hasActivity()
                 && !startedActivityStack.isActivityTypeHome()) {
             startedActivityStack.removeIfPossible();
             startedActivityStack = null;
@@ -1650,7 +1658,7 @@ class ActivityStarter {
             return START_CANCELED;
         }
 
-        if (mRestrictedBgActivity && (newTask || !targetTask.containsAppUid(mCallingUid))
+        if (mRestrictedBgActivity && (newTask || !targetTask.isUidPresent(mCallingUid))
                 && handleBackgroundActivityAbort(mStartActivity)) {
             Slog.e(TAG, "Abort background activity starts from " + mCallingUid);
             return START_ABORTED;
@@ -1890,8 +1898,8 @@ class ActivityStarter {
             // In this case, we are launching an activity in our own task that may
             // already be running somewhere in the history, and we want to shuffle it to
             // the front of the stack if so.
-            final ActivityRecord act = targetTask.findActivityInHistoryLocked(
-                    mStartActivity);
+            final ActivityRecord act =
+                    targetTask.findActivityInHistory(mStartActivity.mActivityComponent);
             if (act != null) {
                 final Task task = act.getTask();
                 task.moveActivityToFrontLocked(act);
@@ -2309,7 +2317,7 @@ class ActivityStarter {
                     ? null : focusStack.topRunningNonDelayedActivityLocked(mNotTop);
             final Task topTask = curTop != null ? curTop.getTask() : null;
             differentTopTask = topTask != intentActivity.getTask()
-                    || (focusStack != null && topTask != focusStack.topTask());
+                    || (focusStack != null && topTask != focusStack.getTopMostTask());
         } else {
             // The existing task should always be different from those in other displays.
             differentTopTask = true;
@@ -2373,7 +2381,7 @@ class ActivityStarter {
                     mMovedToFront = true;
                 }
 
-                if (launchStack != null && launchStack.topTask() == null) {
+                if (launchStack != null && launchStack.getTopMostTask() == null) {
                     // The task does not need to be reparented to the launch stack. Remove the
                     // launch stack if there is no activity in it.
                     Slog.w(TAG, "Removing an empty stack: " + launchStack);
@@ -2596,7 +2604,7 @@ class ActivityStarter {
             // If task's parent stack is not focused - use it during adjacent launch.
             return parentStack;
         } else {
-            if (focusedStack != null && task == focusedStack.topTask()) {
+            if (focusedStack != null && task == focusedStack.getTopMostTask()) {
                 // If task is already on top of focused stack - use it. We don't want to move the
                 // existing focused task to adjacent stack, just deliver new intent in this case.
                 return focusedStack;

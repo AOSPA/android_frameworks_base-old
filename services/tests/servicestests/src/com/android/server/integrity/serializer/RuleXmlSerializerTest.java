@@ -34,6 +34,7 @@ import org.junit.runners.JUnit4;
 
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -49,11 +50,11 @@ public class RuleXmlSerializerTest {
         RuleSerializer xmlSerializer = new RuleXmlSerializer();
         String expectedRules = "<RL />";
 
-        String actualRules =
+        byte[] actualRules =
                 xmlSerializer.serialize(
                         Collections.singletonList(rule), /* formatVersion= */ Optional.empty());
 
-        assertEquals(expectedRules, actualRules);
+        assertEquals(expectedRules, new String(actualRules, StandardCharsets.UTF_8));
     }
 
     @Test
@@ -82,15 +83,15 @@ public class RuleXmlSerializerTest {
                         + "</R>"
                         + "</RL>";
 
-        String actualRules =
+        byte[] actualRules =
                 xmlSerializer.serialize(
                         Arrays.asList(rule1, rule2), /* formatVersion= */ Optional.empty());
 
-        assertEquals(expectedRules, actualRules);
+        assertEquals(expectedRules, new String(actualRules, StandardCharsets.UTF_8));
     }
 
     @Test
-    public void testXmlStream_serializeValidOpenFormula() throws Exception {
+    public void testXmlStream_serializeValidCompoundFormula() throws Exception {
         Rule rule =
                 new Rule(
                         new CompoundFormula(
@@ -128,12 +129,12 @@ public class RuleXmlSerializerTest {
                 /* formatVersion= */ Optional.empty(),
                 outputStream);
 
-        String actualRules = outputStream.toString();
-        assertEquals(expectedRules, actualRules);
+        byte[] actualRules = outputStream.toString().getBytes(StandardCharsets.UTF_8);
+        assertEquals(expectedRules, new String(actualRules, StandardCharsets.UTF_8));
     }
 
     @Test
-    public void testXmlString_serializeValidOpenFormula_notConnector() throws Exception {
+    public void testXmlString_serializeValidCompoundFormula_notConnector() throws Exception {
         Rule rule =
                 new Rule(
                         new CompoundFormula(
@@ -165,15 +166,15 @@ public class RuleXmlSerializerTest {
                         + "</R>"
                         + "</RL>";
 
-        String actualRules =
+        byte[] actualRules =
                 xmlSerializer.serialize(
                         Collections.singletonList(rule), /* formatVersion= */ Optional.empty());
 
-        assertEquals(expectedRules, actualRules);
+        assertEquals(expectedRules, new String(actualRules, StandardCharsets.UTF_8));
     }
 
     @Test
-    public void testXmlString_serializeValidOpenFormula_andConnector() throws Exception {
+    public void testXmlString_serializeValidCompoundFormula_andConnector() throws Exception {
         Rule rule =
                 new Rule(
                         new CompoundFormula(
@@ -215,15 +216,15 @@ public class RuleXmlSerializerTest {
                         + "</R>"
                         + "</RL>";
 
-        String actualRules =
+        byte[] actualRules =
                 xmlSerializer.serialize(
                         Collections.singletonList(rule), /* formatVersion= */ Optional.empty());
 
-        assertEquals(expectedRules, actualRules);
+        assertEquals(expectedRules, new String(actualRules, StandardCharsets.UTF_8));
     }
 
     @Test
-    public void testXmlString_serializeValidOpenFormula_orConnector() throws Exception {
+    public void testXmlString_serializeValidCompoundFormula_orConnector() throws Exception {
         Rule rule =
                 new Rule(
                         new CompoundFormula(
@@ -265,11 +266,11 @@ public class RuleXmlSerializerTest {
                         + "</R>"
                         + "</RL>";
 
-        String actualRules =
+        byte[] actualRules =
                 xmlSerializer.serialize(
                         Collections.singletonList(rule), /* formatVersion= */ Optional.empty());
 
-        assertEquals(expectedRules, actualRules);
+        assertEquals(expectedRules, new String(actualRules, StandardCharsets.UTF_8));
     }
 
     @Test
@@ -297,11 +298,11 @@ public class RuleXmlSerializerTest {
                         + "</R>"
                         + "</RL>";
 
-        String actualRules =
+        byte[] actualRules =
                 xmlSerializer.serialize(
                         Collections.singletonList(rule), /* formatVersion= */ Optional.empty());
 
-        assertEquals(expectedRules, actualRules);
+        assertEquals(expectedRules, new String(actualRules, StandardCharsets.UTF_8));
     }
 
     @Test
@@ -327,11 +328,11 @@ public class RuleXmlSerializerTest {
                         + "</R>"
                         + "</RL>";
 
-        String actualRules =
+        byte[] actualRules =
                 xmlSerializer.serialize(
                         Collections.singletonList(rule), /* formatVersion= */ Optional.empty());
 
-        assertEquals(expectedRules, actualRules);
+        assertEquals(expectedRules, new String(actualRules, StandardCharsets.UTF_8));
     }
 
     @Test
@@ -355,11 +356,11 @@ public class RuleXmlSerializerTest {
                         + "</R>"
                         + "</RL>";
 
-        String actualRules =
+        byte[] actualRules =
                 xmlSerializer.serialize(
                         Collections.singletonList(rule), /* formatVersion= */ Optional.empty());
 
-        assertEquals(expectedRules, actualRules);
+        assertEquals(expectedRules, new String(actualRules, StandardCharsets.UTF_8));
     }
 
     @Test

@@ -114,8 +114,8 @@ interface IDevicePolicyManager {
 
     boolean requestBugreport(in ComponentName who);
 
-    void setCameraDisabled(in ComponentName who, boolean disabled);
-    boolean getCameraDisabled(in ComponentName who, int userHandle);
+    void setCameraDisabled(in ComponentName who, boolean disabled, boolean parent);
+    boolean getCameraDisabled(in ComponentName who, int userHandle, boolean parent);
 
     void setScreenCaptureDisabled(in ComponentName who, boolean disabled);
     boolean getScreenCaptureDisabled(in ComponentName who, int userHandle);
@@ -294,6 +294,9 @@ interface IDevicePolicyManager {
 
     void setAutoTimeRequired(in ComponentName who, boolean required);
     boolean getAutoTimeRequired();
+
+    void setAutoTime(in ComponentName who, boolean enabled);
+    boolean getAutoTime(in ComponentName who);
 
     void setForceEphemeralUsers(in ComponentName who, boolean forceEpehemeralUsers);
     boolean getForceEphemeralUsers(in ComponentName who);
