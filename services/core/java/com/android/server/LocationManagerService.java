@@ -81,6 +81,7 @@ import android.text.TextUtils;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
+import android.util.SparseArray;
 import android.util.TimeUtils;
 
 import com.android.internal.annotations.GuardedBy;
@@ -297,9 +298,8 @@ public class LocationManagerService extends ILocationManager.Stub {
                     AppOpsManager.WATCH_FOREGROUND_CHANGES,
                     new AppOpsManager.OnOpChangedInternalListener() {
                         public void onOpChanged(int op, String packageName) {
-                            // onOpChanged invoked on ui thread, move to our thread to reduce
-                            // risk of
-                            // blocking ui thread
+                            // onOpChanged invoked on ui thread, move to our thread to reduce risk
+                            // of blocking ui thread
                             mHandler.post(() -> {
                                 synchronized (mLock) {
                                     onAppOpChangedLocked();
@@ -310,8 +310,7 @@ public class LocationManagerService extends ILocationManager.Stub {
             mPackageManager.addOnPermissionsChangeListener(
                     uid -> {
                         // listener invoked on ui thread, move to our thread to reduce risk of
-                        // blocking
-                        // ui thread
+                        // blocking ui thread
                         mHandler.post(() -> {
                             synchronized (mLock) {
                                 onPermissionsChangedLocked();
@@ -321,8 +320,7 @@ public class LocationManagerService extends ILocationManager.Stub {
             mActivityManager.addOnUidImportanceListener(
                     (uid, importance) -> {
                         // listener invoked on ui thread, move to our thread to reduce risk of
-                        // blocking
-                        // ui thread
+                        // blocking ui thread
                         mHandler.post(() -> {
                             synchronized (mLock) {
                                 onUidImportanceChangedLocked(uid, importance);
@@ -334,8 +332,7 @@ public class LocationManagerService extends ILocationManager.Stub {
             localPowerManager.registerLowPowerModeObserver(ServiceType.LOCATION,
                     state -> {
                         // listener invoked on ui thread, move to our thread to reduce risk of
-                        // blocking
-                        // ui thread
+                        // blocking ui thread
                         mHandler.post(() -> {
                             synchronized (mLock) {
                                 onBatterySaverModeChangedLocked(state.locationMode);
@@ -344,14 +341,9 @@ public class LocationManagerService extends ILocationManager.Stub {
                     });
             mBatterySaverMode = mPowerManager.getLocationPowerSaveMode();
 
-            mSettingsStore.addOnLocationEnabledChangedListener(() -> {
+            mSettingsStore.addOnLocationEnabledChangedListener((userId) -> {
                 synchronized (mLock) {
-                    onLocationModeChangedLocked(true);
-                }
-            });
-            mSettingsStore.addOnLocationProvidersAllowedChangedListener(() -> {
-                synchronized (mLock) {
-                    onProviderAllowedChangedLocked();
+                    onLocationModeChangedLocked(userId);
                 }
             });
             mSettingsStore.addOnBackgroundThrottleIntervalChangedListener(() -> {
@@ -474,28 +466,17 @@ public class LocationManagerService extends ILocationManager.Stub {
     }
 
     @GuardedBy("mLock")
-    private void onLocationModeChangedLocked(boolean broadcast) {
+    private void onLocationModeChangedLocked(int userId) {
         if (D) {
-            Log.d(TAG, "location enabled is now " + isLocationEnabled());
+            Log.d(TAG, "[u" + userId + "] location enabled = " + isLocationEnabledForUser(userId));
         }
+
+        Intent intent = new Intent(LocationManager.MODE_CHANGED_ACTION);
+        intent.putExtra(LocationManager.EXTRA_LOCATION_ENABLED, isLocationEnabledForUser(userId));
+        mContext.sendBroadcastAsUser(intent, UserHandle.of(userId));
 
         for (LocationProvider p : mProviders) {
-            p.onLocationModeChangedLocked();
-        }
-
-        if (broadcast) {
-            // needs to be sent to everyone because we don't know which user may have changed
-            // LOCATION_MODE state.
-            mContext.sendBroadcastAsUser(
-                    new Intent(LocationManager.MODE_CHANGED_ACTION),
-                    UserHandle.ALL);
-        }
-    }
-
-    @GuardedBy("mLock")
-    private void onProviderAllowedChangedLocked() {
-        for (LocationProvider p : mProviders) {
-            p.onAllowedChangedLocked();
+            p.onUseableChangedLocked(userId);
         }
     }
 
@@ -659,7 +640,7 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         if (GnssManagerService.isGnssSupported()) {
             // Create a gps location provider manager
-            LocationProvider gnssProviderManager = new LocationProvider(GPS_PROVIDER, true);
+            LocationProvider gnssProviderManager = new LocationProvider(GPS_PROVIDER);
             mRealProviders.add(gnssProviderManager);
             addProviderLocked(gnssProviderManager);
 
@@ -690,7 +671,7 @@ public class LocationManagerService extends ILocationManager.Stub {
         ensureFallbackFusedProviderPresentLocked(pkgs);
 
         // bind to network provider
-        LocationProvider networkProviderManager = new LocationProvider(NETWORK_PROVIDER, true);
+        LocationProvider networkProviderManager = new LocationProvider(NETWORK_PROVIDER);
         LocationProviderProxy networkProvider = LocationProviderProxy.createAndBind(
                 mContext,
                 networkProviderManager,
@@ -804,21 +785,14 @@ public class LocationManagerService extends ILocationManager.Stub {
             Log.d(TAG, "foreground user is changing to " + userId);
         }
 
-        // let providers know the current user is on the way out before changing the user
-        for (LocationProvider p : mProviders) {
-            p.onUserChangingLocked();
-        }
-
+        int oldUserId = userId;
         mCurrentUserId = userId;
         onUserProfilesChangedLocked();
 
-        // if the user changes, per-user settings may also have changed
-        onLocationModeChangedLocked(false);
-        onProviderAllowedChangedLocked();
-
-        // always force useability to be rechecked, even if no per-user settings have changed
+        // let providers know the current user has changed
         for (LocationProvider p : mProviders) {
-            p.onUseableChangedLocked(false);
+            p.onUseableChangedLocked(oldUserId);
+            p.onUseableChangedLocked(mCurrentUserId);
         }
     }
 
@@ -829,18 +803,13 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         private final String mName;
 
-        // whether this provider should respect LOCATION_PROVIDERS_ALLOWED (ie gps and network)
-        private final boolean mIsManagedBySettings;
-
         // remember to clear binder identity before invoking any provider operation
         @GuardedBy("mLock")
         @Nullable
         protected AbstractLocationProvider mProvider;
 
         @GuardedBy("mLock")
-        private boolean mUseable;  // combined state
-        @GuardedBy("mLock")
-        private boolean mAllowed;  // state of LOCATION_PROVIDERS_ALLOWED
+        private SparseArray<Boolean> mUseable;  // combined state for each user id
         @GuardedBy("mLock")
         private boolean mEnabled;  // state of provider
 
@@ -849,27 +818,19 @@ public class LocationManagerService extends ILocationManager.Stub {
         private ProviderProperties mProperties;
 
         private LocationProvider(String name) {
-            this(name, false);
-        }
-
-        private LocationProvider(String name, boolean isManagedBySettings) {
             mName = name;
-            mIsManagedBySettings = isManagedBySettings;
 
             mProvider = null;
-            mUseable = false;
-            mAllowed = !mIsManagedBySettings;
+            mUseable = new SparseArray<>(1);
             mEnabled = false;
             mProperties = null;
 
-            if (mIsManagedBySettings) {
-                // since we assume providers are disabled by default
-                Settings.Secure.putStringForUser(
-                        mContext.getContentResolver(),
-                        Settings.Secure.LOCATION_PROVIDERS_ALLOWED,
-                        "-" + mName,
-                        mCurrentUserId);
-            }
+            // update LOCATION_PROVIDERS_ALLOWED for best effort backwards compatibility
+            Settings.Secure.putStringForUser(
+                    mContext.getContentResolver(),
+                    Settings.Secure.LOCATION_PROVIDERS_ALLOWED,
+                    "-" + mName,
+                    mCurrentUserId);
         }
 
         @GuardedBy("mLock")
@@ -882,7 +843,10 @@ public class LocationManagerService extends ILocationManager.Stub {
             }
 
             mProvider = provider;
-            onUseableChangedLocked(false);
+
+            // it would be more correct to call this for all users, but we know this can only
+            // affect the current user since providers are disabled for non-current users
+            onUseableChangedLocked(mCurrentUserId);
         }
 
         public String getName() {
@@ -949,12 +913,9 @@ public class LocationManagerService extends ILocationManager.Stub {
 
             pw.increaseIndent();
 
-            pw.println("useable=" + mUseable);
-            if (!mUseable) {
+            pw.println("useable=" + isUseableLocked(mCurrentUserId));
+            if (!isUseableLocked(mCurrentUserId)) {
                 pw.println("attached=" + (mProvider != null));
-                if (mIsManagedBySettings) {
-                    pw.println("allowed=" + mAllowed);
-                }
                 pw.println("enabled=" + mEnabled);
             }
 
@@ -1015,7 +976,10 @@ public class LocationManagerService extends ILocationManager.Stub {
                 }
 
                 mEnabled = enabled;
-                onUseableChangedLocked(false);
+
+                // it would be more correct to call this for all users, but we know this can only
+                // affect the current user since providers are disabled for non-current users
+                onUseableChangedLocked(mCurrentUserId);
             }
         }
 
@@ -1027,91 +991,49 @@ public class LocationManagerService extends ILocationManager.Stub {
         }
 
         @GuardedBy("mLock")
-        public void onLocationModeChangedLocked() {
-            onUseableChangedLocked(false);
-        }
-
-        @GuardedBy("mLock")
-        public void onAllowedChangedLocked() {
-            if (mIsManagedBySettings) {
-                boolean allowed = mSettingsStore.getLocationProvidersAllowed(
-                        mCurrentUserId).contains(mName);
-
-                if (allowed == mAllowed) {
-                    return;
-                }
-
-                if (D) {
-                    Log.d(TAG, mName + " provider allowed is now " + mAllowed);
-                }
-
-                mAllowed = allowed;
-                onUseableChangedLocked(true);
-            }
-        }
-
-        @GuardedBy("mLock")
         public boolean isUseableLocked() {
-            return isUseableForUserLocked(mCurrentUserId);
+            return isUseableLocked(mCurrentUserId);
         }
 
         @GuardedBy("mLock")
-        public boolean isUseableForUserLocked(int userId) {
-            return isCurrentProfileLocked(userId) && mUseable;
+        public boolean isUseableLocked(int userId) {
+            return mUseable.get(userId, Boolean.FALSE);
         }
 
         @GuardedBy("mLock")
-        private boolean isUseableIgnoringAllowedLocked() {
-            return mProvider != null && mProviders.contains(this) && isLocationEnabled()
-                    && mEnabled;
-        }
-
-        @GuardedBy("mLock")
-        public void onUseableChangedLocked(boolean isAllowedChanged) {
+        public void onUseableChangedLocked(int userId) {
             // if any property that contributes to "useability" here changes state, it MUST result
             // in a direct or indrect call to onUseableChangedLocked. this allows the provider to
             // guarantee that it will always eventually reach the correct state.
-            boolean useableIgnoringAllowed = isUseableIgnoringAllowedLocked();
-            boolean useable = useableIgnoringAllowed && mAllowed;
+            boolean useable = mProvider != null && mProviders.contains(this)
+                    && isCurrentProfileLocked(userId) && isLocationEnabledForUser(userId)
+                    && mEnabled;
 
-            // update deprecated provider allowed settings for backwards compatibility, and do this
-            // even if there is no change in overall useability state. this may result in trying to
-            // overwrite the same value, but Settings handles deduping this.
-            if (mIsManagedBySettings) {
-                // a "-" change derived from the allowed setting should not be overwritten, but a
-                // "+" change should be corrected if necessary
-                if (useableIgnoringAllowed && !isAllowedChanged) {
-                    Settings.Secure.putStringForUser(
-                            mContext.getContentResolver(),
-                            Settings.Secure.LOCATION_PROVIDERS_ALLOWED,
-                            "+" + mName,
-                            mCurrentUserId);
-                } else if (!useableIgnoringAllowed) {
-                    Settings.Secure.putStringForUser(
-                            mContext.getContentResolver(),
-                            Settings.Secure.LOCATION_PROVIDERS_ALLOWED,
-                            "-" + mName,
-                            mCurrentUserId);
-                }
-
-                // needs to be sent to all users because whether or not a provider is enabled for
-                // a given user is complicated... we broadcast to everyone and let them figure it
-                // out via isProviderEnabled()
-                Intent intent = new Intent(LocationManager.PROVIDERS_CHANGED_ACTION);
-                intent.putExtra(LocationManager.EXTRA_PROVIDER_NAME, mName);
-                mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
-            }
-
-            if (useable == mUseable) {
+            if (useable == isUseableLocked(userId)) {
                 return;
             }
-            mUseable = useable;
+            mUseable.put(userId, useable);
 
             if (D) {
-                Log.d(TAG, mName + " provider useable is now " + mUseable);
+                Log.d(TAG, "[u" + userId + "] " + mName + " provider useable = " + useable);
             }
 
-            if (!mUseable) {
+            // fused and passive provider never get public updates for legacy reasons
+            if (!FUSED_PROVIDER.equals(mName) && !PASSIVE_PROVIDER.equals(mName)) {
+                // update LOCATION_PROVIDERS_ALLOWED for best effort backwards compatibility
+                Settings.Secure.putStringForUser(
+                        mContext.getContentResolver(),
+                        Settings.Secure.LOCATION_PROVIDERS_ALLOWED,
+                        (useable ? "+" : "-") + mName,
+                        userId);
+
+                Intent intent = new Intent(LocationManager.PROVIDERS_CHANGED_ACTION);
+                intent.putExtra(LocationManager.EXTRA_PROVIDER_NAME, mName);
+                intent.putExtra(LocationManager.EXTRA_PROVIDER_ENABLED, useable);
+                mContext.sendBroadcastAsUser(intent, UserHandle.of(userId));
+            }
+
+            if (!useable) {
                 // If any provider has been disabled, clear all last locations for all
                 // providers. This is to be on the safe side in case a provider has location
                 // derived from this disabled provider.
@@ -1119,15 +1041,6 @@ public class LocationManagerService extends ILocationManager.Stub {
                 mLastLocationCoarseInterval.clear();
             }
 
-            updateProviderUseableLocked(this);
-        }
-
-        @GuardedBy("mLock")
-        public void onUserChangingLocked() {
-            // when the user is about to change, we set this provider to un-useable, and notify all
-            // of the current user clients. when the user is finished changing, useability will be
-            // updated back via onLocationModeChanged() and onAllowedChanged().
-            mUseable = false;
             updateProviderUseableLocked(this);
         }
     }
@@ -1563,14 +1476,17 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         mProviders.add(provider);
 
-        provider.onAllowedChangedLocked();  // allowed state may change while provider was inactive
-        provider.onUseableChangedLocked(false);
+        // it would be more correct to call this for all users, but we know this can only
+        // affect the current user since providers are disabled for non-current users
+        provider.onUseableChangedLocked(mCurrentUserId);
     }
 
     @GuardedBy("mLock")
     private void removeProviderLocked(LocationProvider provider) {
         if (mProviders.remove(provider)) {
-            provider.onUseableChangedLocked(false);
+            // it would be more correct to call this for all users, but we know this can only
+            // affect the current user since providers are disabled for non-current users
+            provider.onUseableChangedLocked(mCurrentUserId);
         }
     }
 
@@ -2821,10 +2737,6 @@ public class LocationManagerService extends ILocationManager.Stub {
         }
     }
 
-    private boolean isLocationEnabled() {
-        return isLocationEnabledForUser(mCurrentUserId);
-    }
-
     @Override
     public boolean isLocationEnabledForUser(int userId) {
         // Check INTERACT_ACROSS_USERS permission if userId is not current user id.
@@ -2857,7 +2769,7 @@ public class LocationManagerService extends ILocationManager.Stub {
 
         synchronized (mLock) {
             LocationProvider provider = getLocationProviderLocked(providerName);
-            return provider != null && provider.isUseableForUserLocked(userId);
+            return provider != null && provider.isUseableLocked(userId);
         }
     }
 
@@ -3252,6 +3164,7 @@ public class LocationManagerService extends ILocationManager.Stub {
         synchronized (mLock) {
             if (mGnssManagerService != null && args.length > 0 && args[0].equals("--gnssmetrics")) {
                 mGnssManagerService.dump(fd, pw, args);
+                return;
             }
 
             ipw.println("Location Manager State:");
@@ -3262,7 +3175,7 @@ public class LocationManagerService extends ILocationManager.Stub {
                     + TimeUtils.formatDuration(SystemClock.elapsedRealtime()));
             ipw.println("Current user: " + mCurrentUserId + " " + Arrays.toString(
                     mCurrentUserProfiles));
-            ipw.println("Location Mode: " + isLocationEnabled());
+            ipw.println("Location Mode: " + isLocationEnabledForUser(mCurrentUserId));
             ipw.println("Battery Saver Location Mode: "
                     + locationPowerSaveModeToString(mBatterySaverMode));
 

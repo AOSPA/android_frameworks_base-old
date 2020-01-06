@@ -44,7 +44,6 @@ import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Patterns;
 
-import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.SmsApplication;
 
 import java.lang.annotation.Retention;
@@ -1414,7 +1413,7 @@ public final class Telephony {
                 }
 
                 String format = intent.getStringExtra("format");
-                int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY,
+                int subId = intent.getIntExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,
                         SubscriptionManager.getDefaultSmsSubscriptionId());
 
                 Rlog.v(TAG, " getMessagesFromIntent sub_id : " + subId);
@@ -4206,20 +4205,6 @@ public final class Telephony {
         public static final String CID = "cid";
 
         /**
-         * Message code. <em>OBSOLETE: merged into SERIAL_NUMBER.</em>
-         * <P>Type: INTEGER</P>
-         * @hide
-         */
-        public static final String V1_MESSAGE_CODE = "message_code";
-
-        /**
-         * Message identifier. <em>OBSOLETE: renamed to SERVICE_CATEGORY.</em>
-         * <P>Type: INTEGER</P>
-         * @hide
-         */
-        public static final String V1_MESSAGE_IDENTIFIER = "message_id";
-
-        /**
          * Service category which represents the general topic of the message.
          * <p>
          * For GSM/UMTS: message identifier (see 3GPP TS 23.041 section 9.4.1.2.2)
@@ -4570,7 +4555,7 @@ public final class Telephony {
         /**
          * The current registered voice network operator name in long alphanumeric format.
          * <p>
-         * This is the same as {@link ServiceState#getVoiceOperatorAlphaLong()}.
+         * This is the same as {@link ServiceState#getOperatorAlphaLong()}.
          * @hide
          */
         public static final String VOICE_OPERATOR_ALPHA_LONG = "voice_operator_alpha_long";
@@ -4581,11 +4566,10 @@ public final class Telephony {
          * In GSM/UMTS, short format can be up to 8 characters long. The current registered voice
          * network operator name in long alphanumeric format.
          * <p>
-         * This is the same as {@link ServiceState#getVoiceOperatorAlphaShort()}.
+         * This is the same as {@link ServiceState#getOperatorAlphaShort()}.
          * @hide
          */
         public static final String VOICE_OPERATOR_ALPHA_SHORT = "voice_operator_alpha_short";
-
 
         /**
          * The current registered operator numeric id.
@@ -4600,7 +4584,7 @@ public final class Telephony {
         /**
          * The current registered data network operator name in long alphanumeric format.
          * <p>
-         * This is the same as {@link ServiceState#getDataOperatorAlphaLong()}.
+         * This is the same as {@link ServiceState#getOperatorAlphaLong()}.
          * @hide
          */
         public static final String DATA_OPERATOR_ALPHA_LONG = "data_operator_alpha_long";
@@ -4608,7 +4592,7 @@ public final class Telephony {
         /**
          * The current registered data network operator name in short alphanumeric format.
          * <p>
-         * This is the same as {@link ServiceState#getDataOperatorAlphaShort()}.
+         * This is the same as {@link ServiceState#getOperatorAlphaShort()}.
          * @hide
          */
         public static final String DATA_OPERATOR_ALPHA_SHORT = "data_operator_alpha_short";
@@ -4616,7 +4600,7 @@ public final class Telephony {
         /**
          * The current registered data network operator numeric id.
          * <p>
-         * This is the same as {@link ServiceState#getDataOperatorNumeric()}.
+         * This is the same as {@link ServiceState#getOperatorNumeric()}.
          * @hide
          */
         public static final String DATA_OPERATOR_NUMERIC = "data_operator_numeric";
@@ -4903,5 +4887,24 @@ public final class Telephony {
             @NonNull
             public static final Uri CONTENT_URI = Uri.parse("content://carrier_id/all");
         }
+    }
+
+    /**
+     * Contains SIM Information
+     * @hide
+     */
+    @SystemApi
+    public static final class SimInfo {
+        /**
+         * Not instantiable.
+         * @hide
+         */
+        private SimInfo() {}
+
+        /**
+         * The {@code content://} style URI for this provider.
+         */
+        @NonNull
+        public static final Uri CONTENT_URI = Uri.parse("content://telephony/siminfo");
     }
 }

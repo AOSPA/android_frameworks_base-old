@@ -73,6 +73,7 @@ import org.junit.runner.RunWith;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Tests for the {@link RootActivityContainer} class.
@@ -146,12 +147,10 @@ public class RootActivityContainerTests extends ActivityTestsBase {
     }
 
     private static void ensureStackPlacement(ActivityStack stack, ActivityRecord... activities) {
-        final Task task = stack.getAllTasks().get(0);
+        final Task task = stack.getBottomMostTask();
         final ArrayList<ActivityRecord> stackActivities = new ArrayList<>();
 
-        for (int i = 0; i < task.getChildCount(); i++) {
-            stackActivities.add(task.getChildAt(i));
-        }
+        task.forAllActivities((Consumer<ActivityRecord>) stackActivities::add, false);
 
         assertEquals("Expecting " + Arrays.deepToString(activities) + " got " + stackActivities,
                 stackActivities.size(), activities != null ? activities.length : 0);
@@ -227,20 +226,20 @@ public class RootActivityContainerTests extends ActivityTestsBase {
     @Test
     public void testRemovingStackOnAppCrash() {
         final ActivityDisplay defaultDisplay = mRootActivityContainer.getDefaultDisplay();
-        final int originalStackCount = defaultDisplay.getChildCount();
+        final int originalStackCount = defaultDisplay.getStackCount();
         final ActivityStack stack = mRootActivityContainer.getDefaultDisplay().createStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, false /* onTop */);
         final ActivityRecord firstActivity = new ActivityBuilder(mService).setCreateTask(true)
                 .setStack(stack).build();
 
-        assertEquals(originalStackCount + 1, defaultDisplay.getChildCount());
+        assertEquals(originalStackCount + 1, defaultDisplay.getStackCount());
 
         // Let's pretend that the app has crashed.
         firstActivity.app.setThread(null);
         mRootActivityContainer.finishTopCrashedActivities(firstActivity.app, "test");
 
         // Verify that the stack was removed.
-        assertEquals(originalStackCount, defaultDisplay.getChildCount());
+        assertEquals(originalStackCount, defaultDisplay.getStackCount());
     }
 
     @Test
@@ -321,7 +320,7 @@ public class RootActivityContainerTests extends ActivityTestsBase {
                 .setWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY)
                 .setOnTop(true)
                 .build();
-        final Task task = primaryStack.topTask();
+        final Task task = primaryStack.getTopMostTask();
 
         // Resize dock stack.
         mService.resizeDockedStack(stackSize, taskSize, null, null, null);
@@ -341,7 +340,7 @@ public class RootActivityContainerTests extends ActivityTestsBase {
         final ActivityStack targetStack = new StackBuilder(mRootActivityContainer)
                 .setOnTop(false)
                 .build();
-        final Task targetTask = targetStack.getChildAt(0);
+        final Task targetTask = targetStack.getBottomMostTask();
 
         // Create Recents on top of the display.
         final ActivityStack stack = new StackBuilder(mRootActivityContainer).setActivityType(
@@ -393,7 +392,7 @@ public class RootActivityContainerTests extends ActivityTestsBase {
                 ACTIVITY_TYPE_STANDARD, false /* onTop */));
         final Task task = new TaskBuilder(mSupervisor).setStack(targetStack).build();
         final ActivityRecord activity = new ActivityBuilder(mService).setTask(task).build();
-        display.positionChildAtBottom(targetStack);
+        display.positionStackAtBottom(targetStack);
 
         // Assume the stack is not at the topmost position (e.g. behind always-on-top stacks) but it
         // is the current top focused stack.
@@ -494,7 +493,7 @@ public class RootActivityContainerTests extends ActivityTestsBase {
         final Task task = new TaskBuilder(mSupervisor).setStack(targetStack).build();
         final ActivityRecord activity = new ActivityBuilder(mService).setTask(task).build();
         activity.setState(ActivityState.RESUMED, "test");
-        display.positionChildAtBottom(targetStack);
+        display.positionStackAtBottom(targetStack);
 
         // Assume the stack is at the topmost position
         assertFalse(targetStack.isTopStackOnDisplay());

@@ -119,11 +119,11 @@ import com.android.systemui.statusbar.phone.NotificationGroupAlertTransferHelper
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.phone.StatusBarComponent;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.statusbar.phone.StatusBarNotificationActivityStarter;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
-import com.android.systemui.statusbar.phone.StatusBarWindowViewController;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
@@ -140,6 +140,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import javax.inject.Named;
+import javax.inject.Provider;
 
 import dagger.Lazy;
 
@@ -156,7 +157,6 @@ public class CarStatusBar extends StatusBar implements CarBatteryController.Batt
     private static final float FLING_SPEED_UP_FACTOR = 0.6f;
 
     private final ScrimController mScrimController;
-    private final StatusBarWindowViewController mStatusBarWindowViewController;
     private final LockscreenLockIconController mLockscreenLockIconController;
 
     private float mOpeningVelocity = DEFAULT_FLING_VELOCITY;
@@ -174,7 +174,6 @@ public class CarStatusBar extends StatusBar implements CarBatteryController.Batt
 
     private final Object mQueueLock = new Object();
     private final CarNavigationBarController mCarNavigationBarController;
-    private final Lazy<DrivingStateHelper> mDrivingStateHelperLazy;
     private final Lazy<PowerManagerHelper> mPowerManagerHelperLazy;
     private final CarServiceProvider mCarServiceProvider;
 
@@ -289,7 +288,6 @@ public class CarStatusBar extends StatusBar implements CarBatteryController.Batt
             NotificationListener notificationListener,
             ConfigurationController configurationController,
             StatusBarWindowController statusBarWindowController,
-            StatusBarWindowViewController statusBarWindowViewController,
             LockscreenLockIconController lockscreenLockIconController,
             DozeParameters dozeParameters,
             ScrimController scrimController,
@@ -302,6 +300,7 @@ public class CarStatusBar extends StatusBar implements CarBatteryController.Batt
             VolumeComponent volumeComponent,
             CommandQueue commandQueue,
             Optional<Recents> recents,
+            Provider<StatusBarComponent.Builder> statusBarComponentBuilder,
             PluginManager pluginManager,
             RemoteInputUriController remoteInputUriController,
             Optional<Divider> dividerOptional,
@@ -314,7 +313,6 @@ public class CarStatusBar extends StatusBar implements CarBatteryController.Batt
             DismissCallbackRegistry dismissCallbackRegistry,
             /* Car Settings injected components. */
             CarServiceProvider carServiceProvider,
-            Lazy<DrivingStateHelper> drivingStateHelperLazy,
             Lazy<PowerManagerHelper> powerManagerHelperLazy,
             Lazy<FullscreenUserSwitcher> fullscreenUserSwitcherLazy,
             CarNavigationBarController carNavigationBarController) {
@@ -368,7 +366,6 @@ public class CarStatusBar extends StatusBar implements CarBatteryController.Batt
                 notificationListener,
                 configurationController,
                 statusBarWindowController,
-                statusBarWindowViewController,
                 lockscreenLockIconController,
                 dozeParameters,
                 scrimController,
@@ -382,6 +379,7 @@ public class CarStatusBar extends StatusBar implements CarBatteryController.Batt
                 volumeComponent,
                 commandQueue,
                 recents,
+                statusBarComponentBuilder,
                 pluginManager,
                 remoteInputUriController,
                 dividerOptional,
@@ -392,11 +390,9 @@ public class CarStatusBar extends StatusBar implements CarBatteryController.Batt
                 viewMediatorCallback,
                 dismissCallbackRegistry);
         mScrimController = scrimController;
-        mStatusBarWindowViewController = statusBarWindowViewController;
         mLockscreenLockIconController = lockscreenLockIconController;
         mDeviceProvisionedController = deviceProvisionedController;
         mCarServiceProvider = carServiceProvider;
-        mDrivingStateHelperLazy = drivingStateHelperLazy;
         mPowerManagerHelperLazy = powerManagerHelperLazy;
         mFullscreenUserSwitcherLazy = fullscreenUserSwitcherLazy;
         mCarNavigationBarController = carNavigationBarController;

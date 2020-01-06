@@ -977,9 +977,9 @@ public class RecentTasksTest extends ActivityTestsBase {
     private void assertNotRestoreTask(Runnable action) {
         // Verify stack count doesn't change because task with fullscreen mode and standard type
         // would have its own stack.
-        final int orignalStackCount = mDisplay.getChildCount();
+        final int originalStackCount = mDisplay.getStackCount();
         action.run();
-        assertEquals(orignalStackCount, mDisplay.getChildCount());
+        assertEquals(originalStackCount, mDisplay.getStackCount());
     }
 
     @Test
@@ -1282,10 +1282,10 @@ public class RecentTasksTest extends ActivityTestsBase {
 
         @Override
         void getTasks(int maxNum, List<RunningTaskInfo> list, int ignoreActivityType,
-                int ignoreWindowingMode, ArrayList<ActivityDisplay> activityDisplays,
+                int ignoreWindowingMode, RootActivityContainer root,
                 int callingUid, boolean allowed, boolean crossUser, ArraySet<Integer> profileIds) {
             mLastAllowed = allowed;
-            super.getTasks(maxNum, list, ignoreActivityType, ignoreWindowingMode, activityDisplays,
+            super.getTasks(maxNum, list, ignoreActivityType, ignoreWindowingMode, root,
                     callingUid, allowed, crossUser, profileIds);
         }
     }

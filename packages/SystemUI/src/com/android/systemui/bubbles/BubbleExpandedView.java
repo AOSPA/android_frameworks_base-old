@@ -31,15 +31,12 @@ import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.graphics.Insets;
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.graphics.drawable.Drawable;
 import android.graphics.drawable.ShapeDrawable;
 import android.os.RemoteException;
 import android.service.notification.StatusBarNotification;
@@ -102,9 +99,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
     private int mExpandedViewTouchSlop;
 
     private Bubble mBubble;
-    private PackageManager mPm;
     private String mAppName;
-    private Drawable mAppIcon;
 
     private BubbleController mBubbleController = Dependency.get(BubbleController.class);
     private WindowManager mWindowManager;
@@ -130,12 +125,17 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
                             Log.d(TAG, "onActivityViewReady: calling startActivity, "
                                     + "bubble=" + getBubbleKey());
                         }
-                        Intent fillInIntent = new Intent();
-                        // Apply flags to make behaviour match documentLaunchMode=always.
-                        fillInIntent.addFlags(FLAG_ACTIVITY_NEW_DOCUMENT);
-                        fillInIntent.addFlags(FLAG_ACTIVITY_MULTIPLE_TASK);
                         try {
-                            mActivityView.startActivity(mBubbleIntent, fillInIntent, options);
+                            if (mBubble.usingShortcutInfo()) {
+                                mActivityView.startShortcutActivity(mBubble.getShortcutInfo(),
+                                        options, null /* sourceBounds */);
+                            } else {
+                                Intent fillInIntent = new Intent();
+                                // Apply flags to make behaviour match documentLaunchMode=always.
+                                fillInIntent.addFlags(FLAG_ACTIVITY_NEW_DOCUMENT);
+                                fillInIntent.addFlags(FLAG_ACTIVITY_MULTIPLE_TASK);
+                                mActivityView.startActivity(mBubbleIntent, fillInIntent, options);
+                            }
                         } catch (RuntimeException e) {
                             // If there's a runtime exception here then there's something
                             // wrong with the intent, we can't really recover / try to populate
@@ -184,12 +184,10 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
                         + " mActivityViewStatus=" + mActivityViewStatus
                         + " bubble=" + getBubbleKey());
             }
-            if (mBubble != null && !mBubble.isUserCreated()) {
-                if (mBubble != null) {
-                    // Must post because this is called from a binder thread.
-                    post(() -> mBubbleController.removeBubble(mBubble.getKey(),
-                            BubbleController.DISMISS_TASK_FINISHED));
-                }
+            if (mBubble != null && !mBubbleController.isUserCreatedBubble(mBubble.getKey())) {
+                // Must post because this is called from a binder thread.
+                post(() -> mBubbleController.removeBubble(mBubble.getKey(),
+                        BubbleController.DISMISS_TASK_FINISHED));
             }
         }
     };
@@ -209,7 +207,6 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
     public BubbleExpandedView(Context context, AttributeSet attrs, int defStyleAttr,
             int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
-        mPm = context.getPackageManager();
         mDisplaySize = new Point();
         mWindowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
         // Get the real size -- this includes screen decorations (notches, statusbar, navbar).
@@ -278,17 +275,15 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
     }
 
     void applyThemeAttrs() {
-        TypedArray ta = getContext().obtainStyledAttributes(R.styleable.BubbleExpandedView);
-        int bgColor = ta.getColor(
-                R.styleable.BubbleExpandedView_android_colorBackgroundFloating, Color.WHITE);
-        float cornerRadius = ta.getDimension(
-                R.styleable.BubbleExpandedView_android_dialogCornerRadius, 0);
+        final TypedArray ta = mContext.obtainStyledAttributes(
+                new int[] {
+                        android.R.attr.colorBackgroundFloating,
+                        android.R.attr.dialogCornerRadius});
+        int bgColor = ta.getColor(0, Color.WHITE);
+        float cornerRadius = ta.getDimensionPixelSize(1, 0);
         ta.recycle();
 
-        // Update triangle color.
         mPointerDrawable.setTint(bgColor);
-
-        // Update ActivityView cornerRadius
         if (ScreenDecorationsUtils.supportsRoundedCornersOnWindows(mContext.getResources())) {
             mActivityView.setCornerRadius(cornerRadius);
         }
@@ -347,29 +342,14 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
     /**
      * Sets the bubble used to populate this view.
      */
-    public void setBubble(Bubble bubble, BubbleStackView stackView, String appName) {
+    public void setBubble(Bubble bubble, BubbleStackView stackView) {
         if (DEBUG_BUBBLE_EXPANDED_VIEW) {
             Log.d(TAG, "setBubble: bubble=" + (bubble != null ? bubble.getKey() : "null"));
         }
-
         mStackView = stackView;
         mBubble = bubble;
-        mAppName = appName;
+        mAppName = bubble.getAppName();
 
-        try {
-            ApplicationInfo info = mPm.getApplicationInfo(
-                    bubble.getPackageName(),
-                    PackageManager.MATCH_UNINSTALLED_PACKAGES
-                            | PackageManager.MATCH_DISABLED_COMPONENTS
-                            | PackageManager.MATCH_DIRECT_BOOT_UNAWARE
-                            | PackageManager.MATCH_DIRECT_BOOT_AWARE);
-            mAppIcon = mPm.getApplicationIcon(info);
-        } catch (PackageManager.NameNotFoundException e) {
-            // Do nothing.
-        }
-        if (mAppIcon == null) {
-            mAppIcon = mPm.getDefaultActivityIcon();
-        }
         applyThemeAttrs();
         showSettingsIcon();
         updateExpandedView();
@@ -415,7 +395,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
                     + getBubbleKey());
         }
 
-        mBubbleIntent = mBubble.getBubbleIntent(mContext);
+        mBubbleIntent = mBubble.getBubbleIntent();
         if (mBubbleIntent != null) {
             setContentVisibility(false);
             mActivityView.setVisibility(VISIBLE);
@@ -621,7 +601,7 @@ public class BubbleExpandedView extends LinearLayout implements View.OnClickList
                 action,
                 mStackView.getNormalizedXPosition(),
                 mStackView.getNormalizedYPosition(),
-                bubble.showInShadeWhenBubble(),
+                bubble.showInShade(),
                 bubble.isOngoing(),
                 false /* isAppForeground (unused) */);
     }

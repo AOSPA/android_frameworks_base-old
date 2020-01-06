@@ -54,6 +54,7 @@ import static com.android.server.wm.ActivityTaskManagerService.ANIMATE;
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -520,9 +521,9 @@ public class ActivityStarterTests extends ActivityTestsBase {
     }
 
     private void assertNoTasks(ActivityDisplay display) {
-        for (int i = display.getChildCount() - 1; i >= 0; --i) {
-            final ActivityStack stack = display.getChildAt(i);
-            assertThat(stack.getAllTasks()).isEmpty();
+        for (int i = display.getStackCount() - 1; i >= 0; --i) {
+            final ActivityStack stack = display.getStackAt(i);
+            assertFalse(stack.hasChild());
         }
     }
 

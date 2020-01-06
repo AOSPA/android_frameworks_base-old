@@ -48,12 +48,12 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
-import android.os.HandlerExecutor;
 import android.os.Looper;
 import android.os.ParcelUuid;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.provider.Telephony.SimInfo;
 import android.telephony.euicc.EuiccManager;
 import android.telephony.ims.ImsMmTelManager;
 import android.util.DisplayMetrics;
@@ -63,6 +63,7 @@ import android.util.Pair;
 import com.android.internal.telephony.ISetOpportunisticDataCallback;
 import com.android.internal.telephony.ISub;
 import com.android.internal.telephony.PhoneConstants;
+import com.android.internal.telephony.util.HandlerExecutor;
 import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
@@ -129,7 +130,7 @@ public class SubscriptionManager {
 
     /** @hide */
     @UnsupportedAppUsage
-    public static final Uri CONTENT_URI = Uri.parse("content://telephony/siminfo");
+    public static final Uri CONTENT_URI = SimInfo.CONTENT_URI;
 
     /**
      * Generates a content {@link Uri} used to receive updates on simInfo change
@@ -400,19 +401,19 @@ public class SubscriptionManager {
     public static final String NAME_SOURCE = "name_source";
 
     /**
-     * The name_source is the default
+     * The name_source is the default, which is from the carrier id.
      * @hide
      */
     public static final int NAME_SOURCE_DEFAULT_SOURCE = 0;
 
     /**
-     * The name_source is from the SIM
+     * The name_source is from SIM EF_SPN.
      * @hide
      */
-    public static final int NAME_SOURCE_SIM_SOURCE = 1;
+    public static final int NAME_SOURCE_SIM_SPN = 1;
 
     /**
-     * The name_source is from the user
+     * The name_source is from user input
      * @hide
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
@@ -423,6 +424,24 @@ public class SubscriptionManager {
      * @hide
      */
     public static final int NAME_SOURCE_CARRIER = 3;
+
+    /**
+     * The name_source is from SIM EF_PNN.
+     * @hide
+     */
+    public static final int NAME_SOURCE_SIM_PNN = 4;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"NAME_SOURCE_"},
+            value = {
+                    NAME_SOURCE_DEFAULT_SOURCE,
+                    NAME_SOURCE_SIM_SPN,
+                    NAME_SOURCE_USER_INPUT,
+                    NAME_SOURCE_CARRIER,
+                    NAME_SOURCE_SIM_PNN
+            })
+    public @interface SimDisplayNameSource {}
 
     /**
      * TelephonyProvider column name for the color of a SIM.
@@ -1667,13 +1686,12 @@ public class SubscriptionManager {
      * Set display name by simInfo index with name source
      * @param displayName the display name of SIM card
      * @param subId the unique SubscriptionInfo index in database
-     * @param nameSource 0: NAME_SOURCE_DEFAULT_SOURCE, 1: NAME_SOURCE_SIM_SOURCE,
-     *                   2: NAME_SOURCE_USER_INPUT
+     * @param nameSource SIM display name source
      * @return the number of records updated or < 0 if invalid subId
      * @hide
      */
     @UnsupportedAppUsage
-    public int setDisplayName(String displayName, int subId, int nameSource) {
+    public int setDisplayName(String displayName, int subId, @SimDisplayNameSource int nameSource) {
         if (VDBG) {
             logd("[setDisplayName]+  displayName:" + displayName + " subId:" + subId
                     + " nameSource:" + nameSource);

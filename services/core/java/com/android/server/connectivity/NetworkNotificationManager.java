@@ -31,7 +31,6 @@ import android.net.NetworkSpecifier;
 import android.net.StringNetworkSpecifier;
 import android.net.wifi.WifiInfo;
 import android.os.UserHandle;
-import android.telephony.AccessNetworkConstants.TransportType;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.SubscriptionManager;
@@ -106,8 +105,7 @@ public class NetworkNotificationManager {
         return -1;
     }
 
-    // TODO: Remove @TransportType or change it to @Transport.
-    private static String getTransportName(@TransportType int transportType) {
+    private static String getTransportName(final int transportType) {
         Resources r = Resources.getSystem();
         String[] networkTypes = r.getStringArray(R.array.network_switch_type_name);
         try {

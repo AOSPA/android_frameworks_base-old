@@ -178,7 +178,7 @@ class ScreenRotationAnimation {
                     .setContainerLayer()
                     .build();
 
-            mSurfaceControl = displayContent.makeSurface(null)
+            mSurfaceControl = mService.makeSurfaceBuilder(null)
                     .setName("ScreenshotSurface")
                     .setParent(mRotationLayer)
                     .setBufferSize(mWidth, mHeight)
@@ -250,7 +250,7 @@ class ScreenRotationAnimation {
         }
     }
 
-    public void writeToProto(ProtoOutputStream proto, long fieldId) {
+    public void dumpDebug(ProtoOutputStream proto, long fieldId) {
         final long token = proto.start(fieldId);
         proto.write(STARTED, mStarted);
         proto.write(ANIMATION_RUNNING, mAnimRunning);

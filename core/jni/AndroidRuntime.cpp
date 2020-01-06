@@ -86,6 +86,7 @@ extern int register_android_hardware_UsbDeviceConnection(JNIEnv *env);
 extern int register_android_hardware_UsbRequest(JNIEnv *env);
 extern int register_android_hardware_location_ActivityRecognitionHardware(JNIEnv* env);
 
+extern int register_android_media_AudioDeviceAddress(JNIEnv *env);
 extern int register_android_media_AudioEffectDescriptor(JNIEnv *env);
 extern int register_android_media_AudioRecord(JNIEnv *env);
 extern int register_android_media_AudioSystem(JNIEnv *env);
@@ -151,6 +152,7 @@ extern int register_android_os_UEventObserver(JNIEnv* env);
 extern int register_android_os_HidlMemory(JNIEnv* env);
 extern int register_android_os_MemoryFile(JNIEnv* env);
 extern int register_android_os_SharedMemory(JNIEnv* env);
+extern int register_android_service_DataLoaderService(JNIEnv* env);
 extern int register_android_net_LocalSocketImpl(JNIEnv* env);
 extern int register_android_net_NetworkUtils(JNIEnv* env);
 extern int register_android_text_AndroidCharacter(JNIEnv *env);
@@ -650,6 +652,7 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
     char methodTraceFileSizeBuf[sizeof("-Xmethod-trace-file-size:") + PROPERTY_VALUE_MAX];
     std::string fingerprintBuf;
     char jdwpProviderBuf[sizeof("-XjdwpProvider:") - 1 + PROPERTY_VALUE_MAX];
+    char opaqueJniIds[sizeof("-Xopaque-jni-ids:") - 1 + PROPERTY_VALUE_MAX];
     char bootImageBuf[sizeof("-Ximage:") - 1 + PROPERTY_VALUE_MAX];
 
     // Read if we are using the profile configuration, do this at the start since the last ART args
@@ -839,6 +842,14 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
                          jdwpProviderBuf,
                          "-XjdwpProvider:",
                          "default");
+    }
+
+    // Only pass an explicit opaque-jni-ids to apps forked from zygote
+    if (zygote) {
+      parseRuntimeOption("dalvik.vm.opaque-jni-ids",
+                        opaqueJniIds,
+                        "-Xopaque-jni-ids:",
+                        "swapable");
     }
 
     parseRuntimeOption("dalvik.vm.lockprof.threshold",
@@ -1445,6 +1456,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_os_NativeHandle),
     REG_JNI(register_android_os_VintfObject),
     REG_JNI(register_android_os_VintfRuntimeInfo),
+    REG_JNI(register_android_service_DataLoaderService),
     REG_JNI(register_android_view_DisplayEventReceiver),
     REG_JNI(register_android_view_RenderNodeAnimator),
     REG_JNI(register_android_view_InputApplicationHandle),
@@ -1504,6 +1516,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_hardware_UsbDeviceConnection),
     REG_JNI(register_android_hardware_UsbRequest),
     REG_JNI(register_android_hardware_location_ActivityRecognitionHardware),
+    REG_JNI(register_android_media_AudioDeviceAddress),
     REG_JNI(register_android_media_AudioEffectDescriptor),
     REG_JNI(register_android_media_AudioSystem),
     REG_JNI(register_android_media_AudioRecord),

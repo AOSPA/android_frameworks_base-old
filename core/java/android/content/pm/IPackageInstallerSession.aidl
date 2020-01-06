@@ -36,7 +36,7 @@ interface IPackageInstallerSession {
 
     void close();
     void commit(in IntentSender statusReceiver, boolean forTransferred);
-    void transfer(in String packageName);
+    void transfer(in String packageName, in IntentSender statusReceiver);
     void abandon();
 
     boolean isMultiPackage();
@@ -46,4 +46,5 @@ interface IPackageInstallerSession {
     int getParentSessionId();
 
     boolean isStaged();
+    void addFile(in String name, long size, in byte[] metadata);
 }

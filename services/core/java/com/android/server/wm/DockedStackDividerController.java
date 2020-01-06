@@ -259,7 +259,7 @@ public class DockedStackDividerController {
         if (homeStack == null) {
             return false;
         }
-        final Task homeTask = homeStack.findHomeTask();
+        final Task homeTask = homeStack.getTopMostTask();
         return homeTask != null && homeTask.isResizeable();
     }
 
@@ -708,7 +708,7 @@ public class DockedStackDividerController {
         if (homeStack == null) {
             return;
         }
-        final Task homeTask = homeStack.findHomeTask();
+        final Task homeTask = homeStack.getTopMostTask();
         if (homeTask == null || !isWithinDisplay(homeTask)) {
             return;
         }
@@ -1018,7 +1018,7 @@ public class DockedStackDividerController {
         pw.println(prefix + "  mAdjustedForDivider=" + mAdjustedForDivider);
     }
 
-    void writeToProto(ProtoOutputStream proto, long fieldId) {
+    void dumpDebug(ProtoOutputStream proto, long fieldId) {
         final long token = proto.start(fieldId);
         proto.write(MINIMIZED_DOCK, mMinimizedDock);
         proto.end(token);

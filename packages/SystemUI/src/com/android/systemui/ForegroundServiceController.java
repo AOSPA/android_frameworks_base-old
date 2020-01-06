@@ -37,7 +37,7 @@ import javax.inject.Singleton;
  */
 @Singleton
 public class ForegroundServiceController {
-    private static final int[] APP_OPS = new int[] {AppOpsManager.OP_CAMERA,
+    public static final int[] APP_OPS = new int[] {AppOpsManager.OP_CAMERA,
             AppOpsManager.OP_SYSTEM_ALERT_WINDOW,
             AppOpsManager.OP_RECORD_AUDIO,
             AppOpsManager.OP_COARSE_LOCATION,
@@ -139,6 +139,8 @@ public class ForegroundServiceController {
             }
         }
 
+        // TODO: (b/145659174) remove when moving to NewNotifPipeline. Replaced by
+        //  ForegroundCoordinator
         // Update appOp if there's an associated pending or visible notification:
         final String foregroundKey = getStandardLayoutKey(userId, packageName);
         if (foregroundKey != null) {

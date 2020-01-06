@@ -4012,14 +4012,184 @@ public class Intent implements Parcelable, Cloneable {
      * Broadcast Action: The sim card state has changed.
      * For more details see TelephonyIntents.ACTION_SIM_STATE_CHANGED. This is here
      * because TelephonyIntents is an internal class.
-     * @hide
+     * The intent will have following extras.</p>
+     * <p>
+     * @see #EXTRA_SIM_STATE
+     * @see #EXTRA_SIM_LOCKED_REASON
+     *
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED} or
      * {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
+     *
+     * @hide
      */
     @Deprecated
     @SystemApi
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_SIM_STATE_CHANGED = "android.intent.action.SIM_STATE_CHANGED";
+
+    /**
+     * The extra used with {@link #ACTION_SIM_STATE_CHANGED} for broadcasting SIM STATE.
+     * This will have one of the following intent values.
+     * @see #SIM_STATE_UNKNOWN
+     * @see #SIM_STATE_NOT_READY
+     * @see #SIM_STATE_ABSENT
+     * @see #SIM_STATE_PRESENT
+     * @see #SIM_STATE_CARD_IO_ERROR
+     * @see #SIM_STATE_CARD_RESTRICTED
+     * @see #SIM_STATE_LOCKED
+     * @see #SIM_STATE_READY
+     * @see #SIM_STATE_IMSI
+     * @see #SIM_STATE_LOADED
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_SIM_STATE = "ss";
+
+    /**
+     * The intent value UNKNOWN represents the SIM state unknown
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    public static final String SIM_STATE_UNKNOWN = "UNKNOWN";
+
+    /**
+     * The intent value NOT_READY means that the SIM is not ready eg. radio is off or powering on
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    public static final String SIM_STATE_NOT_READY = "NOT_READY";
+
+    /**
+     * The intent value ABSENT means the SIM card is missing
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    public static final String SIM_STATE_ABSENT = "ABSENT";
+
+    /**
+     * The intent value PRESENT means the device has a SIM card inserted
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    public static final String SIM_STATE_PRESENT = "PRESENT";
+
+    /**
+     * The intent value CARD_IO_ERROR means for three consecutive times there was SIM IO error
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    static public final String SIM_STATE_CARD_IO_ERROR = "CARD_IO_ERROR";
+
+    /**
+     * The intent value CARD_RESTRICTED means card is present but not usable due to carrier
+     * restrictions
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    static public final String SIM_STATE_CARD_RESTRICTED = "CARD_RESTRICTED";
+
+    /**
+     * The intent value LOCKED means the SIM is locked by PIN or by network
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    public static final String SIM_STATE_LOCKED = "LOCKED";
+
+    /**
+     * The intent value READY means the SIM is ready to be accessed
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    public static final String SIM_STATE_READY = "READY";
+
+    /**
+     * The intent value IMSI means the SIM IMSI is ready in property
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    public static final String SIM_STATE_IMSI = "IMSI";
+
+    /**
+     * The intent value LOADED means all SIM records, including IMSI, are loaded
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    public static final String SIM_STATE_LOADED = "LOADED";
+
+    /**
+     * The extra used with {@link #ACTION_SIM_STATE_CHANGED} for broadcasting SIM STATE.
+     * This extra will have one of the following intent values.
+     * <p>
+     * @see #SIM_LOCKED_ON_PIN
+     * @see #SIM_LOCKED_ON_PUK
+     * @see #SIM_LOCKED_NETWORK
+     * @see #SIM_ABSENT_ON_PERM_DISABLED
+     *
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_SIM_LOCKED_REASON = "reason";
+
+    /**
+     * The intent value PIN means the SIM is locked on PIN1
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    public static final String SIM_LOCKED_ON_PIN = "PIN";
+
+    /**
+     * The intent value PUK means the SIM is locked on PUK1
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
+     */
+    /* PUK means ICC is locked on PUK1 */
+    @Deprecated
+    @SystemApi
+    public static final String SIM_LOCKED_ON_PUK = "PUK";
+
+    /**
+     * The intent value NETWORK means the SIM is locked on NETWORK PERSONALIZATION
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    public static final String SIM_LOCKED_NETWORK = "NETWORK";
+
+    /**
+     * The intent value PERM_DISABLED means SIM is permanently disabled due to puk fails
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    public static final String SIM_ABSENT_ON_PERM_DISABLED = "PERM_DISABLED";
 
     /**
      * Broadcast Action: indicate that the phone service state has changed.
@@ -4063,6 +4233,13 @@ public class Intent implements Parcelable, Cloneable {
     @SystemApi
     @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_SERVICE_STATE = "android.intent.action.SERVICE_STATE";
+
+    /**
+     * Used for looking up a Data Loader Service providers.
+     * @hide
+     */
+    @SdkConstant(SdkConstant.SdkConstantType.SERVICE_ACTION)
+    public static final String ACTION_LOAD_DATA = "android.intent.action.LOAD_DATA";
 
     /**
      * An int extra used with {@link #ACTION_SERVICE_STATE} which indicates voice registration
@@ -10298,26 +10475,26 @@ public class Intent implements Parcelable, Cloneable {
     }
 
     /** @hide */
-    public void writeToProto(ProtoOutputStream proto, long fieldId) {
+    public void dumpDebug(ProtoOutputStream proto, long fieldId) {
         // Same input parameters that toString() gives to toShortString().
-        writeToProto(proto, fieldId, true, true, true, false);
+        dumpDebug(proto, fieldId, true, true, true, false);
     }
 
     /** @hide */
-    public void writeToProto(ProtoOutputStream proto) {
+    public void dumpDebug(ProtoOutputStream proto) {
         // Same input parameters that toString() gives to toShortString().
-        writeToProtoWithoutFieldId(proto, true, true, true, false);
+        dumpDebugWithoutFieldId(proto, true, true, true, false);
     }
 
     /** @hide */
-    public void writeToProto(ProtoOutputStream proto, long fieldId, boolean secure, boolean comp,
+    public void dumpDebug(ProtoOutputStream proto, long fieldId, boolean secure, boolean comp,
             boolean extras, boolean clip) {
         long token = proto.start(fieldId);
-        writeToProtoWithoutFieldId(proto, secure, comp, extras, clip);
+        dumpDebugWithoutFieldId(proto, secure, comp, extras, clip);
         proto.end(token);
     }
 
-    private void writeToProtoWithoutFieldId(ProtoOutputStream proto, boolean secure, boolean comp,
+    private void dumpDebugWithoutFieldId(ProtoOutputStream proto, boolean secure, boolean comp,
             boolean extras, boolean clip) {
         if (mAction != null) {
             proto.write(IntentProto.ACTION, mAction);
@@ -10343,7 +10520,7 @@ public class Intent implements Parcelable, Cloneable {
             proto.write(IntentProto.PACKAGE, mPackage);
         }
         if (comp && mComponent != null) {
-            mComponent.writeToProto(proto, IntentProto.COMPONENT);
+            mComponent.dumpDebug(proto, IntentProto.COMPONENT);
         }
         if (mSourceBounds != null) {
             proto.write(IntentProto.SOURCE_BOUNDS, mSourceBounds.toShortString());

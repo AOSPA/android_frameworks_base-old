@@ -205,7 +205,20 @@ filegroup {
         "wifi/java/**/*.java",
         "wifi/java/**/*.aidl",
     ],
+    exclude_srcs: [
+        ":framework-wifi-non-updatable-sources"
+    ],
     path: "wifi/java",
+}
+
+filegroup {
+    name: "framework-wifi-non-updatable-sources",
+    srcs: [
+        // TODO(b/146011398) package android.net.wifi is now split amongst 2 jars: framework.jar and
+        // framework-wifi.jar. This is not a good idea, should move WifiNetworkScoreCache
+        // to a separate package.
+        "wifi/java/android/net/wifi/WifiNetworkScoreCache.java"
+    ],
 }
 
 filegroup {
@@ -233,6 +246,7 @@ filegroup {
         ":framework-telephony-common-sources",
         ":framework-telephony-sources",
         ":framework-wifi-sources",
+        ":framework-wifi-non-updatable-sources",
         ":PacProcessor-aidl-sources",
         ":ProxyHandler-aidl-sources",
 
@@ -253,6 +267,8 @@ filegroup {
         ":libcamera_client_aidl",
         ":libcamera_client_framework_aidl",
         ":libupdate_engine_aidl",
+        // TODO: this needs to be removed when statsd-framework.jar is separated out
+        ":statsd_aidl",
         ":storaged_aidl",
         ":vold_aidl",
 
@@ -327,12 +343,14 @@ java_library {
         "android.hardware.cas-V1.1-java",
         "android.hardware.cas-V1.0-java",
         "android.hardware.contexthub-V1.0-java",
+        "android.hardware.gnss-V1.0-java",
         "android.hardware.health-V1.0-java-constants",
         "android.hardware.radio-V1.0-java",
         "android.hardware.radio-V1.1-java",
         "android.hardware.radio-V1.2-java",
         "android.hardware.radio-V1.3-java",
         "android.hardware.radio-V1.4-java",
+        "android.hardware.radio-V1.5-java",
         "android.hardware.thermal-V1.0-java-constants",
         "android.hardware.thermal-V1.0-java",
         "android.hardware.thermal-V1.1-java",
@@ -370,12 +388,14 @@ java_defaults {
 
     exclude_srcs: [
         // See comment on framework-atb-backward-compatibility module below
-        "core/java/android/content/pm/AndroidTestBaseUpdater.java",
+        "core/java/android/content/pm/parsing/library/AndroidTestBaseUpdater.java",
     ],
 
     sdk_version: "core_platform",
     libs: [
+        "app-compat-annotations",
         "ext",
+        "unsupportedappusage",
         "updatable_media_stubs",
     ],
 
@@ -411,18 +431,6 @@ filegroup {
 }
 
 filegroup {
-    name: "statsd_aidl",
-    srcs: [
-        "core/java/android/os/IPullAtomCallback.aidl",
-        "core/java/android/os/IPullAtomResultReceiver.aidl",
-        "core/java/android/os/IStatsCompanionService.aidl",
-        "core/java/android/os/IStatsManager.aidl",
-        "core/java/android/os/IStatsPullerCallback.aidl",
-    ],
-    path: "core/java",
-}
-
-filegroup {
     name: "libvibrator_aidl",
     srcs: [
         "core/java/android/os/IExternalVibrationController.aidl",
@@ -435,7 +443,6 @@ java_library {
     name: "framework-minus-apex",
     defaults: ["framework-defaults"],
     srcs: [":framework-non-updatable-sources"],
-    libs: ["app-compat-annotations"],
     installable: true,
     javac_shard_size: 150,
     required: [
@@ -444,6 +451,7 @@ java_library {
         "services-platform-compat-config",
         "media-provider-platform-compat-config",
         "services-devicepolicy-platform-compat-config",
+        "services-core-platform-compat-config",
     ],
     static_libs: [
         // If MimeMap ever becomes its own APEX, then this dependency would need to be removed
@@ -452,6 +460,7 @@ java_library {
     ],
     // For backwards compatibility.
     stem: "framework",
+    apex_available: ["//apex_available:platform"],
 }
 
 // This "framework" module is NOT installed to the device. It's
@@ -472,6 +481,7 @@ java_library {
         // TODO(jiyong): add stubs for APEXes here
     ],
     sdk_version: "core_platform",
+    apex_available: ["//apex_available:platform"],
 }
 
 java_library {
@@ -479,15 +489,18 @@ java_library {
     defaults: ["framework-defaults"],
     srcs: [":framework-all-sources"],
     installable: false,
-    libs: ["app-compat-annotations"],
-    static_libs: ["exoplayer2-core"]
+    static_libs: ["exoplayer2-core"],
+    apex_available: ["//apex_available:platform"],
 }
 
 java_library {
     name: "framework-annotation-proc",
     defaults: ["framework-aidl-export-defaults"],
     srcs: [":framework-all-sources"],
-    libs: ["app-compat-annotations"],
+    libs: [
+        "app-compat-annotations",
+        "unsupportedappusage",
+    ],
     installable: false,
     plugins: [
         "unsupportedappusage-annotation-processor",
@@ -533,7 +546,7 @@ java_library {
     installable: true,
     libs: ["app-compat-annotations"],
     srcs: [
-        "core/java/android/content/pm/AndroidTestBaseUpdater.java",
+        "core/java/android/content/pm/parsing/library/AndroidTestBaseUpdater.java",
     ],
 }
 
@@ -578,6 +591,7 @@ filegroup {
         "core/java/android/annotation/Nullable.java",
         "core/java/android/annotation/IntDef.java",
         "core/java/android/annotation/IntRange.java",
+        "core/java/android/annotation/SystemApi.java",
         "core/java/android/annotation/UnsupportedAppUsage.java",
         "core/java/com/android/internal/annotations/GuardedBy.java",
         "core/java/com/android/internal/annotations/VisibleForTesting.java",
@@ -800,10 +814,9 @@ filegroup {
 }
 
 filegroup {
-    name: "incremental_data_loader_aidl",
+    name: "dataloader_aidl",
     srcs: [
-        "core/java/android/service/incremental/IIncrementalDataLoaderStatusListener.aidl",
-        "core/java/android/service/incremental/IIncrementalDataLoaderService.aidl",
+        "core/java/android/content/pm/IDataLoaderStatusListener.aidl",
     ],
     path: "core/java",
 }
@@ -812,7 +825,27 @@ aidl_interface {
     name: "libincremental_aidl",
     srcs: [
         ":incremental_aidl",
-        ":incremental_data_loader_aidl",
+    ],
+    imports: [
+        "libdataloader_aidl",
+    ],
+    backend: {
+        java: {
+            sdk_version: "28",
+        },
+        cpp: {
+            enabled: true,
+        },
+        ndk: {
+            enabled: true,
+        },
+    },
+}
+
+aidl_interface {
+    name: "libdataloader_aidl",
+    srcs: [
+        ":dataloader_aidl",
     ],
     backend: {
         java: {
@@ -1634,6 +1667,7 @@ filegroup {
         "core/java/com/android/internal/os/SomeArgs.java",
         "core/java/com/android/internal/util/FastXmlSerializer.java",
         "core/java/com/android/internal/util/HexDump.java",
+        "core/java/com/android/internal/util/IState.java",
         "core/java/com/android/internal/util/IndentingPrintWriter.java",
         "core/java/com/android/internal/util/Preconditions.java",
         "core/java/com/android/internal/util/State.java",
@@ -1667,15 +1701,14 @@ filegroup {
 }
 
 filegroup {
-    name: "framework-wifistack-shared-srcs",
+    name: "framework-wifi-service-shared-srcs",
     srcs: [
         ":framework-annotations",
-	"core/java/android/os/HandlerExecutor.java",
-        "core/java/android/util/KeyValueListParser.java",
+        "core/java/android/net/InterfaceConfiguration.java",
+        "core/java/android/os/HandlerExecutor.java",
+        "core/java/android/util/BackupUtils.java",
         "core/java/android/util/LocalLog.java",
         "core/java/android/util/Rational.java",
-        "core/java/android/util/proto/ProtoStream.java",
-        "core/java/android/util/proto/ProtoOutputStream.java",
         "core/java/com/android/internal/util/FastXmlSerializer.java",
         "core/java/com/android/internal/util/HexDump.java",
         "core/java/com/android/internal/util/IState.java",

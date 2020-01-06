@@ -2083,7 +2083,6 @@ public class KeyguardViewMediator extends SystemUI {
 
     @Override
     public void onBootCompleted() {
-        mUpdateMonitor.dispatchBootCompleted();
         synchronized (this) {
             mBootCompleted = true;
             if (mBootSendUserPresent) {

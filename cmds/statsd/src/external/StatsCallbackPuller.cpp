@@ -20,7 +20,7 @@
 #include "StatsCallbackPuller.h"
 
 #include <android/os/IPullAtomCallback.h>
-#include <android/util/StatsEvent.h>
+#include <android/util/StatsEventParcel.h>
 
 #include "PullResultReceiver.h"
 #include "StatsPullerManager.h"
@@ -35,8 +35,9 @@ namespace android {
 namespace os {
 namespace statsd {
 
-StatsCallbackPuller::StatsCallbackPuller(int tagId, const sp<IPullAtomCallback>& callback)
-    : StatsPuller(tagId), mCallback(callback) {
+StatsCallbackPuller::StatsCallbackPuller(int tagId, const sp<IPullAtomCallback>& callback,
+                                         int64_t timeoutNs)
+    : StatsPuller(tagId), mCallback(callback), mTimeoutNs(timeoutNs) {
     VLOG("StatsCallbackPuller created for tag %d", tagId);
 }
 
@@ -57,20 +58,26 @@ bool StatsCallbackPuller::PullInternal(vector<shared_ptr<LogEvent>>* data) {
 
     sp<PullResultReceiver> resultReceiver = new PullResultReceiver(
             [cv_mutex, cv, pullFinish, pullSuccess, sharedData](
-                    int32_t atomTag, bool success, const vector<StatsEvent>& output) {
+                    int32_t atomTag, bool success, const vector<StatsEventParcel>& output) {
                 // This is the result of the pull, executing in a statsd binder thread.
                 // The pull could have taken a long time, and we should only modify
                 // data (the output param) if the pointer is in scope and the pull did not time out.
                 {
                     lock_guard<mutex> lk(*cv_mutex);
-                    // TODO: fill the shared vector of LogEvents once StatsEvent is complete.
+                    for (const StatsEventParcel& parcel: output) {
+                        shared_ptr<LogEvent> event = make_shared<LogEvent>(
+                                const_cast<uint8_t*>(parcel.buffer.data()), parcel.buffer.size(),
+                                /*uid=*/-1, /*useNewSchema=*/true);
+                        sharedData->push_back(event);
+                    }
                     *pullSuccess = success;
                     *pullFinish = true;
                 }
                 cv->notify_one();
             });
 
-    // Initiate the pull.
+    // Initiate the pull. This is a oneway call to a different process, except
+    // in unit tests. In process calls are not oneway.
     Status status = mCallback->onPullAtom(mTagId, resultReceiver);
     if (!status.isOk()) {
         return false;
@@ -78,10 +85,8 @@ bool StatsCallbackPuller::PullInternal(vector<shared_ptr<LogEvent>>* data) {
 
     {
         unique_lock<mutex> unique_lk(*cv_mutex);
-        int64_t pullTimeoutNs =
-                StatsPullerManager::kAllPullAtomInfo.at({.atomTag = mTagId}).pullTimeoutNs;
         // Wait until the pull finishes, or until the pull timeout.
-        cv->wait_for(unique_lk, chrono::nanoseconds(pullTimeoutNs),
+        cv->wait_for(unique_lk, chrono::nanoseconds(mTimeoutNs),
                      [pullFinish] { return *pullFinish; });
         if (!*pullFinish) {
             // Note: The parent stats puller will also note that there was a timeout and that the
@@ -90,7 +95,7 @@ bool StatsCallbackPuller::PullInternal(vector<shared_ptr<LogEvent>>* data) {
             return true;
         } else {
             // Only copy the data if we did not timeout and the pull was successful.
-            if (pullSuccess) {
+            if (*pullSuccess) {
                 *data = std::move(*sharedData);
             }
             VLOG("StatsCallbackPuller::pull succeeded for %d", mTagId);

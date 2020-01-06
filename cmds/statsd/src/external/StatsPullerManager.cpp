@@ -281,6 +281,9 @@ std::map<PullerKey, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         {{.atomTag = android::util::VMS_CLIENT_STATS},
          {.additiveFields = {5, 6, 7, 8, 9, 10},
           .puller = new CarStatsPuller(android::util::VMS_CLIENT_STATS)}},
+        // NotiifcationRemoteViews.
+        {{.atomTag = android::util::NOTIFICATION_REMOTE_VIEWS},
+         {.puller = new StatsCompanionServicePuller(android::util::NOTIFICATION_REMOTE_VIEWS)}},
 };
 
 StatsPullerManager::StatsPullerManager() : mNextPullTimeNs(NO_ALARM_UPDATE) {
@@ -497,10 +500,11 @@ void StatsPullerManager::RegisterPullAtomCallback(const int uid, const int32_t a
     VLOG("RegisterPullerCallback: adding puller for tag %d", atomTag);
     // TODO: linkToDeath with the callback so that we can remove it and delete the puller.
     StatsdStats::getInstance().notePullerCallbackRegistrationChanged(atomTag, /*registered=*/true);
-    kAllPullAtomInfo[{.atomTag = atomTag}] = {.additiveFields = additiveFields,
-                                              .coolDownNs = coolDownNs,
-                                              .puller = new StatsCallbackPuller(atomTag, callback),
-                                              .pullTimeoutNs = timeoutNs,
+    kAllPullAtomInfo[{.atomTag = atomTag}] = {
+            .additiveFields = additiveFields,
+            .coolDownNs = coolDownNs,
+            .puller = new StatsCallbackPuller(atomTag, callback, timeoutNs),
+            .pullTimeoutNs = timeoutNs,
     };
 }
 

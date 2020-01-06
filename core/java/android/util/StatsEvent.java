@@ -20,8 +20,6 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.os.Parcel;
-import android.os.Parcelable;
 import android.os.SystemClock;
 
 import com.android.internal.annotations.GuardedBy;
@@ -33,18 +31,27 @@ import com.android.internal.annotations.VisibleForTesting;
  *
  * <p>Usage:</p>
  * <pre>
+ *      // Pushed event
+ *      StatsEvent statsEvent = StatsEvent.newBuilder()
+ *          .setAtomId(atomId)
+ *          .writeBoolean(false)
+ *          .writeString("annotated String field")
+ *          .addBooleanAnnotation(annotationId, true)
+ *          .usePooledBuffer()
+ *          .build();
+ *      StatsLog.write(statsEvent);
+ *
+ *      // Pulled event
  *      StatsEvent statsEvent = StatsEvent.newBuilder()
  *          .setAtomId(atomId)
  *          .writeBoolean(false)
  *          .writeString("annotated String field")
  *          .addBooleanAnnotation(annotationId, true)
  *          .build();
- *
- *      StatsLog.write(statsEvent);
  * </pre>
  * @hide
  **/
-public final class StatsEvent implements Parcelable {
+public final class StatsEvent {
     // Type Ids.
     /**
      * @hide
@@ -177,7 +184,7 @@ public final class StatsEvent implements Parcelable {
      * @hide
      **/
     @VisibleForTesting
-    public static final int ERROR_ATTRIBUTION_UIDS_TAGS_SIZES_NOT_EQUAL = 0x400;
+    public static final int ERROR_ATTRIBUTION_UIDS_TAGS_SIZES_NOT_EQUAL = 0x1000;
 
     // Size limits.
 
@@ -212,12 +219,15 @@ public final class StatsEvent implements Parcelable {
     private static final int MAX_PAYLOAD_SIZE = LOGGER_ENTRY_MAX_PAYLOAD - 4;
 
     private final int mAtomId;
-    private final Buffer mBuffer;
+    private final byte[] mPayload;
+    private Buffer mBuffer;
     private final int mNumBytes;
 
-    private StatsEvent(final int atomId, @NonNull final Buffer buffer, final int numBytes) {
+    private StatsEvent(final int atomId, @Nullable final Buffer buffer,
+            @NonNull final byte[] payload, final int numBytes) {
         mAtomId = atomId;
         mBuffer = buffer;
+        mPayload = payload;
         mNumBytes = numBytes;
     }
 
@@ -245,7 +255,7 @@ public final class StatsEvent implements Parcelable {
      **/
     @NonNull
     public byte[] getBytes() {
-        return mBuffer.getBytes();
+        return mPayload;
     }
 
     /**
@@ -258,44 +268,15 @@ public final class StatsEvent implements Parcelable {
     }
 
     /**
-     * Recycle this StatsEvent object.
+     * Recycle resources used by this StatsEvent object.
+     * No actions should be taken on this StatsEvent after release() is called.
      **/
     public void release() {
-        mBuffer.release();
+        if (mBuffer != null) {
+            mBuffer.release();
+            mBuffer = null;
+        }
     }
-
-    /**
-     * Boilerplate for Parcel.
-     */
-    public static final @NonNull Parcelable.Creator<StatsEvent> CREATOR =
-            new Parcelable.Creator<StatsEvent>() {
-                public StatsEvent createFromParcel(Parcel in) {
-                    // Purposefully leaving this method not implemented.
-                    throw new RuntimeException("Not implemented");
-                }
-
-                public StatsEvent[] newArray(int size) {
-                    // Purposefully leaving this method not implemented.
-                    throw new RuntimeException("Not implemented");
-                }
-            };
-
-    /**
-     * Boilerplate for Parcel.
-     */
-    public void writeToParcel(Parcel out, int flags) {
-        out.writeInt(mAtomId);
-        out.writeInt(getNumBytes());
-        out.writeByteArray(getBytes());
-    }
-
-    /**
-     * Boilerplate for Parcel.
-     */
-    public int describeContents() {
-        return 0;
-    }
-
 
     /**
      * Builder for constructing a StatsEvent object.
@@ -315,7 +296,18 @@ public final class StatsEvent implements Parcelable {
      *         optional string field3 = 3 [(annotation1) = true];
      *     }
      *
-     *     // StatsEvent construction.
+     *     // StatsEvent construction for pushed event.
+     *     StatsEvent.newBuilder()
+     *     StatsEvent statsEvent = StatsEvent.newBuilder()
+     *         .setAtomId(atomId)
+     *         .writeInt(3) // field1
+     *         .writeLong(8L) // field2
+     *         .writeString("foo") // field 3
+     *         .addBooleanAnnotation(annotation1Id, true)
+     *         .usePooledBuffer()
+     *         .build();
+     *
+     *     // StatsEvent construction for pulled event.
      *     StatsEvent.newBuilder()
      *     StatsEvent statsEvent = StatsEvent.newBuilder()
      *         .setAtomId(atomId)
@@ -341,6 +333,7 @@ public final class StatsEvent implements Parcelable {
         private byte mLastType;
         private int mNumElements;
         private int mErrorMask;
+        private boolean mUsePooledBuffer = false;
 
         private Builder(final Buffer buffer) {
             mBuffer = buffer;
@@ -604,6 +597,17 @@ public final class StatsEvent implements Parcelable {
         }
 
         /**
+         * Indicates to reuse Buffer's byte array as the underlying payload in StatsEvent.
+         * This should be called for pushed events to reduce memory allocations and garbage
+         * collections.
+         **/
+        @NonNull
+        public Builder usePooledBuffer() {
+            mUsePooledBuffer = true;
+            return this;
+        }
+
+        /**
          * Builds a StatsEvent object with values entered in this Builder.
          **/
         @NonNull
@@ -628,13 +632,24 @@ public final class StatsEvent implements Parcelable {
             if (0 == mErrorMask) {
                 mBuffer.putByte(POS_NUM_ELEMENTS, (byte) mNumElements);
             } else {
-                mBuffer.putByte(0, TYPE_ERRORS);
-                mBuffer.putByte(POS_NUM_ELEMENTS, (byte) 3);
+                mPos += mBuffer.putByte(mPos, TYPE_ERRORS);
                 mPos += mBuffer.putInt(mPos, mErrorMask);
+                mBuffer.putByte(POS_NUM_ELEMENTS, (byte) 3);
                 size = mPos;
             }
 
-            return new StatsEvent(mAtomId, mBuffer, size);
+            if (mUsePooledBuffer) {
+                return new StatsEvent(mAtomId, mBuffer, mBuffer.getBytes(), size);
+            } else {
+                // Create a copy of the buffer with the required number of bytes.
+                final byte[] payload = new byte[size];
+                System.arraycopy(mBuffer.getBytes(), 0, payload, 0, size);
+
+                // Return Buffer instance to the pool.
+                mBuffer.release();
+
+                return new StatsEvent(mAtomId, null, payload, size);
+            }
         }
 
         private void writeTypeId(final byte typeId) {

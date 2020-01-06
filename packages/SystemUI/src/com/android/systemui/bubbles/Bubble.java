@@ -27,9 +27,13 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
+import android.content.pm.ShortcutInfo;
 import android.content.res.Resources;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.os.Bundle;
 import android.os.Parcelable;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -57,10 +61,12 @@ class Bubble {
     private final String mGroupId;
     private String mAppName;
     private Drawable mUserBadgedAppIcon;
+    private ShortcutInfo mShortcutInfo;
 
     private boolean mInflated;
-    private BubbleView mIconView;
+    private BadgedImageView mIconView;
     private BubbleExpandedView mExpandedView;
+    private BubbleIconFactory mBubbleIconFactory;
 
     private long mLastUpdated;
     private long mLastAccessed;
@@ -93,6 +99,14 @@ class Bubble {
         mKey = e.getKey();
         mLastUpdated = e.getSbn().getPostTime();
         mGroupId = groupId(e);
+
+        String shortcutId = e.getSbn().getNotification().getShortcutId();
+        if (BubbleExperimentConfig.useShortcutInfoToBubble(context)
+                && shortcutId != null) {
+            mShortcutInfo = BubbleExperimentConfig.getShortcutInfo(context,
+                    e.getSbn().getPackageName(),
+                    e.getSbn().getUser(), shortcutId);
+        }
 
         PackageManager pm = context.getPackageManager();
         ApplicationInfo info;
@@ -133,21 +147,34 @@ class Bubble {
         return mAppName;
     }
 
-    public Drawable getUserBadgedAppIcon() {
+    Drawable getUserBadgedAppIcon() {
         return mUserBadgedAppIcon;
+    }
+
+    @Nullable
+    public ShortcutInfo getShortcutInfo() {
+        return mShortcutInfo;
+    }
+
+    /**
+     * Whether shortcut information should be used to populate the bubble.
+     * <p>
+     * To populate the activity use {@link LauncherApps#startShortcut(ShortcutInfo, Rect, Bundle)}.
+     * To populate the icon use {@link LauncherApps#getShortcutIconDrawable(ShortcutInfo, int)}.
+     */
+    public boolean usingShortcutInfo() {
+        return BubbleExperimentConfig.isShortcutIntent(getBubbleIntent());
+    }
+
+    void setBubbleIconFactory(BubbleIconFactory factory) {
+        mBubbleIconFactory = factory;
     }
 
     boolean isInflated() {
         return mInflated;
     }
 
-    void updateDotVisibility() {
-        if (mIconView != null) {
-            mIconView.updateDotVisibility(true /* animate */);
-        }
-    }
-
-    BubbleView getIconView() {
+    BadgedImageView getIconView() {
         return mIconView;
     }
 
@@ -165,13 +192,14 @@ class Bubble {
         if (mInflated) {
             return;
         }
-        mIconView = (BubbleView) inflater.inflate(
+        mIconView = (BadgedImageView) inflater.inflate(
                 R.layout.bubble_view, stackView, false /* attachToRoot */);
+        mIconView.setBubbleIconFactory(mBubbleIconFactory);
         mIconView.setBubble(this);
 
         mExpandedView = (BubbleExpandedView) inflater.inflate(
                 R.layout.bubble_expanded_view, stackView, false /* attachToRoot */);
-        mExpandedView.setBubble(this, stackView, mAppName);
+        mExpandedView.setBubble(this, stackView);
 
         mInflated = true;
     }
@@ -232,15 +260,15 @@ class Bubble {
      */
     void markAsAccessedAt(long lastAccessedMillis) {
         mLastAccessed = lastAccessedMillis;
-        setShowInShadeWhenBubble(false);
-        setShowBubbleDot(false);
+        setShowInShade(false);
+        setShowDot(false /* show */, true /* animate */);
     }
 
     /**
      * Whether this notification should be shown in the shade when it is also displayed as a
      * bubble.
      */
-    boolean showInShadeWhenBubble() {
+    boolean showInShade() {
         return !mEntry.isRowDismissed() && !shouldSuppressNotification()
                 && (!mEntry.isClearable() || mShowInShadeWhenBubble);
     }
@@ -249,29 +277,37 @@ class Bubble {
      * Sets whether this notification should be shown in the shade when it is also displayed as a
      * bubble.
      */
-    void setShowInShadeWhenBubble(boolean showInShade) {
+    void setShowInShade(boolean showInShade) {
         mShowInShadeWhenBubble = showInShade;
     }
 
     /**
      * Sets whether the bubble for this notification should show a dot indicating updated content.
      */
-    void setShowBubbleDot(boolean showDot) {
+    void setShowDot(boolean showDot, boolean animate) {
         mShowBubbleUpdateDot = showDot;
+        if (animate && mIconView != null) {
+            mIconView.animateDot();
+        } else if (mIconView != null) {
+            mIconView.invalidate();
+        }
     }
 
     /**
      * Whether the bubble for this notification should show a dot indicating updated content.
      */
-    boolean showBubbleDot() {
-        return mShowBubbleUpdateDot && !mEntry.shouldSuppressNotificationDot();
+    boolean showDot() {
+        return mShowBubbleUpdateDot
+                && !mEntry.shouldSuppressNotificationDot()
+                && !shouldSuppressNotification();
     }
 
     /**
      * Whether the flyout for the bubble should be shown.
      */
-    boolean showFlyoutForBubble() {
+    boolean showFlyout() {
         return !mSuppressFlyout && !mEntry.shouldSuppressPeek()
+                && !shouldSuppressNotification()
                 && !mEntry.shouldSuppressNotificationList();
     }
 
@@ -291,20 +327,6 @@ class Bubble {
     boolean isOngoing() {
         int flags = mEntry.getSbn().getNotification().flags;
         return (flags & Notification.FLAG_FOREGROUND_SERVICE) != 0;
-    }
-
-    /**
-     * Whether this bubble was explicitly created by the user via a SysUI affordance.
-     */
-    boolean isUserCreated() {
-        return mIsUserCreated;
-    }
-
-    /**
-     * Set whether this bubble was explicitly created by the user via a SysUI affordance.
-     */
-    void setUserCreated(boolean isUserCreated) {
-        mIsUserCreated = isUserCreated;
     }
 
     float getDesiredHeight(Context context) {
@@ -331,7 +353,7 @@ class Bubble {
     }
 
     @Nullable
-    PendingIntent getBubbleIntent(Context context) {
+    PendingIntent getBubbleIntent() {
         Notification.BubbleMetadata data = mEntry.getBubbleMetadata();
         if (data != null) {
             return data.getIntent();
@@ -456,9 +478,9 @@ class Bubble {
     public void dump(
             @NonNull FileDescriptor fd, @NonNull PrintWriter pw, @NonNull String[] args) {
         pw.print("key: "); pw.println(mKey);
-        pw.print("  showInShade:   "); pw.println(showInShadeWhenBubble());
-        pw.print("  showDot:       "); pw.println(showBubbleDot());
-        pw.print("  showFlyout:    "); pw.println(showFlyoutForBubble());
+        pw.print("  showInShade:   "); pw.println(showInShade());
+        pw.print("  showDot:       "); pw.println(showDot());
+        pw.print("  showFlyout:    "); pw.println(showFlyout());
         pw.print("  desiredHeight: "); pw.println(getDesiredHeightString());
         pw.print("  suppressNotif: "); pw.println(shouldSuppressNotification());
         pw.print("  autoExpand:    "); pw.println(shouldAutoExpand());

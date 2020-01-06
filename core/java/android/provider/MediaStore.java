@@ -20,12 +20,14 @@ import android.annotation.BytesLong;
 import android.annotation.CurrentTimeMillisLong;
 import android.annotation.CurrentTimeSecondsLong;
 import android.annotation.DurationMillisLong;
+import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.Activity;
@@ -61,6 +63,7 @@ import android.os.UserManager;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageVolume;
 import android.os.storage.VolumeInfo;
+import android.os.storage.VolumeRecord;
 import android.service.media.CameraPrewarmService;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
@@ -78,6 +81,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -154,6 +159,8 @@ public final class MediaStore {
     public static final String SCAN_FILE_CALL = "scan_file";
     /** {@hide} */
     public static final String SCAN_VOLUME_CALL = "scan_volume";
+    /** {@hide} */
+    public static final String SUICIDE_CALL = "suicide";
 
     /**
      * Extra used with {@link #SCAN_FILE_CALL} or {@link #SCAN_VOLUME_CALL} to indicate that
@@ -205,8 +212,10 @@ public final class MediaStore {
     public static final String PARAM_DELETE_DATA = "deletedata";
 
     /** {@hide} */
+    @Deprecated
     public static final String PARAM_INCLUDE_PENDING = "includePending";
     /** {@hide} */
+    @Deprecated
     public static final String PARAM_INCLUDE_TRASHED = "includeTrashed";
     /** {@hide} */
     public static final String PARAM_PROGRESS = "progress";
@@ -559,6 +568,101 @@ public final class MediaStore {
     public static final String UNKNOWN_STRING = "<unknown>";
 
     /**
+     * Specify a {@link Uri} that is "related" to the current operation being
+     * performed.
+     * <p>
+     * This is typically used to allow an operation that may normally be
+     * rejected, such as making a copy of a pre-existing image located under a
+     * {@link MediaColumns#RELATIVE_PATH} where new images are not allowed.
+     * <p>
+     * It's strongly recommended that when making a copy of pre-existing content
+     * that you define the "original document ID" GUID as defined by the <em>XMP
+     * Media Management</em> standard.
+     * <p>
+     * This key can be placed in a {@link Bundle} of extras and passed to
+     * {@link ContentResolver#insert}.
+     */
+    public static final String QUERY_ARG_RELATED_URI = "android:query-arg-related-uri";
+
+    /**
+     * Specify how {@link MediaColumns#IS_PENDING} items should be filtered when
+     * performing a {@link MediaStore} operation.
+     * <p>
+     * This key can be placed in a {@link Bundle} of extras and passed to
+     * {@link ContentResolver#query}, {@link ContentResolver#update}, or
+     * {@link ContentResolver#delete}.
+     * <p>
+     * By default, pending items are filtered away from operations.
+     */
+    @Match
+    public static final String QUERY_ARG_MATCH_PENDING = "android:query-arg-match-pending";
+
+    /**
+     * Specify how {@link MediaColumns#IS_TRASHED} items should be filtered when
+     * performing a {@link MediaStore} operation.
+     * <p>
+     * This key can be placed in a {@link Bundle} of extras and passed to
+     * {@link ContentResolver#query}, {@link ContentResolver#update}, or
+     * {@link ContentResolver#delete}.
+     * <p>
+     * By default, trashed items are filtered away from operations.
+     */
+    @Match
+    public static final String QUERY_ARG_MATCH_TRASHED = "android:query-arg-match-trashed";
+
+    /**
+     * Specify how {@link MediaColumns#IS_FAVORITE} items should be filtered
+     * when performing a {@link MediaStore} operation.
+     * <p>
+     * This key can be placed in a {@link Bundle} of extras and passed to
+     * {@link ContentResolver#query}, {@link ContentResolver#update}, or
+     * {@link ContentResolver#delete}.
+     * <p>
+     * By default, favorite items are <em>not</em> filtered away from
+     * operations.
+     */
+    @Match
+    public static final String QUERY_ARG_MATCH_FAVORITE = "android:query-arg-match-favorite";
+
+    /** @hide */
+    @IntDef(flag = true, prefix = { "MATCH_" }, value = {
+            MATCH_DEFAULT,
+            MATCH_INCLUDE,
+            MATCH_EXCLUDE,
+            MATCH_ONLY,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Match {}
+
+    /**
+     * Value indicating that the default matching behavior should be used, as
+     * defined by the key documentation.
+     */
+    public static final int MATCH_DEFAULT = 0;
+
+    /**
+     * Value indicating that operations should include items matching the
+     * criteria defined by this key.
+     * <p>
+     * Note that items <em>not</em> matching the criteria <em>may</em> also be
+     * included depending on the default behavior documented by the key. If you
+     * want to operate exclusively on matching items, use {@link #MATCH_ONLY}.
+     */
+    public static final int MATCH_INCLUDE = 1;
+
+    /**
+     * Value indicating that operations should exclude items matching the
+     * criteria defined by this key.
+     */
+    public static final int MATCH_EXCLUDE = 2;
+
+    /**
+     * Value indicating that operations should only operate on items explicitly
+     * matching the criteria defined by this key.
+     */
+    public static final int MATCH_ONLY = 3;
+
+    /**
      * Update the given {@link Uri} to also include any pending media items from
      * calls such as
      * {@link ContentResolver#query(Uri, String[], Bundle, CancellationSignal)}.
@@ -566,12 +670,16 @@ public final class MediaStore {
      *
      * @see MediaColumns#IS_PENDING
      * @see MediaStore#getIncludePending(Uri)
+     * @deprecated consider migrating to {@link #QUERY_ARG_MATCH_PENDING} which
+     *             is more expressive.
      */
+    @Deprecated
     public static @NonNull Uri setIncludePending(@NonNull Uri uri) {
         return setIncludePending(uri.buildUpon()).build();
     }
 
     /** @hide */
+    @Deprecated
     public static @NonNull Uri.Builder setIncludePending(@NonNull Uri.Builder uriBuilder) {
         return uriBuilder.appendQueryParameter(PARAM_INCLUDE_PENDING, "1");
     }
@@ -582,7 +690,11 @@ public final class MediaStore {
      *
      * @see MediaColumns#IS_PENDING
      * @see MediaStore#setIncludePending(Uri)
+     * @deprecated consider migrating to {@link #QUERY_ARG_MATCH_PENDING} which
+     *             is more expressive.
+     * @removed
      */
+    @Deprecated
     public static boolean getIncludePending(@NonNull Uri uri) {
         return parseBoolean(uri.getQueryParameter(MediaStore.PARAM_INCLUDE_PENDING));
     }
@@ -597,7 +709,11 @@ public final class MediaStore {
      * @see MediaStore#setIncludeTrashed(Uri)
      * @see MediaStore#trash(Context, Uri)
      * @see MediaStore#untrash(Context, Uri)
+     * @deprecated consider migrating to {@link #QUERY_ARG_MATCH_TRASHED} which
+     *             is more expressive.
+     * @removed
      */
+    @Deprecated
     public static @NonNull Uri setIncludeTrashed(@NonNull Uri uri) {
         return uri.buildUpon().appendQueryParameter(PARAM_INCLUDE_TRASHED, "1").build();
     }
@@ -1000,7 +1116,7 @@ public final class MediaStore {
          * the field to {@code 0}, or until they expire as defined by
          * {@link #DATE_EXPIRES}.
          *
-         * @see MediaStore#setIncludePending(Uri)
+         * @see MediaStore#QUERY_ARG_MATCH_PENDING
          */
         @Column(Cursor.FIELD_TYPE_INTEGER)
         public static final String IS_PENDING = "is_pending";
@@ -1011,8 +1127,7 @@ public final class MediaStore {
          * Trashed items are retained until they expire as defined by
          * {@link #DATE_EXPIRES}.
          *
-         * @see MediaColumns#IS_TRASHED
-         * @see MediaStore#setIncludeTrashed(Uri)
+         * @see MediaStore#QUERY_ARG_MATCH_TRASHED
          * @see MediaStore#trash(Context, Uri)
          * @see MediaStore#untrash(Context, Uri)
          */
@@ -1186,6 +1301,8 @@ public final class MediaStore {
         /**
          * Flag indicating if the media item has been marked as being a
          * "favorite" by the user.
+         *
+         * @see MediaStore#QUERY_ARG_MATCH_FAVORITE
          */
         @Column(Cursor.FIELD_TYPE_INTEGER)
         public static final String IS_FAVORITE = "is_favorite";
@@ -1477,29 +1594,39 @@ public final class MediaStore {
 
             /**
              * Constant for the {@link #MEDIA_TYPE} column indicating that file
-             * is not an audio, image, video or playlist file.
+             * is not an audio, image, video, playlist, or subtitles file.
              */
             public static final int MEDIA_TYPE_NONE = 0;
 
             /**
-             * Constant for the {@link #MEDIA_TYPE} column indicating that file is an image file.
+             * Constant for the {@link #MEDIA_TYPE} column indicating that file
+             * is an image file.
              */
             public static final int MEDIA_TYPE_IMAGE = 1;
 
             /**
-             * Constant for the {@link #MEDIA_TYPE} column indicating that file is an audio file.
+             * Constant for the {@link #MEDIA_TYPE} column indicating that file
+             * is an audio file.
              */
             public static final int MEDIA_TYPE_AUDIO = 2;
 
             /**
-             * Constant for the {@link #MEDIA_TYPE} column indicating that file is a video file.
+             * Constant for the {@link #MEDIA_TYPE} column indicating that file
+             * is a video file.
              */
             public static final int MEDIA_TYPE_VIDEO = 3;
 
             /**
-             * Constant for the {@link #MEDIA_TYPE} column indicating that file is a playlist file.
+             * Constant for the {@link #MEDIA_TYPE} column indicating that file
+             * is a playlist file.
              */
             public static final int MEDIA_TYPE_PLAYLIST = 4;
+
+            /**
+             * Constant for the {@link #MEDIA_TYPE} column indicating that file
+             * is a subtitles or lyrics file.
+             */
+            public static final int MEDIA_TYPE_SUBTITLE = 5;
 
             /**
              * Column indicating if the file is part of Downloads collection.
@@ -3490,6 +3617,43 @@ public final class MediaStore {
     }
 
     /**
+     * Return list of all specific volume names that have recently been part of
+     * {@link #VOLUME_EXTERNAL}.
+     * <p>
+     * This includes both currently mounted volumes <em>and</em> recently
+     * mounted (but currently unmounted) volumes. Any indexed metadata for these
+     * volumes is preserved to optimize the speed of remounting at a later time.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.WRITE_MEDIA_STORAGE)
+    public static @NonNull Set<String> getRecentExternalVolumeNames(@NonNull Context context) {
+        final StorageManager sm = context.getSystemService(StorageManager.class);
+
+        // We always have primary storage
+        final Set<String> volumeNames = new ArraySet<>();
+        volumeNames.add(VOLUME_EXTERNAL_PRIMARY);
+
+        final long lastWeek = System.currentTimeMillis() - DateUtils.WEEK_IN_MILLIS;
+        for (VolumeRecord rec : sm.getVolumeRecords()) {
+            // Skip volumes without valid UUIDs
+            if (TextUtils.isEmpty(rec.fsUuid)) continue;
+
+            final VolumeInfo vi = sm.findVolumeByUuid(rec.fsUuid);
+            if (vi != null && vi.isVisibleForUser(UserHandle.myUserId())
+                    && vi.isMountedReadable()) {
+                // We're mounted right now
+                volumeNames.add(rec.getNormalizedFsUuid());
+            } else if (rec.lastSeenMillis > 0 && rec.lastSeenMillis < lastWeek) {
+                // We're not mounted right now, but we've been seen recently
+                volumeNames.add(rec.getNormalizedFsUuid());
+            }
+        }
+        return volumeNames;
+    }
+
+    /**
      * Return the volume name that the given {@link Uri} references.
      */
     public static @NonNull String getVolumeName(@NonNull Uri uri) {
@@ -3588,6 +3752,8 @@ public final class MediaStore {
      * @hide
      */
     @TestApi
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.WRITE_MEDIA_STORAGE)
     public static @NonNull Collection<File> getVolumeScanPaths(@NonNull String volumeName)
             throws FileNotFoundException {
         if (TextUtils.isEmpty(volumeName)) {
@@ -3812,6 +3978,16 @@ public final class MediaStore {
             client.call(WAIT_FOR_IDLE_CALL, null, null);
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    /** @hide */
+    public static void suicide(Context context) {
+        final ContentResolver resolver = context.getContentResolver();
+        try (ContentProviderClient client = resolver
+                .acquireUnstableContentProviderClient(AUTHORITY)) {
+            client.call(SUICIDE_CALL, null, null);
+        } catch (Exception ignored) {
         }
     }
 

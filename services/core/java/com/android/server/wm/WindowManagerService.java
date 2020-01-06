@@ -16,7 +16,6 @@
 
 package com.android.server.wm;
 
-import static android.Manifest.permission.ACCESS_SURFACE_FLINGER;
 import static android.Manifest.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS;
 import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
 import static android.Manifest.permission.MANAGE_ACTIVITY_STACKS;
@@ -1736,20 +1735,7 @@ public class WindowManagerService extends IWindowManager.Stub
             }
         }
 
-        DisplayContent displayContent = mRoot.getDisplayContent(displayId);
-
-        // Create an instance if possible instead of waiting for the ActivityManagerService to drive
-        // the creation.
-        if (displayContent == null) {
-            final Display display = mDisplayManager.getDisplay(displayId);
-
-            if (display != null) {
-                displayContent = mRoot.createDisplayContent(display, null /* activityDisplay */);
-                displayContent.reconfigureDisplayLocked();
-            }
-        }
-
-        return displayContent;
+        return mAtmService.mRootActivityContainer.getActivityDisplayOrCreate(displayId);
     }
 
     private boolean doesAddToastWindowRequireToken(String packageName, int callingUid,
@@ -2355,7 +2341,7 @@ public class WindowManagerService extends IWindowManager.Stub
             win.setLastReportedMergedConfiguration(mergedConfiguration);
 
             // Update the last inset values here because the values are sent back to the client.
-            // The last inset values represent the last client state.
+            // The last inset values represent the last client state
             win.updateLastInsetValues();
 
             win.getCompatFrame(outFrame);
@@ -3565,8 +3551,12 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    void setRotateForApp(int displayId,
-            @DisplayRotation.FixedToUserRotation int fixedToUserRotation) {
+    @Override
+    public void setFixedToUserRotation(int displayId, int fixedToUserRotation) {
+        if (!checkCallingPermission(android.Manifest.permission.SET_ORIENTATION,
+                "freezeRotation()")) {
+            throw new SecurityException("Requires SET_ORIENTATION permission");
+        }
         synchronized (mGlobalLock) {
             final DisplayContent display = mRoot.getDisplayContent(displayId);
             if (display == null) {
@@ -5804,9 +5794,9 @@ public class WindowManagerService extends IWindowManager.Stub
      * @param proto     Stream to write the WindowContainer object to.
      * @param logLevel  Determines the amount of data to be written to the Protobuf.
      */
-    void writeToProtoLocked(ProtoOutputStream proto, @WindowTraceLogLevel int logLevel) {
-        mPolicy.writeToProto(proto, POLICY);
-        mRoot.writeToProto(proto, ROOT_WINDOW_CONTAINER, logLevel);
+    void dumpDebugLocked(ProtoOutputStream proto, @WindowTraceLogLevel int logLevel) {
+        mPolicy.dumpDebug(proto, POLICY);
+        mRoot.dumpDebug(proto, ROOT_WINDOW_CONTAINER, logLevel);
         final DisplayContent topFocusedDisplayContent = mRoot.getTopFocusedDisplayContent();
         if (topFocusedDisplayContent.mCurrentFocus != null) {
             topFocusedDisplayContent.mCurrentFocus.writeIdentifierToProto(proto, FOCUSED_WINDOW);
@@ -6129,7 +6119,7 @@ public class WindowManagerService extends IWindowManager.Stub
         if (useProto) {
             final ProtoOutputStream proto = new ProtoOutputStream(fd);
             synchronized (mGlobalLock) {
-                writeToProtoLocked(proto, WindowTraceLogLevel.ALL);
+                dumpDebugLocked(proto, WindowTraceLogLevel.ALL);
             }
             proto.flush();
             return;
@@ -6820,19 +6810,23 @@ public class WindowManagerService extends IWindowManager.Stub
                 "setShouldShowWithInsecureKeyguard()")) {
             throw new SecurityException("Requires INTERNAL_SYSTEM_WINDOW permission");
         }
+        final long origId = Binder.clearCallingIdentity();
+        try {
+            synchronized (mGlobalLock) {
+                final DisplayContent displayContent = getDisplayContentOrCreate(displayId, null);
+                if (displayContent == null) {
+                    ProtoLog.w(WM_ERROR, "Attempted to set flag to a display that does not exist: "
+                            + "%d", displayId);
+                    return;
+                }
 
-        synchronized (mGlobalLock) {
-            final DisplayContent displayContent = getDisplayContentOrCreate(displayId, null);
-            if (displayContent == null) {
-                ProtoLog.w(WM_ERROR, "Attempted to set flag to a display that does not exist: %d",
-                        displayId);
-                return;
+                mDisplayWindowSettings.setShouldShowWithInsecureKeyguardLocked(displayContent,
+                        shouldShow);
+
+                displayContent.reconfigureDisplayLocked();
             }
-
-            mDisplayWindowSettings.setShouldShowWithInsecureKeyguardLocked(displayContent,
-                    shouldShow);
-
-            displayContent.reconfigureDisplayLocked();
+        } finally {
+            Binder.restoreCallingIdentity(origId);
         }
     }
 
@@ -6861,22 +6855,26 @@ public class WindowManagerService extends IWindowManager.Stub
         if (!checkCallingPermission(INTERNAL_SYSTEM_WINDOW, "setShouldShowSystemDecors()")) {
             throw new SecurityException("Requires INTERNAL_SYSTEM_WINDOW permission");
         }
+        final long origId = Binder.clearCallingIdentity();
+        try {
+            synchronized (mGlobalLock) {
+                final DisplayContent displayContent = getDisplayContentOrCreate(displayId, null);
+                if (displayContent == null) {
+                    ProtoLog.w(WM_ERROR, "Attempted to set system decors flag to a display that "
+                            + "does not exist: %d", displayId);
+                    return;
+                }
+                if (displayContent.isUntrustedVirtualDisplay()) {
+                    throw new SecurityException("Attempted to set system decors flag to an "
+                            + "untrusted virtual display: " + displayId);
+                }
 
-        synchronized (mGlobalLock) {
-            final DisplayContent displayContent = getDisplayContentOrCreate(displayId, null);
-            if (displayContent == null) {
-                ProtoLog.w(WM_ERROR, "Attempted to set system decors flag to a display that does "
-                        + "not exist: %d", displayId);
-                return;
+                mDisplayWindowSettings.setShouldShowSystemDecorsLocked(displayContent, shouldShow);
+
+                displayContent.reconfigureDisplayLocked();
             }
-            if (displayContent.isUntrustedVirtualDisplay()) {
-                throw new SecurityException("Attempted to set system decors flag to an untrusted "
-                        + "virtual display: " + displayId);
-            }
-
-            mDisplayWindowSettings.setShouldShowSystemDecorsLocked(displayContent, shouldShow);
-
-            displayContent.reconfigureDisplayLocked();
+        } finally {
+            Binder.restoreCallingIdentity(origId);
         }
     }
 
@@ -6907,23 +6905,26 @@ public class WindowManagerService extends IWindowManager.Stub
         if (!checkCallingPermission(INTERNAL_SYSTEM_WINDOW, "setShouldShowIme()")) {
             throw new SecurityException("Requires INTERNAL_SYSTEM_WINDOW permission");
         }
+        final long origId = Binder.clearCallingIdentity();
+        try {
+            synchronized (mGlobalLock) {
+                final DisplayContent displayContent = getDisplayContentOrCreate(displayId, null);
+                if (displayContent == null) {
+                    ProtoLog.w(WM_ERROR, "Attempted to set IME flag to a display that does not "
+                            + "exist: %d", displayId);
+                    return;
+                }
+                if (displayContent.isUntrustedVirtualDisplay()) {
+                    throw new SecurityException("Attempted to set IME flag to an untrusted "
+                            + "virtual display: " + displayId);
+                }
 
-        synchronized (mGlobalLock) {
-            final DisplayContent displayContent = getDisplayContentOrCreate(displayId, null);
-            if (displayContent == null) {
-                ProtoLog.w(WM_ERROR,
-                        "Attempted to set IME flag to a display that does not exist: %d",
-                        displayId);
-                return;
+                mDisplayWindowSettings.setShouldShowImeLocked(displayContent, shouldShow);
+
+                displayContent.reconfigureDisplayLocked();
             }
-            if (displayContent.isUntrustedVirtualDisplay()) {
-                throw new SecurityException("Attempted to set IME flag to an untrusted "
-                        + "virtual display: " + displayId);
-            }
-
-            mDisplayWindowSettings.setShouldShowImeLocked(displayContent, shouldShow);
-
-            displayContent.reconfigureDisplayLocked();
+        } finally {
+            Binder.restoreCallingIdentity(origId);
         }
     }
 
@@ -7425,6 +7426,27 @@ public class WindowManagerService extends IWindowManager.Stub
         public @Nullable KeyInterceptionInfo getKeyInterceptionInfoFromToken(IBinder inputToken) {
             return mKeyInterceptionInfoForToken.get(inputToken);
         }
+
+        @Override
+        public void setAccessibilityIdToSurfaceMetadata(
+                IBinder windowToken, int accessibilityWindowId) {
+            synchronized (mGlobalLock) {
+                final WindowState state = mWindowMap.get(windowToken);
+                if (state == null) {
+                    Slog.w(TAG, "Cannot find window which accessibility connection is added to");
+                    return;
+                }
+                try (SurfaceControl.Transaction t = new SurfaceControl.Transaction()) {
+                    t.setMetadata(
+                            state.mSurfaceControl,
+                            SurfaceControl.METADATA_ACCESSIBILITY_ID,
+                            accessibilityWindowId);
+                    t.apply();
+                } finally {
+                    SurfaceControl.closeTransaction();
+                }
+            }
+        }
     }
 
     void registerAppFreezeListener(AppFreezeListener listener) {
@@ -7639,12 +7661,15 @@ public class WindowManagerService extends IWindowManager.Stub
             // it as if the host window was tapped.
             touchedWindow = mEmbeddedWindowController.getHostWindow(touchedToken);
         }
-        if (touchedWindow == null || !touchedWindow.canReceiveKeys()) {
+
+        if (touchedWindow == null || !touchedWindow.canReceiveKeys(true /* fromUserTouch */)) {
+            // If the window that received the input event cannot receive keys, don't move the
+            // display it's on to the top since that window won't be able to get focus anyway.
             return;
         }
 
-        handleTaskFocusChange(touchedWindow.getTask());
         handleDisplayFocusChange(touchedWindow);
+        handleTaskFocusChange(touchedWindow.getTask());
     }
 
     private void handleTaskFocusChange(Task task) {
@@ -7672,12 +7697,6 @@ public class WindowManagerService extends IWindowManager.Stub
             return;
         }
 
-        if (!window.canReceiveKeys()) {
-            // If the window that received the input event cannot receive keys, don't move the
-            // display it's on to the top since that window won't be able to get focus anyway.
-            return;
-        }
-
         final WindowContainer parent = displayContent.getParent();
         if (parent != null && parent.getTopChild() != displayContent) {
             parent.positionChildAt(WindowContainer.POSITION_TOP, displayContent,
@@ -7689,7 +7708,8 @@ public class WindowManagerService extends IWindowManager.Stub
             // to do so because it seems possible to resume activities as part of a larger
             // transaction and it's too early to resume based on current order when performing
             // updateTopResumedActivityIfNeeded().
-            displayContent.mActivityDisplay.ensureActivitiesVisible(null /* starting */,
+            // TODO(display-merge): Remove cast
+            ((ActivityDisplay) displayContent).ensureActivitiesVisible(null /* starting */,
                     0 /* configChanges */, !PRESERVE_WINDOWS, true /* notifyClients */);
         }
     }
@@ -7823,8 +7843,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public boolean mirrorDisplay(int displayId, SurfaceControl outSurfaceControl) {
-        if (!checkCallingPermission(ACCESS_SURFACE_FLINGER, "mirrorDisplay()")) {
-            throw new SecurityException("Requires ACCESS_SURFACE_FLINGER permission");
+        if (!checkCallingPermission(READ_FRAME_BUFFER, "mirrorDisplay()")) {
+            throw new SecurityException("Requires READ_FRAME_BUFFER permission");
         }
 
         final SurfaceControl displaySc;
@@ -7835,7 +7855,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 return false;
             }
 
-            displaySc = displayContent.getSurfaceControl();
+            displaySc = displayContent.getWindowingLayer();
         }
 
         final SurfaceControl mirror = SurfaceControl.mirrorSurface(displaySc);

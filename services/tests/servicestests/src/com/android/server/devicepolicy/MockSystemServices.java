@@ -32,6 +32,7 @@ import android.app.IActivityTaskManager;
 import android.app.NotificationManager;
 import android.app.backup.IBackupManager;
 import android.app.timedetector.TimeDetector;
+import android.app.timezonedetector.TimeZoneDetector;
 import android.app.usage.UsageStatsManagerInternal;
 import android.content.BroadcastReceiver;
 import android.content.ContentValues;
@@ -113,6 +114,7 @@ public class MockSystemServices {
     public final AccountManager accountManager;
     public final AlarmManager alarmManager;
     public final TimeDetector timeDetector;
+    public final TimeZoneDetector timeZoneDetector;
     public final KeyChain.KeyChainConnection keyChainConnection;
     /** Note this is a partial mock, not a real mock. */
     public final PackageManager packageManager;
@@ -155,6 +157,7 @@ public class MockSystemServices {
         accountManager = mock(AccountManager.class);
         alarmManager = mock(AlarmManager.class);
         timeDetector = mock(TimeDetector.class);
+        timeZoneDetector = mock(TimeZoneDetector.class);
         keyChainConnection = mock(KeyChain.KeyChainConnection.class, RETURNS_DEEP_STUBS);
 
         // Package manager is huge, so we use a partial mock instead.
@@ -182,8 +185,8 @@ public class MockSystemServices {
 
         // Add the system user with a fake profile group already set up (this can happen in the real
         // world if a managed profile is added and then removed).
-        systemUserDataDir =
-                addUser(UserHandle.USER_SYSTEM, UserInfo.FLAG_PRIMARY, UserHandle.USER_SYSTEM);
+        systemUserDataDir = addUser(UserHandle.USER_SYSTEM, UserInfo.FLAG_PRIMARY,
+                UserManager.USER_TYPE_FULL_SYSTEM, UserHandle.USER_SYSTEM);
 
         // System user is always running.
         setUserRunning(UserHandle.USER_SYSTEM, true);
@@ -205,26 +208,21 @@ public class MockSystemServices {
         mBroadcastReceivers.removeIf(r -> r.receiver == receiver);
     }
 
-    public File addUser(int userId, int flags) {
-        return addUser(userId, flags, UserInfo.NO_PROFILE_GROUP_ID);
+    public File addUser(int userId, int flags, String type) {
+        return addUser(userId, flags, type, UserInfo.NO_PROFILE_GROUP_ID);
     }
 
-    public File addUser(int userId, int flags, int profileGroupId) {
+    public File addUser(int userId, int flags, String type, int profileGroupId) {
         // Set up (default) UserInfo for CALLER_USER_HANDLE.
         final UserInfo uh = new UserInfo(userId, "user" + userId, flags);
+
+        uh.userType = type;
         uh.profileGroupId = profileGroupId;
         when(userManager.getUserInfo(eq(userId))).thenReturn(uh);
-
         mUserInfos.add(uh);
         when(userManager.getUsers()).thenReturn(mUserInfos);
         when(userManager.getUsers(anyBoolean())).thenReturn(mUserInfos);
         when(userManager.isUserRunning(eq(new UserHandle(userId)))).thenReturn(true);
-        when(userManager.getUserInfo(anyInt())).thenAnswer(
-                invocation -> {
-                    final int userId1 = (int) invocation.getArguments()[0];
-                    return getUserInfo(userId1);
-                }
-        );
         when(userManager.getProfileParent(anyInt())).thenAnswer(
                 invocation -> {
                     final int userId1 = (int) invocation.getArguments()[0];
@@ -305,7 +303,7 @@ public class MockSystemServices {
      */
     public void addUsers(int... userIds) {
         for (final int userId : userIds) {
-            addUser(userId, 0);
+            addUser(userId, 0, "");
         }
     }
 

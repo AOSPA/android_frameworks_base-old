@@ -508,7 +508,7 @@
         -->
     <string translatable="false" name="config_mobile_hotspot_provision_app_no_ui"></string>
     <!-- Sent in response to a provisioning check. The caller must hold the
-         permission android.permission.CONNECTIVITY_INTERNAL for Settings to
+         permission android.permission.TETHER_PRIVILEGED for Settings to
          receive this response.
 
          See config_mobile_hotspot_provision_response
@@ -2151,8 +2151,6 @@
     <integer name="config_dreamsBatteryLevelDrainCutoff">5</integer>
     <!-- Limit of how long the device can remain unlocked due to attention checking.  -->
     <integer name="config_attentionMaximumExtension">330000</integer> <!-- 5 minutes and 30 sec.-->
-    <!-- How long we should wait until we give up on receiving an attention API callback.  -->
-    <integer name="config_attentionApiTimeout">2000</integer> <!-- 2 seconds -->
 
     <!-- ComponentName of a dream to show whenever the system would otherwise have
          gone to sleep.  When the PowerManager is asked to go to sleep, it will instead
@@ -2859,9 +2857,6 @@
     <!-- String array containing numbers that shouldn't be logged. Country-specific. -->
     <string-array name="unloggable_phone_numbers" />
 
-    <!-- Flag specifying whether or not IMS will use the dynamic ImsResolver -->
-    <bool name="config_dynamic_bind_ims">false</bool>
-
     <!-- Cellular data service package name to bind to by default. If none is specified in an overlay, an
          empty string is passed in -->
     <string name="config_wwan_data_service_package" translatable="false">com.android.phone</string>
@@ -3531,8 +3526,9 @@
          protection level. Note, framework by default support multiple telephony apps, each package
          name is separated by comma.
          Example: "com.android.phone,com.android.stk,com.android.providers.telephony"
+         (Note: shell is included for testing purposes)
      -->
-    <string name="config_telephonyPackages" translatable="false">"com.android.phone,com.android.stk,com.android.providers.telephony,com.android.ons,com.android.cellbroadcastservice"</string>
+    <string name="config_telephonyPackages" translatable="false">"com.android.phone,com.android.stk,com.android.providers.telephony,com.android.ons,com.android.cellbroadcastservice,com.android.cellbroadcastreceiver,com.android.shell"</string>
 
     <!-- The component name for the default system attention service.
          This service must be trusted, as it can be activated without explicit consent of the user.
@@ -3703,6 +3699,8 @@
          instead of 'Emergency calls only' when SIM is unready. -->
     <string-array translatable="false" name="config_display_no_service_when_sim_unready">
         <item>"DE"</item>
+        <item>"GB"</item>
+        <item>"JP"</item>
     </string-array>
 
     <!-- Class names of device specific services inheriting com.android.server.SystemService. The
@@ -4200,6 +4198,26 @@
     <string-array name="config_integrityRuleProviderPackages" translatable="false">
         <!-- Add packages here -->
     </string-array>
+
+    <!-- When true, enables the whitelisted app to handle bug reports from power menu short press. -->
+    <bool name="config_bugReportHandlerEnabled">false</bool>
+
+    <!-- The package name for the default bug report handler app from power menu short press. This app must be whitelisted. -->
+    <string name="config_defaultBugReportHandlerApp" translatable="false"></string>
+
+    <!-- The default value used for RawContacts.ACCOUNT_NAME when contacts are inserted without this
+         column set. These contacts are stored locally on the device and will not be removed even
+         if an android.account.Account with this name and type exists. A null string will be used
+         if the value is left empty. When this is non-empty then config_rawContactsLocalAccountType
+         should also be non-empty.  -->
+    <string name="config_rawContactsLocalAccountName" translatable="false"></string>
+
+    <!-- The default value used for RawContacts.ACCOUNT_TYPE when contacts are inserted without this
+         column set. These contacts are stored locally on the device and will not be removed even
+         if an android.account.Account with this name and type exists. A null string will be used
+         if the value is left empty.  When this is non-empty then config_rawContactsLocalAccountName
+         should also be non-empty.-->
+    <string name="config_rawContactsLocalAccountType" translatable="false"></string>
 
     <!-- pdp data retry for cause 29, 33 and 55-->
     <bool name="config_pdp_retry_for_29_33_55_enabled">false</bool>

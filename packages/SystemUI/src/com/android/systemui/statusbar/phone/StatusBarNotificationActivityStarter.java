@@ -93,6 +93,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
     private final NotificationRemoteInputManager mRemoteInputManager;
     private final NotificationLockscreenUserManager mLockscreenUserManager;
     private final ShadeController mShadeController;
+    private final StatusBar mStatusBar;
     private final KeyguardStateController mKeyguardStateController;
     private final ActivityStarter mActivityStarter;
     private final NotificationEntryManager mEntryManager;
@@ -104,6 +105,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
     private final NotificationPresenter mPresenter;
     private final LockPatternUtils mLockPatternUtils;
     private final HeadsUpManagerPhone mHeadsUpManager;
+    private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
     private final KeyguardManager mKeyguardManager;
     private final ActivityLaunchAnimator mActivityLaunchAnimator;
     private final IStatusBarService mBarService;
@@ -121,11 +123,14 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             NotificationPresenter presenter, NotificationEntryManager entryManager,
             HeadsUpManagerPhone headsUpManager, ActivityStarter activityStarter,
             ActivityLaunchAnimator activityLaunchAnimator, IStatusBarService statusBarService,
-            StatusBarStateController statusBarStateController, KeyguardManager keyguardManager,
+            StatusBarStateController statusBarStateController,
+            StatusBarKeyguardViewManager statusBarKeyguardViewManager,
+            KeyguardManager keyguardManager,
             IDreamManager dreamManager, NotificationRemoteInputManager remoteInputManager,
             StatusBarRemoteInputCallback remoteInputCallback, NotificationGroupManager groupManager,
             NotificationLockscreenUserManager lockscreenUserManager,
-            ShadeController shadeController, KeyguardStateController keyguardStateController,
+            ShadeController shadeController, StatusBar statusBar,
+            KeyguardStateController keyguardStateController,
             NotificationInterruptionStateProvider notificationInterruptionStateProvider,
             MetricsLogger metricsLogger, LockPatternUtils lockPatternUtils,
             Handler mainThreadHandler, Handler backgroundHandler,
@@ -137,11 +142,14 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         mActivityLaunchAnimator = activityLaunchAnimator;
         mBarService = statusBarService;
         mCommandQueue = commandQueue;
+        mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
         mKeyguardManager = keyguardManager;
         mDreamManager = dreamManager;
         mRemoteInputManager = remoteInputManager;
         mLockscreenUserManager = lockscreenUserManager;
         mShadeController = shadeController;
+        // TODO: use KeyguardStateController#isOccluded to remove this dependency
+        mStatusBar = statusBar;
         mKeyguardStateController = keyguardStateController;
         mActivityStarter = activityStarter;
         mEntryManager = entryManager;
@@ -198,7 +206,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         final boolean afterKeyguardGone = isActivityIntent
                 && mActivityIntentHelper.wouldLaunchResolverActivity(intent.getIntent(),
                 mLockscreenUserManager.getCurrentUserId());
-        final boolean wasOccluded = mShadeController.isOccluded();
+        final boolean wasOccluded = mStatusBar.isOccluded();
         boolean showOverLockscreen = mKeyguardStateController.isShowing() && intent != null
                 && mActivityIntentHelper.wouldShowOverLockscreen(intent.getIntent(),
                 mLockscreenUserManager.getCurrentUserId());
@@ -253,8 +261,8 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             mShadeController.addPostCollapseAction(runnable);
             mShadeController.collapsePanel(true /* animate */);
         } else if (mKeyguardStateController.isShowing()
-                && mShadeController.isOccluded()) {
-            mShadeController.addAfterKeyguardGoneRunnable(runnable);
+                && mStatusBar.isOccluded()) {
+            mStatusBarKeyguardViewManager.addAfterKeyguardGoneRunnable(runnable);
             mShadeController.collapsePanel();
         } else {
             mBackgroundHandler.postAtFrontOfQueue(runnable);
@@ -384,7 +392,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                         .addNextIntentWithParentStack(intent)
                         .startActivities(getActivityOptions(
                                 mActivityLaunchAnimator.getLaunchAnimation(
-                                        row, mShadeController.isOccluded())),
+                                        row, mStatusBar.isOccluded())),
                                 new UserHandle(UserHandle.getUserId(appUid)));
                 mActivityLaunchAnimator.setLaunchResult(launchResult, true /* isActivityIntent */);
                 if (shouldCollapse()) {
@@ -500,6 +508,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         private final ActivityStarter mActivityStarter;
         private final IStatusBarService mStatusBarService;
         private final StatusBarStateController mStatusBarStateController;
+        private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
         private final KeyguardManager mKeyguardManager;
         private final IDreamManager mDreamManager;
         private final NotificationRemoteInputManager mRemoteInputManager;
@@ -518,6 +527,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         private ShadeController mShadeController;
         private NotificationPresenter mNotificationPresenter;
         private ActivityLaunchAnimator mActivityLaunchAnimator;
+        private StatusBar mStatusBar;
 
         @Inject
         public Builder(Context context,
@@ -528,6 +538,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                 ActivityStarter activityStarter,
                 IStatusBarService statusBarService,
                 StatusBarStateController statusBarStateController,
+                StatusBarKeyguardViewManager statusBarKeyguardViewManager,
                 KeyguardManager keyguardManager,
                 IDreamManager dreamManager,
                 NotificationRemoteInputManager remoteInputManager,
@@ -551,6 +562,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             mActivityStarter = activityStarter;
             mStatusBarService = statusBarService;
             mStatusBarStateController = statusBarStateController;
+            mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
             mKeyguardManager = keyguardManager;
             mDreamManager = dreamManager;
             mRemoteInputManager = remoteInputManager;
@@ -567,8 +579,11 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             mBubbleController = bubbleController;
             mSuperStatusBarViewFactory = superStatusBarViewFactory;
         }
-        public Builder setShadeController(ShadeController shadeController) {
-            mShadeController = shadeController;
+
+        /** Sets the status bar to use as {@link StatusBar} and {@link ShadeController}. */
+        public Builder setStatusBar(StatusBar statusBar) {
+            mStatusBar = statusBar;
+            mShadeController = statusBar;
             return this;
         }
 
@@ -593,6 +608,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                     mActivityLaunchAnimator,
                     mStatusBarService,
                     mStatusBarStateController,
+                    mStatusBarKeyguardViewManager,
                     mKeyguardManager,
                     mDreamManager,
                     mRemoteInputManager,
@@ -600,6 +616,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                     mGroupManager,
                     mLockscreenUserManager,
                     mShadeController,
+                    mStatusBar,
                     mKeyguardStateController,
                     mNotificationInterruptionStateProvider,
                     mMetricsLogger,

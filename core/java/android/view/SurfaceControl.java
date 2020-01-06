@@ -162,7 +162,7 @@ public final class SurfaceControl implements Parcelable {
                                                                  int[] allowedConfigs);
     private static native int[] nativeGetAllowedDisplayConfigs(IBinder displayToken);
     private static native boolean nativeSetDesiredDisplayConfigSpecs(IBinder displayToken,
-            int defaultModeId, float minRefreshRate, float maxRefreshRate);
+            SurfaceControl.DesiredDisplayConfigSpecs desiredDisplayConfigSpecs);
     private static native int[] nativeGetDisplayColorModes(IBinder displayToken);
     private static native SurfaceControl.DisplayPrimaries nativeGetDisplayNativePrimaries(
             IBinder displayToken);
@@ -443,6 +443,12 @@ public final class SurfaceControl implements Parcelable {
      * @hide
      */
     public static final int METADATA_TASK_ID = 3;
+
+    /**
+     * Accessibility ID to allow association between surfaces and accessibility tree.
+     * @hide
+     */
+    public static final int METADATA_ACCESSIBILITY_ID = 4;
 
     /**
      * A wrapper around GraphicBuffer that contains extra information about how to
@@ -898,7 +904,7 @@ public final class SurfaceControl implements Parcelable {
      * @param fieldId Field Id of the SurfaceControl as defined in the parent message.
      * @hide
      */
-    public void writeToProto(ProtoOutputStream proto, long fieldId) {
+    public void dumpDebug(ProtoOutputStream proto, long fieldId) {
         final long token = proto.start(fieldId);
         proto.write(HASH_CODE, System.identityHashCode(this));
         proto.write(NAME, mName);
@@ -1495,16 +1501,47 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
+     * Contains information about desired display configuration.
+     *
+     * @hide
+     */
+    public static final class DesiredDisplayConfigSpecs {
+        /**
+         * @hide
+         */
+        public int mDefaultModeId;
+
+        /**
+         * @hide
+         */
+        public float mMinRefreshRate;
+
+        /**
+         * @hide
+         */
+        public float mMaxRefreshRate;
+
+        /**
+         * @hide
+         */
+        public DesiredDisplayConfigSpecs(
+                int defaultModeId, float minRefreshRate, float maxRefreshRate) {
+            mDefaultModeId = defaultModeId;
+            mMinRefreshRate = minRefreshRate;
+            mMaxRefreshRate = maxRefreshRate;
+        }
+    }
+
+    /**
      * @hide
      */
     public static boolean setDesiredDisplayConfigSpecs(IBinder displayToken,
-            int defaultModeId, float minRefreshRate, float maxRefreshRate) {
+            SurfaceControl.DesiredDisplayConfigSpecs desiredDisplayConfigSpecs) {
         if (displayToken == null) {
             throw new IllegalArgumentException("displayToken must not be null");
         }
 
-        return nativeSetDesiredDisplayConfigSpecs(displayToken, defaultModeId, minRefreshRate,
-            maxRefreshRate);
+        return nativeSetDesiredDisplayConfigSpecs(displayToken, desiredDisplayConfigSpecs);
     }
 
     /**
@@ -1881,7 +1918,9 @@ public final class SurfaceControl implements Parcelable {
      *
      * @param layer            The root layer to capture.
      * @param sourceCrop       The portion of the root surface to capture; caller may pass in 'new
-     *                         Rect()' or null if no cropping is desired.
+     *                         Rect()' or null if no cropping is desired. If the root layer does not
+     *                         have a buffer or a crop set, then a non-empty source crop must be
+     *                         specified.
      * @param frameScale       The desired scale of the returned buffer; the raw
      *                         screen will be scaled up/down.
      *
@@ -1898,7 +1937,9 @@ public final class SurfaceControl implements Parcelable {
      *
      * @param layer            The root layer to capture.
      * @param sourceCrop       The portion of the root surface to capture; caller may pass in 'new
-     *                         Rect()' or null if no cropping is desired.
+     *                         Rect()' or null if no cropping is desired. If the root layer does not
+     *                         have a buffer or a crop set, then a non-empty source crop must be
+     *                         specified.
      * @param frameScale       The desired scale of the returned buffer; the raw
      *                         screen will be scaled up/down.
      * @param format           The desired pixel format of the returned buffer.
@@ -2619,6 +2660,7 @@ public final class SurfaceControl implements Parcelable {
          * @hide
          */
         public Transaction setMetadata(SurfaceControl sc, int key, Parcel data) {
+            sc.checkNotReleased();
             nativeSetMetadata(mNativeObject, sc.mNativeObject, key, data);
             return this;
         }
