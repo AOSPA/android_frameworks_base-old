@@ -200,8 +200,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
     public static final int SECURITY_OWE = 4;
     public static final int SECURITY_SAE = 5;
     public static final int SECURITY_EAP_SUITE_B = 6;
-    public static final int SECURITY_PSK_SAE_TRANSITION = 7;
-    public static final int SECURITY_OWE_TRANSITION = 8;
+    public static final int SECURITY_PSK_SAE_TRANSITION = 7; //deprecated
+    public static final int SECURITY_OWE_TRANSITION = 8;  // deprecated
     public static final int SECURITY_DPP = 9;
     public static final int SECURITY_MAX_VAL = 10; // Has to be the last
 
@@ -257,7 +257,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
     private int mRssi = UNREACHABLE_RSSI;
 
     private int mWifiGeneration = WIFI_GENERATION_LEGACY;
-    private boolean mTwtSupport = false;
+    private boolean mHe8ssCapableAp = false;
     private boolean mVhtMax8SpatialStreamsSupport = false;
 
     private WifiInfo mInfo;
@@ -747,18 +747,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         }
 
         final int configSecurity = getSecurity(config);
-        final WifiManager wifiManager = getWifiManager();
-        switch (security) {
-            case SECURITY_PSK_SAE_TRANSITION:
-                return configSecurity == SECURITY_PSK
-                        || (wifiManager.isWpa3SaeSupported() && configSecurity == SECURITY_SAE);
-            case SECURITY_OWE_TRANSITION:
-                return configSecurity == SECURITY_NONE
-                        || (wifiManager.isEnhancedOpenSupported()
-                                && configSecurity == SECURITY_OWE);
-            default:
-                return security == configSecurity;
-        }
+        return security == configSecurity;
     }
 
     public WifiConfiguration getConfig() {
@@ -840,6 +829,64 @@ public class AccessPoint implements Comparable<AccessPoint> {
                 }
             }
         return false;
+    }
+
+    private static boolean isWpa3SaeSupported() {
+        IWifiManager wifiManager = IWifiManager.Stub.asInterface(
+                        ServiceManager.getService(Context.WIFI_SERVICE));
+        long supportedFeature = 0;
+        long feature = WifiManager.WIFI_FEATURE_WPA3_SAE;
+
+        try {
+            supportedFeature = wifiManager.getSupportedFeatures();
+        } catch (RemoteException e) {
+            Log.w(TAG, "Remote Exception", e);
+        }
+
+        return (supportedFeature & feature) == feature;
+    }
+
+    private static boolean isEnhancedOpenSupported() {
+        IWifiManager wifiManager = IWifiManager.Stub.asInterface(
+                        ServiceManager.getService(Context.WIFI_SERVICE));
+        long supportedFeature = 0;
+        long feature = WifiManager.WIFI_FEATURE_OWE;
+
+        try {
+            supportedFeature = wifiManager.getSupportedFeatures();
+        } catch (RemoteException e) {
+            Log.w(TAG, "Remote Exception", e);
+        }
+
+        return (supportedFeature & feature) == feature;
+
+    }
+
+    public static boolean checkForSaeTransitionMode(ScanResult result) {
+        if (result.capabilities.contains("SAE")
+            && result.capabilities.contains("PSK")) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public static boolean checkForOweTransitionMode(ScanResult result) {
+        if (result.capabilities.contains("OWE_TRANSITION")) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public String getFallbackKey() {
+        if (security == SECURITY_SAE) {
+            return getKey(ssid, bssid, SECURITY_PSK);
+        } else if (security == SECURITY_OWE) {
+            return getKey(ssid, bssid, SECURITY_NONE);
+        }
+        // can't fall back.
+        return mKey;
     }
 
     public WifiInfo getInfo() {
@@ -962,7 +1009,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         int currBssidMaxCapability;
         int scanResultsMinCapability = MAX_CAPABLE_BSSID;
 
-        mTwtSupport = false;
+        mHe8ssCapableAp = false;
         mVhtMax8SpatialStreamsSupport = false;
         for (ScanResult result : mScanResults) {
             currBssidMaxCapability = getMaxCapability(result);
@@ -991,8 +1038,8 @@ public class AccessPoint implements Comparable<AccessPoint> {
         return mWifiGeneration;
     }
 
-    public boolean isTwtSupported() {
-        return mTwtSupport;
+    public boolean isHe8ssCapableAp() {
+        return mHe8ssCapableAp;
     }
 
     public boolean isVhtMax8SpatialStreamsSupported() {
@@ -1568,10 +1615,10 @@ public class AccessPoint implements Comparable<AccessPoint> {
                 update(config); // Notifies the AccessPointListener of the change
             }
             if (mWifiGeneration != info.getWifiGeneration() ||
-                mTwtSupport != info.isTwtSupported() ||
+                mHe8ssCapableAp != info.isHe8ssCapableAp() ||
                 mVhtMax8SpatialStreamsSupport != info.isVhtMax8SpatialStreamsSupported()) {
                 mWifiGeneration = info.getWifiGeneration();
-                mTwtSupport = info.isTwtSupported();
+                mHe8ssCapableAp = info.isHe8ssCapableAp();
                 mVhtMax8SpatialStreamsSupport = info.isVhtMax8SpatialStreamsSupported();
                 updated = true;
             }
@@ -1770,8 +1817,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
     private static int getPskType(ScanResult result) {
         boolean wpa = result.capabilities.contains("WPA-PSK");
         boolean wpa2 = result.capabilities.contains("RSN-PSK");
-        boolean wpa3TransitionMode = result.capabilities.contains("PSK")
-                                         && result.capabilities.contains("SAE");
+        boolean wpa3TransitionMode = checkForSaeTransitionMode(result);
         boolean wpa3 = result.capabilities.contains("RSN-SAE");
         if (wpa3TransitionMode) {
             return PSK_SAE;
@@ -1807,9 +1853,12 @@ public class AccessPoint implements Comparable<AccessPoint> {
             return SECURITY_DPP;
         } else if (result.capabilities.contains("WEP")) {
             return SECURITY_WEP;
-        } else if (result.capabilities.contains("PSK")
-                   && result.capabilities.contains("SAE")) {
-            return SECURITY_PSK_SAE_TRANSITION;
+        } else if (checkForSaeTransitionMode(result)) {
+            if (isWpa3SaeSupported()) {
+                return SECURITY_SAE;
+            } else {
+                return SECURITY_PSK;
+            }
         } else if (result.capabilities.contains("SAE")) {
             return SECURITY_SAE;
         } else if (result.capabilities.contains("PSK")) {
@@ -1818,8 +1867,12 @@ public class AccessPoint implements Comparable<AccessPoint> {
             return SECURITY_EAP_SUITE_B;
         } else if (result.capabilities.contains("EAP")) {
             return SECURITY_EAP;
-        } else if (result.capabilities.contains("OWE_TRANSITION")) {
-            return SECURITY_OWE_TRANSITION;
+        } else if (checkForOweTransitionMode(result)) {
+            if (isEnhancedOpenSupported()) {
+                return SECURITY_OWE;
+            } else {
+                return SECURITY_NONE;
+            }
         } else if (result.capabilities.contains("OWE")) {
             return SECURITY_OWE;
         }
