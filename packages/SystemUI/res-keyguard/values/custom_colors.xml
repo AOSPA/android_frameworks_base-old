@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-/* //device/apps/common/assets/res/any/dimens.xml
+/* Copyright (c) 2013, The Linux Foundation. All rights reserved.
+** Not a Contribution.
 **
-** Copyright 2006, The Android Open Source Project
+** Copyright 2012, The Android Open Source Project
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
 ** you may not use this file except in compliance with the License.
@@ -18,8 +19,7 @@
 */
 -->
 <resources>
-    <dimen name="analog_clock_width">100dp</dimen>
-    <dimen name="analog_clock_height">100dp</dimen>
-    <dimen name="digital_clock_two_line_spacing">-20dp</dimen>
-    <dimen name="clock_bottom_margin">8dp</dimen>
+    <color name="analog_clock_hour_color">#ff0000</color>
+    <color name="analog_clock_minute_color">#ffffff</color>
+    <color name="analog_clock_bg_color">#303030</color>
 </resources>
