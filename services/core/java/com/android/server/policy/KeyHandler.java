@@ -660,7 +660,7 @@ public class KeyHandler {
         if (isKeySupportedAndEnabled && !mHandler.hasMessages(GESTURE_REQUEST)) {
             Message msg = getMessageForKeyEvent(event);
             if (mProximitySensor != null) {
-                mHandler.sendMessageDelayed(msg, 250 /* proximity timeout */);
+                mHandler.sendMessageDelayed(msg, 25 /* proximity timeout */);
                 processEvent(event);
             } else {
                 mHandler.sendMessage(msg);
