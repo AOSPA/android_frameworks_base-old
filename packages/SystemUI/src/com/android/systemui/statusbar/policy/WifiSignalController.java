@@ -128,7 +128,7 @@ public class WifiSignalController extends
                 && (mCurrentState.connected || !mHasMobileData);
         String wifiDesc = wifiVisible ? mCurrentState.ssid : null;
         boolean ssidPresent = wifiVisible && mCurrentState.ssid != null;
-        String contentDescription = getStringIfExists(getContentDescription());
+        String contentDescription = getStringIfExists(getContentDescription()).toString();
         if (mCurrentState.inetCondition == 0) {
             contentDescription += ("," + mContext.getString(R.string.data_connection_no_internet));
         }
@@ -166,7 +166,7 @@ public class WifiSignalController extends
         mCurrentState.statusLabel = mWifiTracker.statusLabel;
         mCurrentState.wifiGenerationVersion = mWifiTracker.wifiGeneration;
         mCurrentState.isReady = (mWifiTracker.vhtMax8SpatialStreamsSupport
-                                    && mWifiTracker.twtSupport);
+                                    && mWifiTracker.he8ssCapableAp);
         updateIconGroup();
         notifyListenersIfNecessary();
     }

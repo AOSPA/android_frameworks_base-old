@@ -20,6 +20,7 @@ import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 
 import static com.android.server.Watchdog.NATIVE_STACKS_OF_INTEREST;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_ANR;
+import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_OOM_ADJ;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.am.ActivityManagerService.MY_PID;
@@ -62,6 +63,7 @@ import com.android.internal.app.procstats.ProcessStats;
 import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.os.Zygote;
+import com.android.server.Watchdog;
 import com.android.server.wm.WindowProcessController;
 import com.android.server.wm.WindowProcessListener;
 
@@ -1380,6 +1382,25 @@ class ProcessRecord implements WindowProcessListener {
         }
     }
 
+    @Override
+    public void setRunningRemoteAnimation(boolean runningRemoteAnimation) {
+        if (pid == Process.myPid()) {
+            Slog.wtf(TAG, "system can't run remote animation");
+            return;
+        }
+        synchronized (mService) {
+            if (this.runningRemoteAnimation == runningRemoteAnimation) {
+                return;
+            }
+            this.runningRemoteAnimation = runningRemoteAnimation;
+            if (DEBUG_OOM_ADJ) {
+                Slog.i(TAG, "Setting runningRemoteAnimation=" + runningRemoteAnimation
+                        + " for pid=" + pid);
+            }
+            mService.updateOomAdjLocked(this, true, OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
+        }
+    }
+
     public long getInputDispatchingTimeout() {
         return mWindowProcessController.getInputDispatchingTimeout();
     }
@@ -1508,28 +1529,26 @@ class ProcessRecord implements WindowProcessListener {
         }
 
         ProcessCpuTracker processCpuTracker = new ProcessCpuTracker(true);
+        ArrayList<Integer> nativePids = null;
 
         // don't dump native PIDs for background ANRs unless it is the process of interest
-        String[] nativeProcs = null;
+        String[] nativeProc = null;
         if (isSilentAnr()) {
             for (int i = 0; i < NATIVE_STACKS_OF_INTEREST.length; i++) {
                 if (NATIVE_STACKS_OF_INTEREST[i].equals(processName)) {
-                    nativeProcs = new String[] { processName };
+                    nativeProc = new String[] { processName };
                     break;
                 }
             }
-        } else {
-            nativeProcs = NATIVE_STACKS_OF_INTEREST;
-        }
-
-        int[] pids = nativeProcs == null ? null : Process.getPidsForCommands(nativeProcs);
-        ArrayList<Integer> nativePids = null;
-
-        if (pids != null) {
-            nativePids = new ArrayList<>(pids.length);
-            for (int i : pids) {
-                nativePids.add(i);
+            int[] pid = nativeProc == null ? null : Process.getPidsForCommands(nativeProc);
+            if(pid != null){
+                nativePids = new ArrayList<>(pid.length);
+                for (int i : pid) {
+                    nativePids.add(i);
+                }
             }
+        } else {
+            nativePids = Watchdog.getInstance().getInterestingNativePids();
         }
 
         // For background ANRs, don't pass the ProcessCpuTracker to

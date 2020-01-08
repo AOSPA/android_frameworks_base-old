@@ -599,8 +599,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mWakeupIntent = PendingIntent.getBroadcast(mContext, 0, new Intent(ALARM_WAKEUP), 0);
         mTimeoutIntent = PendingIntent.getBroadcast(mContext, 0, new Intent(ALARM_TIMEOUT), 0);
 
-        mNetworkConnectivityHandler = new GnssNetworkConnectivityHandler(context,
-                GnssLocationProvider.this::onNetworkAvailable, looper);
 
         // App ops service to keep track of who is accessing the GPS
         mAppOps = mContext.getSystemService(AppOpsManager.class);
@@ -623,6 +621,9 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mNIHandler = new GpsNetInitiatedHandler(context,
                 mNetInitiatedListener,
                 mSuplEsEnabled);
+        mNetworkConnectivityHandler = new GnssNetworkConnectivityHandler(context,
+                GnssLocationProvider.this::onNetworkAvailable, looper, mNIHandler);
+
         sendMessage(INITIALIZE_HANDLER, 0, null);
 
         mGnssStatusListenerHelper = new GnssStatusListenerHelper(mContext, mHandler) {
@@ -1461,7 +1462,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 info.mSvCarrierFreqs);
 
         // Log CN0 as part of GNSS metrics
-        mGnssMetrics.logCn0(info.mCn0s, info.mSvCount);
+        mGnssMetrics.logCn0(info.mCn0s, info.mSvCount, info.mSvCarrierFreqs);
 
         if (VERBOSE) {
             Log.v(TAG, "SV count: " + info.mSvCount);
@@ -1512,6 +1513,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 SystemClock.elapsedRealtime() - mLastFixTime > RECENT_FIX_TIMEOUT) {
             updateStatus(LocationProvider.TEMPORARILY_UNAVAILABLE);
         }
+
+        mGnssMetrics.logSvStatus(info.mSvCount, info.mSvidWithFlags, info.mSvCarrierFreqs);
     }
 
     @NativeEntryPoint

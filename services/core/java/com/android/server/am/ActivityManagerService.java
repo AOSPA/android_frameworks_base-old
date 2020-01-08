@@ -369,6 +369,7 @@ import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.ActivityTaskManagerService;
 import com.android.server.wm.WindowManagerService;
 import com.android.server.wm.WindowProcessController;
+import com.android.server.ActivityTriggerService;
 
 import dalvik.system.VMRuntime;
 
@@ -758,6 +759,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             synchronized (this) {
                 mPidMap.put(app.pid, app);
             }
+            ActivityTriggerService atService = LocalServices.getService(ActivityTriggerService.class);
+            if(atService != null) {
+                atService.updateRecord(app.hostingRecord, app.info, app.pid, ActivityTriggerService.PROC_ADDED_NOTIFICATION);
+            }
             mAtmInternal.onProcessMapped(app.pid, app.getWindowProcessController());
         }
 
@@ -776,6 +781,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
             if (removed) {
+                ActivityTriggerService atService = LocalServices.getService(ActivityTriggerService.class);
+                if(atService != null) {
+                    atService.updateRecord(app.hostingRecord, app.info, app.pid, ActivityTriggerService.PROC_REMOVED_NOTIFICATION);
+                }
                 mAtmInternal.onProcessUnMapped(app.pid);
             }
         }
@@ -1555,13 +1564,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     static final String SERVICE_RECORD_KEY = "servicerecord";
 
-    static final ActivityTrigger mActivityTrigger = new ActivityTrigger();
-
     long mLastMemUsageReportTime = 0;
-
-    // Process in same process Group keep in same cgroup
-    boolean mEnableProcessGroupCgroupFollow =
-            SystemProperties.getBoolean("ro.vendor.qti.cgroup_follow.enable",false);
 
     /**
      * Flag whether the current user is a "monkey", i.e. whether
@@ -4923,6 +4926,10 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         EventLog.writeEvent(EventLogTags.AM_PROC_BOUND, app.userId, app.pid, app.processName);
 
+        if (mUxPerf != null && app.hostingRecord != null && "activity".equals(app.hostingRecord.getType())) {
+            mUxPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, app.processName, app.pid, BoostFramework.Launch.TYPE_ATTACH_APPLICATION);
+        }
+
         app.curAdj = app.setAdj = app.verifiedAdj = ProcessList.INVALID_ADJ;
         app.setCurrentSchedulingGroup(app.setSchedGroup = ProcessList.SCHED_GROUP_DEFAULT);
         app.forcingToImportant = null;
@@ -5240,9 +5247,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 (int) (SystemClock.elapsedRealtime() - app.startTime),
                 app.hostingRecord.getType(),
                 (app.hostingRecord.getName() != null ? app.hostingRecord.getName() : ""));
-
-        //send start notification to AT with the starting app's info.
-        mActivityTrigger.activityStartTrigger(app.info, app.pid);
         return true;
     }
 
@@ -5330,11 +5334,14 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         // Inform checkpointing systems of success
         try {
+            // This line is needed to CTS test for the correct exception handling
+            // See b/138952436#comment36 for context
+            Slog.i(TAG, "About to commit checkpoint");
             IStorageManager storageManager = PackageHelper.getStorageManager();
             storageManager.commitChanges();
         } catch (Exception e) {
             PowerManager pm = (PowerManager)
-                     mInjector.getContext().getSystemService(Context.POWER_SERVICE);
+                     mContext.getSystemService(Context.POWER_SERVICE);
             pm.reboot("Checkpoint commit failed");
         }
 
@@ -8542,32 +8549,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
-    void setRunningRemoteAnimation(int pid, boolean runningRemoteAnimation) {
-        if (pid == Process.myPid()) {
-            Slog.wtf(TAG, "system can't run remote animation");
-            return;
-        }
-        synchronized (ActivityManagerService.this) {
-            final ProcessRecord pr;
-            synchronized (mPidsSelfLocked) {
-                pr = mPidsSelfLocked.get(pid);
-                if (pr == null) {
-                    Slog.w(TAG, "setRunningRemoteAnimation called on unknown pid: " + pid);
-                    return;
-                }
-            }
-            if (pr.runningRemoteAnimation == runningRemoteAnimation) {
-                return;
-            }
-            pr.runningRemoteAnimation = runningRemoteAnimation;
-            if (DEBUG_OOM_ADJ) {
-                Slog.i(TAG, "Setting runningRemoteAnimation=" + pr.runningRemoteAnimation
-                        + " for pid=" + pid);
-            }
-            updateOomAdjLocked(pr, true, OomAdjuster.OOM_ADJ_REASON_UI_VISIBILITY);
-        }
-    }
-
     public final void enterSafeMode() {
         synchronized(this) {
             // It only makes sense to do this before the system is ready
@@ -9124,7 +9105,16 @@ public class ActivityManagerService extends IActivityManager.Stub
                 Integer.toString(currentUserId), currentUserId);
         mBatteryStatsService.noteEvent(BatteryStats.HistoryItem.EVENT_USER_FOREGROUND_START,
                 Integer.toString(currentUserId), currentUserId);
-        mSystemServiceManager.startUser(currentUserId);
+
+        // On Automotive, at this point the system user has already been started and unlocked,
+        // and some of the tasks we do here have already been done. So skip those in that case.
+        // TODO(b/132262830): this workdound shouldn't be necessary once we move the
+        // headless-user start logic to UserManager-land
+        final boolean bootingSystemUser = currentUserId == UserHandle.USER_SYSTEM;
+
+        if (bootingSystemUser) {
+            mSystemServiceManager.startUser(currentUserId);
+        }
 
         synchronized (this) {
             // Only start up encryption-aware persistent apps; once user is
@@ -9148,43 +9138,53 @@ public class ActivityManagerService extends IActivityManager.Stub
                     throw e.rethrowAsRuntimeException();
                 }
             }
-            mAtmInternal.startHomeOnAllDisplays(currentUserId, "systemReady");
+
+            if (bootingSystemUser) {
+                mAtmInternal.startHomeOnAllDisplays(currentUserId, "systemReady");
+            }
 
             mAtmInternal.showSystemReadyErrorDialogsIfNeeded();
 
-            final int callingUid = Binder.getCallingUid();
-            final int callingPid = Binder.getCallingPid();
-            long ident = Binder.clearCallingIdentity();
-            try {
-                Intent intent = new Intent(Intent.ACTION_USER_STARTED);
-                intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY
-                        | Intent.FLAG_RECEIVER_FOREGROUND);
-                intent.putExtra(Intent.EXTRA_USER_HANDLE, currentUserId);
-                broadcastIntentLocked(null, null, intent,
-                        null, null, 0, null, null, null, OP_NONE,
-                        null, false, false, MY_PID, SYSTEM_UID, callingUid, callingPid,
-                        currentUserId);
-                intent = new Intent(Intent.ACTION_USER_STARTING);
-                intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
-                intent.putExtra(Intent.EXTRA_USER_HANDLE, currentUserId);
-                broadcastIntentLocked(null, null, intent,
-                        null, new IIntentReceiver.Stub() {
-                            @Override
-                            public void performReceive(Intent intent, int resultCode, String data,
-                                    Bundle extras, boolean ordered, boolean sticky, int sendingUser)
-                                    throws RemoteException {
-                            }
-                        }, 0, null, null,
-                        new String[] {INTERACT_ACROSS_USERS}, OP_NONE,
-                        null, true, false, MY_PID, SYSTEM_UID, callingUid, callingPid,
-                        UserHandle.USER_ALL);
-            } catch (Throwable t) {
-                Slog.wtf(TAG, "Failed sending first user broadcasts", t);
-            } finally {
-                Binder.restoreCallingIdentity(ident);
+            if (bootingSystemUser) {
+                final int callingUid = Binder.getCallingUid();
+                final int callingPid = Binder.getCallingPid();
+                long ident = Binder.clearCallingIdentity();
+                try {
+                    Intent intent = new Intent(Intent.ACTION_USER_STARTED);
+                    intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY
+                            | Intent.FLAG_RECEIVER_FOREGROUND);
+                    intent.putExtra(Intent.EXTRA_USER_HANDLE, currentUserId);
+                    broadcastIntentLocked(null, null, intent,
+                            null, null, 0, null, null, null, OP_NONE,
+                            null, false, false, MY_PID, SYSTEM_UID, callingUid, callingPid,
+                            currentUserId);
+                    intent = new Intent(Intent.ACTION_USER_STARTING);
+                    intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
+                    intent.putExtra(Intent.EXTRA_USER_HANDLE, currentUserId);
+                    broadcastIntentLocked(null, null, intent,
+                            null, new IIntentReceiver.Stub() {
+                                @Override
+                                public void performReceive(Intent intent, int resultCode, String data,
+                                        Bundle extras, boolean ordered, boolean sticky, int sendingUser)
+                                        throws RemoteException {
+                                }
+                            }, 0, null, null,
+                            new String[] {INTERACT_ACROSS_USERS}, OP_NONE,
+                            null, true, false, MY_PID, SYSTEM_UID, callingUid, callingPid,
+                            UserHandle.USER_ALL);
+                } catch (Throwable t) {
+                    Slog.wtf(TAG, "Failed sending first user broadcasts", t);
+                } finally {
+                    Binder.restoreCallingIdentity(ident);
+                }
+            } else {
+                Slog.i(TAG, "Not sending multi-user broadcasts for non-system user "
+                        + currentUserId);
             }
             mAtmInternal.resumeTopActivities(false /* scheduleIdle */);
-            mUserController.sendUserSwitchBroadcasts(-1, currentUserId);
+            if (bootingSystemUser) {
+                mUserController.sendUserSwitchBroadcasts(-1, currentUserId);
+            }
 
             BinderInternal.nSetBinderProxyCountWatermarks(BINDER_PROXY_HIGH_WATERMARK,
                     BINDER_PROXY_LOW_WATERMARK);
@@ -15076,7 +15076,12 @@ public class ActivityManagerService extends IActivityManager.Stub
                             final int uid = getUidFromIntent(intent);
                             if (uid >= 0) {
                                 mBatteryStatsService.removeUid(uid);
-                                mAppOpsService.uidRemoved(uid);
+                                if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) {
+                                    mAppOpsService.resetAllModes(UserHandle.getUserId(uid),
+                                            intent.getStringExtra(Intent.EXTRA_PACKAGE_NAME));
+                                } else {
+                                    mAppOpsService.uidRemoved(uid);
+                                }
                             }
                             break;
                         case Intent.ACTION_EXTERNAL_APPLICATIONS_UNAVAILABLE:
@@ -16593,7 +16598,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                         }
                         app.kill("excessive cpu " + cputimeUsed + " during " + uptimeSince
                                 + " dur=" + checkDur + " limit=" + cpuLimit, true);
-                        app.baseProcessTracker.reportExcessiveCpu(app.pkgList.mPkgList);
+                        if (app.baseProcessTracker != null) {
+                            app.baseProcessTracker.reportExcessiveCpu(app.pkgList.mPkgList);
+                        }
                         for (int ipkg = app.pkgList.size() - 1; ipkg >= 0; ipkg--) {
                             ProcessStats.ProcessStateHolder holder = app.pkgList.valueAt(ipkg);
                             StatsLog.write(StatsLog.EXCESSIVE_CPU_USAGE_REPORTED,
@@ -18048,11 +18055,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             synchronized (ActivityManagerService.this) {
                 return isUidActiveLocked(uid);
             }
-        }
-
-        @Override
-        public void setRunningRemoteAnimation(int pid, boolean runningRemoteAnimation) {
-            ActivityManagerService.this.setRunningRemoteAnimation(pid, runningRemoteAnimation);
         }
 
         @Override

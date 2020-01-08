@@ -148,7 +148,8 @@ void CanvasContext::setSurface(sp<Surface>&& surface) {
 
     if (surface) {
         mNativeSurface = new ReliableSurface{std::move(surface)};
-        mNativeSurface->setDequeueTimeout(1000_ms);
+        // TODO: Fix error handling & re-shorten timeout
+        mNativeSurface->setDequeueTimeout(4000_ms);
     } else {
         mNativeSurface = nullptr;
     }
@@ -422,7 +423,8 @@ void CanvasContext::setPresentTime() {
 
     if (renderAhead) {
         presentTime = mCurrentFrameInfo->get(FrameInfoIndex::Vsync) +
-                (frameIntervalNanos * (renderAhead + 1));
+                (frameIntervalNanos * (renderAhead + 1)) - DeviceInfo::get()->getAppOffset() +
+                (frameIntervalNanos / 2);
     }
     native_window_set_buffers_timestamp(mNativeSurface.get(), presentTime);
 }
