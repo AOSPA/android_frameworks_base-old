@@ -47,6 +47,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.Settings;
 import android.telecom.TelecomManager;
@@ -722,9 +723,9 @@ public class KeyHandler {
                 Settings.System.HAPTIC_FEEDBACK_ENABLED, 0, UserHandle.USER_CURRENT) != 0;
         if (hapticsEnabled && mVibrator != null) {
             if (success) {
-                mVibrator.vibrate(mVibePattern, -1, VIBRATION_ATTRIBUTES);
+                mVibrator.vibrate(VibrationEffect.get(VibrationEffect.EFFECT_THUD));
             } else {
-                mVibrator.vibrate(350L, VIBRATION_ATTRIBUTES);
+                mVibrator.vibrate(VibrationEffect.get(VibrationEffect.EFFECT_DOUBLE_CLICK));
             }
         }
     }
