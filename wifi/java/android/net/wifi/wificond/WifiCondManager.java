@@ -245,6 +245,18 @@ public class WifiCondManager {
          * @param bandwidth The new bandwidth of the SoftAp.
          */
         void onSoftApChannelSwitched(int frequencyMhz, @WifiAnnotations.Bandwidth int bandwidth);
+
+        /**
+         * Invoked when the station connected to Any AP.
+         * @hide
+         */
+        void onStaConnected(@NonNull String bssidStr);
+
+        /**
+         * Invoked when the station disconnected to Any AP.
+         * @hide
+         */
+        void onStaDisconnected(@NonNull String bssidStr);
     }
 
     /**
@@ -596,6 +608,39 @@ public class WifiCondManager {
             Log.e(TAG, "Failed to refresh wificond scanner due to remote exception");
         }
 
+        return true;
+    }
+
+    /**
+     * Unsubscribe scan for specific STA interface configured in wificond.
+     * Additionally, trigger stopPnoScan() before invalidating wificond scanner object.
+     *
+     * @return Returns true on success.
+     * @hide
+     */
+    public boolean unsubscribeScan(@NonNull String ifaceName) {
+        if (getClientInterface(ifaceName) == null) {
+            Log.e(TAG, "No valid wificond client interface handler");
+            return false;
+        }
+
+        // stop any active pno scan
+        stopPnoScan(ifaceName);
+
+        try {
+            IWifiScannerImpl scannerImpl = mWificondScanners.get(ifaceName);
+            if (scannerImpl != null) {
+                scannerImpl.unsubscribeScanEvents();
+                scannerImpl.unsubscribePnoScanEvents();
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to unsubscribe wificond scanner due to remote exception");
+            return false;
+        }
+
+        mWificondScanners.remove(ifaceName);
+        mScanEventHandlers.remove(ifaceName);
+        mPnoScanEventHandlers.remove(ifaceName);
         return true;
     }
 
@@ -1153,5 +1198,75 @@ public class WifiCondManager {
         mApInterfaces.clear();
         mApInterfaceListeners.clear();
         mSendMgmtFrameInProgress.set(false);
+    }
+
+    /** @hide **/
+    public static class WifiGenerationCapabilities {
+
+        public boolean htSupport2g = false;
+        public boolean vhtSupport2g = false;
+        public boolean staHeSupport2g = false;
+        public boolean sapHeSupport2g = false;
+        public boolean htSupport5g = false;
+        public boolean vhtSupport5g = false;
+        public boolean staHeSupport5g = false;
+        public boolean sapHeSupport5g = false;
+
+        public WifiGenerationCapabilities() {
+        }
+    }
+
+    /**
+     * Query the Wi-Fi generation capabilities for 2G and 5G bands.
+     *
+     * @return WifiGenerationCapabilities object, or null for error.
+     * @hide
+     */
+    @Nullable public WifiGenerationCapabilities getWifiGenerationCapabilities() {
+        if (!retrieveWificondAndRegisterForDeath()) {
+            return null;
+        }
+
+        int wifiGenerationCapaMask = 0;
+        try {
+            wifiGenerationCapaMask = mWificond.QcGetWifiGenerationCapabilities();
+        } catch (RemoteException e1) {
+            Log.e(TAG, "Failed to request getWifiGenerationCapabilities due to remote exception");
+            return null;
+        }
+
+        if (wifiGenerationCapaMask == -1) {
+            Log.e(TAG, "Failed to get Wifi generation capabilities.");
+            return null;
+        }
+
+        WifiGenerationCapabilities wifiGenerationCapa = new WifiGenerationCapabilities();
+
+        if ((wifiGenerationCapaMask & (1 << IWificond.QC_2G_HT_SUPPORT)) != 0) {
+            wifiGenerationCapa.htSupport2g = true;
+        }
+        if ((wifiGenerationCapaMask & (1 << IWificond.QC_2G_VHT_SUPPORT)) != 0) {
+            wifiGenerationCapa.vhtSupport2g = true;
+        }
+        if ((wifiGenerationCapaMask & (1 << IWificond.QC_2G_STA_HE_SUPPORT)) != 0) {
+            wifiGenerationCapa.staHeSupport2g = true;
+        }
+        if ((wifiGenerationCapaMask & (1 << IWificond.QC_2G_SAP_HE_SUPPORT)) != 0) {
+            wifiGenerationCapa.sapHeSupport2g = true;
+        }
+        if ((wifiGenerationCapaMask & (1 << IWificond.QC_5G_HT_SUPPORT)) != 0) {
+            wifiGenerationCapa.htSupport5g = true;
+        }
+        if ((wifiGenerationCapaMask & (1 << IWificond.QC_5G_VHT_SUPPORT)) != 0) {
+            wifiGenerationCapa.vhtSupport5g = true;
+        }
+        if ((wifiGenerationCapaMask & (1 << IWificond.QC_5G_STA_HE_SUPPORT)) != 0) {
+            wifiGenerationCapa.staHeSupport5g = true;
+        }
+        if ((wifiGenerationCapaMask & (1 << IWificond.QC_5G_SAP_HE_SUPPORT)) != 0) {
+            wifiGenerationCapa.sapHeSupport5g = true;
+        }
+
+        return wifiGenerationCapa;
     }
 }
