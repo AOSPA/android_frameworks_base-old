@@ -143,6 +143,8 @@ public class SecureSettings {
         Settings.Secure.LOCK_SCREEN_WHEN_TRUST_LOST,
         Settings.Secure.SKIP_DIRECTION,
         Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES,
+        Settings.Secure.BACK_GESTURE_INSET_SCALE_LEFT,
+        Settings.Secure.BACK_GESTURE_INSET_SCALE_RIGHT,
         Settings.Secure.NAVIGATION_MODE,
         Settings.Secure.SKIP_GESTURE_COUNT,
         Settings.Secure.SKIP_TOUCH_COUNT,
@@ -156,6 +158,8 @@ public class SecureSettings {
         Settings.Secure.GLOBAL_ACTIONS_PANEL_ENABLED,
         Settings.Secure.AWARE_LOCK_ENABLED,
         Settings.Secure.AWARE_TAP_PAUSE_GESTURE_COUNT,
-        Settings.Secure.AWARE_TAP_PAUSE_TOUCH_COUNT
+        Settings.Secure.AWARE_TAP_PAUSE_TOUCH_COUNT,
+        Settings.Secure.PEOPLE_STRIP,
+        Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE,
     };
 }

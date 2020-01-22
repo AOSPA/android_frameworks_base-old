@@ -88,7 +88,7 @@ public class RecentsAnimationTest extends ActivityTestsBase {
 
     @Test
     public void testRecentsActivityVisiblility() {
-        ActivityDisplay display = mRootActivityContainer.getDefaultDisplay();
+        DisplayContent display = mRootWindowContainer.getDefaultDisplay();
         ActivityStack recentsStack = display.createStack(WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_RECENTS, true /* onTop */);
         ActivityRecord recentActivity = new ActivityBuilder(mService)
@@ -99,9 +99,9 @@ public class RecentsAnimationTest extends ActivityTestsBase {
         ActivityRecord topActivity = new ActivityBuilder(mService).setCreateTask(true).build();
         topActivity.getActivityStack().moveToFront("testRecentsActivityVisiblility");
 
-        doCallRealMethod().when(mRootActivityContainer).ensureActivitiesVisible(
+        doCallRealMethod().when(mRootWindowContainer).ensureActivitiesVisible(
                 any() /* starting */, anyInt() /* configChanges */,
-                anyBoolean() /* preserveWindows */);
+                anyBoolean() /* preserveWindows */, anyBoolean() /* notifyClients */);
 
         RecentsAnimationCallbacks recentsAnimation = startRecentsActivity(
                 mRecentsComponent, true /* getRecentsAnimation */);
@@ -116,7 +116,7 @@ public class RecentsAnimationTest extends ActivityTestsBase {
 
     @Test
     public void testPreloadRecentsActivity() {
-        final ActivityDisplay defaultDisplay = mRootActivityContainer.getDefaultDisplay();
+        final DisplayContent defaultDisplay = mRootWindowContainer.getDefaultDisplay();
         final ActivityStack homeStack =
                 defaultDisplay.getStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME);
         defaultDisplay.positionStackAtTop(homeStack, false /* includingParents */);
@@ -149,7 +149,7 @@ public class RecentsAnimationTest extends ActivityTestsBase {
         mService.startRecentsActivity(recentsIntent, null /* assistDataReceiver */,
                 null /* recentsAnimationRunner */);
 
-        ActivityDisplay display = mRootActivityContainer.getDefaultDisplay();
+        DisplayContent display = mRootWindowContainer.getDefaultDisplay();
         ActivityStack recentsStack = display.getStack(WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_RECENTS);
         assertThat(recentsStack).isNotNull();
@@ -161,7 +161,7 @@ public class RecentsAnimationTest extends ActivityTestsBase {
         assertFalse(recentsActivity.mVisibleRequested);
 
         // Assume it is stopped to test next use case.
-        recentsActivity.activityStoppedLocked(null /* newIcicle */, null /* newPersistentState */,
+        recentsActivity.activityStopped(null /* newIcicle */, null /* newPersistentState */,
                 null /* description */);
         mSupervisor.mStoppingActivities.remove(recentsActivity);
 
@@ -178,7 +178,7 @@ public class RecentsAnimationTest extends ActivityTestsBase {
     @Test
     public void testRestartRecentsActivity() throws Exception {
         // Have a recents activity that is not attached to its process (ActivityRecord.app = null).
-        ActivityDisplay display = mRootActivityContainer.getDefaultDisplay();
+        DisplayContent display = mRootWindowContainer.getDefaultDisplay();
         ActivityStack recentsStack = display.createStack(WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_RECENTS, true /* onTop */);
         ActivityRecord recentActivity = new ActivityBuilder(mService).setComponent(
@@ -190,9 +190,9 @@ public class RecentsAnimationTest extends ActivityTestsBase {
         new ActivityBuilder(mService).setCreateTask(true).build().getActivityStack().moveToFront(
                 "testRestartRecentsActivity");
 
-        doCallRealMethod().when(mRootActivityContainer).ensureActivitiesVisible(
+        doCallRealMethod().when(mRootWindowContainer).ensureActivitiesVisible(
                 any() /* starting */, anyInt() /* configChanges */,
-                anyBoolean() /* preserveWindows */);
+                anyBoolean() /* preserveWindows */, anyBoolean() /* notifyClients */);
         doReturn(app).when(mService).getProcessController(eq(recentActivity.processName), anyInt());
         ClientLifecycleManager lifecycleManager = mService.getLifecycleManager();
         doNothing().when(lifecycleManager).scheduleTransaction(any());
@@ -200,14 +200,14 @@ public class RecentsAnimationTest extends ActivityTestsBase {
         startRecentsActivity();
 
         // Recents activity must be restarted, but not be resumed while running recents animation.
-        verify(mRootActivityContainer.mStackSupervisor).startSpecificActivity(
+        verify(mRootWindowContainer.mStackSupervisor).startSpecificActivity(
                 eq(recentActivity), eq(false), anyBoolean());
         assertThat(recentActivity.getState()).isEqualTo(PAUSED);
     }
 
     @Test
     public void testSetLaunchTaskBehindOfTargetActivity() {
-        ActivityDisplay display = mRootActivityContainer.getDefaultDisplay();
+        DisplayContent display = mRootWindowContainer.getDefaultDisplay();
         display.mDisplayContent.mBoundsAnimationController = mock(BoundsAnimationController.class);
         ActivityStack homeStack = display.getHomeStack();
         // Assume the home activity support recents.
@@ -253,7 +253,7 @@ public class RecentsAnimationTest extends ActivityTestsBase {
 
     @Test
     public void testCancelAnimationOnVisibleStackOrderChange() {
-        ActivityDisplay display = mService.mRootActivityContainer.getDefaultDisplay();
+        DisplayContent display = mService.mRootWindowContainer.getDefaultDisplay();
         display.mDisplayContent.mBoundsAnimationController = mock(BoundsAnimationController.class);
         ActivityStack fullscreenStack = display.createStack(WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_STANDARD, true /* onTop */);
@@ -299,7 +299,7 @@ public class RecentsAnimationTest extends ActivityTestsBase {
 
     @Test
     public void testKeepAnimationOnHiddenStackOrderChange() {
-        ActivityDisplay display = mService.mRootActivityContainer.getDefaultDisplay();
+        DisplayContent display = mService.mRootWindowContainer.getDefaultDisplay();
         ActivityStack fullscreenStack = display.createStack(WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_STANDARD, true /* onTop */);
         new ActivityBuilder(mService)
@@ -335,7 +335,7 @@ public class RecentsAnimationTest extends ActivityTestsBase {
 
     @Test
     public void testMultipleUserHomeActivity_findUserHomeTask() {
-        ActivityDisplay display = mService.mRootActivityContainer.getDefaultDisplay();
+        DisplayContent display = mService.mRootWindowContainer.getDefaultDisplay();
         ActivityStack homeStack = display.getStack(WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_HOME);
         ActivityRecord otherUserHomeActivity = new ActivityBuilder(mService)
                 .setStack(homeStack)
@@ -353,9 +353,9 @@ public class RecentsAnimationTest extends ActivityTestsBase {
                 .build();
 
         doReturn(TEST_USER_ID).when(mService).getCurrentUserId();
-        doCallRealMethod().when(mRootActivityContainer).ensureActivitiesVisible(
+        doCallRealMethod().when(mRootWindowContainer).ensureActivitiesVisible(
                 any() /* starting */, anyInt() /* configChanges */,
-                anyBoolean() /* preserveWindows */);
+                anyBoolean() /* preserveWindows */, anyBoolean() /* notifyClients */);
 
         startRecentsActivity(otherUserHomeActivity.getTask().getBaseIntent().getComponent(),
                 true);

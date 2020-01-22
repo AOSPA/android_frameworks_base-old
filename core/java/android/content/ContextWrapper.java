@@ -21,9 +21,9 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
@@ -250,6 +250,16 @@ public class ContextWrapper extends Context {
     @Override
     public File getFilesDir() {
         return mBase.getFilesDir();
+    }
+
+    /**
+     * {@inheritDoc Context#getCrateDir()}
+     * @hide
+     */
+    @NonNull
+    @Override
+    public File getCrateDir(@NonNull String cratedId) {
+        return mBase.getCrateDir(cratedId);
     }
 
     @Override

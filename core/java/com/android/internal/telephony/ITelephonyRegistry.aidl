@@ -19,11 +19,13 @@ package com.android.internal.telephony;
 import android.content.Intent;
 import android.net.LinkProperties;
 import android.net.NetworkCapabilities;
-import android.os.Bundle;
 import android.telephony.CallQuality;
+import android.telephony.CellIdentity;
 import android.telephony.CellInfo;
 import android.telephony.ims.ImsReasonInfo;
 import android.telephony.PhoneCapability;
+import android.telephony.PhysicalChannelConfig;
+import android.telephony.PreciseDataConnectionState;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.telephony.emergency.EmergencyNumber;
@@ -60,21 +62,13 @@ interface ITelephonyRegistry {
     @UnsupportedAppUsage(maxTargetSdk = 28)
     void notifyDataActivity(int state);
     void notifyDataActivityForSubscriber(in int subId, int state);
-    void notifyDataConnection(int state, boolean isDataConnectivityPossible,
-            String apn, String apnType, in LinkProperties linkProperties,
-            in NetworkCapabilities networkCapabilities, int networkType, boolean roaming);
-    void notifyDataConnectionForSubscriber(int phoneId, int subId, int state,
-            boolean isDataConnectivityPossible,
-            String apn, String apnType, in LinkProperties linkProperties,
-            in NetworkCapabilities networkCapabilities, int networkType, boolean roaming);
+    void notifyDataConnectionForSubscriber(
+            int phoneId, int subId, String apnType, in PreciseDataConnectionState preciseState);
     @UnsupportedAppUsage
     void notifyDataConnectionFailed(String apnType);
-    void notifyDataConnectionFailedForSubscriber(int phoneId, int subId, String apnType);
-    @UnsupportedAppUsage(maxTargetSdk = 28)
-    void notifyCellLocation(in Bundle cellLocation);
-    void notifyCellLocationForSubscriber(in int subId, in Bundle cellLocation);
-    @UnsupportedAppUsage(maxTargetSdk = 28)
-    void notifyOtaspChanged(in int subId, in int otaspMode);
+    // Uses CellIdentity which is Parcelable here; will convert to CellLocation in client.
+    void notifyCellLocation(in CellIdentity cellLocation);
+    void notifyCellLocationForSubscriber(in int subId, in CellIdentity cellLocation);
     @UnsupportedAppUsage
     void notifyCellInfo(in List<CellInfo> cellInfo);
     void notifyPreciseCallState(int phoneId, int subId, int ringingCallState,

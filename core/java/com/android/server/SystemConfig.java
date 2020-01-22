@@ -25,6 +25,7 @@ import android.content.pm.FeatureInfo;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Environment;
+import android.os.FileUtils;
 import android.os.Process;
 import android.os.SystemProperties;
 import android.os.Trace;
@@ -222,6 +223,8 @@ public class SystemConfig {
     private ArrayMap<String, Set<String>> mPackageToUserTypeWhitelist = new ArrayMap<>();
     private ArrayMap<String, Set<String>> mPackageToUserTypeBlacklist = new ArrayMap<>();
 
+    private final ArraySet<String> mRollbackWhitelistedPackages = new ArraySet<>();
+
     /**
      * Map of system pre-defined, uniquely named actors; keys are namespace,
      * value maps actor name to package name.
@@ -382,6 +385,10 @@ public class SystemConfig {
         return mBugreportWhitelistedPackages;
     }
 
+    public Set<String> getRollbackWhitelistedPackages() {
+        return mRollbackWhitelistedPackages;
+    }
+
     /**
      * Gets map of packagesNames to userTypes, dictating on which user types each package should be
      * initially installed, and then removes this map from SystemConfig.
@@ -492,6 +499,19 @@ public class SystemConfig {
                 Environment.getSystemExtDirectory(), "etc", "sysconfig"), ALLOW_ALL);
         readPermissions(Environment.buildPath(
                 Environment.getSystemExtDirectory(), "etc", "permissions"), ALLOW_ALL);
+
+        // Skip loading configuration from apex if it is not a system process.
+        if (!isSystemProcess()) {
+            return;
+        }
+        // Read configuration of libs from apex module.
+        // TODO: Use a solid way to filter apex module folders?
+        for (File f: FileUtils.listFilesOrEmpty(Environment.getApexDirectory())) {
+            if (f.isFile() || f.getPath().contains("@")) {
+                continue;
+            }
+            readPermissions(Environment.buildPath(f, "etc", "permissions"), ALLOW_LIBS);
+        }
     }
 
     @VisibleForTesting
@@ -1075,6 +1095,16 @@ public class SystemConfig {
                             }
 
                             nameToPkgMap.put(actorName, pkgName);
+                        }
+                        XmlUtils.skipCurrentTag(parser);
+                    } break;
+                    case "rollback-whitelisted-app": {
+                        String pkgname = parser.getAttributeValue(null, "package");
+                        if (pkgname == null) {
+                            Slog.w(TAG, "<" + name + "> without package in " + permFile
+                                    + " at " + parser.getPositionDescription());
+                        } else {
+                            mRollbackWhitelistedPackages.add(pkgname);
                         }
                         XmlUtils.skipCurrentTag(parser);
                     } break;

@@ -29,7 +29,6 @@ import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.StringRes;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.annotation.UserIdInt;
 import android.annotation.XmlRes;
 import android.app.ActivityManager;
@@ -40,6 +39,7 @@ import android.app.admin.DevicePolicyManager;
 import android.app.usage.StorageStatsManager;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.Disabled;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -710,6 +710,29 @@ public abstract class PackageManager {
     public static final int COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED = 4;
 
     /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(value = {
+            RollbackDataPolicy.RESTORE,
+            RollbackDataPolicy.WIPE,
+            RollbackDataPolicy.RETAIN
+    })
+    public @interface RollbackDataPolicy {
+        /**
+         * User data will be backed up during install and restored during rollback.
+         */
+        int RESTORE = 0;
+        /**
+         * User data won't be backed up during install but will be wiped out during rollback.
+         */
+        int WIPE = 1;
+        /**
+         * User data won't be backed up during install and won't be restored during rollback.
+         * TODO: Not implemented yet.
+         */
+        int RETAIN = 2;
+    }
+
+    /** @hide */
     @IntDef(flag = true, prefix = { "INSTALL_" }, value = {
             INSTALL_REPLACE_EXISTING,
             INSTALL_ALLOW_TEST,
@@ -946,7 +969,8 @@ public abstract class PackageManager {
             INSTALL_REASON_POLICY,
             INSTALL_REASON_DEVICE_RESTORE,
             INSTALL_REASON_DEVICE_SETUP,
-            INSTALL_REASON_USER
+            INSTALL_REASON_USER,
+            INSTALL_REASON_ROLLBACK
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface InstallReason {}
@@ -975,6 +999,13 @@ public abstract class PackageManager {
      * Code indicating that the package installation was initiated by the user.
      */
     public static final int INSTALL_REASON_USER = 4;
+
+    /**
+     * Code indicating that the package installation was a rollback initiated by RollbackManager.
+     *
+     * @hide
+     */
+    public static final int INSTALL_REASON_ROLLBACK = 5;
 
     /**
      * @hide
@@ -1503,16 +1534,6 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int DELETE_DONT_KILL_APP = 0x00000008;
-
-    /**
-     * Flag parameter for {@link #deletePackage} to indicate that any
-     * contributed media should also be deleted during this uninstall. The
-     * meaning of "contributed" means it won't automatically be deleted when the
-     * app is uninstalled.
-     *
-     * @hide
-     */
-    public static final int DELETE_CONTRIBUTED_MEDIA = 0x00000010;
 
     /**
      * Flag parameter for {@link #deletePackage} to indicate that package deletion
@@ -3245,6 +3266,15 @@ public abstract class PackageManager {
     public static final int FLAG_PERMISSION_REVOKED_COMPAT =  FLAG_PERMISSION_REVOKE_ON_UPGRADE;
 
     /**
+     * Permission flag: The permission is one-time and should be revoked automatically on app
+     * inactivity
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int FLAG_PERMISSION_ONE_TIME = 1 << 16;
+
+    /**
      * Permission flags: Bitwise or of all permission flags allowing an
      * exemption for a restricted permission.
      * @hide
@@ -3285,7 +3315,8 @@ public abstract class PackageManager {
             | FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT
             | FLAG_PERMISSION_APPLY_RESTRICTION
             | FLAG_PERMISSION_GRANTED_BY_ROLE
-            | FLAG_PERMISSION_REVOKED_COMPAT;
+            | FLAG_PERMISSION_REVOKED_COMPAT
+            | FLAG_PERMISSION_ONE_TIME;
 
     /**
      * Injected activity in app that forwards user to setting activity of that app.
@@ -4065,7 +4096,8 @@ public abstract class PackageManager {
             FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT,
             FLAG_PERMISSION_APPLY_RESTRICTION,
             FLAG_PERMISSION_GRANTED_BY_ROLE,
-            FLAG_PERMISSION_REVOKED_COMPAT
+            FLAG_PERMISSION_REVOKED_COMPAT,
+            FLAG_PERMISSION_ONE_TIME
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface PermissionFlags {}
@@ -7166,6 +7198,7 @@ public abstract class PackageManager {
             case FLAG_PERMISSION_APPLY_RESTRICTION: return "APPLY_RESTRICTION";
             case FLAG_PERMISSION_GRANTED_BY_ROLE: return "GRANTED_BY_ROLE";
             case FLAG_PERMISSION_REVOKED_COMPAT: return "REVOKED_COMPAT";
+            case FLAG_PERMISSION_ONE_TIME: return "ONE_TIME";
             default: return Integer.toString(flag);
         }
     }

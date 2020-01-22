@@ -27,6 +27,7 @@ import android.content.pm.PackageUserState;
 import android.content.pm.SharedLibraryInfo;
 import android.content.pm.parsing.ComponentParseUtils.ParsedActivity;
 import android.content.pm.parsing.ComponentParseUtils.ParsedActivityIntentInfo;
+import android.content.pm.parsing.ComponentParseUtils.ParsedFeature;
 import android.content.pm.parsing.ComponentParseUtils.ParsedInstrumentation;
 import android.content.pm.parsing.ComponentParseUtils.ParsedPermission;
 import android.content.pm.parsing.ComponentParseUtils.ParsedPermissionGroup;
@@ -245,6 +246,9 @@ public interface AndroidPackage extends Parcelable {
     List<ParsedInstrumentation> getInstrumentations();
 
     @Nullable
+    List<ParsedFeature> getFeatures();
+
+    @Nullable
     List<ParsedPermissionGroup> getPermissionGroups();
 
     @Nullable
@@ -402,6 +406,8 @@ public interface AndroidPackage extends Parcelable {
     boolean isEmbeddedDexUsed();
 
     boolean isEnabled();
+
+    boolean isCrossProfile();
 
     boolean isEncryptionAware();
 

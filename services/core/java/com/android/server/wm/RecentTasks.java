@@ -209,8 +209,8 @@ class RecentTasks {
             mService.mH.post(PooledLambda.obtainRunnable((nonArg) -> {
                 synchronized (mService.mGlobalLock) {
                     // Unfreeze the task list once we touch down in a task
-                    final RootActivityContainer rac = mService.mRootActivityContainer;
-                    final DisplayContent dc = rac.getActivityDisplay(displayId).mDisplayContent;
+                    final RootWindowContainer rac = mService.mRootWindowContainer;
+                    final DisplayContent dc = rac.getDisplayContent(displayId).mDisplayContent;
                     if (dc.pointWithinAppWindow(x, y)) {
                         final ActivityStack stack = mService.getTopDisplayFocusedStack();
                         final Task topTask = stack != null ? stack.getTopMostTask() : null;
@@ -1146,6 +1146,7 @@ class RecentTasks {
 
         // Trim the set of tasks to the active set
         trimInactiveRecentTasks();
+        notifyTaskPersisterLocked(task, false /* flush */);
     }
 
     /**
@@ -1325,7 +1326,7 @@ class RecentTasks {
         // TODO(b/126185105): Find a different signal to use besides isSingleTaskInstance
         final ActivityStack stack = task.getStack();
         if (stack != null) {
-            ActivityDisplay display = stack.getDisplay();
+            DisplayContent display = stack.getDisplay();
             if (display != null && display.isSingleTaskInstance()) {
                 return false;
             }
@@ -1390,12 +1391,12 @@ class RecentTasks {
 
         // Ignore tasks from different displays
         // TODO (b/115289124): No Recents on non-default displays.
-        if (stack.mDisplayId != DEFAULT_DISPLAY) {
+        if (stack.getDisplayId() != DEFAULT_DISPLAY) {
             return false;
         }
 
         // Trim tasks that are in stacks that are behind the home stack
-        final ActivityDisplay display = stack.getDisplay();
+        final DisplayContent display = stack.getDisplay();
         return display.getIndexOf(stack) < display.getIndexOf(display.getHomeStack());
     }
 

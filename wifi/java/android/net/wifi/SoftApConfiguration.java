@@ -60,31 +60,76 @@ public final class SoftApConfiguration implements Parcelable {
      * @hide
      */
     @SystemApi
-    public static final int BAND_2GHZ = 0;
+    public static final int BAND_2GHZ = 1 << 0;
 
     /**
      * 5GHz band.
      * @hide
      */
     @SystemApi
-    public static final int BAND_5GHZ = 1;
+    public static final int BAND_5GHZ = 1 << 1;
 
     /**
-     * Device is allowed to choose the optimal band (2Ghz or 5Ghz) based on device capability,
+     * 6GHz band.
+     * @hide
+     */
+    @SystemApi
+    public static final int BAND_6GHZ = 1 << 2;
+
+    /**
+     * Device is allowed to choose the optimal band (2Ghz, 5Ghz, 6Ghz) based on device capability,
      * operating country code and current radio conditions.
      * @hide
      */
     @SystemApi
-    public static final int BAND_ANY = -1;
+    public static final int BAND_ANY = BAND_2GHZ | BAND_5GHZ | BAND_6GHZ;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef(prefix = { "BAND_TYPE_" }, value = {
+    @IntDef(flag = true, prefix = { "BAND_TYPE_" }, value = {
             BAND_2GHZ,
             BAND_5GHZ,
-            BAND_ANY,
+            BAND_6GHZ,
     })
     public @interface BandType {}
+
+    private static boolean isBandValid(@BandType int band) {
+        return ((band != 0) && ((band & ~BAND_ANY) == 0));
+    }
+
+    private static final int MIN_CH_2G_BAND = 1;
+    private static final int MAX_CH_2G_BAND = 14;
+    private static final int MIN_CH_5G_BAND = 34;
+    private static final int MAX_CH_5G_BAND = 196;
+    private static final int MIN_CH_6G_BAND = 1;
+    private static final int MAX_CH_6G_BAND = 253;
+
+
+
+    private static boolean isChannelBandPairValid(int channel, @BandType int band) {
+        switch (band) {
+            case BAND_2GHZ:
+                if (channel < MIN_CH_2G_BAND || channel >  MAX_CH_2G_BAND) {
+                    return false;
+                }
+                break;
+
+            case BAND_5GHZ:
+                if (channel < MIN_CH_5G_BAND || channel >  MAX_CH_5G_BAND) {
+                    return false;
+                }
+                break;
+
+            case BAND_6GHZ:
+                if (channel < MIN_CH_6G_BAND || channel >  MAX_CH_6G_BAND) {
+                    return false;
+                }
+                break;
+            default:
+                return false;
+        }
+        return true;
+    }
 
     /**
      * SSID for the AP, or null for a framework-determined SSID.
@@ -117,6 +162,11 @@ public final class SoftApConfiguration implements Parcelable {
      * The operating channel of the AP.
      */
     private final int mChannel;
+
+    /**
+     * The maximim allowed number of clients that can associate to the AP.
+     */
+    private final int mMaxNumberOfClients;
 
     /**
      * The operating security type of the AP.
@@ -161,7 +211,7 @@ public final class SoftApConfiguration implements Parcelable {
     /** Private constructor for Builder and Parcelable implementation. */
     private SoftApConfiguration(@Nullable String ssid, @Nullable MacAddress bssid,
             @Nullable String wpa2Passphrase, boolean hiddenSsid, @BandType int band, int channel,
-            @SecurityType int securityType, @Nullable String oweTransIfaceName) {
+            @SecurityType int securityType, int maxNumberOfClients, @Nullable String oweTransIfaceName) {
         mSsid = ssid;
         mBssid = bssid;
         mWpa2Passphrase = wpa2Passphrase;
@@ -169,6 +219,7 @@ public final class SoftApConfiguration implements Parcelable {
         mBand = band;
         mChannel = channel;
         mSecurityType = securityType;
+        mMaxNumberOfClients = maxNumberOfClients;
         mOweTransIfaceName = oweTransIfaceName;
     }
 
@@ -188,13 +239,14 @@ public final class SoftApConfiguration implements Parcelable {
                 && mBand == other.mBand
                 && mChannel == other.mChannel
                 && mSecurityType == other.mSecurityType
+                && mMaxNumberOfClients == other.mMaxNumberOfClients
                 && mOweTransIfaceName == other.mOweTransIfaceName;
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(mSsid, mBssid, mWpa2Passphrase, mHiddenSsid,
-                mBand, mChannel, mSecurityType, mOweTransIfaceName);
+                mBand, mChannel, mSecurityType, mMaxNumberOfClients, mOweTransIfaceName);
     }
 
     @Override
@@ -208,6 +260,7 @@ public final class SoftApConfiguration implements Parcelable {
         sbuf.append(" \n Band =").append(mBand);
         sbuf.append(" \n Channel =").append(mChannel);
         sbuf.append(" \n SecurityType=").append(getSecurityType());
+        sbuf.append(" \n MaxClient=").append(mMaxNumberOfClients);
         sbuf.append(" \n OWE Transition mode Iface =").append(mOweTransIfaceName);
         return sbuf.toString();
     }
@@ -221,6 +274,7 @@ public final class SoftApConfiguration implements Parcelable {
         dest.writeInt(mBand);
         dest.writeInt(mChannel);
         dest.writeInt(mSecurityType);
+        dest.writeInt(mMaxNumberOfClients);
         dest.writeString(mOweTransIfaceName);
     }
 
@@ -237,7 +291,7 @@ public final class SoftApConfiguration implements Parcelable {
                     in.readString(),
                     in.readParcelable(MacAddress.class.getClassLoader()),
                     in.readString(), in.readBoolean(), in.readInt(), in.readInt(), in.readInt(),
-                    in.readString());
+                    in.readInt(), in.readString());
         }
 
         @Override
@@ -257,7 +311,7 @@ public final class SoftApConfiguration implements Parcelable {
 
     /**
      * Returns MAC address set to be BSSID for the AP.
-     * {@link #setBssid(MacAddress)}.
+     * {@link Builder#setBssid(MacAddress)}.
      */
     @Nullable
     public MacAddress getBssid() {
@@ -266,7 +320,7 @@ public final class SoftApConfiguration implements Parcelable {
 
     /**
      * Returns String set to be passphrase for the WPA2-PSK AP.
-     * {@link #setWpa2Passphrase(String)}.
+     * {@link Builder#setWpa2Passphrase(String)}.
      */
     @Nullable
     public String getWpa2Passphrase() {
@@ -276,7 +330,7 @@ public final class SoftApConfiguration implements Parcelable {
     /**
      * Returns Boolean set to be indicate hidden (true: doesn't broadcast its SSID) or
      * not (false: broadcasts its SSID) for the AP.
-     * {@link #setHiddenSsid(boolean)}.
+     * {@link Builder#setHiddenSsid(boolean)}.
      */
     public boolean isHiddenSsid() {
         return mHiddenSsid;
@@ -284,7 +338,7 @@ public final class SoftApConfiguration implements Parcelable {
 
     /**
      * Returns {@link BandType} set to be the band for the AP.
-     * {@link #setBand(@BandType int)}.
+     * {@link Builder#setBand(@BandType int)}.
      */
     public @BandType int getBand() {
         return mBand;
@@ -292,7 +346,7 @@ public final class SoftApConfiguration implements Parcelable {
 
     /**
      * Returns Integer set to be the channel for the AP.
-     * {@link #setChannel(int)}.
+     * {@link Builder#setChannel(int)}.
      */
     public int getChannel() {
         return mChannel;
@@ -305,6 +359,14 @@ public final class SoftApConfiguration implements Parcelable {
      */
     public @SecurityType int getSecurityType() {
         return mSecurityType;
+    }
+
+    /**
+     * Returns the maximum number of clients that can associate to the AP.
+     * {@link Builder#setMaxNumberOfClients(int)}.
+     */
+    public int getMaxNumberOfClients() {
+        return mMaxNumberOfClients;
     }
 
     /**
@@ -332,6 +394,7 @@ public final class SoftApConfiguration implements Parcelable {
         private boolean mHiddenSsid;
         private int mBand;
         private int mChannel;
+        private int mMaxNumberOfClients;
         private String mOweTransIfaceName;
 
         private int setSecurityType() {
@@ -356,6 +419,7 @@ public final class SoftApConfiguration implements Parcelable {
             mHiddenSsid = false;
             mBand = BAND_2GHZ;
             mChannel = 0;
+            mMaxNumberOfClients = 0;
             mOweTransIfaceName = null;
         }
 
@@ -371,6 +435,7 @@ public final class SoftApConfiguration implements Parcelable {
             mHiddenSsid = other.mHiddenSsid;
             mBand = other.mBand;
             mChannel = other.mChannel;
+            mMaxNumberOfClients = other.mMaxNumberOfClients;
             mOweTransIfaceName = other.mOweTransIfaceName;
         }
 
@@ -382,7 +447,7 @@ public final class SoftApConfiguration implements Parcelable {
         @NonNull
         public SoftApConfiguration build() {
             return new SoftApConfiguration(mSsid, mBssid, mWpa2Passphrase,
-                mHiddenSsid, mBand, mChannel, setSecurityType(), mOweTransIfaceName);
+                mHiddenSsid, mBand, mChannel, setSecurityType(), mMaxNumberOfClients, mOweTransIfaceName);
         }
 
         /**
@@ -473,40 +538,88 @@ public final class SoftApConfiguration implements Parcelable {
          * <p>
          * <li>If not set, defaults to BAND_2GHZ {@link @BandType}.</li>
          *
-         * @param band One of the band types from {@link @BandType}.
+         * @param band One or combination of the band types from {@link @BandType}.
          * @return Builder for chaining.
          */
         @NonNull
         public Builder setBand(@BandType int band) {
-            switch (band) {
-                case BAND_2GHZ:
-                    break;
-                case BAND_5GHZ:
-                    break;
-                case BAND_ANY:
-                    break;
-                default:
-                    throw new IllegalArgumentException("Invalid band type");
+            if (!isBandValid(band)) {
+                throw new IllegalArgumentException("Invalid band type");
             }
             mBand = band;
+            // Since band preference is specified, no specific channel is selected.
+            mChannel = 0;
             return this;
         }
 
         /**
-         * Specifies the channel for the AP.
+         * Specifies the channel and associated band for the AP.
          *
          * The channel which AP resides on. Valid channels are country dependent.
-         * Use the special channel value 0 to have the framework auto-select a valid channel
-         * from the band configured with {@link #setBand(@BandType int)}.
+         * <p>
+         * The default for the channel is a the special value 0 to have the framework
+         * auto-select a valid channel from the band configured with
+         * {@link #setBand(@BandType int)}.
+         *
+         * The channel auto selection will offload to driver when
+         * {@link SoftApCapability#isFeatureSupported(SoftApCapability.SOFTAP_FEATURE_ACS_OFFLOAD)}
+         * return true. Driver will auto select best channel which based on environment
+         * interference to get best performance. Check {@link SoftApCapability} to get more detail.
+         *
+         * Note, since 6GHz band use the same channel numbering of 2.4GHz and 5GHZ bands,
+         * the caller needs to pass the band containing the selected channel.
          *
          * <p>
          * <li>If not set, defaults to 0.</li>
          * @param channel operating channel of the AP.
+         * @param band containing this channel.
          * @return Builder for chaining.
          */
         @NonNull
-        public Builder setChannel(int channel) {
+        public Builder setChannel(int channel, @BandType int band) {
+            if (!isChannelBandPairValid(channel, band)) {
+                throw new IllegalArgumentException("Invalid band type");
+            }
+            mBand = band;
             mChannel = channel;
+            return this;
+        }
+
+        /**
+         * Specifies the maximum number of clients that can associate to the AP.
+         *
+         * The maximum number of clients (STAs) which can associate to the AP.
+         * The AP will reject association from any clients above this number.
+         * Specify a value of 0 to have the framework automatically use the maximum number
+         * which the device can support (based on hardware and carrier constraints).
+         * <p>
+         * Use {@link WifiManager.SoftApCallback#onCapabilityChanged(SoftApCapability)} and
+         * {@link SoftApCapability#getMaxSupportedClients} to get the maximum number of clients
+         * which the device supports (based on hardware and carrier constraints).
+         *
+         * <p>
+         * <li>If not set, defaults to 0.</li>
+         *
+         * This method requires hardware support. If the method is used to set a
+         * non-zero {@code maxNumberOfClients} value then
+         * {@link WifiManager#startTetheredHotspot} will report error code
+         * {@link WifiManager#SAP_START_FAILURE_UNSUPPORTED_CONFIGURATION}.
+         *
+         * <p>
+         * Use {@link WifiManager.SoftApCallback#onCapabilityChanged(SoftApCapability)} and
+         * {@link SoftApCapability#isFeatureSupported(int)}
+         * with {@link SoftApCapability.SOFTAP_FEATURE_CLIENT_FORCE_DISCONNECT} to determine whether
+         * or not this feature is supported.
+         *
+         * @param maxNumberOfClients maximum client number of the AP.
+         * @return Builder for chaining.
+         */
+        @NonNull
+        public Builder setMaxNumberOfClients(int maxNumberOfClients) {
+            if (maxNumberOfClients < 0) {
+                throw new IllegalArgumentException("maxNumberOfClients should be not negative");
+            }
+            mMaxNumberOfClients = maxNumberOfClients;
             return this;
         }
 

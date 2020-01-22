@@ -27,8 +27,9 @@ import java.util.List;
  */
 oneway interface IDataLoader {
    void create(int id, in Bundle params, IDataLoaderStatusListener listener);
-   void start(in List<InstallationFile> fileInfos);
+   void start();
    void stop();
    void destroy();
-   void onFileCreated(long inode, in byte[] metadata);
+
+   void prepareImage(in List<InstallationFile> addedFiles, in List<String> removedFiles);
 }

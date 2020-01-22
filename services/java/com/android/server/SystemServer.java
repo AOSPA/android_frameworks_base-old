@@ -16,6 +16,7 @@
 
 package com.android.server;
 
+import static android.net.NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK;
 import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_CRITICAL;
 import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_HIGH;
 import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_NORMAL;
@@ -30,20 +31,20 @@ import android.app.ActivityThread;
 import android.app.AppCompatCallbacks;
 import android.app.INotificationManager;
 import android.app.usage.UsageStatsManagerInternal;
-import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManagerInternal;
 import android.content.res.Configuration;
 import android.content.res.Resources.Theme;
 import android.database.sqlite.SQLiteCompatibilityWalFlags;
 import android.database.sqlite.SQLiteGlobal;
 import android.hardware.display.DisplayManagerInternal;
 import android.net.ConnectivityModuleConnector;
+import android.net.ITetheringConnector;
 import android.net.NetworkStackClient;
-import android.net.TetheringManager;
 import android.os.BaseBundle;
 import android.os.Binder;
 import android.os.Build;
@@ -106,6 +107,7 @@ import com.android.server.emergency.EmergencyAffordanceService;
 import com.android.server.gpu.GpuService;
 import com.android.server.hdmi.HdmiControlService;
 import com.android.server.incident.IncidentCompanionService;
+import com.android.server.incremental.IncrementalManagerService;
 import com.android.server.input.InputManagerService;
 import com.android.server.inputmethod.InputMethodManagerService;
 import com.android.server.inputmethod.InputMethodSystemProperty;
@@ -127,6 +129,7 @@ import com.android.server.os.DeviceIdentifiersPolicyService;
 import com.android.server.os.SchedulingPolicyService;
 import com.android.server.pm.BackgroundDexOptService;
 import com.android.server.pm.CrossProfileAppsService;
+import com.android.server.pm.DataLoaderManagerService;
 import com.android.server.pm.DynamicCodeLoggingService;
 import com.android.server.pm.Installer;
 import com.android.server.pm.LauncherAppsService;
@@ -144,10 +147,12 @@ import com.android.server.recoverysystem.RecoverySystemService;
 import com.android.server.restrictions.RestrictionsManagerService;
 import com.android.server.role.RoleManagerService;
 import com.android.server.rollback.RollbackManagerService;
+import com.android.server.security.FileIntegrityService;
 import com.android.server.security.KeyAttestationApplicationIdProviderService;
 import com.android.server.security.KeyChainSystemService;
 import com.android.server.signedconfig.SignedConfigService;
 import com.android.server.soundtrigger.SoundTriggerService;
+import com.android.server.soundtrigger_middleware.SoundTriggerMiddlewareService;
 import com.android.server.statusbar.StatusBarManagerService;
 import com.android.server.storage.DeviceStorageMonitorService;
 import com.android.server.telecom.TelecomLoaderService;
@@ -211,8 +216,8 @@ public final class SystemServer {
             "com.android.server.print.PrintManagerService";
     private static final String COMPANION_DEVICE_MANAGER_SERVICE_CLASS =
             "com.android.server.companion.CompanionDeviceManagerService";
-    private static final String STATS_COMPANION_SERVICE_LIFECYCLE_CLASS =
-            "com.android.server.stats.StatsCompanionService$Lifecycle";
+    private static final String STATS_COMPANION_LIFECYCLE_CLASS =
+            "com.android.server.stats.StatsCompanion$Lifecycle";
     private static final String USB_SERVICE_CLASS =
             "com.android.server.usb.UsbService$Lifecycle";
     private static final String MIDI_SERVICE_CLASS =
@@ -325,6 +330,8 @@ public final class SystemServer {
     private PackageManager mPackageManager;
     private ContentResolver mContentResolver;
     private EntropyMixer mEntropyMixer;
+    private DataLoaderManagerService mDataLoaderManagerService;
+    private IncrementalManagerService mIncrementalManagerService;
 
     private boolean mOnlyCore;
     private boolean mFirstBoot;
@@ -497,6 +504,9 @@ public final class SystemServer {
             // Initialize the system context.
             createSystemContext();
 
+            // Call per-process mainline module initialization.
+            ActivityThread.initializeMainlineModules();
+
             // Create the system service manager.
             mSystemServiceManager = new SystemServiceManager(mSystemContext);
             mSystemServiceManager.setStartInfo(mRuntimeRestart,
@@ -668,6 +678,13 @@ public final class SystemServer {
         AppCompatCallbacks.install(new long[0]);
         t.traceEnd();
 
+        // FileIntegrityService responds to requests from apps and the system. It needs to run after
+        // the source (i.e. keystore) is ready, and before the apps (or the first customer in the
+        // system) run.
+        t.traceBegin("StartFileIntegrityService");
+        mSystemServiceManager.startService(FileIntegrityService.class);
+        t.traceEnd();
+
         // Wait for installd to finish starting up so that it has a chance to
         // create critical directories such as /data/user with the appropriate
         // permissions.  We need this to complete before we initialize other services.
@@ -696,6 +713,17 @@ public final class SystemServer {
         mActivityManagerService.setSystemServiceManager(mSystemServiceManager);
         mActivityManagerService.setInstaller(installer);
         mWindowManagerGlobalLock = atm.getGlobalLock();
+        t.traceEnd();
+
+        // Data loader manager service needs to be started before package manager
+        t.traceBegin("StartDataLoaderManagerService");
+        mDataLoaderManagerService = mSystemServiceManager.startService(
+                DataLoaderManagerService.class);
+        t.traceEnd();
+
+        // Incremental service needs to be started before package manager
+        t.traceBegin("StartIncrementalManagerService");
+        mIncrementalManagerService = IncrementalManagerService.start(mSystemContext);
         t.traceEnd();
 
         // Power manager needs to be started early because other services need it.
@@ -1581,6 +1609,10 @@ public final class SystemServer {
             }
             t.traceEnd();
 
+            t.traceBegin("StartSoundTriggerMiddlewareService");
+            mSystemServiceManager.startService(SoundTriggerMiddlewareService.Lifecycle.class);
+            t.traceEnd();
+
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_BROADCAST_RADIO)) {
                 t.traceBegin("StartBroadcastRadioService");
                 mSystemServiceManager.startService(BroadcastRadioService.class);
@@ -1976,8 +2008,8 @@ public final class SystemServer {
         }
 
         // Statsd helper
-        t.traceBegin("StartStatsCompanionService");
-        mSystemServiceManager.startService(STATS_COMPANION_SERVICE_LIFECYCLE_CLASS);
+        t.traceBegin("StartStatsCompanion");
+        mSystemServiceManager.startService(STATS_COMPANION_LIFECYCLE_CLASS);
         t.traceEnd();
 
         // Incidentd and dumpstated helper
@@ -2105,6 +2137,12 @@ public final class SystemServer {
         t.traceBegin("MakePackageManagerServiceReady");
         mPackageManagerService.systemReady();
         t.traceEnd();
+
+        if (mIncrementalManagerService != null) {
+            t.traceBegin("MakeIncrementalManagerServiceReady");
+            mIncrementalManagerService.systemReady();
+            t.traceEnd();
+        }
 
         t.traceBegin("MakeDisplayManagerServiceReady");
         try {
@@ -2294,8 +2332,14 @@ public final class SystemServer {
 
             t.traceBegin("StartTethering");
             try {
-                // Tethering must start after ConnectivityService and NetworkStack.
-                TetheringManager.getInstance().start();
+                // TODO: hide implementation details, b/146312721.
+                ConnectivityModuleConnector.getInstance().startModuleService(
+                        ITetheringConnector.class.getName(),
+                        PERMISSION_MAINLINE_NETWORK_STACK, service -> {
+                            ServiceManager.addService(Context.TETHERING_SERVICE, service,
+                                    false /* allowIsolated */,
+                                    DUMP_FLAG_PRIORITY_HIGH | DUMP_FLAG_PRIORITY_NORMAL);
+                        });
             } catch (Throwable e) {
                 reportWtf("starting Tethering", e);
             }
@@ -2440,9 +2484,9 @@ public final class SystemServer {
     }
 
     private static void startSystemUi(Context context, WindowManagerService windowManager) {
+        PackageManagerInternal pm = LocalServices.getService(PackageManagerInternal.class);
         Intent intent = new Intent();
-        intent.setComponent(new ComponentName("com.android.systemui",
-                "com.android.systemui.SystemUIService"));
+        intent.setComponent(pm.getSystemUiServiceComponent());
         intent.addFlags(Intent.FLAG_DEBUG_TRIAGED_MISSING);
         //Slog.d(TAG, "Starting service: " + intent);
         context.startServiceAsUser(intent, UserHandle.SYSTEM);

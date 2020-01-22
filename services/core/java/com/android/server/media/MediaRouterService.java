@@ -39,6 +39,7 @@ import android.media.MediaRouter;
 import android.media.MediaRouterClientState;
 import android.media.RemoteDisplayState;
 import android.media.RemoteDisplayState.RemoteDisplayInfo;
+import android.media.RouteSessionInfo;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
@@ -457,8 +458,28 @@ public final class MediaRouterService extends IMediaRouterService.Stub
 
     // Binder call
     @Override
-    public void requestSelectRoute2(IMediaRouter2Client client, MediaRoute2Info route) {
-        mService2.requestSelectRoute2(client, route);
+    public void requestCreateSession(IMediaRouter2Client client, MediaRoute2Info route,
+            String controlCategory, int requestId) {
+        mService2.requestCreateSession(client, route, controlCategory, requestId);
+    }
+
+    // Binder call
+    @Override
+    public void selectRoute(IMediaRouter2Client client, String sessionId, MediaRoute2Info route) {
+        mService2.selectRoute(client, sessionId, route);
+    }
+
+    // Binder call
+    @Override
+    public void deselectRoute(IMediaRouter2Client client, String sessionId, MediaRoute2Info route) {
+        mService2.deselectRoute(client, sessionId, route);
+    }
+
+    // Binder call
+    @Override
+    public void transferToRoute(IMediaRouter2Client client, String sessionId,
+            MediaRoute2Info route) {
+        mService2.transferToRoute(client, sessionId, route);
     }
 
     // Binder call
@@ -486,11 +507,10 @@ public final class MediaRouterService extends IMediaRouterService.Stub
 
     // Binder call
     @Override
-    public void selectClientRoute2(IMediaRouter2Manager manager,
-            String packageName, MediaRoute2Info route) {
-        mService2.selectClientRoute2(manager, packageName, route);
+    public void requestCreateClientSession(IMediaRouter2Manager manager, String packageName,
+            MediaRoute2Info route, int requestId) {
+        mService2.requestCreateClientSession(manager, packageName, route, requestId);
     }
-
     // Binder call
     @Override
     public void setControlCategories(IMediaRouter2Client client, List<String> categories) {
@@ -521,6 +541,12 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     public void requestUpdateVolume2Manager(IMediaRouter2Manager manager,
             MediaRoute2Info route, int delta) {
         mService2.requestUpdateVolume2Manager(manager, route, delta);
+    }
+
+    // Binder call
+    @Override
+    public List<RouteSessionInfo> getActiveSessions(IMediaRouter2Manager manager) {
+        return mService2.getActiveSessions(manager);
     }
 
     void restoreBluetoothA2dp() {

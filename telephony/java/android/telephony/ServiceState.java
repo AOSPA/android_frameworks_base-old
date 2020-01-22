@@ -30,7 +30,6 @@ import android.os.Parcelable;
 import android.telephony.AccessNetworkConstants.AccessNetworkType;
 import android.telephony.AccessNetworkConstants.TransportType;
 import android.telephony.Annotation.NetworkType;
-import android.telephony.Annotation.RilRadioTechnology;
 import android.telephony.NetworkRegistrationInfo.Domain;
 import android.telephony.NetworkRegistrationInfo.NRState;
 import android.text.TextUtils;
@@ -65,6 +64,13 @@ public class ServiceState implements Parcelable {
     static final boolean DBG = false;
     static final boolean VDBG = false;  // STOPSHIP if true
 
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = "STATE_",
+            value = {STATE_IN_SERVICE, STATE_OUT_OF_SERVICE, STATE_EMERGENCY_ONLY,
+                    STATE_POWER_OFF})
+    public @interface RegState {}
+
     /**
      * Normal operation condition, the phone is registered
      * with an operator either in home network or in roaming.
@@ -83,6 +89,7 @@ public class ServiceState implements Parcelable {
     /**
      * The phone is registered and locked.  Only emergency numbers are allowed. {@more}
      */
+    //TODO: This state is not used anymore. It should be deprecated in a future release.
     public static final int STATE_EMERGENCY_ONLY =
             TelephonyProtoEnums.SERVICE_STATE_EMERGENCY_ONLY;  // 2
 
@@ -221,6 +228,36 @@ public class ServiceState implements Parcelable {
     public static final int  RIL_RADIO_TECHNOLOGY_NR = 20;
 
     /**
+     * RIL Radio Annotation
+     * @hide
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"RIL_RADIO_TECHNOLOGY_" }, value = {
+        ServiceState.RIL_RADIO_TECHNOLOGY_UNKNOWN,
+        ServiceState.RIL_RADIO_TECHNOLOGY_GPRS,
+        ServiceState.RIL_RADIO_TECHNOLOGY_EDGE,
+        ServiceState.RIL_RADIO_TECHNOLOGY_UMTS,
+        ServiceState.RIL_RADIO_TECHNOLOGY_IS95A,
+        ServiceState.RIL_RADIO_TECHNOLOGY_IS95B,
+        ServiceState.RIL_RADIO_TECHNOLOGY_1xRTT,
+        ServiceState.RIL_RADIO_TECHNOLOGY_EVDO_0,
+        ServiceState.RIL_RADIO_TECHNOLOGY_EVDO_A,
+        ServiceState.RIL_RADIO_TECHNOLOGY_HSDPA,
+        ServiceState.RIL_RADIO_TECHNOLOGY_HSUPA,
+        ServiceState.RIL_RADIO_TECHNOLOGY_HSPA,
+        ServiceState.RIL_RADIO_TECHNOLOGY_EVDO_B,
+        ServiceState.RIL_RADIO_TECHNOLOGY_EHRPD,
+        ServiceState.RIL_RADIO_TECHNOLOGY_LTE,
+        ServiceState.RIL_RADIO_TECHNOLOGY_HSPAP,
+        ServiceState.RIL_RADIO_TECHNOLOGY_GSM,
+        ServiceState.RIL_RADIO_TECHNOLOGY_TD_SCDMA,
+        ServiceState.RIL_RADIO_TECHNOLOGY_IWLAN,
+        ServiceState.RIL_RADIO_TECHNOLOGY_LTE_CA,
+        ServiceState.RIL_RADIO_TECHNOLOGY_NR})
+    public @interface RilRadioTechnology {}
+
+
+    /**
      * The number of the radio technologies.
      */
     private static final int NEXT_RIL_RADIO_TECHNOLOGY = 21;
@@ -342,15 +379,15 @@ public class ServiceState implements Parcelable {
     /**
      * Create a new ServiceState from a intent notifier Bundle
      *
-     * This method is used by PhoneStateIntentReceiver, CellBroadcastReceiver, and maybe by
-     * external applications.
+     * This method is used to get ServiceState object from extras upon receiving
+     * {@link Intent#ACTION_SERVICE_STATE}.
      *
      * @param m Bundle from intent notifier
      * @return newly created ServiceState
      * @hide
      */
+    @SystemApi
     @NonNull
-    @UnsupportedAppUsage
     public static ServiceState newFromBundle(@NonNull Bundle m) {
         ServiceState ret;
         ret = new ServiceState();
@@ -501,18 +538,37 @@ public class ServiceState implements Parcelable {
     }
 
     /**
-     * Get current data service state
+     * Get current data registration state.
      *
      * @see #STATE_IN_SERVICE
      * @see #STATE_OUT_OF_SERVICE
      * @see #STATE_EMERGENCY_ONLY
      * @see #STATE_POWER_OFF
      *
+     * @return current data registration state {@link RegState}
+     *
      * @hide
      */
     @UnsupportedAppUsage
     public int getDataRegState() {
         return mDataRegState;
+    }
+
+    /**
+     * Get current data registration state.
+     *
+     * @see #STATE_IN_SERVICE
+     * @see #STATE_OUT_OF_SERVICE
+     * @see #STATE_EMERGENCY_ONLY
+     * @see #STATE_POWER_OFF
+     *
+     * @return current data registration state {@link RegState}
+     *
+     * @hide
+     */
+    @SystemApi
+    public @RegState int getDataRegistrationState() {
+        return getDataRegState();
     }
 
     /**
@@ -941,7 +997,7 @@ public class ServiceState implements Parcelable {
                 rtString = "LTE_CA";
                 break;
             case RIL_RADIO_TECHNOLOGY_NR:
-                rtString = "LTE_NR";
+                rtString = "NR_SA";
                 break;
             default:
                 rtString = "Unexpected";
@@ -1225,11 +1281,15 @@ public class ServiceState implements Parcelable {
     /**
      * Set intent notifier Bundle based on service state.
      *
+     * Put ServiceState object and its fields into bundle which is used by TelephonyRegistry
+     * to broadcast {@link Intent#ACTION_SERVICE_STATE}.
+     *
      * @param m intent notifier Bundle
      * @hide
+     *
      */
-    @UnsupportedAppUsage
-    public void fillInNotifierBundle(Bundle m) {
+    @SystemApi
+    public void fillInNotifierBundle(@NonNull Bundle m) {
         m.putParcelable(Intent.EXTRA_SERVICE_STATE, this);
         // serviceState already consists of below entries.
         // for backward compatibility, we continue fill in below entries.
@@ -1408,7 +1468,15 @@ public class ServiceState implements Parcelable {
         return getRilDataRadioTechnology();
     }
 
-    /** @hide */
+    /**
+     * Transform RIL radio technology {@link RilRadioTechnology} value to Network
+     * type {@link NetworkType}.
+     *
+     * @param rat The RIL radio technology {@link RilRadioTechnology}.
+     * @return The network type {@link NetworkType}.
+     *
+     * @hide
+     */
     public static int rilRadioTechnologyToNetworkType(@RilRadioTechnology int rat) {
         switch(rat) {
             case RIL_RADIO_TECHNOLOGY_GPRS:
@@ -1479,8 +1547,9 @@ public class ServiceState implements Parcelable {
                 return AccessNetworkType.CDMA2000;
             case RIL_RADIO_TECHNOLOGY_LTE:
             case RIL_RADIO_TECHNOLOGY_LTE_CA:
-            case RIL_RADIO_TECHNOLOGY_NR:
                 return AccessNetworkType.EUTRAN;
+            case RIL_RADIO_TECHNOLOGY_NR:
+                return AccessNetworkType.NGRAN;
             case RIL_RADIO_TECHNOLOGY_IWLAN:
                 return AccessNetworkType.IWLAN;
             case RIL_RADIO_TECHNOLOGY_UNKNOWN:
@@ -1489,7 +1558,15 @@ public class ServiceState implements Parcelable {
         }
     }
 
-    /** @hide */
+    /**
+     * Transform network type {@link NetworkType} value to RIL radio technology
+     * {@link RilRadioTechnology}.
+     *
+     * @param networkType The network type {@link NetworkType}.
+     * @return The RIL radio technology {@link RilRadioTechnology}.
+     *
+     * @hide
+     */
     public static int networkTypeToRilRadioTechnology(int networkType) {
         switch(networkType) {
             case TelephonyManager.NETWORK_TYPE_GPRS:
@@ -1697,7 +1774,14 @@ public class ServiceState implements Parcelable {
         return bearerBitmask;
     }
 
-    /** @hide */
+    /**
+     * Convert network type bitmask to bearer bitmask.
+     *
+     * @param networkTypeBitmask The network type bitmask value
+     * @return The bearer bitmask value.
+     *
+     * @hide
+     */
     public static int convertNetworkTypeBitmaskToBearerBitmask(int networkTypeBitmask) {
         if (networkTypeBitmask == 0) {
             return 0;
@@ -1711,7 +1795,14 @@ public class ServiceState implements Parcelable {
         return bearerBitmask;
     }
 
-    /** @hide */
+    /**
+     * Convert bearer bitmask to network type bitmask.
+     *
+     * @param bearerBitmask The bearer bitmask value.
+     * @return The network type bitmask value.
+     *
+     * @hide
+     */
     public static int convertBearerBitmaskToNetworkTypeBitmask(int bearerBitmask) {
         if (bearerBitmask == 0) {
             return 0;
@@ -1870,9 +1961,18 @@ public class ServiceState implements Parcelable {
      * Returns a copy of self with location-identifying information removed.
      * Always clears the NetworkRegistrationInfo's CellIdentity fields, but if removeCoarseLocation
      * is true, clears other info as well.
+     *
+     * @param removeCoarseLocation Whether to also remove coarse location information.
+     *                             if false, it only clears fine location information such as
+     *                             NetworkRegistrationInfo's CellIdentity fields; If true, it will
+     *                             also remove other location information such as operator's MCC
+     *                             and MNC.
+     * @return the copied ServiceState with location info sanitized.
      * @hide
      */
-    public ServiceState sanitizeLocationInfo(boolean removeCoarseLocation) {
+    @SystemApi
+    @NonNull
+    public ServiceState createLocationInfoSanitizedCopy(boolean removeCoarseLocation) {
         ServiceState state = new ServiceState(this);
         synchronized (state.mNetworkRegistrationInfos) {
             List<NetworkRegistrationInfo> networkRegistrationInfos =

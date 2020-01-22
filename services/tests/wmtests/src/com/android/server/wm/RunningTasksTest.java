@@ -57,14 +57,14 @@ public class RunningTasksTest extends ActivityTestsBase {
     @Test
     public void testCollectTasksByLastActiveTime() {
         // Create a number of stacks with tasks (of incrementing active time)
-        final ArrayList<ActivityDisplay> displays = new ArrayList<>();
-        final ActivityDisplay display =
-                new TestActivityDisplay.Builder(mService, 1000, 2500).build();
+        final ArrayList<DisplayContent> displays = new ArrayList<>();
+        final DisplayContent display =
+                new TestDisplayContent.Builder(mService, 1000, 2500).build();
         displays.add(display);
 
         final int numStacks = 2;
         for (int stackIndex = 0; stackIndex < numStacks; stackIndex++) {
-            final ActivityStack stack = new StackBuilder(mRootActivityContainer)
+            final ActivityStack stack = new StackBuilder(mRootWindowContainer)
                     .setCreateActivity(false)
                     .setDisplay(display)
                     .setOnTop(false)
@@ -82,7 +82,7 @@ public class RunningTasksTest extends ActivityTestsBase {
         final int numFetchTasks = 5;
         ArrayList<RunningTaskInfo> tasks = new ArrayList<>();
         mRunningTasks.getTasks(5, tasks, ACTIVITY_TYPE_UNDEFINED, WINDOWING_MODE_UNDEFINED,
-                mRootActivityContainer, -1 /* callingUid */, true /* allowed */,
+                mRootWindowContainer, -1 /* callingUid */, true /* allowed */,
                 true /*crossUser */, PROFILE_IDS);
         assertThat(tasks).hasSize(numFetchTasks);
         for (int i = 0; i < numFetchTasks; i++) {
@@ -93,7 +93,7 @@ public class RunningTasksTest extends ActivityTestsBase {
         // and does not crash
         tasks.clear();
         mRunningTasks.getTasks(100, tasks, ACTIVITY_TYPE_UNDEFINED, WINDOWING_MODE_UNDEFINED,
-                mRootActivityContainer, -1 /* callingUid */, true /* allowed */,
+                mRootWindowContainer, -1 /* callingUid */, true /* allowed */,
                 true /* crossUser */, PROFILE_IDS);
         assertThat(tasks).hasSize(numTasks);
         for (int i = 0; i < numTasks; i++) {

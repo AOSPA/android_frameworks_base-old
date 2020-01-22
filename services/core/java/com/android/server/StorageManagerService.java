@@ -118,6 +118,7 @@ import android.sysprop.VoldProperties;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.ArrayMap;
+import android.util.ArraySet;
 import android.util.AtomicFile;
 import android.util.DataUnit;
 import android.util.FeatureFlagUtils;
@@ -143,6 +144,7 @@ import com.android.internal.util.HexDump;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.widget.LockPatternUtils;
+import com.android.server.pm.Installer;
 import com.android.server.storage.AppFuseBridge;
 import com.android.server.storage.StorageSessionController;
 import com.android.server.storage.StorageSessionController.ExternalStorageServiceException;
@@ -366,6 +368,8 @@ class StorageManagerService extends IStorageManager.Stub
     private volatile int mMediaStoreAuthorityAppId = -1;
 
     private volatile int mCurrentUserId = UserHandle.USER_SYSTEM;
+
+    private final Installer mInstaller;
 
     /** Holding lock for AppFuse business */
     private final Object mAppFuseLock = new Object();
@@ -1245,6 +1249,13 @@ class StorageManagerService extends IStorageManager.Stub
                     vol.state = newState;
                     onVolumeStateChangedLocked(vol, oldState, newState);
                 }
+                try {
+                    if (vol.type == VolumeInfo.TYPE_PRIVATE && state == VolumeInfo.STATE_MOUNTED) {
+                        mInstaller.onPrivateVolumeMounted(vol.getFsUuid());
+                    }
+                } catch (Installer.InstallerException e) {
+                    Slog.i(TAG, "Failed when private volume mounted " + vol, e);
+                }
             }
         }
 
@@ -1290,6 +1301,13 @@ class StorageManagerService extends IStorageManager.Stub
 
             if (vol != null) {
                 mStorageSessionController.onVolumeRemove(vol);
+                try {
+                    if (vol.type == VolumeInfo.TYPE_PRIVATE) {
+                        mInstaller.onPrivateVolumeRemoved(vol.getFsUuid());
+                    }
+                } catch (Installer.InstallerException e) {
+                    Slog.i(TAG, "Failed when private volume unmounted " + vol, e);
+                }
             }
         }
     };
@@ -1585,10 +1603,8 @@ class StorageManagerService extends IStorageManager.Stub
         // Snapshot feature flag used for this boot
         SystemProperties.set(StorageManager.PROP_ISOLATED_STORAGE_SNAPSHOT, Boolean.toString(
                 SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, true)));
-        SystemProperties.set(StorageManager.PROP_FUSE_SNAPSHOT, Boolean.toString(
-                SystemProperties.getBoolean(StorageManager.PROP_FUSE, false)));
 
-        mIsFuseEnabled = SystemProperties.getBoolean(StorageManager.PROP_FUSE_SNAPSHOT, false);
+        mIsFuseEnabled = SystemProperties.getBoolean(StorageManager.PROP_FUSE, false);
         mContext = context;
         mResolver = mContext.getContentResolver();
         mCallbacks = new Callbacks(FgThread.get().getLooper());
@@ -1602,6 +1618,9 @@ class StorageManagerService extends IStorageManager.Stub
         mObbActionHandler = new ObbActionHandler(IoThread.get().getLooper());
 
         mStorageSessionController = new StorageSessionController(mContext, mIsFuseEnabled);
+
+        mInstaller = new Installer(mContext);
+        mInstaller.onStart();
 
         // Initialize the last-fstrim tracking if necessary
         File dataDir = Environment.getDataDirectory();
@@ -1648,12 +1667,22 @@ class StorageManagerService extends IStorageManager.Stub
      *  and updates PROP_FUSE (reboots if changed).
      */
     private void updateFusePropFromSettings() {
-        Boolean settingsFuseFlag = SystemProperties.getBoolean((FeatureFlagUtils.PERSIST_PREFIX
-                + FeatureFlagUtils.SETTINGS_FUSE_FLAG), false);
-        Slog.d(TAG, "The value of Settings Fuse Flag is " + settingsFuseFlag);
-        if (SystemProperties.getBoolean(StorageManager.PROP_FUSE, false) != settingsFuseFlag) {
+        String settingsFuseFlag = SystemProperties.get(StorageManager.PROP_SETTINGS_FUSE);
+        Slog.d(TAG, "The value of Settings Fuse Flag is "
+                + (settingsFuseFlag == null || settingsFuseFlag.isEmpty()
+                ? "null" : settingsFuseFlag));
+        // Set default value of PROP_SETTINGS_FUSE and PROP_FUSE if it
+        // is unset (neither true nor false, this happens only on the first boot
+        // after wiping data partition).
+        if (settingsFuseFlag == null || settingsFuseFlag.isEmpty()) {
+            SystemProperties.set(StorageManager.PROP_SETTINGS_FUSE, "false");
+            SystemProperties.set(StorageManager.PROP_FUSE, "false");
+            return;
+        }
+
+        if (!SystemProperties.get(StorageManager.PROP_FUSE).equals(settingsFuseFlag)) {
             Slog.d(TAG, "Set persist.sys.fuse to " + settingsFuseFlag);
-            SystemProperties.set(StorageManager.PROP_FUSE, Boolean.toString(settingsFuseFlag));
+            SystemProperties.set(StorageManager.PROP_FUSE, settingsFuseFlag);
             // Perform hard reboot to kick policy into place
             mContext.getSystemService(PowerManager.class).reboot("Reboot device for FUSE system"
                     + "property change to take effect");
@@ -1966,6 +1995,13 @@ class StorageManagerService extends IStorageManager.Stub
         try {
             mVold.unmount(vol.id);
             mStorageSessionController.onVolumeUnmount(vol);
+            try {
+                if (vol.type == VolumeInfo.TYPE_PRIVATE) {
+                    mInstaller.onPrivateVolumeRemoved(vol.getFsUuid());
+                }
+            } catch (Installer.InstallerException e) {
+                Slog.e(TAG, "Failed unmount mirror data", e);
+            }
         } catch (Exception e) {
             Slog.wtf(TAG, e);
         }
@@ -2067,7 +2103,7 @@ class StorageManagerService extends IStorageManager.Stub
     public void setVolumeNickname(String fsUuid, String nickname) {
         enforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
 
-        Preconditions.checkNotNull(fsUuid);
+        Objects.requireNonNull(fsUuid);
         synchronized (mLock) {
             final VolumeRecord rec = mRecords.get(fsUuid);
             rec.nickname = nickname;
@@ -2080,7 +2116,7 @@ class StorageManagerService extends IStorageManager.Stub
     public void setVolumeUserFlags(String fsUuid, int flags, int mask) {
         enforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
 
-        Preconditions.checkNotNull(fsUuid);
+        Objects.requireNonNull(fsUuid);
         synchronized (mLock) {
             final VolumeRecord rec = mRecords.get(fsUuid);
             rec.userFlags = (rec.userFlags & ~mask) | (flags & mask);
@@ -2093,7 +2129,7 @@ class StorageManagerService extends IStorageManager.Stub
     public void forgetVolume(String fsUuid) {
         enforcePermission(android.Manifest.permission.MOUNT_UNMOUNT_FILESYSTEMS);
 
-        Preconditions.checkNotNull(fsUuid);
+        Objects.requireNonNull(fsUuid);
 
         synchronized (mLock) {
             final VolumeRecord rec = mRecords.remove(fsUuid);
@@ -2499,7 +2535,7 @@ class StorageManagerService extends IStorageManager.Stub
 
     @Override
     public String getMountedObbPath(String rawPath) {
-        Preconditions.checkNotNull(rawPath, "rawPath cannot be null");
+        Objects.requireNonNull(rawPath, "rawPath cannot be null");
 
         warnOnNotMounted();
 
@@ -2517,7 +2553,7 @@ class StorageManagerService extends IStorageManager.Stub
 
     @Override
     public boolean isObbMounted(String rawPath) {
-        Preconditions.checkNotNull(rawPath, "rawPath cannot be null");
+        Objects.requireNonNull(rawPath, "rawPath cannot be null");
         synchronized (mObbMounts) {
             return mObbPathToStateMap.containsKey(rawPath);
         }
@@ -2526,10 +2562,10 @@ class StorageManagerService extends IStorageManager.Stub
     @Override
     public void mountObb(String rawPath, String canonicalPath, String key,
             IObbActionListener token, int nonce, ObbInfo obbInfo) {
-        Preconditions.checkNotNull(rawPath, "rawPath cannot be null");
-        Preconditions.checkNotNull(canonicalPath, "canonicalPath cannot be null");
-        Preconditions.checkNotNull(token, "token cannot be null");
-        Preconditions.checkNotNull(obbInfo, "obbIfno cannot be null");
+        Objects.requireNonNull(rawPath, "rawPath cannot be null");
+        Objects.requireNonNull(canonicalPath, "canonicalPath cannot be null");
+        Objects.requireNonNull(token, "token cannot be null");
+        Objects.requireNonNull(obbInfo, "obbIfno cannot be null");
 
         final int callingUid = Binder.getCallingUid();
         final ObbState obbState = new ObbState(rawPath, canonicalPath,
@@ -2543,7 +2579,7 @@ class StorageManagerService extends IStorageManager.Stub
 
     @Override
     public void unmountObb(String rawPath, boolean force, IObbActionListener token, int nonce) {
-        Preconditions.checkNotNull(rawPath, "rawPath cannot be null");
+        Objects.requireNonNull(rawPath, "rawPath cannot be null");
 
         final ObbState existingState;
         synchronized (mObbMounts) {
@@ -3130,14 +3166,6 @@ class StorageManagerService extends IStorageManager.Stub
 
     @Override
     public void mkdirs(String callingPkg, String appPath) {
-        if (mIsFuseEnabled) {
-            // TODO(b/144332951): Calling into Vold is risky because the FUSE daemon can go down
-            // anytime and Vold will hang forever. We should either remove this call
-            // or at least call into the FUSE daemon to mkdir instead
-            Slog.w(TAG, "Not making dir for package " + callingPkg + " with path " + appPath);
-            return;
-        }
-
         final int callingUid = Binder.getCallingUid();
         final int userId = UserHandle.getUserId(callingUid);
         final UserEnvironment userEnv = new UserEnvironment(userId);
@@ -3194,16 +3222,20 @@ class StorageManagerService extends IStorageManager.Stub
         final boolean forWrite = (flags & StorageManager.FLAG_FOR_WRITE) != 0;
         final boolean realState = (flags & StorageManager.FLAG_REAL_STATE) != 0;
         final boolean includeInvisible = (flags & StorageManager.FLAG_INCLUDE_INVISIBLE) != 0;
+        final boolean includeRecent = (flags & StorageManager.FLAG_INCLUDE_RECENT) != 0;
 
         // Report all volumes as unmounted until we've recorded that user 0 has unlocked. There
         // are no guarantees that callers will see a consistent view of the volume before that
         // point
         final boolean systemUserUnlocked = isSystemUnlocked(UserHandle.USER_SYSTEM);
 
+        final boolean userIsDemo;
         final boolean userKeyUnlocked;
         final boolean storagePermission;
         final long token = Binder.clearCallingIdentity();
         try {
+            userIsDemo = LocalServices.getService(UserManagerInternal.class)
+                    .getUserInfo(userId).isDemo();
             userKeyUnlocked = isUserKeyUnlocked(userId);
             storagePermission = mStorageManagerInternal.hasExternalStorage(uid, packageName);
         } finally {
@@ -3213,6 +3245,7 @@ class StorageManagerService extends IStorageManager.Stub
         boolean foundPrimary = false;
 
         final ArrayList<StorageVolume> res = new ArrayList<>();
+        final ArraySet<String> resUuids = new ArraySet<>();
         synchronized (mLock) {
             for (int i = 0; i < mVolumes.size(); i++) {
                 final VolumeInfo vol = mVolumes.valueAt(i);
@@ -3255,7 +3288,43 @@ class StorageManagerService extends IStorageManager.Stub
                 } else {
                     res.add(userVol);
                 }
+                resUuids.add(userVol.getUuid());
             }
+
+            if (includeRecent) {
+                final long lastWeek = System.currentTimeMillis() - DateUtils.WEEK_IN_MILLIS;
+                for (int i = 0; i < mRecords.size(); i++) {
+                    final VolumeRecord rec = mRecords.valueAt(i);
+
+                    // Skip if we've already included it above
+                    if (resUuids.contains(rec.fsUuid)) continue;
+
+                    // Treat as recent if mounted within the last week
+                    if (rec.lastSeenMillis > 0 && rec.lastSeenMillis < lastWeek) {
+                        final StorageVolume userVol = rec.buildStorageVolume(mContext);
+                        res.add(userVol);
+                        resUuids.add(userVol.getUuid());
+                    }
+                }
+            }
+        }
+
+        // Synthesize a volume for preloaded media under demo users, so that
+        // it's scanned into MediaStore
+        if (userIsDemo) {
+            final String id = "demo";
+            final File path = Environment.getDataPreloadsMediaDirectory();
+            final boolean primary = false;
+            final boolean removable = false;
+            final boolean emulated = true;
+            final boolean allowMassStorage = false;
+            final long maxFileSize = 0;
+            final UserHandle user = new UserHandle(userId);
+            final String envState = Environment.MEDIA_MOUNTED_READ_ONLY;
+            final String description = mContext.getString(android.R.string.unknownName);
+
+            res.add(new StorageVolume(id, path, path, description, primary, removable,
+                    emulated, allowMassStorage, maxFileSize, user, id, envState));
         }
 
         if (!foundPrimary) {
@@ -3857,7 +3926,7 @@ class StorageManagerService extends IStorageManager.Stub
                 }
             }
             if ((hasInstall || hasInstallOp) && hasWrite) {
-                return Zygote.MOUNT_EXTERNAL_WRITE;
+                return Zygote.MOUNT_EXTERNAL_INSTALLER;
             }
 
             // Otherwise we're willing to give out sandboxed or non-sandboxed if

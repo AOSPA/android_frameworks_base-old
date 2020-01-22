@@ -40,6 +40,7 @@ import com.android.cts.install.lib.TestApp;
 import com.android.cts.install.lib.Uninstall;
 import com.android.cts.rollback.lib.Rollback;
 import com.android.cts.rollback.lib.RollbackUtils;
+import com.android.internal.R;
 
 import libcore.io.IoUtils;
 
@@ -184,6 +185,12 @@ public class StagedRollbackTest {
      */
     @Test
     public void testNativeWatchdogTriggersRollback_Phase1() throws Exception {
+        // When multiple staged sessions are installed on a device which doesn't support checkpoint,
+        // only the 1st one will prevail. We have to check no other rollbacks available to ensure
+        // TestApp.A is always the 1st and the only one to commit so rollback can work as intended.
+        // If there are leftover rollbacks from previous tests, this assertion will fail.
+        assertThat(RollbackUtils.getRollbackManager().getAvailableRollbacks()).isEmpty();
+
         Uninstall.packages(TestApp.A);
         Install.single(TestApp.A1).commit();
         assertThat(InstallUtils.getInstalledVersion(TestApp.A)).isEqualTo(1);
@@ -339,6 +346,80 @@ public class StagedRollbackTest {
         RollbackManager rm = RollbackUtils.getRollbackManager();
         assertThat(getUniqueRollbackInfoForPackage(rm.getRecentlyCommittedRollbacks(),
                         getNetworkStackPackageName())).isNull();
+    }
+
+    private static String getModuleMetadataPackageName() {
+        return InstrumentationRegistry.getInstrumentation().getContext()
+                .getResources().getString(R.string.config_defaultModuleMetadataProvider);
+    }
+
+    @Test
+    public void testRollbackWhitelistedApp_Phase1() throws Exception {
+        // Remove available rollbacks
+        String pkgName = getModuleMetadataPackageName();
+        RollbackUtils.getRollbackManager().expireRollbackForPackage(pkgName);
+        assertThat(RollbackUtils.getAvailableRollback(pkgName)).isNull();
+
+        // Overwrite existing permissions. We don't want TEST_MANAGE_ROLLBACKS which allows us
+        // to enable rollback for any app
+        InstallUtils.adoptShellPermissionIdentity(
+                Manifest.permission.INSTALL_PACKAGES,
+                Manifest.permission.MANAGE_ROLLBACKS);
+
+        // Re-install a whitelisted app with rollbacks enabled
+        String filePath = InstrumentationRegistry.getInstrumentation().getContext()
+                .getPackageManager().getPackageInfo(pkgName, 0).applicationInfo.sourceDir;
+        TestApp app = new TestApp("ModuleMetadata", pkgName, -1, false, new File(filePath));
+        Install.single(app).setStaged().setEnableRollback()
+                .addInstallFlags(PackageManager.INSTALL_REPLACE_EXISTING).commit();
+    }
+
+    @Test
+    public void testRollbackWhitelistedApp_Phase2() throws Exception {
+        assertThat(RollbackUtils.getAvailableRollback(getModuleMetadataPackageName())).isNotNull();
+    }
+
+    @Test
+    public void testRollbackWhitelistedApp_cleanUp() throws Exception {
+        RollbackUtils.getRollbackManager().expireRollbackForPackage(getModuleMetadataPackageName());
+    }
+
+    @Test
+    public void testRollbackDataPolicy_Phase1() throws Exception {
+        Uninstall.packages(TestApp.A, TestApp.B);
+        Install.multi(TestApp.A1, TestApp.B1).commit();
+        // Write user data version = 1
+        InstallUtils.processUserData(TestApp.A);
+        InstallUtils.processUserData(TestApp.B);
+
+        Install a2 = Install.single(TestApp.A2).setStaged()
+                .setEnableRollback(PackageManager.RollbackDataPolicy.WIPE);
+        Install b2 = Install.single(TestApp.B2).setStaged()
+                .setEnableRollback(PackageManager.RollbackDataPolicy.RESTORE);
+        Install.multi(a2, b2).setEnableRollback().setStaged().commit();
+    }
+
+    @Test
+    public void testRollbackDataPolicy_Phase2() throws Exception {
+        assertThat(InstallUtils.getInstalledVersion(TestApp.A)).isEqualTo(2);
+        assertThat(InstallUtils.getInstalledVersion(TestApp.B)).isEqualTo(2);
+        // Write user data version = 2
+        InstallUtils.processUserData(TestApp.A);
+        InstallUtils.processUserData(TestApp.B);
+
+        RollbackInfo info = RollbackUtils.getAvailableRollback(TestApp.A);
+        RollbackUtils.rollback(info.getRollbackId());
+    }
+
+    @Test
+    public void testRollbackDataPolicy_Phase3() throws Exception {
+        assertThat(InstallUtils.getInstalledVersion(TestApp.A)).isEqualTo(1);
+        assertThat(InstallUtils.getInstalledVersion(TestApp.B)).isEqualTo(1);
+        // Read user data version from userdata.txt
+        // A's user data version is -1 for user data is wiped.
+        // B's user data version is 1 as rollback committed.
+        assertThat(InstallUtils.getUserDataVersion(TestApp.A)).isEqualTo(-1);
+        assertThat(InstallUtils.getUserDataVersion(TestApp.B)).isEqualTo(1);
     }
 
     private static void runShellCommand(String cmd) {

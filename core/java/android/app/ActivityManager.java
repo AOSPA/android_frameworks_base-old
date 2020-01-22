@@ -28,7 +28,7 @@ import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -1120,8 +1120,8 @@ public class ActivityManager {
         }
 
         /**
-         * Copies this the values from another TaskDescription, but preserves the hidden fields
-         * if they weren't set on {@code other}
+         * Copies values from another TaskDescription, but preserves the hidden fields if they
+         * weren't set on {@code other}. Public fields will be overwritten anyway.
          * @hide
          */
         public void copyFromPreserveHiddenFields(TaskDescription other) {
@@ -1130,6 +1130,7 @@ public class ActivityManager {
             mIconRes = other.mIconRes;
             mIconFilename = other.mIconFilename;
             mColorPrimary = other.mColorPrimary;
+
             if (other.mColorBackground != 0) {
                 mColorBackground = other.mColorBackground;
             }
@@ -1139,12 +1140,20 @@ public class ActivityManager {
             if (other.mNavigationBarColor != 0) {
                 mNavigationBarColor = other.mNavigationBarColor;
             }
+
             mEnsureStatusBarContrastWhenTransparent = other.mEnsureStatusBarContrastWhenTransparent;
             mEnsureNavigationBarContrastWhenTransparent =
                     other.mEnsureNavigationBarContrastWhenTransparent;
-            mResizeMode = other.mResizeMode;
-            mMinWidth = other.mMinWidth;
-            mMinHeight = other.mMinHeight;
+
+            if (other.mResizeMode != RESIZE_MODE_RESIZEABLE) {
+                mResizeMode = other.mResizeMode;
+            }
+            if (other.mMinWidth != -1) {
+                mMinWidth = other.mMinWidth;
+            }
+            if (other.mMinHeight != -1) {
+                mMinHeight = other.mMinHeight;
+            }
         }
 
         private TaskDescription(Parcel source) {
@@ -2097,6 +2106,113 @@ public class ActivityManager {
                 return new TaskSnapshot[size];
             }
         };
+
+        /** Builder for a {@link TaskSnapshot} object */
+        public static final class Builder {
+            private long mId;
+            private ComponentName mTopActivity;
+            private GraphicBuffer mSnapshot;
+            private ColorSpace mColorSpace;
+            private int mOrientation;
+            private Rect mContentInsets;
+            private boolean mReducedResolution;
+            private float mScaleFraction;
+            private boolean mIsRealSnapshot;
+            private int mWindowingMode;
+            private int mSystemUiVisibility;
+            private boolean mIsTranslucent;
+            private int mPixelFormat;
+
+            public Builder setId(long id) {
+                mId = id;
+                return this;
+            }
+
+            public Builder setTopActivityComponent(ComponentName name) {
+                mTopActivity = name;
+                return this;
+            }
+
+            public Builder setSnapshot(GraphicBuffer buffer) {
+                mSnapshot = buffer;
+                return this;
+            }
+
+            public Builder setColorSpace(ColorSpace colorSpace) {
+                mColorSpace = colorSpace;
+                return this;
+            }
+
+            public Builder setOrientation(int orientation) {
+                mOrientation = orientation;
+                return this;
+            }
+
+            public Builder setContentInsets(Rect contentInsets) {
+                mContentInsets = contentInsets;
+                return this;
+            }
+
+            public Builder setReducedResolution(boolean reducedResolution) {
+                mReducedResolution = reducedResolution;
+                return this;
+            }
+
+            public float getScaleFraction() {
+                return mScaleFraction;
+            }
+
+            public Builder setScaleFraction(float scaleFraction) {
+                mScaleFraction = scaleFraction;
+                return this;
+            }
+
+            public Builder setIsRealSnapshot(boolean realSnapshot) {
+                mIsRealSnapshot = realSnapshot;
+                return this;
+            }
+
+            public Builder setWindowingMode(int windowingMode) {
+                mWindowingMode = windowingMode;
+                return this;
+            }
+
+            public Builder setSystemUiVisibility(int systemUiVisibility) {
+                mSystemUiVisibility = systemUiVisibility;
+                return this;
+            }
+
+            public Builder setIsTranslucent(boolean isTranslucent) {
+                mIsTranslucent = isTranslucent;
+                return this;
+            }
+
+            public int getPixelFormat() {
+                return mPixelFormat;
+            }
+
+            public Builder setPixelFormat(int pixelFormat) {
+                mPixelFormat = pixelFormat;
+                return this;
+            }
+
+            public TaskSnapshot build() {
+                return new TaskSnapshot(
+                        mId,
+                        mTopActivity,
+                        mSnapshot,
+                        mColorSpace,
+                        mOrientation,
+                        mContentInsets,
+                        mReducedResolution,
+                        mScaleFraction,
+                        mIsRealSnapshot,
+                        mWindowingMode,
+                        mSystemUiVisibility,
+                        mIsTranslucent);
+
+            }
+        }
     }
 
     /** @hide */
@@ -4415,6 +4531,33 @@ public class ActivityManager {
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
+        }
+    }
+
+    /**
+     * Get packages of bugreport-whitelisted apps to handle a bug report.
+     *
+     * @return packages of bugreport-whitelisted apps to handle a bug report.
+     * @hide
+     */
+    public List<String> getBugreportWhitelistedPackages() {
+        try {
+            return getService().getBugreportWhitelistedPackages();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Method for the app to tell system that it's wedged and would like to trigger an ANR.
+     *
+     * @param reason The description of that what happened
+     */
+    public void appNotResponding(@NonNull final String reason) {
+        try {
+            getService().appNotResponding(reason);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 }

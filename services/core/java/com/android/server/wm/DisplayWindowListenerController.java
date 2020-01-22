@@ -39,9 +39,9 @@ class DisplayWindowListenerController {
         synchronized (mService.mGlobalLock) {
             mDisplayListeners.register(listener);
             try {
-                for (int i = 0; i < mService.mAtmService.mRootActivityContainer.getChildCount();
+                for (int i = 0; i < mService.mAtmService.mRootWindowContainer.getChildCount();
                         ++i) {
-                    ActivityDisplay d = mService.mAtmService.mRootActivityContainer.getChildAt(i);
+                    DisplayContent d = mService.mAtmService.mRootWindowContainer.getChildAt(i);
                     listener.onDisplayAdded(d.mDisplayId);
                 }
             } catch (RemoteException e) { }
@@ -52,7 +52,7 @@ class DisplayWindowListenerController {
         mDisplayListeners.unregister(listener);
     }
 
-    void dispatchDisplayAdded(ActivityDisplay display) {
+    void dispatchDisplayAdded(DisplayContent display) {
         int count = mDisplayListeners.beginBroadcast();
         for (int i = 0; i < count; ++i) {
             try {
@@ -85,7 +85,7 @@ class DisplayWindowListenerController {
         mDisplayListeners.finishBroadcast();
     }
 
-    void dispatchDisplayRemoved(ActivityDisplay display) {
+    void dispatchDisplayRemoved(DisplayContent display) {
         int count = mDisplayListeners.beginBroadcast();
         for (int i = 0; i < count; ++i) {
             try {

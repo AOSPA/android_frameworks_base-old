@@ -312,6 +312,7 @@
     <protected-broadcast android:name="android.net.nsd.STATE_CHANGED" />
 
     <protected-broadcast android:name="android.nfc.action.ADAPTER_STATE_CHANGED" />
+    <protected-broadcast android:name="android.nfc.action.PREFERRED_PAYMENT_CHANGED" />
     <protected-broadcast android:name="android.nfc.action.TRANSACTION_DETECTED" />
     <protected-broadcast android:name="com.android.nfc.action.LLCP_UP" />
     <protected-broadcast android:name="com.android.nfc.action.LLCP_DOWN" />
@@ -351,6 +352,10 @@
     <protected-broadcast android:name="com.android.server.am.DELETE_DUMPHEAP" />
     <protected-broadcast android:name="com.android.server.net.action.SNOOZE_WARNING" />
     <protected-broadcast android:name="com.android.server.net.action.SNOOZE_RAPID" />
+    <protected-broadcast android:name="com.android.server.wifi.ACTION_SHOW_SET_RANDOMIZATION_DETAILS" />
+    <protected-broadcast android:name="com.android.server.wifi.action.NetworkSuggestion.USER_ALLOWED_APP" />
+    <protected-broadcast android:name="com.android.server.wifi.action.NetworkSuggestion.USER_DISALLOWED_APP" />
+    <protected-broadcast android:name="com.android.server.wifi.action.NetworkSuggestion.USER_DISMISSED" />
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.USER_DISMISSED_NOTIFICATION" />
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.CONNECT_TO_NETWORK" />
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.PICK_WIFI_NETWORK" />
@@ -670,7 +675,7 @@
 
     <!-- NETWORK_SET_TIME moved from com.android.phone to system server. It should ultimately be
          removed. -->
-    <protected-broadcast android:name="android.intent.action.NETWORK_SET_TIME" />
+    <protected-broadcast android:name="android.telephony.action.NETWORK_SET_TIME" />
 
     <!-- For tether entitlement recheck-->
     <protected-broadcast
@@ -753,6 +758,11 @@
     <!-- Permissions for accessing and modifying user's SMS messages            -->
     <!-- ====================================================================== -->
     <eat-comment />
+
+    <!-- @SystemApi Allows accessing the messages on ICC
+         @hide Used internally. -->
+    <permission android:name="android.permission.ACCESS_MESSAGES_ON_ICC"
+        android:protectionLevel="signature|telephony" />
 
     <!-- Used for runtime permissions related to user's SMS messages. -->
     <permission-group android:name="android.permission-group.SMS"
@@ -1667,6 +1677,14 @@
     <permission android:name="android.permission.NETWORK_SETTINGS"
         android:protectionLevel="signature|telephony" />
 
+    <!-- Allows holder to request bluetooth/wifi scan bypassing global "use location" setting and
+         location permissions.
+         <p>Not for use by third-party or privileged applications.
+         @hide
+    -->
+    <permission android:name="android.permission.RADIO_SCAN_WITHOUT_LOCATION"
+                android:protectionLevel="signature|companion" />
+
     <!-- Allows SetupWizard to call methods in Networking services
          <p>Not for use by any other third-party or privileged applications.
          @SystemApi
@@ -1787,6 +1805,14 @@
          <p>Protection level: normal
     -->
     <permission android:name="android.permission.NFC_TRANSACTION_EVENT"
+      android:protectionLevel="normal" />
+
+    <!-- Allows applications to receive NFC preferred payment service information.
+         <p>Protection level: normal
+    -->
+    <permission android:name="android.permission.NFC_PREFERRED_PAYMENT_INFO"
+        android:description="@string/permdesc_preferredPaymentInfo"
+        android:label="@string/permlab_preferredPaymentInfo"
         android:protectionLevel="normal" />
 
     <!-- @deprecated This permission used to allow too broad access to sensitive methods and all its
@@ -1887,6 +1913,13 @@
         android:label="@string/permlab_vibrate"
         android:description="@string/permdesc_vibrate"
         android:protectionLevel="normal|instant" />
+
+    <!-- Allows access to the vibrator always-on settings.
+         <p>Protection level: signature
+         @hide
+    -->
+    <permission android:name="android.permission.VIBRATE_ALWAYS_ON"
+        android:protectionLevel="signature" />
 
     <!-- Allows using PowerManager WakeLocks to keep processor from sleeping or screen
          from dimming.
@@ -2238,6 +2271,17 @@
     -->
     <permission android:name="android.permission.MANAGE_DOCUMENTS"
         android:protectionLevel="signature|documenter" />
+
+    <!-- Allows an application to manage access to crates, usually as part
+         of a crates picker.
+         <p>This permission should <em>only</em> be requested by the platform
+         management app.  This permission cannot be granted to
+         third-party apps.
+         @hide
+         @TestApi
+    -->
+    <permission android:name="android.permission.MANAGE_CRATES"
+                android:protectionLevel="signature" />
 
     <!-- @hide Allows an application to cache content.
          <p>Not for use by third-party applications.
@@ -2964,6 +3008,14 @@
     <permission android:name="android.permission.BIND_QUICK_SETTINGS_TILE"
         android:protectionLevel="signature" />
 
+    <!-- Allows SystemUI to request third party controls.
+         <p>Should only be requested by the System and required by
+         ControlsService declarations.
+         @hide
+    -->
+    <permission android:name="android.permission.BIND_CONTROLS"
+        android:protectionLevel="signature" />
+
     <!-- @SystemApi Allows an application to force a BACK operation on whatever is the
          top activity.
          <p>Not for use by third-party applications.
@@ -3302,13 +3354,6 @@
     <permission android:name="android.permission.BIND_TV_INPUT"
         android:protectionLevel="signature|privileged" />
 
-    <!-- Must be required by an {@link android.service.sms.FinancialSmsService}
-         to ensure that only the system can bind to it.
-         @hide This is not a third-party API (intended for OEMs and system apps).
-    -->
-    <permission android:name="android.permission.BIND_FINANCIAL_SMS_SERVICE"
-                android:protectionLevel="signature" />
-
     <!-- @SystemApi
          Must be required by a {@link com.android.media.tv.remoteprovider.TvRemoteProvider}
          to ensure that only the system can bind to it.
@@ -3583,6 +3628,11 @@
     <!-- @hide Allows an application to observe permission changes. -->
     <permission android:name="android.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS"
         android:protectionLevel="signature|privileged" />
+
+    <!-- @SystemApi Allows an application to start and stop one time permission sessions
+    @hide -->
+    <permission android:name="android.permission.MANAGE_ONE_TIME_PERMISSION_SESSIONS"
+                android:protectionLevel="signature|installer" />
 
     <!-- @SystemApi Allows an application to manage the holders of a role.
          @hide
@@ -4115,7 +4165,7 @@
     <permission android:name="android.permission.INTENT_FILTER_VERIFICATION_AGENT"
         android:protectionLevel="signature|privileged" />
 
-    <!-- Must be required by intent filter verifier receiver, to ensure that only the
+    <!-- Must be required by intent filter verifier rintent-filtereceiver, to ensure that only the
          system can interact with it.
          @hide
     -->
@@ -4455,6 +4505,12 @@
     <permission android:name="android.permission.MANAGE_SOUND_TRIGGER"
         android:protectionLevel="signature|privileged" />
 
+    <!-- Allows preempting sound trigger recognitions for the sake of capturing audio on
+         implementations which do not support running both concurrently.
+         @hide -->
+    <permission android:name="android.permission.PREEMPT_SOUND_TRIGGER"
+                android:protectionLevel="signature|privileged" />
+
     <!-- Must be required by system/priv apps implementing sound trigger detection services
          @hide
          @SystemApi -->
@@ -4728,6 +4784,12 @@
     <permission android:name="android.permission.PEEK_DROPBOX_DATA"
         android:protectionLevel="signature" />
 
+    <!-- @SystemApi Allows an application to access TV tuner HAL
+         <p>Not for use by third-party applications.
+         @hide -->
+    <permission android:name="android.permission.ACCESS_TV_TUNER"
+        android:protectionLevel="signature|privileged" />
+
     <application android:process="system"
                  android:persistent="true"
                  android:hasCode="false"
@@ -4758,7 +4820,7 @@
         </activity>
         <activity android:name="com.android.internal.app.AccessibilityButtonChooserActivity"
                   android:exported="false"
-                  android:theme="@style/Theme.DeviceDefault.Resolver"
+                  android:theme="@style/Theme.DeviceDefault.Dialog.Alert.DayNight"
                   android:finishOnCloseSystemDialogs="true"
                   android:excludeFromRecents="true"
                   android:documentLaunchMode="never"
@@ -5133,6 +5195,12 @@
                  android:permission="android.permission.BIND_JOB_SERVICE" >
         </service>
 
-</application>
+        <service android:name="com.android.server.pm.PackageManagerShellCommandDataLoader">
+            <intent-filter>
+                <action android:name="android.intent.action.LOAD_DATA" />
+            </intent-filter>
+        </service>
+
+    </application>
 
 </manifest>

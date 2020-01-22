@@ -22,7 +22,7 @@ import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ContentProviderClient;
 import android.content.ContentResolver;
 import android.content.ContentUris;
@@ -1314,8 +1314,8 @@ public class DownloadManager {
 
         // TODO: DownloadProvider.update() should take care of updating corresponding
         // MediaProvider entries.
-        MediaStore.scanFile(context, before);
-        MediaStore.scanFile(context, after);
+        MediaStore.scanFile(mResolver, before);
+        MediaStore.scanFile(mResolver, after);
 
         final ContentValues values = new ContentValues();
         values.put(Downloads.Impl.COLUMN_TITLE, displayName);

@@ -18,8 +18,8 @@
 #include "Log.h"
 #include "FieldValue.h"
 #include "HashableDimensionKey.h"
+#include "atoms_info.h"
 #include "math.h"
-#include "statslog.h"
 
 namespace android {
 namespace os {
@@ -433,6 +433,25 @@ bool equalDimensions(const std::vector<Matcher>& dimension_a,
         }
     }
     return eq;
+}
+
+bool subsetDimensions(const std::vector<Matcher>& dimension_a,
+                      const std::vector<Matcher>& dimension_b) {
+    if (dimension_a.size() > dimension_b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < dimension_a.size(); ++i) {
+        bool found = false;
+        for (size_t j = 0; j < dimension_b.size(); ++j) {
+            if (dimension_a[i] == dimension_b[j]) {
+                found = true;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool HasPositionANY(const FieldMatcher& matcher) {

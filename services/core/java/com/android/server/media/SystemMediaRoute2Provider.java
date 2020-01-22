@@ -35,6 +35,8 @@ import android.util.Log;
 
 import com.android.internal.R;
 
+import java.util.Collections;
+
 /**
  * Provides routes for local playbacks such as phone speaker, wired headset, or Bluetooth speakers.
  */
@@ -88,21 +90,30 @@ class SystemMediaRoute2Provider extends MediaRoute2Provider {
         initializeRoutes();
     }
 
-    //TODO: implement method
     @Override
-    public void requestSelectRoute(@NonNull String packageName, @NonNull String routeId, int seq) {
-        try {
-            mAudioService.setBluetoothA2dpOn(
-                    !TextUtils.equals(routeId, mDefaultRoute.getId()));
-        } catch (RemoteException ex) {
-            Log.e(TAG, "Error changing Bluetooth A2DP route");
-        }
+    public void requestCreateSession(String packageName, String routeId, String controlCategory,
+            long requestId) {
+        // Do nothing
     }
 
-    //TODO: implement method
     @Override
-    public void unselectRoute(@NonNull String packageName, @NonNull String routeId) {
-        // does nothing..?
+    public void releaseSession(int sessionId) {
+        // Do nothing
+    }
+
+    @Override
+    public void selectRoute(int sessionId, MediaRoute2Info route) {
+        //TODO: implement method
+    }
+
+    @Override
+    public void deselectRoute(int sessionId, MediaRoute2Info route) {
+        //TODO: implement method
+    }
+
+    @Override
+    public void transferToRoute(int sessionId, MediaRoute2Info route) {
+        //TODO: implement method
     }
 
     //TODO: implement method
@@ -205,6 +216,6 @@ class SystemMediaRoute2Provider extends MediaRoute2Provider {
             builder.addRoute(mBluetoothA2dpRoute);
         }
         builder.addRoute(mDefaultRoute);
-        setAndNotifyProviderInfo(builder.build());
+        setAndNotifyProviderState(builder.build(), Collections.emptyList());
     }
 }

@@ -87,8 +87,11 @@ final class LogicalDisplay {
     // True if the logical display has unique content.
     private boolean mHasContent;
 
-    private int[] mAllowedDisplayModes = new int[0];
     private int mRequestedColorMode;
+    private boolean mRequestedMinimalPostProcessing;
+
+    private DisplayModeDirector.DesiredDisplayModeSpecs mDesiredDisplayModeSpecs =
+            new DisplayModeDirector.DesiredDisplayModeSpecs();
 
     // The display offsets to apply to the display projection.
     private int mDisplayOffsetX;
@@ -282,6 +285,8 @@ final class LogicalDisplay {
                     deviceInfo.supportedColorModes,
                     deviceInfo.supportedColorModes.length);
             mBaseDisplayInfo.hdrCapabilities = deviceInfo.hdrCapabilities;
+            mBaseDisplayInfo.minimalPostProcessingSupported =
+                    deviceInfo.allmSupported || deviceInfo.gameContentTypeSupported;
             mBaseDisplayInfo.logicalDensityDpi = deviceInfo.densityDpi;
             mBaseDisplayInfo.physicalXDpi = deviceInfo.xDpi;
             mBaseDisplayInfo.physicalYDpi = deviceInfo.yDpi;
@@ -352,14 +357,17 @@ final class LogicalDisplay {
 
         // Set the color mode and allowed display mode.
         if (device == mPrimaryDisplayDevice) {
-            // See ag/9588196 for correct values.
-            device.setDesiredDisplayConfigSpecs(0, 60, 60, mAllowedDisplayModes);
+            device.setDesiredDisplayModeSpecsLocked(mDesiredDisplayModeSpecs);
             device.setRequestedColorModeLocked(mRequestedColorMode);
         } else {
             // Reset to default for non primary displays
-            device.setDesiredDisplayConfigSpecs(0, 60, 60, new int[] {0});
+            device.setDesiredDisplayModeSpecsLocked(
+                    new DisplayModeDirector.DesiredDisplayModeSpecs());
             device.setRequestedColorModeLocked(0);
         }
+
+        device.setAutoLowLatencyModeLocked(mRequestedMinimalPostProcessing);
+        device.setGameContentTypeLocked(mRequestedMinimalPostProcessing);
 
         // Only grab the display info now as it may have been changed based on the requests above.
         final DisplayInfo displayInfo = getDisplayInfoLocked();
@@ -462,17 +470,18 @@ final class LogicalDisplay {
     }
 
     /**
-     * Sets the display modes the system is free to switch between.
+     * Sets the display configs the system can use.
      */
-    public void setAllowedDisplayModesLocked(int[] modes) {
-        mAllowedDisplayModes = modes;
+    public void setDesiredDisplayModeSpecsLocked(
+            DisplayModeDirector.DesiredDisplayModeSpecs specs) {
+        mDesiredDisplayModeSpecs = specs;
     }
 
     /**
-     * Returns the display modes the system is free to switch between.
+     * Returns the display configs the system can choose.
      */
-    public int[] getAllowedDisplayModesLocked() {
-        return mAllowedDisplayModes;
+    public DisplayModeDirector.DesiredDisplayModeSpecs getDesiredDisplayModeSpecsLocked() {
+        return mDesiredDisplayModeSpecs;
     }
 
     /**
@@ -480,6 +489,23 @@ final class LogicalDisplay {
      */
     public void setRequestedColorModeLocked(int colorMode) {
         mRequestedColorMode = colorMode;
+    }
+
+    /**
+     * Returns the last requested minimal post processing setting.
+     */
+    public boolean getRequestedMinimalPostProcessingLocked() {
+        return mRequestedMinimalPostProcessing;
+    }
+
+    /**
+     * Instructs the connected display to do minimal post processing. This is implemented either
+     * via HDMI 2.1 ALLM or HDMI 1.4 ContentType=Game.
+     *
+     * @param on Whether to set minimal post processing on/off on the connected display.
+     */
+    public void setRequestedMinimalPostProcessingLocked(boolean on) {
+        mRequestedMinimalPostProcessing = on;
     }
 
     /** Returns the pending requested color mode. */
@@ -531,7 +557,7 @@ final class LogicalDisplay {
         pw.println("mDisplayId=" + mDisplayId);
         pw.println("mLayerStack=" + mLayerStack);
         pw.println("mHasContent=" + mHasContent);
-        pw.println("mAllowedDisplayModes=" + Arrays.toString(mAllowedDisplayModes));
+        pw.println("mDesiredDisplayModeSpecs={" + mDesiredDisplayModeSpecs + "}");
         pw.println("mRequestedColorMode=" + mRequestedColorMode);
         pw.println("mDisplayOffset=(" + mDisplayOffsetX + ", " + mDisplayOffsetY + ")");
         pw.println("mDisplayScalingDisabled=" + mDisplayScalingDisabled);
@@ -539,5 +565,6 @@ final class LogicalDisplay {
                 mPrimaryDisplayDevice.getNameLocked() : "null"));
         pw.println("mBaseDisplayInfo=" + mBaseDisplayInfo);
         pw.println("mOverrideDisplayInfo=" + mOverrideDisplayInfo);
+        pw.println("mRequestedMinimalPostProcessing=" + mRequestedMinimalPostProcessing);
     }
 }

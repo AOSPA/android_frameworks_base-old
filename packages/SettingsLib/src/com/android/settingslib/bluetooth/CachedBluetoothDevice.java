@@ -769,9 +769,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             if (mIsBondingInitiatedLocally) {
                 mDevice.setBondingInitiatedLocally(false);
             }
-            if (mDevice.isBluetoothDock()) {
-                onBondingDockConnect();
-            } else if (mIsTwsConnectEnabled) {
+            if (mIsTwsConnectEnabled) {
                 Log.d(TAG, "Initiating connection to" + mDevice);
                 if (mIsBondingInitiatedLocally || mDevice.isTwsPlusDevice()) {
                     connect(false);

@@ -55,6 +55,7 @@ import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.PinnedStackListenerForwarder.PinnedStackListener;
 import com.android.systemui.shared.system.TaskStackChangeListener;
 import com.android.systemui.shared.system.WindowManagerWrapper;
+import com.android.systemui.wm.DisplayWindowController;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -228,7 +229,8 @@ public class PipManager implements BasePipManager {
     /**
      * Initializes {@link PipManager}.
      */
-    public void initialize(Context context, BroadcastDispatcher broadcastDispatcher) {
+    public void initialize(Context context, BroadcastDispatcher broadcastDispatcher,
+            DisplayWindowController displayWindowController) {
         if (mInitialized) {
             return;
         }
@@ -748,7 +750,7 @@ public class PipManager implements BasePipManager {
     }
 
     private void updatePipVisibility(final boolean visible) {
-        Dependency.get(UiOffloadThread.class).submit(() -> {
+        Dependency.get(UiOffloadThread.class).execute(() -> {
             WindowManagerWrapper.getInstance().setPipVisibility(visible);
         });
     }

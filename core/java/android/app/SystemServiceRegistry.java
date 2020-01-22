@@ -50,10 +50,14 @@ import android.content.ContentCaptureOptions;
 import android.content.Context;
 import android.content.IRestrictionsManager;
 import android.content.RestrictionsManager;
+import android.content.integrity.AppIntegrityManager;
+import android.content.integrity.IAppIntegrityManager;
 import android.content.om.IOverlayManager;
 import android.content.om.OverlayManager;
 import android.content.pm.CrossProfileApps;
+import android.content.pm.DataLoaderManager;
 import android.content.pm.ICrossProfileApps;
+import android.content.pm.IDataLoaderManager;
 import android.content.pm.IPackageManager;
 import android.content.pm.IShortcutService;
 import android.content.pm.LauncherApps;
@@ -114,11 +118,13 @@ import android.net.NetworkPolicyManager;
 import android.net.NetworkScoreManager;
 import android.net.NetworkWatchlistManager;
 import android.net.TestNetworkManager;
+import android.net.TetheringManager;
 import android.net.lowpan.ILowpanManager;
 import android.net.lowpan.LowpanManager;
 import android.net.nsd.INsdManager;
 import android.net.nsd.NsdManager;
 import android.net.wifi.WifiFrameworkInitializer;
+import android.net.wifi.wificond.WifiCondManager;
 import android.nfc.NfcManager;
 import android.os.BatteryManager;
 import android.os.BatteryStats;
@@ -149,11 +155,15 @@ import android.os.Vibrator;
 import android.os.health.SystemHealthManager;
 import android.os.image.DynamicSystemManager;
 import android.os.image.IDynamicSystemService;
+import android.os.incremental.IIncrementalManagerNative;
+import android.os.incremental.IncrementalManager;
 import android.os.storage.StorageManager;
 import android.permission.PermissionControllerManager;
 import android.permission.PermissionManager;
 import android.print.IPrintManager;
 import android.print.PrintManager;
+import android.security.FileIntegrityManager;
+import android.security.IFileIntegrityService;
 import android.service.oemlock.IOemLockService;
 import android.service.oemlock.OemLockManager;
 import android.service.persistentdata.IPersistentDataBlockService;
@@ -188,6 +198,7 @@ import com.android.internal.policy.PhoneLayoutInflater;
 import com.android.internal.util.Preconditions;
 
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Manages all of the system services that can be returned by {@link Context#getSystemService}.
@@ -333,6 +344,17 @@ public final class SystemServiceRegistry {
                 return ServiceManager.getServiceOrThrow(Context.NETD_SERVICE);
             }
         });
+
+        registerService(Context.TETHERING_SERVICE, TetheringManager.class,
+                new CachedServiceFetcher<TetheringManager>() {
+            @Override
+            public TetheringManager createService(ContextImpl ctx) throws ServiceNotFoundException {
+                IBinder b = ServiceManager.getService(Context.TETHERING_SERVICE);
+                if (b == null) return null;
+
+                return new TetheringManager(ctx, b);
+            }});
+
 
         registerService(Context.IPSEC_SERVICE, IpSecManager.class,
                 new CachedServiceFetcher<IpSecManager>() {
@@ -693,6 +715,14 @@ public final class SystemServiceRegistry {
                 IEthernetManager service = IEthernetManager.Stub.asInterface(b);
                 return new EthernetManager(ctx.getOuterContext(), service);
             }});
+
+        registerService(Context.WIFI_COND_SERVICE, WifiCondManager.class,
+                new CachedServiceFetcher<WifiCondManager>() {
+                    @Override
+                    public WifiCondManager createService(ContextImpl ctx) {
+                        return new WifiCondManager(ctx.getOuterContext());
+                    }
+                });
 
         registerService(Context.WINDOW_SERVICE, WindowManager.class,
                 new CachedServiceFetcher<WindowManager>() {
@@ -1187,6 +1217,7 @@ public final class SystemServiceRegistry {
                         return new DynamicSystemManager(
                                 IDynamicSystemService.Stub.asInterface(b));
                     }});
+
         registerService(Context.BATTERY_STATS_SERVICE, BatteryStatsManager.class,
                 new CachedServiceFetcher<BatteryStatsManager>() {
                     @Override
@@ -1197,7 +1228,49 @@ public final class SystemServiceRegistry {
                         return new BatteryStatsManager(
                                 IBatteryStats.Stub.asInterface(b));
                     }});
+        registerService(Context.DATA_LOADER_MANAGER_SERVICE, DataLoaderManager.class,
+                new CachedServiceFetcher<DataLoaderManager>() {
+                    @Override
+                    public DataLoaderManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getServiceOrThrow(
+                                Context.DATA_LOADER_MANAGER_SERVICE);
+                        return new DataLoaderManager(IDataLoaderManager.Stub.asInterface(b));
+                    }});
+        //TODO(b/136132412): refactor this: 1) merge IIncrementalManager.aidl and
+        //IIncrementalManagerNative.aidl, 2) implement the binder interface in
+        //IncrementalManagerService.java, 3) use JNI to call native functions
+        registerService(Context.INCREMENTAL_SERVICE, IncrementalManager.class,
+                new CachedServiceFetcher<IncrementalManager>() {
+                    @Override
+                    public IncrementalManager createService(ContextImpl ctx) {
+                        IBinder b = ServiceManager.getService(Context.INCREMENTAL_SERVICE);
+                        if (b == null) {
+                            return null;
+                        }
+                        return new IncrementalManager(
+                                IIncrementalManagerNative.Stub.asInterface(b));
+                    }});
+
+        registerService(Context.FILE_INTEGRITY_SERVICE, FileIntegrityManager.class,
+                new CachedServiceFetcher<FileIntegrityManager>() {
+                    @Override
+                    public FileIntegrityManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getServiceOrThrow(
+                                Context.FILE_INTEGRITY_SERVICE);
+                        return new FileIntegrityManager(
+                                IFileIntegrityService.Stub.asInterface(b));
+                    }});
         //CHECKSTYLE:ON IndentationCheck
+        registerService(Context.APP_INTEGRITY_SERVICE, AppIntegrityManager.class,
+                new CachedServiceFetcher<AppIntegrityManager>() {
+                    @Override
+                    public AppIntegrityManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getServiceOrThrow(Context.APP_INTEGRITY_SERVICE);
+                        return new AppIntegrityManager(IAppIntegrityManager.Stub.asInterface(b));
+                    }});
 
         sInitializing = true;
         try {
@@ -1357,8 +1430,8 @@ public final class SystemServiceRegistry {
             @NonNull StaticServiceProducerWithBinder<TServiceClass> serviceProducer) {
         ensureInitializing("registerStaticService");
         Preconditions.checkStringNotEmpty(serviceName);
-        Preconditions.checkNotNull(serviceWrapperClass);
-        Preconditions.checkNotNull(serviceProducer);
+        Objects.requireNonNull(serviceWrapperClass);
+        Objects.requireNonNull(serviceProducer);
 
         registerService(serviceName, serviceWrapperClass,
                 new StaticServiceFetcher<TServiceClass>() {
@@ -1381,8 +1454,8 @@ public final class SystemServiceRegistry {
             @NonNull StaticServiceProducerWithoutBinder<TServiceClass> serviceProducer) {
         ensureInitializing("registerStaticService");
         Preconditions.checkStringNotEmpty(serviceName);
-        Preconditions.checkNotNull(serviceWrapperClass);
-        Preconditions.checkNotNull(serviceProducer);
+        Objects.requireNonNull(serviceWrapperClass);
+        Objects.requireNonNull(serviceProducer);
 
         registerService(serviceName, serviceWrapperClass,
                 new StaticServiceFetcher<TServiceClass>() {
@@ -1414,8 +1487,8 @@ public final class SystemServiceRegistry {
             @NonNull ContextAwareServiceProducerWithBinder<TServiceClass> serviceProducer) {
         ensureInitializing("registerContextAwareService");
         Preconditions.checkStringNotEmpty(serviceName);
-        Preconditions.checkNotNull(serviceWrapperClass);
-        Preconditions.checkNotNull(serviceProducer);
+        Objects.requireNonNull(serviceWrapperClass);
+        Objects.requireNonNull(serviceProducer);
 
         registerService(serviceName, serviceWrapperClass,
                 new CachedServiceFetcher<TServiceClass>() {
@@ -1442,8 +1515,8 @@ public final class SystemServiceRegistry {
             @NonNull ContextAwareServiceProducerWithoutBinder<TServiceClass> serviceProducer) {
         ensureInitializing("registerContextAwareService");
         Preconditions.checkStringNotEmpty(serviceName);
-        Preconditions.checkNotNull(serviceWrapperClass);
-        Preconditions.checkNotNull(serviceProducer);
+        Objects.requireNonNull(serviceWrapperClass);
+        Objects.requireNonNull(serviceProducer);
 
         registerService(serviceName, serviceWrapperClass,
                 new CachedServiceFetcher<TServiceClass>() {

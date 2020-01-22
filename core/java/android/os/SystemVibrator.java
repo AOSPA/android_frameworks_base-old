@@ -16,7 +16,7 @@
 
 package android.os;
 
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.media.AudioAttributes;
 import android.util.Log;
@@ -65,6 +65,20 @@ public class SystemVibrator extends Vibrator {
         try {
             return mService.hasAmplitudeControl();
         } catch (RemoteException e) {
+        }
+        return false;
+    }
+
+    @Override
+    public boolean setAlwaysOnEffect(int id, VibrationEffect effect, AudioAttributes attributes) {
+        if (mService == null) {
+            Log.w(TAG, "Failed to set always-on effect; no vibrator service.");
+            return false;
+        }
+        try {
+            return mService.setAlwaysOnEffect(id, effect, attributes);
+        } catch (RemoteException e) {
+            Log.w(TAG, "Failed to set always-on effect.", e);
         }
         return false;
     }

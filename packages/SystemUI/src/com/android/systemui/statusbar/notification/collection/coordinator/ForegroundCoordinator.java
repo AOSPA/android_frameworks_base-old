@@ -24,8 +24,7 @@ import android.util.ArraySet;
 
 import com.android.systemui.ForegroundServiceController;
 import com.android.systemui.appops.AppOpsController;
-import com.android.systemui.dagger.qualifiers.BgHandler;
-import com.android.systemui.dagger.qualifiers.MainHandler;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.statusbar.notification.collection.NotifCollection;
 import com.android.systemui.statusbar.notification.collection.NotifCollectionListener;
 import com.android.systemui.statusbar.notification.collection.NotifLifetimeExtender;
@@ -52,12 +51,11 @@ import javax.inject.Singleton;
  */
 @Singleton
 public class ForegroundCoordinator implements Coordinator {
-    private static final String TAG = "ForegroundNotificationCoordinator";
+    private static final String TAG = "ForegroundCoordinator";
 
     private final ForegroundServiceController mForegroundServiceController;
     private final AppOpsController mAppOpsController;
     private final Handler mMainHandler;
-    private final Handler mBgHandler;
 
     private NotifCollection mNotifCollection;
 
@@ -65,12 +63,10 @@ public class ForegroundCoordinator implements Coordinator {
     public ForegroundCoordinator(
             ForegroundServiceController foregroundServiceController,
             AppOpsController appOpsController,
-            @MainHandler Handler mainHandler,
-            @BgHandler Handler bgHandler) {
+            @Main Handler mainHandler) {
         mForegroundServiceController = foregroundServiceController;
         mAppOpsController = appOpsController;
         mMainHandler = mainHandler;
-        mBgHandler = bgHandler;
     }
 
     @Override
@@ -87,13 +83,13 @@ public class ForegroundCoordinator implements Coordinator {
         mAppOpsController.addCallback(ForegroundServiceController.APP_OPS, this::onAppOpsChanged);
 
         // filter out foreground service notifications that aren't necessary anymore
-        notifListBuilder.addFilter(mNotifFilter);
+        notifListBuilder.addPreGroupFilter(mNotifFilter);
     }
 
     /**
      * Filters out notifications that represent foreground services that are no longer running.
      */
-    protected final NotifFilter mNotifFilter = new NotifFilter(TAG) {
+    private final NotifFilter mNotifFilter = new NotifFilter(TAG) {
         @Override
         public boolean shouldFilterOut(NotificationEntry entry, long now) {
             StatusBarNotification sbn = entry.getSbn();
@@ -120,7 +116,8 @@ public class ForegroundCoordinator implements Coordinator {
      * Extends the lifetime of foreground notification services such that they show for at least
      * five seconds
      */
-    private final NotifLifetimeExtender mForegroundLifetimeExtender = new NotifLifetimeExtender() {
+    private final NotifLifetimeExtender mForegroundLifetimeExtender =
+            new NotifLifetimeExtender() {
         private static final int MIN_FGS_TIME_MS = 5000;
         private OnEndLifetimeExtensionCallback mEndCallback;
         private Map<String, Runnable> mEndRunnables = new HashMap<>();
@@ -154,8 +151,8 @@ public class ForegroundCoordinator implements Coordinator {
                         }
                     };
                     mEndRunnables.put(entry.getKey(), runnable);
-                    mBgHandler.postDelayed(runnable, MIN_FGS_TIME_MS
-                            - (currTime - entry.getSbn().getPostTime()));
+                    mMainHandler.postDelayed(runnable,
+                            MIN_FGS_TIME_MS - (currTime - entry.getSbn().getPostTime()));
                 }
             }
 
@@ -166,7 +163,7 @@ public class ForegroundCoordinator implements Coordinator {
         public void cancelLifetimeExtension(NotificationEntry entry) {
             if (mEndRunnables.containsKey(entry.getKey())) {
                 Runnable endRunnable = mEndRunnables.remove(entry.getKey());
-                mBgHandler.removeCallbacks(endRunnable);
+                mMainHandler.removeCallbacks(endRunnable);
             }
         }
     };

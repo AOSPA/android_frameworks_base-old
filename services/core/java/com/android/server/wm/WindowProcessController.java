@@ -44,6 +44,7 @@ import android.app.ActivityThread;
 import android.app.IApplicationThread;
 import android.app.ProfilerInfo;
 import android.app.servertransaction.ConfigurationChangeItem;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
@@ -67,6 +68,7 @@ import com.android.server.wm.ActivityTaskManagerService.HotPath;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The Activity Manager (AM) package manages the lifecycle of processes in the system through
@@ -575,14 +577,14 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
             return true;
         }
 
-        final ActivityDisplay display = activity.getDisplay();
+        final DisplayContent display = activity.getDisplay();
         if (display == null) {
             // No need to update if the activity hasn't attach to any display.
             return false;
         }
 
         boolean canUpdate = false;
-        final ActivityDisplay topDisplay =
+        final DisplayContent topDisplay =
                 mPreQTopResumedActivity != null ? mPreQTopResumedActivity.getDisplay() : null;
         // Update the topmost activity if current top activity is
         // - not on any display OR
@@ -767,6 +769,30 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         }
     }
 
+    /**
+     * Returns display UI context list which there is any app window shows or starting activities
+     * int this process.
+     */
+    public void getDisplayContextsWithErrorDialogs(List<Context> displayContexts) {
+        if (displayContexts == null) {
+            return;
+        }
+        synchronized (mAtm.mGlobalLock) {
+            final RootWindowContainer root = mAtm.mWindowManager.mRoot;
+            root.getDisplayContextsWithNonToastVisibleWindows(mPid, displayContexts);
+
+            for (int i = mActivities.size() - 1; i >= 0; --i) {
+                final ActivityRecord r = mActivities.get(i);
+                final int displayId = r.getDisplayId();
+                final Context c = root.getDisplayUiContext(displayId);
+
+                if (r.mVisibleRequested && !displayContexts.contains(c)) {
+                    displayContexts.add(c);
+                }
+            }
+        }
+    }
+
     public interface ComputeOomAdjCallback {
         void onVisibleActivity();
         void onPausedActivity();
@@ -938,15 +964,15 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         mAtm.mH.sendMessage(m);
     }
 
-    void registerDisplayConfigurationListenerLocked(ActivityDisplay activityDisplay) {
-        if (activityDisplay == null) {
+    void registerDisplayConfigurationListenerLocked(DisplayContent displayContent) {
+        if (displayContent == null) {
             return;
         }
         // A process can only register to one display to listener to the override configuration
         // change. Unregister existing listener if it has one before register the new one.
         unregisterDisplayConfigurationListenerLocked();
-        mDisplayId = activityDisplay.mDisplayId;
-        activityDisplay.registerConfigurationChangeListener(this);
+        mDisplayId = displayContent.mDisplayId;
+        displayContent.registerConfigurationChangeListener(this);
     }
 
     @VisibleForTesting
@@ -954,10 +980,10 @@ public class WindowProcessController extends ConfigurationContainer<Configuratio
         if (mDisplayId == INVALID_DISPLAY) {
             return;
         }
-        final ActivityDisplay activityDisplay =
-                mAtm.mRootActivityContainer.getActivityDisplay(mDisplayId);
-        if (activityDisplay != null) {
-            activityDisplay.unregisterConfigurationChangeListener(this);
+        final DisplayContent displayContent =
+                mAtm.mRootWindowContainer.getDisplayContent(mDisplayId);
+        if (displayContent != null) {
+            displayContent.unregisterConfigurationChangeListener(this);
         }
         mDisplayId = INVALID_DISPLAY;
     }

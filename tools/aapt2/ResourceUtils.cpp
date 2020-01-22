@@ -516,7 +516,7 @@ Maybe<ResourceId> ParseResourceId(const StringPiece& str) {
   if (android::ResTable::stringToInt(str16.data(), str16.size(), &value)) {
     if (value.dataType == android::Res_value::TYPE_INT_HEX) {
       ResourceId id(value.data);
-      if (id.is_valid_dynamic()) {
+      if (id.is_valid()) {
         return id;
       }
     }
@@ -738,7 +738,13 @@ std::unique_ptr<Item> ParseBinaryResValue(const ResourceType& type, const Config
                                           const android::Res_value& res_value,
                                           StringPool* dst_pool) {
   if (type == ResourceType::kId) {
-    return util::make_unique<Id>();
+    if (res_value.dataType != android::Res_value::TYPE_REFERENCE &&
+        res_value.dataType != android::Res_value::TYPE_DYNAMIC_REFERENCE) {
+      // plain "id" resources are actually encoded as dummy values (aapt1 uses an empty string,
+      // while aapt2 uses a false boolean).
+      return util::make_unique<Id>();
+    }
+    // fall through to regular reference deserialization logic
   }
 
   const uint32_t data = util::DeviceToHost32(res_value.data);

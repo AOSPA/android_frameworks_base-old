@@ -109,7 +109,9 @@ interface IWifiManager
 
     String getCountryCode();
 
-    boolean isDualBandSupported();
+    boolean is5GHzBandSupported();
+
+    boolean is6GHzBandSupported();
 
     boolean needs5GHzToAnyApBandConversion();
 
@@ -187,7 +189,7 @@ interface IWifiManager
 
     byte[] retrieveSoftApBackupData();
 
-    void restoreSoftApBackupData(in byte[] data);
+    SoftApConfiguration restoreSoftApBackupData(in byte[] data);
 
     void restoreSupplicantBackupData(in byte[] supplicantData, in byte[] ipConfigData);
 

@@ -18,7 +18,6 @@ package com.android.server.wm;
 
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
-import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
@@ -56,7 +55,7 @@ class ActivityTestsBase extends SystemServiceTestsBase {
     final Context mContext = getInstrumentation().getTargetContext();
 
     ActivityTaskManagerService mService;
-    RootActivityContainer mRootActivityContainer;
+    RootWindowContainer mRootWindowContainer;
     ActivityStackSupervisor mSupervisor;
 
     // Default package name
@@ -74,17 +73,17 @@ class ActivityTestsBase extends SystemServiceTestsBase {
     public void setUpBase() {
         mService = mSystemServicesTestRule.getActivityTaskManagerService();
         mSupervisor = mService.mStackSupervisor;
-        mRootActivityContainer = mService.mRootActivityContainer;
+        mRootWindowContainer = mService.mRootWindowContainer;
     }
 
-    /** Creates and adds a {@link TestActivityDisplay} to supervisor at the given position. */
-    TestActivityDisplay addNewActivityDisplayAt(int position) {
-        return new TestActivityDisplay.Builder(mService, 1000, 1500).setPosition(position).build();
+    /** Creates and adds a {@link TestDisplayContent} to supervisor at the given position. */
+    TestDisplayContent addNewDisplayContentAt(int position) {
+        return new TestDisplayContent.Builder(mService, 1000, 1500).setPosition(position).build();
     }
 
     /** Sets the default minimum task size to 1 so that tests can use small task sizes */
     public void removeGlobalMinSizeRestriction() {
-        mService.mRootActivityContainer.mDefaultMinSizeOfResizeableTaskDp = 1;
+        mService.mRootWindowContainer.mDefaultMinSizeOfResizeableTaskDp = 1;
     }
 
     /**
@@ -274,7 +273,7 @@ class ActivityTestsBase extends SystemServiceTestsBase {
                     activity.processName, activity.info.applicationInfo.uid);
 
             // Resume top activities to make sure all other signals in the system are connected.
-            mService.mRootActivityContainer.resumeFocusedStacksTopActivities();
+            mService.mRootWindowContainer.resumeFocusedStacksTopActivities();
             return activity;
         }
     }
@@ -346,7 +345,7 @@ class ActivityTestsBase extends SystemServiceTestsBase {
 
         Task build() {
             if (mStack == null && mCreateStack) {
-                mStack = mSupervisor.mRootActivityContainer.getDefaultDisplay().createStack(
+                mStack = mSupervisor.mRootWindowContainer.getDefaultDisplay().createStack(
                         WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
                 spyOn(mStack);
             }
@@ -380,17 +379,17 @@ class ActivityTestsBase extends SystemServiceTestsBase {
     }
 
     static class StackBuilder {
-        private final RootActivityContainer mRootActivityContainer;
-        private ActivityDisplay mDisplay;
+        private final RootWindowContainer mRootWindowContainer;
+        private DisplayContent mDisplay;
         private int mStackId = -1;
         private int mWindowingMode = WINDOWING_MODE_UNDEFINED;
         private int mActivityType = ACTIVITY_TYPE_STANDARD;
         private boolean mOnTop = true;
         private boolean mCreateActivity = true;
 
-        StackBuilder(RootActivityContainer root) {
-            mRootActivityContainer = root;
-            mDisplay = mRootActivityContainer.getDefaultDisplay();
+        StackBuilder(RootWindowContainer root) {
+            mRootWindowContainer = root;
+            mDisplay = mRootWindowContainer.getDefaultDisplay();
         }
 
         StackBuilder setWindowingMode(int windowingMode) {
@@ -408,15 +407,8 @@ class ActivityTestsBase extends SystemServiceTestsBase {
             return this;
         }
 
-        // TODO(display-merge): Remove
-        StackBuilder setDisplay(ActivityDisplay display) {
-            mDisplay = display;
-            return this;
-        }
-
         StackBuilder setDisplay(DisplayContent display) {
-            // TODO(display-merge): Remove cast
-            mDisplay = (ActivityDisplay) display;
+            mDisplay = display;
             return this;
         }
 
@@ -433,32 +425,26 @@ class ActivityTestsBase extends SystemServiceTestsBase {
         ActivityStack build() {
             final int stackId = mStackId >= 0 ? mStackId : mDisplay.getNextStackId();
             final ActivityStack stack;
-            final ActivityStackSupervisor supervisor = mRootActivityContainer.mStackSupervisor;
-            if (mWindowingMode == WINDOWING_MODE_PINNED) {
-                stack = new ActivityStack(mDisplay, stackId, supervisor,
-                        mWindowingMode, ACTIVITY_TYPE_STANDARD, mOnTop);
-            } else {
-                stack = new ActivityStack(mDisplay, stackId, supervisor,
-                        mWindowingMode, mActivityType, mOnTop);
+            final ActivityStackSupervisor supervisor = mRootWindowContainer.mStackSupervisor;
 
-                if (mCreateActivity) {
-                    new ActivityBuilder(supervisor.mService)
-                            .setCreateTask(true)
-                            .setStack(stack)
-                            .build();
-                    if (mOnTop) {
-                        // We move the task to front again in order to regain focus after activity
-                        // added to the stack.
-                        // Or {@link ActivityDisplay#mPreferredTopFocusableStack} could be other
-                        // stacks (e.g. home stack).
-                        stack.moveToFront("createActivityStack");
-                    } else {
-                        stack.moveToBack("createActivityStack", null);
-                    }
+            stack = mDisplay.createStackUnchecked(mWindowingMode, mActivityType, stackId, mOnTop);
+
+            if (mCreateActivity) {
+                new ActivityBuilder(supervisor.mService)
+                        .setCreateTask(true)
+                        .setStack(stack)
+                        .build();
+                if (mOnTop) {
+                    // We move the task to front again in order to regain focus after activity
+                    // added to the stack. Or {@link DisplayContent#mPreferredTopFocusableStack}
+                    // could be other stacks (e.g. home stack).
+                    stack.moveToFront("createActivityStack");
+                } else {
+                    stack.moveToBack("createActivityStack", null);
                 }
             }
-
             spyOn(stack);
+
             doNothing().when(stack).startActivityLocked(
                     any(), any(), anyBoolean(), anyBoolean(), any());
 

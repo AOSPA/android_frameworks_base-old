@@ -47,15 +47,12 @@ import androidx.test.filters.SmallTest;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto;
 import com.android.systemui.ActivityStarterDelegate;
-import com.android.systemui.Dependency;
 import com.android.systemui.ExpandHelper;
-import com.android.systemui.InitController;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.classifier.FalsingManagerFake;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.statusbar.EmptyShadeView;
-import com.android.systemui.statusbar.NotificationEntryBuilder;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationPresenter;
@@ -71,6 +68,7 @@ import com.android.systemui.statusbar.notification.NotificationSectionsFeatureMa
 import com.android.systemui.statusbar.notification.TestableNotificationEntryManager;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder;
 import com.android.systemui.statusbar.notification.collection.NotificationRankingManager;
 import com.android.systemui.statusbar.notification.logging.NotifLog;
 import com.android.systemui.statusbar.notification.people.PeopleHubSectionFooterViewAdapter;
@@ -170,7 +168,6 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
                 ),
                 mock(NotificationEntryManager.KeyguardEnvironment.class));
         mDependency.injectTestDependency(NotificationEntryManager.class, mEntryManager);
-        Dependency.get(InitController.class).executePostInitTasks();
         mEntryManager.setUpForTest(mock(NotificationPresenter.class), null, mHeadsUpManager);
 
 

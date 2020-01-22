@@ -21,8 +21,8 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
-import android.annotation.UnsupportedAppUsage;
 import android.app.Service;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ParceledListSlice;
@@ -298,6 +298,18 @@ public abstract class AccessibilityService extends Service {
      * The user has performed an down and right gesture on the touch screen.
      */
     public static final int GESTURE_SWIPE_DOWN_AND_RIGHT = 16;
+
+    /**
+     * The user has performed a double tap gesture on the touch screen.
+     * @hide
+     */
+    public static final int GESTURE_DOUBLE_TAP = 17;
+
+    /**
+     * The user has performed a double tap and hold gesture on the touch screen.
+     * @hide
+     */
+    public static final int GESTURE_DOUBLE_TAP_AND_HOLD = 18;
 
     /**
      * The {@link Intent} that must be declared as handled by the service.

@@ -89,6 +89,7 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.connectivity.WifiActivityEnergyInfo;
 import android.os.test.TestLooper;
+import android.util.SparseArray;
 
 import androidx.test.filters.SmallTest;
 
@@ -876,6 +877,25 @@ public class WifiManagerTest {
         verify(mSoftApCallback).onInfoChanged(testSoftApInfo);
     }
 
+
+    /*
+     * Verify client-provided callback is being called through callback proxy
+     */
+    @Test
+    public void softApCallbackProxyCallsOnCapabilityChanged() throws Exception {
+        SoftApCapability testSoftApCapability = new SoftApCapability(0);
+        testSoftApCapability.setMaxSupportedClients(10);
+        ArgumentCaptor<ISoftApCallback.Stub> callbackCaptor =
+                ArgumentCaptor.forClass(ISoftApCallback.Stub.class);
+        mWifiManager.registerSoftApCallback(new HandlerExecutor(mHandler), mSoftApCallback);
+        verify(mWifiService).registerSoftApCallback(any(IBinder.class), callbackCaptor.capture(),
+                anyInt());
+
+        callbackCaptor.getValue().onCapabilityChanged(testSoftApCapability);
+        mLooper.dispatchAll();
+        verify(mSoftApCallback).onCapabilityChanged(testSoftApCapability);
+    }
+
     /*
      * Verify client-provided callback is being called through callback proxy on multiple events
      */
@@ -884,6 +904,8 @@ public class WifiManagerTest {
         SoftApInfo testSoftApInfo = new SoftApInfo();
         testSoftApInfo.setFrequency(TEST_AP_FREQUENCY);
         testSoftApInfo.setBandwidth(TEST_AP_BANDWIDTH);
+        SoftApCapability testSoftApCapability = new SoftApCapability(0);
+        testSoftApCapability.setMaxSupportedClients(10);
         ArgumentCaptor<ISoftApCallback.Stub> callbackCaptor =
                 ArgumentCaptor.forClass(ISoftApCallback.Stub.class);
         mWifiManager.registerSoftApCallback(new HandlerExecutor(mHandler), mSoftApCallback);
@@ -895,12 +917,15 @@ public class WifiManagerTest {
         callbackCaptor.getValue().onConnectedClientsChanged(testClients);
         callbackCaptor.getValue().onInfoChanged(testSoftApInfo);
         callbackCaptor.getValue().onStateChanged(WIFI_AP_STATE_FAILED, SAP_START_FAILURE_GENERAL);
+        callbackCaptor.getValue().onCapabilityChanged(testSoftApCapability);
+
 
         mLooper.dispatchAll();
         verify(mSoftApCallback).onStateChanged(WIFI_AP_STATE_ENABLING, 0);
         verify(mSoftApCallback).onConnectedClientsChanged(testClients);
         verify(mSoftApCallback).onInfoChanged(testSoftApInfo);
         verify(mSoftApCallback).onStateChanged(WIFI_AP_STATE_FAILED, SAP_START_FAILURE_GENERAL);
+        verify(mSoftApCallback).onCapabilityChanged(testSoftApCapability);
     }
 
     /*
@@ -1696,8 +1721,6 @@ public class WifiManagerTest {
         assertTrue(mWifiManager.isPasspointSupported());
         assertTrue(mWifiManager.isP2pSupported());
         assertFalse(mWifiManager.isPortableHotspotSupported());
-        assertFalse(mWifiManager.is5GHzBandSupported());
-        assertFalse(mWifiManager.is6GHzBandSupported());
         assertFalse(mWifiManager.isDeviceToDeviceRttSupported());
         assertFalse(mWifiManager.isDeviceToApRttSupported());
         assertFalse(mWifiManager.isPreferredNetworkOffloadSupported());
@@ -1782,13 +1805,23 @@ public class WifiManagerTest {
     }
 
     /**
-     * Test behavior of {@link WifiManager#isDualBandSupported()}
+     * Test behavior of {@link WifiManager#is5GHzBandSupported()}
      */
     @Test
-    public void testIsDualBandSupported() throws Exception {
-        when(mWifiService.isDualBandSupported()).thenReturn(true);
-        assertTrue(mWifiManager.isDualBandSupported());
-        verify(mWifiService).isDualBandSupported();
+    public void testIs5GHzBandSupported() throws Exception {
+        when(mWifiService.is5GHzBandSupported()).thenReturn(true);
+        assertTrue(mWifiManager.is5GHzBandSupported());
+        verify(mWifiService).is5GHzBandSupported();
+    }
+
+    /**
+     * Test behavior of {@link WifiManager#is6GHzBandSupported()}
+     */
+    @Test
+    public void testIs6GHzBandSupported() throws Exception {
+        when(mWifiService.is6GHzBandSupported()).thenReturn(true);
+        assertTrue(mWifiManager.is6GHzBandSupported());
+        verify(mWifiService).is6GHzBandSupported();
     }
 
     /**
@@ -2066,5 +2099,78 @@ public class WifiManagerTest {
         int actual = mWifiManager.getMaxSignalLevel();
         verify(mWifiService).calculateSignalLevel(Integer.MAX_VALUE);
         assertEquals(4, actual);
+    }
+
+    /*
+     * Test behavior of isWapiSupported
+     * @throws Exception
+     */
+    @Test
+    public void testIsWapiSupported() throws Exception {
+        when(mWifiService.getSupportedFeatures())
+                .thenReturn(new Long(WifiManager.WIFI_FEATURE_WAPI));
+        assertTrue(mWifiManager.isWapiSupported());
+        when(mWifiService.getSupportedFeatures())
+                .thenReturn(new Long(~WifiManager.WIFI_FEATURE_WAPI));
+        assertFalse(mWifiManager.isWapiSupported());
+    }
+
+    /*
+     * Test that DPP channel list is parsed correctly
+     */
+    @Test
+    public void testparseDppChannelList() throws Exception {
+        String channelList = "81/1,2,3,4,5,6,7,8,9,10,11,115/36,40,44,48";
+        SparseArray<int[]> expectedResult = new SparseArray<>();
+        expectedResult.append(81, new int[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11});
+        expectedResult.append(115, new int[]{36, 40, 44, 48});
+
+        SparseArray<int[]> result = WifiManager.parseDppChannelList(channelList);
+        assertEquals(expectedResult.size(), result.size());
+
+        int index = 0;
+        int key;
+
+        // Compare the two primitive int arrays
+        do {
+            try {
+                key = result.keyAt(index);
+            } catch (java.lang.ArrayIndexOutOfBoundsException e) {
+                break;
+            }
+            int[] expected = expectedResult.get(key);
+            int[] output = result.get(key);
+            assertEquals(expected.length, output.length);
+            for (int i = 0; i < output.length; i++) {
+                assertEquals(expected[i], output[i]);
+            }
+            index++;
+        } while (true);
+    }
+
+    /*
+     * Test that DPP channel list parser gracefully fails for invalid input
+     */
+    @Test
+    public void testparseDppChannelListWithInvalidFormats() throws Exception {
+        String channelList = "1,2,3,4,5,6,7,8,9,10,11,36,40,44,48";
+        SparseArray<int[]> result = WifiManager.parseDppChannelList(channelList);
+        assertEquals(result.size(), 0);
+
+        channelList = "ajgalskgjalskjg3-09683dh";
+        result = WifiManager.parseDppChannelList(channelList);
+        assertEquals(result.size(), 0);
+
+        channelList = "13/abc,46////";
+        result = WifiManager.parseDppChannelList(channelList);
+        assertEquals(result.size(), 0);
+
+        channelList = "11/4,5,13/";
+        result = WifiManager.parseDppChannelList(channelList);
+        assertEquals(result.size(), 0);
+
+        channelList = "/24,6";
+        result = WifiManager.parseDppChannelList(channelList);
+        assertEquals(result.size(), 0);
     }
 }

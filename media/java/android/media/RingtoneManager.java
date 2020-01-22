@@ -23,9 +23,9 @@ import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
-import android.annotation.UnsupportedAppUsage;
 import android.annotation.WorkerThread;
 import android.app.Activity;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ContentProvider;
 import android.content.ContentResolver;
 import android.content.ContentUris;
@@ -908,7 +908,7 @@ public class RingtoneManager {
         }
 
         // Tell MediaScanner about the new file. Wait for it to assign a {@link Uri}.
-        return MediaStore.scanFile(mContext, outFile);
+        return MediaStore.scanFile(mContext.getContentResolver(), outFile);
     }
 
     private static final String getExternalDirectoryForType(final int type) {

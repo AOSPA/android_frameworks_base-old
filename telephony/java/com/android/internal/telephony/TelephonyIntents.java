@@ -18,6 +18,7 @@ package com.android.internal.telephony;
 
 import android.content.Intent;
 import android.telephony.SubscriptionManager;
+import android.telephony.TelephonyManager;
 
 /**
  * The intents that the telephony services broadcast.
@@ -99,7 +100,7 @@ public class TelephonyIntents {
      * by the system.
      */
     public static final String ACTION_EMERGENCY_CALLBACK_MODE_CHANGED
-            = "android.intent.action.EMERGENCY_CALLBACK_MODE_CHANGED";
+            = TelephonyManager.ACTION_EMERGENCY_CALLBACK_MODE_CHANGED;
 
     /**
      * <p>Broadcast Action: The emergency call state is changed.
@@ -120,7 +121,7 @@ public class TelephonyIntents {
      * by the system.
      */
     public static final String ACTION_EMERGENCY_CALL_STATE_CHANGED
-            = "android.intent.action.EMERGENCY_CALL_STATE_CHANGED";
+            = TelephonyManager.ACTION_EMERGENCY_CALL_STATE_CHANGED;
 
     /**
      * Broadcast Action: The phone's signal strength has changed. The intent will have the
@@ -172,24 +173,6 @@ public class TelephonyIntents {
             = "android.intent.action.ANY_DATA_STATE";
 
     /**
-     * Broadcast Action: An attempt to establish a data connection has failed.
-     * The intent will have the following extra values:</p>
-     * <dl>
-     *   <dt>phoneName</dt><dd>A string version of the phone name.</dd>
-     *   <dt>state</dt><dd>One of {@code CONNECTED}, {@code CONNECTING}, or {code DISCONNECTED}.</dd>
-     *   <dt>reason</dt><dd>A string indicating the reason for the failure, if available.</dd>
-     * </dl>
-     *
-     * <p class="note">
-     * Requires the READ_PHONE_STATE permission.
-     *
-     * <p class="note">This is a protected intent that can only be sent
-     * by the system.
-     */
-    public static final String ACTION_DATA_CONNECTION_FAILED
-            = "android.intent.action.DATA_CONNECTION_FAILED";
-
-    /**
      * Broadcast Action: The sim card state has changed.
      * The intent will have the following extra values:</p>
      * <dl>
@@ -225,22 +208,6 @@ public class TelephonyIntents {
     public static final String EXTRA_REBROADCAST_ON_UNLOCK= "rebroadcastOnUnlock";
 
     /**
-     * Broadcast Action: The time was set by the carrier (typically by the NITZ string).
-     * This is a sticky broadcast.
-     * The intent will have the following extra values:</p>
-     * <ul>
-     *   <li><em>time</em> - The time as a long in UTC milliseconds.</li>
-     * </ul>
-     *
-     * <p class="note">
-     * Requires the READ_PHONE_STATE permission.
-     *
-     * <p class="note">This is a protected intent that can only be sent
-     * by the system.
-     */
-    public static final String ACTION_NETWORK_SET_TIME = "android.intent.action.NETWORK_SET_TIME";
-
-    /**
      * <p>Broadcast Action: It indicates the Emergency callback mode blocks datacall/sms
      * <p class="note">.
      * This is to pop up a notice to show user that the phone is in emergency callback mode
@@ -250,7 +217,7 @@ public class TelephonyIntents {
      * by the system.
      */
     public static final String ACTION_SHOW_NOTICE_ECM_BLOCK_OTHERS
-            = "com.android.internal.intent.action.ACTION_SHOW_NOTICE_ECM_BLOCK_OTHERS";
+            = TelephonyManager.ACTION_SHOW_NOTICE_ECM_BLOCK_OTHERS;
 
     /**
      * <p>Broadcast Action: Indicates that the action is forbidden by network.

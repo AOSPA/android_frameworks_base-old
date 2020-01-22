@@ -273,14 +273,6 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
         public WindowManager.LayoutParams getAttrs();
 
         /**
-         * Return whether this window needs the menu key shown.  Must be called
-         * with window lock held, because it may need to traverse down through
-         * window list to determine the result.
-         * @param bottom The bottom-most window to consider when determining this.
-         */
-        public boolean getNeedsMenuLw(WindowState bottom);
-
-        /**
          * Retrieve the current system UI visibility flags associated with
          * this window.
          */
@@ -342,13 +334,6 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
          * considering its app token) is currently animating.
          */
         boolean isAnimatingLw();
-
-        /**
-         * @return Whether the window can affect SystemUI flags, meaning that SystemUI (system bars,
-         *         for example) will be  affected by the flags specified in this window. This is the
-         *         case when the surface is on screen but not exiting.
-         */
-        boolean canAffectSystemUiFlags();
 
         /**
          * Is this window considered to be gone for purposes of layout?

@@ -32,7 +32,6 @@ import static com.android.internal.annotations.VisibleForTesting.Visibility.PACK
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.UnsupportedAppUsage;
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
 import android.app.backup.BackupAgent;
@@ -42,10 +41,13 @@ import android.app.servertransaction.ActivityRelaunchItem;
 import android.app.servertransaction.ActivityResultItem;
 import android.app.servertransaction.ClientTransaction;
 import android.app.servertransaction.ClientTransactionItem;
+import android.app.servertransaction.PauseActivityItem;
 import android.app.servertransaction.PendingTransactionActions;
 import android.app.servertransaction.PendingTransactionActions.StopInfo;
+import android.app.servertransaction.ResumeActivityItem;
 import android.app.servertransaction.TransactionExecutor;
 import android.app.servertransaction.TransactionExecutorHelper;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.AutofillOptions;
 import android.content.BroadcastReceiver;
 import android.content.ComponentCallbacks2;
@@ -112,6 +114,7 @@ import android.os.ServiceManager;
 import android.os.StrictMode;
 import android.os.SystemClock;
 import android.os.SystemProperties;
+import android.os.TelephonyServiceManager;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.permission.IPermissionManager;
@@ -128,6 +131,7 @@ import android.security.net.config.NetworkSecurityConfigProvider;
 import android.system.ErrnoException;
 import android.system.OsConstants;
 import android.system.StructStat;
+import android.telephony.TelephonyFrameworkInitializer;
 import android.util.AndroidRuntimeException;
 import android.util.ArrayMap;
 import android.util.BoostFramework;
@@ -521,6 +525,8 @@ public final class ActivityThread extends ClientTransactionHandler {
         boolean startsNotResumed;
         public final boolean isForward;
         int pendingConfigChanges;
+        // Whether we are in the process of performing on user leaving.
+        boolean mIsUserLeaving;
 
         Window mPendingRemoveWindow;
         WindowManager mPendingRemoveWindowManager;
@@ -3416,7 +3422,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     private ContextImpl createBaseContextForActivity(ActivityClientRecord r) {
         final int displayId;
         try {
-            displayId = ActivityTaskManager.getService().getActivityDisplayId(r.token);
+            displayId = ActivityTaskManager.getService().getDisplayId(r.token);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3654,7 +3660,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     r.activity, Looper.myLooper());
         }
         r.activity.onGetDirectActions(cancellationSignal, (actions) -> {
-            Preconditions.checkNotNull(actions);
+            Objects.requireNonNull(actions);
             Preconditions.checkCollectionElementsNotNull(actions, "actions");
             if (!actions.isEmpty()) {
                 final int actionCount = actions.size();
@@ -3760,6 +3766,66 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
             r.activity.dispatchPictureInPictureModeChanged(isInPipMode, newConfig);
         }
+    }
+
+    @Override
+    public void handlePictureInPictureRequested(IBinder token) {
+        final ActivityClientRecord r = mActivities.get(token);
+        if (r == null) {
+            Log.w(TAG, "Activity to request PIP to no longer exists");
+            return;
+        }
+
+        r.activity.onPictureInPictureRequested();
+    }
+
+    /**
+     * Cycle activity through onPause and onUserLeaveHint so that PIP is entered if supported, then
+     * return to its previous state. This allows activities that rely on onUserLeaveHint instead of
+     * onPictureInPictureRequested to enter picture-in-picture.
+     */
+    public void schedulePauseAndReturnToCurrentState(IBinder token) {
+        final ActivityClientRecord r = mActivities.get(token);
+        if (r == null) {
+            Log.w(TAG, "Activity to request pause with user leaving hint to no longer exists");
+            return;
+        }
+
+        if (r.mIsUserLeaving) {
+            // The activity is about to perform user leaving, so there's no need to cycle ourselves.
+            return;
+        }
+
+        final int prevState = r.getLifecycleState();
+        if (prevState != ON_RESUME && prevState != ON_PAUSE) {
+            return;
+        }
+
+        switch (prevState) {
+            case ON_RESUME:
+                // Schedule a PAUSE then return to RESUME.
+                schedulePauseWithUserLeavingHint(r);
+                scheduleResume(r);
+                break;
+            case ON_PAUSE:
+                // Schedule a RESUME then return to PAUSE.
+                scheduleResume(r);
+                schedulePauseWithUserLeavingHint(r);
+                break;
+        }
+    }
+
+    private void schedulePauseWithUserLeavingHint(ActivityClientRecord r) {
+        final ClientTransaction transaction = ClientTransaction.obtain(this.mAppThread, r.token);
+        transaction.setLifecycleStateRequest(PauseActivityItem.obtain(r.activity.isFinishing(),
+                /* userLeaving */ true, r.activity.mConfigChangeFlags, /* dontReport */ false));
+        executeTransaction(transaction);
+    }
+
+    private void scheduleResume(ActivityClientRecord r) {
+        final ClientTransaction transaction = ClientTransaction.obtain(this.mAppThread, r.token);
+        transaction.setLifecycleStateRequest(ResumeActivityItem.obtain(/* isForward */ false));
+        executeTransaction(transaction);
     }
 
     private void handleLocalVoiceInteractionStarted(IBinder token, IVoiceInteractor interactor) {
@@ -4406,7 +4472,9 @@ public final class ActivityThread extends ClientTransactionHandler {
                 r.newConfig = null;
             }
             if (localLOGV) Slog.v(TAG, "Resuming " + r + " with isForward=" + isForward);
-            WindowManager.LayoutParams l = r.window.getAttributes();
+            ViewRootImpl impl = r.window.getDecorView().getViewRootImpl();
+            WindowManager.LayoutParams l = impl != null
+                    ? impl.mWindowAttributes : r.window.getAttributes();
             if ((l.softInputMode
                     & WindowManager.LayoutParams.SOFT_INPUT_IS_FORWARD_NAVIGATION)
                     != forwardBit) {
@@ -4480,6 +4548,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         if (r != null) {
             if (userLeaving) {
                 performUserLeavingActivity(r);
+                r.mIsUserLeaving = false;
             }
 
             r.activity.mConfigChangeFlags |= configChanges;
@@ -4494,6 +4563,8 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     final void performUserLeavingActivity(ActivityClientRecord r) {
+        r.mIsUserLeaving = true;
+        mInstrumentation.callActivityOnPictureInPictureRequested(r.activity);
         mInstrumentation.callActivityOnUserLeaving(r.activity);
     }
 
@@ -7436,6 +7507,24 @@ public final class ActivityThread extends ClientTransactionHandler {
                 super.remove(path);
             }
         }
+
+        @Override
+        public void rename(String oldPath, String newPath) throws ErrnoException {
+            try {
+                super.rename(oldPath, newPath);
+            } catch (ErrnoException e) {
+                if (e.errno == OsConstants.EXDEV && oldPath.startsWith("/storage/")) {
+                    Log.v(TAG, "Recovering failed rename " + oldPath + " to " + newPath);
+                    try {
+                        Files.move(new File(oldPath).toPath(), new File(newPath).toPath());
+                    } catch (IOException e2) {
+                        throw e;
+                    }
+                } else {
+                    throw e;
+                }
+            }
+        }
     }
 
     public static void main(String[] args) {
@@ -7454,6 +7543,9 @@ public final class ActivityThread extends ClientTransactionHandler {
         // Make sure TrustedCertificateStore looks in the right place for CA certificates
         final File configDir = Environment.getUserConfigDirectory(UserHandle.myUserId());
         TrustedCertificateStore.setDefaultUserDirectory(configDir);
+
+        // Call per-process mainline module initialization.
+        initializeMainlineModules();
 
         Process.setArgV0("<pre-initialized>");
 
@@ -7487,6 +7579,14 @@ public final class ActivityThread extends ClientTransactionHandler {
         Looper.loop();
 
         throw new RuntimeException("Main thread loop unexpectedly exited");
+    }
+
+    /**
+     * Call various initializer APIs in mainline modules that need to be called when each process
+     * starts.
+     */
+    public static void initializeMainlineModules() {
+        TelephonyFrameworkInitializer.setTelephonyServiceManager(new TelephonyServiceManager());
     }
 
     private void purgePendingResources() {

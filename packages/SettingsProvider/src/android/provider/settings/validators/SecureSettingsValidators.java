@@ -217,6 +217,10 @@ public class SecureSettingsValidators {
         VALIDATORS.put(Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES, JSON_OBJECT_VALIDATOR);
         VALIDATORS.put(
                 Secure.NAVIGATION_MODE, new DiscreteValueValidator(new String[] {"0", "1", "2"}));
+        VALIDATORS.put(Secure.BACK_GESTURE_INSET_SCALE_LEFT,
+                new InclusiveFloatRangeValidator(0.0f, Float.MAX_VALUE));
+        VALIDATORS.put(Secure.BACK_GESTURE_INSET_SCALE_RIGHT,
+                new InclusiveFloatRangeValidator(0.0f, Float.MAX_VALUE));
         VALIDATORS.put(Secure.AWARE_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.SKIP_GESTURE_COUNT, NON_NEGATIVE_INTEGER_VALIDATOR);
         VALIDATORS.put(Secure.SKIP_TOUCH_COUNT, NON_NEGATIVE_INTEGER_VALIDATOR);
@@ -235,5 +239,10 @@ public class SecureSettingsValidators {
         VALIDATORS.put(Secure.AWARE_LOCK_ENABLED, BOOLEAN_VALIDATOR);
         VALIDATORS.put(Secure.DISPLAY_DENSITY_FORCED, NON_NEGATIVE_INTEGER_VALIDATOR);
         VALIDATORS.put(Secure.TAP_GESTURE, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(Secure.PEOPLE_STRIP, BOOLEAN_VALIDATOR);
+        VALIDATORS.put(Secure.ACCESSIBILITY_MAGNIFICATION_MODE,
+                new InclusiveIntegerRangeValidator(
+                        Secure.ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN,
+                        Secure.ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW));
     }
 }

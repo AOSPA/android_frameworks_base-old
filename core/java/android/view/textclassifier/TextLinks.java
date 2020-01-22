@@ -42,12 +42,14 @@ import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 
 /**
@@ -109,7 +111,6 @@ public final class TextLinks implements Parcelable {
 
     /**
      * Returns the text that was used to generate these links.
-     * @hide
      */
     @NonNull
     public String getText() {
@@ -155,7 +156,7 @@ public final class TextLinks implements Parcelable {
             @NonNull Spannable text,
             @ApplyStrategy int applyStrategy,
             @Nullable Function<TextLink, TextLinkSpan> spanFactory) {
-        Preconditions.checkNotNull(text);
+        Objects.requireNonNull(text);
         return new TextLinksParams.Builder()
                 .setApplyStrategy(applyStrategy)
                 .setSpanFactory(spanFactory)
@@ -223,10 +224,10 @@ public final class TextLinks implements Parcelable {
          */
         private TextLink(int start, int end, @NonNull EntityConfidence entityConfidence,
                 @NonNull Bundle extras, @Nullable URLSpan urlSpan) {
-            Preconditions.checkNotNull(entityConfidence);
+            Objects.requireNonNull(entityConfidence);
             Preconditions.checkArgument(!entityConfidence.getEntities().isEmpty());
             Preconditions.checkArgument(start <= end);
-            Preconditions.checkNotNull(extras);
+            Objects.requireNonNull(extras);
             mStart = start;
             mEnd = end;
             mEntityScores = entityConfidence;
@@ -341,6 +342,7 @@ public final class TextLinks implements Parcelable {
         private final boolean mLegacyFallback;
         @Nullable private String mCallingPackageName;
         private final Bundle mExtras;
+        @Nullable private final ZonedDateTime mReferenceTime;
         @UserIdInt
         private int mUserId = UserHandle.USER_NULL;
 
@@ -349,11 +351,13 @@ public final class TextLinks implements Parcelable {
                 LocaleList defaultLocales,
                 EntityConfig entityConfig,
                 boolean legacyFallback,
+                ZonedDateTime referenceTime,
                 Bundle extras) {
             mText = text;
             mDefaultLocales = defaultLocales;
             mEntityConfig = entityConfig;
             mLegacyFallback = legacyFallback;
+            mReferenceTime = referenceTime;
             mExtras = extras;
         }
 
@@ -391,6 +395,15 @@ public final class TextLinks implements Parcelable {
          */
         public boolean isLegacyFallback() {
             return mLegacyFallback;
+        }
+
+        /**
+         * @return reference time based on which relative dates (e.g. "tomorrow") should be
+         *      interpreted.
+         */
+        @Nullable
+        public ZonedDateTime getReferenceTime() {
+            return mReferenceTime;
         }
 
         /**
@@ -453,9 +466,10 @@ public final class TextLinks implements Parcelable {
             @Nullable private EntityConfig mEntityConfig;
             private boolean mLegacyFallback = true; // Use legacy fall back by default.
             @Nullable private Bundle mExtras;
+            @Nullable private ZonedDateTime mReferenceTime;
 
             public Builder(@NonNull CharSequence text) {
-                mText = Preconditions.checkNotNull(text);
+                mText = Objects.requireNonNull(text);
             }
 
             /**
@@ -510,13 +524,26 @@ public final class TextLinks implements Parcelable {
             }
 
             /**
+             * @param referenceTime reference time based on which relative dates (e.g. "tomorrow"
+             *      should be interpreted. This should usually be the time when the text was
+             *      originally composed.
+             *
+             * @return this builder
+             */
+            @NonNull
+            public Builder setReferenceTime(@Nullable ZonedDateTime referenceTime) {
+                mReferenceTime = referenceTime;
+                return this;
+            }
+
+            /**
              * Builds and returns the request object.
              */
             @NonNull
             public Request build() {
                 return new Request(
                         mText, mDefaultLocales, mEntityConfig,
-                        mLegacyFallback,
+                        mLegacyFallback, mReferenceTime,
                         mExtras == null ? Bundle.EMPTY : mExtras);
             }
         }
@@ -534,6 +561,7 @@ public final class TextLinks implements Parcelable {
             dest.writeString(mCallingPackageName);
             dest.writeInt(mUserId);
             dest.writeBundle(mExtras);
+            dest.writeString(mReferenceTime == null ? null : mReferenceTime.toString());
         }
 
         private static Request readFromParcel(Parcel in) {
@@ -543,9 +571,12 @@ public final class TextLinks implements Parcelable {
             final String callingPackageName = in.readString();
             final int userId = in.readInt();
             final Bundle extras = in.readBundle();
+            final String referenceTimeString = in.readString();
+            final ZonedDateTime referenceTime = referenceTimeString == null
+                    ? null : ZonedDateTime.parse(referenceTimeString);
 
             final Request request = new Request(text, defaultLocales, entityConfig,
-                    /* legacyFallback= */ true, extras);
+                    /* legacyFallback= */ true, referenceTime, extras);
             request.setCallingPackageName(callingPackageName);
             request.setUserId(userId);
             return request;
@@ -654,7 +685,7 @@ public final class TextLinks implements Parcelable {
          * @param fullText The full text to annotate with links
          */
         public Builder(@NonNull String fullText) {
-            mFullText = Preconditions.checkNotNull(fullText);
+            mFullText = Objects.requireNonNull(fullText);
             mLinks = new ArrayList<>();
         }
 

@@ -298,6 +298,9 @@
         <!-- Additional flag from base permission type: this permission can be automatically
             granted to the system telephony apps -->
         <flag name="telephony" value="0x400000" />
+        <!-- Additional flag from base permission type: this permission can be automatically
+            granted to the system companion device manager service -->
+        <flag name="companion" value="0x800000" />
     </attr>
 
     <!-- Flags indicating more context for a permission group. -->
@@ -1530,7 +1533,8 @@
          <code>com.google.app.<em>appname</em></code>
 
          <p>Inside of the manifest tag, may appear the following tags
-         in any order: {@link #AndroidManifestPermission permission},
+         in any order: {@link #AndroidManifestFeature feature},
+         {@link #AndroidManifestPermission permission},
          {@link #AndroidManifestPermissionGroup permission-group},
          {@link #AndroidManifestPermissionTree permission-tree},
          {@link #AndroidManifestUsesSdk uses-sdk},
@@ -1753,7 +1757,36 @@
 
              The default value is {@code false}. -->
         <attr name="forceQueryable" format="boolean" />
+
+        <!-- If {@code true} indicates that this application is capable of presenting a unified
+             interface representing multiple profiles.
+
+             The default value is {@code false}. -->
+        <attr name="crossProfile" format="boolean" />
     </declare-styleable>
+
+    <!-- The <code>feature</code> tag declares a feature. A feature is a part of an app. E.g.
+    photo sharing app might include a direct messaging component.
+
+    <p>This appears as a child tag of the root {@link #AndroidManifest manifest} tag.
+
+    <p>In case this feature inherits from another feature, this tag can contain one or multiple
+    {@link #AndroidManifestFeatureInheritFrom inherit-from} tags. -->
+    <declare-styleable name="AndroidManifestFeature" parent="AndroidManifest">
+        <!-- Required identifier for a feature. Can be passed to
+        {@link android.content.Context#createFeatureContext} to create a context for this feature
+        -->
+        <attr name="featureId" format="string" />
+        <!-- Required user visible label for a feature. -->
+        <attr name="label" format="string" />
+    </declare-styleable>
+
+    <!-- Declares previously declared features this feature inherits from. -->
+    <declare-styleable name="AndroidManifestFeatureInheritFrom" parent="AndroidManifestFeature">
+        <!-- Identifier of the feature this feature inherits from -->
+        <attr name="featureId" format="string" />
+    </declare-styleable>
+
     <!-- The <code>permission</code> tag declares a security permission that can be
          used to control access from other packages to specific components or
          features in your package (or other packages).  See the
@@ -2494,6 +2527,30 @@
             <enum name="hdr" value="2" />
         </attr>
         <attr name="forceQueryable" format="boolean" />
+        <!-- Indicates whether the activity wants the connected display to do minimal
+             post processing on the produced image or video frames. This will only be
+             requested if this activity's main window is visible on the screen.
+
+             <p> This setting should be used when low latency has a higher priority than
+             image enhancement processing (e.g. for games or video conferencing).
+
+             <p> If the Display sink is connected via HDMI, the device will begin to
+             send infoframes with Auto Low Latency Mode enabled and Game Content Type.
+             This will switch the connected display to a minimal image processing  mode
+             (if available), which reduces latency, improving the user experience for
+             gaming or video conferencing applications. For more information,
+             see HDMI 2.1 specification.
+
+             <p> If the Display sink has an internal connection or uses some other
+             protocol than HDMI, effects may be similar but implementation-defined.
+
+             <p> The ability to switch to a mode with minimal post proessing may be
+             disabled by a user setting in the system settings menu. In that case,
+             this field is ignored and the display will remain in its current
+             mode.
+
+             <p> See {@link android.content.pm.ActivityInfo #preferMinimalPostProcessing} -->
+        <attr name="preferMinimalPostProcessing" format="boolean"/>
     </declare-styleable>
 
     <!-- The <code>activity-alias</code> tag declares a new

@@ -24,6 +24,8 @@ import static android.view.ViewRootImpl.NEW_INSETS_MODE_IME;
 import static android.view.ViewRootImpl.NEW_INSETS_MODE_NONE;
 import static android.view.ViewRootImpl.sNewInsetsMode;
 
+import static com.android.server.wm.WindowManagerService.H.LAYOUT_AND_ASSIGN_WINDOW_LAYERS_IF_NEEDED;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.graphics.Point;
@@ -36,7 +38,6 @@ import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 
 import com.android.internal.util.function.TriConsumer;
-import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
 
 import java.io.PrintWriter;
@@ -141,9 +142,10 @@ class InsetsSourceProvider {
     }
 
     /**
-     * Called when a layout pass has occurred.
+     * The source frame can affect the layout of other windows, so this should be called once the
+     * window gets laid out.
      */
-    void onPostLayout() {
+    void updateSourceFrame() {
         if (mWin == null) {
             return;
         }
@@ -155,6 +157,17 @@ class InsetsSourceProvider {
             mTmpRect.inset(mWin.mGivenContentInsets);
         }
         mSource.setFrame(mTmpRect);
+    }
+
+    /**
+     * Called when a layout pass has occurred.
+     */
+    void onPostLayout() {
+        if (mWin == null) {
+            return;
+        }
+
+        updateSourceFrame();
         if (mControl != null) {
             final Rect frame = mWin.getWindowFrames().mFrame;
             if (mControl.setSurfacePosition(frame.left, frame.top)) {
@@ -210,8 +223,8 @@ class InsetsSourceProvider {
             return;
         }
         mClientVisible = clientVisible;
-        mDisplayContent.mWmService.mH.sendMessage(PooledLambda.obtainMessage(
-                DisplayContent::layoutAndAssignWindowLayersIfNeeded, mDisplayContent));
+        mDisplayContent.mWmService.mH.obtainMessage(
+                LAYOUT_AND_ASSIGN_WINDOW_LAYERS_IF_NEEDED, mDisplayContent).sendToTarget();
         updateVisibility();
     }
 

@@ -606,7 +606,7 @@ public final class ActiveServices {
             }
             mAm.mAppOpsService.startOperation(AppOpsManager.getToken(mAm.mAppOpsService),
                     AppOpsManager.OP_START_FOREGROUND, r.appInfo.uid, r.packageName, null,
-                    true);
+                    true, false, null);
         }
 
         final ServiceMap smap = getServiceMapLocked(r.userId);
@@ -1431,7 +1431,7 @@ public final class ActiveServices {
                         mAm.mAppOpsService.startOperation(
                                 AppOpsManager.getToken(mAm.mAppOpsService),
                                 AppOpsManager.OP_START_FOREGROUND, r.appInfo.uid, r.packageName,
-                                null, true);
+                                null, true, false, "");
                         StatsLog.write(StatsLog.FOREGROUND_SERVICE_STATE_CHANGED,
                                 r.appInfo.uid, r.shortInstanceName,
                                 StatsLog.FOREGROUND_SERVICE_STATE_CHANGED__STATE__ENTER);
@@ -2610,7 +2610,7 @@ public final class ActiveServices {
             if(SERVICE_RESCHEDULE) {
                 boolean shouldDelay = false;
                 ActivityRecord top_rc = null;
-                ActivityStack stack = mAm.mStackSupervisor.mRootActivityContainer.getTopDisplayFocusedStack();
+                ActivityStack stack = mAm.mStackSupervisor.mRootWindowContainer.getTopDisplayFocusedStack();
                 if(stack != null) {
                     top_rc = stack.topRunningActivity();
                 }
@@ -3142,7 +3142,9 @@ public final class ActiveServices {
                     } catch (Exception e) {
                         Slog.w(TAG, "Exception when unbinding service "
                                 + r.shortInstanceName, e);
+                        needOomAdj = false;
                         serviceProcessGoneLocked(r);
+                        break;
                     }
                 }
             }

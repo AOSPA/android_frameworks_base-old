@@ -569,14 +569,6 @@ interface ISms {
             int subId, String callingPkg, String prefixes, in PendingIntent intent);
 
     /**
-     * Get the capacity count of sms on Icc card.
-     *
-     * @param subId for subId which getSmsCapacityOnIcc is queried.
-     * @return capacity of ICC
-     */
-    int getSmsCapacityOnIccForSubscriber(int subId);
-
-    /**
      * Check if the destination is a possible premium short code.
      *
      * @param destAddress the destination address to test for possible short code
@@ -602,4 +594,12 @@ interface ISms {
      * @return true for success, false otherwise.
      */
     boolean setSmscAddressOnIccEfForSubscriber(String smsc, int subId, String callingPackage);
+
+    /**
+     * Get the capacity count of sms on Icc card.
+     *
+     * @param subId for subId which getSmsCapacityOnIcc is queried.
+     * @return capacity of ICC
+     */
+    int getSmsCapacityOnIccForSubscriber(int subId);
 }

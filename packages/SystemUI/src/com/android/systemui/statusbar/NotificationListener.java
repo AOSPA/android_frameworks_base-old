@@ -19,9 +19,7 @@ package com.android.systemui.statusbar;
 import static com.android.systemui.statusbar.RemoteInputController.processForRemoteInput;
 import static com.android.systemui.statusbar.notification.NotificationEntryManager.UNDEFINED_DISMISS_REASON;
 import static com.android.systemui.statusbar.phone.StatusBar.DEBUG;
-import static com.android.systemui.statusbar.phone.StatusBar.ENABLE_CHILD_NOTIFICATIONS;
 
-import android.annotation.Nullable;
 import android.annotation.SuppressLint;
 import android.app.NotificationManager;
 import android.content.ComponentName;
@@ -32,12 +30,11 @@ import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
 
-import com.android.systemui.dagger.qualifiers.MainHandler;
-import com.android.systemui.statusbar.notification.NotificationEntryManager;
-import com.android.systemui.statusbar.phone.NotificationGroupManager;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.statusbar.phone.NotificationListenerWithPlugins;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -51,31 +48,33 @@ import javax.inject.Singleton;
 public class NotificationListener extends NotificationListenerWithPlugins {
     private static final String TAG = "NotificationListener";
 
-    // Dependencies:
-    private final NotificationEntryManager mEntryManager;
-    private final NotificationGroupManager mGroupManager;
-
     private final Context mContext;
+    private final NotificationManager mNotificationManager;
     private final Handler mMainHandler;
+    private final List<NotificationHandler> mNotificationHandlers = new ArrayList<>();
     private final ArrayList<NotificationSettingsListener> mSettingsListeners = new ArrayList<>();
-    @Nullable private NotifServiceListener mDownstreamListener;
 
     @Inject
-    public NotificationListener(Context context, @MainHandler Handler mainHandler,
-            NotificationEntryManager notificationEntryManager,
-            NotificationGroupManager notificationGroupManager) {
+    public NotificationListener(
+            Context context,
+            NotificationManager notificationManager,
+            @Main Handler mainHandler) {
         mContext = context;
+        mNotificationManager = notificationManager;
         mMainHandler = mainHandler;
-        mEntryManager = notificationEntryManager;
-        mGroupManager = notificationGroupManager;
     }
 
+    /** Registers a listener that's notified when notifications are added/removed/etc. */
+    public void addNotificationHandler(NotificationHandler handler) {
+        if (mNotificationHandlers.contains(handler)) {
+            throw new IllegalArgumentException("Listener is already added");
+        }
+        mNotificationHandlers.add(handler);
+    }
+
+    /** Registers a listener that's notified when any notification-related settings change. */
     public void addNotificationSettingsListener(NotificationSettingsListener listener) {
         mSettingsListeners.add(listener);
-    }
-
-    public void setDownstreamListener(NotifServiceListener downstreamListener) {
-        mDownstreamListener = downstreamListener;
     }
 
     @Override
@@ -89,15 +88,25 @@ public class NotificationListener extends NotificationListenerWithPlugins {
         }
         final RankingMap currentRanking = getCurrentRanking();
         mMainHandler.post(() -> {
+            // There's currently a race condition between the calls to getActiveNotifications() and
+            // getCurrentRanking(). It's possible for the ranking that we store here to not contain
+            // entries for every notification in getActiveNotifications(). To prevent downstream
+            // crashes, we temporarily fill in these missing rankings with stubs.
+            // See b/146011844 for long-term fix
+            final List<Ranking> newRankings = new ArrayList<>();
             for (StatusBarNotification sbn : notifications) {
-                if (mDownstreamListener != null) {
-                    mDownstreamListener.onNotificationPosted(sbn, currentRanking);
+                newRankings.add(getRankingOrTemporaryStandIn(currentRanking, sbn.getKey()));
+            }
+            final RankingMap completeMap = new RankingMap(newRankings.toArray(new Ranking[0]));
+
+            for (StatusBarNotification sbn : notifications) {
+                for (NotificationHandler listener : mNotificationHandlers) {
+                    listener.onNotificationPosted(sbn, completeMap);
                 }
-                mEntryManager.addNotification(sbn, currentRanking);
             }
         });
-        NotificationManager noMan = mContext.getSystemService(NotificationManager.class);
-        onSilentStatusBarIconsVisibilityChanged(noMan.shouldHideSilentStatusBarIcons());
+        onSilentStatusBarIconsVisibilityChanged(
+                mNotificationManager.shouldHideSilentStatusBarIcons());
     }
 
     @Override
@@ -108,34 +117,8 @@ public class NotificationListener extends NotificationListenerWithPlugins {
             mMainHandler.post(() -> {
                 processForRemoteInput(sbn.getNotification(), mContext);
 
-                if (mDownstreamListener != null) {
-                    mDownstreamListener.onNotificationPosted(sbn, rankingMap);
-                }
-
-                String key = sbn.getKey();
-                boolean isUpdate = mEntryManager.getActiveNotificationUnfiltered(key) != null;
-                // In case we don't allow child notifications, we ignore children of
-                // notifications that have a summary, since` we're not going to show them
-                // anyway. This is true also when the summary is canceled,
-                // because children are automatically canceled by NoMan in that case.
-                if (!ENABLE_CHILD_NOTIFICATIONS
-                        && mGroupManager.isChildInGroupWithSummary(sbn)) {
-                    if (DEBUG) {
-                        Log.d(TAG, "Ignoring group child due to existing summary: " + sbn);
-                    }
-
-                    // Remove existing notification to avoid stale data.
-                    if (isUpdate) {
-                        mEntryManager.removeNotification(key, rankingMap, UNDEFINED_DISMISS_REASON);
-                    } else {
-                        mEntryManager.updateRanking(rankingMap, "onNotificationPosted");
-                    }
-                    return;
-                }
-                if (isUpdate) {
-                    mEntryManager.updateNotification(sbn, rankingMap);
-                } else {
-                    mEntryManager.addNotification(sbn, rankingMap);
+                for (NotificationHandler handler : mNotificationHandlers) {
+                    handler.onNotificationPosted(sbn, rankingMap);
                 }
             });
         }
@@ -146,12 +129,10 @@ public class NotificationListener extends NotificationListenerWithPlugins {
             int reason) {
         if (DEBUG) Log.d(TAG, "onNotificationRemoved: " + sbn + " reason: " + reason);
         if (sbn != null && !onPluginNotificationRemoved(sbn, rankingMap)) {
-            final String key = sbn.getKey();
             mMainHandler.post(() -> {
-                if (mDownstreamListener != null) {
-                    mDownstreamListener.onNotificationRemoved(sbn, rankingMap, reason);
+                for (NotificationHandler handler : mNotificationHandlers) {
+                    handler.onNotificationRemoved(sbn, rankingMap, reason);
                 }
-                mEntryManager.removeNotification(key, rankingMap, reason);
             });
         }
     }
@@ -167,10 +148,9 @@ public class NotificationListener extends NotificationListenerWithPlugins {
         if (rankingMap != null) {
             RankingMap r = onPluginRankingUpdate(rankingMap);
             mMainHandler.post(() -> {
-                if (mDownstreamListener != null) {
-                    mDownstreamListener.onNotificationRankingUpdate(rankingMap);
+                for (NotificationHandler handler : mNotificationHandlers) {
+                    handler.onNotificationRankingUpdate(r);
                 }
-                mEntryManager.updateNotificationRanking(r);
             });
         }
     }
@@ -192,13 +172,42 @@ public class NotificationListener extends NotificationListenerWithPlugins {
         }
     }
 
+    private static Ranking getRankingOrTemporaryStandIn(RankingMap rankingMap, String key) {
+        Ranking ranking = new Ranking();
+        if (!rankingMap.getRanking(key, ranking)) {
+            ranking.populate(
+                    key,
+                    0,
+                    false,
+                    0,
+                    0,
+                    0,
+                    null,
+                    null,
+                    null,
+                    new ArrayList<>(),
+                    new ArrayList<>(),
+                    false,
+                    0,
+                    false,
+                    0,
+                    false,
+                    new ArrayList<>(),
+                    new ArrayList<>(),
+                    false,
+                    false
+            );
+        }
+        return ranking;
+    }
+
     public interface NotificationSettingsListener {
 
         default void onStatusBarIconsBehaviorChanged(boolean hideSilentStatusIcons) { }
     }
 
     /** Interface for listening to add/remove events that we receive from NotificationManager. */
-    public interface NotifServiceListener {
+    public interface NotificationHandler {
         void onNotificationPosted(StatusBarNotification sbn, RankingMap rankingMap);
         void onNotificationRemoved(StatusBarNotification sbn, RankingMap rankingMap);
         void onNotificationRemoved(StatusBarNotification sbn, RankingMap rankingMap, int reason);

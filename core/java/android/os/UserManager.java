@@ -28,12 +28,12 @@ import android.annotation.StringDef;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.annotation.UserIdInt;
 import android.annotation.WorkerThread;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.admin.DevicePolicyManager;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -442,7 +442,13 @@ public class UserManager {
      * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
      * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
      * @see #getUserRestrictions()
+     * @deprecated As the ability to have a managed profile on a fully-managed device has been
+     * removed from the platform, this restriction will be silently ignored when applied by the
+     * device owner.
+     * When the device is provisioned with a managed profile on an organization-owned device,
+     * the managed profile could not be removed anyway.
      */
+    @Deprecated
     public static final String DISALLOW_REMOVE_MANAGED_PROFILE = "no_remove_managed_profile";
 
     /**
@@ -589,7 +595,11 @@ public class UserManager {
      * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
      * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
      * @see #getUserRestrictions()
+     * @deprecated As the ability to have a managed profile on a fully-managed device has been
+     * removed from the platform, this restriction will be silently ignored when applied by the
+     * device owner.
      */
+    @Deprecated
     public static final String DISALLOW_ADD_MANAGED_PROFILE = "no_add_managed_profile";
 
     /**
@@ -1540,6 +1550,9 @@ public class UserManager {
      * set by the user and is not a placeholder string provided by the system.
      * @hide
      */
+    @SystemApi
+    @RequiresPermission(anyOf = {Manifest.permission.MANAGE_USERS,
+            Manifest.permission.GET_ACCOUNTS_PRIVILEGED})
     public boolean isUserNameSet() {
         try {
             return mService.isUserNameSet(getUserHandle());
@@ -2391,19 +2404,11 @@ public class UserManager {
      */
     public @Nullable UserInfo createUser(@Nullable String name, @NonNull String userType,
             @UserInfoFlag int flags) {
-        UserInfo user = null;
         try {
-            user = mService.createUser(name, userType, flags);
-            // TODO: Keep this in sync with
-            // UserManagerService.LocalService.createUserEvenWhenDisallowed
-            if (user != null && !user.isAdmin() && !user.isDemo()) {
-                mService.setUserRestriction(DISALLOW_SMS, true, user.id);
-                mService.setUserRestriction(DISALLOW_OUTGOING_CALLS, true, user.id);
-            }
+            return mService.createUser(name, userType, flags);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
-        return user;
     }
 
     /**
@@ -2748,8 +2753,7 @@ public class UserManager {
     /**
      * Assigns admin privileges to the user, if such a user exists.
      *
-     * <p>Requires {@link android.Manifest.permission#MANAGE_USERS} and
-     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL} permissions.
+     * <p>Note that this does not alter the user's pre-existing user restrictions.
      *
      * @param userId the id of the user to become admin
      * @hide

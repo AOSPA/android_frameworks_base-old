@@ -20,7 +20,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.AutofillOptions;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -99,6 +99,7 @@ import java.io.InputStream;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.nio.ByteOrder;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Objects;
 import java.util.concurrent.Executor;
@@ -250,6 +251,8 @@ class ContextImpl extends Context {
     private File mPreferencesDir;
     @GuardedBy("mSync")
     private File mFilesDir;
+    @GuardedBy("mSync")
+    private File mCratesDir;
     @GuardedBy("mSync")
     private File mNoBackupFilesDir;
     @GuardedBy("mSync")
@@ -699,6 +702,24 @@ class ContextImpl extends Context {
             }
             return ensurePrivateDirExists(mFilesDir);
         }
+    }
+
+    @Override
+    public File getCrateDir(@NonNull String crateId) {
+        Preconditions.checkArgument(FileUtils.isValidExtFilename(crateId), "invalidated crateId");
+        final Path cratesRootPath = getDataDir().toPath().resolve("crates");
+        final Path absoluteNormalizedCratePath = cratesRootPath.resolve(crateId)
+                .toAbsolutePath().normalize();
+
+        synchronized (mSync) {
+            if (mCratesDir == null) {
+                mCratesDir = cratesRootPath.toFile();
+            }
+            ensurePrivateDirExists(mCratesDir);
+        }
+
+        File cratedDir = absoluteNormalizedCratePath.toFile();
+        return ensurePrivateDirExists(cratedDir);
     }
 
     @Override
@@ -2773,7 +2794,7 @@ class ContextImpl extends Context {
 
         public ApplicationContentResolver(Context context, ActivityThread mainThread) {
             super(context);
-            mMainThread = Preconditions.checkNotNull(mainThread);
+            mMainThread = Objects.requireNonNull(mainThread);
         }
 
         @Override

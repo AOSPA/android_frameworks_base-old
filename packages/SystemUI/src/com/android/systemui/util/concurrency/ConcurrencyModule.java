@@ -18,13 +18,18 @@ package com.android.systemui.util.concurrency;
 
 import android.content.Context;
 import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
+import android.os.Process;
 
 import com.android.systemui.dagger.qualifiers.Background;
-import com.android.systemui.dagger.qualifiers.BgHandler;
 import com.android.systemui.dagger.qualifiers.Main;
-import com.android.systemui.dagger.qualifiers.MainHandler;
+import com.android.systemui.dagger.qualifiers.UiBackground;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+
+import javax.inject.Singleton;
 
 import dagger.Module;
 import dagger.Provides;
@@ -34,12 +39,52 @@ import dagger.Provides;
  */
 @Module
 public abstract class ConcurrencyModule {
+    /** Background Looper */
+    @Provides
+    @Singleton
+    @Background
+    public static Looper provideBgLooper() {
+        HandlerThread thread = new HandlerThread("SysUiBg",
+                Process.THREAD_PRIORITY_BACKGROUND);
+        thread.start();
+        return thread.getLooper();
+    }
+
+    /** Main Looper */
+    @Provides
+    @Main
+    public static  Looper provideMainLooper() {
+        return Looper.getMainLooper();
+    }
+
+    /**
+     * Background Handler.
+     *
+     * Prefer the Background Executor when possible.
+     */
+    @Provides
+    @Background
+    public static Handler provideBgHandler(@Background Looper bgLooper) {
+        return new Handler(bgLooper);
+    }
+
+    /**
+     * Main Handler.
+     *
+     * Prefer the Main Executor when possible.
+     */
+    @Provides
+    @Main
+    public static Handler provideMainHandler(@Main Looper mainLooper) {
+        return new Handler(mainLooper);
+    }
+
     /**
      * Provide a Background-Thread Executor by default.
      */
     @Provides
-    public static Executor provideExecutor(@BgHandler Handler handler) {
-        return new ExecutorImpl(handler);
+    public static Executor provideExecutor(@Background Looper looper) {
+        return new ExecutorImpl(new Handler(looper));
     }
 
     /**
@@ -47,8 +92,8 @@ public abstract class ConcurrencyModule {
      */
     @Provides
     @Background
-    public static Executor provideBackgroundExecutor(@BgHandler Handler handler) {
-        return new ExecutorImpl(handler);
+    public static Executor provideBackgroundExecutor(@Background Looper looper) {
+        return new ExecutorImpl(new Handler(looper));
     }
 
     /**
@@ -64,8 +109,8 @@ public abstract class ConcurrencyModule {
      * Provide a Background-Thread Executor by default.
      */
     @Provides
-    public static DelayableExecutor provideDelayableExecutor(@BgHandler Handler handler) {
-        return new ExecutorImpl(handler);
+    public static DelayableExecutor provideDelayableExecutor(@Background Looper looper) {
+        return new ExecutorImpl(new Handler(looper));
     }
 
     /**
@@ -73,8 +118,8 @@ public abstract class ConcurrencyModule {
      */
     @Provides
     @Background
-    public static DelayableExecutor provideBackgroundDelayableExecutor(@BgHandler Handler handler) {
-        return new ExecutorImpl(handler);
+    public static DelayableExecutor provideBackgroundDelayableExecutor(@Background Looper looper) {
+        return new ExecutorImpl(new Handler(looper));
     }
 
     /**
@@ -82,7 +127,19 @@ public abstract class ConcurrencyModule {
      */
     @Provides
     @Main
-    public static DelayableExecutor provideMainDelayableExecutor(@MainHandler Handler handler) {
-        return new ExecutorImpl(handler);
+    public static DelayableExecutor provideMainDelayableExecutor(@Main Looper looper) {
+        return new ExecutorImpl(new Handler(looper));
+    }
+
+    /**
+     * Provide an Executor specifically for running UI operations on a separate thread.
+     *
+     * Keep submitted runnables short and to the point, just as with any other UI code.
+     */
+    @Provides
+    @Singleton
+    @UiBackground
+    public static Executor provideUiBackgroundExecutor() {
+        return Executors.newSingleThreadExecutor();
     }
 }

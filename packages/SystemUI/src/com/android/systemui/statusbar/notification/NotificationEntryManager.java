@@ -18,6 +18,8 @@ package com.android.systemui.statusbar.notification;
 import static android.service.notification.NotificationListenerService.REASON_CANCEL;
 import static android.service.notification.NotificationListenerService.REASON_ERROR;
 
+import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.InflationCallback;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Notification;
@@ -33,19 +35,19 @@ import com.android.internal.statusbar.NotificationVisibility;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.statusbar.NotificationLifetimeExtender;
+import com.android.systemui.statusbar.NotificationListener;
+import com.android.systemui.statusbar.NotificationListener.NotificationHandler;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationRemoveInterceptor;
 import com.android.systemui.statusbar.NotificationUiAdjustment;
-import com.android.systemui.statusbar.NotificationUpdateHandler;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.NotificationRankingManager;
 import com.android.systemui.statusbar.notification.collection.NotificationRowBinder;
 import com.android.systemui.statusbar.notification.logging.NotifEvent;
 import com.android.systemui.statusbar.notification.logging.NotifLog;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
-import com.android.systemui.statusbar.notification.row.NotificationContentInflater;
-import com.android.systemui.statusbar.notification.row.NotificationContentInflater.InflationFlag;
+import com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.InflationFlag;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
@@ -93,8 +95,7 @@ import javax.inject.Singleton;
 @Singleton
 public class NotificationEntryManager implements
         Dumpable,
-        NotificationContentInflater.InflationCallback,
-        NotificationUpdateHandler,
+        InflationCallback,
         VisualStabilityManager.Callback {
     private static final String TAG = "NotificationEntryMgr";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
@@ -174,6 +175,11 @@ public class NotificationEntryManager implements
         mGroupManager = groupManager;
         mRankingManager = rankingManager;
         mKeyguardEnvironment = keyguardEnvironment;
+    }
+
+    /** Once called, the NEM will start processing notification events from system server. */
+    public void attach(NotificationListener notificationListener) {
+        notificationListener.addNotificationHandler(mNotifListener);
     }
 
     /** Adds a {@link NotificationEntryListener}. */
@@ -267,14 +273,13 @@ public class NotificationEntryManager implements
             NotificationEntry entry = mPendingNotifications.get(key);
             entry.abortTask();
             mPendingNotifications.remove(key);
-            mNotifLog.log(NotifEvent.INFLATION_ABORTED, entry.getSbn(), null,
-                    "PendingNotification aborted. " + reason);
+            mNotifLog.log(NotifEvent.INFLATION_ABORTED, entry, "PendingNotification aborted"
+                    + " reason=" + reason);
         }
         NotificationEntry addedEntry = getActiveNotificationUnfiltered(key);
         if (addedEntry != null) {
             addedEntry.abortTask();
-            mNotifLog.log(NotifEvent.INFLATION_ABORTED, addedEntry.getSbn(),
-                    null, reason);
+            mNotifLog.log(NotifEvent.INFLATION_ABORTED, addedEntry.getKey() + " " + reason);
         }
     }
 
@@ -321,6 +326,36 @@ public class NotificationEntryManager implements
         }
     }
 
+    private final NotificationHandler mNotifListener = new NotificationHandler() {
+        @Override
+        public void onNotificationPosted(StatusBarNotification sbn, RankingMap rankingMap) {
+            final boolean isUpdate = mActiveNotifications.containsKey(sbn.getKey());
+            if (isUpdate) {
+                updateNotification(sbn, rankingMap);
+            } else {
+                addNotification(sbn, rankingMap);
+            }
+        }
+
+        @Override
+        public void onNotificationRemoved(StatusBarNotification sbn, RankingMap rankingMap) {
+            removeNotification(sbn.getKey(), rankingMap, UNDEFINED_DISMISS_REASON);
+        }
+
+        @Override
+        public void onNotificationRemoved(
+                StatusBarNotification sbn,
+                RankingMap rankingMap,
+                int reason) {
+            removeNotification(sbn.getKey(), rankingMap, reason);
+        }
+
+        @Override
+        public void onNotificationRankingUpdate(RankingMap rankingMap) {
+            updateNotificationRanking(rankingMap);
+        }
+    };
+
     /**
      * Equivalent to the old NotificationData#add
      * @param entry - an entry which is prepared for display
@@ -347,7 +382,6 @@ public class NotificationEntryManager implements
     }
 
 
-    @Override
     public void removeNotification(String key, RankingMap ranking,
             int reason) {
         removeNotificationInternal(key, ranking, obtainVisibility(key), false /* forceRemove */,
@@ -501,13 +535,12 @@ public class NotificationEntryManager implements
 
         abortExistingInflation(key, "addNotification");
         mPendingNotifications.put(key, entry);
-        mNotifLog.log(NotifEvent.NOTIF_ADDED, entry.getSbn());
+        mNotifLog.log(NotifEvent.NOTIF_ADDED, entry);
         for (NotificationEntryListener listener : mNotificationEntryListeners) {
             listener.onPendingEntryAdded(entry);
         }
     }
 
-    @Override
     public void addNotification(StatusBarNotification notification, RankingMap ranking) {
         try {
             addNotificationInternal(notification, ranking);
@@ -536,7 +569,7 @@ public class NotificationEntryManager implements
         entry.setSbn(notification);
         mGroupManager.onEntryUpdated(entry, oldSbn);
 
-        mNotifLog.log(NotifEvent.NOTIF_UPDATED, entry.getSbn(), entry.getRanking());
+        mNotifLog.log(NotifEvent.NOTIF_UPDATED, entry);
         for (NotificationEntryListener listener : mNotificationEntryListeners) {
             listener.onPreEntryUpdated(entry);
         }
@@ -557,7 +590,6 @@ public class NotificationEntryManager implements
         }
     }
 
-    @Override
     public void updateNotification(StatusBarNotification notification, RankingMap ranking) {
         try {
             updateNotificationInternal(notification, ranking);
@@ -577,7 +609,6 @@ public class NotificationEntryManager implements
         }
     }
 
-    @Override
     public void updateNotificationRanking(RankingMap rankingMap) {
         List<NotificationEntry> entries = new ArrayList<>();
         entries.addAll(getVisibleNotifications());

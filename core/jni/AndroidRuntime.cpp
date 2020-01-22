@@ -80,7 +80,6 @@ extern int register_android_hardware_camera2_DngCreator(JNIEnv *env);
 extern int register_android_hardware_HardwareBuffer(JNIEnv *env);
 extern int register_android_hardware_SensorManager(JNIEnv *env);
 extern int register_android_hardware_SerialPort(JNIEnv *env);
-extern int register_android_hardware_SoundTrigger(JNIEnv *env);
 extern int register_android_hardware_UsbDevice(JNIEnv *env);
 extern int register_android_hardware_UsbDeviceConnection(JNIEnv *env);
 extern int register_android_hardware_UsbRequest(JNIEnv *env);
@@ -131,6 +130,7 @@ extern int register_android_database_CursorWindow(JNIEnv* env);
 extern int register_android_database_SQLiteConnection(JNIEnv* env);
 extern int register_android_database_SQLiteGlobal(JNIEnv* env);
 extern int register_android_database_SQLiteDebug(JNIEnv* env);
+extern int register_android_media_MediaMetrics(JNIEnv *env);
 extern int register_android_os_Debug(JNIEnv* env);
 extern int register_android_os_GraphicsEnvironment(JNIEnv* env);
 extern int register_android_os_HidlSupport(JNIEnv* env);
@@ -153,6 +153,7 @@ extern int register_android_os_HidlMemory(JNIEnv* env);
 extern int register_android_os_MemoryFile(JNIEnv* env);
 extern int register_android_os_SharedMemory(JNIEnv* env);
 extern int register_android_service_DataLoaderService(JNIEnv* env);
+extern int register_android_os_incremental_IncrementalManager(JNIEnv* env);
 extern int register_android_net_LocalSocketImpl(JNIEnv* env);
 extern int register_android_net_NetworkUtils(JNIEnv* env);
 extern int register_android_text_AndroidCharacter(JNIEnv *env);
@@ -1499,6 +1500,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_net_NetworkUtils),
     REG_JNI(register_android_os_MemoryFile),
     REG_JNI(register_android_os_SharedMemory),
+    REG_JNI(register_android_os_incremental_IncrementalManager),
     REG_JNI(register_com_android_internal_os_ClassLoaderFactory),
     REG_JNI(register_com_android_internal_os_Zygote),
     REG_JNI(register_com_android_internal_os_ZygoteInit),
@@ -1511,7 +1513,6 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_hardware_HardwareBuffer),
     REG_JNI(register_android_hardware_SensorManager),
     REG_JNI(register_android_hardware_SerialPort),
-    REG_JNI(register_android_hardware_SoundTrigger),
     REG_JNI(register_android_hardware_UsbDevice),
     REG_JNI(register_android_hardware_UsbDeviceConnection),
     REG_JNI(register_android_hardware_UsbRequest),
@@ -1525,6 +1526,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_media_AudioProductStrategies),
     REG_JNI(register_android_media_AudioVolumeGroups),
     REG_JNI(register_android_media_AudioVolumeGroupChangeHandler),
+    REG_JNI(register_android_media_MediaMetrics),
     REG_JNI(register_android_media_MicrophoneInfo),
     REG_JNI(register_android_media_RemoteDisplay),
     REG_JNI(register_android_media_ToneGenerator),

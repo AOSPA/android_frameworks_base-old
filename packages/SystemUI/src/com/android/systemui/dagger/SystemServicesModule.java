@@ -23,6 +23,7 @@ import android.app.AlarmManager;
 import android.app.IActivityManager;
 import android.app.IWallpaperManager;
 import android.app.KeyguardManager;
+import android.app.NotificationManager;
 import android.app.WallpaperManager;
 import android.app.admin.DevicePolicyManager;
 import android.content.Context;
@@ -43,8 +44,8 @@ import android.view.accessibility.AccessibilityManager;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.LatencyTracker;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
-import com.android.systemui.dagger.qualifiers.BgHandler;
-import com.android.systemui.dagger.qualifiers.MainResources;
+import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.shared.system.PackageManagerWrapper;
 
 import javax.inject.Singleton;
@@ -125,8 +126,14 @@ public class SystemServicesModule {
     @Provides
     @Nullable
     static LocalBluetoothManager provideLocalBluetoothController(Context context,
-            @BgHandler Handler bgHandler) {
+            @Background Handler bgHandler) {
         return LocalBluetoothManager.create(context, bgHandler, UserHandle.ALL);
+    }
+
+    @Singleton
+    @Provides
+    static NotificationManager provideNotificationManager(Context context) {
+        return context.getSystemService(NotificationManager.class);
     }
 
     @Singleton
@@ -143,7 +150,7 @@ public class SystemServicesModule {
     }
 
     @Provides
-    @MainResources
+    @Main
     static Resources provideResources(Context context) {
         return context.getResources();
     }

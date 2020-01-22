@@ -16,10 +16,11 @@
 
 package android.app;
 
+import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
@@ -429,6 +430,20 @@ public class ActivityTaskManager {
     public void setDisplayToSingleTaskInstance(int displayId) {
         try {
             getService().setDisplayToSingleTaskInstance(displayId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Requests that an activity should enter picture-in-picture mode if possible.
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
+    public void requestPictureInPictureMode(@NonNull IBinder token) {
+        try {
+            getService().requestPictureInPictureMode(token);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

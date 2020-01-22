@@ -27,44 +27,36 @@ import static com.android.server.integrity.model.ComponentBitSize.KEY_BITS;
 import static com.android.server.integrity.model.ComponentBitSize.OPERATOR_BITS;
 import static com.android.server.integrity.model.ComponentBitSize.SEPARATOR_BITS;
 import static com.android.server.integrity.model.ComponentBitSize.VALUE_SIZE_BITS;
+import static com.android.server.integrity.serializer.RuleIndexingDetails.APP_CERTIFICATE_INDEXED;
+import static com.android.server.integrity.serializer.RuleIndexingDetails.NOT_INDEXED;
+import static com.android.server.integrity.serializer.RuleIndexingDetails.PACKAGE_NAME_INDEXED;
 
 import android.content.integrity.AtomicFormula;
 import android.content.integrity.CompoundFormula;
 import android.content.integrity.Formula;
 import android.content.integrity.Rule;
 
+import com.android.internal.util.Preconditions;
+import com.android.server.integrity.IntegrityUtils;
 import com.android.server.integrity.model.BitOutputStream;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 
 /** A helper class to serialize rules from the {@link Rule} model to Binary representation. */
 public class RuleBinarySerializer implements RuleSerializer {
 
-    // Get the byte representation for a list of rules, and write them to an output stream.
-    @Override
-    public void serialize(
-            List<Rule> rules, Optional<Integer> formatVersion, OutputStream outputStream)
-            throws RuleSerializeException {
-        try {
-            BitOutputStream bitOutputStream = new BitOutputStream();
+    // The parsing time seems acceptable for 100 rules based on the tests in go/ic-rule-file-format.
+    private static final int INDEXING_BLOCK_SIZE = 100;
 
-            int formatVersionValue = formatVersion.orElse(DEFAULT_FORMAT_VERSION);
-            bitOutputStream.setNext(FORMAT_VERSION_BITS, formatVersionValue);
-            outputStream.write(bitOutputStream.toByteArray());
-
-            for (Rule rule : rules) {
-                bitOutputStream.clear();
-                serializeRule(rule, bitOutputStream);
-                outputStream.write(bitOutputStream.toByteArray());
-            }
-        } catch (Exception e) {
-            throw new RuleSerializeException(e.getMessage(), e);
-        }
-    }
+    private static final String START_INDEXING_KEY = "START_KEY";
+    private static final String END_INDEXING_KEY = "END_KEY";
 
     // Get the byte representation for a list of rules.
     @Override
@@ -77,6 +69,73 @@ public class RuleBinarySerializer implements RuleSerializer {
         } catch (Exception e) {
             throw new RuleSerializeException(e.getMessage(), e);
         }
+    }
+
+    // Get the byte representation for a list of rules, and write them to an output stream.
+    @Override
+    public void serialize(
+            List<Rule> rules, Optional<Integer> formatVersion, OutputStream originalOutputStream)
+            throws RuleSerializeException {
+        try {
+            // Determine the indexing groups and the order of the rules within each indexed group.
+            Map<Integer, TreeMap<String, List<Rule>>> indexedRules =
+                    RuleIndexingDetailsIdentifier.splitRulesIntoIndexBuckets(rules);
+
+            ByteTrackedOutputStream outputStream =
+                    new ByteTrackedOutputStream(originalOutputStream);
+
+            serializeRuleFileMetadata(formatVersion, outputStream);
+
+            Map<String, Long> packageNameIndexes =
+                    serializeRuleList(indexedRules.get(PACKAGE_NAME_INDEXED), outputStream);
+            Map<String, Long> appCertificateIndexes =
+                    serializeRuleList(indexedRules.get(APP_CERTIFICATE_INDEXED), outputStream);
+            Map<String, Long> unindexedRulesIndex =
+                    serializeRuleList(indexedRules.get(NOT_INDEXED), outputStream);
+
+            // TODO(b/145493956): Write these indexes into a index file provided by integrity file
+            //  manager.
+        } catch (Exception e) {
+            throw new RuleSerializeException(e.getMessage(), e);
+        }
+    }
+
+    private void serializeRuleFileMetadata(Optional<Integer> formatVersion,
+            ByteTrackedOutputStream outputStream) throws IOException {
+        int formatVersionValue = formatVersion.orElse(DEFAULT_FORMAT_VERSION);
+
+        BitOutputStream bitOutputStream = new BitOutputStream();
+        bitOutputStream.setNext(FORMAT_VERSION_BITS, formatVersionValue);
+        outputStream.write(bitOutputStream.toByteArray());
+    }
+
+    private Map<String, Long> serializeRuleList(TreeMap<String, List<Rule>> rulesMap,
+            ByteTrackedOutputStream outputStream)
+            throws IOException {
+        Preconditions.checkArgument(rulesMap != null,
+                "serializeRuleList should never be called with null rule list.");
+
+        BitOutputStream bitOutputStream = new BitOutputStream();
+        Map<String, Long> indexMapping = new TreeMap();
+        long indexTracker = 0;
+
+        indexMapping.put(START_INDEXING_KEY, outputStream.getWrittenBytesCount());
+        for (Map.Entry<String, List<Rule>> entry : rulesMap.entrySet()) {
+            if (indexTracker >= INDEXING_BLOCK_SIZE) {
+                indexMapping.put(entry.getKey(), outputStream.getWrittenBytesCount());
+                indexTracker = 0;
+            }
+
+            for (Rule rule : entry.getValue()) {
+                bitOutputStream.clear();
+                serializeRule(rule, bitOutputStream);
+                outputStream.write(bitOutputStream.toByteArray());
+                indexTracker++;
+            }
+        }
+        indexMapping.put(END_INDEXING_KEY, outputStream.getWrittenBytesCount());
+
+        return indexMapping;
     }
 
     private void serializeRule(Rule rule, BitOutputStream bitOutputStream) {
@@ -131,7 +190,7 @@ public class RuleBinarySerializer implements RuleSerializer {
             AtomicFormula.StringAtomicFormula stringAtomicFormula =
                     (AtomicFormula.StringAtomicFormula) atomicFormula;
             bitOutputStream.setNext(OPERATOR_BITS, AtomicFormula.EQ);
-            serializeValue(
+            serializeStringValue(
                     stringAtomicFormula.getValue(),
                     stringAtomicFormula.getIsHashedValue(),
                     bitOutputStream);
@@ -139,32 +198,48 @@ public class RuleBinarySerializer implements RuleSerializer {
             AtomicFormula.IntAtomicFormula intAtomicFormula =
                     (AtomicFormula.IntAtomicFormula) atomicFormula;
             bitOutputStream.setNext(OPERATOR_BITS, intAtomicFormula.getOperator());
-            serializeValue(
-                    String.valueOf(intAtomicFormula.getValue()),
-                    /* isHashedValue= */ false,
-                    bitOutputStream);
+            serializeIntValue(intAtomicFormula.getValue(), bitOutputStream);
         } else if (atomicFormula.getTag() == AtomicFormula.BOOLEAN_ATOMIC_FORMULA_TAG) {
             AtomicFormula.BooleanAtomicFormula booleanAtomicFormula =
                     (AtomicFormula.BooleanAtomicFormula) atomicFormula;
             bitOutputStream.setNext(OPERATOR_BITS, AtomicFormula.EQ);
-            serializeValue(
-                    booleanAtomicFormula.getValue() ? "1" : "0",
-                    /* isHashedValue= */ false,
-                    bitOutputStream);
+            serializeBooleanValue(booleanAtomicFormula.getValue(), bitOutputStream);
         } else {
             throw new IllegalArgumentException(
                     String.format("Invalid atomic formula type: %s", atomicFormula.getClass()));
         }
     }
 
-    private void serializeValue(
+    private void serializeStringValue(
             String value, boolean isHashedValue, BitOutputStream bitOutputStream) {
-        byte[] valueBytes = value.getBytes(StandardCharsets.UTF_8);
+        if (value == null) {
+            throw new IllegalArgumentException("String value can not be null.");
+        }
+        byte[] valueBytes = getBytesForString(value, isHashedValue);
 
         bitOutputStream.setNext(isHashedValue);
         bitOutputStream.setNext(VALUE_SIZE_BITS, valueBytes.length);
         for (byte valueByte : valueBytes) {
             bitOutputStream.setNext(/* numOfBits= */ 8, valueByte);
         }
+    }
+
+    private void serializeIntValue(int value, BitOutputStream bitOutputStream) {
+        bitOutputStream.setNext(/* numOfBits= */ 32, value);
+    }
+
+    private void serializeBooleanValue(boolean value, BitOutputStream bitOutputStream) {
+        bitOutputStream.setNext(value);
+    }
+
+    // Get the byte array for a value.
+    // If the value is not hashed, use its byte array form directly.
+    // If the value is hashed, get the raw form decoding of the value. All hashed values are
+    // hex-encoded. Serialized values are in raw form.
+    private static byte[] getBytesForString(String value, boolean isHashedValue) {
+        if (!isHashedValue) {
+            return value.getBytes(StandardCharsets.UTF_8);
+        }
+        return IntegrityUtils.getBytesFromHexDigest(value);
     }
 }

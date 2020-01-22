@@ -18,11 +18,14 @@
 
 #include <binder/Parcel.h>
 #include <jni.h>
-#include <media/MediaAnalyticsItem.h>
+#include <media/IMediaMetricsService.h>
+#include <media/MediaMetricsItem.h>
 #include <nativehelper/JNIHelp.h>
+#include <variant>
 
 #include "android_media_MediaMetricsJNI.h"
 #include "android_os_Parcel.h"
+#include "android_runtime/AndroidRuntime.h"
 
 // This source file is compiled and linked into:
 // core/jni/ (libandroid_runtime.so)
@@ -52,7 +55,7 @@ struct BundleHelper {
     const jmethodID constructID;
     jobject const bundle;
 
-    // We use templated put to access MediaAnalyticsItem based on data type not type enum.
+    // We use templated put to access mediametrics::Item based on data type not type enum.
     // See std::variant and std::visit.
     template<typename T>
     void put(jstring keyName, const T& value) = delete;
@@ -73,6 +76,23 @@ struct BundleHelper {
     }
 
     template<>
+    void put(jstring keyName, const std::string& value) {
+        env->CallVoidMethod(bundle, putStringID, keyName, env->NewStringUTF(value.c_str()));
+    }
+
+    template<>
+    void put(jstring keyName, const std::pair<int64_t, int64_t>& value) {
+        ; // rate is currently ignored
+    }
+
+    template<>
+    void put(jstring keyName, const std::monostate& value) {
+        ; // none is currently ignored
+    }
+
+    // string char * helpers
+
+    template<>
     void put(jstring keyName, const char * const& value) {
         env->CallVoidMethod(bundle, putStringID, keyName, env->NewStringUTF(value));
     }
@@ -80,11 +100,6 @@ struct BundleHelper {
     template<>
     void put(jstring keyName, char * const& value) {
         env->CallVoidMethod(bundle, putStringID, keyName, env->NewStringUTF(value));
-    }
-
-    template<>
-    void put(jstring keyName, const std::pair<int64_t, int64_t>& value) {
-        ; // rate is currently ignored
     }
 
     // We allow both jstring and non-jstring variants.
@@ -97,7 +112,7 @@ struct BundleHelper {
 
 // place the attributes into a java PersistableBundle object
 jobject MediaMetricsJNI::writeMetricsToBundle(
-        JNIEnv* env, MediaAnalyticsItem *item, jobject bundle)
+        JNIEnv* env, mediametrics::Item *item, jobject bundle)
 {
     BundleHelper bh(env, bundle);
 
@@ -106,15 +121,15 @@ jobject MediaMetricsJNI::writeMetricsToBundle(
         return nullptr;
     }
 
-    bh.put("__key", item->getKey().c_str());
+    bh.put(mediametrics::BUNDLE_KEY, item->getKey().c_str());
     if (item->getPid() != -1) {
-        bh.put("__pid", (int32_t)item->getPid());
+        bh.put(mediametrics::BUNDLE_PID, (int32_t)item->getPid());
     }
     if (item->getTimestamp() > 0) {
-        bh.put("__timestamp", (int64_t)item->getTimestamp());
+        bh.put(mediametrics::BUNDLE_TIMESTAMP, (int64_t)item->getTimestamp());
     }
     if (item->getUid() != -1) {
-        bh.put("__uid", (int32_t)item->getUid());
+        bh.put(mediametrics::BUNDLE_UID, (int32_t)item->getUid());
     }
     for (const auto &prop : *item) {
         const char *name = prop.getName();
@@ -122,6 +137,26 @@ jobject MediaMetricsJNI::writeMetricsToBundle(
         prop.visit([&] (auto &value) { bh.put(name, value); });
     }
     return bh.bundle;
+}
+
+// Implementation of MediaMetrics.native_submit_bytebuffer(),
+// Delivers the byte buffer to the mediametrics service.
+static jint android_media_MediaMetrics_submit_bytebuffer(
+        JNIEnv* env, jobject thiz, jobject byteBuffer, jint length)
+{
+    const jbyte* buffer =
+            reinterpret_cast<const jbyte*>(env->GetDirectBufferAddress(byteBuffer));
+    if (buffer == nullptr) {
+        ALOGE("Error retrieving source of audio data to play, can't play");
+        return (jint)BAD_VALUE;
+    }
+
+    sp<IMediaMetricsService> service = mediametrics::BaseItem::getService();
+    if (service == nullptr) {
+        ALOGW("Cannot retrieve mediametrics service");
+        return (jint)NO_INIT;
+    }
+    return (jint)service->submitBuffer((char *)buffer, length);
 }
 
 // Helper function to convert a native PersistableBundle to a Java
@@ -191,5 +226,18 @@ jobject MediaMetricsJNI::nativeToJavaPersistableBundle(JNIEnv *env,
     return newBundle;
 }
 
-};  // namespace android
+// ----------------------------------------------------------------------------
 
+static constexpr JNINativeMethod gMethods[] = {
+    {"native_submit_bytebuffer", "(Ljava/nio/ByteBuffer;I)I",
+            (void *)android_media_MediaMetrics_submit_bytebuffer},
+};
+
+// Registers the native methods, called from core/jni/AndroidRuntime.cpp
+int register_android_media_MediaMetrics(JNIEnv *env)
+{
+    return AndroidRuntime::registerNativeMethods(
+            env, "android/media/MediaMetrics", gMethods, std::size(gMethods));
+}
+
+};  // namespace android

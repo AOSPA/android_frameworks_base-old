@@ -56,6 +56,9 @@ int register_android_server_net_NetworkStatsService(JNIEnv* env);
 int register_android_server_security_VerityUtils(JNIEnv* env);
 int register_android_server_am_AppCompactor(JNIEnv* env);
 int register_android_server_am_LowMemDetector(JNIEnv* env);
+int register_com_android_server_soundtrigger_middleware_AudioSessionProviderImpl(
+        JNIEnv* env);
+int register_android_server_incremental_IncrementalManagerService(JNIEnv* env);
 int register_android_server_ActivityTriggerService(JNIEnv* env);
 };
 
@@ -106,6 +109,9 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void* /* reserved */)
     register_android_server_security_VerityUtils(env);
     register_android_server_am_AppCompactor(env);
     register_android_server_am_LowMemDetector(env);
+    register_com_android_server_soundtrigger_middleware_AudioSessionProviderImpl(
+            env);
+    register_android_server_incremental_IncrementalManagerService(env);
     register_android_server_ActivityTriggerService(env);
     return JNI_VERSION_1_4;
 }

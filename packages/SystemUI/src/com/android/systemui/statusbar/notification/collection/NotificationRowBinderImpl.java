@@ -16,9 +16,8 @@
 
 package com.android.systemui.statusbar.notification.collection;
 
-import static com.android.internal.util.Preconditions.checkNotNull;
 import static com.android.systemui.statusbar.NotificationRemoteInputManager.ENABLE_REMOTE_INPUT;
-import static com.android.systemui.statusbar.notification.row.NotificationContentInflater.FLAG_CONTENT_VIEW_HEADS_UP;
+import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_HEADS_UP;
 
 import android.annotation.Nullable;
 import android.content.Context;
@@ -50,6 +49,8 @@ import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
+
+import java.util.Objects;
 
 /** Handles inflating and updating views for notifications. */
 public class NotificationRowBinderImpl implements NotificationRowBinder {
@@ -258,14 +259,14 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
         row.setEntry(entry);
 
         if (mNotificationInterruptionStateProvider.shouldHeadsUp(entry)) {
-            row.updateInflationFlag(FLAG_CONTENT_VIEW_HEADS_UP, true /* shouldInflate */);
+            row.setInflationFlags(FLAG_CONTENT_VIEW_HEADS_UP);
         }
         row.setNeedsRedaction(
                 Dependency.get(NotificationLockscreenUserManager.class).needsRedaction(entry));
         row.inflateViews();
 
         // bind the click event to the content area
-        checkNotNull(mNotificationClicker).register(row, sbn);
+        Objects.requireNonNull(mNotificationClicker).register(row, sbn);
     }
 
     private void logNotificationExpansion(String key, boolean userAction, boolean expanded) {

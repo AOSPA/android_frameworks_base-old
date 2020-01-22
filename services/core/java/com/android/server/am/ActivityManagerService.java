@@ -160,7 +160,6 @@ import android.app.ApplicationErrorReport;
 import android.app.ApplicationThreadConstants;
 import android.app.BroadcastOptions;
 import android.app.ContentProviderHolder;
-import android.app.Dialog;
 import android.app.IActivityController;
 import android.app.IActivityManager;
 import android.app.IApplicationThread;
@@ -330,6 +329,7 @@ import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.MemInfoReader;
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.function.HexFunction;
 import com.android.internal.util.function.QuadFunction;
 import com.android.internal.util.function.TriFunction;
 import com.android.server.AlarmManagerInternal;
@@ -497,7 +497,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     static final String[] EMPTY_STRING_ARRAY = new String[0];
 
     // How many bytes to write into the dropbox log before truncating
-    static final int DROPBOX_MAX_SIZE = 192 * 1024;
+    static final int DROPBOX_DEFAULT_MAX_SIZE = 192 * 1024;
     // Assumes logcat entries average around 100 bytes; that's not perfect stack traces count
     // as one line, but close enough for now.
     static final int RESERVED_BYTES_PER_LOGCAT_LINE = 100;
@@ -981,10 +981,12 @@ public class ActivityManagerService extends IActivityManager.Stub
             new DeviceConfig.OnPropertiesChangedListener() {
                 @Override
                 public void onPropertiesChanged(Properties properties) {
-                    mPssDeferralTime = properties.getLong(ACTIVITY_START_PSS_DEFER_CONFIG, 0);
-                    if (DEBUG_PSS) {
-                        Slog.d(TAG_PSS, "Activity-start PSS delay now "
-                                + mPssDeferralTime + " ms");
+                    if (properties.getKeyset().contains(ACTIVITY_START_PSS_DEFER_CONFIG)) {
+                        mPssDeferralTime = properties.getLong(ACTIVITY_START_PSS_DEFER_CONFIG, 0);
+                        if (DEBUG_PSS) {
+                            Slog.d(TAG_PSS, "Activity-start PSS delay now "
+                                    + mPssDeferralTime + " ms");
+                        }
                     }
                 }
             };
@@ -1643,82 +1645,72 @@ public class ActivityManagerService extends IActivityManager.Stub
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
-            case SHOW_ERROR_UI_MSG: {
-                mAppErrors.handleShowAppErrorUi(msg);
-                ensureBootCompleted();
-            } break;
-            case SHOW_NOT_RESPONDING_UI_MSG: {
-                mAppErrors.handleShowAnrUi(msg);
-                ensureBootCompleted();
-            } break;
-            case SHOW_STRICT_MODE_VIOLATION_UI_MSG: {
-                HashMap<String, Object> data = (HashMap<String, Object>) msg.obj;
-                synchronized (ActivityManagerService.this) {
-                    ProcessRecord proc = (ProcessRecord) data.get("app");
-                    if (proc == null) {
-                        Slog.e(TAG, "App not found when showing strict mode dialog.");
-                        break;
-                    }
-                    if (proc.crashDialog != null) {
-                        Slog.e(TAG, "App already has strict mode dialog: " + proc);
-                        return;
-                    }
-                    AppErrorResult res = (AppErrorResult) data.get("result");
-                    if (mAtmInternal.showStrictModeViolationDialog()) {
-                        Dialog d = new StrictModeViolationDialog(mUiContext,
-                                ActivityManagerService.this, res, proc);
-                        d.show();
-                        proc.crashDialog = d;
-                    } else {
-                        // The device is asleep, so just pretend that the user
-                        // saw a crash dialog and hit "force quit".
-                        res.set(0);
-                    }
-                }
-                ensureBootCompleted();
-            } break;
-            case WAIT_FOR_DEBUGGER_UI_MSG: {
-                synchronized (ActivityManagerService.this) {
-                    ProcessRecord app = (ProcessRecord)msg.obj;
-                    if (msg.arg1 != 0) {
-                        if (!app.waitedForDebugger) {
-                            Dialog d = new AppWaitingForDebuggerDialog(
-                                    ActivityManagerService.this,
-                                    mUiContext, app);
-                            app.waitDialog = d;
-                            app.waitedForDebugger = true;
-                            d.show();
+                case SHOW_ERROR_UI_MSG: {
+                    mAppErrors.handleShowAppErrorUi(msg);
+                    ensureBootCompleted();
+                } break;
+                case SHOW_NOT_RESPONDING_UI_MSG: {
+                    mAppErrors.handleShowAnrUi(msg);
+                    ensureBootCompleted();
+                } break;
+                case SHOW_STRICT_MODE_VIOLATION_UI_MSG: {
+                    HashMap<String, Object> data = (HashMap<String, Object>) msg.obj;
+                    synchronized (ActivityManagerService.this) {
+                        ProcessRecord proc = (ProcessRecord) data.get("app");
+                        if (proc == null) {
+                            Slog.e(TAG, "App not found when showing strict mode dialog.");
+                            break;
                         }
-                    } else {
-                        if (app.waitDialog != null) {
-                            app.waitDialog.dismiss();
-                            app.waitDialog = null;
+                        if (proc.getDialogController().hasViolationDialogs()) {
+                            Slog.e(TAG, "App already has strict mode dialog: " + proc);
+                            return;
+                        }
+                        AppErrorResult res = (AppErrorResult) data.get("result");
+                        if (mAtmInternal.showStrictModeViolationDialog()) {
+                            proc.getDialogController().showViolationDialogs(res);
+                        } else {
+                            // The device is asleep, so just pretend that the user
+                            // saw a crash dialog and hit "force quit".
+                            res.set(0);
                         }
                     }
+                    ensureBootCompleted();
+                } break;
+                case WAIT_FOR_DEBUGGER_UI_MSG: {
+                    synchronized (ActivityManagerService.this) {
+                        ProcessRecord app = (ProcessRecord) msg.obj;
+                        if (msg.arg1 != 0) {
+                            if (!app.waitedForDebugger) {
+                                app.getDialogController().showDebugWaitingDialogs();
+                                app.waitedForDebugger = true;
+                            }
+                        } else {
+                            app.getDialogController().clearWaitingDialog();
+                        }
+                    }
+                } break;
+                case DISPATCH_PROCESSES_CHANGED_UI_MSG: {
+                    dispatchProcessesChanged();
+                    break;
                 }
-            } break;
-            case DISPATCH_PROCESSES_CHANGED_UI_MSG: {
-                dispatchProcessesChanged();
-                break;
-            }
-            case DISPATCH_PROCESS_DIED_UI_MSG: {
-                final int pid = msg.arg1;
-                final int uid = msg.arg2;
-                dispatchProcessDied(pid, uid);
-                break;
-            }
-            case DISPATCH_UIDS_CHANGED_UI_MSG: {
-                if (false) { // DO NOT SUBMIT WITH TRUE
-                    maybeTriggerWatchdog();
+                case DISPATCH_PROCESS_DIED_UI_MSG: {
+                    final int pid = msg.arg1;
+                    final int uid = msg.arg2;
+                    dispatchProcessDied(pid, uid);
+                    break;
                 }
-                dispatchUidsChanged();
-            } break;
-            case DISPATCH_OOM_ADJ_OBSERVER_MSG: {
-                dispatchOomAdjObserver((String)msg.obj);
-            } break;
-            case PUSH_TEMP_WHITELIST_UI_MSG: {
-                pushTempWhitelist();
-            } break;
+                case DISPATCH_UIDS_CHANGED_UI_MSG: {
+                    if (false) { // DO NOT SUBMIT WITH TRUE
+                        maybeTriggerWatchdog();
+                    }
+                    dispatchUidsChanged();
+                } break;
+                case DISPATCH_OOM_ADJ_OBSERVER_MSG: {
+                    dispatchOomAdjObserver((String) msg.obj);
+                } break;
+                case PUSH_TEMP_WHITELIST_UI_MSG: {
+                    pushTempWhitelist();
+                } break;
             }
         }
     }
@@ -2410,7 +2402,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         mConstants = hasHandlerThread
                 ? new ActivityManagerConstants(mContext, this, mHandler) : null;
         final ActiveUids activeUids = new ActiveUids(this, false /* postChangesToAtm */);
-        mProcessList.init(this, activeUids);
+        mPlatformCompat = null;
+        mProcessList.init(this, activeUids, mPlatformCompat);
         mLowMemDetector = null;
         mOomAdjuster = hasHandlerThread
                 ? new OomAdjuster(this, mProcessList, activeUids, handlerThread) : null;
@@ -2434,7 +2427,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         mFactoryTest = FACTORY_TEST_OFF;
         mUgmInternal = LocalServices.getService(UriGrantsManagerInternal.class);
         mInternal = new LocalService();
-        mPlatformCompat = null;
     }
 
     // Note: This method is invoked on the main thread but may need to attach various
@@ -2463,7 +2455,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         mConstants = new ActivityManagerConstants(mContext, this, mHandler);
         final ActiveUids activeUids = new ActiveUids(this, true /* postChangesToAtm */);
-        mProcessList.init(this, activeUids);
+        mPlatformCompat = (PlatformCompat) ServiceManager.getService(
+                Context.PLATFORM_COMPAT_SERVICE);
+        mProcessList.init(this, activeUids, mPlatformCompat);
         mLowMemDetector = new LowMemDetector(this);
         mOomAdjuster = new OomAdjuster(this, mProcessList, activeUids);
 
@@ -2571,9 +2565,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         };
 
         mHiddenApiBlacklist = new HiddenApiSettings(mHandler, mContext);
-
-        mPlatformCompat = (PlatformCompat) ServiceManager.getService(
-                Context.PLATFORM_COMPAT_SERVICE);
 
         Watchdog.getInstance().addMonitor(this);
         Watchdog.getInstance().addThread(mHandler);
@@ -3155,7 +3146,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     private boolean hasUsageStatsPermission(String callingPackage) {
         final int mode = mAppOpsService.noteOperation(AppOpsManager.OP_GET_USAGE_STATS,
-                Binder.getCallingUid(), callingPackage, null);
+                Binder.getCallingUid(), callingPackage, null, false, "");
         if (mode == AppOpsManager.MODE_DEFAULT) {
             return checkCallingPermission(Manifest.permission.PACKAGE_USAGE_STATS)
                     == PackageManager.PERMISSION_GRANTED;
@@ -5111,9 +5102,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             bindApplicationTimeMillis = SystemClock.elapsedRealtime();
             mAtmInternal.preBindApplication(app.getWindowProcessController());
             final ActiveInstrumentation instr2 = app.getActiveInstrumentation();
-            long[] disabledCompatChanges = {};
             if (mPlatformCompat != null) {
-                disabledCompatChanges = mPlatformCompat.getDisabledChanges(app.info);
                 mPlatformCompat.resetReporting(app.info);
             }
             if (app.isolatedEntryPoint != null) {
@@ -5132,7 +5121,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         app.compat, getCommonServicesLocked(app.isolated),
                         mCoreSettingsObserver.getCoreSettingsLocked(),
                         buildSerial, autofillOptions, contentCaptureOptions,
-                        disabledCompatChanges);
+                        app.mDisabledCompatChanges);
             } else {
                 thread.bindApplication(processName, appInfo, providers, null, profilerInfo,
                         null, null, null, testMode,
@@ -5142,7 +5131,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         app.compat, getCommonServicesLocked(app.isolated),
                         mCoreSettingsObserver.getCoreSettingsLocked(),
                         buildSerial, autofillOptions, contentCaptureOptions,
-                        disabledCompatChanges);
+                        app.mDisabledCompatChanges);
             }
             if (profilerInfo != null) {
                 profilerInfo.closeFd();
@@ -5907,7 +5896,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         public int noteOp(String op, int uid, String packageName) {
             // TODO moltmann: Allow to specify featureId
             return mActivityManagerService.mAppOpsService
-                    .noteOperation(AppOpsManager.strOpToOp(op), uid, packageName, null);
+                    .noteOperation(AppOpsManager.strOpToOp(op), uid, packageName, null,
+                            false, "");
         }
 
         @Override
@@ -6059,7 +6049,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         // ...and legacy apps get an AppOp check
         int appop = mAppOpsService.noteOperation(AppOpsManager.OP_RUN_IN_BACKGROUND,
-                uid, packageName, null);
+                uid, packageName, null, false, "");
         if (DEBUG_BACKGROUND_CHECK) {
             Slog.i(TAG, "Legacy app " + uid + "/" + packageName + " bg appop " + appop);
         }
@@ -7649,6 +7639,26 @@ public class ActivityManagerService extends IActivityManager.Stub
         });
     }
 
+    @Override
+    public void appNotResponding(final String reason) {
+        final int callingPid = Binder.getCallingPid();
+
+        synchronized (mPidsSelfLocked) {
+            final ProcessRecord app = mPidsSelfLocked.get(callingPid);
+            if (app == null) {
+                throw new SecurityException("Unknown process: " + callingPid);
+            }
+
+            mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    app.appNotResponding(
+                            null, app.info, null, null, false, "App requested: " + reason);
+                }
+            });
+        }
+    }
+
     public final void installSystemProviders() {
         List<ProviderInfo> providers;
         synchronized (this) {
@@ -8469,6 +8479,18 @@ public class ActivityManagerService extends IActivityManager.Stub
                 "launchBugReportHandlerApp");
 
         return BugReportHandlerUtil.launchBugReportHandlerApp(mContext);
+    }
+
+    /**
+     * Get packages of bugreport-whitelisted apps to handle a bug report.
+     *
+     * @return packages of bugreport-whitelisted apps to handle a bug report.
+     */
+    @Override
+    public List<String> getBugreportWhitelistedPackages() {
+        enforceCallingPermission(android.Manifest.permission.MANAGE_DEBUGGING,
+                "getBugreportWhitelistedPackages");
+        return new ArrayList<>(SystemConfig.getInstance().getBugreportWhitelistedPackages());
     }
 
     public void registerProcessObserver(IProcessObserver observer) {
@@ -9449,9 +9471,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
-    void killAppAtUsersRequest(ProcessRecord app, Dialog fromDialog) {
+    void killAppAtUsersRequest(ProcessRecord app) {
         synchronized (this) {
-            mAppErrors.killAppAtUserRequestLocked(app, fromDialog);
+            mAppErrors.killAppAtUserRequestLocked(app);
         }
     }
 
@@ -9852,9 +9874,12 @@ public class ActivityManagerService extends IActivityManager.Stub
                     sb.append(report);
                 }
 
-                String setting = Settings.Global.ERROR_LOGCAT_PREFIX + dropboxTag;
-                int lines = Settings.Global.getInt(mContext.getContentResolver(), setting, 0);
-                int maxDataFileSize = DROPBOX_MAX_SIZE - sb.length()
+                String logcatSetting = Settings.Global.ERROR_LOGCAT_PREFIX + dropboxTag;
+                String maxBytesSetting = Settings.Global.MAX_ERROR_BYTES_PREFIX + dropboxTag;
+                int lines = Settings.Global.getInt(mContext.getContentResolver(), logcatSetting, 0);
+                int dropboxMaxSize = Settings.Global.getInt(
+                        mContext.getContentResolver(), maxBytesSetting, DROPBOX_DEFAULT_MAX_SIZE);
+                int maxDataFileSize = dropboxMaxSize - sb.length()
                         - lines * RESERVED_BYTES_PER_LOGCAT_LINE;
 
                 if (dataFile != null && maxDataFileSize > 0) {
@@ -13127,14 +13152,31 @@ public class ActivityManagerService extends IActivityManager.Stub
                     pw.println(totalPss - cachedPss);
                 }
             }
-            long lostRAM = memInfo.getTotalSizeKb() - (totalPss - totalSwapPss)
+            long kernelUsed = memInfo.getKernelUsedSizeKb();
+            final long ionHeap = Debug.getIonHeapsSizeKb();
+            if (ionHeap > 0) {
+                final long ionMapped = Debug.getIonMappedSizeKb();
+                final long ionUnmapped = ionHeap - ionMapped;
+                final long ionPool = Debug.getIonPoolsSizeKb();
+                pw.print("      ION: ");
+                        pw.print(stringifyKBSize(ionHeap + ionPool));
+                        pw.print(" (");
+                        pw.print(stringifyKBSize(ionMapped));
+                        pw.print(" mapped + ");
+                        pw.print(stringifyKBSize(ionUnmapped));
+                        pw.print(" unmapped + ");
+                        pw.print(stringifyKBSize(ionPool));
+                        pw.println(" pools)");
+                kernelUsed += ionUnmapped;
+            }
+            final long lostRAM = memInfo.getTotalSizeKb() - (totalPss - totalSwapPss)
                     - memInfo.getFreeSizeKb() - memInfo.getCachedSizeKb()
-                    - memInfo.getKernelUsedSizeKb() - memInfo.getZramTotalSizeKb();
+                    - kernelUsed - memInfo.getZramTotalSizeKb();
             if (!opts.isCompact) {
                 pw.print(" Used RAM: "); pw.print(stringifyKBSize(totalPss - cachedPss
-                        + memInfo.getKernelUsedSizeKb())); pw.print(" (");
+                        + kernelUsed)); pw.print(" (");
                 pw.print(stringifyKBSize(totalPss - cachedPss)); pw.print(" used pss + ");
-                pw.print(stringifyKBSize(memInfo.getKernelUsedSizeKb())); pw.print(" kernel)\n");
+                pw.print(stringifyKBSize(kernelUsed)); pw.print(" kernel)\n");
                 pw.print(" Lost RAM: "); pw.println(stringifyKBSize(lostRAM));
             } else {
                 pw.print("lostram,"); pw.println(lostRAM);
@@ -13900,14 +13942,25 @@ public class ActivityManagerService extends IActivityManager.Stub
         memInfoBuilder.append(stringifyKBSize(cachedPss + memInfo.getCachedSizeKb()
                 + memInfo.getFreeSizeKb()));
         memInfoBuilder.append("\n");
+        long kernelUsed = memInfo.getKernelUsedSizeKb();
+        final long ionHeap = Debug.getIonHeapsSizeKb();
+        if (ionHeap > 0) {
+            final long ionMapped = Debug.getIonMappedSizeKb();
+            final long ionUnmapped = ionHeap - ionMapped;
+            final long ionPool = Debug.getIonPoolsSizeKb();
+            memInfoBuilder.append("       ION: ");
+            memInfoBuilder.append(stringifyKBSize(ionHeap + ionPool));
+            memInfoBuilder.append("\n");
+            kernelUsed += ionUnmapped;
+        }
         memInfoBuilder.append("  Used RAM: ");
         memInfoBuilder.append(stringifyKBSize(
-                                  totalPss - cachedPss + memInfo.getKernelUsedSizeKb()));
+                                  totalPss - cachedPss + kernelUsed));
         memInfoBuilder.append("\n");
         memInfoBuilder.append("  Lost RAM: ");
         memInfoBuilder.append(stringifyKBSize(memInfo.getTotalSizeKb()
                 - (totalPss - totalSwapPss) - memInfo.getFreeSizeKb() - memInfo.getCachedSizeKb()
-                - memInfo.getKernelUsedSizeKb() - memInfo.getZramTotalSizeKb()));
+                - kernelUsed - memInfo.getZramTotalSizeKb()));
         memInfoBuilder.append("\n");
         Slog.i(TAG, "Low on memory:");
         Slog.i(TAG, shortNativeBuilder.toString());
@@ -14073,18 +14126,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         ProcessList.abortNextPssTime(app.procStateMemTracker);
 
         // Dismiss any open dialogs.
-        if (app.crashDialog != null && !app.forceCrashReport) {
-            app.crashDialog.dismiss();
-            app.crashDialog = null;
-        }
-        if (app.anrDialog != null) {
-            app.anrDialog.dismiss();
-            app.anrDialog = null;
-        }
-        if (app.waitDialog != null) {
-            app.waitDialog.dismiss();
-            app.waitDialog = null;
-        }
+        app.getDialogController().clearAllErrorDialogs();
 
         app.setCrashing(false);
         app.setNotResponding(false);
@@ -18522,7 +18564,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         public ActivityPresentationInfo getActivityPresentationInfo(IBinder token) {
             int displayId = Display.INVALID_DISPLAY;
             try {
-                displayId = mActivityTaskManager.getActivityDisplayId(token);
+                displayId = mActivityTaskManager.getDisplayId(token);
             } catch (RemoteException e) {
             }
 
@@ -19299,18 +19341,22 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public int noteOperation(int code, int uid, @Nullable String packageName,
-                @Nullable String featureId,
-                @NonNull QuadFunction<Integer, Integer, String, String, Integer> superImpl) {
+                @Nullable String featureId, boolean shouldCollectAsyncNotedOp,
+                @Nullable String message,
+                @NonNull HexFunction<Integer, Integer, String, String, Boolean, String, Integer>
+                        superImpl) {
             if (uid == mTargetUid && isTargetOp(code)) {
                 final long identity = Binder.clearCallingIdentity();
                 try {
                     return mAppOpsService.noteProxyOperation(code, Process.SHELL_UID,
-                            "com.android.shell", null, uid, packageName, featureId);
+                            "com.android.shell", null, uid, packageName, featureId,
+                            shouldCollectAsyncNotedOp, message);
                 } finally {
                     Binder.restoreCallingIdentity(identity);
                 }
             }
-            return superImpl.apply(code, uid, packageName, featureId);
+            return superImpl.apply(code, uid, packageName, featureId, shouldCollectAsyncNotedOp,
+                    message);
         }
 
         @Override

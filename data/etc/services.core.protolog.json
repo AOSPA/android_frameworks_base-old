@@ -7,12 +7,6 @@
       "group": "WM_DEBUG_KEEP_SCREEN_ON",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
-    "-2138637148": {
-      "message": "Clearing focused app, displayId=%d",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_FOCUS_LIGHT",
-      "at": "com\/android\/server\/wm\/ActivityDisplay.java"
-    },
     "-2127842445": {
       "message": "Clearing startingData for token=%s",
       "level": "VERBOSE",
@@ -78,12 +72,6 @@
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
-    },
-    "-1976550065": {
-      "message": "commitVisibility: %s: visible=%b visibleRequested=%b",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_APP_TRANSITIONS",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
     "-1963461591": {
       "message": "Removing %s from %s",
@@ -283,6 +271,12 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-1521427940": {
+      "message": "commitVisibility: %s: visible=%b mVisibleRequested=%b",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_APP_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
     "-1515151503": {
       "message": ">>> OPEN TRANSACTION removeReplacedWindows",
       "level": "INFO",
@@ -391,6 +385,12 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-1263316010": {
+      "message": "Computed rotation=%s (%d) for display id=%d based on lastOrientation=%s (%d) and oldRotation=%s (%d)",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_ORIENTATION",
+      "at": "com\/android\/server\/wm\/DisplayRotation.java"
+    },
     "-1259022216": {
       "message": "SURFACE HIDE ( %s ): %s",
       "level": "INFO",
@@ -468,6 +468,12 @@
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
+    "-1108775960": {
+      "message": "%s is requesting orientation %d (%s)",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_ORIENTATION",
+      "at": "com\/android\/server\/wm\/WindowContainer.java"
     },
     "-1103716954": {
       "message": "Not removing %s due to exit animation",
@@ -637,6 +643,12 @@
       "group": "WM_DEBUG_FOCUS_LIGHT",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
+    "-766059044": {
+      "message": "Display id=%d selected orientation %s (%d), got rotation %s (%d)",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_ORIENTATION",
+      "at": "com\/android\/server\/wm\/DisplayRotation.java"
+    },
     "-760801764": {
       "message": "onAnimationCancelled",
       "level": "DEBUG",
@@ -697,12 +709,6 @@
       "group": "WM_DEBUG_SCREEN_ON",
       "at": "com\/android\/server\/wm\/DisplayContent.java"
     },
-    "-633961578": {
-      "message": "applyAnimation: transition animation is disabled or skipped. container=%s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_APP_TRANSITIONS_ANIM",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
-    },
     "-622997754": {
       "message": "postWindowRemoveCleanupLocked: %s",
       "level": "VERBOSE",
@@ -714,6 +720,12 @@
       "level": "INFO",
       "group": "WM_DEBUG_BOOT",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
+    "-603199586": {
+      "message": "Clearing focused app, displayId=%d",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_FOCUS_LIGHT",
+      "at": "com\/android\/server\/wm\/DisplayContent.java"
     },
     "-583031528": {
       "message": "%s",
@@ -1273,12 +1285,6 @@
       "group": "WM_DEBUG_RECENTS_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RecentsAnimation.java"
     },
-    "481370485": {
-      "message": "Computed rotation=%d for display id=%d based on lastOrientation=%d and oldRotation=%d",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_ORIENTATION",
-      "at": "com\/android\/server\/wm\/DisplayRotation.java"
-    },
     "490877640": {
       "message": "onStackOrderChanged(): stack=%s",
       "level": "DEBUG",
@@ -1320,6 +1326,12 @@
       "level": "INFO",
       "group": "WM_SHOW_TRANSACTIONS",
       "at": "com\/android\/server\/wm\/WindowSurfaceController.java"
+    },
+    "584499099": {
+      "message": "Set focused app to: %s moveFocusNow=%b displayId=%d",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_FOCUS_LIGHT",
+      "at": "com\/android\/server\/wm\/DisplayContent.java"
     },
     "585096182": {
       "message": "SURFACE isColorSpaceAgnostic=%b: %s",
@@ -1477,12 +1489,6 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
-    "841702299": {
-      "message": "Changing app %s visible=%b performLayout=%b",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_APP_TRANSITIONS",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
-    },
     "845234215": {
       "message": "App is requesting an orientation, return %d for display id=%d",
       "level": "VERBOSE",
@@ -1524,12 +1530,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/WindowStateAnimator.java"
-    },
-    "917739349": {
-      "message": "Set focused app to: %s moveFocusNow=%b displayId=%d",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_FOCUS_LIGHT",
-      "at": "com\/android\/server\/wm\/ActivityDisplay.java"
     },
     "954470154": {
       "message": "FORCED DISPLAY SCALING DISABLED",
@@ -1741,6 +1741,12 @@
       "group": "WM_DEBUG_APP_TRANSITIONS_ANIM",
       "at": "com\/android\/server\/wm\/AppTransition.java"
     },
+    "1460759282": {
+      "message": "getAnimationTarget in=%s, out=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_APP_TRANSITIONS_ANIM",
+      "at": "com\/android\/server\/wm\/AppTransitionController.java"
+    },
     "1469292670": {
       "message": "Changing focus from %s to %s displayId=%d Callers=%s",
       "level": "VERBOSE",
@@ -1806,12 +1812,6 @@
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
-    },
-    "1573332272": {
-      "message": "Display id=%d selected orientation %d, got rotation %d",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_ORIENTATION",
-      "at": "com\/android\/server\/wm\/DisplayRotation.java"
     },
     "1577579529": {
       "message": "win=%s destroySurfaces: appStopped=%b win.mWindowRemovalAllowed=%b win.mRemoveOnExit=%b",
@@ -1992,6 +1992,12 @@
       "level": "INFO",
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
+    },
+    "1967975839": {
+      "message": "Changing app %s visible=%b performLayout=%b",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_APP_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/AppTransitionController.java"
     },
     "1984470582": {
       "message": "Creating TaskScreenshotAnimatable: task: %s width: %d height: %d",

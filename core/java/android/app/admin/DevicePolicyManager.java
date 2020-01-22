@@ -33,13 +33,13 @@ import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.annotation.UserIdInt;
 import android.annotation.WorkerThread;
 import android.app.Activity;
 import android.app.IServiceConnection;
 import android.app.KeyguardManager;
 import android.app.admin.SecurityLog.SecurityEvent;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -115,6 +115,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -1349,6 +1350,9 @@ public class DevicePolicyManager {
      * Broadcast action: send when any policy admin changes a policy.
      * This is generally used to find out when a new policy is in effect.
      *
+     * If the profile owner of an organization-owned managed profile changes some user
+     * restriction explicitly on the parent user, this broadcast will <em>not</em> be
+     * sent to the parent user.
      * @hide
      */
     @UnsupportedAppUsage
@@ -2324,6 +2328,11 @@ public class DevicePolicyManager {
 
     /**
      * Activity action: Starts the administrator to show policy compliance for the provisioning.
+     * This action is used any time that the administrator has an opportunity to show policy
+     * compliance before the end of setup wizard. This could happen as part of the admin-integrated
+     * provisioning flow (in which case this gets sent after {@link #ACTION_GET_PROVISIONING_MODE}),
+     * or it could happen during provisioning finalization if the administrator supports
+     * finalization during setup wizard.
      */
     public static final String ACTION_ADMIN_POLICY_COMPLIANCE =
             "android.app.action.ADMIN_POLICY_COMPLIANCE";
@@ -4255,7 +4264,7 @@ public class DevicePolicyManager {
      *            {@link #WIPE_SILENTLY} is set.
      */
     public void wipeData(int flags, @NonNull CharSequence reason) {
-        Preconditions.checkNotNull(reason, "reason string is null");
+        Objects.requireNonNull(reason, "reason string is null");
         Preconditions.checkStringNotEmpty(reason, "reason string is empty");
         Preconditions.checkArgument((flags & WIPE_SILENTLY) == 0, "WIPE_SILENTLY cannot be set");
         wipeDataInternal(flags, reason.toString());
@@ -5053,12 +5062,17 @@ public class DevicePolicyManager {
      *         owner. If Device ID attestation is requested (using {@link #ID_TYPE_SERIAL},
      *         {@link #ID_TYPE_IMEI} or {@link #ID_TYPE_MEID}), the caller must be the Device Owner
      *         or the Certificate Installer delegate.
-     * @throws IllegalArgumentException if the alias in {@code keySpec} is empty, if the
-     *         algorithm specification in {@code keySpec} is not {@code RSAKeyGenParameterSpec}
-     *         or {@code ECGenParameterSpec}, or if Device ID attestation was requested but the
-     *         {@code keySpec} does not contain an attestation challenge.
-     * @throws UnsupportedOperationException if Device ID attestation was requested but the
-     *         underlying hardware does not support it.
+     * @throws IllegalArgumentException in the following cases:
+     *         <p>
+     *         <ul>
+     *         <li>The alias in {@code keySpec} is empty.</li>
+     *         <li>The algorithm specification in {@code keySpec} is not
+     *         {@code RSAKeyGenParameterSpec} or {@code ECGenParameterSpec}.</li>
+     *         <li>Device ID attestation was requested but the {@code keySpec} does not contain an
+     *         attestation challenge.</li>
+     *         </ul>
+     * @throws UnsupportedOperationException if Device ID attestation or individual attestation
+     *         was requested but the underlying hardware does not support it.
      * @throws StrongBoxUnavailableException if the use of StrongBox for key generation was
      *         specified in {@code keySpec} but the device does not have one.
      * @see KeyGenParameterSpec.Builder#setAttestationChallenge(byte[])
@@ -5797,6 +5811,49 @@ public class DevicePolicyManager {
         if (mService != null) {
             try {
                 return mService.getAutoTime(admin);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Called by a device owner, a profile owner for the primary user or a profile
+     * owner of an organization-owned managed profile to turn auto time zone on and off.
+     * Callers are recommended to use {@link UserManager#DISALLOW_CONFIG_DATE_TIME}
+     * to prevent the user from changing this setting.
+     * <p>
+     * If user restriction {@link UserManager#DISALLOW_CONFIG_DATE_TIME} is used,
+     * no user will be able set the date and time zone. Instead, the network date
+     * and time zone will be used.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param enabled Whether time zone should be obtained automatically from the network or not.
+     * @throws SecurityException if caller is not a device owner, a profile owner for the
+     * primary user, or a profile owner of an organization-owned managed profile.
+     */
+    public void setAutoTimeZone(@NonNull ComponentName admin, boolean enabled) {
+        throwIfParentInstance("setAutoTimeZone");
+        if (mService != null) {
+            try {
+                mService.setAutoTimeZone(admin, enabled);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * @return true if auto time zone is enabled on the device.
+     * @throws SecurityException if caller is not a device owner, a profile owner for the
+     * primary user, or a profile owner of an organization-owned managed profile.
+     */
+    public boolean getAutoTimeZone(@NonNull ComponentName admin) {
+        throwIfParentInstance("getAutoTimeZone");
+        if (mService != null) {
+            try {
+                return mService.getAutoTimeZone(admin);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -6708,8 +6765,9 @@ public class DevicePolicyManager {
      *
      * @hide
      */
-    public boolean checkDeviceIdentifierAccess(String packageName, int pid, int uid) {
-        throwIfParentInstance("checkDeviceIdentifierAccess");
+    @SystemApi
+    public boolean hasDeviceIdentifierAccess(@NonNull String packageName, int pid, int uid) {
+        throwIfParentInstance("hasDeviceIdentifierAccess");
         if (packageName == null) {
             return false;
         }
@@ -7910,18 +7968,23 @@ public class DevicePolicyManager {
      * <p>
      * The calling device admin must be a profile or device owner; if it is not, a security
      * exception will be thrown.
+     * <p>
+     * The profile owner of an organization-owned managed profile may invoke this method on
+     * the {@link DevicePolicyManager} instance it obtained from
+     * {@link #getParentProfileInstance(ComponentName)}, for enforcing device-wide restrictions.
+     * <p>
+     * See the constants in {@link android.os.UserManager} for the list of restrictions that can
+     * be enforced device-wide.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
-     * @param key The key of the restriction. See the constants in {@link android.os.UserManager}
-     *            for the list of keys.
+     * @param key   The key of the restriction.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
      */
     public void addUserRestriction(@NonNull ComponentName admin,
             @UserManager.UserRestrictionKey String key) {
-        throwIfParentInstance("addUserRestriction");
         if (mService != null) {
             try {
-                mService.setUserRestriction(admin, key, true);
+                mService.setUserRestriction(admin, key, true, mParentInstance);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -7933,18 +7996,22 @@ public class DevicePolicyManager {
      * <p>
      * The calling device admin must be a profile or device owner; if it is not, a security
      * exception will be thrown.
+     * <p>
+     * The profile owner of an organization-owned managed profile may invoke this method on
+     * the {@link DevicePolicyManager} instance it obtained from
+     * {@link #getParentProfileInstance(ComponentName)}, for clearing device-wide restrictions.
+     * <p>
+     * See the constants in {@link android.os.UserManager} for the list of restrictions.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
-     * @param key The key of the restriction. See the constants in {@link android.os.UserManager}
-     *            for the list of keys.
+     * @param key   The key of the restriction.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
      */
     public void clearUserRestriction(@NonNull ComponentName admin,
             @UserManager.UserRestrictionKey String key) {
-        throwIfParentInstance("clearUserRestriction");
         if (mService != null) {
             try {
-                mService.setUserRestriction(admin, key, false);
+                mService.setUserRestriction(admin, key, false, mParentInstance);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -7958,16 +8025,20 @@ public class DevicePolicyManager {
      * The target user may have more restrictions set by the system or other device owner / profile
      * owner. To get all the user restrictions currently set, use
      * {@link UserManager#getUserRestrictions()}.
+     * <p>
+     * The profile owner of an organization-owned managed profile may invoke this method on
+     * the {@link DevicePolicyManager} instance it obtained from
+     * {@link #getParentProfileInstance(ComponentName)}, for retrieving device-wide restrictions
+     * it previously set with {@link #addUserRestriction(ComponentName, String)}.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
      */
     public @NonNull Bundle getUserRestrictions(@NonNull ComponentName admin) {
-        throwIfParentInstance("getUserRestrictions");
         Bundle ret = null;
         if (mService != null) {
             try {
-                ret = mService.getUserRestrictions(admin);
+                ret = mService.getUserRestrictions(admin, mParentInstance);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -10360,8 +10431,8 @@ public class DevicePolicyManager {
             @NonNull String packageName, @NonNull @CallbackExecutor Executor executor,
             @NonNull OnClearApplicationUserDataListener listener) {
         throwIfParentInstance("clearAppData");
-        Preconditions.checkNotNull(executor);
-        Preconditions.checkNotNull(listener);
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(listener);
         try {
             mService.clearApplicationUserData(admin, packageName,
                     new IPackageDataObserver.Stub() {
@@ -10811,7 +10882,7 @@ public class DevicePolicyManager {
     @WorkerThread public @PrivateDnsModeErrorCodes int setGlobalPrivateDnsModeSpecifiedHost(
             @NonNull ComponentName admin, @NonNull String privateDnsHost) {
         throwIfParentInstance("setGlobalPrivateDnsModeSpecifiedHost");
-        Preconditions.checkNotNull(privateDnsHost, "dns resolver is null");
+        Objects.requireNonNull(privateDnsHost, "dns resolver is null");
 
         if (mService == null) {
             return PRIVATE_DNS_SET_ERROR_FAILURE_SETTING;
@@ -11077,6 +11148,53 @@ public class DevicePolicyManager {
                 final List<String> packageNames = mService.getCrossProfileCalendarPackagesForUser(
                         myUserId());
                 return packageNames == null ? null : new ArraySet<>(packageNames);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return Collections.emptySet();
+    }
+
+    /**
+     * Sets the set of package names that are allowed to request user consent for cross-profile
+     * communication.
+     *
+     * <p>Assumes that the caller is a profile owner and is the given {@code admin}.
+     *
+     * <p>Previous calls are overridden by each subsequent call to this method.
+     *
+     * @param admin the {@link DeviceAdminReceiver} this request is associated with
+     * @param packageNames the new cross-profile package names
+     */
+    public void setCrossProfilePackages(
+            @NonNull ComponentName admin, @NonNull Set<String> packageNames) {
+        throwIfParentInstance("setCrossProfilePackages");
+        if (mService != null) {
+            try {
+                mService.setCrossProfilePackages(admin, new ArrayList<>(packageNames));
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Returns the set of package names that the admin has previously set as allowed to request user
+     * consent for cross-profile communication, via {@link
+     * #setCrossProfilePackages(ComponentName, Set)}.
+     *
+     * <p>Assumes that the caller is a profile owner and is the given {@code admin}.
+     *
+     * @param admin the {@link DeviceAdminReceiver} this request is associated with
+     * @return the set of package names the admin has previously set as allowed to request user
+     * consent for cross-profile communication, via {@link
+     * #setCrossProfilePackages(ComponentName, Set)}
+     */
+    public @NonNull Set<String> getCrossProfilePackages(@NonNull ComponentName admin) {
+        throwIfParentInstance("getCrossProfilePackages");
+        if (mService != null) {
+            try {
+                return new ArraySet<>(mService.getCrossProfilePackages(admin));
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }

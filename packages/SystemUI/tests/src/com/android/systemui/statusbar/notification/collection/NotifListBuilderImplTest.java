@@ -16,7 +16,6 @@
 
 package com.android.systemui.statusbar.notification.collection;
 
-import static com.android.internal.util.Preconditions.checkNotNull;
 import static com.android.systemui.statusbar.notification.collection.ListDumper.dumpList;
 
 import static org.junit.Assert.assertEquals;
@@ -28,6 +27,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
@@ -38,7 +38,6 @@ import android.util.ArrayMap;
 import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
-import com.android.systemui.statusbar.NotificationEntryBuilder;
 import com.android.systemui.statusbar.notification.collection.NotifListBuilderImpl.OnRenderListListener;
 import com.android.systemui.statusbar.notification.collection.listbuilder.OnBeforeRenderListListener;
 import com.android.systemui.statusbar.notification.collection.listbuilder.OnBeforeSortListener;
@@ -47,6 +46,7 @@ import com.android.systemui.statusbar.notification.collection.listbuilder.plugga
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifFilter;
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifPromoter;
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.SectionsProvider;
+import com.android.systemui.statusbar.notification.logging.NotifLog;
 import com.android.systemui.util.Assert;
 import com.android.systemui.util.time.FakeSystemClock;
 
@@ -66,6 +66,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @SmallTest
@@ -76,6 +77,7 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
     private NotifListBuilderImpl mListBuilder;
     private FakeSystemClock mSystemClock = new FakeSystemClock();
 
+    @Mock private NotifLog mNotifLog;
     @Mock private NotifCollection mNotifCollection;
     @Spy private OnBeforeTransformGroupsListener mOnBeforeTransformGroupsListener;
     @Spy private OnBeforeSortListener mOnBeforeSortListener;
@@ -97,13 +99,13 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
         MockitoAnnotations.initMocks(this);
         Assert.sMainLooper = TestableLooper.get(this).getLooper();
 
-        mListBuilder = new NotifListBuilderImpl(mSystemClock);
+        mListBuilder = new NotifListBuilderImpl(mSystemClock, mNotifLog);
         mListBuilder.setOnRenderListListener(mOnRenderListListener);
 
         mListBuilder.attach(mNotifCollection);
 
         Mockito.verify(mNotifCollection).setBuildListener(mBuildListenerCaptor.capture());
-        mReadyForBuildListener = checkNotNull(mBuildListenerCaptor.getValue());
+        mReadyForBuildListener = Objects.requireNonNull(mBuildListenerCaptor.getValue());
     }
 
     @Test
@@ -334,7 +336,7 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
         // GIVEN a notification that is initially added to the list
         PackageFilter filter = new PackageFilter(PACKAGE_2);
         filter.setEnabled(false);
-        mListBuilder.addFilter(filter);
+        mListBuilder.addPreGroupFilter(filter);
 
         addNotif(0, PACKAGE_1);
         addNotif(1, PACKAGE_2);
@@ -371,24 +373,54 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
                 notif(2)
         );
 
-        // THEN the list of newly visible entries doesn't contain the summary or the group
-        assertEquals(
-                Arrays.asList(
-                        mEntrySet.get(0),
-                        mEntrySet.get(2)),
-                listener.newlyVisibleEntries
-        );
-
         // THEN the summary has a null parent and an unset firstAddedIteration
         assertNull(mEntrySet.get(1).getParent());
         assertEquals(-1, mEntrySet.get(1).mFirstAddedIteration);
     }
 
     @Test
-    public void testNotifsAreFiltered() {
+    public void testPreGroupNotifsAreFiltered() {
+        // GIVEN a PreGroupNotifFilter and PreRenderFilter that filters out the same package
+        NotifFilter preGroupFilter = spy(new PackageFilter(PACKAGE_2));
+        NotifFilter preRenderFilter = spy(new PackageFilter(PACKAGE_2));
+        mListBuilder.addPreGroupFilter(preGroupFilter);
+        mListBuilder.addPreRenderFilter(preRenderFilter);
+
+        // WHEN the pipeline is kicked off on a list of notifs
+        addNotif(0, PACKAGE_1);
+        addNotif(1, PACKAGE_2);
+        addNotif(2, PACKAGE_3);
+        addNotif(3, PACKAGE_2);
+        dispatchBuild();
+
+        // THEN the preGroupFilter is called on each notif in the original set
+        verify(preGroupFilter).shouldFilterOut(eq(mEntrySet.get(0)), anyLong());
+        verify(preGroupFilter).shouldFilterOut(eq(mEntrySet.get(1)), anyLong());
+        verify(preGroupFilter).shouldFilterOut(eq(mEntrySet.get(2)), anyLong());
+        verify(preGroupFilter).shouldFilterOut(eq(mEntrySet.get(3)), anyLong());
+
+        // THEN the preRenderFilter is only called on the notifications not already filtered out
+        verify(preRenderFilter).shouldFilterOut(eq(mEntrySet.get(0)), anyLong());
+        verify(preRenderFilter, never()).shouldFilterOut(eq(mEntrySet.get(1)), anyLong());
+        verify(preRenderFilter).shouldFilterOut(eq(mEntrySet.get(2)), anyLong());
+        verify(preRenderFilter, never()).shouldFilterOut(eq(mEntrySet.get(3)), anyLong());
+
+        // THEN the final list doesn't contain any filtered-out notifs
+        verifyBuiltList(
+                notif(0),
+                notif(2)
+        );
+
+        // THEN each filtered notif records the NotifFilter that did it
+        assertEquals(preGroupFilter, mEntrySet.get(1).mExcludingFilter);
+        assertEquals(preGroupFilter, mEntrySet.get(3).mExcludingFilter);
+    }
+
+    @Test
+    public void testPreRenderNotifsAreFiltered() {
         // GIVEN a NotifFilter that filters out a specific package
         NotifFilter filter1 = spy(new PackageFilter(PACKAGE_2));
-        mListBuilder.addFilter(filter1);
+        mListBuilder.addPreRenderFilter(filter1);
 
         // WHEN the pipeline is kicked off on a list of notifs
         addNotif(0, PACKAGE_1);
@@ -419,8 +451,8 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
         // GIVEN two notif filters
         NotifFilter filter1 = spy(new PackageFilter(PACKAGE_2));
         NotifFilter filter2 = spy(new PackageFilter(PACKAGE_5));
-        mListBuilder.addFilter(filter1);
-        mListBuilder.addFilter(filter2);
+        mListBuilder.addPreGroupFilter(filter1);
+        mListBuilder.addPreGroupFilter(filter2);
 
         // WHEN the pipeline is kicked off on a list of notifs
         addNotif(0, PACKAGE_1);
@@ -520,7 +552,7 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
     public void testNotifsAreSectioned() {
         // GIVEN a filter that removes all PACKAGE_4 notifs and a SectionsProvider that divides
         // notifs based on package name
-        mListBuilder.addFilter(new PackageFilter(PACKAGE_4));
+        mListBuilder.addPreGroupFilter(new PackageFilter(PACKAGE_4));
         final SectionsProvider sectionsProvider = spy(new PackageSectioner());
         mListBuilder.setSectionsProvider(sectionsProvider);
 
@@ -594,17 +626,19 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
     @Test
     public void testListenersAndPluggablesAreFiredInOrder() {
         // GIVEN a bunch of registered listeners and pluggables
-        NotifFilter filter = spy(new PackageFilter(PACKAGE_1));
+        NotifFilter preGroupFilter = spy(new PackageFilter(PACKAGE_1));
         NotifPromoter promoter = spy(new IdPromoter(3));
         PackageSectioner sectioner = spy(new PackageSectioner());
         NotifComparator comparator = spy(new HypeComparator(PACKAGE_4));
-        mListBuilder.addFilter(filter);
+        NotifFilter preRenderFilter = spy(new PackageFilter(PACKAGE_5));
+        mListBuilder.addPreGroupFilter(preGroupFilter);
         mListBuilder.addOnBeforeTransformGroupsListener(mOnBeforeTransformGroupsListener);
         mListBuilder.addPromoter(promoter);
         mListBuilder.addOnBeforeSortListener(mOnBeforeSortListener);
         mListBuilder.setComparators(Collections.singletonList(comparator));
         mListBuilder.setSectionsProvider(sectioner);
         mListBuilder.addOnBeforeRenderListListener(mOnBeforeRenderListListener);
+        mListBuilder.addPreRenderFilter(preRenderFilter);
 
         // WHEN a few new notifs are added
         addNotif(0, PACKAGE_1);
@@ -618,25 +652,28 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
 
         // THEN the pluggables and listeners are called in order
         InOrder inOrder = inOrder(
-                filter,
+                preGroupFilter,
                 mOnBeforeTransformGroupsListener,
                 promoter,
                 mOnBeforeSortListener,
                 sectioner,
                 comparator,
+                preRenderFilter,
                 mOnBeforeRenderListListener,
                 mOnRenderListListener);
 
-        inOrder.verify(filter, atLeastOnce())
+        inOrder.verify(preGroupFilter, atLeastOnce())
                 .shouldFilterOut(any(NotificationEntry.class), anyLong());
         inOrder.verify(mOnBeforeTransformGroupsListener)
-                .onBeforeTransformGroups(anyList(), anyList());
+                .onBeforeTransformGroups(anyList());
         inOrder.verify(promoter, atLeastOnce())
                 .shouldPromoteToTopLevel(any(NotificationEntry.class));
         inOrder.verify(mOnBeforeSortListener).onBeforeSort(anyList());
         inOrder.verify(sectioner, atLeastOnce()).getSection(any(ListEntry.class));
         inOrder.verify(comparator, atLeastOnce())
                 .compare(any(ListEntry.class), any(ListEntry.class));
+        inOrder.verify(preRenderFilter, atLeastOnce())
+                .shouldFilterOut(any(NotificationEntry.class), anyLong());
         inOrder.verify(mOnBeforeRenderListListener).onBeforeRenderList(anyList());
         inOrder.verify(mOnRenderListListener).onRenderList(anyList());
     }
@@ -649,7 +686,7 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
         SectionsProvider sectionsProvider = new PackageSectioner();
         NotifComparator hypeComparator = new HypeComparator(PACKAGE_2);
 
-        mListBuilder.addFilter(packageFilter);
+        mListBuilder.addPreGroupFilter(packageFilter);
         mListBuilder.addPromoter(idPromoter);
         mListBuilder.setSectionsProvider(sectionsProvider);
         mListBuilder.setComparators(Collections.singletonList(hypeComparator));
@@ -685,12 +722,12 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
         NotifFilter filter1 = spy(new PackageFilter(PACKAGE_5));
         NotifFilter filter2 = spy(new PackageFilter(PACKAGE_5));
         NotifFilter filter3 = spy(new PackageFilter(PACKAGE_5));
-        mListBuilder.addFilter(filter1);
-        mListBuilder.addFilter(filter2);
-        mListBuilder.addFilter(filter3);
+        mListBuilder.addPreGroupFilter(filter1);
+        mListBuilder.addPreGroupFilter(filter2);
+        mListBuilder.addPreGroupFilter(filter3);
 
         // GIVEN the SystemClock is set to a particular time:
-        mSystemClock.setUptimeMillis(47);
+        mSystemClock.setUptimeMillis(10047);
 
         // WHEN the pipeline is kicked off on a list of notifs
         addNotif(0, PACKAGE_1);
@@ -698,22 +735,22 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
         dispatchBuild();
 
         // THEN the value of `now` is the same for all calls to shouldFilterOut
-        verify(filter1).shouldFilterOut(mEntrySet.get(0), 47);
-        verify(filter2).shouldFilterOut(mEntrySet.get(0), 47);
-        verify(filter3).shouldFilterOut(mEntrySet.get(0), 47);
-        verify(filter1).shouldFilterOut(mEntrySet.get(1), 47);
-        verify(filter2).shouldFilterOut(mEntrySet.get(1), 47);
-        verify(filter3).shouldFilterOut(mEntrySet.get(1), 47);
+        verify(filter1).shouldFilterOut(mEntrySet.get(0), 10047);
+        verify(filter2).shouldFilterOut(mEntrySet.get(0), 10047);
+        verify(filter3).shouldFilterOut(mEntrySet.get(0), 10047);
+        verify(filter1).shouldFilterOut(mEntrySet.get(1), 10047);
+        verify(filter2).shouldFilterOut(mEntrySet.get(1), 10047);
+        verify(filter3).shouldFilterOut(mEntrySet.get(1), 10047);
     }
 
     @Test
-    public void testNewlyAddedEntries() {
+    public void testGroupTransformEntries() {
         // GIVEN a registered OnBeforeTransformGroupsListener
         RecordingOnBeforeTransformGroupsListener listener =
                 spy(new RecordingOnBeforeTransformGroupsListener());
         mListBuilder.addOnBeforeTransformGroupsListener(listener);
 
-        // Given some new notifs
+        // GIVEN some new notifs
         addNotif(0, PACKAGE_1);
         addGroupChild(1, PACKAGE_2, GROUP_1);
         addGroupSummary(2, PACKAGE_2, GROUP_1);
@@ -741,27 +778,18 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
                         mEntrySet.get(0),
                         mBuiltList.get(1),
                         mEntrySet.get(4)
-                ),
-                Arrays.asList(
-                        mEntrySet.get(0),
-                        mEntrySet.get(1),
-                        mBuiltList.get(1),
-                        mEntrySet.get(2),
-                        mEntrySet.get(3),
-                        mEntrySet.get(4),
-                        mEntrySet.get(5)
                 )
         );
     }
 
     @Test
-    public void testNewlyAddedEntriesOnSecondRun() {
+    public void testGroupTransformEntriesOnSecondRun() {
         // GIVEN a registered OnBeforeTransformGroupsListener
         RecordingOnBeforeTransformGroupsListener listener =
                 spy(new RecordingOnBeforeTransformGroupsListener());
         mListBuilder.addOnBeforeTransformGroupsListener(listener);
 
-        // Given some notifs that have already been added (two of which are in malformed groups)
+        // GIVEN some notifs that have already been added (two of which are in malformed groups)
         addNotif(0, PACKAGE_1);
         addGroupChild(1, PACKAGE_2, GROUP_1);
         addGroupChild(2, PACKAGE_3, GROUP_2);
@@ -796,13 +824,6 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
                         mEntrySet.get(0),
                         mEntrySet.get(1),
                         mBuiltList.get(2),
-                        mEntrySet.get(7)
-                ),
-                Arrays.asList(
-                        mBuiltList.get(2),
-                        mEntrySet.get(4),
-                        mEntrySet.get(5),
-                        mEntrySet.get(6),
                         mEntrySet.get(7)
                 )
         );
@@ -840,19 +861,18 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
     }
 
     @Test(expected = IllegalStateException.class)
-    public void testOutOfOrderFilterInvalidationThrows() {
-        // GIVEN a NotifFilter that gets invalidated during the grouping stage
+    public void testOutOfOrderPreGroupFilterInvalidationThrows() {
+        // GIVEN a PreGroupNotifFilter that gets invalidated during the grouping stage
         NotifFilter filter = new PackageFilter(PACKAGE_5);
-        OnBeforeTransformGroupsListener listener =
-                (list, newlyVisibleEntries) -> filter.invalidateList();
-        mListBuilder.addFilter(filter);
+        OnBeforeTransformGroupsListener listener = (list) -> filter.invalidateList();
+        mListBuilder.addPreGroupFilter(filter);
         mListBuilder.addOnBeforeTransformGroupsListener(listener);
 
         // WHEN we try to run the pipeline and the filter is invalidated
         addNotif(0, PACKAGE_1);
         dispatchBuild();
 
-        // Then an exception is thrown
+        // THEN an exception is thrown
     }
 
     @Test(expected = IllegalStateException.class)
@@ -868,7 +888,7 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
         addNotif(0, PACKAGE_1);
         dispatchBuild();
 
-        // Then an exception is thrown
+        // THEN an exception is thrown
     }
 
     @Test(expected = IllegalStateException.class)
@@ -884,7 +904,37 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
         addNotif(0, PACKAGE_1);
         dispatchBuild();
 
-        // Then an exception is thrown
+        // THEN an exception is thrown
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testOutOfOrderPreRenderFilterInvalidationThrows() {
+        // GIVEN a PreRenderNotifFilter that gets invalidated during the finalizing stage
+        NotifFilter filter = new PackageFilter(PACKAGE_5);
+        OnBeforeRenderListListener listener = (list) -> filter.invalidateList();
+        mListBuilder.addPreRenderFilter(filter);
+        mListBuilder.addOnBeforeRenderListListener(listener);
+
+        // WHEN we try to run the pipeline and the PreRenderFilter is invalidated
+        addNotif(0, PACKAGE_1);
+        dispatchBuild();
+
+        // THEN an exception is thrown
+    }
+
+    @Test
+    public void testInOrderPreRenderFilter() {
+        // GIVEN a PreRenderFilter that gets invalidated during the grouping stage
+        NotifFilter filter = new PackageFilter(PACKAGE_5);
+        OnBeforeTransformGroupsListener listener = (list) -> filter.invalidateList();
+        mListBuilder.addPreRenderFilter(filter);
+        mListBuilder.addOnBeforeTransformGroupsListener(listener);
+
+        // WHEN we try to run the pipeline and the filter is invalidated
+        addNotif(0, PACKAGE_1);
+        dispatchBuild();
+
+        // THEN no exception thrown
     }
 
     /**
@@ -971,7 +1021,6 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
             mPendingSet.clear();
         }
 
-        mReadyForBuildListener.onBeginDispatchToListeners();
         mReadyForBuildListener.onBuildList(mEntrySet);
     }
 
@@ -1176,13 +1225,9 @@ public class NotifListBuilderImplTest extends SysuiTestCase {
 
     private static class RecordingOnBeforeTransformGroupsListener
             implements OnBeforeTransformGroupsListener {
-        public List<ListEntry> newlyVisibleEntries;
 
         @Override
-        public void onBeforeTransformGroups(List<ListEntry> list,
-                List<ListEntry> newlyVisibleEntries) {
-            this.newlyVisibleEntries = newlyVisibleEntries;
-        }
+        public void onBeforeTransformGroups(List<ListEntry> list) { }
     }
 
     private static final String PACKAGE_1 = "com.test1";

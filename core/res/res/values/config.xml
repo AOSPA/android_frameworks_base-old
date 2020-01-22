@@ -2360,15 +2360,22 @@
 
     <!-- Whether to only install system packages on a user if they're whitelisted for that user
          type. These are flags and can be freely combined.
-         0 (0b000) - disable whitelist (install all system packages; no logging)
-         1 (0b001) - enforce (only install system packages if they are whitelisted)
-         2 (0b010) - log (log when a non-whitelisted package is run)
-         4 (0b100) - treat any package not mentioned in the whitelist file as implicitly whitelisted
-         8 (0b1000) - ignore OTAs (don't install system packages during OTAs)
+         0  - disable whitelist (install all system packages; no logging)
+         1  - enforce (only install system packages if they are whitelisted)
+         2  - log (log when a non-whitelisted package is run)
+         4  - any package not mentioned in the whitelist file is implicitly whitelisted on all users
+         8  - same as 4, but just for the SYSTEM user
+         16 - ignore OTAs (don't install system packages during OTAs)
+         Common scenarios:
+          - to enable feature (fully enforced) for a complete whitelist: 1
+          - to enable feature for an incomplete whitelist (so use implicit whitelist mode): 5
+          - to enable feature but implicitly whitelist for SYSTEM user to ease local development: 9
+          - to disable feature completely if it had never been enabled: 16
+          - to henceforth disable feature and try to undo its previous effects: 0
         Note: This list must be kept current with PACKAGE_WHITELIST_MODE_PROP in
         frameworks/base/services/core/java/com/android/server/pm/UserSystemPackageInstaller.java -->
-    <integer name="config_userTypePackageWhitelistMode">13</integer> <!-- 0b1101 -->
-    <!-- TODO(b/143200798): Change to value 5, i.e. 0b0101, when b/143200798 is resolved. -->
+    <integer name="config_userTypePackageWhitelistMode">29</integer> <!-- 1+4+8+16 -->
+    <!-- TODO(b/143200798): Change to value 13, i.e. 1+4+8, when b/143200798 is resolved. -->
 
     <!-- Whether UI for multi user should be shown -->
     <bool name="config_enableMultiUserUI">false</bool>
@@ -2547,6 +2554,28 @@
     <string name="config_customAdbPublicKeyConfirmationSecondaryUserComponent"
             >com.android.systemui/com.android.systemui.usb.UsbDebuggingSecondaryUserActivity</string>
 
+    <!-- Component name of the activity that shows the usb containment status. -->
+    <string name="config_usbContaminantActivity" translatable="false"
+            >com.android.systemui/com.android.systemui.usb.UsbContaminantActivity</string>
+
+    <!-- Component name of the activity that shows the request for access to a usb device. -->
+    <string name="config_usbPermissionActivity" translatable="false"
+            >com.android.systemui/com.android.systemui.usb.UsbPermissionActivity</string>
+
+    <!-- Component name of the activity that shows more information about a usb accessory. -->
+    <string name="config_usbAccessoryUriActivity" translatable="false"
+            >com.android.systemui/com.android.systemui.usb.UsbAccessoryUriActivity</string>
+
+    <!-- Component name of the activity that confirms the activity to start when a usb device is
+         plugged in. -->
+    <string name="config_usbConfirmActivity" translatable="false"
+            >com.android.systemui/com.android.systemui.usb.UsbConfirmActivity</string>
+
+    <!-- Component name of the activity to select the activity to start when a usb device is plugged
+         in. -->
+    <string name="config_usbResolverActivity" translatable="false"
+            >com.android.systemui/com.android.systemui.usb.UsbResolverActivity</string>
+
     <!-- Name of the dialog that is used to request the user's consent to VPN connection -->
     <string name="config_customVpnConfirmDialogComponent" translatable="false"
             >com.android.vpndialogs/com.android.vpndialogs.ConfirmDialog</string>
@@ -2633,6 +2662,18 @@
         <item>353</item>
     </string-array>
 
+    <!-- Ims supported call barring MMI code -->
+    <string-array translatable="false" name="config_callBarringMMI_for_ims">
+        <item>33</item>
+        <item>331</item>
+        <item>332</item>
+        <item>35</item>
+        <item>351</item>
+        <item>330</item>
+        <item>333</item>
+        <item>353</item>
+    </string-array>
+
     <!-- Override the default detection behavior for the framework method
          android.view.ViewConfiguration#hasPermanentMenuKey().
          Valid settings are:
@@ -2655,11 +2696,6 @@
     <!-- Package name for default network scorer app; overridden by product overlays. -->
     <string name="config_defaultNetworkScorerPackageName"></string>
 
-    <!-- Feature flag to enable memory efficient task snapshots that are used in recents optimized
-         for low memory devices and replace the app transition starting window with the splash
-         screen. -->
-    <bool name="config_lowRamTaskSnapshotsAndRecents">false</bool>
-
     <!-- The amount to scale fullscreen snapshots for Overview and snapshot starting windows. -->
     <item name="config_fullTaskSnapshotScale" format="float" type="dimen">1.0</item>
 
@@ -2670,11 +2706,45 @@
          property. If this is false, then the following recents config flags are ignored. -->
     <bool name="config_hasRecents">true</bool>
 
-    <!-- Component name for the activity that will be presenting the Recents UI, which will receive special permissions for API related
-          to fetching and presenting recent tasks. The default configuration uses Launcehr3QuickStep as default launcher and points to
-          the corresponding recents component. When using a different default launcher, change this appropriately or use the default
-          systemui implementation: com.android.systemui/.recents.RecentsActivity -->
-    <string name="config_recentsComponentName" translatable="false">com.android.launcher3/com.android.quickstep.RecentsActivity</string>
+    <!-- Component name for the activity that will be presenting the Recents UI, which will receive
+         special permissions for API related to fetching and presenting recent tasks. The default
+         configuration uses Launcehr3QuickStep as default launcher and points to the corresponding
+         recents component. When using a different default launcher, change this appropriately or
+         use the default systemui implementation: com.android.systemui/.recents.RecentsActivity -->
+    <string name="config_recentsComponentName" translatable="false"
+            >com.android.launcher3/com.android.quickstep.RecentsActivity</string>
+
+    <!-- SystemUi service component -->
+    <string name="config_systemUIServiceComponent" translatable="false"
+            >com.android.systemui/com.android.systemui.SystemUIService</string>
+
+    <!-- Keyguard component -->
+    <string name="config_keyguardComponent" translatable="false"
+            >com.android.systemui/com.android.systemui.keyguard.KeyguardService</string>
+
+    <!-- Screen record dialog component -->
+    <string name="config_screenRecorderComponent" translatable="false"
+            >com.android.systemui/com.android.systemui.screenrecord.ScreenRecordDialog</string>
+
+    <!-- The component name of a special dock app that merely launches a dream.
+         We don't want to launch this app when docked because it causes an unnecessary
+         activity transition.  We just want to start the dream. -->
+    <string name="config_somnambulatorComponent" translatable="false"
+            >com.android.systemui/com.android.systemui.Somnambulator</string>
+
+    <!-- The component name of a special dock app that merely launches a dream.
+         We don't want to launch this app when docked because it causes an unnecessary
+         activity transition.  We just want to start the dream.. -->
+    <string name="config_screenshotServiceComponent" translatable="false"
+            >com.android.systemui/com.android.systemui.screenshot.TakeScreenshotService</string>
+
+    <!-- The component notified when there is an error while taking a screenshot. -->
+    <string name="config_screenshotErrorReceiverComponent" translatable="false"
+            >com.android.systemui/com.android.systemui.screenshot.ScreenshotServiceErrorReceiver</string>
+
+    <!-- The component for the activity shown to grant permissions for a slice. -->
+    <string name="config_slicePermissionComponent" translatable="false"
+            >com.android.systemui/com.android.systemui.SlicePermissionActivity</string>
 
     <!-- The minimum number of visible recent tasks to be presented to the user through the
          SystemUI. Can be -1 if there is no minimum limit. -->
@@ -2849,10 +2919,6 @@
 
     <!-- Whether to use voip audio mode for ims call -->
     <bool name="config_use_voip_mode_for_ims">false</bool>
-
-    <!-- ImsService package name to bind to by default. If none is specified in an overlay, an
-         empty string is passed in -->
-    <string name="config_ims_package"/>
 
     <!-- String array containing numbers that shouldn't be logged. Country-specific. -->
     <string-array name="unloggable_phone_numbers" />
@@ -3031,9 +3097,6 @@
     <!-- Specifies the maximum burn-in offset vertically. -->
     <integer name="config_burnInProtectionMaxVerticalOffset">0</integer>
 
-    <!-- Keyguard component -->
-    <string name="config_keyguardComponent" translatable="false">com.android.systemui/com.android.systemui.keyguard.KeyguardService</string>
-
     <!-- Limit for the number of face templates per user -->
     <integer name="config_faceMaxTemplatesPerUser">1</integer>
 
@@ -3072,7 +3135,9 @@
 
          The path is assumed to be specified in display coordinates with pixel units and in
          the display's native orientation, with the origin of the coordinate system at the
-         center top of the display.
+         center top of the display. Optionally, you can append either `@left` or `@right` to the
+         end of the path string, in order to change the path origin to either the top left,
+         or top right of the display.
 
          To facilitate writing device-independent emulation overlays, the marker `@dp` can be
          appended after the path string to interpret coordinates in dp instead of px units.
@@ -3501,17 +3566,25 @@
          set to empty string), a default textclassifier will be loaded in the calling app's process.
          See android.view.textclassifier.TextClassificationManager.
     -->
+    <!-- TODO(b/144896755) remove the config -->
     <string name="config_defaultTextClassifierPackage" translatable="false"></string>
 
-    <!-- A list of the default system textclassifier service package name. Only one of the packages
-         will be activated and the fist package is the default system textclassifier service. OS
-         only tries to bind the first trusted service and the others can be selected via device
-         config. These services must be trusted, as they can be activated without explicit consent
-         of the user. Example: "com.android.textclassifier"
+    <!-- A list of supported system textClassifier service package names. Only one of the packages
+         will be activated. The first package in the list is the default system textClassifier
+         service. OS only tries to bind and grant permissions to the first trusted service and the
+         others can be selected via device config. These services must be trusted, as they can be
+         activated without explicit consent of the user. Example: "com.android.textclassifier"
     -->
     <string-array name="config_defaultTextClassifierPackages" translatable="false">
         <item>android.ext.services</item>
     </string-array>
+
+    <!-- The package name for the system companion device manager service.
+         This service must be trusted, as it can be activated without explicit consent of the user.
+         Example: "com.android.companiondevicemanager"
+         See android.companion.CompanionDeviceManager.
+    -->
+    <string name="config_companionDeviceManagerPackage" translatable="false"></string>
 
     <!-- The package name for the default wellbeing app.
          This package must be trusted, as it has the permissions to control other applications
@@ -4119,6 +4192,14 @@
     <!-- Which binder services to include in incident reports containing restricted images. -->
     <string-array name="config_restrictedImagesServices" translatable="false"/>
 
+    <!-- List of biometric sensors on the device, in decreasing strength. Consumed by AuthService
+         when registering authenticators with BiometricService. Format must be ID:Modality:Strength,
+         where: IDs are unique per device, Modality as defined in BiometricAuthenticator.java,
+         and Strength as defined in Authenticators.java -->
+    <string-array name="config_biometric_sensors" translatable="false" >
+        <item>0:2:15</item> <!-- ID0:Fingerprint:Strong -->
+    </string-array>
+
     <!-- Messages that should not be shown to the user during face auth enrollment. This should be
          used to hide messages that may be too chatty or messages that the user can't do much about.
          Entries are defined in android.hardware.biometrics.face@1.0 types.hal -->
@@ -4199,6 +4280,10 @@
         <!-- Add packages here -->
     </string-array>
 
+    <!-- Whether or not wcg (wide color gamut) should be enabled on this device,
+         we only enabled it while the device has ability of mixed color spaces composition -->
+    <bool name="config_enableWcgMode">false</bool>
+
     <!-- When true, enables the whitelisted app to handle bug reports from power menu short press. -->
     <bool name="config_bugReportHandlerEnabled">false</bool>
 
@@ -4207,17 +4292,20 @@
 
     <!-- The default value used for RawContacts.ACCOUNT_NAME when contacts are inserted without this
          column set. These contacts are stored locally on the device and will not be removed even
-         if an android.account.Account with this name and type exists. A null string will be used
-         if the value is left empty. When this is non-empty then config_rawContactsLocalAccountType
+         if no android.account.Account with this name exists. A null string will be used if the
+         value is left empty. When this is non-empty then config_rawContactsLocalAccountType
          should also be non-empty.  -->
     <string name="config_rawContactsLocalAccountName" translatable="false"></string>
 
     <!-- The default value used for RawContacts.ACCOUNT_TYPE when contacts are inserted without this
          column set. These contacts are stored locally on the device and will not be removed even
-         if an android.account.Account with this name and type exists. A null string will be used
-         if the value is left empty.  When this is non-empty then config_rawContactsLocalAccountName
+         if no android.account.Account with this type exists. A null string will be used if the
+         value is left empty.  When this is non-empty then config_rawContactsLocalAccountName
          should also be non-empty.-->
     <string name="config_rawContactsLocalAccountType" translatable="false"></string>
+
+    <!-- Whether or not to use assistant stream volume separately from music volume -->
+    <bool name="config_useAssistantVolume">false</bool>
 
     <!-- pdp data retry for cause 29, 33 and 55-->
     <bool name="config_pdp_retry_for_29_33_55_enabled">false</bool>

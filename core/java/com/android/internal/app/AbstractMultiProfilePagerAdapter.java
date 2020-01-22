@@ -14,7 +14,9 @@
  * limitations under the License.
  */
 package com.android.internal.app;
+
 import android.annotation.IntDef;
+import android.annotation.Nullable;
 import android.content.Context;
 import android.os.UserHandle;
 import android.view.View;
@@ -22,9 +24,9 @@ import android.view.ViewGroup;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.widget.PagerAdapter;
-
-import com.android.internal.util.Preconditions;
 import com.android.internal.widget.ViewPager;
+
+import java.util.Objects;
 
 /**
  * Skeletal {@link PagerAdapter} implementation of a work or personal profile page for
@@ -41,7 +43,7 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
     private int mCurrentPage;
 
     AbstractMultiProfilePagerAdapter(Context context, int currentPage) {
-        mContext = Preconditions.checkNotNull(context);
+        mContext = Objects.requireNonNull(context);
         mCurrentPage = currentPage;
     }
 
@@ -60,7 +62,7 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
             @Override
             public void onPageSelected(int position) {
                 mCurrentPage = position;
-                getCurrentListAdapter().rebuildList();
+                getActiveListAdapter().rebuildList();
             }
         });
         viewPager.setAdapter(this);
@@ -89,7 +91,7 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
     }
 
     UserHandle getCurrentUserHandle() {
-        return getCurrentListAdapter().mResolverListController.getUserHandle();
+        return getActiveListAdapter().mResolverListController.getUserHandle();
     }
 
     @Override
@@ -136,7 +138,17 @@ public abstract class AbstractMultiProfilePagerAdapter extends PagerAdapter {
     abstract Object getAdapterForIndex(int pageIndex);
 
     @VisibleForTesting
-    public abstract ResolverListAdapter getCurrentListAdapter();
+    public abstract ResolverListAdapter getActiveListAdapter();
+
+    /**
+     * If this is a device with a work profile, returns the {@link ResolverListAdapter} instance
+     * of the profile that is not the active one. Otherwise returns {@code null}. For example,
+     * if the share sheet is launched in the work profile, this method returns the personal
+     * profile {@link ResolverListAdapter}.
+     * @see #getActiveListAdapter()
+     */
+    @VisibleForTesting
+    public abstract @Nullable ResolverListAdapter getInactiveListAdapter();
 
     abstract Object getCurrentRootAdapter();
 

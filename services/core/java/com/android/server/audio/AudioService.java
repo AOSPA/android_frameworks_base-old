@@ -313,7 +313,8 @@ public class AudioService extends IAudioService.Stub
         7,  // STREAM_SYSTEM_ENFORCED
         15, // STREAM_DTMF
         15, // STREAM_TTS
-        15  // STREAM_ACCESSIBILITY
+        15, // STREAM_ACCESSIBILITY
+        15  // STREAM_ASSISTANT
     };
 
     /** Minimum volume index values for audio streams */
@@ -328,7 +329,8 @@ public class AudioService extends IAudioService.Stub
         0,  // STREAM_SYSTEM_ENFORCED
         0,  // STREAM_DTMF
         0,  // STREAM_TTS
-        1   // STREAM_ACCESSIBILITY
+        1,  // STREAM_ACCESSIBILITY
+        0   // STREAM_ASSISTANT
     };
 
     /* mStreamVolumeAlias[] indicates for each stream if it uses the volume settings
@@ -351,7 +353,8 @@ public class AudioService extends IAudioService.Stub
         AudioSystem.STREAM_RING,            // STREAM_SYSTEM_ENFORCED
         AudioSystem.STREAM_RING,            // STREAM_DTMF
         AudioSystem.STREAM_MUSIC,           // STREAM_TTS
-        AudioSystem.STREAM_MUSIC            // STREAM_ACCESSIBILITY
+        AudioSystem.STREAM_MUSIC,           // STREAM_ACCESSIBILITY
+        AudioSystem.STREAM_MUSIC            // STREAM_ASSISTANT
     };
     private final int[] STREAM_VOLUME_ALIAS_TELEVISION = new int[] {
         AudioSystem.STREAM_MUSIC,       // STREAM_VOICE_CALL
@@ -364,7 +367,8 @@ public class AudioService extends IAudioService.Stub
         AudioSystem.STREAM_MUSIC,       // STREAM_SYSTEM_ENFORCED
         AudioSystem.STREAM_MUSIC,       // STREAM_DTMF
         AudioSystem.STREAM_MUSIC,       // STREAM_TTS
-        AudioSystem.STREAM_MUSIC        // STREAM_ACCESSIBILITY
+        AudioSystem.STREAM_MUSIC,       // STREAM_ACCESSIBILITY
+        AudioSystem.STREAM_MUSIC        // STREAM_ASSISTANT
     };
     private final int[] STREAM_VOLUME_ALIAS_DEFAULT = new int[] {
         AudioSystem.STREAM_VOICE_CALL,      // STREAM_VOICE_CALL
@@ -377,7 +381,8 @@ public class AudioService extends IAudioService.Stub
         AudioSystem.STREAM_RING,            // STREAM_SYSTEM_ENFORCED
         AudioSystem.STREAM_RING,            // STREAM_DTMF
         AudioSystem.STREAM_MUSIC,           // STREAM_TTS
-        AudioSystem.STREAM_MUSIC            // STREAM_ACCESSIBILITY
+        AudioSystem.STREAM_MUSIC,           // STREAM_ACCESSIBILITY
+        AudioSystem.STREAM_MUSIC            // STREAM_ASSISTANT
     };
     protected static int[] mStreamVolumeAlias;
 
@@ -397,6 +402,7 @@ public class AudioService extends IAudioService.Stub
         AppOpsManager.OP_AUDIO_MEDIA_VOLUME,            // STREAM_DTMF
         AppOpsManager.OP_AUDIO_MEDIA_VOLUME,            // STREAM_TTS
         AppOpsManager.OP_AUDIO_ACCESSIBILITY_VOLUME,    // STREAM_ACCESSIBILITY
+        AppOpsManager.OP_AUDIO_MEDIA_VOLUME             // STREAM_ASSISTANT
     };
 
     private final boolean mUseFixedVolume;
@@ -412,8 +418,10 @@ public class AudioService extends IAudioService.Stub
         public void onError(int error) {
             switch (error) {
                 case AudioSystem.AUDIO_STATUS_SERVER_DIED:
-                    mRecordMonitor.onAudioServerDied();
-
+                    // check for null in case error callback is called during instance creation
+                    if (mRecordMonitor != null) {
+                        mRecordMonitor.onAudioServerDied();
+                    }
                     sendMsg(mAudioHandler, MSG_AUDIO_SERVER_DIED,
                             SENDMSG_NOOP, 0, 0, null, 0);
                     sendMsg(mAudioHandler, MSG_DISPATCH_AUDIO_SERVER_STATE,
@@ -1256,6 +1264,9 @@ public class AudioService extends IAudioService.Stub
         int dtmfStreamAlias;
         final int a11yStreamAlias = sIndependentA11yVolume ?
                 AudioSystem.STREAM_ACCESSIBILITY : AudioSystem.STREAM_MUSIC;
+        final int assistantStreamAlias = mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_useAssistantVolume) ?
+                AudioSystem.STREAM_ASSISTANT : AudioSystem.STREAM_MUSIC;
 
         if (mIsSingleVolume) {
             mStreamVolumeAlias = STREAM_VOLUME_ALIAS_TELEVISION;
@@ -1285,6 +1296,7 @@ public class AudioService extends IAudioService.Stub
 
         mStreamVolumeAlias[AudioSystem.STREAM_DTMF] = dtmfStreamAlias;
         mStreamVolumeAlias[AudioSystem.STREAM_ACCESSIBILITY] = a11yStreamAlias;
+        mStreamVolumeAlias[AudioSystem.STREAM_ASSISTANT] = assistantStreamAlias;
 
         if (updateVolumes && mStreamStates != null) {
             updateDefaultVolumes();
@@ -1823,6 +1835,17 @@ public class AudioService extends IAudioService.Stub
             return;
         }
 
+        // If the stream is STREAM_ASSISTANT,
+        // make sure that the calling app have the MODIFY_AUDIO_ROUTING permission.
+        if (streamType == AudioSystem.STREAM_ASSISTANT &&
+            mContext.checkCallingOrSelfPermission(
+                android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+                    != PackageManager.PERMISSION_GRANTED) {
+            Log.w(TAG, "MODIFY_AUDIO_ROUTING Permission Denial: adjustStreamVolume from pid="
+                    + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid());
+            return;
+        }
+
         // use stream type alias here so that streams with same alias have the same behavior,
         // including with regard to silent mode control (e.g the use of STREAM_RING below and in
         // checkForRingerModeChange() in place of STREAM_RING or STREAM_NOTIFICATION)
@@ -2188,7 +2211,7 @@ public class AudioService extends IAudioService.Stub
     public void setVolumeIndexForAttributes(@NonNull AudioAttributes attr, int index, int flags,
                                             String callingPackage) {
         enforceModifyAudioRoutingPermission();
-        Preconditions.checkNotNull(attr, "attr must not be null");
+        Objects.requireNonNull(attr, "attr must not be null");
         // @todo not hold the caller context, post message
         int stream = AudioProductStrategy.getLegacyStreamTypeForStrategyWithAudioAttributes(attr);
         final int device = getDeviceForStream(stream);
@@ -2223,7 +2246,7 @@ public class AudioService extends IAudioService.Stub
     /** @see AudioManager#getVolumeIndexForAttributes(attr) */
     public int getVolumeIndexForAttributes(@NonNull AudioAttributes attr) {
         enforceModifyAudioRoutingPermission();
-        Preconditions.checkNotNull(attr, "attr must not be null");
+        Objects.requireNonNull(attr, "attr must not be null");
         int stream = AudioProductStrategy.getLegacyStreamTypeForStrategyWithAudioAttributes(attr);
         final int device = getDeviceForStream(stream);
 
@@ -2233,14 +2256,14 @@ public class AudioService extends IAudioService.Stub
     /** @see AudioManager#getMaxVolumeIndexForAttributes(attr) */
     public int getMaxVolumeIndexForAttributes(@NonNull AudioAttributes attr) {
         enforceModifyAudioRoutingPermission();
-        Preconditions.checkNotNull(attr, "attr must not be null");
+        Objects.requireNonNull(attr, "attr must not be null");
         return AudioSystem.getMaxVolumeIndexForAttributes(attr);
     }
 
     /** @see AudioManager#getMinVolumeIndexForAttributes(attr) */
     public int getMinVolumeIndexForAttributes(@NonNull AudioAttributes attr) {
         enforceModifyAudioRoutingPermission();
-        Preconditions.checkNotNull(attr, "attr must not be null");
+        Objects.requireNonNull(attr, "attr must not be null");
         return AudioSystem.getMinVolumeIndexForAttributes(attr);
     }
 
@@ -2257,6 +2280,14 @@ public class AudioService extends IAudioService.Stub
                     != PackageManager.PERMISSION_GRANTED)) {
             Log.w(TAG, "Trying to call setStreamVolume() for STREAM_VOICE_CALL and index 0 without"
                     + " MODIFY_PHONE_STATE  callingPackage=" + callingPackage);
+            return;
+        }
+        if ((streamType == AudioManager.STREAM_ASSISTANT)
+            && (mContext.checkCallingOrSelfPermission(
+                    android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+                    != PackageManager.PERMISSION_GRANTED)) {
+            Log.w(TAG, "Trying to call setStreamVolume() for STREAM_ASSISTANT without"
+                    + " MODIFY_AUDIO_ROUTING  callingPackage=" + callingPackage);
             return;
         }
         sVolumeLogger.log(new VolumeEvent(VolumeEvent.VOL_SET_STREAM_VOL, streamType,
@@ -2502,7 +2533,7 @@ public class AudioService extends IAudioService.Stub
 
 
     private int getVolumeGroupIdForAttributes(@NonNull AudioAttributes attributes) {
-        Preconditions.checkNotNull(attributes, "attributes must not be null");
+        Objects.requireNonNull(attributes, "attributes must not be null");
         int volumeGroupId = getVolumeGroupIdForAttributesInt(attributes);
         if (volumeGroupId != AudioVolumeGroup.DEFAULT_VOLUME_GROUP) {
             return volumeGroupId;
@@ -2513,7 +2544,7 @@ public class AudioService extends IAudioService.Stub
     }
 
     private int getVolumeGroupIdForAttributesInt(@NonNull AudioAttributes attributes) {
-        Preconditions.checkNotNull(attributes, "attributes must not be null");
+        Objects.requireNonNull(attributes, "attributes must not be null");
         for (final AudioProductStrategy productStrategy :
                 AudioProductStrategy.getAudioProductStrategies()) {
             int volumeGroupId = productStrategy.getVolumeGroupIdForAudioAttributes(attributes);
@@ -4551,12 +4582,13 @@ public class AudioService extends IAudioService.Stub
         }
 
         if (mNm.getZenMode() != Settings.Global.ZEN_MODE_NO_INTERRUPTIONS
+                && !isStreamMutedByRingerOrZenMode(AudioSystem.STREAM_MUSIC)
                 && DEVICE_MEDIA_UNMUTED_ON_PLUG_SET.contains(newDevice)
                 && mStreamStates[AudioSystem.STREAM_MUSIC].mIsMuted
                 && mStreamStates[AudioSystem.STREAM_MUSIC].getIndex(newDevice) != 0
                 && (newDevice & AudioSystem.getDevicesForStream(AudioSystem.STREAM_MUSIC)) != 0) {
             if (DEBUG_VOL) {
-                Log.i(TAG, String.format(" onAccessoryPlugMediaUnmute unmuting device=%d [%s]",
+                Log.i(TAG, String.format("onAccessoryPlugMediaUnmute unmuting device=%d [%s]",
                         newDevice, AudioSystem.getOutputDeviceName(newDevice)));
             }
             mStreamStates[AudioSystem.STREAM_MUSIC].mute(false);
@@ -6229,6 +6261,7 @@ public class AudioService extends IAudioService.Stub
         pw.println("\nRinger mode: ");
         pw.println("- mode (internal) = " + RINGER_MODE_NAMES[mRingerMode]);
         pw.println("- mode (external) = " + RINGER_MODE_NAMES[mRingerModeExternal]);
+        pw.println("- zen mode:" + Settings.Global.zenModeToString(mNm.getZenMode()));
         dumpRingerModeStreams(pw, "affected", mRingerModeAffectedStreams);
         dumpRingerModeStreams(pw, "muted", mRingerAndZenModeMutedStreams);
         pw.print("- delegate = "); pw.println(mRingerModeDelegate);

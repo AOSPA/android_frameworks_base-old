@@ -494,23 +494,92 @@ public final class Settings {
      * Activity Action: Show setting page to process an Easy Connect (Wi-Fi DPP) QR code and start
      * configuration. This intent should be used when you want to use this device to take on the
      * configurator role for an IoT/other device. When provided with a valid DPP URI string Settings
-     * will open a wifi selection screen for the user to indicate which network they would like
-     * to configure the device specified in the DPP URI string for and carry them through the rest
-     * of the flow for provisioning the device.
+     * will open a wifi selection screen for the user to indicate which network they would like to
+     * configure the device specified in the DPP URI string for and carry them through the rest of
+     * the flow for provisioning the device.
      * <p>
-     * In some cases, a matching Activity may not exist, so ensure you safeguard
-     * against this by checking WifiManager.isEasyConnectSupported();
+     * In some cases, a matching Activity may not exist, so ensure you safeguard against this by
+     * checking WifiManager.isEasyConnectSupported();
      * <p>
      * Input: The Intent's data URI specifies bootstrapping information for authenticating and
      * provisioning the peer, with the "DPP" scheme.
      * <p>
      * Output: After {@code startActivityForResult}, the callback {@code onActivityResult} will have
-     *         resultCode {@link android.app.Activity#RESULT_OK} if Wi-Fi Easy Connect configuration
-     *         success and the user clicks 'Done' button.
+     * resultCode {@link android.app.Activity#RESULT_OK} if Wi-Fi Easy Connect configuration succeeded
+     * and the user tapped 'Done' button, or {@link android.app.Activity#RESULT_CANCELED} if operation
+     * failed and user tapped 'Cancel'. In case the operation has failed, a status code from {@link
+     * android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode} will be returned as
+     * Extra {@link #EXTRA_EASY_CONNECT_ERROR_CODE}. Easy Connect R2 Enrollees report additional
+     * details about the error they encountered, which will be provided in the {@link
+     * #EXTRA_EASY_CONNECT_ATTEMPTED_SSID}, {@link #EXTRA_EASY_CONNECT_CHANNEL_LIST}, and {@link
+     * #EXTRA_EASY_CONNECT_BAND_LIST}.
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_PROCESS_WIFI_EASY_CONNECT_URI =
             "android.settings.PROCESS_WIFI_EASY_CONNECT_URI";
+
+    /**
+     * Activity Extra: The Easy Connect operation error code
+     * <p>
+     * An extra returned on the result intent received when using the {@link
+     * #ACTION_PROCESS_WIFI_EASY_CONNECT_URI} intent to launch the Easy Connect Operation. This
+     * extra contains the error code of the operation - one of
+     * {@link android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode}.
+     * If there is no error, i.e. if the operation returns {@link android.app.Activity#RESULT_OK},
+     * then this extra is not attached to the result intent.
+     */
+    public static final String EXTRA_EASY_CONNECT_ERROR_CODE =
+            "android.provider.extra.EASY_CONNECT_ERROR_CODE";
+
+    /**
+     * Activity Extra: The SSID that the Enrollee tried to connect to.
+     * <p>
+     * An extra returned on the result intent received when using the {@link
+     * #ACTION_PROCESS_WIFI_EASY_CONNECT_URI} intent to launch the Easy Connect Operation. This
+     * extra contains the SSID of the Access Point that the remote Enrollee tried to connect to.
+     * This value is populated only by remote R2 devices, and only for the following error codes:
+     * {@link android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode#EASY_CONNECT_EVENT_FAILURE_CANNOT_FIND_NETWORK}
+     * {@link android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode#EASY_CONNECT_EVENT_FAILURE_ENROLLEE_AUTHENTICATION}.
+     * Therefore, always check if this extra is available using {@link Intent#hasExtra(String)}. If
+     * there is no error, i.e. if the operation returns {@link android.app.Activity#RESULT_OK}, then
+     * this extra is not attached to the result intent.
+     */
+    public static final String EXTRA_EASY_CONNECT_ATTEMPTED_SSID =
+            "android.provider.extra.EASY_CONNECT_ATTEMPTED_SSID";
+
+    /**
+     * Activity Extra: The Channel List that the Enrollee used to scan a network.
+     * <p>
+     * An extra returned on the result intent received when using the {@link
+     * #ACTION_PROCESS_WIFI_EASY_CONNECT_URI} intent to launch the Easy Connect Operation. This
+     * extra contains the list channels the Enrollee used to scan for a network. This value is
+     * populated only by remote R2 devices, and only for the following error code: {@link
+     * android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode#EASY_CONNECT_EVENT_FAILURE_CANNOT_FIND_NETWORK}.
+     * Therefore, always check if this extra is available using {@link Intent#hasExtra(String)}. If
+     * there is no error, i.e. if the operation returns {@link android.app.Activity#RESULT_OK}, then
+     * this extra is not attached to the result intent. The list is JSON formatted, as an array
+     * (Wi-Fi global operating classes) of arrays (Wi-Fi channels).
+     */
+    public static final String EXTRA_EASY_CONNECT_CHANNEL_LIST =
+            "android.provider.extra.EASY_CONNECT_CHANNEL_LIST";
+
+    /**
+     * Activity Extra: The Band List that the Enrollee supports.
+     * <p>
+     * An extra returned on the result intent received when using the {@link
+     * #ACTION_PROCESS_WIFI_EASY_CONNECT_URI} intent to launch the Easy Connect Operation. This
+     * extra contains the bands the Enrollee supports, expressed as the Global Operating Class,
+     * see Table E-4 in IEEE Std 802.11-2016 -Global operating classes. This value is populated only
+     * by remote R2 devices, and only for the following error codes: {@link
+     * android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode#EASY_CONNECT_EVENT_FAILURE_CANNOT_FIND_NETWORK}
+     * {@link android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode#EASY_CONNECT_EVENT_FAILURE_ENROLLEE_AUTHENTICATION}
+     * {@link android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode#EASY_CONNECT_EVENT_FAILURE_ENROLLEE_REJECTED_CONFIGURATION}.
+     * Therefore, always check if this extra is available using {@link Intent#hasExtra(String)}. If
+     * there is no error, i.e. if the operation returns {@link android.app.Activity#RESULT_OK}, then
+     * this extra is not attached to the result intent.
+     */
+    public static final String EXTRA_EASY_CONNECT_BAND_LIST =
+            "android.provider.extra.EASY_CONNECT_BAND_LIST";
 
     /**
      * Activity Action: Show settings to allow configuration of data and view data usage.
@@ -568,14 +637,45 @@ public final class Settings {
     /**
      * Activity Action: Show settings to enroll fingerprints, and setup PIN/Pattern/Pass if
      * necessary.
+     * @deprecated See {@link #ACTION_BIOMETRIC_ENROLL}.
      * <p>
      * Input: Nothing.
      * <p>
      * Output: Nothing.
      */
+    @Deprecated
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_FINGERPRINT_ENROLL =
             "android.settings.FINGERPRINT_ENROLL";
+
+    /**
+     * Activity Action: Show settings to enroll biometrics, and setup PIN/Pattern/Pass if
+     * necessary. By default, this prompts the user to enroll biometrics with strength
+     * Weak or above, as defined by the CDD. Only biometrics that meet or exceed Strong, as defined
+     * in the CDD are allowed to participate in Keystore operations.
+     * <p>
+     * Input: extras {@link #EXTRA_BIOMETRIC_MINIMUM_STRENGTH_REQUIRED} as an integer, with
+     * constants defined in {@link android.hardware.biometrics.BiometricManager.Authenticators},
+     * e.g. {@link android.hardware.biometrics.BiometricManager.Authenticators#BIOMETRIC_STRONG}.
+     * If not specified, the default behavior is
+     * {@link android.hardware.biometrics.BiometricManager.Authenticators#BIOMETRIC_WEAK}.
+     * <p>
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_BIOMETRIC_ENROLL =
+            "android.settings.BIOMETRIC_ENROLL";
+
+    /**
+     * Activity Extra: The minimum strength to request enrollment for.
+     * <p>
+     * This can be passed as an extra field to the {@link #ACTION_BIOMETRIC_ENROLL} intent to
+     * indicate that only enrollment for sensors that meet this strength should be shown. The
+     * value should be one of the biometric strength constants defined in
+     * {@link android.hardware.biometrics.BiometricManager.Authenticators}.
+     */
+    public static final String EXTRA_BIOMETRIC_MINIMUM_STRENGTH_REQUIRED =
+            "android.provider.extra.BIOMETRIC_MINIMUM_STRENGTH_REQUIRED";
 
     /**
      * Activity Action: Show settings to allow configuration of cast endpoints.
@@ -3871,6 +3971,12 @@ public final class Settings {
         public static final String VOLUME_ACCESSIBILITY = "volume_a11y";
 
         /**
+         * @hide
+         * Volume index for virtual assistant.
+         */
+        public static final String VOLUME_ASSISTANT = "volume_assistant";
+
+        /**
          * Master volume (float in the range 0.0f to 1.0f).
          *
          * @hide
@@ -3948,7 +4054,7 @@ public final class Settings {
                 "" /*STREAM_SYSTEM_ENFORCED, no setting for this stream*/,
                 "" /*STREAM_DTMF, no setting for this stream*/,
                 "" /*STREAM_TTS, no setting for this stream*/,
-                VOLUME_ACCESSIBILITY
+                VOLUME_ACCESSIBILITY, VOLUME_ASSISTANT
             };
 
         /**
@@ -4495,6 +4601,7 @@ public final class Settings {
             PUBLIC_SETTINGS.add(VOLUME_ALARM);
             PUBLIC_SETTINGS.add(VOLUME_NOTIFICATION);
             PUBLIC_SETTINGS.add(VOLUME_BLUETOOTH_SCO);
+            PUBLIC_SETTINGS.add(VOLUME_ASSISTANT);
             PUBLIC_SETTINGS.add(RINGTONE);
             PUBLIC_SETTINGS.add(NOTIFICATION_SOUND);
             PUBLIC_SETTINGS.add(ALARM_ALERT);
@@ -8403,6 +8510,20 @@ public final class Settings {
                 "navigation_mode";
 
         /**
+         * Scale factor for the back gesture inset size on the left side of the screen.
+         * @hide
+         */
+        public static final String BACK_GESTURE_INSET_SCALE_LEFT =
+                "back_gesture_inset_scale_left";
+
+        /**
+         * Scale factor for the back gesture inset size on the right side of the screen.
+         * @hide
+         */
+        public static final String BACK_GESTURE_INSET_SCALE_RIGHT =
+                "back_gesture_inset_scale_right";
+
+        /**
          * Controls whether aware is enabled.
          * @hide
          */
@@ -8419,6 +8540,41 @@ public final class Settings {
          * @hide
          */
         public static final String TAP_GESTURE = "tap_gesture";
+
+        /**
+         * Controls whether the people strip is enabled.
+         * @hide
+         */
+        public static final String PEOPLE_STRIP = "people_strip";
+
+        /**
+         * Controls if window magnification is enabled.
+         * @hide
+         */
+        public static final String WINDOW_MAGNIFICATION = "window_magnification";
+
+        /**
+         * Controls magnification mode when magnification is enabled via a system-wide
+         * triple tap gesture or the accessibility shortcut.
+         *
+         * @see#ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN
+         * @see#ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW
+         * @hide
+         */
+        public static final String ACCESSIBILITY_MAGNIFICATION_MODE =
+                "accessibility_magnification_mode";
+
+        /**
+         * Magnification mode value that magnifies whole display.
+         * @hide
+         */
+        public static final int ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN = 0x1;
+
+        /**
+         * Magnification mode value that magnifies magnify particular region in a window
+         * @hide
+         */
+        public static final int ACCESSIBILITY_MAGNIFICATION_MODE_WINDOW = 0x2;
 
         /**
          * Keys we no longer back up under the current schema, but want to continue to
@@ -9512,35 +9668,37 @@ public final class Settings {
          */
         public static final String SMS_SHORT_CODE_RULE = "sms_short_code_rule";
 
-       /**
-        * Used to select TCP's default initial receiver window size in segments - defaults to a build config value
-        * @hide
-        */
-       public static final String TCP_DEFAULT_INIT_RWND = "tcp_default_init_rwnd";
+        /**
+         * Used to select TCP's default initial receiver window size in segments - defaults to a
+         * build config value.
+         * @hide
+         */
+        public static final String TCP_DEFAULT_INIT_RWND = "tcp_default_init_rwnd";
 
-       /**
-        * Used to disable Tethering on a device - defaults to true
-        * @hide
-        */
-       public static final String TETHER_SUPPORTED = "tether_supported";
+        /**
+         * Used to disable Tethering on a device - defaults to true.
+         * @hide
+         */
+        @SystemApi
+        public static final String TETHER_SUPPORTED = "tether_supported";
 
-       /**
-        * Used to require DUN APN on the device or not - defaults to a build config value
-        * which defaults to false
-        * @hide
-        */
-       public static final String TETHER_DUN_REQUIRED = "tether_dun_required";
+        /**
+         * Used to require DUN APN on the device or not - defaults to a build config value
+         * which defaults to false.
+         * @hide
+         */
+        public static final String TETHER_DUN_REQUIRED = "tether_dun_required";
 
-       /**
-        * Used to hold a gservices-provisioned apn value for DUN.  If set, or the
-        * corresponding build config values are set it will override the APN DB
-        * values.
-        * Consists of a comma seperated list of strings:
-        * "name,apn,proxy,port,username,password,server,mmsc,mmsproxy,mmsport,mcc,mnc,auth,type"
-        * note that empty fields can be omitted: "name,apn,,,,,,,,,310,260,,DUN"
-        * @hide
-        */
-       public static final String TETHER_DUN_APN = "tether_dun_apn";
+        /**
+         * Used to hold a gservices-provisioned apn value for DUN.  If set, or the
+         * corresponding build config values are set it will override the APN DB
+         * values.
+         * Consists of a comma separated list of strings:
+         * "name,apn,proxy,port,username,password,server,mmsc,mmsproxy,mmsport,mcc,mnc,auth,type"
+         * note that empty fields can be omitted: "name,apn,,,,,,,,,310,260,,DUN"
+         * @hide
+         */
+        public static final String TETHER_DUN_APN = "tether_dun_apn";
 
         /**
          * Used to disable trying to talk to any available tethering offload HAL.
@@ -10331,6 +10489,19 @@ public final class Settings {
          * @hide
          */
         public static final String ERROR_LOGCAT_PREFIX = "logcat_for_";
+
+        /**
+         * Maximum number of bytes of a system crash/ANR/etc. report that
+         * ActivityManagerService should send to DropBox, as a prefix of the
+         * dropbox tag of the report type. For example,
+         * "max_error_bytes_for_system_server_anr" controls the maximum
+         * number of bytes captured with system server ANR reports.
+         * <p>
+         * Type: int (max size in bytes)
+         *
+         * @hide
+         */
+        public static final String MAX_ERROR_BYTES_PREFIX = "max_error_bytes_for_";
 
         /**
          * The interval in minutes after which the amount of free storage left
@@ -13635,13 +13806,6 @@ public final class Settings {
         public static final String KERNEL_CPU_THREAD_READER = "kernel_cpu_thread_reader";
 
         /**
-         * Default user id to boot into. They map to user ids, for example, 10, 11, 12.
-         *
-         * @hide
-         */
-        public static final String DEFAULT_USER_ID_TO_BOOT_INTO = "default_boot_into_user_id";
-
-        /**
          * Persistent user id that is last logged in to.
          *
          * They map to user ids, for example, 10, 11, 12.
@@ -14230,6 +14394,20 @@ public final class Settings {
      * already exists.
      */
     public static final int ADD_WIFI_RESULT_ALREADY_EXISTS = 2;
+
+    /**
+     * Activity Action: Allows user to select current bug report handler.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     *
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_BUGREPORT_HANDLER_SETTINGS =
+            "android.settings.BUGREPORT_HANDLER_SETTINGS";
 
     private static final String[] PM_WRITE_SETTINGS = {
         android.Manifest.permission.WRITE_SETTINGS

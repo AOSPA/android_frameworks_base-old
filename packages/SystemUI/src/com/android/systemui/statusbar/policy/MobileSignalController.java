@@ -107,7 +107,8 @@ public class MobileSignalController extends SignalController<
     @VisibleForTesting
     boolean mIsShowingIconGracefully = false;
     // Some specific carriers have 5GE network which is special LTE CA network.
-    private static final int NETWORK_TYPE_LTE_CA_5GE = TelephonyManager.MAX_NETWORK_TYPE + 1;
+    private static final int NETWORK_TYPE_LTE_CA_5GE =
+            TelephonyManager.getAllNetworkTypes().length + 1;
 
     private int mCallState = TelephonyManager.CALL_STATE_IDLE;
 
@@ -1051,8 +1052,8 @@ public class MobileSignalController extends SignalController<
         @Override
         public void onServiceStateChanged(ServiceState state) {
             if (DEBUG) {
-                Log.d(mTag, "onServiceStateChanged voiceState=" + state.getVoiceRegState()
-                        + " dataState=" + state.getDataRegState());
+                Log.d(mTag, "onServiceStateChanged voiceState=" + state.getState()
+                        + " dataState=" + state.getDataRegistrationState());
             }
             mServiceState = state;
             if (mServiceState != null) {

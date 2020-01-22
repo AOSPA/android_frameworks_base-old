@@ -19,7 +19,7 @@ package android.app;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
@@ -1519,6 +1519,16 @@ public class Instrumentation {
      */
     public void callActivityOnUserLeaving(Activity activity) {
         activity.performUserLeaving();
+    }
+
+    /**
+     * Perform calling of an activity's {@link Activity#onPictureInPictureRequested} method.
+     * The default implementation simply calls through to that method.
+     *
+     * @param activity The activity being notified that picture-in-picture is being requested.
+     */
+    public void callActivityOnPictureInPictureRequested(@NonNull Activity activity) {
+        activity.onPictureInPictureRequested();
     }
     
     /*

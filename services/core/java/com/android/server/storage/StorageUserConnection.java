@@ -48,6 +48,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -69,7 +70,7 @@ public final class StorageUserConnection {
     @GuardedBy("mLock") private final Map<String, Session> mSessions = new HashMap<>();
 
     public StorageUserConnection(Context context, int userId, StorageSessionController controller) {
-        mContext = Preconditions.checkNotNull(context);
+        mContext = Objects.requireNonNull(context);
         mUserId = Preconditions.checkArgumentNonnegative(userId);
         mSessionController = controller;
     }
@@ -83,10 +84,10 @@ public final class StorageUserConnection {
      */
     public void startSession(String sessionId, ParcelFileDescriptor pfd, String upperPath,
             String lowerPath) throws ExternalStorageServiceException {
-        Preconditions.checkNotNull(sessionId);
-        Preconditions.checkNotNull(pfd);
-        Preconditions.checkNotNull(upperPath);
-        Preconditions.checkNotNull(lowerPath);
+        Objects.requireNonNull(sessionId);
+        Objects.requireNonNull(pfd);
+        Objects.requireNonNull(upperPath);
+        Objects.requireNonNull(lowerPath);
 
         prepareRemote();
         synchronized (mLock) {
@@ -161,20 +162,6 @@ public final class StorageUserConnection {
      */
     public void close() {
         mActiveConnection.close();
-    }
-
-    /** Throws an {@link IllegalArgumentException} if {@code path} is not ready for access */
-    public void checkPathReady(String path) {
-        synchronized (mLock) {
-            for (Session session : mSessions.values()) {
-                if (session.upperPath != null && path.startsWith(session.upperPath)) {
-                    if (mActiveConnection.isActiveLocked(session)) {
-                        return;
-                    }
-                }
-            }
-            throw new IllegalStateException("Path not ready " + path);
-        }
     }
 
     /** Returns all created sessions. */

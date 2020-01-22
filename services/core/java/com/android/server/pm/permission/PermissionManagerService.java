@@ -204,6 +204,10 @@ public class PermissionManagerService extends IPermissionManager.Stub {
     /** Permission controller: User space permission management */
     private PermissionControllerManager mPermissionControllerManager;
 
+    /** Map of OneTimePermissionUserManagers keyed by userId */
+    private final SparseArray<OneTimePermissionUserManager> mOneTimePermissionUserManagers =
+            new SparseArray<>();
+
     /** Default permission policy to provide proper behaviour out-of-the-box */
     private final DefaultPermissionGrantPolicy mDefaultPermissionGrantPolicy;
 
@@ -321,7 +325,10 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         public void onPermissionUpdatedNotifyListener(@UserIdInt int[] updatedUserIds, boolean sync,
                 int uid) {
             onPermissionUpdated(updatedUserIds, sync);
-            mOnPermissionChangeListeners.onPermissionsChanged(uid);
+            for (int i = 0; i < updatedUserIds.length; i++) {
+                int userUid = UserHandle.getUid(updatedUserIds[i], UserHandle.getAppId(uid));
+                mOnPermissionChangeListeners.onPermissionsChanged(userUid);
+            }
         }
         public void onInstallPermissionUpdatedNotifyListener(int uid) {
             onInstallPermissionUpdated();
@@ -733,7 +740,8 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             // Install and runtime permissions are stored in different places,
             // so figure out what permission changed and persist the change.
             if (permissionsState.getInstallPermissionState(permName) != null) {
-                callback.onInstallPermissionUpdatedNotifyListener(pkg.getUid());
+                int userUid = UserHandle.getUid(userId, UserHandle.getAppId(pkg.getUid()));
+                callback.onInstallPermissionUpdatedNotifyListener(userUid);
             } else if (permissionsState.getRuntimePermissionState(permName, userId) != null
                     || hadState) {
                 callback.onPermissionUpdatedNotifyListener(new int[]{userId}, false,
@@ -1575,15 +1583,11 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             }
 
             // If shared user we just reset the state to which only this app contributed.
-            final String sharedUserId =
-                    mPackageManagerInt.getSharedUserIdForPackage(pkg.getPackageName());
-            final String[] pkgNames =
-                    mPackageManagerInt.getPackagesForSharedUserId(sharedUserId, userId);
-            if (pkgNames != null && pkgNames.length > 0) {
+            final String[] pkgNames = mPackageManagerInt.getSharedUserPackagesForPackage(
+                    pkg.getPackageName(), userId);
+            if (pkgNames.length > 0) {
                 boolean used = false;
-                final int packageCount = pkgNames.length;
-                for (int j = 0; j < packageCount; j++) {
-                    final String sharedPkgName = pkgNames[j];
+                for (String sharedPkgName : pkgNames) {
                     final AndroidPackage sharedPkg =
                             mPackageManagerInt.getPackage(sharedPkgName);
                     if (sharedPkg != null && !sharedPkg.getPackageName().equals(packageName)
@@ -3005,6 +3009,51 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                 SystemConfig.getInstance().getSplitPermissions());
     }
 
+    private OneTimePermissionUserManager getOneTimePermissionUserManager(@UserIdInt int userId) {
+        synchronized (mLock) {
+            OneTimePermissionUserManager oneTimePermissionUserManager =
+                    mOneTimePermissionUserManagers.get(userId);
+            if (oneTimePermissionUserManager == null) {
+                oneTimePermissionUserManager = new OneTimePermissionUserManager(
+                        mContext.createContextAsUser(UserHandle.of(userId), /*flags*/ 0));
+                mOneTimePermissionUserManagers.put(userId, oneTimePermissionUserManager);
+            }
+            return oneTimePermissionUserManager;
+        }
+    }
+
+    @Override
+    public void startOneTimePermissionSession(String packageName, @UserIdInt int userId,
+            long timeoutMillis, int importanceToResetTimer, int importanceToKeepSessionAlive) {
+        mContext.enforceCallingPermission(Manifest.permission.MANAGE_ONE_TIME_PERMISSION_SESSIONS,
+                "Must hold " + Manifest.permission.MANAGE_ONE_TIME_PERMISSION_SESSIONS
+                        + " to register permissions as one time.");
+        packageName = Preconditions.checkNotNull(packageName);
+
+        long token = Binder.clearCallingIdentity();
+        try {
+            getOneTimePermissionUserManager(userId).startPackageOneTimeSession(packageName,
+                    timeoutMillis, importanceToResetTimer, importanceToKeepSessionAlive);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public void stopOneTimePermissionSession(String packageName, @UserIdInt int userId) {
+        mContext.enforceCallingPermission(Manifest.permission.MANAGE_ONE_TIME_PERMISSION_SESSIONS,
+                "Must hold " + Manifest.permission.MANAGE_ONE_TIME_PERMISSION_SESSIONS
+                        + " to remove permissions as one time.");
+        Preconditions.checkNotNull(packageName);
+
+        long token = Binder.clearCallingIdentity();
+        try {
+            getOneTimePermissionUserManager(userId).stopPackageOneTimeSession(packageName);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
     private boolean isNewPlatformPermissionForPackage(String perm, AndroidPackage pkg) {
         boolean allowed = false;
         final int NP = PackageParser.NEW_PERMISSIONS.length;
@@ -3273,6 +3322,13 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                         PackageManagerInternal.PACKAGE_TELEPHONY, UserHandle.USER_SYSTEM),
                     pkg.getPackageName())) {
                 // Special permissions for the system telephony apps.
+                allowed = true;
+            }
+            if (!allowed && bp.isCompanion()
+                    && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
+                        PackageManagerInternal.PACKAGE_COMPANION, UserHandle.USER_SYSTEM),
+                    pkg.getPackageName())) {
+                // Special permissions for the system companion device manager.
                 allowed = true;
             }
         }

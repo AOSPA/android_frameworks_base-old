@@ -43,7 +43,7 @@ import com.android.internal.telephony.TelephonyIntents;
 import com.android.settingslib.WirelessUtils;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.dagger.qualifiers.MainResources;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.statusbar.policy.FiveGServiceClient;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
@@ -166,8 +166,7 @@ public class CarrierTextController {
     public CarrierTextController(Context context, CharSequence separator, boolean showAirplaneMode,
             boolean showMissingSim) {
         mContext = context;
-        mIsEmergencyCallCapable = context.getResources().getBoolean(
-                com.android.internal.R.bool.config_voice_capable);
+        mIsEmergencyCallCapable = getTelephonyManager().isVoiceCapable();
 
         mShowAirplaneMode = showAirplaneMode;
         mShowMissingSim = showMissingSim;
@@ -313,7 +312,7 @@ public class CarrierTextController {
             }
             if (simState == TelephonyManager.SIM_STATE_READY) {
                 ServiceState ss = mKeyguardUpdateMonitor.mServiceStates.get(subId);
-                if (ss != null && ss.getDataRegState() == ServiceState.STATE_IN_SERVICE) {
+                if (ss != null && ss.getDataRegistrationState() == ServiceState.STATE_IN_SERVICE) {
                     // hack for WFC (IWLAN) not turning off immediately once
                     // Wi-Fi is disassociated or disabled
                     if (ss.getRilDataRadioTechnology() != ServiceState.RIL_RADIO_TECHNOLOGY_IWLAN
@@ -619,7 +618,7 @@ public class CarrierTextController {
         private boolean mShowMissingSim;
 
         @Inject
-        public Builder(Context context, @MainResources Resources resources) {
+        public Builder(Context context, @Main Resources resources) {
             mContext = context;
             mSeparator = resources.getString(
                     com.android.internal.R.string.kg_text_message_separator);

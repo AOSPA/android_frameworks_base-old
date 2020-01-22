@@ -32,12 +32,12 @@ import android.annotation.StyleRes;
 import android.annotation.StyleableRes;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
 import android.app.VrManager;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
@@ -1058,6 +1058,31 @@ public abstract class Context {
      * @see #getDir
      */
     public abstract File getFilesDir();
+
+    /**
+     * Returns the absolute path to the directory that is related to the crate on the filesystem.
+     * <p>
+     *     The crateId require a validated file name. It can't contain any "..", ".",
+     *     {@link File#separatorChar} etc..
+     * </p>
+     * <p>
+     * The returned path may change over time if the calling app is moved to an
+     * adopted storage device, so only relative paths should be persisted.
+     * </p>
+     * <p>
+     * No additional permissions are required for the calling app to read or
+     * write files under the returned path.
+     *</p>
+     *
+     * @param crateId the relative validated file name under {@link Context#getDataDir()}/crates
+     * @return the crate directory file.
+     * @hide
+     */
+    @NonNull
+    @TestApi
+    public File getCrateDir(@NonNull String crateId) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
 
     /**
      * Returns the absolute path to the directory on the filesystem similar to
@@ -3907,6 +3932,15 @@ public abstract class Context {
     public static final String NETWORK_STACK_SERVICE = "network_stack";
 
     /**
+     * Use with {@link android.os.ServiceManager.getService()} to retrieve a
+     * {@link ITetheringConnector} IBinder for communicating with the tethering service
+     * @hide
+     * @see TetheringClient
+     */
+    @SystemApi
+    public static final String TETHERING_SERVICE = "tethering";
+
+    /**
      * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.net.IpSecManager} for encrypting Sockets or Networks with
      * IPSec.
@@ -3971,6 +4005,17 @@ public abstract class Context {
      * @see android.net.wifi.WifiManager
      */
     public static final String WIFI_SERVICE = "wifi";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.net.wifi.WifiCondManager} for handling management of the Wi-Fi control
+     * daemon.
+     *
+     * @see #getSystemService(String)
+     * @see android.net.wifi.WifiCondManager
+     * @hide
+     */
+    public static final String WIFI_COND_SERVICE = "wificond";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a {@link
@@ -4323,6 +4368,15 @@ public abstract class Context {
      * @see #getSystemService(String)
      */
     public static final String SOUND_TRIGGER_SERVICE = "soundtrigger";
+
+    /**
+     * Use with {@link #getSystemService(String)} to access the
+     * {@link com.android.server.soundtrigger_middleware.SoundTriggerMiddlewareService}.
+     *
+     * @hide
+     * @see #getSystemService(String)
+     */
+    public static final String SOUND_TRIGGER_MIDDLEWARE_SERVICE = "soundtrigger_middleware";
 
     /**
      * Official published name of the (internal) permission service.
@@ -4783,6 +4837,12 @@ public abstract class Context {
     public static final String INCIDENT_COMPANION_SERVICE = "incidentcompanion";
 
     /**
+     * Service to assist {@link android.app.StatsManager} that lives in system server.
+     * @hide
+     */
+    public static final String STATS_MANAGER_SERVICE = "statsmanager";
+
+    /**
      * Service to assist statsd in obtaining general stats.
      * @hide
      */
@@ -4905,6 +4965,8 @@ public abstract class Context {
      * {@link android.telephony.ims.ImsManager}.
      * @hide
      */
+    @SystemApi
+    @TestApi
     public static final String TELEPHONY_IMS_SERVICE = "telephony_ims";
 
     /**
@@ -4980,7 +5042,15 @@ public abstract class Context {
      * {@link android.os.incremental.IncrementalManager}.
      * @hide
      */
-    public static final String INCREMENTAL_SERVICE = "incremental";
+    public static final String INCREMENTAL_SERVICE = "incremental_service";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve an
+     * {@link android.security.FileIntegrityManager}.
+     * @see #getSystemService(String)
+     * @see android.security.FileIntegrityManager
+     */
+    public static final String FILE_INTEGRITY_SERVICE = "file_integrity";
 
     /**
      * Determine whether the given permission is allowed for a particular

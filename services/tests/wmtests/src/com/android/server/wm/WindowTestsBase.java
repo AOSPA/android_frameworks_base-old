@@ -129,6 +129,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
                         TYPE_APPLICATION_MEDIA_OVERLAY,
                         "mChildAppWindowBelow");
             }
+
             // Adding a display will cause freezing the display. Make sure to wait until it's
             // unfrozen to not run into race conditions with the tests.
             waitUntilHandlersIdle();
@@ -319,7 +320,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
     ActivityStack createTaskStackOnDisplay(int windowingMode, int activityType, DisplayContent dc) {
         synchronized (mWm.mGlobalLock) {
             return new ActivityTestsBase.StackBuilder(
-                    dc.mWmService.mAtmService.mRootActivityContainer)
+                    dc.mWmService.mAtmService.mRootWindowContainer)
                     .setDisplay(dc)
                     .setWindowingMode(windowingMode)
                     .setActivityType(activityType)
@@ -340,8 +341,8 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
     /** Creates a {@link DisplayContent} and adds it to the system. */
     DisplayContent createNewDisplay(DisplayInfo info) {
-        final ActivityDisplay display =
-                new TestActivityDisplay.Builder(mWm.mAtmService, info).build();
+        final DisplayContent display =
+                new TestDisplayContent.Builder(mWm.mAtmService, info).build();
         return display.mDisplayContent;
     }
 
@@ -378,6 +379,6 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
     /** Sets the default minimum task size to 1 so that tests can use small task sizes */
     void removeGlobalMinSizeRestriction() {
-        mWm.mAtmService.mRootActivityContainer.mDefaultMinSizeOfResizeableTaskDp = 1;
+        mWm.mAtmService.mRootWindowContainer.mDefaultMinSizeOfResizeableTaskDp = 1;
     }
 }

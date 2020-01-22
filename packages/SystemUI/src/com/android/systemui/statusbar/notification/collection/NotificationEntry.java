@@ -21,7 +21,6 @@ import static android.app.Notification.CATEGORY_CALL;
 import static android.app.Notification.CATEGORY_EVENT;
 import static android.app.Notification.CATEGORY_MESSAGE;
 import static android.app.Notification.CATEGORY_REMINDER;
-import static android.app.Notification.EXTRA_MESSAGES;
 import static android.app.Notification.FLAG_BUBBLE;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_AMBIENT;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_BADGE;
@@ -30,7 +29,6 @@ import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_NOTIFICAT
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_PEEK;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_STATUS_BAR;
 
-import static com.android.internal.util.Preconditions.checkNotNull;
 import static com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_ALERTING;
 
 import android.annotation.NonNull;
@@ -42,7 +40,6 @@ import android.app.Person;
 import android.content.Context;
 import android.graphics.drawable.Icon;
 import android.os.Bundle;
-import android.os.Parcelable;
 import android.os.SystemClock;
 import android.service.notification.NotificationListenerService.Ranking;
 import android.service.notification.SnoozeCriterion;
@@ -63,8 +60,8 @@ import com.android.systemui.statusbar.notification.InflationException;
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifFilter;
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifPromoter;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
-import com.android.systemui.statusbar.notification.row.NotificationContentInflater.InflationFlag;
 import com.android.systemui.statusbar.notification.row.NotificationGuts;
+import com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.InflationFlag;
 import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager;
 
 import java.util.ArrayList;
@@ -91,7 +88,6 @@ public final class NotificationEntry extends ListEntry {
     private final String mKey;
     private StatusBarNotification mSbn;
     private Ranking mRanking;
-
 
     /*
      * Bookkeeping members
@@ -120,7 +116,6 @@ public final class NotificationEntry extends ListEntry {
     public int targetSdk;
     private long lastFullScreenIntentLaunchTime = NOT_LAUNCHED_YET;
     public CharSequence remoteInputText;
-    private final List<Person> mAssociatedPeople = new ArrayList<>();
     private Notification.BubbleMetadata mBubbleMetadata;
 
     /**
@@ -157,12 +152,6 @@ public final class NotificationEntry extends ListEntry {
      */
     private boolean hasSentReply;
 
-    /**
-     * Whether this notification is shown to the user as a high priority notification: visible on
-     * the lock screen/status bar and in the top section in the shade.
-     */
-    private boolean mHighPriority;
-
     private boolean mSensitive = true;
     private Runnable mOnSensitiveChangedListener;
     private boolean mAutoHeadsUp;
@@ -172,9 +161,9 @@ public final class NotificationEntry extends ListEntry {
     public NotificationEntry(
             @NonNull StatusBarNotification sbn,
             @NonNull Ranking ranking) {
-        super(checkNotNull(checkNotNull(sbn).getKey()));
+        super(Objects.requireNonNull(Objects.requireNonNull(sbn).getKey()));
 
-        checkNotNull(ranking);
+        Objects.requireNonNull(ranking);
 
         mKey = sbn.getKey();
         setSbn(sbn);
@@ -204,17 +193,19 @@ public final class NotificationEntry extends ListEntry {
      * TODO: Make this package-private
      */
     public void setSbn(@NonNull StatusBarNotification sbn) {
-        checkNotNull(sbn);
-        checkNotNull(sbn.getKey());
+        Objects.requireNonNull(sbn);
+        Objects.requireNonNull(sbn.getKey());
 
         if (!sbn.getKey().equals(mKey)) {
             throw new IllegalArgumentException("New key " + sbn.getKey()
                     + " doesn't match existing key " + mKey);
         }
 
-        mSbn = sbn;
-        mBubbleMetadata = mSbn.getNotification().getBubbleMetadata();
-        updatePeopleList();
+        if (!Objects.equals(mSbn, sbn)) {
+            mSbn = sbn;
+            mBubbleMetadata = mSbn.getNotification().getBubbleMetadata();
+            onSbnUpdated();
+        }
     }
 
     /**
@@ -231,17 +222,19 @@ public final class NotificationEntry extends ListEntry {
      * TODO: Make this package-private
      */
     public void setRanking(@NonNull Ranking ranking) {
-        checkNotNull(ranking);
-        checkNotNull(ranking.getKey());
+        Objects.requireNonNull(ranking);
+        Objects.requireNonNull(ranking.getKey());
 
         if (!ranking.getKey().equals(mKey)) {
             throw new IllegalArgumentException("New key " + ranking.getKey()
                     + " doesn't match existing key " + mKey);
         }
 
-        mRanking = ranking;
+        if (!Objects.equals(mRanking, ranking)) {
+            mRanking = ranking;
+            onRankingUpdated();
+        }
     }
-
 
     /*
      * Convenience getters for SBN and Ranking members
@@ -304,47 +297,8 @@ public final class NotificationEntry extends ListEntry {
         return interruption;
     }
 
-    public boolean isHighPriority() {
-        return mHighPriority;
-    }
-
-    public void setIsHighPriority(boolean highPriority) {
-        this.mHighPriority = highPriority;
-    }
-
     public boolean isBubble() {
         return (mSbn.getNotification().flags & FLAG_BUBBLE) != 0;
-    }
-
-    private void updatePeopleList() {
-        mAssociatedPeople.clear();
-
-        Bundle extras = mSbn.getNotification().extras;
-        if (extras == null) {
-            return;
-        }
-
-        List<Person> p = extras.getParcelableArrayList(Notification.EXTRA_PEOPLE_LIST);
-
-        if (p != null) {
-            mAssociatedPeople.addAll(p);
-        }
-
-        if (Notification.MessagingStyle.class.equals(
-                mSbn.getNotification().getNotificationStyle())) {
-            final Parcelable[] messages = extras.getParcelableArray(EXTRA_MESSAGES);
-            if (!ArrayUtils.isEmpty(messages)) {
-                for (Notification.MessagingStyle.Message message :
-                        Notification.MessagingStyle.Message
-                                .getMessagesFromBundleArray(messages)) {
-                    mAssociatedPeople.add(message.getSenderPerson());
-                }
-            }
-        }
-    }
-
-    boolean hasAssociatedPeople() {
-        return mAssociatedPeople.size() > 0;
     }
 
     /**

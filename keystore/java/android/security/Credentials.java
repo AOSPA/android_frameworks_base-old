@@ -16,7 +16,7 @@
 
 package android.security;
 
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 
 import com.android.org.bouncycastle.util.io.pem.PemObject;
 import com.android.org.bouncycastle.util.io.pem.PemReader;
@@ -64,6 +64,9 @@ public class Credentials {
 
     /** Key prefix for VPN. */
     public static final String VPN = "VPN_";
+
+    /** Key prefix for platform VPNs. */
+    public static final String PLATFORM_VPN = "PLATFORM_VPN_";
 
     /** Key prefix for WIFI. */
     public static final String WIFI = "WIFI_";

@@ -463,7 +463,7 @@ public class AccountManagerService
             Log.v(TAG, "addAccountExplicitly: " + account + ", caller's uid " + callingUid
                     + ", pid " + Binder.getCallingPid());
         }
-        Preconditions.checkNotNull(account, "account cannot be null");
+        Objects.requireNonNull(account, "account cannot be null");
         if (!isAccountManagedByCaller(account.type, callingUid, userId)) {
             String msg = String.format("uid %s cannot explicitly add accounts of type: %s",
                     callingUid, account.type);
@@ -544,7 +544,7 @@ public class AccountManagerService
 
     @Override
     public Map<String, Integer> getPackagesAndVisibilityForAccount(Account account) {
-        Preconditions.checkNotNull(account, "account cannot be null");
+        Objects.requireNonNull(account, "account cannot be null");
         int callingUid = Binder.getCallingUid();
         int userId = UserHandle.getCallingUserId();
         if (!isAccountManagedByCaller(account.type, callingUid, userId)
@@ -590,8 +590,8 @@ public class AccountManagerService
 
     @Override
     public int getAccountVisibility(Account account, String packageName) {
-        Preconditions.checkNotNull(account, "account cannot be null");
-        Preconditions.checkNotNull(packageName, "packageName cannot be null");
+        Objects.requireNonNull(account, "account cannot be null");
+        Objects.requireNonNull(packageName, "packageName cannot be null");
         int callingUid = Binder.getCallingUid();
         int userId = UserHandle.getCallingUserId();
         if (!isAccountManagedByCaller(account.type, callingUid, userId)
@@ -659,7 +659,7 @@ public class AccountManagerService
      */
     private Integer resolveAccountVisibility(Account account, @NonNull String packageName,
             UserAccounts accounts) {
-        Preconditions.checkNotNull(packageName, "packageName cannot be null");
+        Objects.requireNonNull(packageName, "packageName cannot be null");
         int uid = -1;
         try {
             long identityToken = clearCallingIdentity();
@@ -755,8 +755,8 @@ public class AccountManagerService
 
     @Override
     public boolean setAccountVisibility(Account account, String packageName, int newVisibility) {
-        Preconditions.checkNotNull(account, "account cannot be null");
-        Preconditions.checkNotNull(packageName, "packageName cannot be null");
+        Objects.requireNonNull(account, "account cannot be null");
+        Objects.requireNonNull(packageName, "packageName cannot be null");
         int callingUid = Binder.getCallingUid();
         int userId = UserHandle.getCallingUserId();
         if (!isAccountManagedByCaller(account.type, callingUid, userId)
@@ -1526,7 +1526,7 @@ public class AccountManagerService
                     + ", caller's uid " + Binder.getCallingUid()
                     + ", pid " + Binder.getCallingPid());
         }
-        Preconditions.checkNotNull(account, "account cannot be null");
+        Objects.requireNonNull(account, "account cannot be null");
         int userId = UserHandle.getCallingUserId();
         long identityToken = clearCallingIdentity();
         try {
@@ -1565,8 +1565,8 @@ public class AccountManagerService
                     account, key, callingUid, Binder.getCallingPid());
             Log.v(TAG, msg);
         }
-        Preconditions.checkNotNull(account, "account cannot be null");
-        Preconditions.checkNotNull(key, "key cannot be null");
+        Objects.requireNonNull(account, "account cannot be null");
+        Objects.requireNonNull(key, "key cannot be null");
         int userId = UserHandle.getCallingUserId();
         if (!isAccountManagedByCaller(account.type, callingUid, userId)) {
             String msg = String.format(
@@ -1717,7 +1717,7 @@ public class AccountManagerService
                     callingUid);
             Log.v(TAG, msg);
         }
-        Preconditions.checkNotNull(account, "account cannot be null");
+        Objects.requireNonNull(account, "account cannot be null");
         int userId = UserHandle.getCallingUserId();
         if (!isAccountManagedByCaller(account.type, callingUid, userId)) {
             String msg = String.format(
@@ -2404,8 +2404,8 @@ public class AccountManagerService
     @Override
     public void invalidateAuthToken(String accountType, String authToken) {
         int callerUid = Binder.getCallingUid();
-        Preconditions.checkNotNull(accountType, "accountType cannot be null");
-        Preconditions.checkNotNull(authToken, "authToken cannot be null");
+        Objects.requireNonNull(accountType, "accountType cannot be null");
+        Objects.requireNonNull(authToken, "authToken cannot be null");
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "invalidateAuthToken: accountType " + accountType
                     + ", caller's uid " + callerUid
@@ -2521,8 +2521,8 @@ public class AccountManagerService
                     + ", caller's uid " + callingUid
                     + ", pid " + Binder.getCallingPid());
         }
-        Preconditions.checkNotNull(account, "account cannot be null");
-        Preconditions.checkNotNull(authTokenType, "authTokenType cannot be null");
+        Objects.requireNonNull(account, "account cannot be null");
+        Objects.requireNonNull(authTokenType, "authTokenType cannot be null");
         int userId = UserHandle.getCallingUserId();
         if (!isAccountManagedByCaller(account.type, callingUid, userId)) {
             String msg = String.format(
@@ -2554,8 +2554,8 @@ public class AccountManagerService
                     + ", caller's uid " + callingUid
                     + ", pid " + Binder.getCallingPid());
         }
-        Preconditions.checkNotNull(account, "account cannot be null");
-        Preconditions.checkNotNull(authTokenType, "authTokenType cannot be null");
+        Objects.requireNonNull(account, "account cannot be null");
+        Objects.requireNonNull(authTokenType, "authTokenType cannot be null");
         int userId = UserHandle.getCallingUserId();
         if (!isAccountManagedByCaller(account.type, callingUid, userId)) {
             String msg = String.format(
@@ -2582,7 +2582,7 @@ public class AccountManagerService
                     + ", caller's uid " + callingUid
                     + ", pid " + Binder.getCallingPid());
         }
-        Preconditions.checkNotNull(account, "account cannot be null");
+        Objects.requireNonNull(account, "account cannot be null");
         int userId = UserHandle.getCallingUserId();
         if (!isAccountManagedByCaller(account.type, callingUid, userId)) {
             String msg = String.format(
@@ -2649,7 +2649,7 @@ public class AccountManagerService
                     + ", caller's uid " + callingUid
                     + ", pid " + Binder.getCallingPid());
         }
-        Preconditions.checkNotNull(account, "account cannot be null");
+        Objects.requireNonNull(account, "account cannot be null");
         int userId = UserHandle.getCallingUserId();
         if (!isAccountManagedByCaller(account.type, callingUid, userId)) {
             String msg = String.format(
@@ -3954,9 +3954,9 @@ public class AccountManagerService
         if (UserHandle.getAppId(Binder.getCallingUid()) != Process.SYSTEM_UID) {
             throw new SecurityException("Can be called only by system UID");
         }
-        Preconditions.checkNotNull(account, "account cannot be null");
-        Preconditions.checkNotNull(packageName, "packageName cannot be null");
-        Preconditions.checkNotNull(userHandle, "userHandle cannot be null");
+        Objects.requireNonNull(account, "account cannot be null");
+        Objects.requireNonNull(packageName, "packageName cannot be null");
+        Objects.requireNonNull(userHandle, "userHandle cannot be null");
 
         final int userId = userHandle.getIdentifier();
 
@@ -4030,9 +4030,9 @@ public class AccountManagerService
             throw new SecurityException("Can be called only by system UID");
         }
 
-        Preconditions.checkNotNull(account, "account cannot be null");
-        Preconditions.checkNotNull(packageName, "packageName cannot be null");
-        Preconditions.checkNotNull(userHandle, "userHandle cannot be null");
+        Objects.requireNonNull(account, "account cannot be null");
+        Objects.requireNonNull(packageName, "packageName cannot be null");
+        Objects.requireNonNull(userHandle, "userHandle cannot be null");
 
         final int userId = userHandle.getIdentifier();
 
@@ -4417,7 +4417,6 @@ public class AccountManagerService
         return true;
     }
 
-    @Override
     public boolean renameSharedAccountAsUser(Account account, String newName, int userId) {
         userId = handleIncomingUser(userId);
         UserAccounts accounts = getUserAccounts(userId);
@@ -4433,7 +4432,6 @@ public class AccountManagerService
         return r > 0;
     }
 
-    @Override
     public boolean removeSharedAccountAsUser(Account account, int userId) {
         return removeSharedAccountAsUser(account, userId, getCallingUid());
     }
@@ -4451,7 +4449,6 @@ public class AccountManagerService
         return deleted;
     }
 
-    @Override
     public Account[] getSharedAccountsAsUser(int userId) {
         userId = handleIncomingUser(userId);
         UserAccounts accounts = getUserAccounts(userId);

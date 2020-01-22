@@ -16,7 +16,7 @@
 
 package android.os;
 
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.util.ArrayMap;
 import android.util.Log;
 
@@ -140,7 +140,7 @@ public final class ServiceManager {
 
     /**
      * Returns a reference to a service with the given name, or throws
-     * {@link NullPointerException} if none is found.
+     * {@link ServiceNotFoundException} if none is found.
      *
      * @hide
      */
