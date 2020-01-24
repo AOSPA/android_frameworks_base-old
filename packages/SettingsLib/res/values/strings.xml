@@ -42,6 +42,8 @@
     <string name="wifi_security_short_sae" translatable="false">WPA3</string>
     <!-- Do not translate.  Concise terminology for wifi with WPA2/WPA3 transition security -->
     <string name="wifi_security_short_psk_sae" translatable="false">WPA2/WPA3</string>
+    <!-- Do not translate.  Concise terminology for Wi-Fi with None/OWE transition mode security -->
+    <string name="wifi_security_short_none_owe" translatable="false">None/OWE</string>
     <!-- Do not translate.  Concise terminology for wifi with OWE security -->
     <string name="wifi_security_short_owe" translatable="false">OWE</string>
     <!-- Do not translate.  Concise terminology for wifi with 802.1x EAP Suite-B-192 security -->
@@ -74,6 +76,8 @@
     <string name="wifi_security_sae" translatable="false">WPA3-Personal</string>
     <!-- Do not translate.  Terminology for wifi with WPA2/WPA3 Transition mode security -->
     <string name="wifi_security_psk_sae" translatable="false">WPA2/WPA3-Personal</string>
+    <!-- Do not translate.  Terminology for Wi-Fi with None/OWE transition mode security -->
+    <string name="wifi_security_none_owe" translatable="false">None/Enhanced Open</string>
     <!-- Do not translate.  Terminology for wifi with OWE security -->
     <string name="wifi_security_owe" translatable="false">Enhanced Open</string>
     <!-- Do not translate.  Concise terminology for wifi with 802.1x EAP Suite-B-192 security -->
@@ -606,6 +610,8 @@
     <string name="bluetooth_show_devices_without_names">Show Bluetooth devices without names</string>
     <!-- Setting Checkbox title for disabling Bluetooth absolute volume -->
     <string name="bluetooth_disable_absolute_volume">Disable absolute volume</string>
+    <!-- Setting Checkbox title for enabling Bluetooth Gabeldorsche. [CHAR LIMIT=40] -->
+    <string name="bluetooth_enable_gabeldorsche">Enable Gabeldorsche</string>
 
     <!-- UI debug setting: Select Bluetooth AVRCP Version -->
     <string name="bluetooth_select_avrcp_version_string">Bluetooth AVRCP Version</string>
@@ -707,6 +713,8 @@
     <string name="bluetooth_show_devices_without_names_summary">Bluetooth devices without names (MAC addresses only) will be displayed</string>
     <!-- Summary of checkbox for disabling Bluetooth absolute volume -->
     <string name="bluetooth_disable_absolute_volume_summary">Disables the Bluetooth absolute volume feature in case of volume issues with remote devices such as unacceptably loud volume or lack of control.</string>
+    <!-- Summary of checkbox for enabling Bluetooth Gabeldorche features [CHAR LIMIT=none] -->
+    <string name="bluetooth_enable_gabeldorsche_summary">Enables the Bluetooth Gabeldorche feature stack.</string>
 
     <!-- Title of checkbox setting that enables the terminal app. [CHAR LIMIT=32] -->
     <string name="enable_terminal_title">Local terminal</string>
@@ -972,7 +980,7 @@
     <!-- Title for the accessibility preference to configure display color space correction. [CHAR LIMIT=NONE] -->
     <string name="accessibility_display_daltonizer_preference_title">Color correction</string>
     <!-- Subtitle for the accessibility preference to configure display color space correction. [CHAR LIMIT=NONE] -->
-    <string name="accessibility_display_daltonizer_preference_subtitle">This feature is experimental and may affect performance.</string>
+    <string name="accessibility_display_daltonizer_preference_subtitle">Color correction helps people with color blindness to see more accurate colors</string>
     <!-- Summary shown for color space correction preference when its value is overridden by another preference [CHAR LIMIT=35] -->
     <string name="daltonizer_type_overridden">Overridden by <xliff:g id="title" example="Simulate color space">%1$s</xliff:g></string>
 

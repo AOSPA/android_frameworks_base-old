@@ -22,8 +22,11 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.media.MediaRoute2Info;
 import android.media.MediaRoute2ProviderInfo;
-import android.os.Bundle;
+import android.media.RouteSessionInfo;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
 abstract class MediaRoute2Provider {
@@ -31,7 +34,8 @@ abstract class MediaRoute2Provider {
     final String mUniqueId;
 
     Callback mCallback;
-    private MediaRoute2ProviderInfo mProviderInfo;
+    private volatile MediaRoute2ProviderInfo mProviderInfo;
+    private volatile List<RouteSessionInfo> mSessionInfos = Collections.emptyList();
 
     MediaRoute2Provider(@NonNull ComponentName componentName) {
         mComponentName = Objects.requireNonNull(componentName, "Component name must not be null.");
@@ -42,8 +46,14 @@ abstract class MediaRoute2Provider {
         mCallback = callback;
     }
 
-    public abstract void requestSelectRoute(String packageName, String routeId, int seq);
-    public abstract void unselectRoute(String packageName, String routeId);
+    public abstract void requestCreateSession(String packageName, String routeId,
+            String controlCategory, long requestId);
+    public abstract void releaseSession(int sessionId);
+
+    public abstract void selectRoute(int sessionId, MediaRoute2Info route);
+    public abstract void deselectRoute(int sessionId, MediaRoute2Info route);
+    public abstract void transferToRoute(int sessionId, MediaRoute2Info route);
+
     public abstract void sendControlRequest(MediaRoute2Info route, Intent request);
     public abstract void requestSetVolume(MediaRoute2Info route, int volume);
     public abstract void requestUpdateVolume(MediaRoute2Info route, int delta);
@@ -58,15 +68,29 @@ abstract class MediaRoute2Provider {
         return mProviderInfo;
     }
 
-    void setAndNotifyProviderInfo(MediaRoute2ProviderInfo info) {
-        //TODO: check if info is not updated
-        if (info == null) {
+    @NonNull
+    public List<RouteSessionInfo> getSessionInfos() {
+        return mSessionInfos;
+    }
+
+    void setAndNotifyProviderState(MediaRoute2ProviderInfo providerInfo,
+            List<RouteSessionInfo> sessionInfos) {
+        if (providerInfo == null) {
             mProviderInfo = null;
         } else {
-            mProviderInfo = new MediaRoute2ProviderInfo.Builder(info)
+            mProviderInfo = new MediaRoute2ProviderInfo.Builder(providerInfo)
                     .setUniqueId(mUniqueId)
                     .build();
         }
+        List<RouteSessionInfo> sessionInfoWithProviderId = new ArrayList<RouteSessionInfo>();
+        for (RouteSessionInfo sessionInfo : sessionInfos) {
+            sessionInfoWithProviderId.add(
+                    new RouteSessionInfo.Builder(sessionInfo)
+                            .setProviderId(mUniqueId)
+                            .build());
+        }
+        mSessionInfos = sessionInfoWithProviderId;
+
         if (mCallback != null) {
             mCallback.onProviderStateChanged(this);
         }
@@ -79,8 +103,10 @@ abstract class MediaRoute2Provider {
 
     public interface Callback {
         void onProviderStateChanged(@Nullable MediaRoute2Provider provider);
-        void onRouteSelected(@NonNull MediaRoute2ProviderProxy provider,
-                @NonNull String clientPackageName, @NonNull MediaRoute2Info route,
-                @Nullable Bundle controlHints, int seq);
+        void onSessionCreated(@NonNull MediaRoute2Provider provider,
+                @Nullable RouteSessionInfo sessionInfo, long requestId);
+        // TODO: Remove this when MediaRouter2ServiceImpl notifies clients of session changes.
+        void onSessionInfoChanged(@NonNull MediaRoute2Provider provider,
+                @NonNull RouteSessionInfo sessionInfo);
     }
 }

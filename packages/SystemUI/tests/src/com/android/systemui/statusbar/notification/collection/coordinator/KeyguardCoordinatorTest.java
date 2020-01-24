@@ -24,6 +24,8 @@ import static android.app.NotificationManager.IMPORTANCE_MIN;
 import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertTrue;
 
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.os.Handler;
@@ -36,16 +38,19 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
-import com.android.systemui.statusbar.NotificationEntryBuilder;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.RankingBuilder;
 import com.android.systemui.statusbar.notification.collection.GroupEntry;
+import com.android.systemui.statusbar.notification.collection.NotifListBuilderImpl;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder;
+import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifFilter;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -61,14 +66,16 @@ public class KeyguardCoordinatorTest extends SysuiTestCase {
     @Mock private BroadcastDispatcher mBroadcastDispatcher;
     @Mock private StatusBarStateController mStatusBarStateController;
     @Mock private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    @Mock private NotifListBuilderImpl mNotifListBuilder;
 
     private NotificationEntry mEntry;
-    private KeyguardCoordinator mKeyguardNotificationCoordinator;
+    private KeyguardCoordinator mKeyguardCoordinator;
+    private NotifFilter mKeyguardFilter;
 
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
-        mKeyguardNotificationCoordinator = new KeyguardCoordinator(
+        mKeyguardCoordinator = new KeyguardCoordinator(
                 mContext, mMainHandler, mKeyguardStateController, mLockscreenUserManager,
                 mBroadcastDispatcher, mStatusBarStateController,
                 mKeyguardUpdateMonitor);
@@ -76,65 +83,70 @@ public class KeyguardCoordinatorTest extends SysuiTestCase {
         mEntry = new NotificationEntryBuilder()
                 .setUser(new UserHandle(NOTIF_USER_ID))
                 .build();
+
+        ArgumentCaptor<NotifFilter> filterCaptor = ArgumentCaptor.forClass(NotifFilter.class);
+        mKeyguardCoordinator.attach(null, mNotifListBuilder);
+        verify(mNotifListBuilder, times(1)).addPreRenderFilter(filterCaptor.capture());
+        mKeyguardFilter = filterCaptor.getValue();
     }
 
     @Test
     public void unfilteredState() {
         // GIVEN an 'unfiltered-keyguard-showing' state
-        setupUnfilteredState();
+        setupUnfilteredState(mEntry);
 
         // THEN don't filter out the entry
-        assertFalse(mKeyguardNotificationCoordinator.mNotifFilter.shouldFilterOut(mEntry, 0));
+        assertFalse(mKeyguardFilter.shouldFilterOut(mEntry, 0));
     }
 
     @Test
     public void notificationNotForCurrentProfile() {
         // GIVEN the notification isn't for the given user
-        setupUnfilteredState();
+        setupUnfilteredState(mEntry);
         when(mLockscreenUserManager.isCurrentProfile(NOTIF_USER_ID)).thenReturn(false);
 
         // THEN filter out the entry
-        assertTrue(mKeyguardNotificationCoordinator.mNotifFilter.shouldFilterOut(mEntry, 0));
+        assertTrue(mKeyguardFilter.shouldFilterOut(mEntry, 0));
     }
 
     @Test
     public void keyguardNotShowing() {
         // GIVEN the lockscreen isn't showing
-        setupUnfilteredState();
+        setupUnfilteredState(mEntry);
         when(mKeyguardStateController.isShowing()).thenReturn(false);
 
         // THEN don't filter out the entry
-        assertFalse(mKeyguardNotificationCoordinator.mNotifFilter.shouldFilterOut(mEntry, 0));
+        assertFalse(mKeyguardFilter.shouldFilterOut(mEntry, 0));
     }
 
     @Test
     public void doNotShowLockscreenNotifications() {
         // GIVEN an 'unfiltered-keyguard-showing' state
-        setupUnfilteredState();
+        setupUnfilteredState(mEntry);
 
         // WHEN we shouldn't show any lockscreen notifications
         when(mLockscreenUserManager.shouldShowLockscreenNotifications()).thenReturn(false);
 
         // THEN filter out the entry
-        assertTrue(mKeyguardNotificationCoordinator.mNotifFilter.shouldFilterOut(mEntry, 0));
+        assertTrue(mKeyguardFilter.shouldFilterOut(mEntry, 0));
     }
 
     @Test
     public void lockdown() {
         // GIVEN an 'unfiltered-keyguard-showing' state
-        setupUnfilteredState();
+        setupUnfilteredState(mEntry);
 
         // WHEN the notification's user is in lockdown:
         when(mKeyguardUpdateMonitor.isUserInLockdown(NOTIF_USER_ID)).thenReturn(true);
 
         // THEN filter out the entry
-        assertTrue(mKeyguardNotificationCoordinator.mNotifFilter.shouldFilterOut(mEntry, 0));
+        assertTrue(mKeyguardFilter.shouldFilterOut(mEntry, 0));
     }
 
     @Test
     public void publicMode_settingsDisallow() {
         // GIVEN an 'unfiltered-keyguard-showing' state
-        setupUnfilteredState();
+        setupUnfilteredState(mEntry);
 
         // WHEN the notification's user is in public mode and settings are configured to disallow
         // notifications in public mode
@@ -143,13 +155,13 @@ public class KeyguardCoordinatorTest extends SysuiTestCase {
                 .thenReturn(false);
 
         // THEN filter out the entry
-        assertTrue(mKeyguardNotificationCoordinator.mNotifFilter.shouldFilterOut(mEntry, 0));
+        assertTrue(mKeyguardFilter.shouldFilterOut(mEntry, 0));
     }
 
     @Test
     public void publicMode_notifDisallowed() {
         // GIVEN an 'unfiltered-keyguard-showing' state
-        setupUnfilteredState();
+        setupUnfilteredState(mEntry);
 
         // WHEN the notification's user is in public mode and settings are configured to disallow
         // notifications in public mode
@@ -159,13 +171,13 @@ public class KeyguardCoordinatorTest extends SysuiTestCase {
                 .setVisibilityOverride(VISIBILITY_SECRET).build());
 
         // THEN filter out the entry
-        assertTrue(mKeyguardNotificationCoordinator.mNotifFilter.shouldFilterOut(mEntry, 0));
+        assertTrue(mKeyguardFilter.shouldFilterOut(mEntry, 0));
     }
 
     @Test
     public void doesNotExceedThresholdToShow() {
         // GIVEN an 'unfiltered-keyguard-showing' state
-        setupUnfilteredState();
+        setupUnfilteredState(mEntry);
 
         // WHEN the notification doesn't exceed the threshold to show on the lockscreen
         mEntry.setRanking(new RankingBuilder()
@@ -174,39 +186,47 @@ public class KeyguardCoordinatorTest extends SysuiTestCase {
                 .build());
 
         // THEN filter out the entry
-        assertTrue(mKeyguardNotificationCoordinator.mNotifFilter.shouldFilterOut(mEntry, 0));
+        assertTrue(mKeyguardFilter.shouldFilterOut(mEntry, 0));
     }
 
     @Test
     public void summaryExceedsThresholdToShow() {
-        // GIVEN an 'unfiltered-keyguard-showing' state
-        setupUnfilteredState();
+        // GIVEN the notification doesn't exceed the threshold to show on the lockscreen
+        // but it's part of a group (has a parent)
+        final GroupEntry parent = new GroupEntry("test_group_key");
+        final NotificationEntry entryWithParent = new NotificationEntryBuilder()
+                .setParent(parent)
+                .setUser(new UserHandle(NOTIF_USER_ID))
+                .build();
 
-        // WHEN the notification doesn't exceed the threshold to show on the lockscreen
-        // but its summary does
-        mEntry.setRanking(new RankingBuilder()
-                .setKey(mEntry.getKey())
+        setupUnfilteredState(entryWithParent);
+        entryWithParent.setRanking(new RankingBuilder()
+                .setKey(entryWithParent.getKey())
                 .setImportance(IMPORTANCE_MIN)
                 .build());
 
-        final NotificationEntry summary = new NotificationEntryBuilder().build();
-        summary.setRanking(new RankingBuilder()
-                .setKey(summary.getKey())
+        // WHEN its parent has a summary that exceeds threshold to show on lockscreen
+        parent.setSummary(new NotificationEntryBuilder()
                 .setImportance(IMPORTANCE_HIGH)
                 .build());
-        final GroupEntry group = new GroupEntry(mEntry.getSbn().getGroupKey());
-        group.setSummary(summary);
-        mEntry.setParent(group);
 
         // THEN don't filter out the entry
-        assertFalse(mKeyguardNotificationCoordinator.mNotifFilter.shouldFilterOut(mEntry, 0));
+        assertFalse(mKeyguardFilter.shouldFilterOut(entryWithParent, 0));
+
+        // WHEN its parent has a summary that doesn't exceed threshold to show on lockscreen
+        parent.setSummary(new NotificationEntryBuilder()
+                .setImportance(IMPORTANCE_MIN)
+                .build());
+
+        // THEN filter out the entry
+        assertTrue(mKeyguardFilter.shouldFilterOut(entryWithParent, 0));
     }
 
     /**
      * setup a state where the notification will not be filtered by the
      * KeyguardNotificationCoordinator when the keyguard is showing.
      */
-    private void setupUnfilteredState() {
+    private void setupUnfilteredState(NotificationEntry entry) {
         // notification is for current profile
         when(mLockscreenUserManager.isCurrentProfile(NOTIF_USER_ID)).thenReturn(true);
 
@@ -227,7 +247,7 @@ public class KeyguardCoordinatorTest extends SysuiTestCase {
 
         // entry's ranking - should show on all lockscreens
         // + priority of the notification exceeds the threshold to be shown on the lockscreen
-        mEntry.setRanking(new RankingBuilder()
+        entry.setRanking(new RankingBuilder()
                 .setKey(mEntry.getKey())
                 .setVisibilityOverride(VISIBILITY_PUBLIC)
                 .setImportance(IMPORTANCE_HIGH)

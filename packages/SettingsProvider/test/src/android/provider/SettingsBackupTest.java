@@ -87,6 +87,7 @@ public class SettingsBackupTest {
                     Settings.System.VOLUME_ACCESSIBILITY, // used internally, changing value will
                                                           // not change volume
                     Settings.System.VOLUME_ALARM, // deprecated since API 2?
+                    Settings.System.VOLUME_ASSISTANT, // candidate for backup?
                     Settings.System.VOLUME_BLUETOOTH_SCO, // deprecated since API 2?
                     Settings.System.VOLUME_MASTER, // candidate for backup?
                     Settings.System.VOLUME_MUSIC, // deprecated since API 2?
@@ -215,7 +216,6 @@ public class SettingsBackupTest {
                     Settings.Global.DEFAULT_DNS_SERVER,
                     Settings.Global.DEFAULT_INSTALL_LOCATION,
                     Settings.Global.DEFAULT_RESTRICT_BACKGROUND_DATA,
-                    Settings.Global.DEFAULT_USER_ID_TO_BOOT_INTO,
                     Settings.Global.DESK_DOCK_SOUND,
                     Settings.Global.DESK_UNDOCK_SOUND,
                     Settings.Global.DEVELOPMENT_ENABLE_FREEFORM_WINDOWS_SUPPORT,
@@ -223,7 +223,6 @@ public class SettingsBackupTest {
                     Settings.Global.DEVELOPMENT_FORCE_RESIZABLE_ACTIVITIES,
                     Settings.Global.DEVELOPMENT_FORCE_RTL,
                     Settings.Global.DEVELOPMENT_ENABLE_SIZECOMPAT_FREEFORM,
-                    Settings.Global.DEVELOPMENT_SETTINGS_ENABLED,
                     Settings.Global.DEVICE_DEMO_MODE,
                     Settings.Global.DEVICE_IDLE_CONSTANTS,
                     Settings.Global.BATTERY_SAVER_ADAPTIVE_CONSTANTS,
@@ -324,6 +323,7 @@ public class SettingsBackupTest {
                     Settings.Global.LOW_POWER_MODE_SUGGESTION_PARAMS,
                     Settings.Global.LTE_SERVICE_FORCED,
                     Settings.Global.LID_BEHAVIOR,
+                    Settings.Global.MAX_ERROR_BYTES_PREFIX,
                     Settings.Global.MAX_NOTIFICATION_ENQUEUE_RATE,
                     Settings.Global.MAX_SOUND_TRIGGER_DETECTION_SERVICE_OPS_PER_DAY,
                     Settings.Global.MDC_INITIAL_MAX_RETRY,
@@ -734,7 +734,8 @@ public class SettingsBackupTest {
                  Settings.Secure.DOZE_WAKE_LOCK_SCREEN_GESTURE,
                  Settings.Secure.DOZE_WAKE_DISPLAY_GESTURE,
                  Settings.Secure.FACE_UNLOCK_RE_ENROLL,
-                 Settings.Secure.TAP_GESTURE);
+                 Settings.Secure.TAP_GESTURE,
+                 Settings.Secure.WINDOW_MAGNIFICATION);
 
     @Test
     public void systemSettingsBackedUpOrBlacklisted() {

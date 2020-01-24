@@ -516,14 +516,7 @@ public class BubbleStackView extends FrameLayout {
      * Handle theme changes.
      */
     public void onThemeChanged() {
-        // Recreate icon factory to update default adaptive icon scale.
-        mBubbleIconFactory = new BubbleIconFactory(mContext);
         setUpFlyout();
-        for (Bubble b: mBubbleData.getBubbles()) {
-            b.getIconView().setBubbleIconFactory(mBubbleIconFactory);
-            b.getIconView().updateViews();
-            b.getExpandedView().applyThemeAttrs();
-        }
     }
 
     /** Respond to the phone being rotated by repositioning the stack and hiding any flyouts. */
@@ -748,10 +741,6 @@ public class BubbleStackView extends FrameLayout {
         if (mBubbleContainer.getChildCount() == 0) {
             mStackOnLeftOrWillBe = mStackAnimationController.isStackOnLeftSide();
         }
-
-        bubble.setBubbleIconFactory(mBubbleIconFactory);
-        bubble.inflate(mInflater, this);
-        bubble.getIconView().updateViews();
 
         // Set the dot position to the opposite of the side the stack is resting on, since the stack
         // resting slightly off-screen would result in the dot also being off-screen.
@@ -1567,9 +1556,6 @@ public class BubbleStackView extends FrameLayout {
 
         mExpandedViewContainer.setVisibility(mIsExpanded ? VISIBLE : GONE);
         if (mIsExpanded) {
-            // First update the view so that it calculates a new height (ensuring the y position
-            // calculation is correct)
-            mExpandedBubble.getExpandedView().updateView();
             final float y = getExpandedViewY();
             if (!mExpandedViewYAnim.isRunning()) {
                 // We're not animating so set the value
@@ -1731,17 +1717,18 @@ public class BubbleStackView extends FrameLayout {
      */
     public void showBubbleMenu() {
         PointF currentPos = mStackAnimationController.getStackPosition();
-        float yPos = currentPos.y;
-        float xPos = currentPos.x;
-        if (mStackAnimationController.isStackOnLeftSide()) {
-            xPos += mBubbleSize;
-        } else {
-            //TODO: Use the width of the menu instead of this fixed offset. Offset used for now
-            // because menu width isn't correct the first time the menu is shown.
-            xPos -= mBubbleMenuOffset;
-        }
+        mBubbleMenuView.setVisibility(View.INVISIBLE);
+        post(() -> {
+            float yPos = currentPos.y;
+            float xPos = currentPos.x;
+            if (mStackAnimationController.isStackOnLeftSide()) {
+                xPos += mBubbleSize;
+            } else {
+                xPos -= mBubbleMenuView.getMenuView().getWidth();
+            }
 
-        mBubbleMenuView.show(xPos, yPos);
+            mBubbleMenuView.show(xPos, yPos);
+        });
     }
 
     /**
@@ -1762,6 +1749,12 @@ public class BubbleStackView extends FrameLayout {
      * Take a screenshot and send it to the specified bubble.
      */
     public void sendScreenshotToBubble(Bubble bubble) {
-        mBubbleScreenshotListener.onBubbleScreenshot(bubble);
+        hideBubbleMenu();
+        // delay allows the bubble menu to disappear before the screenshot
+        // done here because we already have a Handler to delay with.
+        // TODO: Hide bubble + menu UI from screenshots entirely instead of just delaying.
+        postDelayed(() -> {
+            mBubbleScreenshotListener.onBubbleScreenshot(bubble);
+        }, BubbleMenuView.SCREENSHOT_DELAY);
     }
 }

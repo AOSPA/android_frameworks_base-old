@@ -130,7 +130,6 @@ applications that come with the platform
         <permission name="android.permission.APPROVE_INCIDENT_REPORTS"/>
         <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
         <permission name="android.permission.SUBSTITUTE_NOTIFICATION_APP_NAME" />
-        <permission name="android.permission.PACKAGE_USAGE_STATS" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.phone">
@@ -145,7 +144,7 @@ applications that come with the platform
         <permission name="android.permission.CHANGE_COMPONENT_ENABLED_STATE"/>
         <permission name="android.permission.CHANGE_CONFIGURATION"/>
         <permission name="android.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST"/>
-        <permission name="android.permission.CONNECTIVITY_INTERNAL"/>
+        <permission name="android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS"/>
         <permission name="android.permission.CONTROL_INCALL_EXPERIENCE"/>
         <permission name="android.permission.DUMP"/>
         <permission name="android.permission.INTERACT_ACROSS_USERS"/>
@@ -240,6 +239,13 @@ applications that come with the platform
         <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
     </privapp-permissions>
 
+    <privapp-permissions package="com.android.networkstack.tethering">
+        <permission name="android.permission.MANAGE_USB"/>
+        <permission name="android.permission.MODIFY_PHONE_STATE"/>
+        <permission name="android.permission.READ_NETWORK_USAGE_HISTORY"/>
+        <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
+    </privapp-permissions>
+
     <privapp-permissions package="com.android.server.telecom">
         <permission name="android.permission.BIND_CONNECTION_SERVICE"/>
         <permission name="android.permission.BIND_INCALL_SERVICE"/>
@@ -259,6 +265,8 @@ applications that come with the platform
     </privapp-permissions>
 
     <privapp-permissions package="com.android.shell">
+        <!-- Needed for test only -->
+        <permission name="android.permission.MODIFY_DAY_NIGHT_MODE"/>
         <permission name="android.permission.ACCESS_LOWPAN_STATE"/>
         <permission name="android.permission.BACKUP"/>
         <permission name="android.permission.BATTERY_STATS"/>
@@ -343,6 +351,8 @@ applications that come with the platform
         <permission name="android.permission.ENTER_CAR_MODE_PRIORITIZED"/>
         <!-- Permission required for Telecom car mode CTS tests. -->
         <permission name="android.permission.CONTROL_INCALL_EXPERIENCE"/>
+        <!-- Permission required for Tethering CTS tests. -->
+        <permission name="android.permission.TETHER_PRIVILEGED"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.statementservice">

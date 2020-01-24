@@ -25,6 +25,7 @@ import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.ChangeId;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -1342,8 +1343,7 @@ public final class Telephony {
              * Broadcast action: When SMS-MMS db is being created. If file-based encryption is
              * supported, this broadcast indicates creation of the db in credential-encrypted
              * storage. A boolean is specified in {@link #EXTRA_IS_INITIAL_CREATE} to indicate if
-             * this is the initial create of the db. Requires
-             * {@link android.Manifest.permission#READ_SMS} to receive.
+             * this is the initial create of the db.
              *
              * @see #EXTRA_IS_INITIAL_CREATE
              *
@@ -1424,7 +1424,6 @@ public final class Telephony {
                 for (int i = 0; i < pduCount; i++) {
                     byte[] pdu = (byte[]) messages[i];
                     msgs[i] = SmsMessage.createFromPdu(pdu, format);
-                    if (msgs[i] != null) msgs[i].setSubId(subId);
                 }
                 return msgs;
             }
@@ -3611,7 +3610,8 @@ public final class Telephony {
          * can manage DPC-owned APNs.
          * @hide
          */
-        public static final Uri DPC_URI = Uri.parse("content://telephony/carriers/dpc");
+        @SystemApi
+        public static final @NonNull Uri DPC_URI = Uri.parse("content://telephony/carriers/dpc");
 
         /**
          * The {@code content://} style URL to be called from Telephony to query APNs.
@@ -3920,6 +3920,13 @@ public final class Telephony {
         public static final String USER_EDITABLE = "user_editable";
 
         /**
+         * Integer value denoting an invalid APN id
+         * @hide
+         */
+        @SystemApi
+        public static final int INVALID_APN_ID = -1;
+
+        /**
          * {@link #EDITED_STATUS APN edit status} indicates that this APN has not been edited or
          * fails to edit.
          * <p>Type: INTEGER </p>
@@ -4083,6 +4090,16 @@ public final class Telephony {
         @Retention(RetentionPolicy.SOURCE)
         public @interface Skip464XlatStatus {}
 
+        /**
+         * Compat framework change ID for the APN db read permission change.
+         *
+         * In API level 30 and beyond, accessing the APN database will require the
+         * {@link android.Manifest.permission#WRITE_APN_SETTINGS} permission. This change ID tracks
+         * apps that are affected because they don't hold this permission.
+         * @hide
+         */
+        @ChangeId
+        public static final long APN_READING_PERMISSION_CHANGE_ID = 124107808L;
     }
 
     /**

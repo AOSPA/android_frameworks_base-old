@@ -215,6 +215,18 @@ class ZygoteArguments {
     boolean mIsTopApp;
 
     /**
+     * A set of disabled app compatibility changes for the running app. From
+     * --disabled-compat-changes.
+     */
+    long[] mDisabledCompatChanges = null;
+
+    /**
+     * A list that stores all related packages and its data info: volume uuid and inode.
+     * Null if it does need to do app data isolation.
+     */
+    String[] mPkgDataInfoList;
+
+    /**
      * Constructs instance and parses args
      *
      * @param args zygote command-line args
@@ -421,6 +433,18 @@ class ZygoteArguments {
                 expectRuntimeArgs = false;
             } else if (arg.startsWith(Zygote.START_AS_TOP_APP_ARG)) {
                 mIsTopApp = true;
+            } else if (arg.startsWith("--disabled-compat-changes=")) {
+                if (mDisabledCompatChanges != null) {
+                    throw new IllegalArgumentException("Duplicate arg specified");
+                }
+                final String[] params = getAssignmentList(arg);
+                final int length = params.length;
+                mDisabledCompatChanges = new long[length];
+                for (int i = 0; i < length; i++) {
+                    mDisabledCompatChanges[i] = Long.parseLong(params[i]);
+                }
+            } else if (arg.startsWith(Zygote.PKG_DATA_INFO_MAP)) {
+                mPkgDataInfoList = getAssignmentList(arg);
             } else {
                 break;
             }

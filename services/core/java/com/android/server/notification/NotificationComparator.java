@@ -23,7 +23,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.provider.Settings;
 import android.telecom.TelecomManager;
 
 import com.android.internal.util.NotificationMessagingUtil;
@@ -55,14 +54,15 @@ public class NotificationComparator
         final boolean isLeftHighImportance = leftImportance >= IMPORTANCE_DEFAULT;
         final boolean isRightHighImportance = rightImportance >= IMPORTANCE_DEFAULT;
 
-        // With new interruption model, prefer importance bucket above all other criteria
-        // (to ensure buckets are contiguous)
-        if (Settings.Secure.getInt(mContext.getContentResolver(),
-                Settings.Secure.NOTIFICATION_NEW_INTERRUPTION_MODEL, 1) == 1) {
-            if (isLeftHighImportance != isRightHighImportance) {
-                // by importance bucket, high importance higher than low importance
-                return -1 * Boolean.compare(isLeftHighImportance, isRightHighImportance);
-            }
+        if (isLeftHighImportance != isRightHighImportance) {
+            // by importance bucket, high importance higher than low importance
+            return -1 * Boolean.compare(isLeftHighImportance, isRightHighImportance);
+        }
+
+        // If a score has been assigned by notification assistant service, use this service
+        // rank results within each bucket instead of this comparator implementation.
+        if (left.getRankingScore() != right.getRankingScore()) {
+            return -1 * Float.compare(left.getRankingScore(), right.getRankingScore());
         }
 
         // first all colorized notifications

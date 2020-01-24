@@ -40,7 +40,6 @@ import android.util.Log;
 import android.util.SparseArray;
 
 import com.android.internal.util.AsyncChannel;
-import com.android.internal.util.Preconditions;
 import com.android.internal.util.Protocol;
 
 import java.lang.annotation.Retention;
@@ -48,6 +47,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 
 /**
@@ -88,16 +88,6 @@ public class WifiScanner {
     public static final int WIFI_BAND_5_GHZ_DFS_ONLY  = 1 << WIFI_BAND_INDEX_5_GHZ_DFS_ONLY;
     /** 6 GHz band */
     public static final int WIFI_BAND_6_GHZ = 1 << WIFI_BAND_INDEX_6_GHZ;
-
-    /** @hide */
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef(prefix = {"WIFI_BAND_"}, value = {
-            WIFI_BAND_UNSPECIFIED,
-            WIFI_BAND_24_GHZ,
-            WIFI_BAND_5_GHZ,
-            WIFI_BAND_5_GHZ_DFS_ONLY,
-            WIFI_BAND_6_GHZ})
-    public @interface WifiBandBasic {}
 
     /**
      * Combination of bands
@@ -249,14 +239,6 @@ public class WifiScanner {
      */
     public static final int REPORT_EVENT_NO_BATCH = (1 << 2);
 
-    /** @hide */
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef(prefix = {"SCAN_TYPE_"}, value = {
-            SCAN_TYPE_LOW_LATENCY,
-            SCAN_TYPE_LOW_POWER,
-            SCAN_TYPE_HIGH_ACCURACY})
-    public @interface ScanType {}
-
     /**
      * Optimize the scan for lower latency.
      * @see ScanSettings#type
@@ -354,7 +336,7 @@ public class WifiScanner {
          * {@link #SCAN_TYPE_HIGH_ACCURACY}.
          * Default value: {@link #SCAN_TYPE_LOW_LATENCY}.
          */
-        @ScanType
+        @WifiAnnotations.ScanType
         @RequiresPermission(android.Manifest.permission.NETWORK_STACK)
         public int type = SCAN_TYPE_LOW_LATENCY;
         /**
@@ -742,21 +724,6 @@ public class WifiScanner {
         public int min24GHzRssi;
         /** Minimum 6GHz RSSI for a BSSID to be considered */
         public int min6GHzRssi;
-        /** Maximum score that a network can have before bonuses */
-        public int initialScoreMax;
-        /**
-         *  Only report when there is a network's score this much higher
-         *  than the current connection.
-         */
-        public int currentConnectionBonus;
-        /** score bonus for all networks with the same network flag */
-        public int sameNetworkBonus;
-        /** score bonus for networks that are not open */
-        public int secureBonus;
-        /** 5GHz RSSI score bonus (applied to all 5GHz networks) */
-        public int band5GHzBonus;
-        /** 6GHz RSSI score bonus (applied to all 5GHz networks) */
-        public int band6GHzBonus;
         /** Pno Network filter list */
         public PnoNetwork[] networkList;
 
@@ -771,12 +738,6 @@ public class WifiScanner {
             dest.writeInt(min5GHzRssi);
             dest.writeInt(min24GHzRssi);
             dest.writeInt(min6GHzRssi);
-            dest.writeInt(initialScoreMax);
-            dest.writeInt(currentConnectionBonus);
-            dest.writeInt(sameNetworkBonus);
-            dest.writeInt(secureBonus);
-            dest.writeInt(band5GHzBonus);
-            dest.writeInt(band6GHzBonus);
             if (networkList != null) {
                 dest.writeInt(networkList.length);
                 for (int i = 0; i < networkList.length; i++) {
@@ -799,12 +760,6 @@ public class WifiScanner {
                         settings.min5GHzRssi = in.readInt();
                         settings.min24GHzRssi = in.readInt();
                         settings.min6GHzRssi = in.readInt();
-                        settings.initialScoreMax = in.readInt();
-                        settings.currentConnectionBonus = in.readInt();
-                        settings.sameNetworkBonus = in.readInt();
-                        settings.secureBonus = in.readInt();
-                        settings.band5GHzBonus = in.readInt();
-                        settings.band6GHzBonus = in.readInt();
                         int numNetworks = in.readInt();
                         settings.networkList = new PnoNetwork[numNetworks];
                         for (int i = 0; i < numNetworks; i++) {
@@ -885,8 +840,8 @@ public class WifiScanner {
     @RequiresPermission(Manifest.permission.NETWORK_STACK)
     public void registerScanListener(@NonNull @CallbackExecutor Executor executor,
             @NonNull ScanListener listener) {
-        Preconditions.checkNotNull(executor, "executor cannot be null");
-        Preconditions.checkNotNull(listener, "listener cannot be null");
+        Objects.requireNonNull(executor, "executor cannot be null");
+        Objects.requireNonNull(listener, "listener cannot be null");
         int key = addListener(listener, executor);
         if (key == INVALID_KEY) return;
         validateChannel();
@@ -909,7 +864,7 @@ public class WifiScanner {
      *  #registerScanListener}
      */
     public void unregisterScanListener(@NonNull ScanListener listener) {
-        Preconditions.checkNotNull(listener, "listener cannot be null");
+        Objects.requireNonNull(listener, "listener cannot be null");
         int key = removeListener(listener);
         if (key == INVALID_KEY) return;
         validateChannel();
@@ -939,7 +894,7 @@ public class WifiScanner {
     @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE)
     public void startBackgroundScan(ScanSettings settings, ScanListener listener,
             WorkSource workSource) {
-        Preconditions.checkNotNull(listener, "listener cannot be null");
+        Objects.requireNonNull(listener, "listener cannot be null");
         int key = addListener(listener);
         if (key == INVALID_KEY) return;
         validateChannel();
@@ -958,7 +913,7 @@ public class WifiScanner {
      */
     @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE)
     public void stopBackgroundScan(ScanListener listener) {
-        Preconditions.checkNotNull(listener, "listener cannot be null");
+        Objects.requireNonNull(listener, "listener cannot be null");
         int key = removeListener(listener);
         if (key == INVALID_KEY) return;
         validateChannel();
@@ -1007,7 +962,7 @@ public class WifiScanner {
      */
     @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE)
     public void startScan(ScanSettings settings, ScanListener listener, WorkSource workSource) {
-        Preconditions.checkNotNull(listener, "listener cannot be null");
+        Objects.requireNonNull(listener, "listener cannot be null");
         int key = addListener(listener);
         if (key == INVALID_KEY) return;
         validateChannel();
@@ -1026,7 +981,7 @@ public class WifiScanner {
      */
     @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE)
     public void stopScan(ScanListener listener) {
-        Preconditions.checkNotNull(listener, "listener cannot be null");
+        Objects.requireNonNull(listener, "listener cannot be null");
         int key = removeListener(listener);
         if (key == INVALID_KEY) return;
         validateChannel();
@@ -1081,8 +1036,8 @@ public class WifiScanner {
      */
     public void startConnectedPnoScan(ScanSettings scanSettings, PnoSettings pnoSettings,
             PnoScanListener listener) {
-        Preconditions.checkNotNull(listener, "listener cannot be null");
-        Preconditions.checkNotNull(pnoSettings, "pnoSettings cannot be null");
+        Objects.requireNonNull(listener, "listener cannot be null");
+        Objects.requireNonNull(pnoSettings, "pnoSettings cannot be null");
         int key = addListener(listener);
         if (key == INVALID_KEY) return;
         validateChannel();
@@ -1103,8 +1058,8 @@ public class WifiScanner {
     @RequiresPermission(android.Manifest.permission.NETWORK_STACK)
     public void startDisconnectedPnoScan(ScanSettings scanSettings, PnoSettings pnoSettings,
             PnoScanListener listener) {
-        Preconditions.checkNotNull(listener, "listener cannot be null");
-        Preconditions.checkNotNull(pnoSettings, "pnoSettings cannot be null");
+        Objects.requireNonNull(listener, "listener cannot be null");
+        Objects.requireNonNull(pnoSettings, "pnoSettings cannot be null");
         int key = addListener(listener);
         if (key == INVALID_KEY) return;
         validateChannel();
@@ -1119,7 +1074,7 @@ public class WifiScanner {
      */
     @RequiresPermission(android.Manifest.permission.NETWORK_STACK)
     public void stopPnoScan(ScanListener listener) {
-        Preconditions.checkNotNull(listener, "listener cannot be null");
+        Objects.requireNonNull(listener, "listener cannot be null");
         int key = removeListener(listener);
         if (key == INVALID_KEY) return;
         validateChannel();

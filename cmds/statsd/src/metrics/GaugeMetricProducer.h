@@ -95,8 +95,8 @@ public:
 protected:
     void onMatchedLogEventInternalLocked(
             const size_t matcherIndex, const MetricDimensionKey& eventKey,
-            const ConditionKey& conditionKey, bool condition,
-            const LogEvent& event) override;
+            const ConditionKey& conditionKey, bool condition, const LogEvent& event,
+            const std::map<int, HashableDimensionKey>& statePrimaryKeys) override;
 
 private:
     void onDumpReportLocked(const int64_t dumpTimeNs,
@@ -157,9 +157,6 @@ private:
     // The current full bucket for anomaly detection. This is updated to the latest value seen for
     // this slice (ie, for partial buckets, we use the last partial bucket in this full bucket).
     std::shared_ptr<DimToValMap> mCurrentSlicedBucketForAnomaly;
-
-    // Pairs of (elapsed start, elapsed end) denoting buckets that were skipped.
-    std::list<std::pair<int64_t, int64_t>> mSkippedBuckets;
 
     const int64_t mMinBucketSizeNs;
 

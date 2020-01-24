@@ -269,6 +269,14 @@ public class SystemServicesTestRule implements TestRule {
                 mContext, mImService, false, false, mWMPolicy, mAtmService, StubTransaction::new,
                 () -> mock(Surface.class), (unused) -> new MockSurfaceControlBuilder());
         spyOn(mWmService);
+        spyOn(mWmService.mRoot);
+        // Invoked during {@link ActivityStack} creation.
+        doNothing().when(mWmService.mRoot).updateUIDsPresentOnDisplay();
+        // Always keep things awake.
+        doReturn(true).when(mWmService.mRoot).hasAwakeDisplay();
+        // Called when moving activity to pinned stack.
+        doNothing().when(mWmService.mRoot).ensureActivitiesVisible(any(),
+                anyInt(), anyBoolean(), anyBoolean());
 
         // Setup factory classes to prevent calls to native code.
         mTransaction = spy(StubTransaction.class);
@@ -284,15 +292,13 @@ public class SystemServicesTestRule implements TestRule {
         // Set configuration for default display
         mWmService.getDefaultDisplayContentLocked().reconfigureDisplayLocked();
 
-        // Mock root, some default display, and home stack.
-        spyOn(mWmService.mRoot);
-        final ActivityDisplay display = mAtmService.mRootActivityContainer.getDefaultDisplay();
+        // Mock default display, and home stack.
+        final DisplayContent display = mAtmService.mRootWindowContainer.getDefaultDisplay();
         // Set default display to be in fullscreen mode. Devices with PC feature may start their
         // default display in freeform mode but some of tests in WmTests have implicit assumption on
         // that the default display is in fullscreen mode.
         display.setDisplayWindowingMode(WINDOWING_MODE_FULLSCREEN);
         spyOn(display);
-        spyOn(display.mDisplayContent);
         final ActivityStack homeStack = display.getStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME);
         spyOn(homeStack);
@@ -301,7 +307,7 @@ public class SystemServicesTestRule implements TestRule {
     private void tearDown() {
         // Unregister display listener from root to avoid issues with subsequent tests.
         mContext.getSystemService(DisplayManager.class)
-                .unregisterDisplayListener(mAtmService.mRootActivityContainer);
+                .unregisterDisplayListener(mAtmService.mRootWindowContainer);
         // The constructor of WindowManagerService registers WindowManagerConstants and
         // HighRefreshRateBlacklist with DeviceConfig. We need to undo that here to avoid
         // leaking mWmService.
@@ -312,9 +318,12 @@ public class SystemServicesTestRule implements TestRule {
         // Needs to explicitly dispose current static threads because there could be messages
         // scheduled at a later time, and all mocks are invalid when it's executed.
         DisplayThread.dispose();
+        // Dispose SurfaceAnimationThread before AnimationThread does, so it won't create a new
+        // AnimationThread after AnimationThread disposed, see {@link
+        // AnimatorListenerAdapter#onAnimationEnd()}
+        SurfaceAnimationThread.dispose();
         AnimationThread.dispose();
         UiThread.dispose();
-        SurfaceAnimationThread.dispose();
         mInputChannel.dispose();
 
         tearDownLocalServices();
@@ -424,7 +433,7 @@ public class SystemServicesTestRule implements TestRule {
             doReturn(aos).when(this).getAppOpsService();
             // Make sure permission checks aren't overridden.
             doReturn(AppOpsManager.MODE_DEFAULT).when(aos).noteOperation(anyInt(), anyInt(),
-                    anyString(), nullable(String.class));
+                    anyString(), nullable(String.class), anyBoolean(), nullable(String.class));
 
             // UserManagerService
             final UserManagerService ums = mock(UserManagerService.class);
@@ -444,22 +453,10 @@ public class SystemServicesTestRule implements TestRule {
             spyOn(getLifecycleManager());
             spyOn(getLockTaskController());
             spyOn(getTaskChangeNotificationController());
-            initRootActivityContainerMocks();
 
             AppWarnings appWarnings = getAppWarningsLocked();
             spyOn(appWarnings);
             doNothing().when(appWarnings).onStartActivity(any());
-        }
-
-        void initRootActivityContainerMocks() {
-            spyOn(mRootActivityContainer);
-            // Invoked during {@link ActivityStack} creation.
-            doNothing().when(mRootActivityContainer).updateUIDsPresentOnDisplay();
-            // Always keep things awake.
-            doReturn(true).when(mRootActivityContainer).hasAwakeDisplay();
-            // Called when moving activity to pinned stack.
-            doNothing().when(mRootActivityContainer).ensureActivitiesVisible(any(), anyInt(),
-                    anyBoolean());
         }
 
         @Override

@@ -25,8 +25,8 @@ import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.Size;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
-import android.annotation.UnsupportedAppUsage;
 import android.app.Activity;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -1962,35 +1962,6 @@ public class AccountManager {
                 return bundle.getBoolean(KEY_BOOLEAN_RESULT);
             }
         }.start();
-    }
-
-    /**
-     * @hide
-     * Removes the shared account.
-     * @param account the account to remove
-     * @param user the user to remove the account from
-     * @return
-     */
-    public boolean removeSharedAccount(final Account account, UserHandle user) {
-        try {
-            boolean val = mService.removeSharedAccountAsUser(account, user.getIdentifier());
-            return val;
-        } catch (RemoteException re) {
-            throw re.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * @hide
-     * @param user
-     * @return
-     */
-    public Account[] getSharedAccounts(UserHandle user) {
-        try {
-            return mService.getSharedAccountsAsUser(user.getIdentifier());
-        } catch (RemoteException re) {
-            throw re.rethrowFromSystemServer();
-        }
     }
 
     /**

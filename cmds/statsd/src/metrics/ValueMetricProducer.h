@@ -83,11 +83,14 @@ public:
         flushCurrentBucketLocked(eventTimeNs, eventTimeNs);
     };
 
+    void onStateChanged(int64_t eventTimeNs, int32_t atomId, const HashableDimensionKey& primaryKey,
+                        int oldState, int newState) override;
+
 protected:
     void onMatchedLogEventInternalLocked(
             const size_t matcherIndex, const MetricDimensionKey& eventKey,
-            const ConditionKey& conditionKey, bool condition,
-            const LogEvent& event) override;
+            const ConditionKey& conditionKey, bool condition, const LogEvent& event,
+            const std::map<int, HashableDimensionKey>& statePrimaryKeys) override;
 
 private:
     void onDumpReportLocked(const int64_t dumpTimeNs,
@@ -130,8 +133,9 @@ private:
     int64_t calcBucketsForwardCount(const int64_t& eventTimeNs) const;
 
     // Mark the data as invalid.
-    void invalidateCurrentBucket();
-    void invalidateCurrentBucketWithoutResetBase();
+    void invalidateCurrentBucket(const int64_t dropTimeNs, const BucketDropReason reason);
+    void invalidateCurrentBucketWithoutResetBase(const int64_t dropTimeNs,
+                                                 const BucketDropReason reason);
 
     const int mWhatMatcherIndex;
 
@@ -143,7 +147,10 @@ private:
     std::vector<Matcher> mFieldMatchers;
 
     // Value fields for matching.
-    std::set<MetricDimensionKey> mMatchedMetricDimensionKeys;
+    std::set<HashableDimensionKey> mMatchedMetricDimensionKeys;
+
+    // Holds the atom id, primary key pair from a state change.
+    pair<int32_t, HashableDimensionKey> mStateChangePrimaryKey;
 
     // tagId for pulled data. -1 if this is not pulled
     const int mPullTagId;
@@ -155,10 +162,6 @@ private:
     typedef struct {
         // Index in multi value aggregation.
         int valueIndex;
-        // Holds current base value of the dimension. Take diff and update if necessary.
-        Value base;
-        // Whether there is a base to diff to.
-        bool hasBase;
         // Current value, depending on the aggregation type.
         Value value;
         // Number of samples collected.
@@ -170,15 +173,25 @@ private:
         bool seenNewData = false;
     } Interval;
 
+    typedef struct {
+        // Holds current base value of the dimension. Take diff and update if necessary.
+        Value base;
+        // Whether there is a base to diff to.
+        bool hasBase;
+        // Last seen state value(s).
+        HashableDimensionKey currentState;
+        // Whether this dimensions in what key has a current state key.
+        bool hasCurrentState;
+    } BaseInfo;
+
     std::unordered_map<MetricDimensionKey, std::vector<Interval>> mCurrentSlicedBucket;
+
+    std::unordered_map<HashableDimensionKey, std::vector<BaseInfo>> mCurrentBaseInfo;
 
     std::unordered_map<MetricDimensionKey, int64_t> mCurrentFullBucket;
 
     // Save the past buckets and we can clear when the StatsLogReport is dumped.
     std::unordered_map<MetricDimensionKey, std::vector<ValueBucket>> mPastBuckets;
-
-    // Pairs of (elapsed start, elapsed end) denoting buckets that were skipped.
-    std::list<std::pair<int64_t, int64_t>> mSkippedBuckets;
 
     const int64_t mMinBucketSizeNs;
 
@@ -248,7 +261,6 @@ private:
     FRIEND_TEST(ValueMetricProducerTest, TestBucketBoundaryNoCondition);
     FRIEND_TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition);
     FRIEND_TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition2);
-    FRIEND_TEST(ValueMetricProducerTest, TestBucketIncludingUnknownConditionIsInvalid);
     FRIEND_TEST(ValueMetricProducerTest, TestBucketInvalidIfGlobalBaseIsNotSet);
     FRIEND_TEST(ValueMetricProducerTest, TestCalcPreviousBucketEndTime);
     FRIEND_TEST(ValueMetricProducerTest, TestDataIsNotUpdatedWhenNoConditionChanged);
@@ -258,10 +270,6 @@ private:
     FRIEND_TEST(ValueMetricProducerTest, TestEventsWithNonSlicedCondition);
     FRIEND_TEST(ValueMetricProducerTest, TestFirstBucket);
     FRIEND_TEST(ValueMetricProducerTest, TestFullBucketResetWhenLastBucketInvalid);
-    FRIEND_TEST(ValueMetricProducerTest, TestInvalidBucketWhenGuardRailHit);
-    FRIEND_TEST(ValueMetricProducerTest, TestInvalidBucketWhenInitialPullFailed);
-    FRIEND_TEST(ValueMetricProducerTest, TestInvalidBucketWhenLastPullFailed);
-    FRIEND_TEST(ValueMetricProducerTest, TestInvalidBucketWhenOneConditionFailed);
     FRIEND_TEST(ValueMetricProducerTest, TestLateOnDataPulledWithDiff);
     FRIEND_TEST(ValueMetricProducerTest, TestLateOnDataPulledWithoutDiff);
     FRIEND_TEST(ValueMetricProducerTest, TestPartialBucketCreated);
@@ -292,9 +300,19 @@ private:
     FRIEND_TEST(ValueMetricProducerTest, TestResetBaseOnPullTooLate);
     FRIEND_TEST(ValueMetricProducerTest, TestSkipZeroDiffOutput);
     FRIEND_TEST(ValueMetricProducerTest, TestSkipZeroDiffOutputMultiValue);
+    FRIEND_TEST(ValueMetricProducerTest, TestSlicedState);
+    FRIEND_TEST(ValueMetricProducerTest, TestSlicedStateWithMap);
+    FRIEND_TEST(ValueMetricProducerTest, TestSlicedStateWithPrimaryField_WithDimensions);
     FRIEND_TEST(ValueMetricProducerTest, TestTrimUnusedDimensionKey);
     FRIEND_TEST(ValueMetricProducerTest, TestUseZeroDefaultBase);
     FRIEND_TEST(ValueMetricProducerTest, TestUseZeroDefaultBaseWithPullFailures);
+
+    FRIEND_TEST(ValueMetricProducerTest_BucketDrop, TestInvalidBucketWhenOneConditionFailed);
+    FRIEND_TEST(ValueMetricProducerTest_BucketDrop, TestInvalidBucketWhenInitialPullFailed);
+    FRIEND_TEST(ValueMetricProducerTest_BucketDrop, TestInvalidBucketWhenLastPullFailed);
+    FRIEND_TEST(ValueMetricProducerTest_BucketDrop, TestInvalidBucketWhenGuardRailHit);
+    FRIEND_TEST(ValueMetricProducerTest_BucketDrop,
+                TestInvalidBucketWhenAccumulateEventWrongBucket);
     friend class ValueMetricProducerTestHelper;
 };
 

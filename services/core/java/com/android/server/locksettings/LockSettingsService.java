@@ -27,8 +27,6 @@ import static com.android.internal.widget.LockPatternUtils.CREDENTIAL_TYPE_PASSW
 import static com.android.internal.widget.LockPatternUtils.CREDENTIAL_TYPE_PATTERN;
 import static com.android.internal.widget.LockPatternUtils.CREDENTIAL_TYPE_PIN;
 import static com.android.internal.widget.LockPatternUtils.EscrowTokenStateChangeCallback;
-import static com.android.internal.widget.LockPatternUtils.SYNTHETIC_PASSWORD_ENABLED_BY_DEFAULT;
-import static com.android.internal.widget.LockPatternUtils.SYNTHETIC_PASSWORD_ENABLED_KEY;
 import static com.android.internal.widget.LockPatternUtils.SYNTHETIC_PASSWORD_HANDLE_KEY;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_LOCKOUT;
 import static com.android.internal.widget.LockPatternUtils.USER_FRP;
@@ -153,6 +151,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -1366,6 +1365,8 @@ public class LockSettingsService extends ILockSettings.Stub {
     private void unlockUser(int userId, byte[] token, byte[] secret,
             @ChallengeType int challengeType, long challenge,
             @Nullable ArrayList<PendingResetLockout> resetLockouts) {
+        Slog.i(TAG, "Unlocking user " + userId + " with secret only, length "
+                + (secret != null ? secret.length : 0));
         // TODO: make this method fully async so we can update UI with progress strings
         final boolean alreadyUnlocked = mUserManager.isUserUnlockingOrUnlocked(userId);
         final CountDownLatch latch = new CountDownLatch(1);
@@ -1635,8 +1636,8 @@ public class LockSettingsService extends ILockSettings.Stub {
      */
     private boolean setLockCredentialInternal(LockscreenCredential credential,
             LockscreenCredential savedCredential, int userId, boolean isLockTiedToParent) {
-        Preconditions.checkNotNull(credential);
-        Preconditions.checkNotNull(savedCredential);
+        Objects.requireNonNull(credential);
+        Objects.requireNonNull(savedCredential);
         synchronized (mSpManager) {
             if (isSyntheticPasswordBasedCredentialLocked(userId)) {
                 return spBasedSetLockCredentialInternalLocked(credential, savedCredential, userId,
@@ -2643,23 +2644,12 @@ public class LockSettingsService extends ILockSettings.Stub {
             return type == PersistentData.TYPE_SP || type == PersistentData.TYPE_SP_WEAVER;
         }
         long handle = getSyntheticPasswordHandleLocked(userId);
-        // This is a global setting
-        long enabled = getLong(SYNTHETIC_PASSWORD_ENABLED_KEY,
-                SYNTHETIC_PASSWORD_ENABLED_BY_DEFAULT, UserHandle.USER_SYSTEM);
-      return enabled != 0 && handle != SyntheticPasswordManager.DEFAULT_HANDLE;
+        return handle != SyntheticPasswordManager.DEFAULT_HANDLE;
     }
 
     @VisibleForTesting
     protected boolean shouldMigrateToSyntheticPasswordLocked(int userId) {
-        long handle = getSyntheticPasswordHandleLocked(userId);
-        // This is a global setting
-        long enabled = getLong(SYNTHETIC_PASSWORD_ENABLED_KEY,
-                SYNTHETIC_PASSWORD_ENABLED_BY_DEFAULT, UserHandle.USER_SYSTEM);
-        return enabled != 0 && handle == SyntheticPasswordManager.DEFAULT_HANDLE;
-    }
-
-    private void enableSyntheticPasswordLocked() {
-        setLong(SYNTHETIC_PASSWORD_ENABLED_KEY, 1, UserHandle.USER_SYSTEM);
+        return true;
     }
 
     private VerifyCredentialResponse spBasedDoVerifyCredential(LockscreenCredential userCredential,
@@ -2714,11 +2704,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                 }
             }
         }
-
         if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_OK) {
-            setUserPasswordMetrics(userCredential, userId);
-            unlockKeystore(authResult.authToken.deriveKeyStorePassword(), userId);
-
             // Do resetLockout / revokeChallenge when all profiles are unlocked
             if (hasEnrolledBiometrics) {
                 if (resetLockouts == null) {
@@ -2727,18 +2713,13 @@ public class LockSettingsService extends ILockSettings.Stub {
                 resetLockouts.add(new PendingResetLockout(userId, response.getPayload()));
             }
 
-            final byte[] secret = authResult.authToken.deriveDiskEncryptionKey();
-            Slog.i(TAG, "Unlocking user " + userId + " with secret only, length " + secret.length);
-            unlockUser(userId, null, secret, challengeType, challenge, resetLockouts);
-
-            activateEscrowTokens(authResult.authToken, userId);
-
-            if (isManagedProfileWithSeparatedLock(userId)) {
-                setDeviceUnlockedForUser(userId);
-            }
-            mStrongAuth.reportSuccessfulStrongAuthUnlock(userId);
-
-            onAuthTokenKnownForUser(userId, authResult.authToken);
+            // TODO: Move setUserPasswordMetrics() inside onCredentialVerified(): this will require
+            // LSS to store an encrypted version of the latest password metric for every user,
+            // because user credential is not known when onCredentialVerified() is called during
+            // a token-based unlock.
+            setUserPasswordMetrics(userCredential, userId);
+            onCredentialVerified(authResult.authToken, challengeType, challenge, resetLockouts,
+                    userId);
         } else if (response.getResponseCode() == VerifyCredentialResponse.RESPONSE_RETRY) {
             if (response.getTimeout() > 0) {
                 requireStrongAuth(STRONG_AUTH_REQUIRED_AFTER_LOCKOUT, userId);
@@ -2746,6 +2727,27 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
 
         return response;
+    }
+
+    private void onCredentialVerified(AuthenticationToken authToken,
+            @ChallengeType int challengeType, long challenge,
+            @Nullable ArrayList<PendingResetLockout> resetLockouts, int userId) {
+
+        unlockKeystore(authToken.deriveKeyStorePassword(), userId);
+
+        {
+            final byte[] secret = authToken.deriveDiskEncryptionKey();
+            unlockUser(userId, null, secret, challengeType, challenge, resetLockouts);
+            Arrays.fill(secret, (byte) 0);
+        }
+        activateEscrowTokens(authToken, userId);
+
+        if (isManagedProfileWithSeparatedLock(userId)) {
+            setDeviceUnlockedForUser(userId);
+        }
+        mStrongAuth.reportSuccessfulStrongAuthUnlock(userId);
+
+        onAuthTokenKnownForUser(userId, authToken);
     }
 
     private void setDeviceUnlockedForUser(int userId) {
@@ -2986,7 +2988,6 @@ public class LockSettingsService extends ILockSettings.Stub {
     private long addEscrowToken(byte[] token, int userId, EscrowTokenStateChangeCallback callback) {
         if (DEBUG) Slog.d(TAG, "addEscrowToken: user=" + userId);
         synchronized (mSpManager) {
-            enableSyntheticPasswordLocked();
             // Migrate to synthetic password based credentials if the user has no password,
             // the token can then be activated immediately.
             AuthenticationToken auth = null;
@@ -3120,8 +3121,10 @@ public class LockSettingsService extends ILockSettings.Stub {
                 return false;
             }
         }
-        unlockUser(userId, null, authResult.authToken.deriveDiskEncryptionKey());
-        onAuthTokenKnownForUser(userId, authResult.authToken);
+        // TODO: Reset biometrics lockout here. Ideally that should be self-contained inside
+        // onCredentialVerified(), which will require some refactoring on the current lockout
+        // reset logic.
+        onCredentialVerified(authResult.authToken, CHALLENGE_NONE, 0, null, userId);
         return true;
     }
 

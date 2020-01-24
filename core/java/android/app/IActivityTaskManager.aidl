@@ -164,7 +164,7 @@ interface IActivityTaskManager {
     boolean convertToTranslucent(in IBinder token, in Bundle options);
     void notifyActivityDrawn(in IBinder token);
     void reportActivityFullyDrawn(in IBinder token, boolean restoredFromBundle);
-    int getActivityDisplayId(in IBinder activityToken);
+    int getDisplayId(in IBinder activityToken);
     boolean isImmersive(in IBinder token);
     void setImmersive(in IBinder token, boolean immersive);
     boolean isTopActivityImmersive();
@@ -333,6 +333,7 @@ interface IActivityTaskManager {
     boolean isInPictureInPictureMode(in IBinder token);
     boolean enterPictureInPictureMode(in IBinder token, in PictureInPictureParams params);
     void setPictureInPictureParams(in IBinder token, in PictureInPictureParams params);
+    void requestPictureInPictureMode(in IBinder token);
     int getMaxNumPictureInPictureActions(in IBinder token);
     IBinder getUriPermissionOwnerForActivity(in IBinder activityToken);
 
@@ -405,6 +406,14 @@ interface IActivityTaskManager {
     void setDisablePreviewScreenshots(IBinder token, boolean disable);
 
     /**
+     * It should only be called from home activity to remove its outdated snapshot. The home
+     * snapshot is used to speed up entering home from screen off. If the content of home activity
+     * is significantly different from before taking the snapshot, then the home activity can use
+     * this method to avoid inconsistent transition.
+     */
+    void invalidateHomeTaskSnapshot(IBinder homeToken);
+
+    /**
      * Return the user id of last resumed activity.
      */
     int getLastResumedActivityUserId();
@@ -427,6 +436,11 @@ interface IActivityTaskManager {
      * Registers remote animations for a specific activity.
      */
     void registerRemoteAnimations(in IBinder token, in RemoteAnimationDefinition definition);
+
+    /**
+     * Unregisters all remote animations for a specific activity.
+     */
+    void unregisterRemoteAnimations(in IBinder token);
 
     /**
      * Registers a remote animation to be run for all activity starts from a certain package during

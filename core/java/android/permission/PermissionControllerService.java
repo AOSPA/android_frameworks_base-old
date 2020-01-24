@@ -221,7 +221,7 @@ public abstract class PermissionControllerService extends Service {
      * permission controller package.
      */
     @BinderThread
-    public void onUpdateUserSensitive() {
+    public void onUpdateUserSensitivePermissionFlags() {
         throw new AbstractMethodError("Must be overridden in implementing class");
     }
 
@@ -239,6 +239,18 @@ public abstract class PermissionControllerService extends Service {
             @NonNull String callerPackageName, @NonNull String packageName,
             @NonNull String permission, @PermissionGrantState int grantState,
             @NonNull Consumer<Boolean> callback);
+
+    /**
+     * Called when a package is considered inactive based on the criteria given by
+     * {@link PermissionManager#startOneTimePermissionSession(String, long, int, int)}.
+     * This method is called at the end of a one-time permission session
+     *
+     * @param packageName The package that has been inactive
+     */
+    @BinderThread
+    public void onOneTimePermissionSessionTimeout(@NonNull String packageName) {
+        throw new AbstractMethodError("Must be overridden in implementing class");
+    }
 
     @Override
     public final @NonNull IBinder onBind(Intent intent) {
@@ -449,8 +461,17 @@ public abstract class PermissionControllerService extends Service {
             public void updateUserSensitive(AndroidFuture callback) {
                 Preconditions.checkNotNull(callback, "callback cannot be null");
 
-                onUpdateUserSensitive();
+                onUpdateUserSensitivePermissionFlags();
                 callback.complete(null);
+            }
+
+            @Override
+            public void notifyOneTimePermissionSessionTimeout(String packageName) {
+                enforceSomePermissionsGrantedToCaller(
+                        Manifest.permission.REVOKE_RUNTIME_PERMISSIONS);
+                packageName = Preconditions.checkNotNull(packageName,
+                        "packageName cannot be null");
+                onOneTimePermissionSessionTimeout(packageName);
             }
         };
     }

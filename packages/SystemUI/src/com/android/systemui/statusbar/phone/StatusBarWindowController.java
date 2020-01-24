@@ -41,7 +41,7 @@ import android.view.WindowManager.LayoutParams;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
-import com.android.systemui.dagger.qualifiers.MainResources;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController.StateListener;
@@ -105,7 +105,7 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
             ConfigurationController configurationController,
             KeyguardBypassController keyguardBypassController, SysuiColorExtractor colorExtractor,
             SuperStatusBarViewFactory superStatusBarViewFactory,
-            @MainResources Resources resources) {
+            @Main Resources resources) {
         mContext = context;
         mWindowManager = windowManager;
         mActivityManager = activityManager;
@@ -204,6 +204,7 @@ public class StatusBarWindowController implements Callback, Dumpable, Configurat
                 PixelFormat.TRANSLUCENT);
         mLp.token = new Binder();
         mLp.gravity = Gravity.TOP;
+        mLp.setFitWindowInsetsTypes(0 /* types */);
         mLp.softInputMode = LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
         mLp.setTitle("StatusBar");
         mLp.packageName = mContext.getPackageName();

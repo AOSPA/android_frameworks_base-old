@@ -1094,6 +1094,10 @@ public final class CameraManager {
         }
 
         public String[] getCameraIdListNoLazy() {
+            if (sCameraServiceDisabled) {
+                return new String[] {};
+            }
+
             CameraStatus[] cameraStatuses;
             ICameraServiceListener.Stub testListener = new ICameraServiceListener.Stub() {
                 @Override

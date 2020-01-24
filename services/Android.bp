@@ -73,6 +73,7 @@ java_library {
 
     libs: [
         "android.hidl.manager-V1.0-java",
+        "framework-tethering"
     ],
 
     plugins: [
@@ -111,16 +112,19 @@ droidstubs {
     srcs: [":services-sources"],
     installable: false,
     // TODO: remove the --hide options below
-    args: " --show-single-annotation android.annotation.SystemApi" +
+    args: " --show-single-annotation android.annotation.SystemApi\\(client=android.annotation.SystemApi.Client.MODULE_LIBRARIES,process=android.annotation.SystemApi.Process.SYSTEM_SERVER\\)" +
         " --hide-annotation android.annotation.Hide" +
         " --hide-package com.google.android.startop.iorap" +
         " --hide ReferencesHidden" +
         " --hide DeprecationMismatch" +
         " --hide HiddenTypedefConstant",
-    libs: [
-        "framework-all",
-    ],
     visibility: ["//visibility:private"],
+    check_api: {
+        current: {
+            api_file: "api/current.txt",
+            removed_api_file: "api/removed.txt",
+        },
+    },
 }
 
 java_library {

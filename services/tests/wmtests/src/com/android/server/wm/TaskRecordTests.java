@@ -193,7 +193,7 @@ public class TaskRecordTests extends ActivityTestsBase {
     @FlakyTest(bugId = 137879065)
     public void testFitWithinBounds() {
         final Rect parentBounds = new Rect(10, 10, 200, 200);
-        ActivityDisplay display = mService.mRootActivityContainer.getDefaultDisplay();
+        DisplayContent display = mService.mRootWindowContainer.getDefaultDisplay();
         ActivityStack stack = display.createStack(WINDOWING_MODE_FREEFORM, ACTIVITY_TYPE_STANDARD,
                 true /* onTop */);
         Task task = new TaskBuilder(mSupervisor).setStack(stack).build();
@@ -232,8 +232,8 @@ public class TaskRecordTests extends ActivityTestsBase {
     @Test
     @FlakyTest(bugId = 137879065)
     public void testBoundsOnModeChangeFreeformToFullscreen() {
-        ActivityDisplay display = mService.mRootActivityContainer.getDefaultDisplay();
-        ActivityStack stack = new StackBuilder(mRootActivityContainer).setDisplay(display)
+        DisplayContent display = mService.mRootWindowContainer.getDefaultDisplay();
+        ActivityStack stack = new StackBuilder(mRootWindowContainer).setDisplay(display)
                 .setWindowingMode(WINDOWING_MODE_FREEFORM).build();
         Task task = stack.getBottomMostTask();
         task.getRootActivity().setOrientation(SCREEN_ORIENTATION_UNSPECIFIED);
@@ -265,16 +265,16 @@ public class TaskRecordTests extends ActivityTestsBase {
     public void testFullscreenBoundsForcedOrientation() {
         final Rect fullScreenBounds = new Rect(0, 0, 1920, 1080);
         final Rect fullScreenBoundsPort = new Rect(0, 0, 1080, 1920);
-        ActivityDisplay display = new TestActivityDisplay.Builder(
+        DisplayContent display = new TestDisplayContent.Builder(
                 mService, fullScreenBounds.width(), fullScreenBounds.height()).build();
-        assertTrue(mRootActivityContainer.getActivityDisplay(display.mDisplayId) != null);
+        assertTrue(mRootWindowContainer.getDisplayContent(display.mDisplayId) != null);
         // Fix the display orientation to landscape which is the natural rotation (0) for the test
         // display.
         final DisplayRotation dr = display.mDisplayContent.getDisplayRotation();
         dr.setFixedToUserRotation(FIXED_TO_USER_ROTATION_ENABLED);
         dr.setUserRotation(USER_ROTATION_FREE, ROTATION_0);
 
-        ActivityStack stack = new StackBuilder(mRootActivityContainer)
+        ActivityStack stack = new StackBuilder(mRootWindowContainer)
                 .setWindowingMode(WINDOWING_MODE_FULLSCREEN).setDisplay(display).build();
         Task task = stack.getBottomMostTask();
         ActivityRecord root = task.getTopNonFinishingActivity();
@@ -328,14 +328,14 @@ public class TaskRecordTests extends ActivityTestsBase {
     @Test
     public void testIgnoresForcedOrientationWhenParentHandles() {
         final Rect fullScreenBounds = new Rect(0, 0, 1920, 1080);
-        ActivityDisplay display = new TestActivityDisplay.Builder(
+        DisplayContent display = new TestDisplayContent.Builder(
                 mService, fullScreenBounds.width(), fullScreenBounds.height()).build();
 
         display.getRequestedOverrideConfiguration().orientation =
                 Configuration.ORIENTATION_LANDSCAPE;
         display.onRequestedOverrideConfigurationChanged(
                 display.getRequestedOverrideConfiguration());
-        ActivityStack stack = new StackBuilder(mRootActivityContainer)
+        ActivityStack stack = new StackBuilder(mRootWindowContainer)
                 .setWindowingMode(WINDOWING_MODE_FULLSCREEN).setDisplay(display).build();
         Task task = stack.getBottomMostTask();
         ActivityRecord root = task.getTopNonFinishingActivity();
@@ -345,6 +345,7 @@ public class TaskRecordTests extends ActivityTestsBase {
         spyOn(parentWindowContainer);
         parentWindowContainer.setBounds(fullScreenBounds);
         doReturn(parentWindowContainer).when(task).getParent();
+        doReturn(stack).when(task).getStack();
         doReturn(true).when(parentWindowContainer).handlesOrientationChangeFromDescendant();
 
         // Setting app to fixed portrait fits within parent, but Task shouldn't adjust the
@@ -425,6 +426,61 @@ public class TaskRecordTests extends ActivityTestsBase {
         stackConfig.windowConfiguration.setBounds(bounds);
         task.getStack().onRequestedOverrideConfigurationChanged(stackConfig);
         assertNotEquals(origScreenH, task.getConfiguration().screenHeightDp);
+    }
+
+    @Test
+    public void testInsetDisregardedWhenFreeformOverlapsNavBar() {
+        DisplayContent display = mService.mRootWindowContainer.getDefaultDisplay();
+        ActivityStack stack = display.createStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
+        DisplayInfo displayInfo = new DisplayInfo();
+        mService.mContext.getDisplay().getDisplayInfo(displayInfo);
+        final int displayHeight = displayInfo.logicalHeight;
+        final Task task = new TaskBuilder(mSupervisor).setStack(stack).build();
+        final Configuration inOutConfig = new Configuration();
+        final Configuration parentConfig = new Configuration();
+        final int longSide = 1200;
+        final int shortSide = 600;
+        parentConfig.densityDpi = 400;
+        parentConfig.screenHeightDp = 200; // 200 * 400 / 160 = 500px
+        parentConfig.screenWidthDp = 100; // 100 * 400 / 160 = 250px
+        parentConfig.windowConfiguration.setRotation(ROTATION_0);
+
+        final float density = 2.5f; // densityDpi / DENSITY_DEFAULT_SCALE = 400 / 160.0f
+        final int longSideDp = 480; // longSide / density = 1200 / 400 * 160
+        final int shortSideDp = 240; // shortSide / density = 600 / 400 * 160
+        final int screenLayout = parentConfig.screenLayout
+                & (Configuration.SCREENLAYOUT_LONG_MASK | Configuration.SCREENLAYOUT_SIZE_MASK);
+        final int reducedScreenLayout =
+                Configuration.reduceScreenLayout(screenLayout, longSideDp, shortSideDp);
+
+        // Portrait bounds overlapping with navigation bar, without insets.
+        inOutConfig.windowConfiguration.getBounds().set(0,
+                displayHeight - 10 - longSide,
+                shortSide,
+                displayHeight - 10);
+        // Set to freeform mode to verify bug fix.
+        inOutConfig.windowConfiguration.setWindowingMode(WINDOWING_MODE_FREEFORM);
+
+        task.computeConfigResourceOverrides(inOutConfig, parentConfig);
+
+        assertEquals(parentConfig.screenWidthDp, inOutConfig.screenWidthDp);
+        assertEquals(parentConfig.screenHeightDp, inOutConfig.screenHeightDp);
+        assertEquals(reducedScreenLayout, inOutConfig.screenLayout);
+
+        inOutConfig.setToDefaults();
+        // Landscape bounds overlapping with navigtion bar, without insets.
+        inOutConfig.windowConfiguration.getBounds().set(0,
+                displayHeight - 10 - shortSide,
+                longSide,
+                displayHeight - 10);
+        inOutConfig.windowConfiguration.setWindowingMode(WINDOWING_MODE_FREEFORM);
+
+        task.computeConfigResourceOverrides(inOutConfig, parentConfig);
+
+        assertEquals(parentConfig.screenWidthDp, inOutConfig.screenWidthDp);
+        assertEquals(parentConfig.screenHeightDp, inOutConfig.screenHeightDp);
+        assertEquals(reducedScreenLayout, inOutConfig.screenLayout);
     }
 
     /** Ensures that the alias intent won't have target component resolved. */
@@ -802,14 +858,14 @@ public class TaskRecordTests extends ActivityTestsBase {
     }
 
     private Task getTestTask() {
-        final ActivityStack stack = new StackBuilder(mRootActivityContainer).build();
+        final ActivityStack stack = new StackBuilder(mRootWindowContainer).build();
         return stack.getBottomMostTask();
     }
 
     private void testStackBoundsConfiguration(int windowingMode, Rect parentBounds, Rect bounds,
             Rect expectedConfigBounds) {
 
-        ActivityDisplay display = mService.mRootActivityContainer.getDefaultDisplay();
+        DisplayContent display = mService.mRootWindowContainer.getDefaultDisplay();
         ActivityStack stack = display.createStack(windowingMode, ACTIVITY_TYPE_STANDARD,
                 true /* onTop */);
         Task task = new TaskBuilder(mSupervisor).setStack(stack).build();

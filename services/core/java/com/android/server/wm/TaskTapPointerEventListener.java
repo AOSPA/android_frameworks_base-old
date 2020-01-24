@@ -31,7 +31,7 @@ import android.view.WindowManagerPolicyConstants.PointerEventListener;
 import com.android.server.wm.WindowManagerService.H;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.wm.ActivityStackSupervisor;
-import com.android.server.wm.ActivityDisplay;
+import com.android.server.wm.DisplayContent;
 import android.util.BoostFramework;
 
 /**
@@ -132,16 +132,16 @@ public class TaskTapPointerEventListener implements PointerEventListener {
             mPerfObj.perfHint(BoostFramework.VENDOR_HINT_TAP_EVENT, null);
             ActivityStackSupervisor.mPerfSendTapHint = false;
         }
-        if (ActivityDisplay.mIsPerfBoostAcquired && (mPerfObj != null)) {
-            if (ActivityDisplay.mPerfHandle > 0) {
-                mPerfObj.perfLockReleaseHandler(ActivityDisplay.mPerfHandle);
-                ActivityDisplay.mPerfHandle = -1;
+        if (DisplayContent.mIsPerfBoostAcquired && (mPerfObj != null)) {
+            if (DisplayContent.mPerfHandle > 0) {
+                mPerfObj.perfLockReleaseHandler(DisplayContent.mPerfHandle);
+                DisplayContent.mPerfHandle = -1;
             }
-            ActivityDisplay.mIsPerfBoostAcquired = false;
+            DisplayContent.mIsPerfBoostAcquired = false;
         }
-        if (ActivityDisplay.mPerfSendTapHint && (mPerfObj != null)) {
+        if (DisplayContent.mPerfSendTapHint && (mPerfObj != null)) {
             mPerfObj.perfHint(BoostFramework.VENDOR_HINT_TAP_EVENT, null);
-            ActivityDisplay.mPerfSendTapHint = false;
+            DisplayContent.mPerfSendTapHint = false;
         }
     }
 

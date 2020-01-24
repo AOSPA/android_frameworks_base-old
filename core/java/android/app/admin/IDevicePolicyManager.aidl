@@ -208,8 +208,8 @@ interface IDevicePolicyManager {
     void setRestrictionsProvider(in ComponentName who, in ComponentName provider);
     ComponentName getRestrictionsProvider(int userHandle);
 
-    void setUserRestriction(in ComponentName who, in String key, boolean enable);
-    Bundle getUserRestrictions(in ComponentName who);
+    void setUserRestriction(in ComponentName who, in String key, boolean enable, boolean parent);
+    Bundle getUserRestrictions(in ComponentName who, boolean parent);
     void addCrossProfileIntentFilter(in ComponentName admin, in IntentFilter filter, int flags);
     void clearCrossProfileIntentFilters(in ComponentName admin);
 
@@ -297,6 +297,9 @@ interface IDevicePolicyManager {
 
     void setAutoTime(in ComponentName who, boolean enabled);
     boolean getAutoTime(in ComponentName who);
+
+    void setAutoTimeZone(in ComponentName who, boolean enabled);
+    boolean getAutoTimeZone(in ComponentName who);
 
     void setForceEphemeralUsers(in ComponentName who, boolean forceEpehemeralUsers);
     boolean getForceEphemeralUsers(in ComponentName who);
@@ -437,6 +440,9 @@ interface IDevicePolicyManager {
     List<String> getCrossProfileCalendarPackages(in ComponentName admin);
     boolean isPackageAllowedToAccessCalendarForUser(String packageName, int userHandle);
     List<String> getCrossProfileCalendarPackagesForUser(int userHandle);
+
+    void setCrossProfilePackages(in ComponentName admin, in List<String> packageNames);
+    List<String> getCrossProfilePackages(in ComponentName admin);
 
     boolean isManagedKiosk();
     boolean isUnattendedManagedKiosk();

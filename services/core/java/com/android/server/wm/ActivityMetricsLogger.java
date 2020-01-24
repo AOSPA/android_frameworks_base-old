@@ -9,6 +9,7 @@ import static android.app.WaitResult.LAUNCH_STATE_HOT;
 import static android.app.WaitResult.LAUNCH_STATE_WARM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
@@ -121,6 +122,7 @@ class ActivityMetricsLogger {
     private static final int WINDOW_STATE_SIDE_BY_SIDE = 1;
     private static final int WINDOW_STATE_FREEFORM = 2;
     private static final int WINDOW_STATE_ASSISTANT = 3;
+    private static final int WINDOW_STATE_MULTI_WINDOW = 4;
     private static final int WINDOW_STATE_INVALID = -1;
 
     /**
@@ -195,6 +197,8 @@ class ActivityMetricsLogger {
         final int mTransitionType;
         /** Whether the process was already running when the transition started. */
         final boolean mProcessRunning;
+        /** whether the process of the launching activity didn't have any active activity. */
+        final boolean mProcessSwitch;
         /** The activities that should be drawn. */
         final LinkedList<ActivityRecord> mPendingDrawActivities = new LinkedList<>();
         /** The latest activity to have been launched. */
@@ -223,7 +227,8 @@ class ActivityMetricsLogger {
         /** @return Non-null if there will be a window drawn event for the launch. */
         @Nullable
         static TransitionInfo create(@NonNull ActivityRecord r,
-                @NonNull LaunchingState launchingState, boolean processRunning, int startResult) {
+                @NonNull LaunchingState launchingState, boolean processRunning,
+                boolean processSwitch, int startResult) {
             int transitionType = INVALID_TRANSITION_TYPE;
             if (processRunning) {
                 if (startResult == START_SUCCESS) {
@@ -240,16 +245,18 @@ class ActivityMetricsLogger {
                 // That means the startResult is neither START_SUCCESS nor START_TASK_TO_FRONT.
                 return null;
             }
-            return new TransitionInfo(r, launchingState, transitionType, processRunning);
+            return new TransitionInfo(r, launchingState, transitionType, processRunning,
+                    processSwitch);
         }
 
         /** Use {@link TransitionInfo#create} instead to ensure the transition type is valid. */
         private TransitionInfo(ActivityRecord r, LaunchingState launchingState, int transitionType,
-                boolean processRunning) {
+                boolean processRunning, boolean processSwitch) {
             mLaunchingState = launchingState;
             mTransitionStartTimeNs = launchingState.mCurrentTransitionStartTimeNs;
             mTransitionType = transitionType;
             mProcessRunning = processRunning;
+            mProcessSwitch = processSwitch;
             mCurrentTransitionDeviceUptime =
                     (int) TimeUnit.MILLISECONDS.toSeconds(SystemClock.uptimeMillis());
             setLatestLaunchedActivity(r);
@@ -285,6 +292,14 @@ class ActivityMetricsLogger {
 
         boolean allDrawn() {
             return mPendingDrawActivities.isEmpty();
+        }
+
+        /**
+         * @return {@code true} if the transition info should be sent to MetricsLogger, StatsLog, or
+         *         LaunchObserver.
+         */
+        boolean isInterestingToLoggerAndObserver() {
+            return mProcessSwitch;
         }
 
         int calculateCurrentDelay() {
@@ -386,7 +401,7 @@ class ActivityMetricsLogger {
 
         mWindowState = WINDOW_STATE_INVALID;
         ActivityStack stack =
-                mSupervisor.mRootActivityContainer.getTopDisplayFocusedStack();
+                mSupervisor.mRootWindowContainer.getTopDisplayFocusedStack();
         if (stack == null) {
             return;
         }
@@ -398,7 +413,7 @@ class ActivityMetricsLogger {
 
         @WindowingMode int windowingMode = stack.getWindowingMode();
         if (windowingMode == WINDOWING_MODE_PINNED) {
-            stack = mSupervisor.mRootActivityContainer.findStackBehind(stack);
+            stack = mSupervisor.mRootWindowContainer.findStackBehind(stack);
             windowingMode = stack.getWindowingMode();
         }
         switch (windowingMode) {
@@ -411,6 +426,9 @@ class ActivityMetricsLogger {
                 break;
             case WINDOWING_MODE_FREEFORM:
                 mWindowState = WINDOW_STATE_FREEFORM;
+                break;
+            case WINDOWING_MODE_MULTI_WINDOW:
+                mWindowState = WINDOW_STATE_MULTI_WINDOW;
                 break;
             default:
                 if (windowingMode != WINDOWING_MODE_UNDEFINED) {
@@ -535,9 +553,10 @@ class ActivityMetricsLogger {
             return;
         }
 
-        if (info != null) {
-            // If we are already in an existing transition, only update the activity name, but not
-            // the other attributes.
+        if (info != null
+                && info.mLastLaunchedActivity.mDisplayContent == launchedActivity.mDisplayContent) {
+            // If we are already in an existing transition on the same display, only update the
+            // activity name, but not the other attributes.
 
             if (DEBUG_METRICS) Slog.i(TAG, "notifyActivityLaunched update launched activity");
             // Coalesce multiple (trampoline) activities from a single sequence together.
@@ -546,7 +565,7 @@ class ActivityMetricsLogger {
         }
 
         final TransitionInfo newInfo = TransitionInfo.create(launchedActivity, launchingState,
-                processRunning, resultCode);
+                processRunning, processSwitch, resultCode);
         if (newInfo == null) {
             abort(info, "unrecognized launch");
             return;
@@ -557,7 +576,12 @@ class ActivityMetricsLogger {
         mTransitionInfoList.add(newInfo);
         mLastTransitionInfo.put(launchedActivity, newInfo);
         startLaunchTrace(newInfo);
-        launchObserverNotifyActivityLaunched(newInfo);
+        if (newInfo.isInterestingToLoggerAndObserver()) {
+            launchObserverNotifyActivityLaunched(newInfo);
+        } else {
+            // As abort for no process switch.
+            launchObserverNotifyIntentFailed();
+        }
     }
 
     /**
@@ -733,7 +757,9 @@ class ActivityMetricsLogger {
             launchObserverNotifyActivityLaunchCancelled(info);
         } else {
             logAppTransitionFinished(info);
-            launchObserverNotifyActivityLaunchFinished(info, timestampNs);
+            if (info.isInterestingToLoggerAndObserver()) {
+                launchObserverNotifyActivityLaunchFinished(info, timestampNs);
+            }
         }
         info.mPendingDrawActivities.clear();
         mTransitionInfoList.remove(info);
@@ -770,8 +796,11 @@ class ActivityMetricsLogger {
         // Take a snapshot of the transition info before sending it to the handler for logging.
         // This will avoid any races with other operations that modify the ActivityRecord.
         final TransitionInfoSnapshot infoSnapshot = new TransitionInfoSnapshot(info);
-        BackgroundThread.getHandler().post(() -> logAppTransition(
-                info.mCurrentTransitionDeviceUptime, info.mCurrentTransitionDelayMs, infoSnapshot));
+        if (info.isInterestingToLoggerAndObserver()) {
+            BackgroundThread.getHandler().post(() -> logAppTransition(
+                    info.mCurrentTransitionDeviceUptime, info.mCurrentTransitionDelayMs,
+                    infoSnapshot));
+        }
         BackgroundThread.getHandler().post(() -> logAppDisplayed(infoSnapshot));
         if (info.mPendingFullyDrawn != null) {
             info.mPendingFullyDrawn.run();
@@ -929,6 +958,18 @@ class ActivityMetricsLogger {
             return null;
         }
 
+        final long currentTimestampNs = SystemClock.elapsedRealtimeNanos();
+        final long startupTimeMs = info.mPendingFullyDrawn != null
+                ? info.mWindowsDrawnDelayMs
+                : TimeUnit.NANOSECONDS.toMillis(currentTimestampNs - info.mTransitionStartTimeNs);
+        final TransitionInfoSnapshot infoSnapshot =
+                new TransitionInfoSnapshot(info, r, (int) startupTimeMs);
+        BackgroundThread.getHandler().post(() -> logAppFullyDrawn(infoSnapshot));
+
+        if (!info.isInterestingToLoggerAndObserver()) {
+            return infoSnapshot;
+        }
+
         // Record the handling of the reportFullyDrawn callback in the trace system. This is not
         // actually used to trace this function, but instead the logical task that this function
         // fullfils (handling reportFullyDrawn() callbacks).
@@ -938,10 +979,6 @@ class ActivityMetricsLogger {
         final LogMaker builder = new LogMaker(APP_TRANSITION_REPORTED_DRAWN);
         builder.setPackageName(r.packageName);
         builder.addTaggedData(FIELD_CLASS_NAME, r.info.name);
-        final long currentTimestampNs = SystemClock.elapsedRealtimeNanos();
-        final long startupTimeMs = info.mPendingFullyDrawn != null
-                ? info.mWindowsDrawnDelayMs
-                : TimeUnit.NANOSECONDS.toMillis(currentTimestampNs - info.mTransitionStartTimeNs);
         builder.addTaggedData(APP_TRANSITION_REPORTED_DRAWN_MS, startupTimeMs);
         builder.setType(restoredFromBundle
                 ? TYPE_TRANSITION_REPORTED_DRAWN_WITH_BUNDLE
@@ -963,10 +1000,6 @@ class ActivityMetricsLogger {
         // Ends the trace started at the beginning of this function. This is located here to allow
         // the trace slice to have a noticable duration.
         Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
-
-        final TransitionInfoSnapshot infoSnapshot =
-                new TransitionInfoSnapshot(info, r, (int) startupTimeMs);
-        BackgroundThread.getHandler().post(() -> logAppFullyDrawn(infoSnapshot));
 
         // Notify reportFullyDrawn event.
         launchObserverNotifyReportFullyDrawn(r, currentTimestampNs);
@@ -1093,7 +1126,8 @@ class ActivityMetricsLogger {
             return;
         }
         info.mLaunchTraceName = "launching: " + info.mLastLaunchedActivity.packageName;
-        Trace.asyncTraceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, info.mLaunchTraceName, 0);
+        Trace.asyncTraceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, info.mLaunchTraceName,
+                (int) info.mTransitionStartTimeNs /* cookie */);
     }
 
     /** Stops trace for the launch is completed or cancelled. */
@@ -1102,7 +1136,8 @@ class ActivityMetricsLogger {
         if (info.mLaunchTraceName == null) {
             return;
         }
-        Trace.asyncTraceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER, info.mLaunchTraceName, 0);
+        Trace.asyncTraceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER, info.mLaunchTraceName,
+                (int) info.mTransitionStartTimeNs /* cookie */);
         info.mLaunchTraceName = null;
     }
 

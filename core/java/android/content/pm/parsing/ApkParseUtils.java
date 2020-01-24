@@ -793,6 +793,10 @@ public class ApkParseUtils {
                     parseResult = parseKeySets(parseInput, parsingPackage, res, parser);
                     success = parseResult.isSuccess();
                     break;
+                case PackageParser.TAG_FEATURE:
+                    parseResult = parseFeature(parseInput, parsingPackage, res, parser);
+                    success = parseResult.isSuccess();
+                    break;
                 case PackageParser.TAG_PERMISSION_GROUP:
                     parseResult = parsePermissionGroup(parseInput, parsingPackage, res,
                             parser);
@@ -877,6 +881,13 @@ public class ApkParseUtils {
             return parseInput.error(
                     PackageManager.INSTALL_PARSE_FAILED_MANIFEST_EMPTY,
                     "<manifest> does not contain an <application> or <instrumentation>"
+            );
+        }
+
+        if (!ComponentParseUtils.ParsedFeature.isCombinationValid(parsingPackage.getFeatures())) {
+            return parseInput.error(
+                    INSTALL_PARSE_FAILED_BAD_MANIFEST,
+                    "Combination <feature> tags are not valid"
             );
         }
 
@@ -1259,6 +1270,31 @@ public class ApkParseUtils {
 
         return parseInput.success(parsingPackage);
     }
+
+    private static ParseResult parseFeature(
+            ParseInput parseInput,
+            ParsingPackage parsingPackage,
+            Resources res,
+            XmlResourceParser parser
+    ) throws IOException, XmlPullParserException {
+        // TODO(b/135203078): Remove, replace with ParseResult
+        String[] outError = new String[1];
+
+        ComponentParseUtils.ParsedFeature parsedFeature =
+                ComponentParseUtils.parseFeature(res, parser, outError);
+
+        if (parsedFeature == null || outError[0] != null) {
+            return parseInput.error(
+                    PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED,
+                    outError[0]
+            );
+        }
+
+        parsingPackage.addFeature(parsedFeature);
+
+        return parseInput.success(parsingPackage);
+    }
+
 
     private static ParseResult parsePermissionGroup(
             ParseInput parseInput,
@@ -2070,6 +2106,9 @@ public class ApkParseUtils {
                             sa.getBoolean(R.styleable.AndroidManifestApplication_enabled,
                                     true));
 
+            parsingPackage.setCrossProfile(
+                    sa.getBoolean(R.styleable.AndroidManifestApplication_crossProfile, false));
+
             parsingPackage.setIsGame(sa.getBoolean(
                     R.styleable.AndroidManifestApplication_isGame, false));
 
@@ -2338,7 +2377,7 @@ public class ApkParseUtils {
                         parsingPackage.setProfileableByShell(true);
                     }
                     XmlUtils.skipCurrentTag(parser);
-
+                    break;
                 default:
                     if (!PackageParser.RIGID_PARSER) {
                         Slog.w(TAG, "Unknown element under <application>: " + tagName

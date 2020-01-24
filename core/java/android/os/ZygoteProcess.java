@@ -18,11 +18,12 @@ package android.os;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.ApplicationInfo;
 import android.net.LocalSocket;
 import android.net.LocalSocketAddress;
 import android.util.Log;
+import android.util.Pair;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
@@ -39,6 +40,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /*package*/ class ZygoteStartFailedEx extends Exception {
@@ -306,8 +308,12 @@ public class ZygoteProcess {
      * @param appDataDir null-ok the data directory of the app.
      * @param invokeWith null-ok the command to invoke with.
      * @param packageName null-ok the name of the package this process belongs to.
+     * @param disabledCompatChanges null-ok list of disabled compat changes for the process being
+     *                             started.
      * @param zygoteArgs Additional arguments to supply to the zygote process.
      * @param isTopApp Whether the process starts for high priority application.
+     * @param pkgDataInfoMap Map from related package names to private data directory
+     *                       volume UUID and inode number.
      *
      * @return An object that describes the result of the attempt to start the process.
      * @throws RuntimeException on fatal start failure
@@ -325,6 +331,9 @@ public class ZygoteProcess {
                                                   @Nullable String packageName,
                                                   boolean useUsapPool,
                                                   boolean isTopApp,
+                                                  @Nullable long[] disabledCompatChanges,
+                                                  @Nullable Map<String, Pair<String, Long>>
+                                                          pkgDataInfoMap,
                                                   @Nullable String[] zygoteArgs) {
         // TODO (chriswailes): Is there a better place to check this value?
         if (fetchUsapPoolEnabledPropWithMinInterval()) {
@@ -335,7 +344,8 @@ public class ZygoteProcess {
             return startViaZygote(processClass, niceName, uid, gid, gids,
                     runtimeFlags, mountExternal, targetSdkVersion, seInfo,
                     abi, instructionSet, appDataDir, invokeWith, /*startChildZygote=*/ false,
-                    packageName, useUsapPool, isTopApp, zygoteArgs);
+                    packageName, useUsapPool, isTopApp, disabledCompatChanges,
+                    pkgDataInfoMap, zygoteArgs);
         } catch (ZygoteStartFailedEx ex) {
             Log.e(LOG_TAG,
                     "Starting VM process through Zygote failed");
@@ -535,6 +545,9 @@ public class ZygoteProcess {
      * that has its state cloned from this zygote process.
      * @param packageName null-ok the name of the package this process belongs to.
      * @param isTopApp Whether the process starts for high priority application.
+     * @param disabledCompatChanges a list of disabled compat changes for the process being started.
+     * @param pkgDataInfoMap Map from related package names to private data directory volume UUID
+     *                       and inode number.
      * @param extraArgs Additional arguments to supply to the zygote process.
      * @return An object that describes the result of the attempt to start the process.
      * @throws ZygoteStartFailedEx if process start failed for any reason
@@ -554,6 +567,9 @@ public class ZygoteProcess {
                                                       @Nullable String packageName,
                                                       boolean useUsapPool,
                                                       boolean isTopApp,
+                                                      @Nullable long[] disabledCompatChanges,
+                                                      @Nullable Map<String, Pair<String, Long>>
+                                                              pkgDataInfoMap,
                                                       @Nullable String[] extraArgs)
                                                       throws ZygoteStartFailedEx {
         ArrayList<String> argsForZygote = new ArrayList<>();
@@ -584,10 +600,10 @@ public class ZygoteProcess {
 
         // --setgroups is a comma-separated list
         if (gids != null && gids.length > 0) {
-            StringBuilder sb = new StringBuilder();
+            final StringBuilder sb = new StringBuilder();
             sb.append("--setgroups=");
 
-            int sz = gids.length;
+            final int sz = gids.length;
             for (int i = 0; i < sz; i++) {
                 if (i != 0) {
                     sb.append(',');
@@ -629,6 +645,39 @@ public class ZygoteProcess {
 
         if (isTopApp) {
             argsForZygote.add(Zygote.START_AS_TOP_APP_ARG);
+        }
+        if (pkgDataInfoMap != null && pkgDataInfoMap.size() > 0) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(Zygote.PKG_DATA_INFO_MAP);
+            sb.append("=");
+            boolean started = false;
+            for (Map.Entry<String, Pair<String, Long>> entry : pkgDataInfoMap.entrySet()) {
+                if (started) {
+                    sb.append(',');
+                }
+                started = true;
+                sb.append(entry.getKey());
+                sb.append(',');
+                sb.append(entry.getValue().first);
+                sb.append(',');
+                sb.append(entry.getValue().second);
+            }
+            argsForZygote.add(sb.toString());
+        }
+
+        if (disabledCompatChanges != null && disabledCompatChanges.length > 0) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("--disabled-compat-changes=");
+
+            int sz = disabledCompatChanges.length;
+            for (int i = 0; i < sz; i++) {
+                if (i != 0) {
+                    sb.append(',');
+                }
+                sb.append(disabledCompatChanges[i]);
+            }
+
+            argsForZygote.add(sb.toString());
         }
 
         argsForZygote.add(processClass);
@@ -1162,11 +1211,14 @@ public class ZygoteProcess {
 
         Process.ProcessStartResult result;
         try {
+            // As app zygote is for generating isolated process, at the end it can't access
+            // apps data, so doesn't need to its data info.
             result = startViaZygote(processClass, niceName, uid, gid,
                     gids, runtimeFlags, 0 /* mountExternal */, 0 /* targetSdkVersion */, seInfo,
                     abi, instructionSet, null /* appDataDir */, null /* invokeWith */,
                     true /* startChildZygote */, null /* packageName */,
-                    false /* useUsapPool */, false /* isTopApp */, extraArgs);
+                    false /* useUsapPool */, false /* isTopApp */,
+                    null /* disabledCompatChanges */, null /* pkgDataInfoMap */, extraArgs);
         } catch (ZygoteStartFailedEx ex) {
             throw new RuntimeException("Starting child-zygote through Zygote failed", ex);
         }

@@ -30,7 +30,7 @@ import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.EnhancedEstimatesImpl;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.RecentsImplementation;
-import com.android.systemui.stackdivider.Divider;
+import com.android.systemui.stackdivider.DividerModule;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationLockscreenUserManagerImpl;
@@ -39,16 +39,15 @@ import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.KeyguardEnvironmentImpl;
 import com.android.systemui.statusbar.phone.ShadeController;
-import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.phone.ShadeControllerImpl;
+import com.android.systemui.statusbar.policy.DeviceProvisionedController;
+import com.android.systemui.statusbar.policy.DeviceProvisionedControllerImpl;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
-
-import java.util.Optional;
 
 import javax.inject.Named;
 import javax.inject.Singleton;
 
 import dagger.Binds;
-import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
 
@@ -56,7 +55,7 @@ import dagger.Provides;
  * A dagger module for injecting default implementations of components of System UI that may be
  * overridden by the System UI implementation.
  */
-@Module
+@Module(includes = {DividerModule.class})
 abstract class SystemUIDefaultModule {
 
     @Singleton
@@ -82,19 +81,13 @@ abstract class SystemUIDefaultModule {
             KeyguardEnvironmentImpl keyguardEnvironment);
 
     @Binds
-    abstract ShadeController provideShadeController(StatusBar statusBar);
+    abstract ShadeController provideShadeController(ShadeControllerImpl shadeController);
 
     @Singleton
     @Provides
     @Named(ALLOW_NOTIFICATION_LONG_PRESS_NAME)
     static boolean provideAllowNotificationLongPress() {
         return true;
-    }
-
-    @Singleton
-    @Provides
-    static Divider provideDivider(Context context, Optional<Lazy<Recents>> recentsOptionalLazy) {
-        return new Divider(context, recentsOptionalLazy);
     }
 
     @Singleton
@@ -114,4 +107,8 @@ abstract class SystemUIDefaultModule {
             CommandQueue commandQueue) {
         return new Recents(context, recentsImplementation, commandQueue);
     }
+
+    @Binds
+    abstract DeviceProvisionedController bindDeviceProvisionedController(
+            DeviceProvisionedControllerImpl deviceProvisionedController);
 }

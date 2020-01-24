@@ -16,6 +16,10 @@
 
 package com.android.server.integrity.serializer;
 
+import static com.android.server.integrity.serializer.RuleIndexingDetails.APP_CERTIFICATE_INDEXED;
+import static com.android.server.integrity.serializer.RuleIndexingDetails.NOT_INDEXED;
+import static com.android.server.integrity.serializer.RuleIndexingDetails.PACKAGE_NAME_INDEXED;
+
 import android.content.integrity.AtomicFormula;
 import android.content.integrity.CompoundFormula;
 import android.content.integrity.Formula;
@@ -29,7 +33,9 @@ import java.io.OutputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 
 /** A helper class to serialize rules from the {@link Rule} model to Xml representation. */
 public class RuleXmlSerializer implements RuleSerializer {
@@ -75,13 +81,35 @@ public class RuleXmlSerializer implements RuleSerializer {
         }
     }
 
-    private void serializeRules(List<Rule> rules, XmlSerializer xmlSerializer) throws IOException {
-        xmlSerializer.startTag(NAMESPACE, RULE_LIST_TAG);
-        for (Rule rule : rules) {
-            serializeRule(rule, xmlSerializer);
+    private void serializeRules(List<Rule> rules, XmlSerializer xmlSerializer)
+            throws RuleSerializeException {
+        try {
+            // Determine the indexing groups and the order of the rules within each indexed group.
+            Map<Integer, TreeMap<String, List<Rule>>> indexedRules =
+                    RuleIndexingDetailsIdentifier.splitRulesIntoIndexBuckets(rules);
+
+            // Write the XML formatted rules in order.
+            xmlSerializer.startTag(NAMESPACE, RULE_LIST_TAG);
+
+            serializeRuleList(indexedRules.get(PACKAGE_NAME_INDEXED), xmlSerializer);
+            serializeRuleList(indexedRules.get(APP_CERTIFICATE_INDEXED), xmlSerializer);
+            serializeRuleList(indexedRules.get(NOT_INDEXED), xmlSerializer);
+
+            xmlSerializer.endTag(NAMESPACE, RULE_LIST_TAG);
+            xmlSerializer.endDocument();
+        } catch (Exception e) {
+            throw new RuleSerializeException(e.getMessage(), e);
         }
-        xmlSerializer.endTag(NAMESPACE, RULE_LIST_TAG);
-        xmlSerializer.endDocument();
+    }
+
+    private void serializeRuleList(TreeMap<String, List<Rule>> rulesMap,
+            XmlSerializer xmlSerializer)
+            throws IOException {
+        for (Map.Entry<String, List<Rule>> entry : rulesMap.entrySet()) {
+            for (Rule rule : entry.getValue()) {
+                serializeRule(rule, xmlSerializer);
+            }
+        }
     }
 
     private void serializeRule(Rule rule, XmlSerializer xmlSerializer) throws IOException {

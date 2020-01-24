@@ -21,8 +21,8 @@ import static com.android.internal.config.sysui.SystemUiDeviceConfigFlags.BRIGHT
 import android.content.Context;
 import android.hardware.SensorManager;
 import android.net.Uri;
-import android.os.Handler;
 import android.provider.DeviceConfig;
+import android.util.DisplayMetrics;
 import android.view.MotionEvent;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -30,7 +30,9 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.Dependency;
 import com.android.systemui.classifier.brightline.BrightLineFalsingManager;
 import com.android.systemui.classifier.brightline.FalsingDataProvider;
-import com.android.systemui.dagger.qualifiers.MainHandler;
+import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.dagger.qualifiers.UiBackground;
+import com.android.systemui.dock.DockManager;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.FalsingPlugin;
 import com.android.systemui.plugins.PluginListener;
@@ -39,6 +41,7 @@ import com.android.systemui.util.DeviceConfigProxy;
 import com.android.systemui.util.sensors.ProximitySensor;
 
 import java.io.PrintWriter;
+import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -54,17 +57,23 @@ public class FalsingManagerProxy implements FalsingManager {
     private static final String PROXIMITY_SENSOR_TAG = "FalsingManager";
 
     private final ProximitySensor mProximitySensor;
+    private final DisplayMetrics mDisplayMetrics;
     private FalsingManager mInternalFalsingManager;
     private DeviceConfig.OnPropertiesChangedListener mDeviceConfigListener;
     private final DeviceConfigProxy mDeviceConfig;
     private boolean mBrightlineEnabled;
+    private final DockManager mDockManager;
+    private Executor mUiBgExecutor;
 
     @Inject
-    FalsingManagerProxy(Context context, PluginManager pluginManager,
-            @MainHandler Handler handler,
-            ProximitySensor proximitySensor,
-            DeviceConfigProxy deviceConfig) {
+    FalsingManagerProxy(Context context, PluginManager pluginManager, @Main Executor executor,
+            DisplayMetrics displayMetrics, ProximitySensor proximitySensor,
+            DeviceConfigProxy deviceConfig, DockManager dockManager,
+            @UiBackground Executor uiBgExecutor) {
+        mDisplayMetrics = displayMetrics;
         mProximitySensor = proximitySensor;
+        mDockManager = dockManager;
+        mUiBgExecutor = uiBgExecutor;
         mProximitySensor.setTag(PROXIMITY_SENSOR_TAG);
         mProximitySensor.setSensorDelay(SensorManager.SENSOR_DELAY_GAME);
         mDeviceConfig = deviceConfig;
@@ -73,7 +82,7 @@ public class FalsingManagerProxy implements FalsingManager {
         setupFalsingManager(context);
         mDeviceConfig.addOnPropertiesChangedListener(
                 DeviceConfig.NAMESPACE_SYSTEMUI,
-                handler::post,
+                executor,
                 mDeviceConfigListener
         );
 
@@ -87,7 +96,7 @@ public class FalsingManagerProxy implements FalsingManager {
             }
 
             public void onPluginDisconnected(FalsingPlugin plugin) {
-                mInternalFalsingManager = new FalsingManagerImpl(context);
+                mInternalFalsingManager = new FalsingManagerImpl(context, mUiBgExecutor);
             }
         };
 
@@ -117,13 +126,14 @@ public class FalsingManagerProxy implements FalsingManager {
             mInternalFalsingManager.cleanup();
         }
         if (!brightlineEnabled) {
-            mInternalFalsingManager = new FalsingManagerImpl(context);
+            mInternalFalsingManager = new FalsingManagerImpl(context, mUiBgExecutor);
         } else {
             mInternalFalsingManager = new BrightLineFalsingManager(
-                    new FalsingDataProvider(context.getResources().getDisplayMetrics()),
+                    new FalsingDataProvider(mDisplayMetrics),
                     Dependency.get(KeyguardUpdateMonitor.class),
                     mProximitySensor,
-                    mDeviceConfig
+                    mDeviceConfig,
+                    mDockManager
             );
         }
     }
@@ -177,8 +187,8 @@ public class FalsingManagerProxy implements FalsingManager {
     }
 
     @Override
-    public boolean isClassiferEnabled() {
-        return mInternalFalsingManager.isClassiferEnabled();
+    public boolean isClassifierEnabled() {
+        return mInternalFalsingManager.isClassifierEnabled();
     }
 
     @Override

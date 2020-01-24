@@ -25,7 +25,7 @@ import android.provider.Settings.Secure;
 import android.util.Log;
 
 import com.android.systemui.broadcast.BroadcastDispatcher;
-import com.android.systemui.dagger.qualifiers.MainHandler;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.settings.CurrentUserTracker;
 
 import java.util.ArrayList;
@@ -40,7 +40,7 @@ public class DeviceProvisionedControllerImpl extends CurrentUserTracker implemen
         DeviceProvisionedController {
 
     protected static final String TAG = DeviceProvisionedControllerImpl.class.getSimpleName();
-    private final ArrayList<DeviceProvisionedListener> mListeners = new ArrayList<>();
+    protected final ArrayList<DeviceProvisionedListener> mListeners = new ArrayList<>();
     private final ContentResolver mContentResolver;
     private final Context mContext;
     private final Uri mDeviceProvisionedUri;
@@ -50,7 +50,7 @@ public class DeviceProvisionedControllerImpl extends CurrentUserTracker implemen
     /**
      */
     @Inject
-    public DeviceProvisionedControllerImpl(Context context, @MainHandler Handler mainHandler,
+    public DeviceProvisionedControllerImpl(Context context, @Main Handler mainHandler,
             BroadcastDispatcher broadcastDispatcher) {
         super(broadcastDispatcher);
         mContext = context;
@@ -104,7 +104,7 @@ public class DeviceProvisionedControllerImpl extends CurrentUserTracker implemen
         }
     }
 
-    private void startListening(int user) {
+    protected void startListening(int user) {
         mContentResolver.registerContentObserver(mDeviceProvisionedUri, true,
                 mSettingsObserver, 0);
         mContentResolver.registerContentObserver(mUserSetupUri, true,
@@ -112,7 +112,7 @@ public class DeviceProvisionedControllerImpl extends CurrentUserTracker implemen
         startTracking();
     }
 
-    private void stopListening() {
+    protected void stopListening() {
         stopTracking();
         mContentResolver.unregisterContentObserver(mSettingsObserver);
     }

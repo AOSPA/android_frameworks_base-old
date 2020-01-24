@@ -379,6 +379,7 @@ int collate_atoms(const Descriptor *descriptor, Atoms *atoms) {
   int errorCount = 0;
   const bool dbg = false;
 
+  int maxPushedAtomId = 2;
   for (int i = 0; i < descriptor->field_count(); i++) {
     const FieldDescriptor *atomField = descriptor->field(i);
 
@@ -404,9 +405,9 @@ int collate_atoms(const Descriptor *descriptor, Atoms *atoms) {
         atomDecl.whitelisted = true;
     }
 
-    if (atomField->options().HasExtension(os::statsd::log_from_module)) {
+    if (atomField->options().HasExtension(os::statsd::module)) {
         atomDecl.hasModule = true;
-        atomDecl.moduleName = atomField->options().GetExtension(os::statsd::log_from_module);
+        atomDecl.moduleName = atomField->options().GetExtension(os::statsd::module);
     }
 
     vector<java_type_t> signature;
@@ -447,7 +448,13 @@ int collate_atoms(const Descriptor *descriptor, Atoms *atoms) {
         }
         atoms->non_chained_decls.insert(nonChainedAtomDecl);
     }
+
+    if (atomDecl.code < PULL_ATOM_START_ID && atomDecl.code > maxPushedAtomId) {
+        maxPushedAtomId = atomDecl.code;
+    }
   }
+
+  atoms->maxPushedAtomId = maxPushedAtomId;
 
   if (dbg) {
     printf("signatures = [\n");

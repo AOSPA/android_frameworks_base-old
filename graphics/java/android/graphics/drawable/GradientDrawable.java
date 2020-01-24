@@ -22,7 +22,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.Px;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.ActivityInfo.Config;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
@@ -784,9 +784,7 @@ public class GradientDrawable extends Drawable {
             mFillPaint.setDither(st.mDither);
             mFillPaint.setColorFilter(colorFilter);
             if (colorFilter != null && st.mSolidColors == null) {
-                // If we don't have a solid color and we don't have a gradient,
-                // the app is stroking the shape, set the color to transparent
-                mFillPaint.setColor(st.mGradientColors != null ? mAlpha << 24 : 0);
+                mFillPaint.setColor(mAlpha << 24);
             }
             if (haveStroke) {
                 mStrokePaint.setAlpha(currStrokeAlpha);

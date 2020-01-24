@@ -22,6 +22,7 @@ import android.media.IMediaRouter2Manager;
 import android.media.IMediaRouterClient;
 import android.media.MediaRoute2Info;
 import android.media.MediaRouterClientState;
+import android.media.RouteSessionInfo;
 
 /**
  * {@hide}
@@ -48,29 +49,24 @@ interface IMediaRouterService {
     void sendControlRequest(IMediaRouter2Client client, in MediaRoute2Info route, in Intent request);
     void requestSetVolume2(IMediaRouter2Client client, in MediaRoute2Info route, int volume);
     void requestUpdateVolume2(IMediaRouter2Client client, in MediaRoute2Info route, int direction);
-    /**
-     * Changes the selected route of the client.
-     *
-     * @param client the client that changes it's selected route
-     * @param route the route to be selected
-     */
-    void requestSelectRoute2(IMediaRouter2Client client, in @nullable MediaRoute2Info route);
+
+    void requestCreateSession(IMediaRouter2Client client, in MediaRoute2Info route,
+            String controlCategory, int requestId);
     void setControlCategories(IMediaRouter2Client client, in List<String> categories);
+    void selectRoute(IMediaRouter2Client client, String sessionId, in MediaRoute2Info route);
+    void deselectRoute(IMediaRouter2Client client, String sessionId, in MediaRoute2Info route);
+    void transferToRoute(IMediaRouter2Client client, String sessionId, in MediaRoute2Info route);
 
     void registerManager(IMediaRouter2Manager manager, String packageName);
     void unregisterManager(IMediaRouter2Manager manager);
-    /**
-     * Changes the selected route of an application.
-     *
-     * @param manager the manager that calls the method
-     * @param packageName the package name of the client that will change the selected route
-     * @param route the route to be selected
-     */
-    void selectClientRoute2(IMediaRouter2Manager manager, String packageName,
-            in @nullable MediaRoute2Info route);
+
+    void requestCreateClientSession(IMediaRouter2Manager manager, String packageName,
+        in @nullable MediaRoute2Info route, int requestId);
 
     void requestSetVolume2Manager(IMediaRouter2Manager manager,
             in MediaRoute2Info route, int volume);
     void requestUpdateVolume2Manager(IMediaRouter2Manager manager,
             in MediaRoute2Info route, int direction);
+
+    List<RouteSessionInfo> getActiveSessions(IMediaRouter2Manager manager);
 }

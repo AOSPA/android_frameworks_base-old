@@ -18,12 +18,15 @@ package android.media;
 
 import android.media.MediaRoute2ProviderInfo;
 import android.media.MediaRoute2Info;
+import android.media.RouteSessionInfo;
 import android.os.Bundle;
 
 /**
  * @hide
  */
 oneway interface IMediaRoute2ProviderClient {
-    void updateProviderInfo(in MediaRoute2ProviderInfo info);
-    void notifyRouteSelected(String packageName, String routeId, in Bundle controlHints, int seq);
+    void updateState(in MediaRoute2ProviderInfo providerInfo,
+            in List<RouteSessionInfo> sessionInfos);
+    void notifySessionCreated(in @nullable RouteSessionInfo sessionInfo, long requestId);
+    void notifySessionInfoChanged(in RouteSessionInfo sessionInfo);
 }

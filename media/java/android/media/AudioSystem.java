@@ -19,12 +19,13 @@ package android.media;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.bluetooth.BluetoothCodecConfig;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.media.audiofx.AudioEffect;
 import android.media.audiopolicy.AudioMix;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import java.lang.annotation.Retention;
@@ -79,6 +80,8 @@ public class AudioSystem
     public static final int STREAM_TTS = 9;
     /** Used to identify the volume of audio streams for accessibility prompts */
     public static final int STREAM_ACCESSIBILITY = 10;
+    /** Used to identify the volume of audio streams for virtual assistant */
+    public static final int STREAM_ASSISTANT = 11;
     /**
      * @deprecated Use {@link #numStreamTypes() instead}
      */
@@ -91,7 +94,7 @@ public class AudioSystem
     private static native int native_get_FCC_8();
 
     // Expose only the getter method publicly so we can change it in the future
-    private static final int NUM_STREAM_TYPES = 11;
+    private static final int NUM_STREAM_TYPES = 12;
     @UnsupportedAppUsage
     public static final int getNumStreamTypes() { return NUM_STREAM_TYPES; }
 
@@ -106,7 +109,8 @@ public class AudioSystem
         "STREAM_SYSTEM_ENFORCED",
         "STREAM_DTMF",
         "STREAM_TTS",
-        "STREAM_ACCESSIBILITY"
+        "STREAM_ACCESSIBILITY",
+        "STREAM_ASSISTANT"
     };
 
     /*
@@ -910,6 +914,18 @@ public class AudioSystem
         }
     }
 
+    /**
+     * Returns a human readable name for a given device type
+     * @param device a native device type, NOT an AudioDeviceInfo type
+     * @return a string describing the device type
+     */
+    public static @NonNull String getDeviceName(int device) {
+        if ((device & DEVICE_BIT_IN) != 0) {
+            return getInputDeviceName(device);
+        }
+        return getOutputDeviceName(device);
+    }
+
     // phone state, match audio_mode???
     public static final int PHONE_STATE_OFFCALL = 0;
     public static final int PHONE_STATE_RINGING = 1;
@@ -1272,6 +1288,7 @@ public class AudioSystem
         5, // STREAM_DTMF
         5, // STREAM_TTS
         5, // STREAM_ACCESSIBILITY
+        5, // STREAM_ASSISTANT
     };
 
     public static String streamToString(int stream) {
@@ -1296,7 +1313,8 @@ public class AudioSystem
      * </ul>
      */
     public static int getPlatformType(Context context) {
-        if (context.getResources().getBoolean(com.android.internal.R.bool.config_voice_capable)) {
+        if (((TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE))
+                .isVoiceCapable()) {
             return PLATFORM_VOICE;
         } else if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
             return PLATFORM_TELEVISION;

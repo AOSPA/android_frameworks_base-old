@@ -19,23 +19,22 @@ package android.view.textclassifier;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemService;
-import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityThread;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
-import android.database.ContentObserver;
 import android.os.ServiceManager;
 import android.provider.DeviceConfig;
 import android.provider.DeviceConfig.Properties;
-import android.provider.Settings;
 import android.service.textclassifier.TextClassifierService;
 import android.view.textclassifier.TextClassifier.TextClassifierType;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.IndentingPrintWriter;
-import com.android.internal.util.Preconditions;
 
 import java.lang.ref.WeakReference;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * Interface to the text classification service.
@@ -46,7 +45,7 @@ public final class TextClassificationManager {
     private static final String LOG_TAG = "TextClassificationManager";
 
     private static final TextClassificationConstants sDefaultSettings =
-            new TextClassificationConstants(() ->  null);
+            new TextClassificationConstants();
 
     private final Object mLock = new Object();
     private final TextClassificationSessionFactory mDefaultSessionFactory =
@@ -72,7 +71,7 @@ public final class TextClassificationManager {
 
     /** @hide */
     public TextClassificationManager(Context context) {
-        mContext = Preconditions.checkNotNull(context);
+        mContext = Objects.requireNonNull(context);
         mSessionFactory = mDefaultSessionFactory;
         mSettingsObserver = new SettingsObserver(this);
     }
@@ -132,10 +131,7 @@ public final class TextClassificationManager {
     private TextClassificationConstants getSettings() {
         synchronized (mLock) {
             if (mSettings == null) {
-                mSettings = new TextClassificationConstants(
-                        () ->  Settings.Global.getString(
-                                getApplicationContext().getContentResolver(),
-                                Settings.Global.TEXT_CLASSIFIER_CONSTANTS));
+                mSettings = new TextClassificationConstants();
             }
             return mSettings;
         }
@@ -161,10 +157,10 @@ public final class TextClassificationManager {
     @NonNull
     public TextClassifier createTextClassificationSession(
             @NonNull TextClassificationContext classificationContext) {
-        Preconditions.checkNotNull(classificationContext);
+        Objects.requireNonNull(classificationContext);
         final TextClassifier textClassifier =
                 mSessionFactory.createTextClassificationSession(classificationContext);
-        Preconditions.checkNotNull(textClassifier, "Session Factory should never return null");
+        Objects.requireNonNull(textClassifier, "Session Factory should never return null");
         return textClassifier;
     }
 
@@ -174,8 +170,8 @@ public final class TextClassificationManager {
      */
     public TextClassifier createTextClassificationSession(
             TextClassificationContext classificationContext, TextClassifier textClassifier) {
-        Preconditions.checkNotNull(classificationContext);
-        Preconditions.checkNotNull(textClassifier);
+        Objects.requireNonNull(classificationContext);
+        Objects.requireNonNull(textClassifier);
         return new TextClassificationSession(classificationContext, textClassifier);
     }
 
@@ -201,11 +197,7 @@ public final class TextClassificationManager {
         try {
             // Note that fields could be null if the constructor threw.
             if (mSettingsObserver != null) {
-                getApplicationContext().getContentResolver()
-                        .unregisterContentObserver(mSettingsObserver);
-                if (ConfigParser.ENABLE_DEVICE_CONFIG) {
-                    DeviceConfig.removeOnPropertiesChangedListener(mSettingsObserver);
-                }
+                DeviceConfig.removeOnPropertiesChangedListener(mSettingsObserver);
             }
         } finally {
             super.finalize();
@@ -250,7 +242,7 @@ public final class TextClassificationManager {
 
     private boolean isSystemTextClassifierEnabled() {
         return getSettings().isSystemTextClassifierEnabled()
-                && TextClassifierService.getServiceComponentName(mContext, getSettings()) != null;
+                && TextClassifierService.getServiceComponentName(mContext) != null;
     }
 
     /** @hide */
@@ -262,6 +254,12 @@ public final class TextClassificationManager {
     private void invalidate() {
         synchronized (mLock) {
             mSettings = null;
+            invalidateTextClassifiers();
+        }
+    }
+
+    private void invalidateTextClassifiers() {
+        synchronized (mLock) {
             mLocalTextClassifier = null;
             mSystemTextClassifier = null;
         }
@@ -282,7 +280,7 @@ public final class TextClassificationManager {
 
     /** @hide */
     public static TextClassificationConstants getSettings(Context context) {
-        Preconditions.checkNotNull(context);
+        Objects.requireNonNull(context);
         final TextClassificationManager tcm =
                 context.getSystemService(TextClassificationManager.class);
         if (tcm != null) {
@@ -293,40 +291,29 @@ public final class TextClassificationManager {
         }
     }
 
-    private static final class SettingsObserver extends ContentObserver
-            implements DeviceConfig.OnPropertiesChangedListener {
+    private static final class SettingsObserver implements
+            DeviceConfig.OnPropertiesChangedListener {
 
         private final WeakReference<TextClassificationManager> mTcm;
 
         SettingsObserver(TextClassificationManager tcm) {
-            super(null);
             mTcm = new WeakReference<>(tcm);
-            tcm.getApplicationContext().getContentResolver().registerContentObserver(
-                    Settings.Global.getUriFor(Settings.Global.TEXT_CLASSIFIER_CONSTANTS),
-                    false /* notifyForDescendants */,
+            DeviceConfig.addOnPropertiesChangedListener(
+                    DeviceConfig.NAMESPACE_TEXTCLASSIFIER,
+                    ActivityThread.currentApplication().getMainExecutor(),
                     this);
-            if (ConfigParser.ENABLE_DEVICE_CONFIG) {
-                DeviceConfig.addOnPropertiesChangedListener(
-                        DeviceConfig.NAMESPACE_TEXTCLASSIFIER,
-                        ActivityThread.currentApplication().getMainExecutor(),
-                        this);
-            }
-        }
-
-        @Override
-        public void onChange(boolean selfChange) {
-            invalidateSettings();
         }
 
         @Override
         public void onPropertiesChanged(Properties properties) {
-            invalidateSettings();
-        }
-
-        private void invalidateSettings() {
             final TextClassificationManager tcm = mTcm.get();
             if (tcm != null) {
-                tcm.invalidate();
+                final Set<String> keys = properties.getKeyset();
+                if (keys.contains(TextClassificationConstants.SYSTEM_TEXT_CLASSIFIER_ENABLED)
+                        || keys.contains(
+                        TextClassificationConstants.LOCAL_TEXT_CLASSIFIER_ENABLED)) {
+                    tcm.invalidateTextClassifiers();
+                }
             }
         }
     }

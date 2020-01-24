@@ -146,12 +146,58 @@ cc_defaults {
         "libprotoutil",
         "libservices",
         "libstatslog",
+        "libstatsmetadata",
         "libstatssocket",
         "libsysutils",
         "libtimestats_proto",
         "libutils",
     ],
 }
+
+// ================
+// libstatsmetadata
+// ================
+
+genrule {
+    name: "atoms_info.h",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --atomsInfoHeader $(genDir)/atoms_info.h",
+    out: [
+        "atoms_info.h",
+    ],
+}
+
+genrule {
+    name: "atoms_info.cpp",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --atomsInfoCpp $(genDir)/atoms_info.cpp",
+    out: [
+        "atoms_info.cpp",
+    ],
+}
+
+cc_library_shared {
+    name: "libstatsmetadata",
+    host_supported: true,
+    generated_sources: [
+        "atoms_info.cpp",
+    ],
+    generated_headers: [
+        "atoms_info.h",
+    ],
+    cflags: [
+        "-Wall",
+        "-Werror",
+    ],
+    export_generated_headers: [
+        "atoms_info.h",
+    ],
+    shared_libs: [
+        "libcutils",
+        "libstatslog",
+    ],
+}
+
 
 // =========
 // statsd
@@ -351,7 +397,7 @@ cc_benchmark {
 // ====  java proto device library (for test only)  ==============================
 java_library {
     name: "statsdprotolite",
-    sdk_version: "core_platform",
+    sdk_version: "core_current",
     proto: {
         type: "lite",
         include_dirs: ["external/protobuf/src"],

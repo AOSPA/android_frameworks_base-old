@@ -16,6 +16,7 @@
 
 package android.telephony;
 
+import android.Manifest;
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -1638,14 +1639,16 @@ public final class SmsManager {
      * operation is performed on the correct subscription.
      * </p>
      *
-     * @param messageIndex is the record index of the message on ICC
-     * @return true for success
+     * @param messageIndex This is the same index used to access a message
+     * from {@link #getMessagesFromIcc()}.
+     * @return true for success, false if the operation fails. Failure can be due to IPC failure,
+     * RIL/modem error which results in SMS failed to be deleted on SIM
      *
      * {@hide}
      */
-    @UnsupportedAppUsage
-    public boolean
-    deleteMessageFromIcc(int messageIndex) {
+    @SystemApi
+    @RequiresPermission(Manifest.permission.ACCESS_MESSAGES_ON_ICC)
+    public boolean deleteMessageFromIcc(int messageIndex) {
         android.util.SeempLog.record(80);
         boolean success = false;
 
@@ -1688,6 +1691,7 @@ public final class SmsManager {
      * {@hide}
      */
     @UnsupportedAppUsage
+    @RequiresPermission(Manifest.permission.ACCESS_MESSAGES_ON_ICC)
     public boolean updateMessageOnIcc(int messageIndex, int newStatus, byte[] pdu) {
         android.util.SeempLog.record(81);
         boolean success = false;
@@ -1721,7 +1725,21 @@ public final class SmsManager {
      * operation is performed on the correct subscription.
      * </p>
      *
+     * @return <code>List</code> of <code>SmsMessage</code> objects
+     *
+     * {@hide}
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.ACCESS_MESSAGES_ON_ICC)
+    public @NonNull List<SmsMessage> getMessagesFromIcc() {
+        return getAllMessagesFromIcc();
+    }
+
+    /**
      * @return <code>ArrayList</code> of <code>SmsMessage</code> objects
+     *
+     * This is similar to {@link #getMessagesFromIcc} except that it will return ArrayList.
+     * Suggested to use {@link #getMessagesFromIcc} instead.
      *
      * {@hide}
      */
@@ -2004,13 +2022,15 @@ public final class SmsManager {
     }
 
     /**
-     * Get the capacity count of sms on Icc card
+     * Gets the total capacity of SMS storage on RUIM and SIM cards
      *
-     * @return the capacity count of sms on Icc card
+     * @return the total capacity count of SMS on RUIM and SIM cards
      * @hide
      */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public int getSmsCapacityOnIcc() {
-        int ret = -1;
+        int ret = 0;
         try {
             ISms iccISms = getISmsService();
             if (iccISms != null) {

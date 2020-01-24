@@ -33,10 +33,10 @@ import android.annotation.RequiresPermission;
 import android.annotation.StyleRes;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.app.VoiceInteractor.Request;
 import android.app.admin.DevicePolicyManager;
 import android.app.assist.AssistContent;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentCallbacks2;
 import android.content.ComponentName;
 import android.content.ContentResolver;
@@ -766,8 +766,18 @@ public class Activity extends ContextThemeWrapper
 
     private static final String REQUEST_PERMISSIONS_WHO_PREFIX = "@android:requestPermissions:";
     private static final String AUTO_FILL_AUTH_WHO_PREFIX = "@android:autoFillAuth:";
-
     private static final String KEYBOARD_SHORTCUTS_RECEIVER_PKG_NAME = "com.android.systemui";
+
+    private static final int LOG_AM_ON_CREATE_CALLED = 30057;
+    private static final int LOG_AM_ON_START_CALLED = 30059;
+    private static final int LOG_AM_ON_RESUME_CALLED = 30022;
+    private static final int LOG_AM_ON_PAUSE_CALLED = 30021;
+    private static final int LOG_AM_ON_STOP_CALLED = 30049;
+    private static final int LOG_AM_ON_RESTART_CALLED = 30058;
+    private static final int LOG_AM_ON_DESTROY_CALLED = 30060;
+    private static final int LOG_AM_ON_ACTIVITY_RESULT_CALLED = 30062;
+    private static final int LOG_AM_ON_TOP_RESUMED_GAINED_CALLED = 30064;
+    private static final int LOG_AM_ON_TOP_RESUMED_LOST_CALLED = 30065;
 
     private static class ManagedDialog {
         Dialog mDialog;
@@ -2439,8 +2449,11 @@ public class Activity extends ContextThemeWrapper
      * {@link #onProvideKeyboardShortcuts} to retrieve the shortcuts for the foreground activity.
      */
     public final void requestShowKeyboardShortcuts() {
+        final ComponentName sysuiComponent = ComponentName.unflattenFromString(
+                getResources().getString(
+                        com.android.internal.R.string.config_systemUIServiceComponent));
         Intent intent = new Intent(Intent.ACTION_SHOW_KEYBOARD_SHORTCUTS);
-        intent.setPackage(KEYBOARD_SHORTCUTS_RECEIVER_PKG_NAME);
+        intent.setPackage(sysuiComponent.getPackageName());
         sendBroadcastAsUser(intent, Process.myUserHandle());
     }
 
@@ -2448,8 +2461,11 @@ public class Activity extends ContextThemeWrapper
      * Dismiss the Keyboard Shortcuts screen.
      */
     public final void dismissKeyboardShortcutsHelper() {
+        final ComponentName sysuiComponent = ComponentName.unflattenFromString(
+                getResources().getString(
+                        com.android.internal.R.string.config_systemUIServiceComponent));
         Intent intent = new Intent(Intent.ACTION_DISMISS_KEYBOARD_SHORTCUTS);
-        intent.setPackage(KEYBOARD_SHORTCUTS_RECEIVER_PKG_NAME);
+        intent.setPackage(sysuiComponent.getPackageName());
         sendBroadcastAsUser(intent, Process.myUserHandle());
     }
 
@@ -2819,6 +2835,17 @@ public class Activity extends ContextThemeWrapper
      */
     private boolean deviceSupportsPictureInPictureMode() {
         return getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE);
+    }
+
+    /**
+     * Called by the system when picture in picture mode should be entered if supported.
+     */
+    public void onPictureInPictureRequested() {
+        // Previous recommendation was for apps to enter picture-in-picture in onUserLeaveHint()
+        // which is sent after onPause(). This new method allows the system to request the app to
+        // go into picture-in-picture decoupling it from life cycle events. For backwards
+        // compatibility we schedule the life cycle events if the app didn't override this method.
+        mMainThread.schedulePauseAndReturnToCurrentState(mToken);
     }
 
     void dispatchMovedToDisplay(int displayId, Configuration config) {
@@ -7855,6 +7882,7 @@ public class Activity extends ContextThemeWrapper
         mCurrentConfig = config;
 
         mWindow.setColorMode(info.colorMode);
+        mWindow.setPreferMinimalPostProcessing(info.preferMinimalPostProcessing);
 
         setAutofillOptions(application.getAutofillOptions());
         setContentCaptureOptions(application.getContentCaptureOptions());
@@ -8658,10 +8686,23 @@ public class Activity extends ContextThemeWrapper
      * @hide
      */
     @RequiresPermission(CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS)
-    @UnsupportedAppUsage
     public void registerRemoteAnimations(RemoteAnimationDefinition definition) {
         try {
             ActivityTaskManager.getService().registerRemoteAnimations(mToken, definition);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Unregisters all remote animations for this activity.
+     *
+     * @hide
+     */
+    @RequiresPermission(CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS)
+    public void unregisterRemoteAnimations() {
+        try {
+            ActivityTaskManager.getService().unregisterRemoteAnimations(mToken);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

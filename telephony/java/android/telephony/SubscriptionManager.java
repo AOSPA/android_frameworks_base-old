@@ -21,6 +21,7 @@ import static android.net.NetworkPolicyManager.OVERRIDE_UNMETERED;
 
 import android.Manifest;
 import android.annotation.CallbackExecutor;
+import android.annotation.ColorInt;
 import android.annotation.DurationMillisLong;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -835,6 +836,12 @@ public class SubscriptionManager {
     public static final String IMSI = "imsi";
 
     /**
+     * Whether uicc applications is set to be enabled or disabled. By default it's enabled.
+     * @hide
+     */
+    public static final String UICC_APPLICATIONS_ENABLED = "uicc_applications_enabled";
+
+    /**
      * Broadcast Action: The user has changed one of the default subs related to
      * data, phone calls, or sms</p>
      *
@@ -906,9 +913,9 @@ public class SubscriptionManager {
      * <p>
      * Contains {@link #EXTRA_SUBSCRIPTION_INDEX} to indicate which subscription
      * changed.
-     *
      * @hide
      */
+    @SystemApi
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     @RequiresPermission(android.Manifest.permission.MANAGE_SUBSCRIPTION_PLANS)
     public static final String ACTION_SUBSCRIPTION_PLANS_CHANGED
@@ -1668,14 +1675,15 @@ public class SubscriptionManager {
     }
 
     /**
-     * Set SIM icon tint color by simInfo index
+     * Set SIM icon tint color for subscription ID
      * @param tint the RGB value of icon tint color of the SIM
-     * @param subId the unique SubInfoRecord index in database
+     * @param subId the unique Subscritpion ID in database
      * @return the number of records updated
      * @hide
      */
-    @UnsupportedAppUsage
-    public int setIconTint(int tint, int subId) {
+    @SystemApi
+    @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
+    public int setIconTint(@ColorInt int tint, int subId) {
         if (VDBG) logd("[setIconTint]+ tint:" + tint + " subId:" + subId);
         return setSubscriptionPropertyHelper(subId, "setIconTint",
                 (iSub)-> iSub.setIconTint(tint, subId)
@@ -1683,15 +1691,17 @@ public class SubscriptionManager {
     }
 
     /**
-     * Set display name by simInfo index with name source
+     * Set the display name for a subscription ID
      * @param displayName the display name of SIM card
-     * @param subId the unique SubscriptionInfo index in database
+     * @param subId the unique Subscritpion ID in database
      * @param nameSource SIM display name source
      * @return the number of records updated or < 0 if invalid subId
      * @hide
      */
-    @UnsupportedAppUsage
-    public int setDisplayName(String displayName, int subId, @SimDisplayNameSource int nameSource) {
+    @SystemApi
+    @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
+    public int setDisplayName(@Nullable String displayName, int subId,
+            @SimDisplayNameSource int nameSource) {
         if (VDBG) {
             logd("[setDisplayName]+  displayName:" + displayName + " subId:" + subId
                     + " nameSource:" + nameSource);
@@ -2649,8 +2659,7 @@ public class SubscriptionManager {
 
     /**
      * Checks whether the app with the given context is authorized to manage the given subscription
-     * according to its metadata. Only supported for embedded subscriptions (if
-     * {@code SubscriptionInfo#isEmbedded} returns true).
+     * according to its metadata.
      *
      * @param info The subscription to check.
      * @return whether the app is authorized to manage this subscription per its metadata.
@@ -2663,16 +2672,16 @@ public class SubscriptionManager {
      * Checks whether the given app is authorized to manage the given subscription. An app can only
      * be authorized if it is included in the {@link android.telephony.UiccAccessRule} of the
      * {@link android.telephony.SubscriptionInfo} with the access status.
-     * Only supported for embedded subscriptions (if {@link SubscriptionInfo#isEmbedded}
-     * returns true).
      *
      * @param info The subscription to check.
      * @param packageName Package name of the app to check.
      * @return whether the app is authorized to manage this subscription per its access rules.
      * @hide
      */
-    public boolean canManageSubscription(SubscriptionInfo info, String packageName) {
-        if (info == null || info.getAllAccessRules() == null) {
+    @SystemApi
+    public boolean canManageSubscription(@Nullable SubscriptionInfo info,
+            @Nullable String packageName) {
+        if (info == null || info.getAllAccessRules() == null || packageName == null) {
             return false;
         }
         PackageManager packageManager = mContext.getPackageManager();
@@ -3166,6 +3175,34 @@ public class SubscriptionManager {
         }
 
         return false;
+    }
+
+    /**
+     * Set uicc applications being enabled or disabled.
+     * The value will be remembered on the subscription and will be applied whenever it's present.
+     * If the subscription in currently present, it will also apply the setting to modem
+     * immediately.
+     *
+     * Permissions android.Manifest.permission.MODIFY_PHONE_STATE is required
+     *
+     * @param enabled whether uicc applications are enabled or disabled.
+     * @param subscriptionId which subscription to operate on.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.MODIFY_PHONE_STATE)
+    public void setUiccApplicationsEnabled(boolean enabled, int subscriptionId) {
+        if (VDBG) {
+            logd("setUiccApplicationsEnabled subId= " + subscriptionId + " enable " + enabled);
+        }
+        try {
+            ISub iSub = ISub.Stub.asInterface(ServiceManager.getService("isub"));
+            if (iSub != null) {
+                iSub.setUiccApplicationsEnabled(enabled, subscriptionId);
+            }
+        } catch (RemoteException ex) {
+            // ignore it
+        }
     }
 
     /**

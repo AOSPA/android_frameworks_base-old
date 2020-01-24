@@ -248,6 +248,7 @@
   <java-symbol type="id" name="overlay" />
   <java-symbol type="id" name="app_ops" />
   <java-symbol type="id" name="profile_pager" />
+  <java-symbol type="id" name="content_preview_container" />
 
   <java-symbol type="attr" name="actionModeShareDrawable" />
   <java-symbol type="attr" name="alertDialogCenterButtons" />
@@ -294,7 +295,6 @@
   <java-symbol type="bool" name="config_enableBurnInProtection" />
   <java-symbol type="bool" name="config_hotswapCapable" />
   <java-symbol type="bool" name="config_mms_content_disposition_support" />
-  <java-symbol type="string" name="config_ims_package" />
   <java-symbol type="string" name="config_wwan_network_service_package" />
   <java-symbol type="string" name="config_wlan_network_service_package" />
   <java-symbol type="string" name="config_wwan_network_service_class" />
@@ -357,9 +357,19 @@
   <java-symbol type="bool" name="config_disableUsbPermissionDialogs"/>
   <java-symbol type="dimen" name="config_fullTaskSnapshotScale" />
   <java-symbol type="bool" name="config_use16BitTaskSnapshotPixelFormat" />
-  <java-symbol type="bool" name="config_lowRamTaskSnapshotsAndRecents" />
   <java-symbol type="bool" name="config_hasRecents" />
   <java-symbol type="string" name="config_recentsComponentName" />
+  <java-symbol type="string" name="config_systemUIServiceComponent" />
+  <java-symbol type="string" name="config_screenRecorderComponent" />
+  <java-symbol type="string" name="config_somnambulatorComponent" />
+  <java-symbol type="string" name="config_screenshotServiceComponent" />
+  <java-symbol type="string" name="config_screenshotErrorReceiverComponent" />
+  <java-symbol type="string" name="config_slicePermissionComponent" />
+  <java-symbol type="string" name="config_usbContaminantActivity" />
+  <java-symbol type="string" name="config_usbPermissionActivity" />
+  <java-symbol type="string" name="config_usbAccessoryUriActivity" />
+  <java-symbol type="string" name="config_usbConfirmActivity" />
+  <java-symbol type="string" name="config_usbResolverActivity" />
   <java-symbol type="integer" name="config_minNumVisibleRecentTasks_lowRam" />
   <java-symbol type="integer" name="config_maxNumVisibleRecentTasks_lowRam" />
   <java-symbol type="integer" name="config_minNumVisibleRecentTasks_grid" />
@@ -441,6 +451,7 @@
   <java-symbol type="integer" name="config_multiuserMaxRunningUsers" />
   <java-symbol type="bool" name="config_multiuserDelayUserDataLocking" />
   <java-symbol type="integer" name="config_userTypePackageWhitelistMode"/>
+  <java-symbol type="xml" name="config_user_types" />
   <java-symbol type="integer" name="config_safe_media_volume_index" />
   <java-symbol type="integer" name="config_safe_media_volume_usb_mB" />
   <java-symbol type="integer" name="config_mobile_mtu" />
@@ -457,6 +468,7 @@
   <java-symbol type="string" name="config_deviceSpecificAudioService" />
   <java-symbol type="integer" name="config_num_physical_slots" />
   <java-symbol type="array" name="config_integrityRuleProviderPackages" />
+  <java-symbol type="bool" name="config_useAssistantVolume" />
 
   <java-symbol type="color" name="tab_indicator_text_v4" />
 
@@ -1231,6 +1243,7 @@
   <java-symbol type="array" name="config_cdma_dun_supported_types" />
   <java-symbol type="array" name="config_disabledUntilUsedPreinstalledImes" />
   <java-symbol type="array" name="config_callBarringMMI" />
+  <java-symbol type="array" name="config_callBarringMMI_for_ims" />
   <java-symbol type="array" name="config_globalActionsList" />
   <java-symbol type="array" name="config_telephonyEuiccDeviceCapabilities" />
   <java-symbol type="array" name="config_telephonyHardware" />
@@ -1330,6 +1343,7 @@
   <java-symbol type="drawable" name="picture_emergency" />
   <java-symbol type="drawable" name="platlogo" />
   <java-symbol type="drawable" name="stat_notify_sync_error" />
+  <java-symbol type="drawable" name="stat_notify_wifi_in_range" />
   <java-symbol type="drawable" name="ic_wifi_signal_0" />
   <java-symbol type="drawable" name="ic_wifi_signal_1" />
   <java-symbol type="drawable" name="ic_wifi_signal_2" />
@@ -1676,7 +1690,6 @@
   <java-symbol type="bool" name="config_perDisplayFocusEnabled" />
   <java-symbol type="bool" name="config_showNavigationBar" />
   <java-symbol type="bool" name="config_supportAutoRotation" />
-  <java-symbol type="bool" name="target_honeycomb_needs_options_menu" />
   <java-symbol type="dimen" name="docked_stack_divider_thickness" />
   <java-symbol type="dimen" name="docked_stack_divider_insets" />
   <java-symbol type="dimen" name="docked_stack_minimize_thickness" />
@@ -2489,6 +2502,8 @@
   <java-symbol type="string" name="face_authenticated_no_confirmation_required" />
   <java-symbol type="string" name="face_authenticated_confirmation_required" />
 
+  <java-symbol type="array" name="config_biometric_sensors" />
+
   <java-symbol type="array" name="config_face_acquire_enroll_ignorelist" />
   <java-symbol type="array" name="config_face_acquire_vendor_enroll_ignorelist" />
   <java-symbol type="array" name="config_face_acquire_keyguard_ignorelist" />
@@ -2725,6 +2740,7 @@
   <java-symbol type="layout" name="chooser_grid_preview_file" />
   <java-symbol type="id" name="chooser_row_text_option" />
   <java-symbol type="dimen" name="chooser_row_text_option_translate" />
+  <java-symbol type="dimen" name="chooser_preview_image_max_dimen"/>
   <java-symbol type="integer" name="config_maxShortcutTargetsPerApp" />
   <java-symbol type="layout" name="resolve_grid_item" />
   <java-symbol type="id" name="day_picker_view_pager" />
@@ -2962,6 +2978,8 @@
   <!-- Resolver target actions -->
   <java-symbol type="array" name="resolver_target_actions_pin" />
   <java-symbol type="array" name="resolver_target_actions_unpin" />
+  <java-symbol type="string" name="pin_specific_target" />
+  <java-symbol type="string" name="unpin_specific_target" />
 
   <java-symbol type="array" name="non_removable_euicc_slots" />
 
@@ -3204,19 +3222,10 @@
   <java-symbol type="string" name="accessibility_shortcut_spoken_feedback" />
 
   <!-- Accessibility Button -->
-  <java-symbol type="layout" name="accessibility_button_chooser" />
   <java-symbol type="layout" name="accessibility_button_chooser_item" />
-  <java-symbol type="id" name="accessibility_button_chooser_grid" />
-  <java-symbol type="id" name="accessibility_button_prompt" />
-  <java-symbol type="id" name="accessibility_button_prompt_prologue" />
   <java-symbol type="id" name="accessibility_button_target_icon" />
   <java-symbol type="id" name="accessibility_button_target_label" />
   <java-symbol type="string" name="accessibility_magnification_chooser_text" />
-
-  <java-symbol type="string" name="accessibility_gesture_prompt_text" />
-  <java-symbol type="string" name="accessibility_gesture_3finger_prompt_text" />
-  <java-symbol type="string" name="accessibility_gesture_instructional_text" />
-  <java-symbol type="string" name="accessibility_gesture_3finger_instructional_text" />
 
   <java-symbol type="drawable" name="ic_accessibility_magnification" />
 
@@ -3801,9 +3810,15 @@
 
   <java-symbol type="string" name="accessibility_freeform_caption" />
 
+  <!-- For Wide Color Gamut -->
+  <java-symbol type="bool" name="config_enableWcgMode" />
+
   <!-- For contacts provider. -->
   <java-symbol type="string" name="config_rawContactsLocalAccountName" />
   <java-symbol type="string" name="config_rawContactsLocalAccountType" />
+
+  <!-- Assistant handles -->
+  <java-symbol type="dimen" name="assist_handle_shadow_radius" />
 
   <!-- For Pdn throttle feature -->
   <java-symbol type="bool" name="config_pdp_retry_for_29_33_55_enabled" />

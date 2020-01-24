@@ -126,7 +126,7 @@ public class DisplayContentTests extends WindowTestsBase {
         waitUntilHandlersIdle();
 
         exitingApp.mIsExiting = true;
-        exitingApp.getTask().getTaskStack().mExitingActivities.add(exitingApp);
+        exitingApp.getTask().getStack().mExitingActivities.add(exitingApp);
 
         assertForAllWindowsOrder(Arrays.asList(
                 mWallpaperWindow,
@@ -514,6 +514,13 @@ public class DisplayContentTests extends WindowTestsBase {
         // Prevent mInitialDisplayCutout from being updated from real display (e.g. null
         // if the device has no cutout).
         final DisplayContent dc = createDisplayNoUpdateDisplayInfo();
+        // This test assumes it's a top cutout on a portrait display, so if it happens to be a
+        // landscape display let's rotate it.
+        if (dc.mInitialDisplayHeight < dc.mInitialDisplayWidth) {
+            int tmp = dc.mInitialDisplayHeight;
+            dc.mInitialDisplayHeight = dc.mInitialDisplayWidth;
+            dc.mInitialDisplayWidth = tmp;
+        }
         // Rotation may use real display info to compute bound, so here also uses the
         // same width and height.
         final int displayWidth = dc.mInitialDisplayWidth;
@@ -706,13 +713,13 @@ public class DisplayContentTests extends WindowTestsBase {
                 IWindowManager.FIXED_TO_USER_ROTATION_DISABLED);
 
         final ActivityStack stack =
-                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootActivityContainer)
+                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootWindowContainer)
                         .setDisplay(dc)
                         .build();
         doReturn(true).when(stack).isVisible();
 
         final ActivityStack freeformStack =
-                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootActivityContainer)
+                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootWindowContainer)
                         .setDisplay(dc)
                         .setWindowingMode(WINDOWING_MODE_FREEFORM)
                         .build();
@@ -740,7 +747,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 : SCREEN_ORIENTATION_LANDSCAPE;
 
         final ActivityStack stack =
-                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootActivityContainer)
+                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootWindowContainer)
                         .setDisplay(dc).build();
         final ActivityRecord activity = stack.getTopMostTask().getTopNonFinishingActivity();
 
@@ -762,15 +769,14 @@ public class DisplayContentTests extends WindowTestsBase {
                 : SCREEN_ORIENTATION_LANDSCAPE;
 
         final ActivityStack stack =
-                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootActivityContainer)
+                new ActivityTestsBase.StackBuilder(mWm.mAtmService.mRootWindowContainer)
                         .setDisplay(dc).build();
         final ActivityRecord activity = stack.getTopMostTask().getTopNonFinishingActivity();
 
         activity.setRequestedOrientation(newOrientation);
 
-        // TODO(display-merge): Remove cast
-        verify((ActivityDisplay) dc, never()).updateDisplayOverrideConfigurationLocked(any(),
-                eq(activity), anyBoolean(), same(null));
+        verify(dc, never()).updateDisplayOverrideConfigurationLocked(any(), eq(activity),
+                anyBoolean(), same(null));
         assertEquals(dc.getDisplayRotation().getUserRotation(), dc.getRotation());
     }
 
@@ -964,7 +970,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 invocation -> {
                     continued[0] = true;
                     return true;
-                }).when((ActivityDisplay) dc).updateDisplayOverrideConfigurationLocked();
+                }).when(dc).updateDisplayOverrideConfigurationLocked();
         final boolean[] called = new boolean[1];
         mWm.mDisplayRotationController =
                 new IDisplayWindowRotationController.Stub() {

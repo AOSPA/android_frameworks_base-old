@@ -100,7 +100,6 @@ import com.android.internal.widget.LockscreenCredential;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.devicepolicy.DevicePolicyManagerService.RestrictionsListener;
-import com.android.server.pm.UserRestrictionsUtils;
 
 import org.hamcrest.BaseMatcher;
 import org.hamcrest.Description;
@@ -1162,7 +1161,8 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 MockUtils.checkUserHandle(UserHandle.USER_SYSTEM));
 
         verify(getServices().userManagerInternal).setDevicePolicyUserRestrictions(
-                eq(UserHandle.USER_SYSTEM), eq(null),
+                eq(UserHandle.USER_SYSTEM),
+                MockUtils.checkUserRestrictions(),
                 eq(UserManagerInternal.OWNER_TYPE_DEVICE_OWNER));
 
         verify(getServices().usageStatsManagerInternal).setActiveAdminApps(
@@ -1718,28 +1718,6 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         assertTrue(dpm.setDeviceOwner(admin1, "owner-name",
                 UserHandle.USER_SYSTEM));
 
-        // Check that the user restrictions that are enabled by default are set. Then unset them.
-        final String[] defaultRestrictions = UserRestrictionsUtils
-                .getDefaultEnabledForDeviceOwner().toArray(new String[0]);
-        DpmTestUtils.assertRestrictions(
-                DpmTestUtils.newRestrictions(defaultRestrictions),
-                dpms.getDeviceOwnerAdminLocked().ensureUserRestrictions()
-        );
-        DpmTestUtils.assertRestrictions(
-                DpmTestUtils.newRestrictions(defaultRestrictions),
-                dpm.getUserRestrictions(admin1)
-        );
-        verify(getServices().userManagerInternal).setDevicePolicyUserRestrictions(
-                eq(UserHandle.USER_SYSTEM),
-                MockUtils.checkUserRestrictions(defaultRestrictions),
-                eq(UserManagerInternal.OWNER_TYPE_DEVICE_OWNER)
-        );
-        reset(getServices().userManagerInternal);
-
-        for (String restriction : defaultRestrictions) {
-            dpm.clearUserRestriction(admin1, restriction);
-        }
-
         assertNoDeviceOwnerRestrictions();
         reset(getServices().userManagerInternal);
 
@@ -1966,7 +1944,6 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         // TODO Make sure restrictions are written to the file.
     }
 
-    // TODO: (b/138709470) test addUserRestriction as PO of an organization-owned device
     public void testSetUserRestriction_asPoOfOrgOwnedDevice() throws Exception {
         final int MANAGED_PROFILE_USER_ID = DpmMockContext.CALLER_USER_HANDLE;
         final int MANAGED_PROFILE_ADMIN_UID =
@@ -1979,22 +1956,32 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         when(getServices().userManager.getProfileParent(MANAGED_PROFILE_USER_ID))
                 .thenReturn(new UserInfo(UserHandle.USER_SYSTEM, "user system", 0));
 
+        parentDpm.addUserRestriction(admin1, UserManager.DISALLOW_CONFIG_DATE_TIME);
+        verify(getServices().userManagerInternal).setDevicePolicyUserRestrictions(
+                eq(MANAGED_PROFILE_USER_ID),
+                MockUtils.checkUserRestrictions(UserManager.DISALLOW_CONFIG_DATE_TIME),
+                eq(UserManagerInternal.OWNER_TYPE_PROFILE_OWNER_OF_ORGANIZATION_OWNED_DEVICE));
+        reset(getServices().userManagerInternal);
+
+        parentDpm.clearUserRestriction(admin1, UserManager.DISALLOW_CONFIG_DATE_TIME);
+        reset(getServices().userManagerInternal);
+
         parentDpm.setCameraDisabled(admin1, true);
         verify(getServices().userManagerInternal).setDevicePolicyUserRestrictions(
-                eq(UserHandle.USER_SYSTEM),
+                eq(MANAGED_PROFILE_USER_ID),
                 MockUtils.checkUserRestrictions(UserManager.DISALLOW_CAMERA),
                 eq(UserManagerInternal.OWNER_TYPE_PROFILE_OWNER_OF_ORGANIZATION_OWNED_DEVICE));
         reset(getServices().userManagerInternal);
 
         parentDpm.setCameraDisabled(admin1, false);
         verify(getServices().userManagerInternal).setDevicePolicyUserRestrictions(
-                eq(UserHandle.USER_SYSTEM),
+                eq(MANAGED_PROFILE_USER_ID),
                 MockUtils.checkUserRestrictions(),
                 eq(UserManagerInternal.OWNER_TYPE_PROFILE_OWNER_OF_ORGANIZATION_OWNED_DEVICE));
         reset(getServices().userManagerInternal);
     }
 
-    public void testDefaultEnabledUserRestrictions() throws Exception {
+    public void testNoDefaultEnabledUserRestrictions() throws Exception {
         mContext.callerPermissions.add(permission.MANAGE_DEVICE_ADMINS);
         mContext.callerPermissions.add(permission.MANAGE_USERS);
         mContext.callerPermissions.add(permission.MANAGE_PROFILE_AND_DEVICE_OWNERS);
@@ -2012,29 +1999,6 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         assertTrue(dpm.setDeviceOwner(admin1, "owner-name",
                 UserHandle.USER_SYSTEM));
 
-        // Check that the user restrictions that are enabled by default are set. Then unset them.
-        String[] defaultRestrictions = UserRestrictionsUtils
-                .getDefaultEnabledForDeviceOwner().toArray(new String[0]);
-        assertTrue(defaultRestrictions.length > 0);
-        DpmTestUtils.assertRestrictions(
-                DpmTestUtils.newRestrictions(defaultRestrictions),
-                dpms.getDeviceOwnerAdminLocked().ensureUserRestrictions()
-        );
-        DpmTestUtils.assertRestrictions(
-                DpmTestUtils.newRestrictions(defaultRestrictions),
-                dpm.getUserRestrictions(admin1)
-        );
-        verify(getServices().userManagerInternal).setDevicePolicyUserRestrictions(
-                eq(UserHandle.USER_SYSTEM),
-                MockUtils.checkUserRestrictions(defaultRestrictions),
-                eq(UserManagerInternal.OWNER_TYPE_DEVICE_OWNER)
-        );
-        reset(getServices().userManagerInternal);
-
-        for (String restriction : defaultRestrictions) {
-            dpm.clearUserRestriction(admin1, restriction);
-        }
-
         assertNoDeviceOwnerRestrictions();
 
         // Initialize DPMS again and check that the user restriction wasn't enabled again.
@@ -2044,47 +2008,6 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         assertNotNull(dpms.getDeviceOwnerAdminLocked());
 
         assertNoDeviceOwnerRestrictions();
-
-        // Add a new restriction to the default set, initialize DPMS, and check that the restriction
-        // is set as it wasn't enabled during setDeviceOwner.
-        final String newDefaultEnabledRestriction = UserManager.DISALLOW_REMOVE_MANAGED_PROFILE;
-        assertFalse(UserRestrictionsUtils
-                .getDefaultEnabledForDeviceOwner().contains(newDefaultEnabledRestriction));
-        UserRestrictionsUtils
-                .getDefaultEnabledForDeviceOwner().add(newDefaultEnabledRestriction);
-        try {
-            reset(getServices().userManagerInternal);
-            initializeDpms();
-            assertTrue(dpm.isDeviceOwnerApp(admin1.getPackageName()));
-            assertNotNull(dpms.getDeviceOwnerAdminLocked());
-
-            DpmTestUtils.assertRestrictions(
-                DpmTestUtils.newRestrictions(newDefaultEnabledRestriction),
-                dpms.getDeviceOwnerAdminLocked().ensureUserRestrictions()
-            );
-            DpmTestUtils.assertRestrictions(
-                DpmTestUtils.newRestrictions(newDefaultEnabledRestriction),
-                dpm.getUserRestrictions(admin1)
-            );
-            verify(getServices().userManagerInternal, atLeast(1)).setDevicePolicyUserRestrictions(
-                    eq(UserHandle.USER_SYSTEM),
-                    MockUtils.checkUserRestrictions(newDefaultEnabledRestriction),
-                    eq(UserManagerInternal.OWNER_TYPE_DEVICE_OWNER)
-            );
-            reset(getServices().userManagerInternal);
-
-            // Remove the restriction.
-            dpm.clearUserRestriction(admin1, newDefaultEnabledRestriction);
-
-            // Initialize DPMS again. The restriction shouldn't be enabled for a second time.
-            initializeDpms();
-            assertTrue(dpm.isDeviceOwnerApp(admin1.getPackageName()));
-            assertNotNull(dpms.getDeviceOwnerAdminLocked());
-            assertNoDeviceOwnerRestrictions();
-        } finally {
-            UserRestrictionsUtils
-                .getDefaultEnabledForDeviceOwner().remove(newDefaultEnabledRestriction);
-        }
     }
 
     private void assertNoDeviceOwnerRestrictions() {
@@ -3671,6 +3594,45 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         dpm.setAutoTime(admin1, false);
         verify(getServices().settings).settingsGlobalPutInt(Settings.Global.AUTO_TIME, 0);
+    }
+
+    public void testSetAutoTimeZoneModifiesSetting() throws Exception {
+        mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
+        setupDeviceOwner();
+        dpm.setAutoTimeZone(admin1, true);
+        verify(getServices().settings).settingsGlobalPutInt(Settings.Global.AUTO_TIME_ZONE, 1);
+
+        dpm.setAutoTimeZone(admin1, false);
+        verify(getServices().settings).settingsGlobalPutInt(Settings.Global.AUTO_TIME_ZONE, 0);
+    }
+
+    public void testSetAutoTimeZoneWithPOOnUser0() throws Exception {
+        mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
+        setupProfileOwnerOnUser0();
+        dpm.setAutoTimeZone(admin1, true);
+        verify(getServices().settings).settingsGlobalPutInt(Settings.Global.AUTO_TIME_ZONE, 1);
+
+        dpm.setAutoTimeZone(admin1, false);
+        verify(getServices().settings).settingsGlobalPutInt(Settings.Global.AUTO_TIME_ZONE, 0);
+    }
+
+    public void testSetAutoTimeZoneFailWithPONotOnUser0() throws Exception {
+        setupProfileOwner();
+        assertExpectException(SecurityException.class, null,
+                () -> dpm.setAutoTimeZone(admin1, false));
+        verify(getServices().settings, never()).settingsGlobalPutInt(Settings.Global.AUTO_TIME_ZONE,
+                0);
+    }
+
+    public void testSetAutoTimeZoneWithPOOfOrganizationOwnedDevice() throws Exception {
+        setupProfileOwner();
+        configureProfileOwnerOfOrgOwnedDevice(admin1, DpmMockContext.CALLER_USER_HANDLE);
+
+        dpm.setAutoTimeZone(admin1, true);
+        verify(getServices().settings).settingsGlobalPutInt(Settings.Global.AUTO_TIME_ZONE, 1);
+
+        dpm.setAutoTimeZone(admin1, false);
+        verify(getServices().settings).settingsGlobalPutInt(Settings.Global.AUTO_TIME_ZONE, 0);
     }
 
     public void testSetTime() throws Exception {
@@ -5546,6 +5508,38 @@ public class DevicePolicyManagerTest extends DpmTestBase {
             dpm.markProfileOwnerOnOrganizationOwnedDevice(who);
         });
         mServiceContext.binder.restoreCallingIdentity(ident);
+    }
+
+    public void testGetCrossProfilePackages_notSet_returnsEmpty() {
+        setAsProfileOwner(admin1);
+        assertTrue(dpm.getCrossProfilePackages(admin1).isEmpty());
+    }
+
+    public void testGetCrossProfilePackages_notSet_dpmsReinitialized_returnsEmpty() {
+        setAsProfileOwner(admin1);
+
+        initializeDpms();
+
+        assertTrue(dpm.getCrossProfilePackages(admin1).isEmpty());
+    }
+
+    public void testGetCrossProfilePackages_whenSet_returnsEqual() {
+        setAsProfileOwner(admin1);
+        Set<String> packages = Collections.singleton("TEST_PACKAGE");
+
+        dpm.setCrossProfilePackages(admin1, packages);
+
+        assertEquals(packages, dpm.getCrossProfilePackages(admin1));
+    }
+
+    public void testGetCrossProfilePackages_whenSet_dpmsReinitialized_returnsEqual() {
+        setAsProfileOwner(admin1);
+        Set<String> packages = Collections.singleton("TEST_PACKAGE");
+
+        dpm.setCrossProfilePackages(admin1, packages);
+        initializeDpms();
+
+        assertEquals(packages, dpm.getCrossProfilePackages(admin1));
     }
 
     // admin1 is the outgoing DPC, adminAnotherPakcage is the incoming one.

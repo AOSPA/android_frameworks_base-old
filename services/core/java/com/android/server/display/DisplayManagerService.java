@@ -433,7 +433,8 @@ public final class DisplayManagerService extends SystemService {
             recordTopInsetLocked(mLogicalDisplays.get(Display.DEFAULT_DISPLAY));
         }
 
-        mDisplayModeDirector.setDisplayModeListener(new AllowedDisplayModeObserver());
+        mDisplayModeDirector.setDesiredDisplayModeSpecsListener(
+                new DesiredDisplayModeSpecsObserver());
         mDisplayModeDirector.start(mSensorManager);
 
         mHandler.sendEmptyMessage(MSG_REGISTER_ADDITIONAL_DISPLAY_ADAPTERS);
@@ -1207,12 +1208,16 @@ public final class DisplayManagerService extends SystemService {
     }
 
     private void setDisplayPropertiesInternal(int displayId, boolean hasContent,
-            float requestedRefreshRate, int requestedModeId, boolean inTraversal) {
+            float requestedRefreshRate, int requestedModeId, boolean requestedMinimalPostProcessing,
+            boolean inTraversal) {
         synchronized (mSyncRoot) {
             LogicalDisplay display = mLogicalDisplays.get(displayId);
             if (display == null) {
                 return;
             }
+
+            boolean shouldScheduleTraversal = false;
+
             if (display.hasContentLocked() != hasContent) {
                 if (DEBUG) {
                     Slog.d(TAG, "Display " + displayId + " hasContent flag changed: "
@@ -1220,7 +1225,7 @@ public final class DisplayManagerService extends SystemService {
                 }
 
                 display.setHasContentLocked(hasContent);
-                scheduleTraversalLocked(inTraversal);
+                shouldScheduleTraversal = true;
             }
             if (requestedModeId == 0 && requestedRefreshRate != 0) {
                 // Scan supported modes returned by display.getInfo() to find a mode with the same
@@ -1230,6 +1235,20 @@ public final class DisplayManagerService extends SystemService {
             }
             mDisplayModeDirector.getAppRequestObserver().setAppRequestedMode(
                     displayId, requestedModeId);
+
+
+            if (display.getDisplayInfoLocked().minimalPostProcessingSupported
+                    && (display.getRequestedMinimalPostProcessingLocked()
+                    != requestedMinimalPostProcessing)) {
+
+                display.setRequestedMinimalPostProcessingLocked(requestedMinimalPostProcessing);
+
+                shouldScheduleTraversal = true;
+            }
+
+            if (shouldScheduleTraversal) {
+                scheduleTraversalLocked(inTraversal);
+            }
         }
     }
 
@@ -1342,19 +1361,24 @@ public final class DisplayManagerService extends SystemService {
         return SurfaceControl.getDisplayedContentSample(token, maxFrames, timestamp);
     }
 
-    private void onAllowedDisplayModesChangedInternal() {
+    private void onDesiredDisplayModeSpecsChangedInternal() {
         boolean changed = false;
         synchronized (mSyncRoot) {
             final int count = mLogicalDisplays.size();
             for (int i = 0; i < count; i++) {
                 LogicalDisplay display = mLogicalDisplays.valueAt(i);
                 int displayId = mLogicalDisplays.keyAt(i);
-                int[] allowedModes = mDisplayModeDirector.getAllowedModes(displayId);
-                // Note that order is important here since not all display devices are capable of
-                // automatically switching, so we do actually want to check for equality and not
-                // just equivalent contents (regardless of order).
-                if (!Arrays.equals(allowedModes, display.getAllowedDisplayModesLocked())) {
-                    display.setAllowedDisplayModesLocked(allowedModes);
+                DisplayModeDirector.DesiredDisplayModeSpecs desiredDisplayModeSpecs =
+                        mDisplayModeDirector.getDesiredDisplayModeSpecs(displayId);
+                DisplayModeDirector.DesiredDisplayModeSpecs existingDesiredDisplayModeSpecs =
+                        display.getDesiredDisplayModeSpecsLocked();
+                if (DEBUG) {
+                    Slog.i(TAG,
+                            "Comparing display specs: " + desiredDisplayModeSpecs
+                                    + ", existing: " + existingDesiredDisplayModeSpecs);
+                }
+                if (!desiredDisplayModeSpecs.equals(existingDesiredDisplayModeSpecs)) {
+                    display.setDesiredDisplayModeSpecsLocked(desiredDisplayModeSpecs);
                     changed = true;
                 }
             }
@@ -2358,6 +2382,7 @@ public final class DisplayManagerService extends SystemService {
     }
 
     private final class LocalService extends DisplayManagerInternal {
+
         @Override
         public void initPowerManagement(final DisplayPowerCallbacks callbacks, Handler handler,
                 SensorManager sensorManager) {
@@ -2446,9 +2471,10 @@ public final class DisplayManagerService extends SystemService {
 
         @Override
         public void setDisplayProperties(int displayId, boolean hasContent,
-                float requestedRefreshRate, int requestedMode, boolean inTraversal) {
+                float requestedRefreshRate, int requestedMode,
+                boolean requestedMinimalPostProcessing, boolean inTraversal) {
             setDisplayPropertiesInternal(displayId, hasContent, requestedRefreshRate,
-                    requestedMode, inTraversal);
+                    requestedMode, requestedMinimalPostProcessing, inTraversal);
         }
 
         @Override
@@ -2503,9 +2529,10 @@ public final class DisplayManagerService extends SystemService {
 
     }
 
-    class AllowedDisplayModeObserver implements DisplayModeDirector.DisplayModeListener {
-        public void onAllowedDisplayModesChanged() {
-            onAllowedDisplayModesChangedInternal();
+    class DesiredDisplayModeSpecsObserver
+            implements DisplayModeDirector.DesiredDisplayModeSpecsListener {
+        public void onDesiredDisplayModeSpecsChanged() {
+            onDesiredDisplayModeSpecsChangedInternal();
         }
     }
 }

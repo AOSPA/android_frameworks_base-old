@@ -135,7 +135,7 @@ class ResetTargetTaskHelper {
                                 + r + " out to bottom task " + targetTask);
                     } else {
                         targetTask = mParent.createTask(
-                                mParent.mStackSupervisor.getNextTaskIdForUserLocked(r.mUserId),
+                                mParent.mStackSupervisor.getNextTaskIdForUser(r.mUserId),
                                 r.info, null /* intent */, null /* voiceSession */,
                                 null /* voiceInteractor */, false /* toTop */);
                         targetTask.affinityIntent = r.intent;
@@ -258,10 +258,10 @@ class ResetTargetTaskHelper {
     private void processCreatedTasks() {
         if (mCreatedTasks.isEmpty()) return;
 
-        ActivityDisplay display = mParent.getDisplay();
+        DisplayContent display = mParent.getDisplay();
         final boolean singleTaskInstanceDisplay = display.isSingleTaskInstance();
         if (singleTaskInstanceDisplay) {
-            display = mParent.mRootActivityContainer.getDefaultDisplay();
+            display = mParent.mRootWindowContainer.getDefaultDisplay();
         }
 
         final int windowingMode = mParent.getWindowingMode();

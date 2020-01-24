@@ -388,6 +388,7 @@ interface IActivityManager {
     void requestFullBugReport();
     void requestRemoteBugReport();
     boolean launchBugReportHandlerApp();
+    List<String> getBugreportWhitelistedPackages();
 
     @UnsupportedAppUsage
     Intent getIntentForIntentSender(in IIntentSender sender);
@@ -582,4 +583,9 @@ interface IActivityManager {
      * unlockProgressListener can be null if monitoring progress is not necessary.
      */
     boolean startUserInForegroundWithListener(int userid, IProgressListener unlockProgressListener);
+
+    /**
+     * Method for the app to tell system that it's wedged and would like to trigger an ANR.
+     */
+    void appNotResponding(String reason);
 }

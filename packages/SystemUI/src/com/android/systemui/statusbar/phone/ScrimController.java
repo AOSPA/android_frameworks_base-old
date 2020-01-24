@@ -45,7 +45,7 @@ import com.android.systemui.DejankUtils;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
-import com.android.systemui.dagger.qualifiers.MainResources;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.statusbar.ScrimView;
 import com.android.systemui.statusbar.notification.stack.ViewState;
@@ -192,7 +192,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
     @Inject
     public ScrimController(LightBarController lightBarController, DozeParameters dozeParameters,
             AlarmManager alarmManager, KeyguardStateController keyguardStateController,
-            @MainResources Resources resources,
+            @Main Resources resources,
             DelayedWakeLock.Builder delayedWakeLockBuilder, Handler handler,
             KeyguardUpdateMonitor keyguardUpdateMonitor, SysuiColorExtractor sysuiColorExtractor,
             DockManager dockManager) {
@@ -360,7 +360,8 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
             return false;
         }
 
-        if (mState == ScrimState.AOD && mDozeParameters.getAlwaysOn()) {
+        if (mState == ScrimState.AOD
+                && (mDozeParameters.getAlwaysOn() || mDockManager.isDocked())) {
             return true;
         }
 
@@ -560,7 +561,7 @@ public class ScrimController implements ViewTreeObserver.OnPreDrawListener, OnCo
     }
 
     protected void scheduleUpdate() {
-        if (mUpdatePending) return;
+        if (mUpdatePending || mScrimBehind == null) return;
 
         // Make sure that a frame gets scheduled.
         mScrimBehind.invalidate();

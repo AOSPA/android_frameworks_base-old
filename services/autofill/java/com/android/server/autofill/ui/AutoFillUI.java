@@ -37,6 +37,7 @@ import android.service.autofill.ValueFinder;
 import android.text.TextUtils;
 import android.util.Slog;
 import android.view.KeyEvent;
+import android.view.SurfaceControl;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillManager;
 import android.view.autofill.IAutofillWindowPresenter;
@@ -44,6 +45,7 @@ import android.widget.Toast;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.internal.view.inline.IInlineContentCallback;
 import com.android.server.LocalServices;
 import com.android.server.UiModeManagerInternal;
 import com.android.server.UiThread;
@@ -166,6 +168,36 @@ public final class AutoFillUI {
             }
             if (mFillUi != null) {
                 mFillUi.setFilterText(filterText);
+            }
+        });
+    }
+
+    /**
+     * TODO(b/137800469): Fill in javadoc.
+     * TODO(b/137800469): peoperly manage lifecycle of suggestions surfaces.
+     */
+    public void getSuggestionSurfaceForShowing(@NonNull Dataset dataset,
+            @NonNull FillResponse response, AutofillId autofillId, int width, int height,
+            IInlineContentCallback cb) {
+        if (dataset == null) {
+            Slog.w(TAG, "getSuggestionSurfaceForShowing() called with null dataset");
+        }
+        mHandler.post(() -> {
+            final InlineSuggestionUi inlineSuggestionUi = new InlineSuggestionUi(mContext);
+            final SurfaceControl suggestionSurface = inlineSuggestionUi.inflate(dataset,
+                    autofillId, width, height, v -> {
+                        Slog.d(TAG, "Inline suggestion clicked");
+                        hideFillUiUiThread(mCallback, true);
+                        if (mCallback != null) {
+                            final int datasetIndex = response.getDatasets().indexOf(dataset);
+                            mCallback.fill(response.getRequestId(), datasetIndex, dataset);
+                        }
+                    });
+
+            try {
+                cb.onContent(suggestionSurface);
+            } catch (RemoteException e) {
+                Slog.w(TAG, "RemoteException replying onContent(" + suggestionSurface + "): " + e);
             }
         });
     }
@@ -465,7 +497,7 @@ public final class AutoFillUI {
 
         if (mCreateFillUiRunnable != null) {
             if (sDebug) Slog.d(TAG, "start the pending fill UI request..");
-            mCreateFillUiRunnable.run();
+            mHandler.post(mCreateFillUiRunnable);
             mCreateFillUiRunnable = null;
         }
     }

@@ -21,9 +21,10 @@ import static android.Manifest.permission.CONFIGURE_DISPLAY_COLOR_MODE;
 import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SuppressLint;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.app.KeyguardManager;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -43,7 +44,9 @@ import android.util.Log;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Provides information about the size and density of a logical display.
@@ -381,6 +384,23 @@ public final class Display {
     public static final int COLOR_MODE_ADOBE_RGB = 8;
     /** @hide */
     public static final int COLOR_MODE_DISPLAY_P3 = 9;
+
+    /** @hide **/
+    @IntDef(prefix = {"COLOR_MODE_"}, value = {
+            COLOR_MODE_INVALID,
+            COLOR_MODE_DEFAULT,
+            COLOR_MODE_BT601_625,
+            COLOR_MODE_BT601_625_UNADJUSTED,
+            COLOR_MODE_BT601_525,
+            COLOR_MODE_BT601_525_UNADJUSTED,
+            COLOR_MODE_BT709,
+            COLOR_MODE_DCI_P3,
+            COLOR_MODE_SRGB,
+            COLOR_MODE_ADOBE_RGB,
+            COLOR_MODE_DISPLAY_P3
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ColorMode {}
 
     /**
      * Indicates that when display is removed, all its activities will be moved to the primary
@@ -857,6 +877,31 @@ public final class Display {
     }
 
     /**
+     * <p> Returns true if the connected display can be switched into a mode with minimal
+     * post processing. </p>
+     *
+     * <p> If the Display sink is connected via HDMI, this method will return true if the
+     * display supports either Auto Low Latency Mode or Game Content Type.
+     *
+     * <p> If the Display sink has an internal connection or uses some other protocol than
+     * HDMI, this method will return true if the sink can be switched into an
+     * implementation-defined low latency image processing mode. </p>
+     *
+     * <p> The ability to switch to a mode with minimal post processing may be disabled
+     * by a user setting in the system settings menu. In that case, this method returns
+     * false. </p>
+     *
+     * @see android.view.Window#setPreferMinimalPostProcessing
+     */
+    @SuppressLint("VisiblySynchronized")
+    public boolean isMinimalPostProcessingSupported() {
+        synchronized (this) {
+            updateDisplayInfoLocked();
+            return mDisplayInfo.minimalPostProcessingSupported;
+        }
+    }
+
+    /**
      * Request the display applies a color mode.
      * @hide
      */
@@ -956,6 +1001,37 @@ public final class Display {
             updateDisplayInfoLocked();
             int[] colorModes = mDisplayInfo.supportedColorModes;
             return Arrays.copyOf(colorModes, colorModes.length);
+        }
+    }
+
+    /**
+     * Gets the supported wide color gamuts of this device.
+     *
+     * @return Supported WCG color spaces.
+     * @hide
+     */
+    public @ColorMode ColorSpace[] getSupportedWideColorGamut() {
+        synchronized (this) {
+            final ColorSpace[] defaultColorSpaces = new ColorSpace[0];
+            updateDisplayInfoLocked();
+            if (!isWideColorGamut()) {
+                return defaultColorSpaces;
+            }
+
+            final int[] colorModes = getSupportedColorModes();
+            final List<ColorSpace> colorSpaces = new ArrayList<>();
+            for (int colorMode : colorModes) {
+                // Refer to DisplayInfo#isWideColorGamut.
+                switch (colorMode) {
+                    case COLOR_MODE_DCI_P3:
+                        colorSpaces.add(ColorSpace.get(ColorSpace.Named.DCI_P3));
+                        break;
+                    case COLOR_MODE_DISPLAY_P3:
+                        colorSpaces.add(ColorSpace.get(ColorSpace.Named.DISPLAY_P3));
+                        break;
+                }
+            }
+            return colorSpaces.toArray(defaultColorSpaces);
         }
     }
 

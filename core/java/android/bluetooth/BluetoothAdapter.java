@@ -25,7 +25,6 @@ import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
-import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityThread;
 import android.bluetooth.BluetoothProfile.ConnectionPolicy;
 import android.bluetooth.le.BluetoothLeAdvertiser;
@@ -36,6 +35,7 @@ import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.os.BatteryStats;
 import android.os.Binder;
@@ -849,7 +849,8 @@ public final class BluetoothAdapter {
         }
         synchronized (mLock) {
             if (sBluetoothLeScanner == null) {
-                sBluetoothLeScanner = new BluetoothLeScanner(mManagerService);
+                sBluetoothLeScanner = new BluetoothLeScanner(mManagerService, getOpPackageName(),
+                        getFeatureId());
             }
         }
         return sBluetoothLeScanner;
@@ -1643,6 +1644,15 @@ public final class BluetoothAdapter {
         return ActivityThread.currentOpPackageName();
     }
 
+    private String getFeatureId() {
+        // Workaround for legacy API for getting a BluetoothAdapter not
+        // passing a context
+        if (mContext != null) {
+            return mContext.getFeatureId();
+        }
+        return null;
+    }
+
     /**
      * Start the remote device discovery process.
      * <p>The discovery process usually involves an inquiry scan of about 12
@@ -1681,7 +1691,7 @@ public final class BluetoothAdapter {
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
-                return mService.startDiscovery(getOpPackageName());
+                return mService.startDiscovery(getOpPackageName(), getFeatureId());
             }
         } catch (RemoteException e) {
             Log.e(TAG, "", e);

@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import static android.os.Process.NOBODY_UID;
@@ -62,6 +63,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 
 import android.app.ActivityOptions;
+import android.app.WindowConfiguration;
 import android.app.servertransaction.ActivityConfigurationChangeItem;
 import android.app.servertransaction.ClientTransaction;
 import android.app.servertransaction.PauseActivityItem;
@@ -70,6 +72,7 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.PersistableBundle;
 import android.platform.test.annotations.Presubmit;
@@ -106,7 +109,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
     @Before
     public void setUp() throws Exception {
-        mStack = new StackBuilder(mRootActivityContainer).build();
+        mStack = new StackBuilder(mRootWindowContainer).build();
         mTask = mStack.getBottomMostTask();
         mActivity = mTask.getTopNonFinishingActivity();
 
@@ -130,7 +133,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
     public void testStackCleanupOnTaskRemoval() {
         mStack.removeChild(mTask, null /*reason*/);
         // Stack should be gone on task removal.
-        assertNull(mService.mRootActivityContainer.getStack(mStack.mStackId));
+        assertNull(mService.mRootWindowContainer.getStack(mStack.mStackId));
     }
 
     @Test
@@ -376,6 +379,64 @@ public class ActivityRecordTests extends ActivityTestsBase {
     }
 
     @Test
+    public void ignoreRequestedOrientationInFreeformWindows() {
+        mStack.setWindowingMode(WindowConfiguration.WINDOWING_MODE_FREEFORM);
+        final Rect stableRect = new Rect();
+        mStack.getDisplay().mDisplayContent.getStableRect(stableRect);
+        final boolean isScreenPortrait = stableRect.width() <= stableRect.height();
+        final Rect bounds = new Rect(stableRect);
+        if (isScreenPortrait) {
+            // Landscape bounds
+            final int newHeight = stableRect.width() - 10;
+            bounds.top = stableRect.top + (stableRect.height() - newHeight) / 2;
+            bounds.bottom = bounds.top + newHeight;
+        } else {
+            // Portrait bounds
+            final int newWidth = stableRect.height() - 10;
+            bounds.left = stableRect.left + (stableRect.width() - newWidth) / 2;
+            bounds.right = bounds.left + newWidth;
+        }
+        mTask.setBounds(bounds);
+
+        // Requests orientation that's different from its bounds.
+        mActivity.setRequestedOrientation(
+                isScreenPortrait ? SCREEN_ORIENTATION_PORTRAIT : SCREEN_ORIENTATION_LANDSCAPE);
+
+        // Asserts it has orientation derived from bounds.
+        assertEquals(isScreenPortrait ? ORIENTATION_LANDSCAPE : ORIENTATION_PORTRAIT,
+                mActivity.getConfiguration().orientation);
+    }
+
+    @Test
+    public void ignoreRequestedOrientationInSplitWindows() {
+        mStack.setWindowingMode(WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
+        final Rect stableRect = new Rect();
+        mStack.getDisplay().mDisplayContent.getStableRect(stableRect);
+        final boolean isScreenPortrait = stableRect.width() <= stableRect.height();
+        final Rect bounds = new Rect(stableRect);
+        if (isScreenPortrait) {
+            // Landscape bounds
+            final int newHeight = stableRect.width() - 10;
+            bounds.top = stableRect.top + (stableRect.height() - newHeight) / 2;
+            bounds.bottom = bounds.top + newHeight;
+        } else {
+            // Portrait bounds
+            final int newWidth = stableRect.height() - 10;
+            bounds.left = stableRect.left + (stableRect.width() - newWidth) / 2;
+            bounds.right = bounds.left + newWidth;
+        }
+        mTask.setBounds(bounds);
+
+        // Requests orientation that's different from its bounds.
+        mActivity.setRequestedOrientation(
+                isScreenPortrait ? SCREEN_ORIENTATION_PORTRAIT : SCREEN_ORIENTATION_LANDSCAPE);
+
+        // Asserts it has orientation derived from bounds.
+        assertEquals(isScreenPortrait ? ORIENTATION_LANDSCAPE : ORIENTATION_PORTRAIT,
+                mActivity.getConfiguration().orientation);
+    }
+
+    @Test
     public void testShouldMakeActive_deferredResume() {
         mActivity.setState(ActivityStack.ActivityState.STOPPED, "Testing");
 
@@ -424,7 +485,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
                 .build();
         mActivity.setState(ActivityStack.ActivityState.STOPPED, "Testing");
 
-        final ActivityStack stack = new StackBuilder(mRootActivityContainer).build();
+        final ActivityStack stack = new StackBuilder(mRootWindowContainer).build();
         try {
             doReturn(false).when(stack).isStackTranslucent(any());
             assertFalse(mStack.shouldBeVisible(null /* starting */));
@@ -540,7 +601,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
         // Set state to STOPPING, or ActivityRecord#activityStoppedLocked() call will be ignored.
         mActivity.setState(STOPPING, "test");
-        mActivity.activityStoppedLocked(savedState, persistentSavedState, "desc");
+        mActivity.activityStopped(savedState, persistentSavedState, "desc");
         assertTrue(mActivity.hasSavedState());
         assertEquals(savedState, mActivity.getSavedState());
         assertEquals(persistentSavedState, mActivity.getPersistentSavedState());
@@ -548,7 +609,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         // Sending 'null' for saved state can only happen due to timeout, so previously stored saved
         // states should not be overridden.
         mActivity.setState(STOPPING, "test");
-        mActivity.activityStoppedLocked(null /* savedState */, null /* persistentSavedState */,
+        mActivity.activityStopped(null /* savedState */, null /* persistentSavedState */,
                 "desc");
         assertTrue(mActivity.hasSavedState());
         assertEquals(savedState, mActivity.getSavedState());
@@ -632,14 +693,14 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testFinishActivityIfPossible_adjustStackOrder() {
         // Prepare the stacks with order (top to bottom): mStack, stack1, stack2.
-        final ActivityStack stack1 = new StackBuilder(mRootActivityContainer).build();
+        final ActivityStack stack1 = new StackBuilder(mRootWindowContainer).build();
         mStack.moveToFront("test");
         // The stack2 is needed here for moving back to simulate the
-        // {@link ActivityDisplay#mPreferredTopFocusableStack} is cleared, so
-        // {@link ActivityDisplay#getFocusedStack} will rely on the order of focusable-and-visible
+        // {@link DisplayContent#mPreferredTopFocusableStack} is cleared, so
+        // {@link DisplayContent#getFocusedStack} will rely on the order of focusable-and-visible
         // stacks. Then when mActivity is finishing, its stack will be invisible (no running
         // activities in the stack) that is the key condition to verify.
-        final ActivityStack stack2 = new StackBuilder(mRootActivityContainer).build();
+        final ActivityStack stack2 = new StackBuilder(mRootWindowContainer).build();
         stack2.moveToBack("test", stack2.getBottomMostTask());
 
         assertTrue(mStack.isTopStackOnDisplay());
@@ -791,7 +852,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
         // Simulates that {@code currentTop} starts an existing activity from background (so its
         // state is stopped) and the starting flow just goes to place it at top.
-        final ActivityStack nextStack = new StackBuilder(mRootActivityContainer).build();
+        final ActivityStack nextStack = new StackBuilder(mRootWindowContainer).build();
         final ActivityRecord nextTop = nextStack.getTopNonFinishingActivity();
         nextTop.setState(STOPPED, "test");
 
@@ -913,7 +974,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
         // Add another stack to become focused and make the activity there visible. This way it
         // simulates finishing in non-focused stack in split-screen.
-        final ActivityStack stack = new StackBuilder(mRootActivityContainer).build();
+        final ActivityStack stack = new StackBuilder(mRootWindowContainer).build();
         final ActivityRecord focusedActivity = stack.getTopMostActivity();
         focusedActivity.nowVisible = true;
         focusedActivity.mVisibleRequested = true;
@@ -930,7 +991,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
      */
     @Test
     public void testDestroyIfPossible() {
-        doReturn(false).when(mRootActivityContainer).resumeFocusedStacksTopActivities();
+        doReturn(false).when(mRootWindowContainer).resumeFocusedStacksTopActivities();
         spyOn(mStack);
         mActivity.destroyIfPossible("test");
 
@@ -950,7 +1011,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         final ActivityStack homeStack = mActivity.getDisplay().getHomeStack();
         homeStack.forAllTasks((t) -> { homeStack.removeChild(t, "test"); });
         mActivity.finishing = true;
-        doReturn(false).when(mRootActivityContainer).resumeFocusedStacksTopActivities();
+        doReturn(false).when(mRootWindowContainer).resumeFocusedStacksTopActivities();
         spyOn(mStack);
 
         // Try to destroy the last activity above the home stack.

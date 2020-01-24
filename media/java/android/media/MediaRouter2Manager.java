@@ -25,6 +25,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
@@ -39,6 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @hide
@@ -57,13 +59,15 @@ public class MediaRouter2Manager {
     private Client mClient;
     private final IMediaRouterService mMediaRouterService;
     final Handler mHandler;
-    final List<CallbackRecord> mCallbackRecords = new CopyOnWriteArrayList<>();
+    final CopyOnWriteArrayList<CallbackRecord> mCallbackRecords = new CopyOnWriteArrayList<>();
 
     private final Object mRoutesLock = new Object();
     @GuardedBy("mRoutesLock")
     private final Map<String, MediaRoute2Info> mRoutes = new HashMap<>();
     @NonNull
     final ConcurrentMap<String, List<String>> mControlCategoryMap = new ConcurrentHashMap<>();
+
+    private AtomicInteger mNextRequestId = new AtomicInteger(1);
 
     /**
      * Gets an instance of media router manager that controls media route of other applications.
@@ -99,14 +103,10 @@ public class MediaRouter2Manager {
         Objects.requireNonNull(executor, "executor must not be null");
         Objects.requireNonNull(callback, "callback must not be null");
 
-        CallbackRecord callbackRecord;
-        synchronized (mCallbackRecords) {
-            if (findCallbackRecordIndexLocked(callback) >= 0) {
-                Log.w(TAG, "Ignoring to add the same callback twice.");
-                return;
-            }
-            callbackRecord = new CallbackRecord(executor, callback);
-            mCallbackRecords.add(callbackRecord);
+        CallbackRecord callbackRecord = new CallbackRecord(executor, callback);
+        if (!mCallbackRecords.addIfAbsent(callbackRecord)) {
+            Log.w(TAG, "Ignoring to add the same callback twice.");
+            return;
         }
 
         synchronized (sLock) {
@@ -118,8 +118,6 @@ public class MediaRouter2Manager {
                 } catch (RemoteException ex) {
                     Log.e(TAG, "Unable to register media router manager.", ex);
                 }
-            } else {
-                callbackRecord.notifyRoutes();
             }
         }
     }
@@ -132,36 +130,23 @@ public class MediaRouter2Manager {
     public void unregisterCallback(@NonNull Callback callback) {
         Objects.requireNonNull(callback, "callback must not be null");
 
-        synchronized (mCallbackRecords) {
-            final int index = findCallbackRecordIndexLocked(callback);
-            if (index < 0) {
-                Log.w(TAG, "Ignore removing unknown callback. " + callback);
-                return;
-            }
-            mCallbackRecords.remove(index);
-            synchronized (sLock) {
-                if (mCallbackRecords.size() == 0 && mClient != null) {
-                    try {
-                        mMediaRouterService.unregisterManager(mClient);
-                    } catch (RemoteException ex) {
-                        Log.e(TAG, "Unable to unregister media router manager", ex);
-                    }
-                    //TODO: clear mRoutes?
-                    mClient = null;
-                }
-            }
+        if (!mCallbackRecords.remove(new CallbackRecord(null, callback))) {
+            Log.w(TAG, "Ignore removing unknown callback. " + callback);
+            return;
         }
-    }
 
-    @GuardedBy("mCallbackRecords")
-    private int findCallbackRecordIndexLocked(Callback callback) {
-        final int count = mCallbackRecords.size();
-        for (int i = 0; i < count; i++) {
-            if (mCallbackRecords.get(i).mCallback == callback) {
-                return i;
+        synchronized (sLock) {
+            if (mCallbackRecords.size() == 0 && mClient != null) {
+                try {
+                    mMediaRouterService.unregisterManager(mClient);
+                } catch (RemoteException ex) {
+                    Log.e(TAG, "Unable to unregister media router manager", ex);
+                }
+                //TODO: clear mRoutes?
+                mClient = null;
+                mControlCategoryMap.clear();
             }
         }
-        return -1;
     }
 
     //TODO: Use cache not to create array. For now, it's unclear when to purge the cache.
@@ -182,12 +167,55 @@ public class MediaRouter2Manager {
         List<MediaRoute2Info> routes = new ArrayList<>();
         synchronized (mRoutesLock) {
             for (MediaRoute2Info route : mRoutes.values()) {
-                if (route.supportsControlCategory(controlCategories)) {
+                if (route.supportsControlCategories(controlCategories)) {
                     routes.add(route);
                 }
             }
         }
-        //TODO: Should we cache this?
+        return routes;
+    }
+
+    @NonNull
+    public List<RouteSessionInfo> getActiveSessions() {
+        Client client;
+        synchronized (sLock) {
+            client = mClient;
+        }
+        if (client != null) {
+            try {
+                return mMediaRouterService.getActiveSessions(client);
+            } catch (RemoteException ex) {
+                Log.e(TAG, "Unable to get sessions. Service probably died.", ex);
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    /**
+     * Gets the list of routes that are actively used by {@link MediaRouter2}.
+     */
+    @NonNull
+    public List<MediaRoute2Info> getActiveRoutes() {
+        List<MediaRoute2Info> routes = new ArrayList<>();
+        synchronized (mRoutesLock) {
+            for (MediaRoute2Info route : mRoutes.values()) {
+                if (!TextUtils.isEmpty(route.getClientPackageName())) {
+                    routes.add(route);
+                }
+            }
+        }
+        return routes;
+    }
+
+    /**
+     * Gets the list of discovered routes
+     */
+    @NonNull
+    public List<MediaRoute2Info> getAllRoutes() {
+        List<MediaRoute2Info> routes = new ArrayList<>();
+        synchronized (mRoutesLock) {
+            routes.addAll(mRoutes.values());
+        }
         return routes;
     }
 
@@ -195,7 +223,7 @@ public class MediaRouter2Manager {
      * Selects media route for the specified package name.
      *
      * @param packageName the package name of the application that should change it's media route
-     * @param route the route to be selected
+     * @param route the route to be selected.
      */
     public void selectRoute(@NonNull String packageName, @NonNull MediaRoute2Info route) {
         Objects.requireNonNull(packageName, "packageName must not be null");
@@ -207,26 +235,9 @@ public class MediaRouter2Manager {
         }
         if (client != null) {
             try {
-                mMediaRouterService.selectClientRoute2(client, packageName, route);
-            } catch (RemoteException ex) {
-                Log.e(TAG, "Unable to select media route", ex);
-            }
-        }
-    }
-
-    /**
-     * Unselects media route for the specified package name.
-     *
-     * @param packageName the package name of the application that should stop routing
-     */
-    public void unselectRoute(@NonNull String packageName) {
-        Client client;
-        synchronized (sLock) {
-            client = mClient;
-        }
-        if (client != null) {
-            try {
-                mMediaRouterService.selectClientRoute2(client, packageName, null);
+                int requestId = mNextRequestId.getAndIncrement();
+                mMediaRouterService.requestCreateClientSession(
+                        client, packageName, route, requestId);
             } catch (RemoteException ex) {
                 Log.e(TAG, "Unable to select media route", ex);
             }
@@ -342,10 +353,14 @@ public class MediaRouter2Manager {
     }
 
     void updateControlCategories(String packageName, List<String> categories) {
-        mControlCategoryMap.put(packageName, categories);
+        List<String> prevCategories = mControlCategoryMap.put(packageName, categories);
+        if ((prevCategories == null && categories.size() == 0)
+                || Objects.equals(categories, prevCategories)) {
+            return;
+        }
         for (CallbackRecord record : mCallbackRecords) {
             record.mExecutor.execute(
-                    () -> record.mCallback.onControlCategoriesChanged(packageName));
+                    () -> record.mCallback.onControlCategoriesChanged(packageName, categories));
         }
     }
 
@@ -386,8 +401,10 @@ public class MediaRouter2Manager {
          * Called when the control categories of an app is changed.
          *
          * @param packageName the package name of the application
+         * @param controlCategories the list of control categories set by an application.
          */
-        public void onControlCategoriesChanged(@NonNull String packageName) {}
+        public void onControlCategoriesChanged(@NonNull String packageName,
+                @NonNull List<String> controlCategories) {}
     }
 
     final class CallbackRecord {
@@ -399,14 +416,20 @@ public class MediaRouter2Manager {
             mCallback = callback;
         }
 
-        void notifyRoutes() {
-            List<MediaRoute2Info> routes;
-            synchronized (mRoutesLock) {
-                routes = new ArrayList<>(mRoutes.values());
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
             }
-            if (routes.size() > 0) {
-                mExecutor.execute(() -> mCallback.onRoutesAdded(routes));
+            if (!(obj instanceof CallbackRecord)) {
+                return false;
             }
+            return mCallback ==  ((CallbackRecord) obj).mCallback;
+        }
+
+        @Override
+        public int hashCode() {
+            return mCallback.hashCode();
         }
     }
 

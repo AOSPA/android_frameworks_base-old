@@ -34,6 +34,7 @@ import android.content.IIntentSender;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.DataLoaderParams;
 import android.content.pm.FeatureInfo;
 import android.content.pm.IPackageDataObserver;
 import android.content.pm.IPackageInstaller;
@@ -114,6 +115,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -134,6 +136,10 @@ class PackageManagerShellCommand extends ShellCommand {
     /** Path where ART profiles snapshots are dumped for the shell user */
     private final static String ART_PROFILE_SNAPSHOT_DEBUG_LOCATION = "/data/misc/profman/";
     private static final int DEFAULT_WAIT_MS = 60 * 1000;
+
+    private static final String DATA_LOADER_PACKAGE = "android";
+    private static final String DATA_LOADER_CLASS =
+            "com.android.server.pm.PackageManagerShellCommandDataLoader";
 
     final IPackageManager mInterface;
     final IPermissionManager mPermissionManager;
@@ -175,6 +181,8 @@ class PackageManagerShellCommand extends ShellCommand {
                     return runQueryIntentReceivers();
                 case "install":
                     return runInstall();
+                case "install-streaming":
+                    return runStreamingInstall();
                 case "install-abandon":
                 case "install-destroy":
                     return runInstallAbandon();
@@ -1152,9 +1160,23 @@ class PackageManagerShellCommand extends ShellCommand {
         return 0;
     }
 
-    private int runInstall() throws RemoteException {
-        final PrintWriter pw = getOutPrintWriter();
+    private int runStreamingInstall() throws RemoteException {
         final InstallParams params = makeInstallParams();
+        if (params.sessionParams.dataLoaderParams == null) {
+            final DataLoaderParams dataLoaderParams = DataLoaderParams.forStreaming(
+                    new ComponentName(DATA_LOADER_PACKAGE, DATA_LOADER_CLASS), "");
+            params.sessionParams.setDataLoaderParams(dataLoaderParams);
+        }
+        return doRunInstall(params);
+    }
+
+    private int runInstall() throws RemoteException {
+        return doRunInstall(makeInstallParams());
+    }
+
+    private int doRunInstall(final InstallParams params) throws RemoteException {
+        final PrintWriter pw = getOutPrintWriter();
+        final boolean streaming = params.sessionParams.dataLoaderParams != null;
 
         ArrayList<String> inPaths = getRemainingArgs();
         if (inPaths.isEmpty()) {
@@ -1181,17 +1203,30 @@ class PackageManagerShellCommand extends ShellCommand {
             return 1;
         }
 
-        setParamsSize(params, inPaths);
+        if (!streaming) {
+            setParamsSize(params, inPaths);
+        }
+
         final int sessionId = doCreateSession(params.sessionParams,
                 params.installerPackageName, params.userId);
         boolean abandonSession = true;
         try {
             for (String inPath : inPaths) {
-                String splitName = hasSplits ? (new File(inPath)).getName()
-                        : "base." + (isApex ? "apex" : "apk");
-                if (doWriteSplit(sessionId, inPath, params.sessionParams.sizeBytes, splitName,
-                        false /*logSuccess*/) != PackageInstaller.STATUS_SUCCESS) {
-                    return 1;
+                if (streaming) {
+                    String name = new File(inPath).getName();
+                    byte[] metadata = inPath.getBytes(StandardCharsets.UTF_8);
+                    if (doAddFile(sessionId, name, params.sessionParams.sizeBytes, metadata,
+                            false /*logSuccess*/) != PackageInstaller.STATUS_SUCCESS) {
+                        return 1;
+                    }
+                } else {
+                    String splitName = hasSplits ? new File(inPath).getName()
+                            : "base." + (isApex ? "apex" : "apk");
+
+                    if (doWriteSplit(sessionId, inPath, params.sessionParams.sizeBytes, splitName,
+                            false /*logSuccess*/) != PackageInstaller.STATUS_SUCCESS) {
+                        return 1;
+                    }
                 }
             }
             if (doCommitSession(sessionId, false /*logSuccess*/)
@@ -2927,11 +2962,32 @@ class PackageManagerShellCommand extends ShellCommand {
         return sessionId;
     }
 
+    private int doAddFile(int sessionId, String name, long sizeBytes, byte[] metadata,
+            boolean logSuccess) throws RemoteException {
+        PackageInstaller.Session session = new PackageInstaller.Session(
+                mInterface.getPackageInstaller().openSession(sessionId));
+        try {
+            session.addFile(name, sizeBytes, metadata);
+
+            if (logSuccess) {
+                getOutPrintWriter().println("Success");
+            }
+
+            return 0;
+        } finally {
+            IoUtils.closeQuietly(session);
+        }
+    }
+
     private int doWriteSplit(int sessionId, String inPath, long sizeBytes, String splitName,
             boolean logSuccess) throws RemoteException {
         PackageInstaller.Session session = null;
         try {
+            session = new PackageInstaller.Session(
+                    mInterface.getPackageInstaller().openSession(sessionId));
+
             final PrintWriter pw = getOutPrintWriter();
+
             final ParcelFileDescriptor fd;
             if (STDIN_PATH.equals(inPath)) {
                 fd = ParcelFileDescriptor.dup(getInFileDescriptor());
@@ -2953,8 +3009,6 @@ class PackageManagerShellCommand extends ShellCommand {
                 return 1;
             }
 
-            session = new PackageInstaller.Session(
-                    mInterface.getPackageInstaller().openSession(sessionId));
             session.write(splitName, 0, sizeBytes, fd);
 
             if (logSuccess) {
@@ -3000,7 +3054,6 @@ class PackageManagerShellCommand extends ShellCommand {
         try {
             session = new PackageInstaller.Session(
                     mInterface.getPackageInstaller().openSession(sessionId));
-
             for (String splitName : splitNames) {
                 session.removeSplit(splitName);
             }

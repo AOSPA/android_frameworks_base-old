@@ -25,11 +25,11 @@ import static com.android.internal.util.Preconditions.checkState;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.UnsupportedAppUsage;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.provider.OneTimeUseBuilder;
 import android.text.TextUtils;
@@ -340,7 +340,7 @@ public final class BluetoothLeDeviceFilter implements DeviceFilter<ScanResult> {
         public Builder setRawDataFilter(@NonNull byte[] rawDataFilter,
                 @Nullable byte[] rawDataFilterMask) {
             checkNotUsed();
-            Preconditions.checkNotNull(rawDataFilter);
+            Objects.requireNonNull(rawDataFilter);
             checkArgument(rawDataFilterMask == null ||
                     rawDataFilter.length == rawDataFilterMask.length,
                     "Mask and filter should be the same length");

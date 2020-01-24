@@ -27,6 +27,8 @@ import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 import static android.content.Intent.ACTION_MAIN;
 import static android.content.Intent.CATEGORY_DEFAULT;
 import static android.content.Intent.CATEGORY_HOME;
+import static android.content.Intent.EXTRA_PACKAGE_NAME;
+import static android.content.Intent.EXTRA_VERSION_CODE;
 import static android.content.pm.PackageManager.CERT_INPUT_RAW_X509;
 import static android.content.pm.PackageManager.CERT_INPUT_SHA256;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
@@ -34,6 +36,7 @@ import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
+import static android.content.pm.PackageManager.EXTRA_VERIFICATION_ID;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_POLICY_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVOKED_COMPAT;
@@ -96,6 +99,8 @@ import static com.android.internal.annotations.VisibleForTesting.Visibility;
 import static com.android.internal.app.IntentForwarderActivity.FORWARD_INTENT_TO_MANAGED_PROFILE;
 import static com.android.internal.app.IntentForwarderActivity.FORWARD_INTENT_TO_PARENT;
 import static com.android.internal.content.NativeLibraryHelper.LIB_DIR_NAME;
+import static com.android.internal.util.ArrayUtils.emptyIfNull;
+import static com.android.internal.util.ArrayUtils.filter;
 import static com.android.server.pm.ComponentResolver.RESOLVE_PRIORITY_SORTER;
 import static com.android.server.pm.InstructionSets.getAppDexInstructionSets;
 import static com.android.server.pm.InstructionSets.getDexCodeInstructionSet;
@@ -155,6 +160,7 @@ import android.content.pm.IPackageStatsObserver;
 import android.content.pm.InstallSourceInfo;
 import android.content.pm.InstantAppInfo;
 import android.content.pm.InstantAppRequest;
+import android.content.pm.InstantAppResolveInfo.InstantAppDigest;
 import android.content.pm.InstrumentationInfo;
 import android.content.pm.IntentFilterVerificationInfo;
 import android.content.pm.KeySet;
@@ -248,7 +254,6 @@ import android.os.storage.VolumeInfo;
 import android.os.storage.VolumeRecord;
 import android.permission.IPermissionManager;
 import android.provider.DeviceConfig;
-import android.provider.MediaStore;
 import android.provider.Settings.Global;
 import android.provider.Settings.Secure;
 import android.security.KeyStore;
@@ -377,6 +382,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -384,6 +390,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -553,6 +560,11 @@ public class PackageManagerService extends IPackageManager.Stub
      * Whether verification is enabled by default.
      */
     private static final boolean DEFAULT_VERIFY_ENABLE = true;
+
+    /**
+     * Whether integrity verification is enabled by default.
+     */
+    private static final boolean DEFAULT_INTEGRITY_VERIFY_ENABLE = true;
 
     /**
      * The default maximum time to wait for the verification agent to return in
@@ -1441,6 +1453,7 @@ public class PackageManagerService extends IPackageManager.Stub
     static final int DEFERRED_NO_KILL_POST_DELETE = 23;
     static final int DEFERRED_NO_KILL_INSTALL_OBSERVER = 24;
     static final int INTEGRITY_VERIFICATION_COMPLETE = 25;
+    static final int CHECK_PENDING_INTEGRITY_VERIFICATION = 26;
 
     static final int DEFERRED_NO_KILL_POST_DELETE_DELAY_MS = 3 * 1000;
     static final int DEFERRED_NO_KILL_INSTALL_OBSERVER_DELAY_MS = 500;
@@ -1705,13 +1718,13 @@ public class PackageManagerService extends IPackageManager.Stub
                     final int verificationId = msg.arg1;
                     final PackageVerificationState state = mPendingVerification.get(verificationId);
 
-                    if ((state != null) && !state.timeoutExtended()) {
+                    if ((state != null) && !state.isVerificationComplete()
+                            && !state.timeoutExtended()) {
                         final InstallParams params = state.getInstallParams();
                         final InstallArgs args = params.mArgs;
                         final Uri originUri = Uri.fromFile(args.origin.resolvedFile);
 
                         Slog.i(TAG, "Verification timed out for " + originUri);
-                        mPendingVerification.remove(verificationId);
 
                         final UserHandle user = args.getUser();
                         if (getDefaultVerificationResponse(user)
@@ -1726,11 +1739,54 @@ public class PackageManagerService extends IPackageManager.Stub
                                     PackageManager.VERIFICATION_REJECT, user);
                             params.setReturnCode(
                                     PackageManager.INSTALL_FAILED_VERIFICATION_FAILURE);
+                            state.setVerifierResponse(Binder.getCallingUid(),
+                                    PackageManager.VERIFICATION_REJECT);
+                        }
+
+                        if (state.areAllVerificationsComplete()) {
+                            mPendingVerification.remove(verificationId);
                         }
 
                         Trace.asyncTraceEnd(
                                 TRACE_TAG_PACKAGE_MANAGER, "verification", verificationId);
+
                         params.handleVerificationFinished();
+
+                    }
+                    break;
+                }
+                case CHECK_PENDING_INTEGRITY_VERIFICATION: {
+                    final int verificationId = msg.arg1;
+                    final PackageVerificationState state = mPendingVerification.get(verificationId);
+
+                    if (state != null && !state.isIntegrityVerificationComplete()) {
+                        final InstallParams params = state.getInstallParams();
+                        final InstallArgs args = params.mArgs;
+                        final Uri originUri = Uri.fromFile(args.origin.resolvedFile);
+
+                        Slog.i(TAG, "Integrity verification timed out for " + originUri);
+
+                        state.setIntegrityVerificationResult(
+                                getDefaultIntegrityVerificationResponse());
+
+                        if (getDefaultIntegrityVerificationResponse()
+                                == PackageManagerInternal.INTEGRITY_VERIFICATION_ALLOW) {
+                            Slog.i(TAG, "Integrity check times out, continuing with " + originUri);
+                        } else {
+                            params.setReturnCode(
+                                    PackageManager.INSTALL_FAILED_VERIFICATION_FAILURE);
+                        }
+
+                        if (state.areAllVerificationsComplete()) {
+                            mPendingVerification.remove(verificationId);
+                        }
+
+                        Trace.asyncTraceEnd(
+                                TRACE_TAG_PACKAGE_MANAGER,
+                                "integrity_verification",
+                                verificationId);
+
+                        params.handleIntegrityVerificationFinished();
                     }
                     break;
                 }
@@ -1739,7 +1795,9 @@ public class PackageManagerService extends IPackageManager.Stub
 
                     final PackageVerificationState state = mPendingVerification.get(verificationId);
                     if (state == null) {
-                        Slog.w(TAG, "Invalid verification token " + verificationId + " received");
+                        Slog.w(TAG, "Verification with id " + verificationId
+                                + " not found."
+                                + " It may be invalid or overridden by integrity verification");
                         break;
                     }
 
@@ -1748,8 +1806,6 @@ public class PackageManagerService extends IPackageManager.Stub
                     state.setVerifierResponse(response.callerUid, response.code);
 
                     if (state.isVerificationComplete()) {
-                        mPendingVerification.remove(verificationId);
-
                         final InstallParams params = state.getInstallParams();
                         final InstallArgs args = params.mArgs;
                         final Uri originUri = Uri.fromFile(args.origin.resolvedFile);
@@ -1762,6 +1818,10 @@ public class PackageManagerService extends IPackageManager.Stub
                                     PackageManager.INSTALL_FAILED_VERIFICATION_FAILURE);
                         }
 
+                        if (state.areAllVerificationsComplete()) {
+                            mPendingVerification.remove(verificationId);
+                        }
+
                         Trace.asyncTraceEnd(
                                 TRACE_TAG_PACKAGE_MANAGER, "verification", verificationId);
 
@@ -1771,7 +1831,40 @@ public class PackageManagerService extends IPackageManager.Stub
                     break;
                 }
                 case INTEGRITY_VERIFICATION_COMPLETE: {
-                    // TODO: implement this case.
+                    final int verificationId = msg.arg1;
+
+                    final PackageVerificationState state = mPendingVerification.get(verificationId);
+                    if (state == null) {
+                        Slog.w(TAG, "Integrity verification with id " + verificationId
+                                + " not found. It may be invalid or overridden by verifier");
+                        break;
+                    }
+
+                    final int response = (Integer) msg.obj;
+
+                    final InstallParams params = state.getInstallParams();
+                    final InstallArgs args = params.mArgs;
+                    final Uri originUri = Uri.fromFile(args.origin.resolvedFile);
+
+                    state.setIntegrityVerificationResult(response);
+
+                    if (response == PackageManagerInternal.INTEGRITY_VERIFICATION_ALLOW) {
+                        Slog.i(TAG, "Integrity check passed for " + originUri);
+                    } else {
+                        params.setReturnCode(
+                                PackageManager.INSTALL_FAILED_VERIFICATION_FAILURE);
+                    }
+
+                    if (state.areAllVerificationsComplete()) {
+                        mPendingVerification.remove(verificationId);
+                    }
+
+                    Trace.asyncTraceEnd(
+                            TRACE_TAG_PACKAGE_MANAGER,
+                            "integrity_verification",
+                            verificationId);
+
+                    params.handleIntegrityVerificationFinished();
                     break;
                 }
                 case START_INTENT_FILTER_VERIFICATIONS: {
@@ -6174,10 +6267,12 @@ public class PackageManagerService extends IPackageManager.Stub
 
     private void requestInstantAppResolutionPhaseTwo(AuxiliaryResolveInfo responseObj,
             Intent origIntent, String resolvedType, String callingPackage,
-            Bundle verificationBundle, int userId) {
+            boolean isRequesterInstantApp, Bundle verificationBundle, int userId) {
         final Message msg = mHandler.obtainMessage(INSTANT_APP_RESOLUTION_PHASE_TWO,
                 new InstantAppRequest(responseObj, origIntent, resolvedType,
-                        callingPackage, userId, verificationBundle, false /*resolveForStart*/));
+                        callingPackage, isRequesterInstantApp, userId, verificationBundle,
+                        false /*resolveForStart*/, responseObj.hostDigestPrefixSecure,
+                        responseObj.token));
         mHandler.sendMessage(msg);
     }
 
@@ -6796,8 +6891,10 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         }
         if (addInstant) {
-            result = maybeAddInstantAppInstaller(
-                    result, intent, resolvedType, flags, userId, resolveForStart);
+            String callingPkgName = getInstantAppPackageName(filterCallingUid);
+            boolean isRequesterInstantApp = isInstantApp(callingPkgName, userId);
+            result = maybeAddInstantAppInstaller(result, intent, resolvedType, flags, userId,
+                    resolveForStart, isRequesterInstantApp);
         }
         if (sortResult) {
             Collections.sort(result, RESOLVE_PRIORITY_SORTER);
@@ -6808,7 +6905,8 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     private List<ResolveInfo> maybeAddInstantAppInstaller(List<ResolveInfo> result, Intent intent,
-            String resolvedType, int flags, int userId, boolean resolveForStart) {
+            String resolvedType, int flags, int userId, boolean resolveForStart,
+            boolean isRequesterInstantApp) {
         // first, check to see if we've got an instant app already installed
         final boolean alreadyResolvedLocally = (flags & PackageManager.MATCH_INSTANT) != 0;
         ResolveInfo localInstantApp = null;
@@ -6856,10 +6954,13 @@ public class PackageManagerService extends IPackageManager.Stub
             if (localInstantApp == null) {
                 // we don't have an instant app locally, resolve externally
                 Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "resolveEphemeral");
+                String token = UUID.randomUUID().toString();
+                InstantAppDigest digest = InstantAppResolver.parseDigest(intent);
                 final InstantAppRequest requestObject = new InstantAppRequest(
                         null /*responseObj*/, intent /*origIntent*/, resolvedType,
-                        null /*callingPackage*/, userId, null /*verificationBundle*/,
-                        resolveForStart);
+                        null /*callingPackage*/, isRequesterInstantApp,
+                        userId, null /*verificationBundle*/, resolveForStart,
+                        digest.getDigestPrefixSecure(), token);
                 auxiliaryResponse = InstantAppResolver.doInstantAppResolutionPhaseOne(
                         mInstantAppResolverConnection, requestObject);
                 Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
@@ -11249,6 +11350,12 @@ public class PackageManagerService extends IPackageManager.Stub
                             "Static shared libs cannot declare permission groups");
                 }
 
+                // Static shared libs cannot declare features
+                if (pkg.getFeatures() != null && !pkg.getFeatures().isEmpty()) {
+                    throw new PackageManagerException(
+                            "Static shared libs cannot declare features");
+                }
+
                 // Static shared libs cannot declare permissions
                 if (pkg.getPermissions() != null && !pkg.getPermissions().isEmpty()) {
                     throw new PackageManagerException(
@@ -12802,7 +12909,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public String[] getUnsuspendablePackagesForUser(String[] packageNames, int userId) {
-        Preconditions.checkNotNull("packageNames cannot be null", packageNames);
+        Preconditions.checkNotNull(packageNames, "packageNames cannot be null");
         mContext.enforceCallingOrSelfPermission(Manifest.permission.SUSPEND_APPS,
                 "getUnsuspendablePackagesForUser");
         final int callingUid = Binder.getCallingUid();
@@ -13118,6 +13225,15 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     /**
+     * Get the default integrity verification response code.
+     */
+    private int getDefaultIntegrityVerificationResponse() {
+        // We are not exposing this as a user-configurable setting because we don't want to provide
+        // an easy way to get around the integrity check.
+        return PackageManager.VERIFICATION_REJECT;
+    }
+
+    /**
      * Check whether or not package verification has been enabled.
      *
      * @return true if verification should be performed
@@ -13158,6 +13274,15 @@ public class PackageManagerService extends IPackageManager.Stub
             }
             return true;
         }
+    }
+
+    /**
+     * Check whether or not integrity verification has been enabled.
+     */
+    private boolean isIntegrityVerificationEnabled() {
+        // We are not exposing this as a user-configurable setting because we don't want to provide
+        // an easy way to get around the integrity check.
+        return DEFAULT_INTEGRITY_VERIFY_ENABLE;
     }
 
     @Override
@@ -13518,10 +13643,12 @@ public class PackageManagerService extends IPackageManager.Stub
             }
             Trace.asyncTraceBegin(TRACE_TAG_PACKAGE_MANAGER, "restore", token);
             try {
-                if (bm.isBackupServiceActive(userId)) {
+                if (bm.isUserReadyForBackup(userId)) {
                     bm.restoreAtInstallForUser(
                             userId, res.pkg.getAppInfoPackageName(), token);
                 } else {
+                    Slog.w(TAG, "User " + userId + " is not ready. Restore at install "
+                            + "didn't take place.");
                     return false;
                 }
             } catch (RemoteException e) {
@@ -13868,6 +13995,7 @@ public class PackageManagerService extends IPackageManager.Stub
         @NonNull final InstallSource installSource;
         final String volumeUuid;
         private boolean mVerificationCompleted;
+        private boolean mIntegrityVerificationCompleted;
         private boolean mEnableRollbackCompleted;
         private InstallArgs mArgs;
         int mRet;
@@ -14129,188 +14257,29 @@ public class PackageManagerService extends IPackageManager.Stub
 
             final InstallArgs args = createInstallArgs(this);
             mVerificationCompleted = true;
+            mIntegrityVerificationCompleted = true;
             mEnableRollbackCompleted = true;
             mArgs = args;
 
             if (ret == PackageManager.INSTALL_SUCCEEDED) {
-                // TODO: http://b/22976637
-                // Apps installed for "all" users use the device owner to verify the app
-                UserHandle verifierUser = getUser();
-                if (verifierUser == UserHandle.ALL) {
-                    verifierUser = UserHandle.SYSTEM;
-                }
+                final int verificationId = mPendingVerificationToken++;
 
-                /*
-                 * Determine if we have any installed package verifiers. If we
-                 * do, then we'll defer to them to verify the packages.
-                 */
-                final int requiredUid = mRequiredVerifierPackage == null ? -1
-                        : getPackageUid(mRequiredVerifierPackage, MATCH_DEBUG_TRIAGED_MISSING,
-                                verifierUser.getIdentifier());
-
-                final int optionalUid = mOptionalVerifierPackage == null ? -1
-                        : getPackageUid(mOptionalVerifierPackage, MATCH_DEBUG_TRIAGED_MISSING,
-                                verifierUser.getIdentifier());
-
-                final int installerUid =
-                        verificationInfo == null ? -1 : verificationInfo.installerUid;
-                if (!origin.existing && (requiredUid != -1 || optionalUid != -1)
-                        && isVerificationEnabled(
-                                verifierUser.getIdentifier(), installFlags, installerUid)) {
-                    final Intent verification = new Intent(
-                            Intent.ACTION_PACKAGE_NEEDS_VERIFICATION);
-                    verification.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
-                    verification.setDataAndType(Uri.fromFile(new File(origin.resolvedPath)),
-                            PACKAGE_MIME_TYPE);
-                    verification.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-
-                    // Query all live verifiers based on current user state
-                    final List<ResolveInfo> receivers = queryIntentReceiversInternal(verification,
-                            PACKAGE_MIME_TYPE, 0, verifierUser.getIdentifier(),
-                            false /*allowDynamicSplits*/);
-
-                    if (DEBUG_VERIFY) {
-                        Slog.d(TAG, "Found " + receivers.size() + " verifiers for intent "
-                                + verification.toString() + " with " + pkgLite.verifiers.length
-                                + " optional verifiers");
-                    }
-
-                    final int verificationId = mPendingVerificationToken++;
-
-                    verification.putExtra(PackageManager.EXTRA_VERIFICATION_ID, verificationId);
-
-                    verification.putExtra(PackageManager.EXTRA_VERIFICATION_INSTALLER_PACKAGE,
-                            installSource.installerPackageName);
-
-                    verification.putExtra(PackageManager.EXTRA_VERIFICATION_INSTALL_FLAGS,
-                            installFlags);
-
-                    verification.putExtra(PackageManager.EXTRA_VERIFICATION_PACKAGE_NAME,
-                            pkgLite.packageName);
-
-                    verification.putExtra(PackageManager.EXTRA_VERIFICATION_VERSION_CODE,
-                            pkgLite.versionCode);
-
-                    verification.putExtra(PackageManager.EXTRA_VERIFICATION_LONG_VERSION_CODE,
-                            pkgLite.getLongVersionCode());
-
-                    if (verificationInfo != null) {
-                        if (verificationInfo.originatingUri != null) {
-                            verification.putExtra(Intent.EXTRA_ORIGINATING_URI,
-                                    verificationInfo.originatingUri);
-                        }
-                        if (verificationInfo.referrer != null) {
-                            verification.putExtra(Intent.EXTRA_REFERRER,
-                                    verificationInfo.referrer);
-                        }
-                        if (verificationInfo.originatingUid >= 0) {
-                            verification.putExtra(Intent.EXTRA_ORIGINATING_UID,
-                                    verificationInfo.originatingUid);
-                        }
-                        if (verificationInfo.installerUid >= 0) {
-                            verification.putExtra(PackageManager.EXTRA_VERIFICATION_INSTALLER_UID,
-                                    verificationInfo.installerUid);
-                        }
-                    }
-
-                    final PackageVerificationState verificationState = new PackageVerificationState(
-                            requiredUid, this);
-
+                // Perform package verification (unless we are simply moving the package).
+                if (!origin.existing) {
+                    PackageVerificationState verificationState =
+                            new PackageVerificationState(this);
                     mPendingVerification.append(verificationId, verificationState);
 
-                    final List<ComponentName> sufficientVerifiers = matchVerifiers(pkgLite,
-                            receivers, verificationState);
+                    sendIntegrityVerificationRequest(verificationId, pkgLite, verificationState);
+                    ret = sendPackageVerificationRequest(
+                            verificationId, pkgLite, verificationState);
 
-                    DeviceIdleInternal idleController =
-                            mInjector.getLocalDeviceIdleController();
-                    final long idleDuration = getVerificationTimeout();
-
-                    /*
-                     * If any sufficient verifiers were listed in the package
-                     * manifest, attempt to ask them.
-                     */
-                    if (sufficientVerifiers != null) {
-                        final int N = sufficientVerifiers.size();
-                        if (N == 0) {
-                            Slog.i(TAG, "Additional verifiers required, but none installed.");
-                            ret = PackageManager.INSTALL_FAILED_VERIFICATION_FAILURE;
-                        } else {
-                            for (int i = 0; i < N; i++) {
-                                final ComponentName verifierComponent = sufficientVerifiers.get(i);
-                                idleController.addPowerSaveTempWhitelistApp(Process.myUid(),
-                                        verifierComponent.getPackageName(), idleDuration,
-                                        verifierUser.getIdentifier(), false, "package verifier");
-
-                                final Intent sufficientIntent = new Intent(verification);
-                                sufficientIntent.setComponent(verifierComponent);
-                                mContext.sendBroadcastAsUser(sufficientIntent, verifierUser);
-                            }
-                        }
-                    }
-
-                    if (mOptionalVerifierPackage != null) {
-                        final Intent optionalIntent = new Intent(verification);
-                        optionalIntent.setAction("com.qualcomm.qti.intent.action.PACKAGE_NEEDS_OPTIONAL_VERIFICATION");
-                        final List<ResolveInfo> optional_receivers = queryIntentReceiversInternal(optionalIntent,
-                            PACKAGE_MIME_TYPE, 0, verifierUser.getIdentifier(), false /*allowDynamicSplits*/);
-                        final ComponentName optionalVerifierComponent = matchComponentForVerifier(
-                            mOptionalVerifierPackage, optional_receivers);
-                        optionalIntent.setComponent(optionalVerifierComponent);
-                        verificationState.addOptionalVerifier(optionalUid);
-                        if (mRequiredVerifierPackage != null) {
-                            mContext.sendBroadcastAsUser(optionalIntent, verifierUser, android.Manifest.permission.PACKAGE_VERIFICATION_AGENT);
-                        } else {
-                            mContext.sendOrderedBroadcastAsUser(optionalIntent, verifierUser, android.Manifest.permission.PACKAGE_VERIFICATION_AGENT,
-                            new BroadcastReceiver() {
-                                @Override
-                                public void onReceive(Context context, Intent intent) {
-                                    final Message msg = mHandler.obtainMessage(CHECK_PENDING_VERIFICATION);
-                                    msg.arg1 = verificationId;
-                                    mHandler.sendMessageDelayed(msg, getVerificationTimeout());
-                                }
-                            }, null, 0, null, null);
-
-                            /*
-                             * We don't want the copy to proceed until
-                             * verification succeeds.
-                             */
-                            mVerificationCompleted = false;
-                        }
-                    }
-                    if (ret == PackageManager.INSTALL_SUCCEEDED
-                            && mRequiredVerifierPackage != null) {
-                        final ComponentName requiredVerifierComponent = matchComponentForVerifier(
-                                mRequiredVerifierPackage, receivers);
-                        Trace.asyncTraceBegin(
-                                TRACE_TAG_PACKAGE_MANAGER, "verification", verificationId);
-                        /*
-                         * Send the intent to the required verification agent,
-                         * but only start the verification timeout after the
-                         * target BroadcastReceivers have run.
-                         */
-                        verification.setComponent(requiredVerifierComponent);
-                        idleController.addPowerSaveTempWhitelistApp(Process.myUid(),
-                                mRequiredVerifierPackage, idleDuration,
-                                verifierUser.getIdentifier(), false, "package verifier");
-                        mContext.sendOrderedBroadcastAsUser(verification, verifierUser,
-                                android.Manifest.permission.PACKAGE_VERIFICATION_AGENT,
-                                new BroadcastReceiver() {
-                                    @Override
-                                    public void onReceive(Context context, Intent intent) {
-                                        final Message msg = mHandler
-                                                .obtainMessage(CHECK_PENDING_VERIFICATION);
-                                        msg.arg1 = verificationId;
-                                        mHandler.sendMessageDelayed(msg, getVerificationTimeout());
-                                    }
-                                }, null, 0, null, null);
-
-                        /*
-                         * We don't want the copy to proceed until verification
-                         * succeeds.
-                         */
-                        mVerificationCompleted = false;
+                    // If both verifications are skipped, we should remove the state.
+                    if (verificationState.areAllVerificationsComplete()) {
+                        mPendingVerification.remove(verificationId);
                     }
                 }
+
 
                 if ((installFlags & PackageManager.INSTALL_ENABLE_ROLLBACK) != 0) {
                     // TODO(ruhler) b/112431924: Don't do this in case of 'move'?
@@ -14367,6 +14336,259 @@ public class PackageManagerService extends IPackageManager.Stub
             mRet = ret;
         }
 
+        /**
+         * Send a request to check the integrity of the package.
+         */
+        void sendIntegrityVerificationRequest(
+                int verificationId,
+                PackageInfoLite pkgLite,
+                PackageVerificationState verificationState) {
+            if (!isIntegrityVerificationEnabled()) {
+                // Consider the integrity check as passed.
+                verificationState.setIntegrityVerificationResult(
+                        PackageManagerInternal.INTEGRITY_VERIFICATION_ALLOW);
+                return;
+            }
+
+            final Intent integrityVerification =
+                    new Intent(Intent.ACTION_PACKAGE_NEEDS_INTEGRITY_VERIFICATION);
+
+            integrityVerification.setDataAndType(Uri.fromFile(new File(origin.resolvedPath)),
+                    PACKAGE_MIME_TYPE);
+
+            final int flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    | Intent.FLAG_RECEIVER_REGISTERED_ONLY
+                    | Intent.FLAG_RECEIVER_FOREGROUND;
+            integrityVerification.addFlags(flags);
+
+            integrityVerification.putExtra(EXTRA_VERIFICATION_ID, verificationId);
+            integrityVerification.putExtra(EXTRA_PACKAGE_NAME, pkgLite.packageName);
+            integrityVerification.putExtra(EXTRA_VERSION_CODE, pkgLite.versionCode);
+            populateInstallerExtras(integrityVerification);
+
+            // send to integrity component only.
+            integrityVerification.setPackage("android");
+
+            DeviceIdleInternal idleController =
+                    mInjector.getLocalDeviceIdleController();
+            final long idleDuration = getVerificationTimeout();
+
+            idleController.addPowerSaveTempWhitelistAppDirect(Process.myUid(),
+                     idleDuration,
+                    false, "integrity component");
+            mContext.sendOrderedBroadcastAsUser(integrityVerification, UserHandle.SYSTEM,
+                    /* receiverPermission= */ null,
+                    new BroadcastReceiver() {
+                        @Override
+                        public void onReceive(Context context, Intent intent) {
+                            final Message msg =
+                                    mHandler.obtainMessage(CHECK_PENDING_INTEGRITY_VERIFICATION);
+                            msg.arg1 = verificationId;
+                            // TODO: do we want to use the same timeout?
+                            mHandler.sendMessageDelayed(msg, getVerificationTimeout());
+                        }
+                    }, /* scheduler= */ null,
+                    /* initialCode= */ 0,
+                    /* initialData= */ null,
+                    /* initialExtras= */ null);
+
+            Trace.asyncTraceBegin(
+                    TRACE_TAG_PACKAGE_MANAGER, "integrity_verification", verificationId);
+
+            // stop the copy until verification succeeds.
+            mIntegrityVerificationCompleted = false;
+        }
+
+        /**
+         * Send a request to verifier(s) to verify the package if necessary, and return
+         * {@link PackageManager#INSTALL_SUCCEEDED} if succeeded.
+         */
+        int sendPackageVerificationRequest(
+                int verificationId,
+                PackageInfoLite pkgLite,
+                PackageVerificationState verificationState) {
+            int ret = INSTALL_SUCCEEDED;
+
+            // TODO: http://b/22976637
+            // Apps installed for "all" users use the device owner to verify the app
+            UserHandle verifierUser = getUser();
+            if (verifierUser == UserHandle.ALL) {
+                verifierUser = UserHandle.SYSTEM;
+            }
+
+            /*
+             * Determine if we have any installed package verifiers. If we
+             * do, then we'll defer to them to verify the packages.
+             */
+            final int requiredUid = mRequiredVerifierPackage == null ? -1
+                    : getPackageUid(mRequiredVerifierPackage, MATCH_DEBUG_TRIAGED_MISSING,
+                            verifierUser.getIdentifier());
+            verificationState.setRequiredVerifierUid(requiredUid);
+            final int optionalUid = mOptionalVerifierPackage == null ? -1
+                    : getPackageUid(mOptionalVerifierPackage, MATCH_DEBUG_TRIAGED_MISSING,
+                            verifierUser.getIdentifier());
+            final int installerUid =
+                    verificationInfo == null ? -1 : verificationInfo.installerUid;
+            if (!origin.existing && (requiredUid != -1 || optionalUid != -1)
+                    && isVerificationEnabled(
+                    verifierUser.getIdentifier(), installFlags, installerUid)) {
+                final Intent verification = new Intent(
+                        Intent.ACTION_PACKAGE_NEEDS_VERIFICATION);
+                verification.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+                verification.setDataAndType(Uri.fromFile(new File(origin.resolvedPath)),
+                        PACKAGE_MIME_TYPE);
+                verification.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                // Query all live verifiers based on current user state
+                final List<ResolveInfo> receivers = queryIntentReceiversInternal(verification,
+                        PACKAGE_MIME_TYPE, 0, verifierUser.getIdentifier(),
+                        false /*allowDynamicSplits*/);
+
+                if (DEBUG_VERIFY) {
+                    Slog.d(TAG, "Found " + receivers.size() + " verifiers for intent "
+                            + verification.toString() + " with " + pkgLite.verifiers.length
+                            + " optional verifiers");
+                }
+
+                verification.putExtra(PackageManager.EXTRA_VERIFICATION_ID, verificationId);
+
+                verification.putExtra(
+                        PackageManager.EXTRA_VERIFICATION_INSTALL_FLAGS, installFlags);
+
+                verification.putExtra(
+                        PackageManager.EXTRA_VERIFICATION_PACKAGE_NAME, pkgLite.packageName);
+
+                verification.putExtra(
+                        PackageManager.EXTRA_VERIFICATION_VERSION_CODE, pkgLite.versionCode);
+
+                verification.putExtra(
+                        PackageManager.EXTRA_VERIFICATION_LONG_VERSION_CODE,
+                        pkgLite.getLongVersionCode());
+
+                populateInstallerExtras(verification);
+
+                final List<ComponentName> sufficientVerifiers = matchVerifiers(pkgLite,
+                        receivers, verificationState);
+
+                DeviceIdleInternal idleController =
+                        mInjector.getLocalDeviceIdleController();
+                final long idleDuration = getVerificationTimeout();
+
+                /*
+                 * If any sufficient verifiers were listed in the package
+                 * manifest, attempt to ask them.
+                 */
+                if (sufficientVerifiers != null) {
+                    final int n = sufficientVerifiers.size();
+                    if (n == 0) {
+                        Slog.i(TAG, "Additional verifiers required, but none installed.");
+                        ret = PackageManager.INSTALL_FAILED_VERIFICATION_FAILURE;
+                    } else {
+                        for (int i = 0; i < n; i++) {
+                            final ComponentName verifierComponent = sufficientVerifiers.get(i);
+                            idleController.addPowerSaveTempWhitelistApp(Process.myUid(),
+                                    verifierComponent.getPackageName(), idleDuration,
+                                    verifierUser.getIdentifier(), false, "package verifier");
+
+                            final Intent sufficientIntent = new Intent(verification);
+                            sufficientIntent.setComponent(verifierComponent);
+                            mContext.sendBroadcastAsUser(sufficientIntent, verifierUser);
+                        }
+                    }
+                }
+
+                if (mOptionalVerifierPackage != null) {
+                    final Intent optionalIntent = new Intent(verification);
+                    optionalIntent.setAction("com.qualcomm.qti.intent.action.PACKAGE_NEEDS_OPTIONAL_VERIFICATION");
+                    final List<ResolveInfo> optional_receivers = queryIntentReceiversInternal(optionalIntent,
+                        PACKAGE_MIME_TYPE, 0, verifierUser.getIdentifier(), false /*allowDynamicSplits*/);
+                    final ComponentName optionalVerifierComponent = matchComponentForVerifier(
+                        mOptionalVerifierPackage, optional_receivers);
+                    optionalIntent.setComponent(optionalVerifierComponent);
+                    verificationState.addOptionalVerifier(optionalUid);
+                    if (mRequiredVerifierPackage != null) {
+                        mContext.sendBroadcastAsUser(optionalIntent, verifierUser, android.Manifest.permission.PACKAGE_VERIFICATION_AGENT);
+                    } else {
+                        mContext.sendOrderedBroadcastAsUser(optionalIntent, verifierUser, android.Manifest.permission.PACKAGE_VERIFICATION_AGENT,
+                        new BroadcastReceiver() {
+                            @Override
+                            public void onReceive(Context context, Intent intent) {
+                                final Message msg = mHandler.obtainMessage(CHECK_PENDING_VERIFICATION);
+                                msg.arg1 = verificationId;
+                                mHandler.sendMessageDelayed(msg, getVerificationTimeout());
+                            }
+                        }, null, 0, null, null);
+                        /*
+                         * We don't want the copy to proceed until
+                         * verification succeeds.
+                         */
+                        mVerificationCompleted = false;
+                    }
+                }
+                if (mRequiredVerifierPackage != null) {
+                    /*
+                     * Send the intent to the required verification agent,
+                     * but only start the verification timeout after the
+                     * target BroadcastReceivers have run.
+                     */
+                    final ComponentName requiredVerifierComponent = matchComponentForVerifier(
+                            mRequiredVerifierPackage, receivers);
+                    verification.setComponent(requiredVerifierComponent);
+                    idleController.addPowerSaveTempWhitelistApp(Process.myUid(),
+                            mRequiredVerifierPackage, idleDuration,
+                            verifierUser.getIdentifier(), false, "package verifier");
+                    mContext.sendOrderedBroadcastAsUser(verification, verifierUser,
+                            android.Manifest.permission.PACKAGE_VERIFICATION_AGENT,
+                            new BroadcastReceiver() {
+                                @Override
+                                public void onReceive(Context context, Intent intent) {
+                                    final Message msg = mHandler
+                                            .obtainMessage(CHECK_PENDING_VERIFICATION);
+                                    msg.arg1 = verificationId;
+                                    mHandler.sendMessageDelayed(msg, getVerificationTimeout());
+                                }
+                            }, null, 0, null, null);
+
+                    Trace.asyncTraceBegin(
+                            TRACE_TAG_PACKAGE_MANAGER, "verification", verificationId);
+
+                    /*
+                     * We don't want the copy to proceed until verification
+                     * succeeds.
+                     */
+                    mVerificationCompleted = false;
+                }
+            } else {
+                verificationState.setVerifierResponse(
+                        requiredUid, PackageManager.VERIFICATION_ALLOW);
+            }
+            return ret;
+        }
+
+        void populateInstallerExtras(Intent intent) {
+            intent.putExtra(PackageManager.EXTRA_VERIFICATION_INSTALLER_PACKAGE,
+                    installSource.initiatingPackageName);
+
+            if (verificationInfo != null) {
+                if (verificationInfo.originatingUri != null) {
+                    intent.putExtra(Intent.EXTRA_ORIGINATING_URI,
+                            verificationInfo.originatingUri);
+                }
+                if (verificationInfo.referrer != null) {
+                    intent.putExtra(Intent.EXTRA_REFERRER,
+                            verificationInfo.referrer);
+                }
+                if (verificationInfo.originatingUid >= 0) {
+                    intent.putExtra(Intent.EXTRA_ORIGINATING_UID,
+                            verificationInfo.originatingUid);
+                }
+                if (verificationInfo.installerUid >= 0) {
+                    intent.putExtra(PackageManager.EXTRA_VERIFICATION_INSTALLER_UID,
+                            verificationInfo.installerUid);
+                }
+            }
+        }
+
         void setReturnCode(int ret) {
             if (mRet == PackageManager.INSTALL_SUCCEEDED) {
                 // Only update mRet if it was previously INSTALL_SUCCEEDED to
@@ -14376,9 +14598,27 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         void handleVerificationFinished() {
-            mVerificationCompleted = true;
-            handleReturnCode();
+            if (!mVerificationCompleted) {
+                mVerificationCompleted = true;
+                if (mIntegrityVerificationCompleted || mRet != INSTALL_SUCCEEDED) {
+                    mIntegrityVerificationCompleted = true;
+                    handleReturnCode();
+                }
+                // integrity verification still pending.
+            }
         }
+
+        void handleIntegrityVerificationFinished() {
+            if (!mIntegrityVerificationCompleted) {
+                mIntegrityVerificationCompleted = true;
+                if (mVerificationCompleted || mRet != INSTALL_SUCCEEDED) {
+                    mVerificationCompleted = true;
+                    handleReturnCode();
+                }
+                // verifier still pending
+            }
+        }
+
 
         void handleRollbackEnabled() {
             // TODO(ruhler) b/112431924: Consider halting the install if we
@@ -14389,7 +14629,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         void handleReturnCode() {
-            if (mVerificationCompleted && mEnableRollbackCompleted) {
+            if (mVerificationCompleted
+                    && mIntegrityVerificationCompleted && mEnableRollbackCompleted) {
                 if ((installFlags & PackageManager.INSTALL_DRY_RUN) != 0) {
                     String packageName = "";
                     try {
@@ -14671,7 +14912,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 return false;
             }
 
-            if (!SELinux.restoreconRecursive(afterCodeFile)) {
+            //TODO(b/136132412): enable selinux restorecon for incremental directories
+            if (!onIncremental && !SELinux.restoreconRecursive(afterCodeFile)) {
                 Slog.w(TAG, "Failed to restorecon");
                 return false;
             }
@@ -15774,7 +16016,9 @@ public class PackageManagerService extends IPackageManager.Stub
                 // TODO(patb): create a more descriptive reason than unknown in future release
                 // mark all non-failure installs as UNKNOWN so we do not treat them as success
                 for (InstallRequest request : requests) {
-                    request.installResult.freezer.close();
+                    if (request.installResult.freezer != null) {
+                        request.installResult.freezer.close();
+                    }
                     if (request.installResult.returnCode == PackageManager.INSTALL_SUCCEEDED) {
                         request.installResult.returnCode = PackageManager.INSTALL_UNKNOWN;
                     }
@@ -16686,37 +16930,48 @@ public class PackageManagerService extends IPackageManager.Stub
                 + " Activities needs verification ...");
 
         int count = 0;
-
+        boolean handlesWebUris = false;
+        final boolean alreadyVerified;
         synchronized (mLock) {
             // If this is a new install and we see that we've already run verification for this
             // package, we have nothing to do: it means the state was restored from backup.
-            if (!replacing) {
-                IntentFilterVerificationInfo ivi =
-                        mSettings.getIntentFilterVerificationLPr(packageName);
-                if (ivi != null) {
-                    if (DEBUG_DOMAIN_VERIFICATION) {
-                        Slog.i(TAG, "Package " + packageName+ " already verified: status="
-                                + ivi.getStatusString());
-                    }
-                    return;
+            final IntentFilterVerificationInfo ivi =
+                    mSettings.getIntentFilterVerificationLPr(packageName);
+            alreadyVerified = (ivi != null);
+            if (!replacing && alreadyVerified) {
+                if (DEBUG_DOMAIN_VERIFICATION) {
+                    Slog.i(TAG, "Package " + packageName + " already verified: status="
+                            + ivi.getStatusString());
                 }
+                return;
             }
 
-            // If any filters need to be verified, then all need to be.
+            // If any filters need to be verified, then all need to be.  In addition, we need to
+            // know whether an updating app has any web navigation intent filters, to re-
+            // examine handling policy even if not re-verifying.
             boolean needToVerify = false;
             for (ParsedActivity a : activities) {
                 for (ParsedActivityIntentInfo filter : a.intents) {
+                    if (filter.handlesWebUris(true)) {
+                        handlesWebUris = true;
+                    }
                     if (filter.needsVerification() && needsNetworkVerificationLPr(filter)) {
                         if (DEBUG_DOMAIN_VERIFICATION) {
                             Slog.d(TAG,
                                     "Intent filter needs verification, so processing all filters");
                         }
                         needToVerify = true;
+                        // It's safe to break out here because filter.needsVerification()
+                        // can only be true if filter.handlesWebUris(true) returns true, so
+                        // we've already noted that.
                         break;
                     }
                 }
             }
 
+            // Note whether this app publishes any web navigation handling support at all,
+            // and whether there are any web-nav filters that fit the profile for running
+            // a verification pass now.
             if (needToVerify) {
                 final int verificationId = mIntentFilterVerificationToken++;
                 for (ParsedActivity a : activities) {
@@ -16734,13 +16989,23 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         if (count > 0) {
+            // count > 0 means that we're running a full verification pass
             if (DEBUG_DOMAIN_VERIFICATION) Slog.d(TAG, "Starting " + count
                     + " IntentFilter verification" + (count > 1 ? "s" : "")
                     +  " for userId:" + userId);
             mIntentFilterVerifier.startVerifications(userId);
+        } else if (alreadyVerified && handlesWebUris) {
+            // App used autoVerify in the past, no longer does, but still handles web
+            // navigation starts.
+            if (DEBUG_DOMAIN_VERIFICATION) {
+                Slog.d(TAG, "App changed web filters but no longer verifying - resetting policy");
+            }
+            synchronized (mLock) {
+                clearIntentFilterVerificationsLPw(packageName, userId);
+            }
         } else {
             if (DEBUG_DOMAIN_VERIFICATION) {
-                Slog.d(TAG, "No filters or not all autoVerify for " + packageName);
+                Slog.d(TAG, "No web filters or no prior verify policy for " + packageName);
             }
         }
     }
@@ -18029,14 +18294,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
             mPermissionManager.resetRuntimePermissions(pkg, nextUserId);
-            // Also delete contributed media, when requested
-            if ((flags & PackageManager.DELETE_CONTRIBUTED_MEDIA) != 0) {
-                try {
-                    MediaStore.deleteContributedMedia(mContext, ps.name, UserHandle.of(nextUserId));
-                } catch (IOException e) {
-                    Slog.w(TAG, "Failed to delete contributed media for " + ps.name, e);
-                }
-            }
         }
 
         if (outInfo != null) {
@@ -19335,6 +19592,18 @@ public class PackageManagerService extends IPackageManager.Stub
         }
         return ensureSystemPackageName(appPredictionServiceComponentName.getPackageName());
     }
+
+    private @NonNull String[] dropNonSystemPackages(@NonNull String[] pkgNames) {
+        return emptyIfNull(filter(pkgNames, String[]::new, mIsSystemPackage), String.class);
+    }
+
+    private Predicate<String> mIsSystemPackage = (pkgName) -> {
+        if ("android".equals(pkgName)) {
+            return true;
+        }
+        AndroidPackage pkg = mPackages.get(pkgName);
+        return pkg != null && pkg.isSystem();
+    };
 
     @Override
     public String getSystemCaptionsServicePackageName() {
@@ -22617,7 +22886,11 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public @NonNull String[] getKnownPackageNames(int knownPackage, int userId) {
-            switch (knownPackage) {
+            return dropNonSystemPackages(getKnownPackageNamesInternal(knownPackage, userId));
+        }
+
+        private String[] getKnownPackageNamesInternal(int knownPackage, int userId) {
+            switch(knownPackage) {
                 case PackageManagerInternal.PACKAGE_BROWSER:
                     return new String[]{mPermissionManager.getDefaultBrowser(userId)};
                 case PackageManagerInternal.PACKAGE_INSTALLER:
@@ -22644,6 +22917,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     return filterOnlySystemPackages(mAppPredictionServicePackage);
                 case PackageManagerInternal.PACKAGE_TELEPHONY:
                     return filterOnlySystemPackages(mTelephonyPackages);
+                case PackageManagerInternal.PACKAGE_COMPANION:
+                    return filterOnlySystemPackages("com.android.companiondevicemanager");
                 default:
                     return ArrayUtils.emptyArray(String.class);
             }
@@ -22701,6 +22976,17 @@ public class PackageManagerService extends IPackageManager.Stub
             return PackageManagerService.this
                     .getPackageInfoInternal(packageName, PackageManager.VERSION_CODE_HIGHEST,
                             flags, filterCallingUid, userId);
+        }
+
+        @Override
+        public long getCeDataInode(String packageName, int userId) {
+            synchronized (mLock) {
+                final PackageSetting ps = mSettings.mPackages.get(packageName);
+                if (ps != null) {
+                    return ps.getCeDataInode(userId);
+                }
+                return 0;
+            }
         }
 
         @Override
@@ -22828,6 +23114,12 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         @Override
+        public ComponentName getSystemUiServiceComponent() {
+            return ComponentName.unflattenFromString(mContext.getResources().getString(
+                    com.android.internal.R.string.config_systemUIServiceComponent));
+        }
+
+        @Override
         public void setDeviceAndProfileOwnerPackages(
                 int deviceOwnerUserId, String deviceOwnerPackage,
                 SparseArray<String> profileOwnerPackages) {
@@ -22907,10 +23199,10 @@ public class PackageManagerService extends IPackageManager.Stub
         @Override
         public void requestInstantAppResolutionPhaseTwo(AuxiliaryResolveInfo responseObj,
                 Intent origIntent, String resolvedType, String callingPackage,
-                Bundle verificationBundle, int userId) {
+                boolean isRequesterInstantApp, Bundle verificationBundle, int userId) {
             PackageManagerService.this.requestInstantAppResolutionPhaseTwo(
-                    responseObj, origIntent, resolvedType, callingPackage, verificationBundle,
-                    userId);
+                    responseObj, origIntent, resolvedType, callingPackage, isRequesterInstantApp,
+                    verificationBundle, userId);
         }
 
         @Override
@@ -23123,16 +23415,10 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         @Override
-        public String getSharedUserIdForPackage(String packageName) {
+        @NonNull
+        public String[] getSharedUserPackagesForPackage(String packageName, int userId) {
             synchronized (mLock) {
-                return getSharedUserIdForPackageLocked(packageName);
-            }
-        }
-
-        @Override
-        public String[] getPackagesForSharedUserId(String sharedUserId, int userId) {
-            synchronized (mLock) {
-                return getPackagesForSharedUserIdLocked(sharedUserId, userId);
+                return getSharedUserPackagesForPackageLocked(packageName, userId);
             }
         }
 
@@ -23365,36 +23651,25 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     @GuardedBy("mLock")
-    private String getSharedUserIdForPackageLocked(String packageName) {
-        final PackageSetting ps = mSettings.mPackages.get(packageName);
-        return (ps != null && ps.isSharedUser()) ? ps.sharedUser.name : null;
-    }
-
-    @GuardedBy("mLock")
-    private String[] getPackagesForSharedUserIdLocked(String sharedUserId, int userId) {
-        try {
-            final SharedUserSetting sus = mSettings.getSharedUserLPw(
-                    sharedUserId, 0, 0, false);
-            if (sus == null) {
-                return EmptyArray.STRING;
-            }
-            String[] res = new String[sus.packages.size()];
-            final Iterator<PackageSetting> it = sus.packages.iterator();
-            int i = 0;
-            while (it.hasNext()) {
-                PackageSetting ps = it.next();
-                if (ps.getInstalled(userId)) {
-                    res[i++] = ps.name;
-                }
-            }
-            res = ArrayUtils.trimToSize(res, i);
-            if (res != null) {
-                return res;
-            }
-        } catch (PackageManagerException e) {
-            // Should not happen
+    @NonNull
+    private String[] getSharedUserPackagesForPackageLocked(String packageName, int userId) {
+        final PackageSetting packageSetting = mSettings.mPackages.get(packageName);
+        if (packageSetting == null || !packageSetting.isSharedUser()) {
+            return EmptyArray.STRING;
         }
-        return EmptyArray.STRING;
+
+        ArraySet<PackageSetting> packages = packageSetting.sharedUser.packages;
+        String[] res = new String[packages.size()];
+        final Iterator<PackageSetting> it = packages.iterator();
+        int i = 0;
+        while (it.hasNext()) {
+            PackageSetting ps = it.next();
+            if (ps.getInstalled(userId)) {
+                res[i++] = ps.name;
+            }
+        }
+        res = ArrayUtils.trimToSize(res, i);
+        return res != null ? res : EmptyArray.STRING;
     }
 
     @Override

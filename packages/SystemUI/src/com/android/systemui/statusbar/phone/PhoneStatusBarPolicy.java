@@ -38,12 +38,11 @@ import android.telephony.TelephonyManager;
 import android.text.format.DateFormat;
 import android.util.Log;
 
-import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.UiOffloadThread;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.dagger.qualifiers.UiBackground;
 import com.android.systemui.qs.tiles.DndTile;
 import com.android.systemui.qs.tiles.RotationLockTile;
 import com.android.systemui.statusbar.CommandQueue;
@@ -65,6 +64,7 @@ import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.statusbar.policy.ZenModeController;
 
 import java.util.Locale;
+import java.util.concurrent.Executor;
 
 /**
  * This class contains all of the policy about which icons are installed in the status bar at boot
@@ -116,7 +116,7 @@ public class PhoneStatusBarPolicy
     private final DeviceProvisionedController mProvisionedController;
     private final KeyguardStateController mKeyguardStateController;
     private final LocationController mLocationController;
-    private final UiOffloadThread mUiOffloadThread = Dependency.get(UiOffloadThread.class);
+    private final Executor mUiBgExecutor;
     private final SensorPrivacyController mSensorPrivacyController;
 
     // Assume it's all good unless we hear otherwise.  We don't always seem
@@ -134,7 +134,8 @@ public class PhoneStatusBarPolicy
     private WifiManager mWifiManager;
 
     public PhoneStatusBarPolicy(Context context, StatusBarIconController iconController,
-            CommandQueue commandQueue, BroadcastDispatcher broadcastDispatcher) {
+            CommandQueue commandQueue, BroadcastDispatcher broadcastDispatcher,
+            @UiBackground Executor uiBgExecutor) {
         mContext = context;
         mIconController = iconController;
         mCast = Dependency.get(CastController.class);
@@ -151,6 +152,7 @@ public class PhoneStatusBarPolicy
         mKeyguardStateController = Dependency.get(KeyguardStateController.class);
         mLocationController = Dependency.get(LocationController.class);
         mSensorPrivacyController = Dependency.get(SensorPrivacyController.class);
+        mUiBgExecutor = uiBgExecutor;
 
         mSlotCast = context.getString(com.android.internal.R.string.status_bar_cast);
         mSlotHotspot = context.getString(com.android.internal.R.string.status_bar_hotspot);
@@ -287,21 +289,21 @@ public class PhoneStatusBarPolicy
     }
 
     private final void updateSimState(Intent intent) {
-        String stateExtra = intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE);
-        if (IccCardConstants.INTENT_VALUE_ICC_ABSENT.equals(stateExtra)) {
+        String stateExtra = intent.getStringExtra(Intent.EXTRA_SIM_STATE);
+        if (Intent.SIM_STATE_ABSENT.equals(stateExtra)) {
             mSimState = TelephonyManager.SIM_STATE_READY;
-        } else if (IccCardConstants.INTENT_VALUE_ICC_CARD_IO_ERROR.equals(stateExtra)) {
+        } else if (Intent.SIM_STATE_CARD_IO_ERROR.equals(stateExtra)) {
             mSimState = TelephonyManager.SIM_STATE_CARD_IO_ERROR;
-        } else if (IccCardConstants.INTENT_VALUE_ICC_CARD_RESTRICTED.equals(stateExtra)) {
+        } else if (Intent.SIM_STATE_CARD_RESTRICTED.equals(stateExtra)) {
             mSimState = TelephonyManager.SIM_STATE_CARD_RESTRICTED;
-        } else if (IccCardConstants.INTENT_VALUE_ICC_READY.equals(stateExtra)) {
+        } else if (Intent.SIM_STATE_READY.equals(stateExtra)) {
             mSimState = TelephonyManager.SIM_STATE_READY;
-        } else if (IccCardConstants.INTENT_VALUE_ICC_LOCKED.equals(stateExtra)) {
+        } else if (Intent.SIM_STATE_LOCKED.equals(stateExtra)) {
             final String lockedReason =
-                    intent.getStringExtra(IccCardConstants.INTENT_KEY_LOCKED_REASON);
-            if (IccCardConstants.INTENT_VALUE_LOCKED_ON_PIN.equals(lockedReason)) {
+                    intent.getStringExtra(Intent.EXTRA_SIM_LOCKED_REASON);
+            if (Intent.SIM_LOCKED_ON_PIN.equals(lockedReason)) {
                 mSimState = TelephonyManager.SIM_STATE_PIN_REQUIRED;
-            } else if (IccCardConstants.INTENT_VALUE_LOCKED_ON_PUK.equals(lockedReason)) {
+            } else if (Intent.SIM_LOCKED_ON_PUK.equals(lockedReason)) {
                 mSimState = TelephonyManager.SIM_STATE_PUK_REQUIRED;
             } else {
                 mSimState = TelephonyManager.SIM_STATE_NETWORK_LOCKED;
@@ -383,8 +385,11 @@ public class PhoneStatusBarPolicy
                 mContext.getString(R.string.accessibility_quick_settings_bluetooth_on);
         boolean bluetoothVisible = false;
         if (mBluetooth != null) {
-            if (mBluetooth.isBluetoothConnected()) {
-                contentDescription = mContext.getString(R.string.accessibility_bluetooth_connected);
+            if (mBluetooth.isBluetoothConnected()
+                    && (mBluetooth.isBluetoothAudioActive()
+                    || !mBluetooth.isBluetoothAudioProfileOnly())) {
+                contentDescription = mContext.getString(
+                        R.string.accessibility_bluetooth_connected);
                 bluetoothVisible = mBluetooth.isBluetoothEnabled();
             }
         }
@@ -448,7 +453,7 @@ public class PhoneStatusBarPolicy
         // getLastResumedActivityUserId needds to acquire the AM lock, which may be contended in
         // some cases. Since it doesn't really matter here whether it's updated in this frame
         // or in the next one, we call this method from our UI offload thread.
-        mUiOffloadThread.submit(() -> {
+        mUiBgExecutor.execute(() -> {
             final int userId;
             try {
                 userId = ActivityTaskManager.getService().getLastResumedActivityUserId();

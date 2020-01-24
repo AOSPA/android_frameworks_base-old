@@ -37,6 +37,8 @@ import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.notification.NotificationUtils;
+import com.android.systemui.statusbar.notification.collection.GroupEntry;
+import com.android.systemui.statusbar.notification.collection.ListEntry;
 import com.android.systemui.statusbar.notification.collection.NotifCollection;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.listbuilder.NotifListBuilder;
@@ -51,7 +53,7 @@ import javax.inject.Singleton;
  */
 @Singleton
 public class KeyguardCoordinator implements Coordinator {
-    private static final String TAG = "KeyguardNotificationCoordinator";
+    private static final String TAG = "KeyguardCoordinator";
 
     private final Context mContext;
     private final Handler mMainHandler;
@@ -83,10 +85,10 @@ public class KeyguardCoordinator implements Coordinator {
     @Override
     public void attach(NotifCollection notifCollection, NotifListBuilder notifListBuilder) {
         setupInvalidateNotifListCallbacks();
-        notifListBuilder.addFilter(mNotifFilter);
+        notifListBuilder.addPreRenderFilter(mNotifFilter);
     }
 
-    protected final NotifFilter mNotifFilter = new NotifFilter(TAG) {
+    private final NotifFilter mNotifFilter = new NotifFilter(TAG) {
         @Override
         public boolean shouldFilterOut(NotificationEntry entry, long now) {
             final StatusBarNotification sbn = entry.getSbn();
@@ -129,12 +131,11 @@ public class KeyguardCoordinator implements Coordinator {
                     }
                 }
 
-                // ... neither this notification nor its summary have high enough priority
+                // ... neither this notification nor its group have high enough priority
                 // to be shown on the lockscreen
-                // TODO: grouping hasn't happened yet (b/145134683)
                 if (entry.getParent() != null) {
-                    final NotificationEntry summary = entry.getParent().getRepresentativeEntry();
-                    if (priorityExceedsLockscreenShowingThreshold(summary)) {
+                    final GroupEntry parent = entry.getParent();
+                    if (priorityExceedsLockscreenShowingThreshold(parent)) {
                         return false;
                     }
                 }
@@ -144,17 +145,16 @@ public class KeyguardCoordinator implements Coordinator {
         }
     };
 
-    private boolean priorityExceedsLockscreenShowingThreshold(NotificationEntry entry) {
+    private boolean priorityExceedsLockscreenShowingThreshold(ListEntry entry) {
         if (entry == null) {
             return false;
         }
         if (NotificationUtils.useNewInterruptionModel(mContext)
                 && hideSilentNotificationsOnLockscreen()) {
-            // TODO: make sure in the NewNotifPipeline that entry.isHighPriority() has been
-            //  correctly updated before reaching this point (b/145134683)
             return entry.isHighPriority();
         } else {
-            return !entry.getRanking().isAmbient();
+            return entry.getRepresentativeEntry() != null
+                    && !entry.getRepresentativeEntry().getRanking().isAmbient();
         }
     }
 

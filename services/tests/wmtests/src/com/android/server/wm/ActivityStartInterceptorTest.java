@@ -90,7 +90,7 @@ public class ActivityStartInterceptorTest {
     @Mock
     private ActivityTaskManagerService mService;
     @Mock
-    private RootActivityContainer mRootActivityContainer;
+    private RootWindowContainer mRootWindowContainer;
     @Mock
     private ActivityStackSupervisor mSupervisor;
     @Mock
@@ -114,7 +114,7 @@ public class ActivityStartInterceptorTest {
         MockitoAnnotations.initMocks(this);
         mService.mAmInternal = mAmInternal;
         mInterceptor = new ActivityStartInterceptor(
-                mService, mSupervisor, mRootActivityContainer, mContext);
+                mService, mSupervisor, mRootWindowContainer, mContext);
         mInterceptor.setStates(TEST_USER_ID, TEST_REAL_CALLING_PID, TEST_REAL_CALLING_UID,
                 TEST_START_FLAGS, TEST_CALLING_PACKAGE);
 
@@ -137,8 +137,8 @@ public class ActivityStartInterceptorTest {
         // Mock KeyguardManager
         when(mContext.getSystemService(Context.KEYGUARD_SERVICE)).thenReturn(mKeyguardManager);
         when(mKeyguardManager.createConfirmDeviceCredentialIntent(
-                nullable(CharSequence.class), nullable(CharSequence.class), eq(TEST_USER_ID)))
-                .thenReturn(CONFIRM_CREDENTIALS_INTENT);
+                nullable(CharSequence.class), nullable(CharSequence.class), eq(TEST_USER_ID),
+                eq(true))).thenReturn(CONFIRM_CREDENTIALS_INTENT);
 
         // Mock PackageManager
         when(mService.getPackageManager()).thenReturn(mPackageManager);

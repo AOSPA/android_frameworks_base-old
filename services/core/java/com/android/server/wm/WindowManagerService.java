@@ -59,7 +59,6 @@ import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_HIDE_NON_SYSTE
 import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
-import static android.view.WindowManager.LayoutParams.TYPE_DRAG;
 import static android.view.WindowManager.LayoutParams.TYPE_DREAM;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
@@ -79,7 +78,6 @@ import static com.android.internal.util.LatencyTracker.ACTION_ROTATE_SCREEN;
 import static com.android.server.LockGuard.INDEX_WINDOW;
 import static com.android.server.LockGuard.installLock;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
-import static com.android.server.wm.ActivityStackSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_BOOT;
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_FOCUS;
@@ -299,6 +297,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -408,8 +407,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     private static final int ANIMATION_COMPLETED_TIMEOUT_MS = 5000;
 
-    final WindowManagerConstants mConstants = new WindowManagerConstants(this,
-            DeviceConfigInterface.REAL);
+    final WindowManagerConstants mConstants;
 
     final WindowTracing mWindowTracing;
 
@@ -494,13 +492,6 @@ public class WindowManagerService extends IWindowManager.Stub
     final boolean mHasPermanentDpad;
     final long mDrawLockTimeoutMillis;
     final boolean mAllowAnimationsInLowPowerMode;
-
-    // TODO(b/122671846) Remove the flag below in favor of isLowRam once feature is stable
-    /**
-     * Use very low resolution task snapshots. Replaces task snapshot starting windows with
-     * splashscreen starting windows. Used on low RAM devices to save memory.
-     */
-    final boolean mLowRamTaskSnapshotsAndRecents;
 
     final boolean mAllowBootMessages;
 
@@ -642,10 +633,6 @@ public class WindowManagerService extends IWindowManager.Stub
     boolean mForceDesktopModeOnExternalDisplays;
 
     boolean mDisableTransitionAnimation;
-
-    int getDragLayerLocked() {
-        return mPolicy.getWindowLayerFromTypeLw(TYPE_DRAG) * TYPE_LAYER_MULTIPLIER + TYPE_LAYER_OFFSET;
-    }
 
     class RotationWatcher {
         final IRotationWatcher mWatcher;
@@ -1118,8 +1105,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 com.android.internal.R.bool.config_disableTransitionAnimation);
         mPerDisplayFocusEnabled = context.getResources().getBoolean(
                 com.android.internal.R.bool.config_perDisplayFocusEnabled);
-        mLowRamTaskSnapshotsAndRecents = context.getResources().getBoolean(
-                com.android.internal.R.bool.config_lowRamTaskSnapshotsAndRecents);
         mInputManager = inputManager; // Must be before createDisplayContentLocked.
         mDisplayManagerInternal = LocalServices.getService(DisplayManagerInternal.class);
 
@@ -1246,6 +1231,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
         mHighRefreshRateBlacklist = HighRefreshRateBlacklist.create(context.getResources());
 
+        mConstants = new WindowManagerConstants(this, DeviceConfigInterface.REAL);
         mConstants.start(new HandlerExecutor(mH));
 
         LocalServices.addService(WindowManagerInternal.class, new LocalService());
@@ -1665,7 +1651,8 @@ public class WindowManagerService extends IWindowManager.Stub
                     outFrame, outContentInsets, outStableInsets, outDisplayCutout)) {
                 res |= WindowManagerGlobal.ADD_FLAG_ALWAYS_CONSUME_SYSTEM_BARS;
             }
-            outInsetsState.set(displayContent.getInsetsPolicy().getInsetsForDispatch(win));
+            outInsetsState.set(displayContent.getInsetsPolicy().getInsetsForDispatch(win),
+                    win.mClient instanceof IWindow.Stub /* copySource */);
 
             if (mInTouchMode) {
                 res |= WindowManagerGlobal.ADD_FLAG_IN_TOUCH_MODE;
@@ -1735,7 +1722,7 @@ public class WindowManagerService extends IWindowManager.Stub
             }
         }
 
-        return mAtmService.mRootActivityContainer.getActivityDisplayOrCreate(displayId);
+        return mRoot.getDisplayContentOrCreate(displayId);
     }
 
     private boolean doesAddToastWindowRequireToken(String packageName, int callingUid,
@@ -2349,7 +2336,8 @@ public class WindowManagerService extends IWindowManager.Stub
                     outStableInsets);
             outCutout.set(win.getWmDisplayCutout().getDisplayCutout());
             outBackdropFrame.set(win.getBackdropFrame(win.getFrameLw()));
-            outInsetsState.set(displayContent.getInsetsPolicy().getInsetsForDispatch(win));
+            outInsetsState.set(displayContent.getInsetsPolicy().getInsetsForDispatch(win),
+                    win.mClient instanceof IWindow.Stub /* copySource */);
             if (DEBUG) {
                 Slog.v(TAG_WM, "Relayout given client " + client.asBinder()
                         + ", requestedWidth=" + requestedWidth
@@ -2881,7 +2869,7 @@ public class WindowManagerService extends IWindowManager.Stub
             != PackageManager.PERMISSION_GRANTED) {
             throw new SecurityException("Requires DISABLE_KEYGUARD permission");
         }
-        Preconditions.checkNotNull(token, "token is null");
+        Objects.requireNonNull(token, "token is null");
         final int callingUid = Binder.getCallingUid();
         final long origIdentity = Binder.clearCallingIdentity();
         try {
@@ -3741,6 +3729,26 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
+    public SurfaceControl addShellRoot(int displayId, IWindow client, int windowType) {
+        if (mContext.checkCallingOrSelfPermission(MANAGE_APP_TOKENS)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("Must hold permission " + MANAGE_APP_TOKENS);
+        }
+        final long origId = Binder.clearCallingIdentity();
+        try {
+            synchronized (mGlobalLock) {
+                final DisplayContent dc = mRoot.getDisplayContent(displayId);
+                if (dc == null) {
+                    return null;
+                }
+                return dc.addShellRoot(client, windowType);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(origId);
+        }
+    }
+
+    @Override
     public int watchRotation(IRotationWatcher watcher, int displayId) {
         final DisplayContent displayContent;
         synchronized (mGlobalLock) {
@@ -4353,7 +4361,7 @@ public class WindowManagerService extends IWindowManager.Stub
         final DisplayContent topFocusedDisplay = mRoot.getTopFocusedDisplayContent();
         final ActivityRecord focusedApp = topFocusedDisplay.mFocusedApp;
         return (focusedApp != null && focusedApp.getTask() != null)
-                ? focusedApp.getTask().getTaskStack() : null;
+                ? focusedApp.getTask().getStack() : null;
     }
 
     public boolean detectSafeMode() {
@@ -4521,6 +4529,7 @@ public class WindowManagerService extends IWindowManager.Stub
         public static final int ANIMATION_FAILSAFE = 60;
         public static final int RECOMPUTE_FOCUS = 61;
         public static final int ON_POINTER_DOWN_OUTSIDE_FOCUS = 62;
+        public static final int LAYOUT_AND_ASSIGN_WINDOW_LAYERS_IF_NEEDED = 63;
 
         /**
          * Used to denote that an integer field in a message will not be used.
@@ -4892,6 +4901,13 @@ public class WindowManagerService extends IWindowManager.Stub
                     synchronized (mGlobalLock) {
                         final IBinder touchedToken = (IBinder) msg.obj;
                         onPointerDownOutsideFocusLocked(touchedToken);
+                    }
+                    break;
+                }
+                case LAYOUT_AND_ASSIGN_WINDOW_LAYERS_IF_NEEDED: {
+                    synchronized (mGlobalLock) {
+                        final DisplayContent displayContent = (DisplayContent) msg.obj;
+                        displayContent.layoutAndAssignWindowLayersIfNeeded();
                     }
                     break;
                 }
@@ -5796,7 +5812,7 @@ public class WindowManagerService extends IWindowManager.Stub
      */
     void dumpDebugLocked(ProtoOutputStream proto, @WindowTraceLogLevel int logLevel) {
         mPolicy.dumpDebug(proto, POLICY);
-        mRoot.dumpDebug(proto, ROOT_WINDOW_CONTAINER, logLevel);
+        mRoot.dumpDebugInner(proto, ROOT_WINDOW_CONTAINER, logLevel);
         final DisplayContent topFocusedDisplayContent = mRoot.getTopFocusedDisplayContent();
         if (topFocusedDisplayContent.mCurrentFocus != null) {
             topFocusedDisplayContent.mCurrentFocus.writeIdentifierToProto(proto, FOCUSED_WINDOW);
@@ -6659,14 +6675,14 @@ public class WindowManagerService extends IWindowManager.Stub
      * </ol>
      * Passing an invalid region will remove the area from the exclude region of this window.
      */
-    void updateTapExcludeRegion(IWindow client, int regionId, Region region) {
+    void updateTapExcludeRegion(IWindow client, Region region) {
         synchronized (mGlobalLock) {
             final WindowState callingWin = windowForClientLocked(null, client, false);
             if (callingWin == null) {
                 ProtoLog.w(WM_ERROR, "Bad requesting window %s", client);
                 return;
             }
-            callingWin.updateTapExcludeRegion(regionId, region);
+            callingWin.updateTapExcludeRegion(region);
         }
     }
 
@@ -6883,21 +6899,12 @@ public class WindowManagerService extends IWindowManager.Stub
         if (!checkCallingPermission(INTERNAL_SYSTEM_WINDOW, "shouldShowIme()")) {
             throw new SecurityException("Requires INTERNAL_SYSTEM_WINDOW permission");
         }
-
+        boolean show;
         synchronized (mGlobalLock) {
-            final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
-            if (displayContent == null) {
-                ProtoLog.w(WM_ERROR,
-                        "Attempted to get IME flag of a display that does not exist: %d",
-                        displayId);
-                return false;
-            }
-            if (displayContent.isUntrustedVirtualDisplay()) {
-                return false;
-            }
-            return mDisplayWindowSettings.shouldShowImeLocked(displayContent)
-                    || mForceDesktopModeOnExternalDisplays;
+            show = shouldShowImeSystemWindowUncheckedLocked(displayId);
         }
+
+        return show;
     }
 
     @Override
@@ -7320,18 +7327,12 @@ public class WindowManagerService extends IWindowManager.Stub
                 if (imeTarget == null) {
                     return;
                 }
-                final DisplayContent displayContent = imeTarget.getDisplayContent();
-                if (displayContent == null) {
-                    Slog.w(TAG_WM, "Attempted to show IME on an IME target that does not exist: "
-                            + imeTarget.getName());
+                final int displayId = imeTarget.getDisplayId();
+                if (!shouldShowImeSystemWindowUncheckedLocked(displayId)) {
                     return;
                 }
-                if (displayContent.isUntrustedVirtualDisplay()) {
-                    throw new SecurityException("Attempted to show IME on an untrusted "
-                            + "virtual display: " + displayContent.getDisplayId());
-                }
 
-                displayContent.getInsetsStateController().getImeSourceProvider()
+                mRoot.getDisplayContent(displayId).getInsetsStateController().getImeSourceProvider()
                         .scheduleShowImePostLayout(imeTarget);
             }
         }
@@ -7378,6 +7379,13 @@ public class WindowManagerService extends IWindowManager.Stub
         public int getTopFocusedDisplayId() {
             synchronized (mGlobalLock) {
                 return mRoot.getTopFocusedDisplayContent().getDisplayId();
+            }
+        }
+
+        @Override
+        public Context getTopFocusedDisplayUiContext() {
+            synchronized (mGlobalLock) {
+                return mRoot.getTopFocusedDisplayContent().getDisplayUiContext();
             }
         }
 
@@ -7668,7 +7676,11 @@ public class WindowManagerService extends IWindowManager.Stub
             return;
         }
 
-        handleDisplayFocusChange(touchedWindow);
+        final DisplayContent displayContent = touchedWindow.getDisplayContent();
+        if (!displayContent.isOnTop()) {
+            displayContent.getParent().positionChildAt(WindowContainer.POSITION_TOP, displayContent,
+                    true /* includingParents */);
+        }
         handleTaskFocusChange(touchedWindow.getTask());
     }
 
@@ -7677,7 +7689,7 @@ public class WindowManagerService extends IWindowManager.Stub
             return;
         }
 
-        final ActivityStack stack = task.getTaskStack();
+        final ActivityStack stack = task.getStack();
         // We ignore home stack since we don't want home stack to move to front when touched.
         // Specifically, in freeform we don't want tapping on home to cause the freeform apps to go
         // behind home. See b/117376413
@@ -7688,29 +7700,6 @@ public class WindowManagerService extends IWindowManager.Stub
         try {
             mActivityTaskManager.setFocusedTask(task.mTaskId);
         } catch (RemoteException e) {
-        }
-    }
-
-    private void handleDisplayFocusChange(WindowState window) {
-        final DisplayContent displayContent = window.getDisplayContent();
-        if (displayContent == null) {
-            return;
-        }
-
-        final WindowContainer parent = displayContent.getParent();
-        if (parent != null && parent.getTopChild() != displayContent) {
-            parent.positionChildAt(WindowContainer.POSITION_TOP, displayContent,
-                    true /* includingParents */);
-            // For compatibility, only the topmost activity is allowed to be resumed for pre-Q
-            // app. Ensure the topmost activities are resumed whenever a display is moved to top.
-            // TODO(b/123761773): Investigate whether we can move this into
-            // RootActivityContainer#updateTopResumedActivityIfNeeded(). Currently, it is risky
-            // to do so because it seems possible to resume activities as part of a larger
-            // transaction and it's too early to resume based on current order when performing
-            // updateTopResumedActivityIfNeeded().
-            // TODO(display-merge): Remove cast
-            ((ActivityDisplay) displayContent).ensureActivitiesVisible(null /* starting */,
-                    0 /* configChanges */, !PRESERVE_WINDOWS, true /* notifyClients */);
         }
     }
 
@@ -7862,5 +7851,20 @@ public class WindowManagerService extends IWindowManager.Stub
         outSurfaceControl.copyFrom(mirror);
 
         return true;
+    }
+
+    private boolean shouldShowImeSystemWindowUncheckedLocked(final int displayId) {
+        final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+        if (displayContent == null) {
+            ProtoLog.w(WM_ERROR,
+                    "Attempted to get IME flag of a display that does not exist: %d",
+                    displayId);
+            return false;
+        }
+        if (displayContent.isUntrustedVirtualDisplay()) {
+            return false;
+        }
+        return mDisplayWindowSettings.shouldShowImeLocked(displayContent)
+                || mForceDesktopModeOnExternalDisplays;
     }
 }

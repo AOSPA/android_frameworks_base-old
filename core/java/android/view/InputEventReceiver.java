@@ -16,7 +16,7 @@
 
 package android.view;
 
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.MessageQueue;
@@ -25,6 +25,7 @@ import android.util.SparseIntArray;
 
 import dalvik.system.CloseGuard;
 
+import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 
 /**
@@ -87,6 +88,7 @@ public abstract class InputEventReceiver {
 
     /**
      * Disposes the receiver.
+     * Must be called on the same Looper thread to which the receiver is attached.
      */
     public void dispose() {
         dispose(false);
@@ -110,6 +112,7 @@ public abstract class InputEventReceiver {
             mInputChannel = null;
         }
         mMessageQueue = null;
+        Reference.reachabilityFence(this);
     }
 
     /**

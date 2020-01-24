@@ -38,8 +38,6 @@ import android.widget.LinearLayout;
 
 import androidx.test.filters.SmallTest;
 
-import com.android.systemui.Dependency;
-import com.android.systemui.InitController;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
@@ -47,13 +45,13 @@ import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.ExpandableView;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
-import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.util.Assert;
 
 import com.google.android.collect.Lists;
@@ -79,7 +77,6 @@ public class NotificationViewHierarchyManagerTest extends SysuiTestCase {
     @Mock private NotificationLockscreenUserManager mLockscreenUserManager;
     @Mock private NotificationGroupManager mGroupManager;
     @Mock private VisualStabilityManager mVisualStabilityManager;
-    @Mock private ShadeController mShadeController;
 
     private TestableLooper mTestableLooper;
     private Handler mHandler;
@@ -99,18 +96,15 @@ public class NotificationViewHierarchyManagerTest extends SysuiTestCase {
                 mLockscreenUserManager);
         mDependency.injectTestDependency(NotificationGroupManager.class, mGroupManager);
         mDependency.injectTestDependency(VisualStabilityManager.class, mVisualStabilityManager);
-        mDependency.injectTestDependency(ShadeController.class, mShadeController);
 
         mHelper = new NotificationTestHelper(mContext, mDependency);
 
         mViewHierarchyManager = new NotificationViewHierarchyManager(mContext,
                 mHandler, mLockscreenUserManager, mGroupManager, mVisualStabilityManager,
                 mock(StatusBarStateControllerImpl.class), mEntryManager,
-                () -> mShadeController,
                 mock(KeyguardBypassController.class),
                 mock(BubbleController.class),
                 mock(DynamicPrivacyController.class));
-        Dependency.get(InitController.class).executePostInitTasks();
         mViewHierarchyManager.setUpWithPresenter(mPresenter, mListContainer);
     }
 

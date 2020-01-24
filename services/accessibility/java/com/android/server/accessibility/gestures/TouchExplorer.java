@@ -59,7 +59,7 @@ import java.util.List;
  * @hide
  */
 public class TouchExplorer extends BaseEventStreamTransformation
-        implements AccessibilityGestureDetector.Listener {
+        implements GestureManifold.Listener {
 
     static final boolean DEBUG = false;
 
@@ -104,7 +104,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
     private final ExitGestureDetectionModeDelayed mExitGestureDetectionModeDelayed;
 
     // Helper to detect gestures.
-    private final AccessibilityGestureDetector mGestureDetector;
+    private final GestureManifold  mGestureDetector;
 
     // Helper class to track received pointers.
     private final TouchState.ReceivedPointerTracker mReceivedPointerTracker;
@@ -142,7 +142,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
      *                one created in place, or for testing purpose.
      */
     public TouchExplorer(Context context, AccessibilityManagerService service,
-            AccessibilityGestureDetector detector) {
+            GestureManifold detector) {
         mContext = context;
         mAms = service;
         mState = new TouchState();
@@ -161,7 +161,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
                 AccessibilityEvent.TYPE_TOUCH_INTERACTION_END,
                 mDetermineUserIntentTimeout);
         if (detector == null) {
-            mGestureDetector = new AccessibilityGestureDetector(context, this);
+            mGestureDetector = new GestureManifold(context, this, mState);
         } else {
             mGestureDetector = detector;
         }
@@ -285,16 +285,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
     }
 
     @Override
-    public void onDoubleTapAndHold(MotionEvent event, int policyFlags) {
-        // Ignore the event if we aren't touch interacting.
-        if (!mState.isTouchInteracting()) {
-            return;
-        }
-
-        // Pointers should not be zero when running this command.
-        if (mState.getLastReceivedEvent().getPointerCount() == 0) {
-            return;
-        }
+    public void onDoubleTapAndHold() {
         // Try to use the standard accessibility API to long click
         if (!mAms.performActionOnAccessibilityFocusedItem(
                 AccessibilityNodeInfo.AccessibilityAction.ACTION_LONG_CLICK)) {
@@ -303,11 +294,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
     }
 
     @Override
-    public boolean onDoubleTap(MotionEvent event, int policyFlags) {
-        if (!mState.isTouchInteracting()) {
-            return false;
-        }
-
+    public boolean onDoubleTap() {
         mAms.onTouchInteractionEnd();
         // Remove pending event deliveries.
         mSendHoverEnterAndMoveDelayed.cancel();
@@ -319,7 +306,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
 
         // Announce the end of a new touch interaction.
         mDispatcher.sendAccessibilityEvent(AccessibilityEvent.TYPE_TOUCH_INTERACTION_END);
-
+        mSendTouchInteractionEndDelayed.cancel();
         // Try to use the standard accessibility API to click
         if (!mAms.performActionOnAccessibilityFocusedItem(
                 AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK)) {
@@ -356,7 +343,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
     }
 
     @Override
-    public boolean onGestureCancelled(MotionEvent event, int policyFlags) {
+    public boolean onGestureCancelled(MotionEvent event, MotionEvent rawEvent, int policyFlags) {
         if (mState.isGestureDetecting()) {
             endGestureDetection(event.getActionMasked() == MotionEvent.ACTION_UP);
             return true;
@@ -454,7 +441,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
                 handleActionDown(event, rawEvent, policyFlags);
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
-                handleActionPointerDown();
+                handleActionPointerDown(event, rawEvent, policyFlags);
                 break;
             case MotionEvent.ACTION_MOVE:
                 handleActionMoveStateTouchInteracting(event, rawEvent, policyFlags);
@@ -479,7 +466,7 @@ public class TouchExplorer extends BaseEventStreamTransformation
                 // We should have already received ACTION_DOWN. Ignore.
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
-                handleActionPointerDown();
+                handleActionPointerDown(event, rawEvent, policyFlags);
                 break;
             case MotionEvent.ACTION_MOVE:
                 handleActionMoveStateTouchExploring(event, rawEvent, policyFlags);
@@ -496,12 +483,19 @@ public class TouchExplorer extends BaseEventStreamTransformation
      * Handles ACTION_POINTER_DOWN when in the touch exploring state. This event represents an
      * additional finger touching the screen.
      */
-    private void handleActionPointerDown() {
+    private void handleActionPointerDown(MotionEvent event, MotionEvent rawEvent, int policyFlags) {
         // Another finger down means that if we have not started to deliver
         // hover events, we will not have to. The code for ACTION_MOVE will
         // decide what we will actually do next.
-        mSendHoverEnterAndMoveDelayed.cancel();
-        mSendHoverExitDelayed.cancel();
+
+        if (mSendHoverEnterAndMoveDelayed.isPending()) {
+            mSendHoverEnterAndMoveDelayed.cancel();
+            mSendHoverExitDelayed.cancel();
+        } else {
+            // We have already delivered at least one hover event, so send hover exit to keep the
+            // stream consistent.
+            sendHoverExitAndTouchExplorationGestureEndIfNeeded(policyFlags);
+        }
     }
     /**
      * Handles ACTION_MOVE while in the touch interacting state. This is where transitions to

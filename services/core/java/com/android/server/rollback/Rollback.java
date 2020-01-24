@@ -306,7 +306,7 @@ class Rollback {
      * @return boolean True if the rollback was enabled successfully for the specified package.
      */
     boolean enableForPackage(String packageName, long newVersion, long installedVersion,
-            boolean isApex, String sourceDir, String[] splitSourceDirs) {
+            boolean isApex, String sourceDir, String[] splitSourceDirs, int rollbackDataPolicy) {
         try {
             RollbackStore.backupPackageCodePath(this, packageName, sourceDir);
             if (!ArrayUtils.isEmpty(splitSourceDirs)) {
@@ -323,7 +323,8 @@ class Rollback {
                 new VersionedPackage(packageName, newVersion),
                 new VersionedPackage(packageName, installedVersion),
                 new IntArray() /* pendingBackups */, new ArrayList<>() /* pendingRestores */,
-                isApex, new IntArray(), new SparseLongArray() /* ceSnapshotInodes */);
+                isApex, new IntArray(), new SparseLongArray() /* ceSnapshotInodes */,
+                rollbackDataPolicy);
 
         synchronized (mLock) {
             info.getPackages().add(packageRollbackInfo);
@@ -344,10 +345,12 @@ class Rollback {
 
             for (PackageRollbackInfo pkgRollbackInfo : info.getPackages()) {
                 if (pkgRollbackInfo.getPackageName().equals(packageName)) {
-                    dataHelper.snapshotAppData(info.getRollbackId(), pkgRollbackInfo, userIds);
-
-                    RollbackStore.saveRollback(this);
-                    pkgRollbackInfo.getSnapshottedUsers().addAll(IntArray.wrap(userIds));
+                    if (pkgRollbackInfo.getRollbackDataPolicy()
+                            == PackageManager.RollbackDataPolicy.RESTORE) {
+                        dataHelper.snapshotAppData(info.getRollbackId(), pkgRollbackInfo, userIds);
+                        pkgRollbackInfo.getSnapshottedUsers().addAll(IntArray.wrap(userIds));
+                        RollbackStore.saveRollback(this);
+                    }
                     break;
                 }
             }
@@ -418,6 +421,7 @@ class Rollback {
                 if (isStaged()) {
                     parentParams.setStaged();
                 }
+                parentParams.setInstallReason(PackageManager.INSTALL_REASON_ROLLBACK);
 
                 int parentSessionId = packageInstaller.createSession(parentParams);
                 PackageInstaller.Session parentSession = packageInstaller.openSession(
@@ -484,6 +488,7 @@ class Rollback {
                                 synchronized (mLock) {
                                     mState = ROLLBACK_STATE_AVAILABLE;
                                     mRestoreUserDataInProgress = false;
+                                    info.setCommittedSessionId(-1);
                                 }
                                 sendFailure(context, statusReceiver,
                                         RollbackManager.STATUS_FAILURE_INSTALL,
@@ -500,7 +505,6 @@ class Rollback {
                                     mRestoreUserDataInProgress = false;
                                 }
 
-                                info.setCommittedSessionId(parentSessionId);
                                 info.getCausePackages().addAll(causePackages);
                                 RollbackStore.deletePackageCodePaths(this);
                                 RollbackStore.saveRollback(this);
@@ -528,6 +532,7 @@ class Rollback {
                 );
 
                 mState = ROLLBACK_STATE_COMMITTED;
+                info.setCommittedSessionId(parentSessionId);
                 mRestoreUserDataInProgress = true;
                 parentSession.commit(receiver.getIntentSender());
             } catch (IOException e) {

@@ -72,6 +72,8 @@ import com.android.systemui.statusbar.notification.NotificationInterruptionState
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.util.concurrency.FakeExecutor;
+import com.android.systemui.util.time.FakeSystemClock;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -111,6 +113,8 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     private Handler mHandler;
     @Mock
     private BubbleController mBubbleController;
+    @Mock
+    private ShadeControllerImpl mShadeController;
 
     @Mock
     private ActivityIntentHelper mActivityIntentHelper;
@@ -124,6 +128,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     private SuperStatusBarViewFactory mSuperStatusBarViewFactory;
     @Mock
     private NotificationPanelView mNotificationPanelView;
+    private FakeExecutor mUiBgExecutor = new FakeExecutor(new FakeSystemClock());
 
     private NotificationTestHelper mNotificationTestHelper;
     private ExpandableNotificationRow mNotificationRow;
@@ -176,8 +181,9 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
                 mock(NotificationLockscreenUserManager.class),
                 mKeyguardStateController,
                 mock(NotificationInterruptionStateProvider.class), mock(MetricsLogger.class),
-                mock(LockPatternUtils.class), mHandler, mHandler, mActivityIntentHelper,
-                mBubbleController, mSuperStatusBarViewFactory))
+                mock(LockPatternUtils.class), mHandler, mHandler, mUiBgExecutor,
+                mActivityIntentHelper, mBubbleController, mShadeController,
+                mSuperStatusBarViewFactory))
                 .setStatusBar(mStatusBar)
                 .setNotificationPresenter(mock(NotificationPresenter.class))
                 .setActivityLaunchAnimator(mock(ActivityLaunchAnimator.class))
@@ -194,7 +200,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
 
         // set up addPostCollapseAction to synchronously invoke the Runnable arg
         doAnswer(answerVoid(Runnable::run))
-                .when(mStatusBar).addPostCollapseAction(any(Runnable.class));
+                .when(mShadeController).addPostCollapseAction(any(Runnable.class));
 
         // set up Handler to synchronously invoke the Runnable arg
         doAnswer(answerVoid(Runnable::run))
@@ -219,7 +225,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         mNotificationActivityStarter.onNotificationClicked(sbn, mNotificationRow);
 
         // Then
-        verify(mStatusBar, atLeastOnce()).collapsePanel();
+        verify(mShadeController, atLeastOnce()).collapsePanel();
 
         verify(mContentIntent).sendAndReturnResult(
                 any(Context.class),
@@ -254,7 +260,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         verify(mBubbleController).expandStackAndSelectBubble(eq(sbn.getKey()));
 
         // This is called regardless, and simply short circuits when there is nothing to do.
-        verify(mStatusBar, atLeastOnce()).collapsePanel();
+        verify(mShadeController, atLeastOnce()).collapsePanel();
 
         verify(mAssistManager).hideAssist();
 
@@ -284,7 +290,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         // Then
         verify(mBubbleController).expandStackAndSelectBubble(eq(sbn.getKey()));
 
-        verify(mStatusBar, atLeastOnce()).collapsePanel();
+        verify(mShadeController, atLeastOnce()).collapsePanel();
 
         verify(mAssistManager).hideAssist();
 
@@ -314,7 +320,7 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
         // Then
         verify(mBubbleController).expandStackAndSelectBubble(eq(sbn.getKey()));
 
-        verify(mStatusBar, atLeastOnce()).collapsePanel();
+        verify(mShadeController, atLeastOnce()).collapsePanel();
 
         verify(mAssistManager).hideAssist();
 

@@ -184,7 +184,7 @@ public class TaskEmbedder {
             return false;
         }
 
-        // Create a container surface to which the ActivityDisplay will be reparented
+        // Create a container surface to which the DisplayContent will be reparented
         final String name = "TaskEmbedder - " + Integer.toHexString(System.identityHashCode(this));
         mSurfaceControl = new SurfaceControl.Builder()
                 .setContainerLayer()
@@ -276,7 +276,7 @@ public class TaskEmbedder {
      * @see ActivityView.StateCallback
      * @see #startActivity(Intent)
      */
-    void setListener(TaskEmbedder.Listener listener) {
+    public void setListener(TaskEmbedder.Listener listener) {
         mListener = listener;
         if (mListener != null && isInitialized()) {
             mListener.onInitialized();
@@ -423,7 +423,7 @@ public class TaskEmbedder {
             return;
         }
         reportLocation(mHost.getScreenToTaskMatrix(), mHost.getPositionInWindow());
-        applyTapExcludeRegion(mHost.getWindow(), hashCode(), mHost.getTapExcludeRegion());
+        applyTapExcludeRegion(mHost.getWindow(), mHost.getTapExcludeRegion());
     }
 
     /**
@@ -458,13 +458,12 @@ public class TaskEmbedder {
      * {@link #updateLocationAndTapExcludeRegion()}. This method
      * is provided as an optimization when managing multiple TaskSurfaces within a view.
      *
-     * @see IWindowSession#updateTapExcludeRegion(IWindow, int, Region)
+     * @see IWindowSession#updateTapExcludeRegion(IWindow, Region)
      */
-    private void applyTapExcludeRegion(IWindow window, int regionId,
-            @Nullable Region tapExcludeRegion) {
+    private void applyTapExcludeRegion(IWindow window, @Nullable Region tapExcludeRegion) {
         try {
             IWindowSession session = WindowManagerGlobal.getWindowSession();
-            session.updateTapExcludeRegion(window, regionId, tapExcludeRegion);
+            session.updateTapExcludeRegion(window, tapExcludeRegion);
         } catch (RemoteException e) {
             e.rethrowAsRuntimeException();
         }
@@ -486,7 +485,7 @@ public class TaskEmbedder {
             Log.w(TAG, "clearTapExcludeRegion: not attached to window!");
             return;
         }
-        applyTapExcludeRegion(mHost.getWindow(), hashCode(), null);
+        applyTapExcludeRegion(mHost.getWindow(), null);
     }
 
     /**

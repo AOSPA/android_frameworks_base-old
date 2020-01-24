@@ -51,16 +51,17 @@ import android.os.RemoteException;
 import android.os.WorkSource;
 import android.os.connectivity.WifiActivityEnergyInfo;
 import android.text.TextUtils;
+import android.util.CloseGuard;
 import android.util.Log;
 import android.util.Pair;
+import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 
-import dalvik.system.CloseGuard;
-
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.net.InetAddress;
 import java.util.ArrayList;
@@ -70,6 +71,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.StringTokenizer;
 import java.util.concurrent.Executor;
 
 /**
@@ -560,6 +562,7 @@ public class WifiManager {
      * currently support general and no_channel
      * @see #SAP_START_FAILURE_GENERAL
      * @see #SAP_START_FAILURE_NO_CHANNEL
+     * @see #SAP_START_FAILURE_UNSUPPORTED_CONFIGURATION
      *
      * @hide
      */
@@ -678,6 +681,7 @@ public class WifiManager {
     @IntDef(flag = false, prefix = { "SAP_START_FAILURE_" }, value = {
         SAP_START_FAILURE_GENERAL,
         SAP_START_FAILURE_NO_CHANNEL,
+        SAP_START_FAILURE_UNSUPPORTED_CONFIGURATION,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface SapStartFailure {}
@@ -698,6 +702,15 @@ public class WifiManager {
      */
     @SystemApi
     public static final int SAP_START_FAILURE_NO_CHANNEL = 1;
+
+    /**
+     *  If Wi-Fi AP start failed, this reason code means that the specified configuration
+     *  is not supported by the current HAL version.
+     *
+     *  @hide
+     */
+    @SystemApi
+    public static final int SAP_START_FAILURE_UNSUPPORTED_CONFIGURATION = 2;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -1229,6 +1242,7 @@ public class WifiManager {
     @UnsupportedAppUsage
     public static final int RSSI_LEVELS = 5;
 
+    //TODO (b/146346676): This needs to be removed, not used in the code.
     /**
      * Auto settings in the driver. The driver could choose to operate on both
      * 2.4 GHz and 5 GHz or make a dynamic decision on selecting the band.
@@ -2302,8 +2316,6 @@ public class WifiManager {
     /** @hide */
     public static final long WIFI_FEATURE_INFRA            = 0x0001L;  // Basic infrastructure mode
     /** @hide */
-    public static final long WIFI_FEATURE_INFRA_5G         = 0x0002L;  // Support for 5 GHz Band
-    /** @hide */
     public static final long WIFI_FEATURE_PASSPOINT        = 0x0004L;  // Support for GAS/ANQP
     /** @hide */
     public static final long WIFI_FEATURE_P2P              = 0x0008L;  // Wifi-Direct
@@ -2374,7 +2386,7 @@ public class WifiManager {
     /** @hide */
     public static final long WIFI_FEATURE_OCE              = 0x1000000000L; // OCE Support
     /** @hide */
-    public static final long WIFI_FEATURE_INFRA_6G         = 0x2000000000L; // Support 6 GHz band
+    public static final long WIFI_FEATURE_WAPI             = 0x2000000000L; // WAPI
 
     private long getSupportedFeatures() {
         try {
@@ -2388,22 +2400,7 @@ public class WifiManager {
         return (getSupportedFeatures() & feature) == feature;
     }
 
-    /**
-     * @return true if this adapter supports 5 GHz band
-     */
-    public boolean is5GHzBandSupported() {
-        return isFeatureSupported(WIFI_FEATURE_INFRA_5G);
-    }
-
-    /**
-     * @return true if the device supports operating in the 6 GHz band and Wi-Fi is enabled,
-     *         false otherwise.
-     */
-    public boolean is6GHzBandSupported() {
-        return isFeatureSupported(WIFI_FEATURE_INFRA_6G);
-    }
-
-    /**
+   /**
      * @return true if this adapter supports Passpoint
      * @hide
      */
@@ -2522,6 +2519,30 @@ public class WifiManager {
     @SystemApi
     public boolean isApMacRandomizationSupported() {
         return isFeatureSupported(WIFI_FEATURE_AP_RAND_MAC);
+    }
+
+    /**
+     * Check if the chipset supports 5GHz band.
+     * @return {@code true} if supported, {@code false} otherwise.
+     */
+    public boolean is5GHzBandSupported() {
+        try {
+            return mService.is5GHzBandSupported();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Check if the chipset supports 6GHz band.
+     * @return {@code true} if supported, {@code false} otherwise.
+     */
+    public boolean is6GHzBandSupported() {
+        try {
+            return mService.is6GHzBandSupported();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -2739,28 +2760,13 @@ public class WifiManager {
     }
 
     /**
-     * Check if the chipset supports dual frequency band (2.4 GHz and 5 GHz).
-     * No permissions are required to call this method.
-     * @return {@code true} if supported, {@code false} otherwise.
-     * @hide
-     */
-    @SystemApi
-    public boolean isDualBandSupported() {
-        try {
-            return mService.isDualBandSupported();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
      * Check if the device is dual mode capable i.e. supports concurrent STA + Soft AP.
      *
      * If the device is dual mode capable, it may require conversion of the user's Soft AP band
-     * selection {@link WifiConfiguration#apBand} from {@link WifiConfiguration#AP_BAND_5GHZ} to
-     * {@link WifiConfiguration#AP_BAND_ANY}, since if the device is connected to a 5GHz DFS
-     * channel as a STA, it may be unable to honor a request to start Soft AP on the same DFS
-     * channel.
+     * selection {@link SoftApConfiguration#mBand} from {@link SoftApConfiguration#BAND_5GHZ} to
+     * include also {@link SoftApConfiguration#BAND_2GHZ}, since if the device is connected to a
+     * 5GHz DFS channel as a STA, it may be unable to honor a request to start Soft AP on the same
+     * DFS channel.
      *
      * @return {@code true} if dual mode STA + AP is supported by this device, {@code false}
      * otherwise.
@@ -3585,6 +3591,16 @@ public class WifiManager {
         }
 
         /**
+         * Called when capability of softap changes.
+         *
+         * @param softApCapability is the softap capability. {@link SoftApCapability}
+         */
+        default void onCapabilityChanged(@NonNull SoftApCapability softApCapability) {
+            // Do nothing: can be updated to add SoftApCapability details (e.g. meximum supported
+            // client number) to the UI.
+        }
+
+        /**
          * Called when Stations connected to soft AP.
          *
          * @param Macaddr Mac Address of connected Stations to soft AP
@@ -3650,6 +3666,19 @@ public class WifiManager {
             Binder.clearCallingIdentity();
             mExecutor.execute(() -> {
                 mCallback.onInfoChanged(softApInfo);
+            });
+        }
+
+        @Override
+        public void onCapabilityChanged(SoftApCapability capability) {
+            if (mVerboseLoggingEnabled) {
+                Log.v(TAG, "SoftApCallbackProxy: onCapabilityChanged: SoftApCapability="
+                        + capability);
+            }
+
+            Binder.clearCallingIdentity();
+            mExecutor.execute(() -> {
+                mCallback.onCapabilityChanged(capability);
             });
         }
 
@@ -3755,7 +3784,7 @@ public class WifiManager {
      */
     public class LocalOnlyHotspotReservation implements AutoCloseable {
 
-        private final CloseGuard mCloseGuard = CloseGuard.get();
+        private final CloseGuard mCloseGuard = new CloseGuard();
         private final WifiConfiguration mConfig;
         private boolean mClosed = false;
 
@@ -3782,6 +3811,8 @@ public class WifiManager {
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Failed to stop Local Only Hotspot.");
+            } finally {
+                Reference.reachabilityFence(this);
             }
         }
 
@@ -3906,7 +3937,7 @@ public class WifiManager {
      * @hide
      */
     public class LocalOnlyHotspotSubscription implements AutoCloseable {
-        private final CloseGuard mCloseGuard = CloseGuard.get();
+        private final CloseGuard mCloseGuard = new CloseGuard();
 
         /** @hide */
         @VisibleForTesting
@@ -3921,6 +3952,8 @@ public class WifiManager {
                 mCloseGuard.close();
             } catch (Exception e) {
                 Log.e(TAG, "Failed to unregister LocalOnlyHotspotObserver.");
+            } finally {
+                Reference.reachabilityFence(this);
             }
         }
 
@@ -4867,10 +4900,13 @@ public class WifiManager {
     }
 
     /**
-     * Retrieve the soft ap config data to be backed to save current config data.
+     * Returns a byte stream representing the data that needs to be backed up to save the
+     * current soft ap config data.
+     *
+     * This soft ap config can be restored by calling {@link #restoreSoftApBackupData(byte[])}
      * @hide
      */
-    @Nullable
+    @NonNull
     @SystemApi
     @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
     public byte[] retrieveSoftApBackupData() {
@@ -4882,15 +4918,17 @@ public class WifiManager {
     }
 
     /**
-     * Restore soft ap config from the backed up data.
+     * Returns soft ap config from the backed up data.
+     * @param data byte stream in the same format produced by {@link #retrieveSoftApBackupData()}
+     *
      * @hide
      */
     @Nullable
     @SystemApi
     @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
-    public void restoreSoftApBackupData(@NonNull byte[] data) {
+    public SoftApConfiguration restoreSoftApBackupData(@NonNull byte[] data) {
         try {
-            mService.restoreSoftApBackupData(data);
+            return mService.restoreSoftApBackupData(data);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -5327,6 +5365,13 @@ public class WifiManager {
     }
 
     /**
+     * @return true if this device supports WAPI.
+     */
+    public boolean isWapiSupported() {
+        return isFeatureSupported(WIFI_FEATURE_WAPI);
+    }
+
+    /**
      * Gets the factory Wi-Fi MAC addresses.
      * @return Array of String representing Wi-Fi MAC addresses sorted lexically or an empty Array
      * if failed.
@@ -5533,6 +5578,7 @@ public class WifiManager {
         @Override
         public void onSuccessConfigReceived(int newNetworkId) {
             Log.d(TAG, "Easy Connect onSuccessConfigReceived callback");
+            Binder.clearCallingIdentity();
             mExecutor.execute(() -> {
                 mEasyConnectStatusCallback.onEnrolleeSuccess(newNetworkId);
             });
@@ -5541,22 +5587,28 @@ public class WifiManager {
         @Override
         public void onSuccess(int status) {
             Log.d(TAG, "Easy Connect onSuccess callback");
+            Binder.clearCallingIdentity();
             mExecutor.execute(() -> {
                 mEasyConnectStatusCallback.onConfiguratorSuccess(status);
             });
         }
 
         @Override
-        public void onFailure(int status) {
+        public void onFailure(int status, String ssid, String channelList,
+                int[] operatingClassArray) {
             Log.d(TAG, "Easy Connect onFailure callback");
+            Binder.clearCallingIdentity();
             mExecutor.execute(() -> {
-                mEasyConnectStatusCallback.onFailure(status);
+                SparseArray<int[]> channelListArray = parseDppChannelList(channelList);
+                mEasyConnectStatusCallback.onFailure(status, ssid, channelListArray,
+                        operatingClassArray);
             });
         }
 
         @Override
         public void onProgress(int status) {
             Log.d(TAG, "Easy Connect onProgress callback");
+            Binder.clearCallingIdentity();
             mExecutor.execute(() -> {
                 mEasyConnectStatusCallback.onProgress(status);
             });
@@ -5886,6 +5938,79 @@ public class WifiManager {
                     mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Parse the list of channels the DPP enrollee reports when it fails to find an AP.
+     *
+     * @param channelList List of channels in the format defined in the DPP specification.
+     * @return A parsed sparse array, where the operating class is the key.
+     * @hide
+     */
+    @VisibleForTesting
+    public static SparseArray<int[]> parseDppChannelList(String channelList) {
+        SparseArray<int[]> channelListArray = new SparseArray<>();
+
+        if (TextUtils.isEmpty(channelList)) {
+            return channelListArray;
+        }
+        StringTokenizer str = new StringTokenizer(channelList, ",");
+        String classStr = null;
+        List<Integer> channelsInClass = new ArrayList<>();
+
+        try {
+            while (str.hasMoreElements()) {
+                String cur = str.nextToken();
+
+                /**
+                 * Example for a channel list:
+                 *
+                 * 81/1,2,3,4,5,6,7,8,9,10,11,115/36,40,44,48,118/52,56,60,64,121/100,104,108,112,
+                 * 116,120,124,128,132,136,140,0/144,124/149,153,157,161,125/165
+                 *
+                 * Detect operating class by the delimiter of '/' and use a string tokenizer with
+                 * ',' as a delimiter.
+                 */
+                int classDelim = cur.indexOf('/');
+                if (classDelim != -1) {
+                    if (classStr != null) {
+                        // Store the last channel array in the sparse array, where the operating
+                        // class is the key (as an integer).
+                        int[] channelsArray = new int[channelsInClass.size()];
+                        for (int i = 0; i < channelsInClass.size(); i++) {
+                            channelsArray[i] = channelsInClass.get(i);
+                        }
+                        channelListArray.append(Integer.parseInt(classStr), channelsArray);
+                        channelsInClass = new ArrayList<>();
+                    }
+
+                    // Init a new operating class and store the first channel
+                    classStr = cur.substring(0, classDelim);
+                    String channelStr = cur.substring(classDelim + 1);
+                    channelsInClass.add(Integer.parseInt(channelStr));
+                } else {
+                    if (classStr == null) {
+                        // Invalid format
+                        Log.e(TAG, "Cannot parse DPP channel list");
+                        return new SparseArray<>();
+                    }
+                    channelsInClass.add(Integer.parseInt(cur));
+                }
+            }
+
+            // Store the last array
+            if (classStr != null) {
+                int[] channelsArray = new int[channelsInClass.size()];
+                for (int i = 0; i < channelsInClass.size(); i++) {
+                    channelsArray[i] = channelsInClass.get(i);
+                }
+                channelListArray.append(Integer.parseInt(classStr), channelsArray);
+            }
+            return channelListArray;
+        } catch (NumberFormatException e) {
+            Log.e(TAG, "Cannot parse DPP channel list");
+            return new SparseArray<>();
         }
     }
 }

@@ -349,10 +349,21 @@ public class ActivityManagerServiceTest {
         verifyUidRangesNoOverlap(range, range2);
         verifyIsolatedUidAllocator(range2);
 
-        // Free both, then try to allocate the maximum number of UID ranges
+        // Free both
         allocator.freeUidRangeLocked(appInfo);
         allocator.freeUidRangeLocked(appInfo2);
 
+        // Verify for a secondary user
+        ApplicationInfo appInfo3 = new ApplicationInfo();
+        appInfo3.processName = "com.android.test.app";
+        appInfo3.uid = 1010000;
+        final IsolatedUidRange range3 = allocator.getOrCreateIsolatedUidRangeLocked(
+                appInfo3.processName, appInfo3.uid);
+        validateAppZygoteIsolatedUidRange(range3);
+        verifyIsolatedUidAllocator(range3);
+
+        allocator.freeUidRangeLocked(appInfo3);
+        // Try to allocate the maximum number of UID ranges
         int maxNumUidRanges = (Process.LAST_APP_ZYGOTE_ISOLATED_UID
                 - Process.FIRST_APP_ZYGOTE_ISOLATED_UID + 1) / Process.NUM_UIDS_PER_APP_ZYGOTE;
         for (int i = 0; i < maxNumUidRanges; i++) {
@@ -474,7 +485,7 @@ public class ActivityManagerServiceTest {
     @Test
     public void testDispatchUids_dispatchNeededChanges() throws RemoteException {
         when(mAppOpsService.noteOperation(AppOpsManager.OP_GET_USAGE_STATS, Process.myUid(), null,
-                null)).thenReturn(AppOpsManager.MODE_ALLOWED);
+                null, false, null)).thenReturn(AppOpsManager.MODE_ALLOWED);
 
         final int[] changesToObserve = {
             ActivityManager.UID_OBSERVER_PROCSTATE,

@@ -42,7 +42,7 @@ LOCAL_REQUIRED_MODULES := \
 	IconPackRoundedLauncherOverlay \
 	IconPackRoundedSettingsOverlay \
 	IconPackRoundedSystemUIOverlay \
-	IconPackRoundedThemePickerUIOverlay \
+	IconPackRoundedThemePickerOverlay \
 	IconShapeRoundedRectOverlay \
 	IconShapeSquircleOverlay \
 	IconShapeTeardropOverlay \
@@ -51,7 +51,8 @@ LOCAL_REQUIRED_MODULES := \
 	NavigationBarModeGesturalOverlay \
 	NavigationBarModeGesturalOverlayNarrowBack \
 	NavigationBarModeGesturalOverlayWideBack \
-	NavigationBarModeGesturalOverlayExtraWideBack
+	NavigationBarModeGesturalOverlayExtraWideBack \
+	preinstalled-packages-platform-overlays.xml
 
 include $(BUILD_PHONY_PACKAGE)
 include $(CLEAR_VARS)

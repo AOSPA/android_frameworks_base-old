@@ -46,14 +46,13 @@ public final class MediaRoute2ProviderInfo implements Parcelable {
     };
 
     @Nullable
-    private final String mUniqueId;
+    final String mUniqueId;
     @NonNull
-    private final ArrayMap<String, MediaRoute2Info> mRoutes;
+    final ArrayMap<String, MediaRoute2Info> mRoutes;
 
     MediaRoute2ProviderInfo(@NonNull Builder builder) {
-        if (builder == null) {
-            throw new NullPointerException("Builder must not be null.");
-        }
+        Objects.requireNonNull(builder, "builder must not be null.");
+
         mUniqueId = builder.mUniqueId;
         mRoutes = builder.mRoutes;
     }
@@ -143,6 +142,7 @@ public final class MediaRoute2ProviderInfo implements Parcelable {
         public Builder(@NonNull MediaRoute2ProviderInfo descriptor) {
             Objects.requireNonNull(descriptor, "descriptor must not be null");
 
+            mUniqueId = descriptor.mUniqueId;
             mRoutes = new ArrayMap<>(descriptor.mRoutes);
         }
 

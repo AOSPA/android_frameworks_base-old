@@ -691,6 +691,9 @@ class SettingsProtoDumpUtil {
         dumpRepeatedSetting(s, p,
                 Settings.Global.ERROR_LOGCAT_PREFIX,
                 GlobalSettingsProto.ERROR_LOGCAT_LINES);
+        dumpRepeatedSetting(s, p,
+                Settings.Global.MAX_ERROR_BYTES_PREFIX,
+                GlobalSettingsProto.MAX_ERROR_BYTES);
 
         final long euiccToken = p.start(GlobalSettingsProto.EUICC);
         dumpSetting(s, p,
@@ -1820,6 +1823,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.ACCESSIBILITY_INTERACTIVE_UI_TIMEOUT_MS,
                 SecureSettingsProto.Accessibility.INTERACTIVE_UI_TIMEOUT_MS);
+        dumpSetting(s, p,
+                Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE,
+                SecureSettingsProto.Accessibility.ACCESSIBILITY_MAGNIFICATION_MODE);
         p.end(accessibilityToken);
 
         dumpSetting(s, p,
@@ -2190,6 +2196,14 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.NAVIGATION_MODE,
                 SecureSettingsProto.NAVIGATION_MODE);
+
+        dumpSetting(s, p,
+                Settings.Secure.BACK_GESTURE_INSET_SCALE_LEFT,
+                SecureSettingsProto.GestureNavigation.BACK_GESTURE_INSET_SCALE_LEFT);
+
+        dumpSetting(s, p,
+                Settings.Secure.BACK_GESTURE_INSET_SCALE_RIGHT,
+                SecureSettingsProto.GestureNavigation.BACK_GESTURE_INSET_SCALE_RIGHT);
 
         final long nfcPaymentToken = p.start(SecureSettingsProto.NFC_PAYMENT);
         dumpSetting(s, p,

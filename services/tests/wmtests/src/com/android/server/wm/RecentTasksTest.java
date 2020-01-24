@@ -41,8 +41,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -98,7 +101,7 @@ public class RecentTasksTest extends ActivityTestsBase {
             UserManager.USER_TYPE_PROFILE_MANAGED);
     private static final int INVALID_STACK_ID = 999;
 
-    private ActivityDisplay mDisplay;
+    private DisplayContent mDisplay;
     private ActivityStack mStack;
     private TestTaskPersister mTaskPersister;
     private TestRecentTasks mRecentTasks;
@@ -112,7 +115,8 @@ public class RecentTasksTest extends ActivityTestsBase {
     @Before
     public void setUp() throws Exception {
         mTaskPersister = new TestTaskPersister(mContext.getFilesDir());
-        mDisplay = mRootActivityContainer.getActivityDisplay(DEFAULT_DISPLAY);
+        spyOn(mTaskPersister);
+        mDisplay = mRootWindowContainer.getDisplayContent(DEFAULT_DISPLAY);
 
         // Set the recent tasks we should use for testing in this class.
         mRecentTasks = new TestRecentTasks(mService, mTaskPersister);
@@ -168,6 +172,46 @@ public class RecentTasksTest extends ActivityTestsBase {
         assertThat(mCallbacksRecorder.mAdded).isEmpty();
         assertThat(mCallbacksRecorder.mTrimmed).isEmpty();
         assertThat(mCallbacksRecorder.mRemoved).isEmpty();
+    }
+
+    @Test
+    public void testPersister() {
+        // Add some tasks, ensure the persister is woken
+        mRecentTasks.add(mTasks.get(0));
+        mRecentTasks.add(mTasks.get(1));
+        verify(mTaskPersister, times(1)).wakeup(eq(mTasks.get(0)), anyBoolean());
+        verify(mTaskPersister, times(1)).wakeup(eq(mTasks.get(1)), anyBoolean());
+        reset(mTaskPersister);
+
+        // Update a task, ensure the persister is woken
+        mRecentTasks.add(mTasks.get(0));
+        verify(mTaskPersister, times(1)).wakeup(eq(mTasks.get(0)), anyBoolean());
+        reset(mTaskPersister);
+
+        // Remove some tasks, ensure the persister is woken
+        mRecentTasks.remove(mTasks.get(0));
+        mRecentTasks.remove(mTasks.get(1));
+        verify(mTaskPersister, times(1)).wakeup(eq(mTasks.get(0)), anyBoolean());
+        verify(mTaskPersister, times(1)).wakeup(eq(mTasks.get(1)), anyBoolean());
+        reset(mTaskPersister);
+    }
+
+    @Test
+    public void testPersisterTrimmed() {
+        mRecentTasks.setOnlyTestVisibleRange();
+
+        // Limit the global maximum number of recent tasks to a fixed size
+        mRecentTasks.setGlobalMaxNumTasks(1 /* globalMaxNumTasks */);
+
+        mRecentTasks.add(mTasks.get(0));
+        verify(mTaskPersister, times(1)).wakeup(eq(mTasks.get(0)), anyBoolean());
+        reset(mTaskPersister);
+
+        // Add N+1 tasks to ensure the previous task is trimmed
+        mRecentTasks.add(mTasks.get(1));
+        verify(mTaskPersister, times(1)).wakeup(eq(mTasks.get(0)), anyBoolean());
+        verify(mTaskPersister, times(1)).wakeup(eq(mTasks.get(1)), anyBoolean());
+        assertTrimmed(mTasks.get(0));
     }
 
     @Test
@@ -377,6 +421,7 @@ public class RecentTasksTest extends ActivityTestsBase {
     @Test
     public void testUsersTasks() {
         mRecentTasks.setOnlyTestVisibleRange();
+        mRecentTasks.unloadUserDataFromMemoryLocked(TEST_USER_0_ID);
 
         // Setup some tasks for the users
         mTaskPersister.mUserTaskIdsOverride = new SparseBooleanArray();
@@ -608,8 +653,8 @@ public class RecentTasksTest extends ActivityTestsBase {
         mRecentTasks.setOnlyTestVisibleRange();
         mRecentTasks.setParameters(-1 /* min */, 3 /* max */, -1 /* ms */);
 
-        final ActivityDisplay singleTaskDisplay =
-                addNewActivityDisplayAt(ActivityDisplay.POSITION_TOP);
+        final DisplayContent singleTaskDisplay =
+                addNewDisplayContentAt(DisplayContent.POSITION_TOP);
         singleTaskDisplay.setDisplayToSingleTaskInstance();
         ActivityStack singleTaskStack = singleTaskDisplay.createStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
@@ -728,7 +773,7 @@ public class RecentTasksTest extends ActivityTestsBase {
 
         ActivityStack stack = mTasks.get(2).getStack();
         stack.moveToFront("", mTasks.get(2));
-        doReturn(stack).when(mService.mRootActivityContainer).getTopDisplayFocusedStack();
+        doReturn(stack).when(mService.mRootWindowContainer).getTopDisplayFocusedStack();
 
         // Simulate the reset from the timeout
         mRecentTasks.resetFreezeTaskListReorderingOnTimeout();
@@ -788,7 +833,7 @@ public class RecentTasksTest extends ActivityTestsBase {
         mRecentTasks.setParameters(-1 /* min */, 1 /* max */, -1 /* ms */);
 
         final ActivityStack homeStack = mDisplay.getHomeStack();
-        final ActivityDisplay otherDisplay = addNewActivityDisplayAt(ActivityDisplay.POSITION_TOP);
+        final DisplayContent otherDisplay = addNewDisplayContentAt(DisplayContent.POSITION_TOP);
         final ActivityStack otherDisplayStack = otherDisplay.createStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
@@ -1282,7 +1327,7 @@ public class RecentTasksTest extends ActivityTestsBase {
 
         @Override
         void getTasks(int maxNum, List<RunningTaskInfo> list, int ignoreActivityType,
-                int ignoreWindowingMode, RootActivityContainer root,
+                int ignoreWindowingMode, RootWindowContainer root,
                 int callingUid, boolean allowed, boolean crossUser, ArraySet<Integer> profileIds) {
             mLastAllowed = allowed;
             super.getTasks(maxNum, list, ignoreActivityType, ignoreWindowingMode, root,

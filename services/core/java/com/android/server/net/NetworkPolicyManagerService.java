@@ -91,7 +91,6 @@ import static android.telephony.CarrierConfigManager.KEY_DATA_WARNING_NOTIFICATI
 import static android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID;
 
 import static com.android.internal.util.ArrayUtils.appendInt;
-import static com.android.internal.util.Preconditions.checkNotNull;
 import static com.android.internal.util.XmlUtils.readBooleanAttribute;
 import static com.android.internal.util.XmlUtils.readIntAttribute;
 import static com.android.internal.util.XmlUtils.readLongAttribute;
@@ -223,6 +222,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.ArrayUtils;
+import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastXmlSerializer;
@@ -613,12 +613,12 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     public NetworkPolicyManagerService(Context context, IActivityManager activityManager,
             INetworkManagementService networkManagement, IPackageManager pm, Clock clock,
             File systemDir, boolean suppressDefaultPolicy) {
-        mContext = checkNotNull(context, "missing context");
-        mActivityManager = checkNotNull(activityManager, "missing activityManager");
-        mNetworkManager = checkNotNull(networkManagement, "missing networkManagement");
+        mContext = Objects.requireNonNull(context, "missing context");
+        mActivityManager = Objects.requireNonNull(activityManager, "missing activityManager");
+        mNetworkManager = Objects.requireNonNull(networkManagement, "missing networkManagement");
         mDeviceIdleController = IDeviceIdleController.Stub.asInterface(ServiceManager.getService(
                 Context.DEVICE_IDLE_CONTROLLER));
-        mClock = checkNotNull(clock, "missing Clock");
+        mClock = Objects.requireNonNull(clock, "missing Clock");
         mUserManager = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
         mCarrierConfigManager = mContext.getSystemService(CarrierConfigManager.class);
         mIPm = pm;
@@ -645,7 +645,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     }
 
     public void bindConnectivityManager(IConnectivityManager connManager) {
-        mConnManager = checkNotNull(connManager, "missing IConnectivityManager");
+        mConnManager = Objects.requireNonNull(connManager, "missing IConnectivityManager");
     }
 
     @GuardedBy("mUidRulesFirstLock")
@@ -1032,6 +1032,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             // READ_NETWORK_USAGE_HISTORY permission above.
 
             synchronized (mNetworkPoliciesSecondLock) {
+                updateNetworkRulesNL();
                 updateNetworkEnabledNL();
                 updateNotificationsNL();
             }
@@ -1802,7 +1803,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
     /**
      * Examine all currently active subscriptions from
-     * {@link SubscriptionManager#getActiveSubscriptionIdList()} and update
+     * {@link SubscriptionManager#getActiveSubscriptionInfoList()} and update
      * internal data structures.
      * <p>
      * Callers <em>must not</em> hold any locks when this method called.
@@ -1813,21 +1814,22 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
         final TelephonyManager tm = mContext.getSystemService(TelephonyManager.class);
         final SubscriptionManager sm = mContext.getSystemService(SubscriptionManager.class);
+        final List<SubscriptionInfo> subList = CollectionUtils.emptyIfNull(
+                sm.getActiveSubscriptionInfoList());
 
-        final int[] subIds = ArrayUtils.defeatNullable(sm.getActiveSubscriptionIdList());
         final List<String[]> mergedSubscriberIdsList = new ArrayList();
-
-        final SparseArray<String> subIdToSubscriberId = new SparseArray<>(subIds.length);
-        for (int subId : subIds) {
-            final String subscriberId = tm.getSubscriberId(subId);
+        final SparseArray<String> subIdToSubscriberId = new SparseArray<>(subList.size());
+        for (SubscriptionInfo sub : subList) {
+            final TelephonyManager tmSub = tm.createForSubscriptionId(sub.getSubscriptionId());
+            final String subscriberId = tmSub.getSubscriberId();
             if (!TextUtils.isEmpty(subscriberId)) {
-                subIdToSubscriberId.put(subId, subscriberId);
+                subIdToSubscriberId.put(tmSub.getSubscriptionId(), subscriberId);
             } else {
-                Slog.wtf(TAG, "Missing subscriberId for subId " + subId);
+                Slog.wtf(TAG, "Missing subscriberId for subId " + tmSub.getSubscriptionId());
             }
 
-            String[] mergedSubscriberId = ArrayUtils.defeatNullable(
-                    tm.createForSubscriptionId(subId).getMergedSubscriberIdsFromGroup());
+            final String[] mergedSubscriberId = ArrayUtils.defeatNullable(
+                    tmSub.getMergedImsisFromGroup());
             mergedSubscriberIdsList.add(mergedSubscriberId);
         }
 
@@ -3103,17 +3105,16 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             return;
         }
 
-        long applicableNetworkTypes = 0;
+        final ArraySet<Integer> applicableNetworkTypes = new ArraySet<Integer>();
         boolean allNetworks = false;
         for (SubscriptionPlan plan : plans) {
             if (plan.getNetworkTypes() == null) {
                 allNetworks = true;
             } else {
-                if ((applicableNetworkTypes & plan.getNetworkTypesBitMask()) != 0) {
+                final int[] networkTypes = plan.getNetworkTypes();
+                if (!addAll(applicableNetworkTypes, networkTypes)) {
                     throw new IllegalArgumentException(
                             "Multiple subscription plans defined for a single network type.");
-                } else {
-                    applicableNetworkTypes |= plan.getNetworkTypesBitMask();
                 }
             }
         }
@@ -3123,6 +3124,19 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             throw new IllegalArgumentException(
                     "No generic subscription plan that applies to all network types.");
         }
+    }
+
+    /**
+     * Adds all of the {@code elements} to the {@code set}.
+     *
+     * @return {@code false} if any element is not added because the set already have the value.
+     */
+    private static boolean addAll(@NonNull Set<Integer> set, @NonNull int... elements) {
+        boolean result = true;
+        for (int element : elements) {
+            result &= set.add(element);
+        }
+        return result;
     }
 
     @Override
@@ -3292,7 +3306,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         enforceSubscriptionPlanValidity(plans);
 
         for (SubscriptionPlan plan : plans) {
-            Preconditions.checkNotNull(plan);
+            Objects.requireNonNull(plan);
         }
 
         final long token = Binder.clearCallingIdentity();

@@ -36,6 +36,7 @@ import android.content.pm.ServiceInfo;
 import android.content.pm.SharedLibraryInfo;
 import android.content.pm.parsing.ComponentParseUtils.ParsedActivity;
 import android.content.pm.parsing.ComponentParseUtils.ParsedActivityIntentInfo;
+import android.content.pm.parsing.ComponentParseUtils.ParsedFeature;
 import android.content.pm.parsing.ComponentParseUtils.ParsedInstrumentation;
 import android.content.pm.parsing.ComponentParseUtils.ParsedIntentInfo;
 import android.content.pm.parsing.ComponentParseUtils.ParsedPermission;
@@ -175,6 +176,9 @@ public final class PackageImpl implements ParsingPackage, ParsedPackage, Android
     private ArrayList<ComponentParseUtils.ParsedProvider> providers;
 
     @Nullable
+    private ArrayList<ComponentParseUtils.ParsedFeature> features;
+
+    @Nullable
     private ArrayList<ComponentParseUtils.ParsedPermission> permissions;
 
     @Nullable
@@ -240,6 +244,7 @@ public final class PackageImpl implements ParsingPackage, ParsedPackage, Android
     private int descriptionRes;
     private String deviceProtectedDataDir;
     private boolean enabled;
+    private boolean crossProfile;
     private int flags;
     private int fullBackupContent;
     private boolean hiddenUntilInstalled;
@@ -579,6 +584,12 @@ public final class PackageImpl implements ParsingPackage, ParsedPackage, Android
         return permissions;
     }
 
+    @Nullable
+    @Override
+    public List<ParsedFeature> getFeatures() {
+        return features;
+    }
+
     @Override
     public String getCpuAbiOverride() {
         return cpuAbiOverride;
@@ -787,6 +798,12 @@ public final class PackageImpl implements ParsingPackage, ParsedPackage, Android
     @Override
     public PackageImpl addAdoptPermission(String adoptPermission) {
         this.adoptPermissions = ArrayUtils.add(this.adoptPermissions, adoptPermission);
+        return this;
+    }
+
+    @Override
+    public PackageImpl addFeature(ParsedFeature feature) {
+        this.features = ArrayUtils.add(this.features, feature);
         return this;
     }
 
@@ -1632,6 +1649,12 @@ public final class PackageImpl implements ParsingPackage, ParsedPackage, Android
     @Override
     public PackageImpl setEnabled(boolean enabled) {
         this.enabled = enabled;
+        return this;
+    }
+
+    @Override
+    public PackageImpl setCrossProfile(boolean crossProfile) {
+        this.crossProfile = crossProfile;
         return this;
     }
 
@@ -2835,6 +2858,11 @@ public final class PackageImpl implements ParsingPackage, ParsedPackage, Android
     }
 
     @Override
+    public boolean isCrossProfile() {
+        return crossProfile;
+    }
+
+    @Override
     public String getManageSpaceActivityName() {
         return manageSpaceActivityName;
     }
@@ -3009,6 +3037,7 @@ public final class PackageImpl implements ParsingPackage, ParsedPackage, Android
         dest.writeTypedList(this.receivers);
         dest.writeTypedList(this.services);
         dest.writeTypedList(this.providers);
+        dest.writeTypedList(this.features);
         dest.writeTypedList(this.permissions);
         dest.writeTypedList(this.permissionGroups);
         dest.writeTypedList(this.instrumentations);
@@ -3042,6 +3071,7 @@ public final class PackageImpl implements ParsingPackage, ParsedPackage, Android
         dest.writeInt(this.descriptionRes);
         dest.writeString(this.deviceProtectedDataDir);
         dest.writeBoolean(this.enabled);
+        dest.writeBoolean(this.crossProfile);
         dest.writeInt(this.flags);
         dest.writeInt(this.fullBackupContent);
         dest.writeBoolean(this.hiddenUntilInstalled);
@@ -3160,6 +3190,7 @@ public final class PackageImpl implements ParsingPackage, ParsedPackage, Android
         this.receivers = in.createTypedArrayList(ParsedActivity.CREATOR);
         this.services = in.createTypedArrayList(ParsedService.CREATOR);
         this.providers = in.createTypedArrayList(ParsedProvider.CREATOR);
+        this.features = in.createTypedArrayList(ParsedFeature.CREATOR);
         this.permissions = in.createTypedArrayList(ParsedPermission.CREATOR);
         this.permissionGroups = in.createTypedArrayList(ParsedPermissionGroup.CREATOR);
         this.instrumentations = in.createTypedArrayList(ParsedInstrumentation.CREATOR);
@@ -3194,6 +3225,7 @@ public final class PackageImpl implements ParsingPackage, ParsedPackage, Android
         this.descriptionRes = in.readInt();
         this.deviceProtectedDataDir = in.readString();
         this.enabled = in.readBoolean();
+        this.crossProfile = in.readBoolean();
         this.flags = in.readInt();
         this.fullBackupContent = in.readInt();
         this.hiddenUntilInstalled = in.readBoolean();

@@ -82,6 +82,7 @@ import com.android.server.autofill.AutofillManagerService.AutofillCompatState;
 import com.android.server.autofill.RemoteAugmentedAutofillService.RemoteAugmentedAutofillServiceCallbacks;
 import com.android.server.autofill.ui.AutoFillUI;
 import com.android.server.infra.AbstractPerUserSystemService;
+import com.android.server.inputmethod.InputMethodManagerInternal;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -168,6 +169,8 @@ final class AutofillManagerServiceImpl
     @Nullable
     private ServiceInfo mRemoteAugmentedAutofillServiceInfo;
 
+    private final InputMethodManagerInternal mInputMethodManagerInternal;
+
     AutofillManagerServiceImpl(AutofillManagerService master, Object lock,
             LocalLog uiLatencyHistory, LocalLog wtfHistory, int userId, AutoFillUI ui,
             AutofillCompatState autofillCompatState,
@@ -179,6 +182,7 @@ final class AutofillManagerServiceImpl
         mUi = ui;
         mFieldClassificationStrategy = new FieldClassificationStrategy(getContext(), userId);
         mAutofillCompatState = autofillCompatState;
+        mInputMethodManagerInternal = LocalServices.getService(InputMethodManagerInternal.class);
 
         updateLocked(disabled);
     }
@@ -493,7 +497,7 @@ final class AutofillManagerServiceImpl
                 sessionId, taskId, uid, activityToken, appCallbackToken, hasCallback,
                 mUiLatencyHistory, mWtfHistory, serviceComponentName,
                 componentName, compatMode, bindInstantServiceAllowed, forAugmentedAutofillOnly,
-                flags);
+                flags, mInputMethodManagerInternal);
         mSessions.put(newSession.id, newSession);
 
         return newSession;
@@ -966,6 +970,8 @@ final class AutofillManagerServiceImpl
         } else {
             pw.println(compatPkgs);
         }
+        pw.print(prefix); pw.print("Inline Suggestions Enabled: ");
+        pw.println(isInlineSuggestionsEnabled());
         pw.print(prefix); pw.print("Last prune: "); pw.println(mLastPrune);
 
         pw.print(prefix); pw.print("Disabled apps: ");
@@ -1113,6 +1119,14 @@ final class AutofillManagerServiceImpl
             return mInfo.getCompatibilityPackages();
         }
         return null;
+    }
+
+    @GuardedBy("mLock")
+    boolean isInlineSuggestionsEnabled() {
+        if (mInfo != null) {
+            return mInfo.isInlineSuggestionsEnabled();
+        }
+        return false;
     }
 
     @GuardedBy("mLock")

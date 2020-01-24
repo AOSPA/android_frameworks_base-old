@@ -23,7 +23,6 @@ import static android.os.Process.getUidForPid;
 import static android.os.storage.VolumeInfo.TYPE_PRIVATE;
 import static android.os.storage.VolumeInfo.TYPE_PUBLIC;
 
-import static com.android.internal.util.Preconditions.checkNotNull;
 import static com.android.server.am.MemoryStatUtil.readMemoryStatFromFilesystem;
 import static com.android.server.stats.IonMemoryUtil.readProcessSystemIonHeapSizesFromDebugfs;
 import static com.android.server.stats.IonMemoryUtil.readSystemIonHeapSizeFromDebugfs;
@@ -79,7 +78,7 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.IPullAtomCallback;
 import android.os.IStatsCompanionService;
-import android.os.IStatsManager;
+import android.os.IStatsd;
 import android.os.IStoraged;
 import android.os.IThermalEventListener;
 import android.os.IThermalService;
@@ -112,7 +111,6 @@ import android.util.Log;
 import android.util.Slog;
 import android.util.StatsLog;
 import android.util.proto.ProtoOutputStream;
-import android.util.proto.ProtoStream;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.procstats.IProcessStats;
@@ -137,7 +135,6 @@ import com.android.internal.os.StoragedUidIoStatsReader;
 import com.android.internal.util.DumpUtils;
 import com.android.server.BinderCallsStatsService;
 import com.android.server.LocalServices;
-import com.android.server.SystemService;
 import com.android.server.SystemServiceManager;
 import com.android.server.am.MemoryStatUtil.MemoryStat;
 import com.android.server.notification.NotificationManagerService;
@@ -173,6 +170,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -268,7 +266,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private final AlarmManager mAlarmManager;
     private final INetworkStatsService mNetworkStatsService;
     @GuardedBy("sStatsdLock")
-    private static IStatsManager sStatsd;
+    private static IStatsd sStatsd;
     private static final Object sStatsdLock = new Object();
 
     private final OnAlarmListener mAnomalyAlarmListener = new AnomalyAlarmListener();
@@ -277,6 +275,8 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private final BroadcastReceiver mAppUpdateReceiver;
     private final BroadcastReceiver mUserUpdateReceiver;
     private final ShutdownEventReceiver mShutdownEventReceiver;
+
+    private StatsManagerService mStatsManagerService;
 
     private static final class PullerKey {
         private final int mUid;
@@ -541,9 +541,9 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private void informAllUidsLocked(Context context) throws RemoteException {
         UserManager um = (UserManager) context.getSystemService(Context.USER_SERVICE);
         PackageManager pm = context.getPackageManager();
-        final List<UserInfo> users = um.getUsers(true);
+        final List<UserHandle> users = um.getUserHandles(true);
         if (DEBUG) {
-            Slog.d(TAG, "Iterating over " + users.size() + " profiles.");
+            Slog.d(TAG, "Iterating over " + users.size() + " userHandles.");
         }
 
         ParcelFileDescriptor[] fds;
@@ -570,11 +570,11 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 ProtoOutputStream output = new ProtoOutputStream(fout);
                 int numRecords = 0;
                 // Add in all the apps for every user/profile.
-                for (UserInfo profile : users) {
+                for (UserHandle userHandle : users) {
                     List<PackageInfo> pi =
                             pm.getInstalledPackagesAsUser(PackageManager.MATCH_UNINSTALLED_PACKAGES
                                             | PackageManager.MATCH_ANY_USER,
-                                    profile.id);
+                                    userHandle.getIdentifier());
                     for (int j = 0; j < pi.size(); j++) {
                         if (pi.get(j).applicationInfo != null) {
                             String installer;
@@ -584,23 +584,24 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                                 installer = "";
                             }
                             long applicationInfoToken =
-                                    output.start(ProtoStream.FIELD_TYPE_MESSAGE
-                                            | ProtoStream.FIELD_COUNT_REPEATED
+                                    output.start(ProtoOutputStream.FIELD_TYPE_MESSAGE
+                                            | ProtoOutputStream.FIELD_COUNT_REPEATED
                                                     | APPLICATION_INFO_FIELD_ID);
-                            output.write(ProtoStream.FIELD_TYPE_INT32
-                                    | ProtoStream.FIELD_COUNT_SINGLE | UID_FIELD_ID,
+                            output.write(ProtoOutputStream.FIELD_TYPE_INT32
+                                    | ProtoOutputStream.FIELD_COUNT_SINGLE | UID_FIELD_ID,
                                             pi.get(j).applicationInfo.uid);
-                            output.write(ProtoStream.FIELD_TYPE_INT64
-                                    | ProtoStream.FIELD_COUNT_SINGLE
+                            output.write(ProtoOutputStream.FIELD_TYPE_INT64
+                                    | ProtoOutputStream.FIELD_COUNT_SINGLE
                                             | VERSION_FIELD_ID, pi.get(j).getLongVersionCode());
-                            output.write(ProtoStream.FIELD_TYPE_STRING
-                                    | ProtoStream.FIELD_COUNT_SINGLE | VERSION_STRING_FIELD_ID,
+                            output.write(ProtoOutputStream.FIELD_TYPE_STRING
+                                    | ProtoOutputStream.FIELD_COUNT_SINGLE
+                                    | VERSION_STRING_FIELD_ID,
                                             pi.get(j).versionName);
-                            output.write(ProtoStream.FIELD_TYPE_STRING
-                                    | ProtoStream.FIELD_COUNT_SINGLE
+                            output.write(ProtoOutputStream.FIELD_TYPE_STRING
+                                    | ProtoOutputStream.FIELD_COUNT_SINGLE
                                             | PACKAGE_NAME_FIELD_ID, pi.get(j).packageName);
-                            output.write(ProtoStream.FIELD_TYPE_STRING
-                                    | ProtoStream.FIELD_COUNT_SINGLE
+                            output.write(ProtoOutputStream.FIELD_TYPE_STRING
+                                    | ProtoOutputStream.FIELD_COUNT_SINGLE
                                             | INSTALLER_FIELD_ID,
                                                     installer == null ? "" : installer);
                             numRecords++;
@@ -1846,7 +1847,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             int tagId, long elapsedNanos, long wallClockNanos,
             List<StatsLogEventWrapper> pulledData) {
         PowerProfile powerProfile = new PowerProfile(mContext);
-        checkNotNull(powerProfile);
+        Objects.requireNonNull(powerProfile);
 
         StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos,
                 wallClockNanos);
@@ -2135,8 +2136,8 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         pulledData.add(e);
     }
 
-    private void pullDangerousPermissionState(long elapsedNanos, final long wallClockNanos,
-            List<StatsLogEventWrapper> pulledData) {
+    private void pullDangerousPermissionState(int atomId, long elapsedNanos,
+            final long wallClockNanos, List<StatsLogEventWrapper> pulledData) {
         long token = Binder.clearCallingIdentity();
         Set<Integer> reportedUids = new HashSet<>();
         try {
@@ -2165,6 +2166,11 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                     }
                     reportedUids.add(pkg.applicationInfo.uid);
 
+                    if (atomId == StatsLog.DANGEROUS_PERMISSION_STATE_SAMPLED
+                            && ThreadLocalRandom.current().nextFloat() > 0.2f) {
+                        continue;
+                    }
+
                     int numPerms = pkg.requestedPermissions.length;
                     for (int permNum  = 0; permNum < numPerms; permNum++) {
                         String permName = pkg.requestedPermissions[permNum];
@@ -2174,7 +2180,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                         try {
                             permissionInfo = pm.getPermissionInfo(permName, 0);
                             permissionFlags =
-                                pm.getPermissionFlags(permName, pkg.packageName, user);
+                                    pm.getPermissionFlags(permName, pkg.packageName, user);
 
                         } catch (PackageManager.NameNotFoundException ignored) {
                             continue;
@@ -2185,11 +2191,13 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                         }
 
                         StatsLogEventWrapper e = new StatsLogEventWrapper(
-                                StatsLog.DANGEROUS_PERMISSION_STATE, elapsedNanos, wallClockNanos);
+                                atomId, elapsedNanos, wallClockNanos);
 
                         e.writeString(permName);
                         e.writeInt(pkg.applicationInfo.uid);
-                        e.writeString(null);
+                        if (atomId == StatsLog.DANGEROUS_PERMISSION_STATE) {
+                            e.writeString(null);
+                        }
                         e.writeBoolean((pkg.requestedPermissionsFlags[permNum]
                                 & REQUESTED_PERMISSION_GRANTED) != 0);
                         e.writeInt(permissionFlags);
@@ -2639,7 +2647,13 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 break;
             }
             case StatsLog.DANGEROUS_PERMISSION_STATE: {
-                pullDangerousPermissionState(elapsedNanos, wallClockNanos, ret);
+                pullDangerousPermissionState(StatsLog.DANGEROUS_PERMISSION_STATE, elapsedNanos,
+                        wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.DANGEROUS_PERMISSION_STATE_SAMPLED: {
+                pullDangerousPermissionState(StatsLog.DANGEROUS_PERMISSION_STATE_SAMPLED,
+                        elapsedNanos, wallClockNanos, ret);
                 break;
             }
             case StatsLog.TIME_ZONE_DATA_INFO: {
@@ -2681,6 +2695,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             Slog.d(TAG, "learned that statsdReady");
         }
         sayHiToStatsd(); // tell statsd that we're ready too and link to it
+        mStatsManagerService.systemReady();
         mContext.sendBroadcastAsUser(new Intent(StatsManager.ACTION_STATSD_STARTED)
                         .addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND),
                 UserHandle.SYSTEM, android.Manifest.permission.DUMP);
@@ -2736,51 +2751,51 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         }
     }
 
-    // Lifecycle and related code
+    @Override
+    public void unregisterPullAtomCallback(int atomTag) {
+        synchronized (sStatsdLock) {
+            // Always remove the puller in SCS.
+            // If statsd is down, we will not register it when it comes back up.
+            int callingUid = Binder.getCallingUid();
+            final long token = Binder.clearCallingIdentity();
+            PullerKey key = new PullerKey(callingUid, atomTag);
+            mPullers.remove(key);
+
+            if (sStatsd == null) {
+                Slog.w(TAG, "Could not access statsd for registering puller for atom " + atomTag);
+                return;
+            }
+            try {
+                sStatsd.unregisterPullAtomCallback(callingUid, atomTag);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Failed to access statsd to register puller for atom " + atomTag);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+    }
+
+    // Statsd related code
 
     /**
      * Fetches the statsd IBinder service.
      * Note: This should only be called from sayHiToStatsd. All other clients should use the cached
      * sStatsd with a null check.
      */
-    private static IStatsManager fetchStatsdService() {
-        return IStatsManager.Stub.asInterface(ServiceManager.getService("stats"));
-    }
-
-    public static final class Lifecycle extends SystemService {
-        private StatsCompanionService mStatsCompanionService;
-
-        public Lifecycle(Context context) {
-            super(context);
-        }
-
-        @Override
-        public void onStart() {
-            mStatsCompanionService = new StatsCompanionService(getContext());
-            try {
-                publishBinderService(Context.STATS_COMPANION_SERVICE,
-                        mStatsCompanionService);
-                if (DEBUG) Slog.d(TAG, "Published " + Context.STATS_COMPANION_SERVICE);
-            } catch (Exception e) {
-                Slog.e(TAG, "Failed to publishBinderService", e);
-            }
-        }
-
-        @Override
-        public void onBootPhase(int phase) {
-            super.onBootPhase(phase);
-            if (phase == PHASE_THIRD_PARTY_APPS_CAN_START) {
-                mStatsCompanionService.systemReady();
-            }
-        }
+    private static IStatsd fetchStatsdService() {
+        return IStatsd.Stub.asInterface(ServiceManager.getService("stats"));
     }
 
     /**
      * Now that the android system is ready, StatsCompanion is ready too, so inform statsd.
      */
-    private void systemReady() {
+    void systemReady() {
         if (DEBUG) Slog.d(TAG, "Learned that systemReady");
         sayHiToStatsd();
+    }
+
+    void setStatsManagerService(StatsManagerService statsManagerService) {
+        mStatsManagerService = statsManagerService;
     }
 
     /**

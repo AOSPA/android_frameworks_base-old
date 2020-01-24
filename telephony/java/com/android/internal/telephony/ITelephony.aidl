@@ -30,6 +30,7 @@ import android.service.carrier.CarrierIdentifier;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telephony.CarrierRestrictionRules;
+import android.telephony.CellIdentity;
 import android.telephony.CellInfo;
 import android.telephony.ClientRequestStats;
 import android.telephony.IccOpenLogicalChannelResponse;
@@ -116,13 +117,6 @@ interface ITelephony {
      */
     boolean isRadioOnForSubscriberWithFeature(int subId, String callingPackage, String callingFeatureId);
 
-    /**
-     * Supply a pin to unlock the SIM.  Blocks until a result is determined.
-     * @param pin The pin to check.
-     * @return whether the operation was a success.
-     */
-    @UnsupportedAppUsage
-    boolean supplyPin(String pin);
 
     /**
      * Supply a pin to unlock the SIM for particular subId.
@@ -132,15 +126,6 @@ interface ITelephony {
      * @return whether the operation was a success.
      */
     boolean supplyPinForSubscriber(int subId, String pin);
-
-    /**
-     * Supply puk to unlock the SIM and set SIM pin to new pin.
-     *  Blocks until a result is determined.
-     * @param puk The puk to check.
-     *        pin The new pin to be set in SIM
-     * @return whether the operation was a success.
-     */
-    boolean supplyPuk(String puk, String pin);
 
     /**
      * Supply puk to unlock the SIM and set SIM pin to new pin.
@@ -159,27 +144,7 @@ interface ITelephony {
      * @return retValue[0] = Phone.PIN_RESULT_SUCCESS on success. Otherwise error code
      *         retValue[1] = number of attempts remaining if known otherwise -1
      */
-    int[] supplyPinReportResult(String pin);
-
-    /**
-     * Supply a pin to unlock the SIM.  Blocks until a result is determined.
-     * Returns a specific success/error code.
-     * @param pin The pin to check.
-     * @return retValue[0] = Phone.PIN_RESULT_SUCCESS on success. Otherwise error code
-     *         retValue[1] = number of attempts remaining if known otherwise -1
-     */
     int[] supplyPinReportResultForSubscriber(int subId, String pin);
-
-    /**
-     * Supply puk to unlock the SIM and set SIM pin to new pin.
-     * Blocks until a result is determined.
-     * Returns a specific success/error code
-     * @param puk The puk to check
-     *        pin The pin to check.
-     * @return retValue[0] = Phone.PIN_RESULT_SUCCESS on success. Otherwise error code
-     *         retValue[1] = number of attempts remaining if known otherwise -1
-     */
-    int[] supplyPukReportResult(String puk, String pin);
 
     /**
      * Supply puk to unlock the SIM and set SIM pin to new pin.
@@ -305,7 +270,8 @@ interface ITelephony {
      */
     boolean isDataConnectivityPossible(int subId);
 
-    Bundle getCellLocation(String callingPkg, String callingFeatureId);
+    // Uses CellIdentity which is Parcelable here; will convert to CellLocation in client.
+    CellIdentity getCellLocation(String callingPkg, String callingFeatureId);
 
     /**
      * Returns the ISO country code equivalent of the current registered
@@ -888,12 +854,13 @@ interface ITelephony {
     /**
     *  @return true if the ImsService to bind to for the slot id specified was set, false otherwise.
     */
-    boolean setImsService(int slotId, boolean isCarrierImsService, String packageName);
+    boolean setBoundImsServiceOverride(int slotIndex, boolean isCarrierService,
+            in int[] featureTypes, in String packageName);
 
     /**
     * @return the package name of the carrier/device ImsService associated with this slot.
     */
-    String getImsService(int slotId, boolean isCarrierImsService);
+    String getBoundImsServicePackage(int slotIndex, boolean isCarrierImsService, int featureType);
 
     /**
      * Get the MmTelFeature state attached to this subscription id.
@@ -1133,7 +1100,7 @@ interface ITelephony {
     /**
      * @hide
      */
-    String[] getMergedSubscriberIdsFromGroup(int subId, String callingPackage);
+    String[] getMergedImsisFromGroup(int subId, String callingPackage);
 
     /**
      * Override the operator branding for the current ICCID.
@@ -2120,6 +2087,8 @@ interface ITelephony {
     boolean isDataEnabledForApn(int apnType, int subId, String callingPackage);
 
     boolean isApnMetered(int apnType, int subId);
+
+    boolean isMvnoMatched(int subId, int mvnoType, String mvnoMatchData);
 
     /**
      * Enqueue a pending sms Consumer, which will answer with the user specified selection for an

@@ -43,7 +43,7 @@ import android.annotation.Size;
 import android.annotation.StyleRes;
 import android.annotation.TestApi;
 import android.annotation.UiThread;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.AutofillOptions;
 import android.content.ClipData;
 import android.content.Context;
@@ -109,7 +109,8 @@ import android.view.AccessibilityIterators.ParagraphTextSegmentIterator;
 import android.view.AccessibilityIterators.TextSegmentIterator;
 import android.view.AccessibilityIterators.WordTextSegmentIterator;
 import android.view.ContextMenu.ContextMenuInfo;
-import android.view.WindowInsetsAnimationListener.InsetsAnimation;
+import android.view.WindowInsetsAnimationCallback.AnimationBounds;
+import android.view.WindowInsetsAnimationCallback.InsetsAnimation;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityEventSource;
 import android.view.accessibility.AccessibilityManager;
@@ -4626,7 +4627,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         private ArrayList<OnUnhandledKeyEventListener> mUnhandledKeyListeners;
 
-        private WindowInsetsAnimationListener mWindowInsetsAnimationListener;
+        private WindowInsetsAnimationCallback mWindowInsetsAnimationCallback;
 
         /**
          * This lives here since it's only valid for interactive views.
@@ -6161,8 +6162,25 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         mRenderNode = RenderNode.create(getClass().getName(), new ViewAnimationHostBridge(this));
     }
 
-    final boolean debugDraw() {
+    /**
+     * Returns {@code true} when the View is attached and the system developer setting to show
+     * the layout bounds is enabled or {@code false} otherwise.
+     */
+    public final boolean isShowingLayoutBounds() {
         return DEBUG_DRAW || mAttachInfo != null && mAttachInfo.mDebugLayout;
+    }
+
+    /**
+     * Used to test isShowingLayoutBounds(). This sets the local value used
+     * by that function. This method does nothing if the layout isn't attached.
+     *
+     * @hide
+     */
+    @TestApi
+    public final void setShowingLayoutBounds(boolean debugLayout) {
+        if (mAttachInfo != null) {
+            mAttachInfo.mDebugLayout = debugLayout;
+        }
     }
 
     private static SparseArray<String> getAttributeMap() {
@@ -7146,10 +7164,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     mFrameMetricsObservers = new ArrayList<>();
                 }
 
-                FrameMetricsObserver fmo = new FrameMetricsObserver(window,
-                        handler.getLooper(), listener);
+                FrameMetricsObserver fmo = new FrameMetricsObserver(window, handler, listener);
                 mFrameMetricsObservers.add(fmo);
-                mAttachInfo.mThreadedRenderer.addFrameMetricsObserver(fmo);
+                mAttachInfo.mThreadedRenderer.addObserver(fmo.getRendererObserver());
             } else {
                 Log.w(VIEW_LOG_TAG, "View not hardware-accelerated. Unable to observe frame stats");
             }
@@ -7158,8 +7175,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 mFrameMetricsObservers = new ArrayList<>();
             }
 
-            FrameMetricsObserver fmo = new FrameMetricsObserver(window,
-                    handler.getLooper(), listener);
+            FrameMetricsObserver fmo = new FrameMetricsObserver(window, handler, listener);
             mFrameMetricsObservers.add(fmo);
         }
     }
@@ -7181,7 +7197,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (mFrameMetricsObservers != null) {
             mFrameMetricsObservers.remove(fmo);
             if (renderer != null) {
-                renderer.removeFrameMetricsObserver(fmo);
+                renderer.removeObserver(fmo.getRendererObserver());
             }
         }
     }
@@ -7191,7 +7207,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             ThreadedRenderer renderer = getThreadedRenderer();
             if (renderer != null) {
                 for (FrameMetricsObserver fmo : mFrameMetricsObservers) {
-                    renderer.addFrameMetricsObserver(fmo);
+                    renderer.addObserver(fmo.getRendererObserver());
                 }
             } else {
                 Log.w(VIEW_LOG_TAG, "View not hardware-accelerated. Unable to observe frame stats");
@@ -11091,33 +11107,55 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Sets a {@link WindowInsetsAnimationListener} to be notified about animations of windows that
+     * Sets a {@link WindowInsetsAnimationCallback} to be notified about animations of windows that
      * cause insets.
      *
      * @param listener The listener to set.
-     * @hide pending unhide
      */
-    public void setWindowInsetsAnimationListener(WindowInsetsAnimationListener listener) {
-        getListenerInfo().mWindowInsetsAnimationListener = listener;
+    public void setWindowInsetsAnimationCallback(@Nullable WindowInsetsAnimationCallback listener) {
+        getListenerInfo().mWindowInsetsAnimationCallback = listener;
     }
 
-    void dispatchWindowInsetsAnimationStarted(InsetsAnimation animation) {
-        if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationListener != null) {
-            mListenerInfo.mWindowInsetsAnimationListener.onStarted(animation);
+    /**
+     * Dispatches {@link WindowInsetsAnimationCallback#onStarted(InsetsAnimation, AnimationBounds)}
+     * when Window Insets animation is started.
+     * @param animation current animation
+     * @param bounds the upper and lower {@link AnimationBounds} that provides range of
+     *  {@link InsetsAnimation}.
+     * @return the upper and lower {@link AnimationBounds}.
+     */
+    @NonNull
+    public AnimationBounds dispatchWindowInsetsAnimationStarted(
+            @NonNull InsetsAnimation animation, @NonNull AnimationBounds bounds) {
+        if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationCallback != null) {
+            return mListenerInfo.mWindowInsetsAnimationCallback.onStarted(animation, bounds);
         }
+        return bounds;
     }
 
-    WindowInsets dispatchWindowInsetsAnimationProgress(WindowInsets insets) {
-        if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationListener != null) {
-            return mListenerInfo.mWindowInsetsAnimationListener.onProgress(insets);
+    /**
+     * Dispatches {@link WindowInsetsAnimationCallback#onProgress(WindowInsets)}
+     * when Window Insets animation makes progress.
+     * @param insets The current {@link WindowInsets}.
+     * @return current {@link WindowInsets}.
+     */
+    @NonNull
+    public WindowInsets dispatchWindowInsetsAnimationProgress(@NonNull WindowInsets insets) {
+        if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationCallback != null) {
+            return mListenerInfo.mWindowInsetsAnimationCallback.onProgress(insets);
         } else {
             return insets;
         }
     }
 
-    void dispatchWindowInsetsAnimationFinished(InsetsAnimation animation) {
-        if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationListener != null) {
-            mListenerInfo.mWindowInsetsAnimationListener.onFinished(animation);
+    /**
+     * Dispatches {@link WindowInsetsAnimationCallback#onFinished(InsetsAnimation)}
+     * when Window Insets animation finishes.
+     * @param animation The current ongoing {@link InsetsAnimation}.
+     */
+    public void dispatchWindowInsetsAnimationFinished(@NonNull InsetsAnimation animation) {
+        if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationCallback != null) {
+            mListenerInfo.mWindowInsetsAnimationCallback.onFinished(animation);
         }
     }
 
@@ -11253,7 +11291,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return The {@link WindowInsetsController} or {@code null} if the view isn't attached to a
      *         a window.
      * @see Window#getInsetsController()
-     * @hide pending unhide
      */
     public @Nullable WindowInsetsController getWindowInsetsController() {
         if (mAttachInfo != null) {
@@ -16167,7 +16204,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * by the most recent call to {@link #measure(int, int)}.  This result is a bit mask
      * as defined by {@link #MEASURED_SIZE_MASK} and {@link #MEASURED_STATE_TOO_SMALL}.
      * This should be used during measurement and layout calculations only. Use
-     * {@link #getHeight()} to see how wide a view is after layout.
+     * {@link #getHeight()} to see how high a view is after layout.
      *
      * @return The measured height of this view as a bit mask.
      */
@@ -20865,7 +20902,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         if (mOverlay != null && !mOverlay.isEmpty()) {
                             mOverlay.getOverlayView().draw(canvas);
                         }
-                        if (debugDraw()) {
+                        if (isShowingLayoutBounds()) {
                             debugDrawFocus(canvas);
                         }
                     } else {
@@ -22010,7 +22047,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             // Step 7, draw the default focus highlight
             drawDefaultFocusHighlight(canvas);
 
-            if (debugDraw()) {
+            if (isShowingLayoutBounds()) {
                 debugDrawFocus(canvas);
             }
 
@@ -22185,7 +22222,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         // Step 6, draw decorations (foreground, scrollbars)
         onDrawForeground(canvas);
 
-        if (debugDraw()) {
+        if (isShowingLayoutBounds()) {
             debugDrawFocus(canvas);
         }
     }

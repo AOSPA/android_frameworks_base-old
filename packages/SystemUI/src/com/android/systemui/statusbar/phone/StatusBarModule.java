@@ -17,8 +17,10 @@
 package com.android.systemui.statusbar.phone;
 
 import static com.android.systemui.Dependency.ALLOW_NOTIFICATION_LONG_PRESS_NAME;
+import static com.android.systemui.Dependency.TIME_TICK_HANDLER_NAME;
 
 import android.content.Context;
+import android.os.Handler;
 import android.os.PowerManager;
 import android.util.DisplayMetrics;
 
@@ -27,16 +29,19 @@ import androidx.annotation.Nullable;
 import com.android.internal.logging.MetricsLogger;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.ViewMediatorCallback;
-import com.android.systemui.UiOffloadThread;
+import com.android.systemui.InitController;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
+import com.android.systemui.dagger.qualifiers.UiBackground;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
+import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.plugins.FalsingManager;
+import com.android.systemui.plugins.PluginDependencyProvider;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.ScreenPinningRequest;
 import com.android.systemui.shared.plugins.PluginManager;
@@ -67,14 +72,17 @@ import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
+import com.android.systemui.statusbar.policy.ExtensionController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.RemoteInputQuickSettingsDisabler;
 import com.android.systemui.statusbar.policy.RemoteInputUriController;
+import com.android.systemui.statusbar.policy.UserInfoControllerImpl;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
 import com.android.systemui.volume.VolumeComponent;
 
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 import javax.inject.Named;
 import javax.inject.Provider;
@@ -122,7 +130,7 @@ public class StatusBarModule {
             NotificationAlertingManager notificationAlertingManager,
             DisplayMetrics displayMetrics,
             MetricsLogger metricsLogger,
-            UiOffloadThread uiOffloadThread,
+            @UiBackground Executor uiBgExecutor,
             NotificationMediaManager notificationMediaManager,
             NotificationLockscreenUserManager lockScreenUserManager,
             NotificationRemoteInputManager remoteInputManager,
@@ -164,9 +172,17 @@ public class StatusBarModule {
             LightsOutNotifController lightsOutNotifController,
             StatusBarNotificationActivityStarter.Builder
                     statusBarNotificationActivityStarterBuilder,
+            ShadeController shadeController,
             SuperStatusBarViewFactory superStatusBarViewFactory,
             StatusBarKeyguardViewManager statusBarKeyguardViewManager,
             ViewMediatorCallback viewMediatorCallback,
+            InitController initController,
+            DarkIconDispatcher darkIconDispatcher,
+            @Named(TIME_TICK_HANDLER_NAME) Handler timeTickHandler,
+            PluginDependencyProvider pluginDependencyProvider,
+            KeyguardDismissUtil keyguardDismissUtil,
+            ExtensionController extensionController,
+            UserInfoControllerImpl userInfoControllerImpl,
             DismissCallbackRegistry dismissCallbackRegistry) {
         return new StatusBar(
                 context,
@@ -196,7 +212,7 @@ public class StatusBarModule {
                 notificationAlertingManager,
                 displayMetrics,
                 metricsLogger,
-                uiOffloadThread,
+                uiBgExecutor,
                 notificationMediaManager,
                 lockScreenUserManager,
                 remoteInputManager,
@@ -237,9 +253,17 @@ public class StatusBarModule {
                 dividerOptional,
                 lightsOutNotifController,
                 statusBarNotificationActivityStarterBuilder,
+                shadeController,
                 superStatusBarViewFactory,
                 statusBarKeyguardViewManager,
                 viewMediatorCallback,
+                initController,
+                darkIconDispatcher,
+                timeTickHandler,
+                pluginDependencyProvider,
+                keyguardDismissUtil,
+                extensionController,
+                userInfoControllerImpl,
                 dismissCallbackRegistry);
     }
 }

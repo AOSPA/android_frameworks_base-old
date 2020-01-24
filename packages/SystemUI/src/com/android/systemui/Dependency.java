@@ -39,10 +39,8 @@ import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.bubbles.BubbleController;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
-import com.android.systemui.dagger.qualifiers.BgHandler;
-import com.android.systemui.dagger.qualifiers.BgLooper;
-import com.android.systemui.dagger.qualifiers.MainHandler;
-import com.android.systemui.dagger.qualifiers.MainLooper;
+import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.ScreenLifecycle;
@@ -124,6 +122,7 @@ import com.android.systemui.util.leak.LeakDetector;
 import com.android.systemui.util.leak.LeakReporter;
 import com.android.systemui.util.sensors.AsyncSensorManager;
 import com.android.systemui.wm.DisplayWindowController;
+import com.android.systemui.wm.SystemWindows;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -209,7 +208,6 @@ public class Dependency {
     private final ArrayMap<Object, LazyDependencyCreator> mProviders = new ArrayMap<>();
 
     @Inject Lazy<ActivityStarter> mActivityStarter;
-    @Inject Lazy<ActivityStarterDelegate> mActivityStarterDelegate;
     @Inject Lazy<BroadcastDispatcher> mBroadcastDispatcher;
     @Inject Lazy<AsyncSensorManager> mAsyncSensorManager;
     @Inject Lazy<BluetoothController> mBluetoothController;
@@ -269,7 +267,6 @@ public class Dependency {
     @Inject Lazy<KeyguardEnvironment> mKeyguardEnvironment;
     @Inject Lazy<ShadeController> mShadeController;
     @Inject Lazy<NotificationRemoteInputManager.Callback> mNotificationRemoteInputManagerCallback;
-    @Inject Lazy<InitController> mInitController;
     @Inject Lazy<AppOpsController> mAppOpsController;
     @Inject Lazy<NavigationBarController> mNavigationBarController;
     @Inject Lazy<StatusBarStateController> mStatusBarStateController;
@@ -297,10 +294,10 @@ public class Dependency {
     @Inject Lazy<SensorPrivacyManager> mSensorPrivacyManager;
     @Inject Lazy<AutoHideController> mAutoHideController;
     @Inject Lazy<ForegroundServiceNotificationListener> mForegroundServiceNotificationListener;
-    @Inject @BgLooper Lazy<Looper> mBgLooper;
-    @Inject @BgHandler Lazy<Handler> mBgHandler;
-    @Inject @MainLooper Lazy<Looper> mMainLooper;
-    @Inject @MainHandler Lazy<Handler> mMainHandler;
+    @Inject @Background Lazy<Looper> mBgLooper;
+    @Inject @Background Lazy<Handler> mBgHandler;
+    @Inject @Main Lazy<Looper> mMainLooper;
+    @Inject @Main Lazy<Handler> mMainHandler;
     @Inject @Named(TIME_TICK_HANDLER_NAME) Lazy<Handler> mTimeTickHandler;
     @Nullable
     @Inject @Named(LEAK_REPORT_EMAIL_NAME) Lazy<String> mLeakReportEmail;
@@ -323,6 +320,7 @@ public class Dependency {
     @Inject Lazy<Recents> mRecents;
     @Inject Lazy<StatusBar> mStatusBar;
     @Inject Lazy<DisplayWindowController> mDisplayWindowController;
+    @Inject Lazy<SystemWindows> mSystemWindows;
 
     @Inject
     public Dependency() {
@@ -339,7 +337,6 @@ public class Dependency {
         mProviders.put(MAIN_LOOPER, mMainLooper::get);
         mProviders.put(MAIN_HANDLER, mMainHandler::get);
         mProviders.put(ActivityStarter.class, mActivityStarter::get);
-        mProviders.put(ActivityStarterDelegate.class, mActivityStarterDelegate::get);
         mProviders.put(BroadcastDispatcher.class, mBroadcastDispatcher::get);
 
         mProviders.put(AsyncSensorManager.class, mAsyncSensorManager::get);
@@ -458,8 +455,6 @@ public class Dependency {
         mProviders.put(NotificationRemoteInputManager.Callback.class,
                 mNotificationRemoteInputManagerCallback::get);
 
-        mProviders.put(InitController.class, mInitController::get);
-
         mProviders.put(AppOpsController.class, mAppOpsController::get);
 
         mProviders.put(NavigationBarController.class, mNavigationBarController::get);
@@ -513,6 +508,7 @@ public class Dependency {
         mProviders.put(Recents.class, mRecents::get);
         mProviders.put(StatusBar.class, mStatusBar::get);
         mProviders.put(DisplayWindowController.class, mDisplayWindowController::get);
+        mProviders.put(SystemWindows.class, mSystemWindows::get);
 
         // TODO(b/118592525): to support multi-display , we start to add something which is
         //                    per-display, while others may be global. I think it's time to add

@@ -419,10 +419,31 @@ public class CarrierConfigManager {
             KEY_GSM_NONROAMING_NETWORKS_STRING_ARRAY = "gsm_nonroaming_networks_string_array";
 
     /**
-     * Override the device's configuration for the ImsService to use for this SIM card.
+     * The package name containing the ImsService that will be bound to the telephony framework to
+     * support both IMS MMTEL and RCS feature functionality instead of the device default
+     * ImsService for this subscription.
+     * @deprecated Use {@link #KEY_CONFIG_IMS_MMTEL_PACKAGE_OVERRIDE_STRING} and
+     * {@link #KEY_CONFIG_IMS_RCS_PACKAGE_OVERRIDE_STRING} instead to configure these values
+     * separately. If any of those values are not empty, they will override this value.
      */
     public static final String KEY_CONFIG_IMS_PACKAGE_OVERRIDE_STRING =
             "config_ims_package_override_string";
+
+    /**
+     * The package name containing the ImsService that will be bound to the telephony framework to
+     * support IMS MMTEL feature functionality instead of the device default ImsService for this
+     * subscription.
+     */
+    public static final String KEY_CONFIG_IMS_MMTEL_PACKAGE_OVERRIDE_STRING =
+            "config_ims_mmtel_package_override_string";
+
+    /**
+     * The package name containing the ImsService that will be bound to the telephony framework to
+     * support IMS RCS feature functionality instead of the device default ImsService for this
+     * subscription.
+     */
+    public static final String KEY_CONFIG_IMS_RCS_PACKAGE_OVERRIDE_STRING =
+            "config_ims_rcs_package_override_string";
 
     /**
      * Override the package that will manage {@link SubscriptionPlan}
@@ -1860,6 +1881,14 @@ public class CarrierConfigManager {
      */
     public static final String KEY_CDMA_ROAMING_MODE_INT = "cdma_roaming_mode_int";
 
+    /**
+     * Determines whether 1X voice calls is supported for some CDMA carriers.
+     * Default value is true.
+     * @hide
+     */
+    @SystemApi
+    public static final String KEY_SUPPORT_CDMA_1X_VOICE_CALLS_BOOL =
+            "support_cdma_1x_voice_calls_bool";
 
     /**
      * Boolean indicating if support is provided for directly dialing FDN number from FDN list.
@@ -1973,7 +2002,6 @@ public class CarrierConfigManager {
 
     /**
      * When false, indicates that holding a video call is disabled
-     * @hide
      */
     public static final String KEY_ALLOW_HOLDING_VIDEO_CALL_BOOL =
             "allow_holding_video_call";
@@ -2209,7 +2237,7 @@ public class CarrierConfigManager {
      * the start of the next month.
      * <p>
      * This setting may be still overridden by explicit user choice. By default,
-     * the platform value will be used.
+     * {@link #DATA_CYCLE_USE_PLATFORM_DEFAULT} will be used.
      */
     public static final String KEY_MONTHLY_DATA_CYCLE_DAY_INT =
             "monthly_data_cycle_day_int";
@@ -2218,10 +2246,7 @@ public class CarrierConfigManager {
      * When {@link #KEY_MONTHLY_DATA_CYCLE_DAY_INT}, {@link #KEY_DATA_LIMIT_THRESHOLD_BYTES_LONG},
      * or {@link #KEY_DATA_WARNING_THRESHOLD_BYTES_LONG} are set to this value, the platform default
      * value will be used for that key.
-     *
-     * @hide
      */
-    @Deprecated
     public static final int DATA_CYCLE_USE_PLATFORM_DEFAULT = -1;
 
     /**
@@ -2245,8 +2270,8 @@ public class CarrierConfigManager {
      * If the value is set to {@link #DATA_CYCLE_THRESHOLD_DISABLED}, the data usage warning will
      * be disabled.
      * <p>
-     * This setting may be overridden by explicit user choice. By default, the platform value
-     * will be used.
+     * This setting may be overridden by explicit user choice. By default,
+     * {@link #DATA_CYCLE_USE_PLATFORM_DEFAULT} will be used.
      */
     public static final String KEY_DATA_WARNING_THRESHOLD_BYTES_LONG =
             "data_warning_threshold_bytes_long";
@@ -2254,8 +2279,7 @@ public class CarrierConfigManager {
     /**
      * Controls if the device should automatically notify the user as they reach
      * their cellular data warning. When set to {@code false} the carrier is
-     * expected to have implemented their own notification mechanism.
-     * @hide
+     * expected to have implemented their own notification mechanism. {@code true} by default.
      */
     public static final String KEY_DATA_WARNING_NOTIFICATION_BOOL =
             "data_warning_notification_bool";
@@ -2277,8 +2301,8 @@ public class CarrierConfigManager {
      * phone. If the value is set to {@link #DATA_CYCLE_THRESHOLD_DISABLED}, the data limit will be
      * disabled.
      * <p>
-     * This setting may be overridden by explicit user choice. By default, the platform value
-     * will be used.
+     * This setting may be overridden by explicit user choice. By default,
+     * {@link #DATA_CYCLE_USE_PLATFORM_DEFAULT} will be used.
      */
     public static final String KEY_DATA_LIMIT_THRESHOLD_BYTES_LONG =
             "data_limit_threshold_bytes_long";
@@ -2286,8 +2310,7 @@ public class CarrierConfigManager {
     /**
      * Controls if the device should automatically notify the user as they reach
      * their cellular data limit. When set to {@code false} the carrier is
-     * expected to have implemented their own notification mechanism.
-     * @hide
+     * expected to have implemented their own notification mechanism. {@code true} by default.
      */
     public static final String KEY_DATA_LIMIT_NOTIFICATION_BOOL =
             "data_limit_notification_bool";
@@ -2295,8 +2318,7 @@ public class CarrierConfigManager {
     /**
      * Controls if the device should automatically notify the user when rapid
      * cellular data usage is observed. When set to {@code false} the carrier is
-     * expected to have implemented their own notification mechanism.
-     * @hide
+     * expected to have implemented their own notification mechanism.  {@code true} by default.
      */
     public static final String KEY_DATA_RAPID_NOTIFICATION_BOOL =
             "data_rapid_notification_bool";
@@ -2320,11 +2342,39 @@ public class CarrierConfigManager {
     /**
      * Determine whether to use only RSRP for the number of LTE signal bars.
      * @hide
+     *
+     * @deprecated use {@link #KEY_PARAMETERS_USED_FOR_LTE_SIGNAL_BAR_INT}.
      */
     // FIXME: this key and related keys must not be exposed without a consistent philosophy for
     // all RATs.
+    @Deprecated
     public static final String KEY_USE_ONLY_RSRP_FOR_LTE_SIGNAL_BAR_BOOL =
             "use_only_rsrp_for_lte_signal_bar_bool";
+
+    /**
+     * Bit-field integer to determine whether to use Reference Signal Received Power (RSRP),
+     * Reference Signal Received Quality (RSRQ), or/and Reference Signal Signal to Noise Ratio
+     * (RSSNR) for the number of LTE signal bars and signal criteria reporting enabling.
+     *
+     * <p> If a measure is not set, signal criteria reporting from modem will not be triggered and
+     * not be used for calculating signal level. If multiple measures are set bit, the parameter
+     * whose value is smallest is used to indicate the signal level.
+     *
+     *  RSRP = 1 << 0,
+     *  RSRQ = 1 << 1,
+     *  RSSNR = 1 << 2,
+     *
+     *  The value of this key must be bitwise OR of {@link CellSignalStrengthLte#USE_RSRP},
+     *  {@link CellSignalStrengthLte#USE_RSRQ}, {@link CellSignalStrengthLte#USE_RSSNR}.
+     *
+     * For example, if both RSRP and RSRQ are used, the value of key is 3 (1 << 0 | 1 << 1).
+     * If the key is invalid or not configured, a default value (RSRP | RSSNR = 1 << 0 | 1 << 2)
+     * will apply.
+     *
+     * @hide
+     */
+    public static final String KEY_PARAMETERS_USED_FOR_LTE_SIGNAL_BAR_INT =
+            "parameters_used_for_lte_signal_bar_int";
 
     /**
      * List of 4 customized 5G SS reference signal received power (SSRSRP) thresholds.
@@ -2633,6 +2683,42 @@ public class CarrierConfigManager {
      */
     public static final String KEY_LTE_RSRP_THRESHOLDS_INT_ARRAY =
             "lte_rsrp_thresholds_int_array";
+
+    /**
+     * A list of 4 customized LTE Reference Signal Received Quality (RSRQ) thresholds.
+     *
+     * Reference: TS 136.133 v12.6.0 section 9.1.7 - RSRQ Measurement Report Mapping.
+     *
+     * 4 threshold integers must be within the boundaries [-34 dB, 3 dB], and the levels are:
+     *     "NONE: [-34, threshold1)"
+     *     "POOR: [threshold1, threshold2)"
+     *     "MODERATE: [threshold2, threshold3)"
+     *     "GOOD:  [threshold3, threshold4)"
+     *     "EXCELLENT:  [threshold4, 3]"
+     *
+     * This key is considered invalid if the format is violated. If the key is invalid or
+     * not configured, a default value set will apply.
+     */
+    public static final String KEY_LTE_RSRQ_THRESHOLDS_INT_ARRAY =
+            "lte_rsrq_thresholds_int_array";
+
+    /**
+     * A list of 4 customized LTE Reference Signal Signal to Noise Ratio (RSSNR) thresholds.
+     *
+     * 4 threshold integers must be within the boundaries [-200, 300], and the levels are:
+     *     "NONE: [-200, threshold1)"
+     *     "POOR: [threshold1, threshold2)"
+     *     "MODERATE: [threshold2, threshold3)"
+     *     "GOOD:  [threshold3, threshold4)"
+     *     "EXCELLENT:  [threshold4, 300]"
+     * Note: the unit of the values is 10*db; it is derived by multiplying 10 on the original dB
+     * value reported by modem.
+     *
+     * This key is considered invalid if the format is violated. If the key is invalid or
+     * not configured, a default value set will apply.
+     */
+    public static final String KEY_LTE_RSSNR_THRESHOLDS_INT_ARRAY =
+            "lte_rssnr_thresholds_int_array";
 
     /**
      * Decides when clients try to bind to iwlan network service, which package name will
@@ -3066,16 +3152,18 @@ public class CarrierConfigManager {
             "data_switch_validation_timeout_long";
 
     /**
-     * GPS configs. See android.hardware.gnss@1.0 IGnssConfiguration.
-     * @hide
+     * GPS configs. See the GNSS HAL documentation for more details.
      */
     public static final class Gps {
+        private Gps() {}
+
         /** Prefix of all Gps.KEY_* constants. */
         public static final String KEY_PREFIX = "gps.";
 
         /**
          * Location information during (and after) an emergency call is only provided over control
          * plane signaling from the network.
+         * @hide
          */
         public static final int SUPL_EMERGENCY_MODE_TYPE_CP_ONLY = 0;
 
@@ -3083,6 +3171,7 @@ public class CarrierConfigManager {
          * Location information during (and after) an emergency call is provided over the data
          * plane and serviced by the framework GNSS service, but if it fails, the carrier also
          * supports control plane backup signaling.
+         * @hide
          */
         public static final int SUPL_EMERGENCY_MODE_TYPE_CP_FALLBACK = 1;
 
@@ -3090,6 +3179,7 @@ public class CarrierConfigManager {
          * Location information during (and after) an emergency call is provided over the data plane
          * and serviced by the framework GNSS service only. There is no backup signalling over the
          * control plane if it fails.
+         * @hide
          */
         public static final int SUPL_EMERGENCY_MODE_TYPE_DP_ONLY = 2;
 
@@ -3106,10 +3196,14 @@ public class CarrierConfigManager {
         /**
          * SUPL server host for SET Initiated & non-ES Network-Initiated SUPL requests.
          * Default to supl.google.com
+         * @hide
          */
         public static final String KEY_SUPL_HOST_STRING = KEY_PREFIX + "supl_host";
 
-        /** SUPL server port. Default to 7275. */
+        /**
+         * SUPL server port. Default to 7275.
+         * @hide
+         */
         public static final String KEY_SUPL_PORT_STRING = KEY_PREFIX + "supl_port";
 
         /**
@@ -3117,6 +3211,7 @@ public class CarrierConfigManager {
          * with bits 0:7 representing a service indicator field, bits 8:15
          * representing the minor version and bits 16:23 representing the
          * major version. Default to 0x20000.
+         * @hide
          */
         public static final String KEY_SUPL_VER_STRING = KEY_PREFIX + "supl_ver";
 
@@ -3124,6 +3219,7 @@ public class CarrierConfigManager {
          * SUPL_MODE configuration bit mask
          * 1 - Mobile Station Based. This is default.
          * 2 - Mobile Station Assisted.
+         * @hide
          */
         public static final String KEY_SUPL_MODE_STRING = KEY_PREFIX + "supl_mode";
 
@@ -3132,6 +3228,7 @@ public class CarrierConfigManager {
          * (e.g. E911), and SUPL non-ES requests to only outside of non user emergency sessions.
          * 0 - no.
          * 1 - yes. This is default.
+         * @hide
          */
         public static final String KEY_SUPL_ES_STRING = KEY_PREFIX + "supl_es";
 
@@ -3140,6 +3237,7 @@ public class CarrierConfigManager {
          * 0 - Radio Resource Location Protocol in user plane and control plane. This is default.
          * 1 - Enable LTE Positioning Protocol in user plane.
          * 2 - Enable LTE Positioning Protocol in control plane.
+         * @hide
          */
         public static final String KEY_LPP_PROFILE_STRING = KEY_PREFIX + "lpp_profile";
 
@@ -3147,6 +3245,7 @@ public class CarrierConfigManager {
          * Determine whether to use emergency PDN for emergency SUPL.
          * 0 - no.
          * 1 - yes. This is default.
+         * @hide
          */
         public static final String KEY_USE_EMERGENCY_PDN_FOR_EMERGENCY_SUPL_STRING =
                 KEY_PREFIX + "use_emergency_pdn_for_emergency_supl";
@@ -3157,6 +3256,7 @@ public class CarrierConfigManager {
          * 1 - Use A-GLONASS in Radio Resource Control(RRC) control-plane.
          * 2 - Use A-GLONASS in Radio Resource Location user-plane.
          * 4 - Use A-GLONASS in LTE Positioning Protocol User plane.
+         * @hide
          */
         public static final String KEY_A_GLONASS_POS_PROTOCOL_SELECT_STRING =
                 KEY_PREFIX + "a_glonass_pos_protocol_select";
@@ -3168,11 +3268,13 @@ public class CarrierConfigManager {
          * "1" - Lock Mobile Originated GPS functionalities.
          * "2" - Lock Network initiated GPS functionalities.
          * "3" - Lock both. This is default.
+         * @hide
          */
         public static final String KEY_GPS_LOCK_STRING = KEY_PREFIX + "gps_lock";
 
         /**
          * Control Plane / SUPL NI emergency extension time in seconds. Default to "0".
+         * @hide
          */
         public static final String KEY_ES_EXTENSION_SEC_STRING = KEY_PREFIX + "es_extension_sec";
 
@@ -3181,6 +3283,7 @@ public class CarrierConfigManager {
          * the non-framework entities requesting location directly from GNSS without involving
          * the framework, as managed by IGnssVisibilityControl.hal. For example,
          * "com.example.mdt com.example.ims".
+         * @hide
          */
         public static final String KEY_NFW_PROXY_APPS_STRING = KEY_PREFIX + "nfw_proxy_apps";
 
@@ -3196,6 +3299,7 @@ public class CarrierConfigManager {
          * {@link #SUPL_EMERGENCY_MODE_TYPE_CP_ONLY}.
          * <p>
          * The default value for this configuration is {@link #SUPL_EMERGENCY_MODE_TYPE_CP_ONLY}.
+         * @hide
          */
         public static final String KEY_ES_SUPL_CONTROL_PLANE_SUPPORT_INT = KEY_PREFIX
                 + "es_supl_control_plane_support_int";
@@ -3207,6 +3311,7 @@ public class CarrierConfigManager {
          * <p>
          * A string array of PLMNs that do not support a control-plane mechanism for getting a
          * user's location for SUPL ES.
+         * @hide
          */
         public static final String KEY_ES_SUPL_DATA_PLANE_ONLY_ROAMING_PLMN_STRING_ARRAY =
                 KEY_PREFIX + "es_supl_data_plane_only_roaming_plmn_string_array";
@@ -3528,6 +3633,8 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_GSM_ROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_GSM_NONROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putString(KEY_CONFIG_IMS_PACKAGE_OVERRIDE_STRING, null);
+        sDefaults.putString(KEY_CONFIG_IMS_MMTEL_PACKAGE_OVERRIDE_STRING, null);
+        sDefaults.putString(KEY_CONFIG_IMS_RCS_PACKAGE_OVERRIDE_STRING, null);
         sDefaults.putStringArray(KEY_CDMA_ROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_CDMA_NONROAMING_NETWORKS_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_DIAL_STRING_REPLACE_STRING_ARRAY, null);
@@ -3622,6 +3729,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_FORCE_IMEI_BOOL, false);
         sDefaults.putInt(
                 KEY_CDMA_ROAMING_MODE_INT, TelephonyManager.CDMA_ROAMING_MODE_RADIO_DEFAULT);
+        sDefaults.putBoolean(KEY_SUPPORT_CDMA_1X_VOICE_CALLS_BOOL, true);
         sDefaults.putString(KEY_RCS_CONFIG_SERVER_URL_STRING, "");
 
         // Carrier Signalling Receivers
@@ -3741,6 +3849,20 @@ public class CarrierConfigManager {
                         -108, /* SIGNAL_STRENGTH_GOOD */
                         -98,  /* SIGNAL_STRENGTH_GREAT */
                 });
+        sDefaults.putIntArray(KEY_LTE_RSRQ_THRESHOLDS_INT_ARRAY,
+                new int[] {
+                        -19, /* SIGNAL_STRENGTH_POOR */
+                        -17, /* SIGNAL_STRENGTH_MODERATE */
+                        -14, /* SIGNAL_STRENGTH_GOOD */
+                        -12  /* SIGNAL_STRENGTH_GREAT */
+                });
+        sDefaults.putIntArray(KEY_LTE_RSSNR_THRESHOLDS_INT_ARRAY,
+                new int[] {
+                        -30, /* SIGNAL_STRENGTH_POOR */
+                        10,  /* SIGNAL_STRENGTH_MODERATE */
+                        45,  /* SIGNAL_STRENGTH_GOOD */
+                        130  /* SIGNAL_STRENGTH_GREAT */
+                });
         sDefaults.putIntArray(KEY_WCDMA_RSCP_THRESHOLDS_INT_ARRAY,
                 new int[] {
                         -115,  /* SIGNAL_STRENGTH_POOR */
@@ -3844,6 +3966,34 @@ public class CarrierConfigManager {
                 new int[] {4 /* BUSY */});
         sDefaults.putBoolean(KEY_PREVENT_CLIR_ACTIVATION_AND_DEACTIVATION_CODE_BOOL, false);
         sDefaults.putLong(KEY_DATA_SWITCH_VALIDATION_TIMEOUT_LONG, 2000);
+        sDefaults.putInt(KEY_PARAMETERS_USED_FOR_LTE_SIGNAL_BAR_INT,
+                CellSignalStrengthLte.USE_RSRP | CellSignalStrengthLte.USE_RSSNR);
+        // Default wifi configurations.
+        sDefaults.putAll(Wifi.getDefaults());
+    }
+
+    /**
+     * Wi-Fi configs used in WiFi Module.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final class Wifi {
+        /** Prefix of all Wifi.KEY_* constants. */
+        public static final String KEY_PREFIX = "wifi.";
+        /**
+        * It contains the maximum client count definition that the carrier owns.
+        */
+        public static final String KEY_HOTSPOT_MAX_CLIENT_COUNT =
+                KEY_PREFIX + "hotspot_maximum_client_count";
+
+        private static PersistableBundle getDefaults() {
+            PersistableBundle defaults = new PersistableBundle();
+            defaults.putInt(KEY_HOTSPOT_MAX_CLIENT_COUNT, 0);
+            return defaults;
+        }
+
+        private Wifi() {}
     }
 
     /**
@@ -4042,13 +4192,28 @@ public class CarrierConfigManager {
         }
     }
 
-    /** {@hide} */
+    /**
+     * Gets the package name for a default carrier service.
+     * @return the package name for a default carrier service; empty string if not available.
+     *
+     * @hide
+     */
+    @NonNull
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public String getDefaultCarrierServicePackageName() {
         try {
-            return getICarrierConfigLoader().getDefaultCarrierServicePackageName();
-        } catch (Throwable t) {
-            return null;
+            ICarrierConfigLoader loader = getICarrierConfigLoader();
+            if (loader == null) {
+                Rlog.w(TAG, "getDefaultCarrierServicePackageName ICarrierConfigLoader is null");
+                return "";
+            }
+            return loader.getDefaultCarrierServicePackageName();
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "getDefaultCarrierServicePackageName ICarrierConfigLoader is null"
+                    + ex.toString());
         }
+        return "";
     }
 
     /**

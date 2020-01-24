@@ -26,8 +26,8 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.StyleRes;
 import android.annotation.SystemApi;
-import android.annotation.UnsupportedAppUsage;
 import android.app.WindowConfiguration;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
@@ -46,6 +46,8 @@ import android.os.RemoteException;
 import android.transition.Scene;
 import android.transition.Transition;
 import android.transition.TransitionManager;
+import android.view.WindowInsets.Side.InsetsSide;
+import android.view.WindowInsets.Type.InsetsType;
 import android.view.accessibility.AccessibilityEvent;
 
 import java.util.Collections;
@@ -1170,16 +1172,6 @@ public abstract class Window {
     /**
      * {@hide}
      */
-    @UnsupportedAppUsage
-    protected void setNeedsMenuKey(int value) {
-        final WindowManager.LayoutParams attrs = getAttributes();
-        attrs.needsMenuKey = value;
-        dispatchWindowAttributesChanged(attrs);
-    }
-
-    /**
-     * {@hide}
-     */
     protected void dispatchWindowAttributesChanged(WindowManager.LayoutParams attrs) {
         if (mCallback != null) {
             mCallback.onWindowAttributesChanged(attrs);
@@ -1204,6 +1196,44 @@ public abstract class Window {
         final WindowManager.LayoutParams attrs = getAttributes();
         attrs.setColorMode(colorMode);
         dispatchWindowAttributesChanged(attrs);
+    }
+
+    /**
+     * If {@code isPreferred} is true, this method requests that the connected display does minimal
+     * post processing when this window is visible on the screen. Otherwise, it requests that the
+     * display switches back to standard image processing.
+     *
+     * <p> By default, the display does not do minimal post processing and if this is desired, this
+     * method should not be used. It should be used with {@code isPreferred=true} when low
+     * latency has a higher priority than image enhancement processing (e.g. for games or video
+     * conferencing). The display will automatically go back into standard image processing mode
+     * when no window requesting minimal posst processing is visible on screen anymore.
+     * {@code setPreferMinimalPostProcessing(false)} can be used if
+     * {@code setPreferMinimalPostProcessing(true)} was previously called for this window and
+     * minimal post processing is no longer required.
+     *
+     * <p>If the Display sink is connected via HDMI, the device will begin to send infoframes with
+     * Auto Low Latency Mode enabled and Game Content Type. This will switch the connected display
+     * to a minimal image processing mode (if available), which reduces latency, improving the user
+     * experience for gaming or video conferencing applications. For more information, see HDMI 2.1
+     * specification.
+     *
+     * <p>If the Display sink has an internal connection or uses some other protocol than HDMI,
+     * effects may be similar but implementation-defined.
+     *
+     * <p>The ability to switch to a mode with minimal post proessing may be disabled by a user
+     * setting in the system settings menu. In that case, this method does nothing.
+     *
+     * @see android.content.pm.ActivityInfo#preferMinimalPostProcessing
+     * @see android.view.Display#isMinimalPostProcessingSupported
+     * @see android.view.WindowManager.LayoutParams#preferMinimalPostProcessing
+     *
+     * @param isPreferred Indicates whether minimal post processing is preferred for this window
+     *                    ({@code isPreferred=true}) or not ({@code isPreferred=false}).
+     */
+    public void setPreferMinimalPostProcessing(boolean isPreferred) {
+        mWindowAttributes.preferMinimalPostProcessing = isPreferred;
+        dispatchWindowAttributesChanged(mWindowAttributes);
     }
 
     /**
@@ -1248,6 +1278,60 @@ public abstract class Window {
         attrs.dimAmount = amount;
         mHaveDimAmount = true;
         dispatchWindowAttributesChanged(attrs);
+    }
+
+    /**
+     * A shortcut for {@link WindowManager.LayoutParams#setFitWindowInsetsTypes(int)}
+     * @hide pending unhide
+     */
+    public void setFitWindowInsetsTypes(@InsetsType int types) {
+        final WindowManager.LayoutParams attrs = getAttributes();
+        attrs.setFitWindowInsetsTypes(types);
+        dispatchWindowAttributesChanged(attrs);
+    }
+
+    /**
+     * A shortcut for {@link WindowManager.LayoutParams#setFitWindowInsetsSides(int)}
+     * @hide pending unhide
+     */
+    public void setFitWindowInsetsSides(@InsetsSide int sides) {
+        final WindowManager.LayoutParams attrs = getAttributes();
+        attrs.setFitWindowInsetsSides(sides);
+        dispatchWindowAttributesChanged(attrs);
+    }
+
+    /**
+     * A shortcut for {@link WindowManager.LayoutParams#setFitIgnoreVisibility(boolean)}
+     * @hide pending unhide
+     */
+    public void setFitIgnoreVisibility(boolean ignore) {
+        final WindowManager.LayoutParams attrs = getAttributes();
+        attrs.setFitIgnoreVisibility(ignore);
+        dispatchWindowAttributesChanged(attrs);
+    }
+
+    /**
+     * A shortcut for {@link WindowManager.LayoutParams#getFitWindowInsetsTypes}
+     * @hide pending unhide
+     */
+    public @InsetsType int getFitWindowInsetsTypes() {
+        return getAttributes().getFitWindowInsetsTypes();
+    }
+
+    /**
+     * A shortcut for {@link WindowManager.LayoutParams#getFitWindowInsetsSides()}
+     * @hide pending unhide
+     */
+    public @InsetsSide int getFitWindowInsetsSides() {
+        return getAttributes().getFitWindowInsetsSides();
+    }
+
+    /**
+     * A shortcut for {@link WindowManager.LayoutParams#getFitIgnoreVisibility()}
+     * @hide pending unhide
+     */
+    public boolean getFitIgnoreVisibility() {
+        return getAttributes().getFitIgnoreVisibility();
     }
 
     /**
@@ -2527,7 +2611,8 @@ public abstract class Window {
     /**
      * @return The {@link WindowInsetsController} associated with this window
      * @see View#getWindowInsetsController()
-     * @hide pending unhide
      */
-    public abstract @NonNull WindowInsetsController getInsetsController();
+    public @Nullable WindowInsetsController getInsetsController() {
+        return null;
+    }
 }

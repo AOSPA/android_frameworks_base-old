@@ -19,15 +19,31 @@ package com.android.server.wm;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.any;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.when;
 
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.PictureInPictureParams;
+import android.app.servertransaction.ClientTransaction;
+import android.app.servertransaction.EnterPipRequestedItem;
 import android.content.res.Configuration;
 import android.graphics.Rect;
+import android.os.IBinder;
+import android.os.RemoteException;
 import android.view.IDisplayWindowListener;
 import android.view.WindowContainerTransaction;
 
@@ -36,6 +52,8 @@ import androidx.test.filters.MediumTest;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.MockitoSession;
 
 import java.util.ArrayList;
 
@@ -49,6 +67,9 @@ import java.util.ArrayList;
 @RunWith(WindowTestRunner.class)
 public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
 
+    private final ArgumentCaptor<ClientTransaction> mClientTransactionCaptor =
+            ArgumentCaptor.forClass(ClientTransaction.class);
+
     @Before
     public void setUp() throws Exception {
         doReturn(false).when(mService).isBooting();
@@ -58,7 +79,7 @@ public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
     /** Verify that activity is finished correctly upon request. */
     @Test
     public void testActivityFinish() {
-        final ActivityStack stack = new StackBuilder(mRootActivityContainer).build();
+        final ActivityStack stack = new StackBuilder(mRootWindowContainer).build();
         final ActivityRecord activity = stack.getBottomMostTask().getTopNonFinishingActivity();
         assertTrue("Activity must be finished", mService.finishActivity(activity.appToken,
                 0 /* resultCode */, null /* resultData */,
@@ -71,9 +92,42 @@ public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
     }
 
     @Test
+    public void testOnPictureInPictureRequested() throws RemoteException {
+        final ActivityStack stack = new StackBuilder(mRootWindowContainer).build();
+        final ActivityRecord activity = stack.getBottomMostTask().getTopNonFinishingActivity();
+        ClientLifecycleManager lifecycleManager = mService.getLifecycleManager();
+        doNothing().when(lifecycleManager).scheduleTransaction(any());
+        doReturn(true).when(activity).checkEnterPictureInPictureState(anyString(), anyBoolean());
+
+        mService.requestPictureInPictureMode(activity.token);
+
+        verify(lifecycleManager).scheduleTransaction(mClientTransactionCaptor.capture());
+        final ClientTransaction transaction = mClientTransactionCaptor.getValue();
+        // Check that only an enter pip request item callback was scheduled.
+        assertEquals(1, transaction.getCallbacks().size());
+        assertTrue(transaction.getCallbacks().get(0) instanceof EnterPipRequestedItem);
+        // Check the activity lifecycle state remains unchanged.
+        assertNull(transaction.getLifecycleStateRequest());
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testOnPictureInPictureRequested_cannotEnterPip() throws RemoteException {
+        final ActivityStack stack = new StackBuilder(mRootWindowContainer).build();
+        final ActivityRecord activity = stack.getBottomMostTask().getTopNonFinishingActivity();
+        ClientLifecycleManager lifecycleManager = mService.getLifecycleManager();
+        doNothing().when(lifecycleManager).scheduleTransaction(any());
+        doReturn(false).when(activity).checkEnterPictureInPictureState(anyString(), anyBoolean());
+
+        mService.requestPictureInPictureMode(activity.token);
+
+        // Check enter no transactions with enter pip requests are made.
+        verify(lifecycleManager, times(0)).scheduleTransaction(any());
+    }
+
+    @Test
     public void testTaskTransaction() {
         removeGlobalMinSizeRestriction();
-        final ActivityStack stack = new StackBuilder(mRootActivityContainer)
+        final ActivityStack stack = new StackBuilder(mRootWindowContainer)
                 .setWindowingMode(WINDOWING_MODE_FREEFORM).build();
         final Task task = stack.getTopMostTask();
         WindowContainerTransaction t = new WindowContainerTransaction();
@@ -86,7 +140,7 @@ public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
     @Test
     public void testStackTransaction() {
         removeGlobalMinSizeRestriction();
-        final ActivityStack stack = new StackBuilder(mRootActivityContainer)
+        final ActivityStack stack = new StackBuilder(mRootWindowContainer)
                 .setWindowingMode(WINDOWING_MODE_FREEFORM).build();
         ActivityManager.StackInfo info =
                 mService.getStackInfo(WINDOWING_MODE_FREEFORM, ACTIVITY_TYPE_STANDARD);
@@ -126,7 +180,7 @@ public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
         assertEquals(0, removed.size());
         added.clear();
         // Check adding a display
-        ActivityDisplay newDisp1 = new TestActivityDisplay.Builder(mService, 600, 800).build();
+        DisplayContent newDisp1 = new TestDisplayContent.Builder(mService, 600, 800).build();
         assertEquals(1, added.size());
         assertEquals(0, changed.size());
         assertEquals(0, removed.size());
@@ -135,7 +189,7 @@ public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
         Configuration c = new Configuration(newDisp1.getRequestedOverrideConfiguration());
         c.windowConfiguration.setBounds(new Rect(0, 0, 1000, 1300));
         newDisp1.onRequestedOverrideConfigurationChanged(c);
-        mService.mRootActivityContainer.ensureVisibilityAndConfig(null /* starting */,
+        mService.mRootWindowContainer.ensureVisibilityAndConfig(null /* starting */,
                 newDisp1.mDisplayId, false /* markFrozenIfConfigChanged */,
                 false /* deferResume */);
         assertEquals(0, added.size());
@@ -147,6 +201,44 @@ public class ActivityTaskManagerServiceTests extends ActivityTestsBase {
         assertEquals(0, added.size());
         assertEquals(0, changed.size());
         assertEquals(1, removed.size());
+    }
+
+    /*
+        a test to verify b/144045134 - ignore PIP mode request for destroyed activity.
+        mocks r.getParent() to return null to cause NPE inside enterPipRunnable#run() in
+        ActivityTaskMangerservice#enterPictureInPictureMode(), which rebooted the device.
+        It doesn't fully simulate the issue's reproduce steps, but this should suffice.
+     */
+    @Test
+    public void testEnterPipModeWhenRecordParentChangesToNull() {
+        MockitoSession mockSession = mockitoSession()
+                .initMocks(this)
+                .mockStatic(ActivityRecord.class)
+                .startMocking();
+
+        ActivityRecord record = mock(ActivityRecord.class);
+        IBinder token = mock(IBinder.class);
+        PictureInPictureParams params = mock(PictureInPictureParams.class);
+        record.pictureInPictureArgs = params;
+
+        //mock operations in private method ensureValidPictureInPictureActivityParamsLocked()
+        when(ActivityRecord.forTokenLocked(token)).thenReturn(record);
+        doReturn(true).when(record).supportsPictureInPicture();
+        doReturn(false).when(params).hasSetAspectRatio();
+
+        //mock other operations
+        doReturn(true).when(record)
+                .checkEnterPictureInPictureState("enterPictureInPictureMode", false);
+        doReturn(false).when(mService).isInPictureInPictureMode(any());
+        doReturn(false).when(mService).isKeyguardLocked();
+
+        //to simulate NPE
+        doReturn(null).when(record).getParent();
+
+        mService.enterPictureInPictureMode(token, params);
+        //if record's null parent is not handled gracefully, test will fail with NPE
+
+        mockSession.finishMocking();
     }
 }
 

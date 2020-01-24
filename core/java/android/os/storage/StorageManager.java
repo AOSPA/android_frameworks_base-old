@@ -40,12 +40,12 @@ import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.annotation.WorkerThread;
 import android.app.Activity;
 import android.app.ActivityThread;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
@@ -80,6 +80,7 @@ import android.system.Os;
 import android.system.OsConstants;
 import android.text.TextUtils;
 import android.util.DataUnit;
+import android.util.FeatureFlagUtils;
 import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
@@ -156,7 +157,8 @@ public class StorageManager {
     /** {@hide} */
     public static final String PROP_FUSE = "persist.sys.fuse";
     /** {@hide} */
-    public static final String PROP_FUSE_SNAPSHOT = "sys.fuse_snapshot";
+    public static final String PROP_SETTINGS_FUSE = FeatureFlagUtils.PERSIST_PREFIX
+            + FeatureFlagUtils.SETTINGS_FUSE_FLAG;
 
 
     /** {@hide} */
@@ -262,6 +264,8 @@ public class StorageManager {
     public static final int FLAG_REAL_STATE = 1 << 9;
     /** {@hide} */
     public static final int FLAG_INCLUDE_INVISIBLE = 1 << 10;
+    /** {@hide} */
+    public static final int FLAG_INCLUDE_RECENT = 1 << 11;
 
     /** {@hide} */
     public static final int FSTRIM_FLAG_DEEP = IVold.FSTRIM_FLAG_DEEP_TRIM;
@@ -1123,7 +1127,7 @@ public class StorageManager {
      * Return the {@link StorageVolume} that contains the given file, or
      * {@code null} if none.
      */
-    public @Nullable StorageVolume getStorageVolume(File file) {
+    public @Nullable StorageVolume getStorageVolume(@NonNull File file) {
         return getStorageVolume(getVolumeList(), file);
     }
 
@@ -1138,7 +1142,7 @@ public class StorageManager {
                 return getPrimaryStorageVolume();
             default:
                 for (StorageVolume vol : getStorageVolumes()) {
-                    if (Objects.equals(vol.getNormalizedUuid(), volumeName)) {
+                    if (Objects.equals(vol.getMediaStoreVolumeName(), volumeName)) {
                         return vol;
                     }
                 }
@@ -1199,17 +1203,34 @@ public class StorageManager {
     }
 
     /**
-     * Return the list of shared/external storage volumes available to the
-     * current user. This includes both the primary shared storage device and
-     * any attached external volumes including SD cards and USB drives.
-     *
-     * @see Environment#getExternalStorageDirectory()
-     * @see StorageVolume#createAccessIntent(String)
+     * Return the list of shared/external storage volumes currently available to
+     * the calling user.
+     * <p>
+     * These storage volumes are actively attached to the device, but may be in
+     * any mount state, as returned by {@link StorageVolume#getState()}. Returns
+     * both the primary shared storage device and any attached external volumes,
+     * including SD cards and USB drives.
      */
     public @NonNull List<StorageVolume> getStorageVolumes() {
         final ArrayList<StorageVolume> res = new ArrayList<>();
         Collections.addAll(res,
                 getVolumeList(mContext.getUserId(), FLAG_REAL_STATE | FLAG_INCLUDE_INVISIBLE));
+        return res;
+    }
+
+    /**
+     * Return the list of shared/external storage volumes both currently and
+     * recently available to the calling user.
+     * <p>
+     * Recently available storage volumes are likely to reappear in the future,
+     * so apps are encouraged to preserve any indexed metadata related to these
+     * volumes to optimize user experiences.
+     */
+    public @NonNull List<StorageVolume> getRecentStorageVolumes() {
+        final ArrayList<StorageVolume> res = new ArrayList<>();
+        Collections.addAll(res,
+                getVolumeList(mContext.getUserId(),
+                        FLAG_REAL_STATE | FLAG_INCLUDE_INVISIBLE | FLAG_INCLUDE_RECENT));
         return res;
     }
 

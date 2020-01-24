@@ -26,6 +26,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.wm.utils.DeviceConfigInterface;
 
 import java.io.PrintWriter;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 
 /**
@@ -72,8 +73,8 @@ final class WindowManagerConstants {
     WindowManagerConstants(WindowManagerGlobalLock globalLock,
             Runnable updateSystemGestureExclusionCallback,
             DeviceConfigInterface deviceConfig) {
-        mGlobalLock = globalLock;
-        mUpdateSystemGestureExclusionCallback = updateSystemGestureExclusionCallback;
+        mGlobalLock = Objects.requireNonNull(globalLock);
+        mUpdateSystemGestureExclusionCallback = Objects.requireNonNull(updateSystemGestureExclusionCallback);
         mDeviceConfig = deviceConfig;
         mListenerAndroid = this::onAndroidPropertiesChanged;
         mListenerWindowManager = this::onWindowPropertiesChanged;

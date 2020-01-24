@@ -42,6 +42,7 @@ android_library {
         "res",
     ],
     static_libs: [
+        "WindowManager-Shell",
         "SystemUIPluginLib",
         "SystemUISharedLib",
         "SettingsLib",
@@ -84,7 +85,7 @@ android_library {
 filegroup {
     name: "SystemUI-tests-utils",
     srcs: [
-        "tests/src/com/android/systemui/statusbar/NotificationEntryBuilder.java",
+        "tests/src/com/android/systemui/statusbar/notification/collection/NotificationEntryBuilder.java",
         "tests/src/com/android/systemui/statusbar/RankingBuilder.java",
         "tests/src/com/android/systemui/statusbar/SbnBuilder.java",
     ],
@@ -131,7 +132,7 @@ android_library {
         "SystemUI-proto",
         "metrics-helper-lib",
         "androidx.test.rules", "hamcrest-library",
-        "mockito-target-inline-minus-junit4",
+        "mockito-target-extended-minus-junit4",
         "testables",
         "truth-prebuilt",
         "dagger2-2.19",
@@ -160,7 +161,7 @@ android_app {
     resource_dirs: [],
 
     platform_apis: true,
-    product_specific: true,
+    system_ext_specific: true,
     certificate: "platform",
     privileged: true,
 
