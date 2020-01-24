@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "e242f29c_d1dad627",
+        "filename": "services/core/java/com/android/server/policy/AlertSliderObserver.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 128,
+      "author": {
+        "id": 1000178
+      },
+      "writtenOn": "2020-01-24T21:09:11Z",
+      "side": 0,
+      "message": "This function needs to be changed and used appropriately, we no longer use zen mode stuff so change it and adapt it for audio manager",
+      "revId": "834b596288ec74a702d563fb4853fa32c440ffbf",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}

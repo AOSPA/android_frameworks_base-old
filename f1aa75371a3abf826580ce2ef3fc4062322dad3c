@@ -1,0 +1,55 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "d9761e9c_98d9f4d6",
+        "filename": "services/core/java/com/android/server/policy/AlertSliderObserver.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 47,
+      "author": {
+        "id": 1000178
+      },
+      "writtenOn": "2020-01-24T21:09:11Z",
+      "side": 1,
+      "message": "Remove",
+      "revId": "f1aa75371a3abf826580ce2ef3fc4062322dad3c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "93ee76d2_423200bb",
+        "filename": "services/core/java/com/android/server/policy/AlertSliderObserver.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 56,
+      "author": {
+        "id": 1000178
+      },
+      "writtenOn": "2020-01-24T21:09:11Z",
+      "side": 1,
+      "message": "Don\u0027t need this anymore",
+      "revId": "f1aa75371a3abf826580ce2ef3fc4062322dad3c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "f8da12f8_78afdaed",
+        "filename": "services/core/java/com/android/server/policy/AlertSliderObserver.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 133,
+      "author": {
+        "id": 1000178
+      },
+      "writtenOn": "2020-01-24T21:09:11Z",
+      "side": 1,
+      "message": "Dead code, replace with audio manager",
+      "revId": "f1aa75371a3abf826580ce2ef3fc4062322dad3c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
