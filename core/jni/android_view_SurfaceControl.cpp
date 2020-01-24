@@ -263,7 +263,8 @@ static jobject nativeScreenshot(JNIEnv* env, jclass clazz,
     status_t res = ScreenshotClient::capture(displayToken, dataspace,
             ui::PixelFormat::RGBA_8888,
             sourceCrop, width, height,
-            useIdentityTransform, rotation, captureSecureLayers, &buffer, capturedSecureLayers);
+            useIdentityTransform, ui::toRotation(rotation),
+            captureSecureLayers, &buffer, capturedSecureLayers);
     if (res != NO_ERROR) {
         return NULL;
     }
@@ -422,6 +423,14 @@ static void nativeSetFlags(JNIEnv* env, jclass clazz, jlong transactionObj,
     transaction->setFlags(ctrl, flags, mask);
 }
 
+static void nativeSetFrameRateSelectionPriority(JNIEnv* env, jclass clazz, jlong transactionObj,
+        jlong nativeObject, jint priority) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+
+    SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
+    transaction->setFrameRateSelectionPriority(ctrl, priority);
+}
+
 static void nativeSetTransparentRegionHint(JNIEnv* env, jclass clazz, jlong transactionObj,
         jlong nativeObject, jobject regionObj) {
     SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
@@ -549,6 +558,14 @@ static void nativeSetCornerRadius(JNIEnv* env, jclass clazz, jlong transactionOb
 
     SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
     transaction->setCornerRadius(ctrl, cornerRadius);
+}
+
+static void nativeSetBackgroundBlurRadius(JNIEnv* env, jclass clazz, jlong transactionObj,
+         jlong nativeObject, jint blurRadius) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+
+    SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
+    transaction->setBackgroundBlurRadius(ctrl, blurRadius);
 }
 
 static void nativeSetLayerStack(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -724,7 +741,8 @@ static void nativeSetDisplayProjection(JNIEnv* env, jclass clazz,
 
     {
         auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-        transaction->setDisplayProjection(token, orientation, layerStackRect, displayRect);
+        transaction->setDisplayProjection(token, static_cast<ui::Rotation>(orientation),
+                                          layerStackRect, displayRect);
     }
 }
 
@@ -814,13 +832,6 @@ static jint nativeGetActiveConfig(JNIEnv* env, jclass clazz, jobject tokenObj) {
     sp<IBinder> token(ibinderForJavaObject(env, tokenObj));
     if (token == NULL) return -1;
     return static_cast<jint>(SurfaceComposerClient::getActiveConfig(token));
-}
-
-static jboolean nativeSetActiveConfig(JNIEnv* env, jclass clazz, jobject tokenObj, jint id) {
-    sp<IBinder> token(ibinderForJavaObject(env, tokenObj));
-    if (token == NULL) return JNI_FALSE;
-    status_t err = SurfaceComposerClient::setActiveConfig(token, static_cast<int>(id));
-    return err == NO_ERROR ? JNI_TRUE : JNI_FALSE;
 }
 
 static jintArray nativeGetDisplayColorModes(JNIEnv* env, jclass, jobject tokenObj) {
@@ -1360,10 +1371,14 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetColorSpaceAgnostic },
     {"nativeSetFlags", "(JJII)V",
             (void*)nativeSetFlags },
+    {"nativeSetFrameRateSelectionPriority", "(JJI)V",
+            (void*)nativeSetFrameRateSelectionPriority },
     {"nativeSetWindowCrop", "(JJIIII)V",
             (void*)nativeSetWindowCrop },
     {"nativeSetCornerRadius", "(JJF)V",
             (void*)nativeSetCornerRadius },
+    {"nativeSetBackgroundBlurRadius", "(JJI)V",
+            (void*)nativeSetBackgroundBlurRadius },
     {"nativeSetLayerStack", "(JJI)V",
             (void*)nativeSetLayerStack },
     {"nativeSetShadowRadius", "(JJF)V",
@@ -1388,8 +1403,6 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeGetDisplayConfigs },
     {"nativeGetActiveConfig", "(Landroid/os/IBinder;)I",
             (void*)nativeGetActiveConfig },
-    {"nativeSetActiveConfig", "(Landroid/os/IBinder;I)Z",
-            (void*)nativeSetActiveConfig },
     {"nativeSetDesiredDisplayConfigSpecs",
             "(Landroid/os/IBinder;Landroid/view/SurfaceControl$DesiredDisplayConfigSpecs;)Z",
             (void*)nativeSetDesiredDisplayConfigSpecs },

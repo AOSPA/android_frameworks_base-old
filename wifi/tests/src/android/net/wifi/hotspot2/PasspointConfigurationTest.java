@@ -171,6 +171,8 @@ public class PasspointConfigurationTest {
 
         assertFalse(config.validate());
         assertFalse(config.validateForR2());
+        assertTrue(config.isAutoJoinEnabled());
+        assertTrue(config.isMacRandomizationEnabled());
     }
 
     /**

@@ -16,7 +16,6 @@
 
 package com.android.systemui.statusbar.phone;
 
-import static com.android.systemui.Dependency.ALLOW_NOTIFICATION_LONG_PRESS_NAME;
 import static com.android.systemui.Dependency.TIME_TICK_HANDLER_NAME;
 
 import android.content.Context;
@@ -66,9 +65,11 @@ import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
 import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
-import com.android.systemui.statusbar.notification.collection.init.NewNotifPipeline;
+import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl;
+import com.android.systemui.statusbar.notification.collection.init.NotifPipelineInitializer;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
+import com.android.systemui.statusbar.phone.dagger.StatusBarComponent;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
@@ -116,8 +117,7 @@ public class StatusBarModule {
             HeadsUpManagerPhone headsUpManagerPhone,
             DynamicPrivacyController dynamicPrivacyController,
             BypassHeadsUpNotifier bypassHeadsUpNotifier,
-            @Named(ALLOW_NOTIFICATION_LONG_PRESS_NAME) boolean allowNotificationLongPress,
-            Lazy<NewNotifPipeline> newNotifPipeline,
+            Lazy<NotifPipelineInitializer> newNotifPipeline,
             FalsingManager falsingManager,
             BroadcastDispatcher broadcastDispatcher,
             RemoteInputQuickSettingsDisabler remoteInputQuickSettingsDisabler,
@@ -151,7 +151,7 @@ public class StatusBarModule {
             Lazy<AssistManager> assistManagerLazy,
             NotificationListener notificationListener,
             ConfigurationController configurationController,
-            StatusBarWindowController statusBarWindowController,
+            NotificationShadeWindowController notificationShadeWindowController,
             LockscreenLockIconController lockscreenLockIconController,
             DozeParameters dozeParameters,
             ScrimController scrimController,
@@ -183,6 +183,7 @@ public class StatusBarModule {
             KeyguardDismissUtil keyguardDismissUtil,
             ExtensionController extensionController,
             UserInfoControllerImpl userInfoControllerImpl,
+            NotificationRowBinderImpl notificationRowBinder,
             DismissCallbackRegistry dismissCallbackRegistry) {
         return new StatusBar(
                 context,
@@ -198,7 +199,6 @@ public class StatusBarModule {
                 headsUpManagerPhone,
                 dynamicPrivacyController,
                 bypassHeadsUpNotifier,
-                allowNotificationLongPress,
                 newNotifPipeline,
                 falsingManager,
                 broadcastDispatcher,
@@ -233,7 +233,7 @@ public class StatusBarModule {
                 assistManagerLazy,
                 notificationListener,
                 configurationController,
-                statusBarWindowController,
+                notificationShadeWindowController,
                 lockscreenLockIconController,
                 dozeParameters,
                 scrimController,
@@ -264,6 +264,7 @@ public class StatusBarModule {
                 keyguardDismissUtil,
                 extensionController,
                 userInfoControllerImpl,
+                notificationRowBinder,
                 dismissCallbackRegistry);
     }
 }

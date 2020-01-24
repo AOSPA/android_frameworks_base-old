@@ -26,6 +26,7 @@ android_test {
         "services.core",
         "services.devicepolicy",
         "services.net",
+        "services.people",
         "services.usage",
         "guava",
         "androidx.test.core",
@@ -43,6 +44,11 @@ android_test {
         "servicestests-utils",
         "service-appsearch",
         "service-jobscheduler",
+        "service-permission",
+        // TODO: remove once Android migrates to JUnit 4.12,
+        // which provides assertThrows
+        "testng",
+
     ],
 
     aidl: {

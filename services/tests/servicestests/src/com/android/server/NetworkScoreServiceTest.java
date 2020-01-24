@@ -16,7 +16,7 @@
 
 package com.android.server;
 
-import static android.net.NetworkScoreManager.CACHE_FILTER_NONE;
+import static android.net.NetworkScoreManager.SCORE_FILTER_NONE;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
@@ -29,6 +29,7 @@ import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
@@ -56,7 +57,6 @@ import android.net.wifi.ScanResult;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
-import android.net.wifi.WifiSsid;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -182,8 +182,8 @@ public class NetworkScoreServiceTest {
     }
 
     private ScanResult createScanResult(String ssid, String bssid) {
-        ScanResult result = new ScanResult();
-        result.wifiSsid = WifiSsid.createFromAsciiEncoded(ssid);
+        ScanResult result = mock(ScanResult.class);
+        result.SSID = ssid;
         result.BSSID = bssid;
         return result;
     }
@@ -306,7 +306,7 @@ public class NetworkScoreServiceTest {
         bindToScorer(true /*callerIsScorer*/);
 
         mNetworkScoreService.registerNetworkScoreCache(NetworkKey.TYPE_WIFI,
-                mNetworkScoreCache, CACHE_FILTER_NONE);
+                mNetworkScoreCache, SCORE_FILTER_NONE);
 
         mNetworkScoreService.updateScores(new ScoredNetwork[]{SCORED_NETWORK});
 
@@ -321,9 +321,9 @@ public class NetworkScoreServiceTest {
         bindToScorer(true /*callerIsScorer*/);
 
         mNetworkScoreService.registerNetworkScoreCache(NetworkKey.TYPE_WIFI,
-                mNetworkScoreCache, CACHE_FILTER_NONE);
+                mNetworkScoreCache, SCORE_FILTER_NONE);
         mNetworkScoreService.registerNetworkScoreCache(
-                NetworkKey.TYPE_WIFI, mNetworkScoreCache2, CACHE_FILTER_NONE);
+                NetworkKey.TYPE_WIFI, mNetworkScoreCache2, SCORE_FILTER_NONE);
 
         // updateScores should update both caches
         mNetworkScoreService.updateScores(new ScoredNetwork[]{SCORED_NETWORK});
@@ -378,7 +378,7 @@ public class NetworkScoreServiceTest {
         bindToScorer(true /*callerIsScorer*/);
 
         mNetworkScoreService.registerNetworkScoreCache(NetworkKey.TYPE_WIFI, mNetworkScoreCache,
-                CACHE_FILTER_NONE);
+                SCORE_FILTER_NONE);
         mNetworkScoreService.clearScores();
 
         verify(mNetworkScoreCache).clearScores();
@@ -392,7 +392,7 @@ public class NetworkScoreServiceTest {
                 .thenReturn(PackageManager.PERMISSION_GRANTED);
 
         mNetworkScoreService.registerNetworkScoreCache(NetworkKey.TYPE_WIFI, mNetworkScoreCache,
-                CACHE_FILTER_NONE);
+                SCORE_FILTER_NONE);
         mNetworkScoreService.clearScores();
 
         verify(mNetworkScoreCache).clearScores();
@@ -472,7 +472,7 @@ public class NetworkScoreServiceTest {
 
         try {
             mNetworkScoreService.registerNetworkScoreCache(
-                NetworkKey.TYPE_WIFI, mNetworkScoreCache, CACHE_FILTER_NONE);
+                    NetworkKey.TYPE_WIFI, mNetworkScoreCache, SCORE_FILTER_NONE);
             fail("SecurityException expected");
         } catch (SecurityException e) {
             // expected
@@ -615,7 +615,7 @@ public class NetworkScoreServiceTest {
                 new ArrayList<>(scoredNetworkList),
                 NetworkKey.TYPE_WIFI, mCurrentNetworkFilter, mScanResultsFilter);
 
-        consumer.accept(mNetworkScoreCache, NetworkScoreManager.CACHE_FILTER_NONE);
+        consumer.accept(mNetworkScoreCache, NetworkScoreManager.SCORE_FILTER_NONE);
 
         verify(mNetworkScoreCache).updateScores(scoredNetworkList);
         verifyZeroInteractions(mCurrentNetworkFilter, mScanResultsFilter);
@@ -656,7 +656,7 @@ public class NetworkScoreServiceTest {
                 Collections.emptyList(),
                 NetworkKey.TYPE_WIFI, mCurrentNetworkFilter, mScanResultsFilter);
 
-        consumer.accept(mNetworkScoreCache, NetworkScoreManager.CACHE_FILTER_NONE);
+        consumer.accept(mNetworkScoreCache, NetworkScoreManager.SCORE_FILTER_NONE);
 
         verifyZeroInteractions(mNetworkScoreCache, mCurrentNetworkFilter, mScanResultsFilter);
     }
@@ -673,7 +673,7 @@ public class NetworkScoreServiceTest {
         List<ScoredNetwork> filteredList = new ArrayList<>(scoredNetworkList);
         filteredList.remove(SCORED_NETWORK);
         when(mCurrentNetworkFilter.apply(scoredNetworkList)).thenReturn(filteredList);
-        consumer.accept(mNetworkScoreCache, NetworkScoreManager.CACHE_FILTER_CURRENT_NETWORK);
+        consumer.accept(mNetworkScoreCache, NetworkScoreManager.SCORE_FILTER_CURRENT_NETWORK);
 
         verify(mNetworkScoreCache).updateScores(filteredList);
         verifyZeroInteractions(mScanResultsFilter);
@@ -691,7 +691,7 @@ public class NetworkScoreServiceTest {
         List<ScoredNetwork> filteredList = new ArrayList<>(scoredNetworkList);
         filteredList.remove(SCORED_NETWORK);
         when(mScanResultsFilter.apply(scoredNetworkList)).thenReturn(filteredList);
-        consumer.accept(mNetworkScoreCache, NetworkScoreManager.CACHE_FILTER_SCAN_RESULTS);
+        consumer.accept(mNetworkScoreCache, NetworkScoreManager.SCORE_FILTER_SCAN_RESULTS);
 
         verify(mNetworkScoreCache).updateScores(filteredList);
         verifyZeroInteractions(mCurrentNetworkFilter);
@@ -794,7 +794,7 @@ public class NetworkScoreServiceTest {
     @Test
     public void testScanResultsScoreCacheFilter_invalidScanResults() throws Exception {
         List<ScanResult> invalidScanResults = Lists.newArrayList(
-                new ScanResult(),
+                mock(ScanResult.class),
                 createScanResult("", SCORED_NETWORK.networkKey.wifiKey.bssid),
                 createScanResult(WifiManager.UNKNOWN_SSID, SCORED_NETWORK.networkKey.wifiKey.bssid),
                 createScanResult(SSID, null),

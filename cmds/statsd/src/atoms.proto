@@ -53,6 +53,7 @@ import "frameworks/base/core/proto/android/stats/mediametrics/mediametrics.proto
 import "frameworks/base/core/proto/android/stats/mediaprovider/mediaprovider_enums.proto";
 import "frameworks/base/core/proto/android/stats/storage/storage_enums.proto";
 import "frameworks/base/core/proto/android/stats/style/style_enums.proto";
+import "frameworks/base/core/proto/android/stats/sysui/notification_enums.proto";
 import "frameworks/base/core/proto/android/telecomm/enums.proto";
 import "frameworks/base/core/proto/android/telephony/enums.proto";
 import "frameworks/base/core/proto/android/view/enums.proto";
@@ -94,7 +95,7 @@ message Atom {
         ExcessiveCpuUsageReported excessive_cpu_usage_reported = 16;
         CachedKillReported cached_kill_reported = 17;
         ProcessMemoryStatReported process_memory_stat_reported = 18;
-        LauncherUIChanged launcher_event = 19;
+        LauncherUIChanged launcher_event = 19 [(module) = "sysui"];
         BatterySaverModeStateChanged battery_saver_mode_state_changed = 20;
         DeviceIdleModeStateChanged device_idle_mode_state_changed = 21;
         DeviceIdlingModeStateChanged device_idling_mode_state_changed = 22;
@@ -126,10 +127,10 @@ message Atom {
         AppStartOccurred app_start_occurred = 48;
         AppStartCanceled app_start_canceled = 49;
         AppStartFullyDrawn app_start_fully_drawn = 50;
-        LmkKillOccurred lmk_kill_occurred = 51;
+        LmkKillOccurred lmk_kill_occurred = 51 [(module) = "lmkd"];
         PictureInPictureStateChanged picture_in_picture_state_changed = 52;
         WifiMulticastLockStateChanged wifi_multicast_lock_state_changed = 53 [(module) = "wifi"];
-        LmkStateChanged lmk_state_changed = 54;
+        LmkStateChanged lmk_state_changed = 54 [(module) = "lmkd"];
         AppStartMemoryStateCaptured app_start_memory_state_captured = 55;
         ShutdownSequenceReported shutdown_sequence_reported = 56;
         BootSequenceReported boot_sequence_reported = 57;
@@ -137,9 +138,9 @@ message Atom {
         OverlayStateChanged overlay_state_changed = 59;
         ForegroundServiceStateChanged foreground_service_state_changed = 60;
         CallStateChanged call_state_changed = 61;
-        KeyguardStateChanged keyguard_state_changed = 62;
-        KeyguardBouncerStateChanged keyguard_bouncer_state_changed = 63;
-        KeyguardBouncerPasswordEntered keyguard_bouncer_password_entered = 64;
+        KeyguardStateChanged keyguard_state_changed = 62 [(module) = "sysui"];
+        KeyguardBouncerStateChanged keyguard_bouncer_state_changed = 63 [(module) = "sysui"];
+        KeyguardBouncerPasswordEntered keyguard_bouncer_password_entered = 64 [(module) = "sysui"];
         AppDied app_died = 65;
         ResourceConfigurationChanged resource_configuration_changed = 66;
         BluetoothEnabledStateChanged bluetooth_enabled_state_changed = 67;
@@ -230,7 +231,7 @@ message Atom {
         UsbContaminantReported usb_contaminant_reported = 146;
         WatchdogRollbackOccurred watchdog_rollback_occurred = 147;
         BiometricSystemHealthIssueDetected biometric_system_health_issue_detected = 148;
-        BubbleUIChanged bubble_ui_changed = 149;
+        BubbleUIChanged bubble_ui_changed = 149 [(module) = "sysui"];
         ScheduledJobConstraintChanged scheduled_job_constraint_changed = 150;
         BluetoothActiveDeviceChanged bluetooth_active_device_changed = 151;
         BluetoothA2dpPlaybackStateChanged bluetooth_a2dp_playback_state_changed = 152;
@@ -261,7 +262,7 @@ message Atom {
         AssistGestureProgressReported assist_gesture_progress_reported = 176;
         TouchGestureClassified touch_gesture_classified = 177;
         HiddenApiUsed hidden_api_used = 178 [(allow_from_any_uid) = true];
-        StyleUIChanged style_ui_changed = 179 [(module) = "style"];
+        StyleUIChanged style_ui_changed = 179 [(module) = "sysui"];
         PrivacyIndicatorsInteracted privacy_indicators_interacted =
             180 [(module) = "permissioncontroller"];
         AppInstallOnExternalStorageReported app_install_on_external_storage_reported = 181;
@@ -316,7 +317,7 @@ message Atom {
         ConversationActionsEvent conversation_actions_event = 221  [(module) = "textclassifier"];
         LanguageDetectionEvent language_detection_event = 222  [(module) = "textclassifier"];
         ExclusionRectStateChanged exclusion_rect_state_changed = 223;
-        BackGesture back_gesture_reported_reported = 224;
+        BackGesture back_gesture_reported_reported = 224 [(module) = "sysui"];
         UpdateEngineUpdateAttemptReported update_engine_update_attempt_reported = 225;
         UpdateEngineSuccessfulUpdateReported update_engine_successful_update_reported = 226;
         CameraActionEvent camera_action_event = 227;
@@ -324,8 +325,6 @@ message Atom {
             228 [(allow_from_any_uid) = true];
         PerfettoUploaded perfetto_uploaded = 229 [(module) = "perfetto"];
         VmsClientConnectionStateChanged vms_client_connection_state_changed = 230;
-        GpsLocationStatusReported gps_location_status_reported = 231;
-        GpsTimeToFirstFixReported gps_time_to_first_fix_reported = 232;
         MediaProviderScanEvent media_provider_scan_event = 233 [(module) = "mediaprovider"];
         MediaProviderDeletionEvent media_provider_deletion_event = 234 [(module) = "mediaprovider"];
         MediaProviderPermissionEvent media_provider_permission_event =
@@ -333,10 +332,19 @@ message Atom {
         MediaProviderSchemaChange media_provider_schema_change = 236 [(module) = "mediaprovider"];
         MediaProviderIdleMaintenance media_provider_idle_maintenance =
             237 [(module) = "mediaprovider"];
+        RebootEscrowRecoveryReported reboot_escrow_recovery_reported = 238;
+        BootTimeEventDuration boot_time_event_duration_reported = 239;
+        BootTimeEventElapsedTime boot_time_event_elapsed_time_reported = 240;
+        BootTimeEventUtcTime boot_time_event_utc_time_reported = 241;
+        BootTimeEventErrorCode boot_time_event_error_code_reported = 242;
+        UserspaceRebootReported userspace_reboot_reported = 243;
+        NotificationReported notification_reported = 244;
+        NotificationPanelReported notification_panel_reported = 245;
+        NotificationChannelModified notification_panel_modified = 246;
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10068
+    // Next: 10071
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000;
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001;
@@ -393,7 +401,7 @@ message Atom {
         ExternalStorageInfo external_storage_info = 10053;
         GpuStatsGlobalInfo gpu_stats_global_info = 10054;
         GpuStatsAppInfo gpu_stats_app_info = 10055;
-        SystemIonHeapSize system_ion_heap_size = 10056;
+        SystemIonHeapSize system_ion_heap_size = 10056 [deprecated = true];
         AppsOnExternalStorageInfo apps_on_external_storage_info = 10057;
         FaceSettings face_settings = 10058;
         CoolingDevice cooling_device = 10059;
@@ -405,6 +413,9 @@ message Atom {
         VmsClientStats vms_client_stats = 10065;
         NotificationRemoteViews notification_remote_views = 10066;
         DangerousPermissionStateSampled dangerous_permission_state_sampled = 10067;
+        GraphicsStats graphics_stats = 10068;
+        RuntimeAppOpsAccess runtime_app_ops_access = 10069;
+        IonHeapSize ion_heap_size = 10070;
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
@@ -729,27 +740,6 @@ message GpsSignalQualityChanged {
     optional android.server.location.GpsSignalQualityEnum level = 1;
 }
 
-/**
- * Gps location status report
- *
- * Logged from:
- *   /frameworks/base/location/java/com/android/internal/location/gnssmetrics/GnssMetrics.java
- */
-message GpsLocationStatusReported {
-    // Boolean stating if location was acquired
-    optional bool location_success = 1;
-}
-
-/**
- * Gps log time to first fix report
- *
- * Logged from:
- *   /frameworks/base/location/java/com/android/internal/location/gnssmetrics/GnssMetrics.java
- */
-message GpsTimeToFirstFixReported {
-    // int32 reporting the time to first fix in milliseconds
-    optional int32 time_to_first_fix_millis = 1;
-}
 
 /**
  * Logs when a sync manager sync state changes.
@@ -906,14 +896,16 @@ message CameraStateChanged {
  *   TODO
  */
 message WakelockStateChanged {
-    repeated AttributionNode attribution_node = 1;
+    repeated AttributionNode attribution_node = 1
+            [(state_field_option).option = PRIMARY_FIELD_FIRST_UID];
 
     // The type (level) of the wakelock; e.g. a partial wakelock or a full wakelock.
     // From frameworks/base/core/proto/android/os/enums.proto.
-    optional android.os.WakeLockLevelEnum type = 2;
+    optional android.os.WakeLockLevelEnum type = 2 [(state_field_option).option = PRIMARY];
+    ;
 
     // The wakelock tag (Called tag in the Java API, sometimes name elsewhere).
-    optional string tag = 3;
+    optional string tag = 3 [(state_field_option).option = PRIMARY];
 
     enum State {
         RELEASE = 0;
@@ -921,7 +913,7 @@ message WakelockStateChanged {
         CHANGE_RELEASE = 2;
         CHANGE_ACQUIRE = 3;
     }
-    optional State state = 4;
+    optional State state = 4 [(state_field_option).option = EXCLUSIVE];
 }
 
 /**
@@ -3299,6 +3291,10 @@ message GenericAtom {
  * this button" or "this dialog was displayed".
  * Keep the UI event stream clean: don't use for system or background events.
  * Log using the UiEventLogger wrapper - don't write with the StatsLog API directly.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/
+ *   frameworks/base/packages/SystemUI/src/com/android/systemui/
  */
 message UiEventReported {
     // The event_id.
@@ -3307,7 +3303,126 @@ message UiEventReported {
     // For example, the package posting a notification, or the destination package of a share.
     optional int32 uid = 2 [(is_uid) = true];
     optional string package_name = 3;
+    // An identifier used to disambiguate which logs refer to a particular instance of some
+    // UI element. Useful when there might be multiple instances simultaneously active.
+    optional int32 instance_id = 4;
 }
+
+/**
+ * Reports a notification was created or updated.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/notification/
+ */
+message NotificationReported {
+    // The event_id (as for UiEventReported).
+    optional int32 event_id = 1;
+    // The notifying app's uid and package.
+    optional int32 uid = 2 [(is_uid) = true];
+    optional string package_name = 3;
+    // A small system-assigned identifier for the notification.
+    // Locally probably-unique, but expect collisions across users and/or days.
+    optional int32 instance_id = 4;
+    // The app-assigned notification ID and tag
+    optional int32 notification_id = 5;
+    optional string notification_tag = 6;
+    optional string channel_id = 7;  // App-assigned channel ID
+
+    // Grouping information
+    optional string group_id = 8;  // Group the notification currently belongs to
+    optional int32 group_instance_id = 9;  // Instance_id of the group-summary notification
+    optional bool is_group_summary = 10;  // Tags the group-summary notification
+
+    // Attributes
+    optional string category = 11;   // App-assigned notification category (API-defined strings)
+    optional int32 style = 12;       // App-assigned notification style
+    optional int32 num_people = 13;  // Number of Person records attached to the notification
+
+    // Ordering, importance and interruptiveness
+
+    optional int32 position = 14;    // Position in NotificationManager's list
+
+    optional android.stats.sysui.NotificationImportance importance = 15;
+    optional int32 alerting = 16;    // Bitfield, 1=buzz 2=beep 4=blink
+
+    enum NotificationImportanceExplanation {
+        IMPORTANCE_EXPLANATION_UNKNOWN = 0;
+        IMPORTANCE_EXPLANATION_APP = 1;     // App-specified channel importance.
+        IMPORTANCE_EXPLANATION_USER = 2;    // User-specified channel importance.
+        IMPORTANCE_EXPLANATION_ASST = 3;    // Notification Assistant override.
+        IMPORTANCE_EXPLANATION_SYSTEM = 4;  // System override.
+        // Like _APP, but based on pre-channels priority signal.
+        IMPORTANCE_EXPLANATION_APP_PRE_CHANNELS = 5;
+    }
+
+    optional NotificationImportanceExplanation importance_source = 17;
+    optional android.stats.sysui.NotificationImportance importance_initial = 18;
+    optional NotificationImportanceExplanation importance_initial_source = 19;
+    optional android.stats.sysui.NotificationImportance importance_asst = 20;
+    optional int32 assistant_hash = 21;
+    optional float assistant_ranking_score = 22;
+}
+
+message Notification {
+    // The notifying app's uid and package.
+    optional int32 uid = 1 [(is_uid) = true];
+    optional string package_name = 2;
+    // A small system-assigned identifier for the notification.
+    optional int32 instance_id = 3;
+
+    // Grouping information.
+    optional int32 group_instance_id = 4;
+    optional bool is_group_summary = 5;
+
+    // The section of the shade that the notification is in.
+    // See NotificationSectionsManager.PriorityBucket.
+    enum NotificationSection {
+        SECTION_UNKNOWN = 0;
+        SECTION_PEOPLE = 1;
+        SECTION_ALERTING = 2;
+        SECTION_SILENT = 3;
+    }
+    optional NotificationSection section = 6;
+}
+
+message NotificationList {
+    repeated Notification notifications = 1;  // An ordered sequence of notifications.
+}
+
+/**
+ * Reports a notification panel was displayed, e.g. from the lockscreen or status bar.
+ *
+ * Logged from:
+ *   frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/notification/
+ */
+message NotificationPanelReported {
+    // The event_id (as for UiEventReported).
+    optional int32 event_id = 1;
+    optional int32 num_notifications = 2;
+    // The notifications in the panel, in the order that they appear there.
+    optional NotificationList notifications = 3 [(log_mode) = MODE_BYTES];
+}
+
+/**
+ * Reports a notification channel, or channel group, was created, updated, or deleted.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/notification/
+ */
+message NotificationChannelModified {
+    // The event_id (as for UiEventReported).
+    optional int32 event_id = 1;
+    // The notifying app's uid and package.
+    optional int32 uid = 2 [(is_uid) = true];
+    optional string package_name = 3;
+    // App-assigned notification channel ID or channel-group ID
+    optional string channel_id = 4;
+    // Previous importance setting, if applicable
+    optional android.stats.sysui.NotificationImportance old_importance = 5;
+    // New importance setting
+    optional android.stats.sysui.NotificationImportance importance = 6;
+}
+
 
 /**
  * Logs when a biometric acquire event occurs.
@@ -3497,12 +3612,14 @@ message BinaryPushStateChanged {
         INSTALL_FAILURE_DOWNLOAD = 23;
         INSTALL_FAILURE_STATE_MISMATCH = 24;
         INSTALL_FAILURE_COMMIT = 25;
+        REBOOT_TRIGGERED = 26;
     }
     optional State state = 6;
     // Possible experiment ids for monitoring this push.
     optional TrainExperimentIds experiment_ids = 7 [(log_mode) = MODE_BYTES];
     // user id
     optional int32 user_id = 8;
+    optional int32 reason = 9;
 }
 
 /* Test atom, is not logged anywhere */
@@ -3921,6 +4038,207 @@ message MediaProviderIdleMaintenance {
     optional float normalized_stale_thumbnails = 4;
     // Number of items found to be expired, normalized per file
     optional float normalized_expired_media = 5;
+}
+
+/**
+ * Represents boot time event with duration in ms.
+ *
+ * Logged from: bootstat and various system server components. Check each enums for details.
+ */
+message BootTimeEventDuration {
+    enum DurationEvent {
+        UNKNOWN = 0;
+        // Bootloader time excluding BOOTLOADER_UI_WAIT + boot complete time. Logged from bootstat.
+        ABSOLUTE_BOOT_TIME = 1;
+        // Bootloader's 1st stage execution time.
+        // Logged from bootstat.
+        BOOTLOADER_FIRST_STAGE_EXEC = 2;
+        // Bootloader's 1st stage loading time.
+        // Logged from bootstat.
+        BOOTLOADER_FIRST_STAGE_LOAD = 3;
+        // Bootloader's kernel loading time.
+        // Logged from bootstat.
+        BOOTLOADER_KERNEL_LOAD = 4;
+        // Bootloader's 2nd stage execution time.
+        // Logged from bootstat.
+        BOOTLOADER_SECOND_STAGE_EXEC = 5;
+        // Bootloader's 2nd stage loading time.
+        // Logged from bootstat.
+        BOOTLOADER_SECOND_STAGE_LOAD = 6;
+        // Duration for Bootloader to show unlocked device's warning UI. This should not happen
+        // for locked device.
+        // Logged from bootstat.
+        BOOTLOADER_UI_WAIT = 7;
+        // Total time spend in bootloader. This is the sum of all BOOTLOADER_* listed above.
+        // Logged from bootstat.
+        BOOTLOADER_TOTAL = 8;
+        // Shutdown duration inside init for the reboot before the current boot up.
+        // Logged from f/b/services/.../BootReceiver.java.
+        SHUTDOWN_DURATION = 9;
+        // Total time for mounting of disk devices during bootup.
+        // Logged from f/b/services/.../BootReceiver.java.
+        MOUNT_DEFAULT_DURATION = 10;
+        // Total time for early stage mounting of disk devices during bootup.
+        // Logged from f/b/services/.../BootReceiver.java.
+        MOUNT_EARLY_DURATION = 11;
+        // Total time for late stage mounting of disk devices during bootup.
+        // Logged from f/b/services/.../BootReceiver.java.
+        MOUNT_LATE_DURATION = 12;
+        // Average time to scan non-system app after OTA
+        // Logged from f/b/services/.../PackageManagerService.java
+        OTA_PACKAGE_MANAGER_INIT_TIME = 13;
+        // Time to initialize Package manager after OTA
+        // Logged from f/b/services/.../PackageManagerService.java
+        OTA_PACKAGE_MANAGER_DATA_APP_AVG_SCAN_TIME = 14;
+        // Time to scan all system app from Package manager after OTA
+        // Logged from f/b/services/.../PackageManagerService.java
+        OTA_PACKAGE_MANAGER_SYSTEM_APP_AVG_SCAN_TIME = 15;
+        // Init's total time for cold boot stage.
+        // Logged from bootstat.
+        COLDBOOT_WAIT = 16;
+        // Init's total time for initializing selinux.
+        // Logged from bootstat.
+        SELINUX_INIT = 17;
+        // Time since last factory reset.
+        // Logged from bootstat.
+        FACTORY_RESET_TIME_SINCE_RESET = 18;
+    }
+
+    // Type of the event.
+    optional DurationEvent event = 1;
+    // Duration of the event in ms.
+    optional int64 duration_millis = 2;
+}
+
+/**
+ * Represents the start of specific boot time event during bootup in ms. This is usually a time
+ * since boot-up.
+ *
+ * Logged from: bootstat and various system server components. Check each enums for details.
+ */
+message BootTimeEventElapsedTime {
+    enum ElapsedTimeEvent {
+        UNKNOWN = 0;
+        // Time when init starts 1st stage. Logged from bootstat.
+        ANDROID_INIT_STAGE_1 = 1;
+        // Time when sys.boot_completed prop is set.
+        // Logged from bootstat.
+        BOOT_COMPLETE = 2;
+        // BOOT_COMPLETE for encrypted device.
+        BOOT_COMPLETE_ENCRYPTION = 3;
+        // BOOT_COMPLETE for device with no encryption.
+        BOOT_COMPLETE_NO_ENCRYPTION = 4;
+        // Adjusted BOOT_COMPLETE for encrypted device extracting decryption time.
+        BOOT_COMPLETE_POST_DESCRYPT = 5;
+        // BOOT_COMPLETE after factory reset.
+        FACTORY_RESET_BOOT_COMPLETE = 6;
+        // BOOT_COMPLETE_NO_ENCRYPTION after factory reset.
+        FACTORY_RESET_BOOT_COMPLETE_NO_ENCRYPTION = 7;
+        // BOOT_COMPLETE_POST_DESCRYPT after factory reset.
+        FACTORY_RESET_BOOT_COMPLETE_POST_DESCRYPT = 8;
+        // BOOT_COMPLETE after OTA.
+        OTA_BOOT_COMPLETE = 9;
+        // BOOT_COMPLETE_NO_ENCRYPTION after OTA.
+        OTA_BOOT_COMPLETE_NO_ENCRYPTION = 10;
+        // BOOT_COMPLETE_POST_DESCRYPT after OTA.
+        OTA_BOOT_COMPLETE_POST_DESCRYPT = 11;
+        // Time when the system starts sending LOCKED_BOOT_COMPLETED broadcast.
+        // Logged from  f/b/services/.../UserController.java
+        FRAMEWORK_LOCKED_BOOT_COMPLETED = 12;
+        // Time when the system starts sending BOOT_COMPLETED broadcast.
+        // Logged from  f/b/services/.../UserController.java
+        FRAMEWORK_BOOT_COMPLETED = 13;
+        // Time when the package manager starts init.
+        // Logged from f/b/services/.../SystemServer.java
+        PACKAGE_MANAGER_INIT_START = 14;
+        // Time when package manager is ready
+        // Logged from f/b/services/.../SystemServer.java
+        PACKAGE_MANAGER_INIT_READY = 15;
+        // Represents the time when user has entered unlock credential for system with user pin.
+        // Logged from bootstat.
+        POST_DECRYPT = 16;
+        // Represents the start of zygote's init.
+        // Logged from zygote itself.
+        ZYGOTE_INIT_START = 17;
+        // Represents the start of secondary zygote's init.
+        // TODO: add logging to zygote
+        SECONDARY_ZYGOTE_INIT_START = 18;
+        // Represents the start of system server's init.
+        // Logged from f/b/services/.../SystemServer.java
+        SYSTEM_SERVER_INIT_START = 19;
+        // Represents the completion of system server's init.
+        // Logged from f/b/services/.../SystemServer.java
+        SYSTEM_SERVER_READY = 20;
+        // Represents the start of launcher during boot-up.
+        // TODO: add logging
+        LAUNCHER_START = 21;
+        // Represents the completion of launcher's initial rendering. User can use other apps from
+        // launcher from this point.
+        // TODO: add logging
+        LAUNCHER_SHOWN = 22;
+    }
+
+    // Type of the event.
+    optional ElapsedTimeEvent event = 1;
+    // Time since bootup for the event.
+    // It should be acquired from SystemClock elapsedRealtime() call or equivalent.
+    optional int64 time_millis = 2;
+}
+
+/**
+ * Boot time events with UTC time.
+ *
+ * Logged from: bootstat and various system server components. Check each enums for details.
+ */
+message BootTimeEventUtcTime {
+    enum UtcTimeEvent {
+        UNKNOWN = 0;
+        // Time of the bootstat's marking of 1st boot after the last factory reset.
+        // Logged from bootstat.
+        FACTORY_RESET_RESET_TIME = 1;
+        // The time when bootstat records FACTORY_RESET_* events. This is close to
+        // BOOT_COMPLETE time for the current bootup.
+        // Logged from bootstat.
+        FACTORY_RESET_CURRENT_TIME = 2;
+        // DUplicate of FACTORY_RESET_RESET_TIME added for debugging purpose.
+        // Logged from bootstat.
+        FACTORY_RESET_RECORD_VALUE = 3;
+    }
+
+    // Type of the event.
+    optional UtcTimeEvent event = 1;
+    // UTC time for the event.
+    optional int64 utc_time_secs = 2;
+}
+
+/**
+ * Boot time events representing specific error code during bootup.
+ * Meaning of error code can be different per each event type.
+ *
+ * Logged from: bootstat and various system server components. Check each enums for details.
+ */
+message BootTimeEventErrorCode {
+    enum ErrorCodeEvent {
+        UNKNOWN = 0;
+        // Linux error code for time() call to get the current UTC time.
+        // Logged from bootstat.
+        FACTORY_RESET_CURRENT_TIME_FAILURE = 1;
+        // Represents UmountStat before the reboot for the current boot up. Error codes defined
+        // as UMOUNT_STAT_* from init/reboot.cpp.
+        // Logged from f/b/services/.../BootReceiver.java.
+        SHUTDOWN_UMOUNT_STAT = 2;
+        // Reprepsents fie system mounting error code of /data partition for the current boot.
+        // Error codes defined as combination of FsStatFlags from system/core/fs_mgr/fs_mgr.cpp.
+        // Logged from f/b/services/.../BootReceiver.java.
+        FS_MGR_FS_STAT_DATA_PARTITION = 3;
+    }
+
+    // Type of the event.
+    optional ErrorCodeEvent event = 1;
+    // error code defined per each event type.
+    // For example, this can have a value of FsStatFlags.FS_STAT_FULL_MOUNT_FAILED for the event of
+    // FS_MGR_FS_STAT.
+    optional int32 error_code = 2;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -4723,36 +5041,69 @@ message RoleHolder {
 }
 
 message AggStats {
-    optional int64 min = 1;
+    // These are all in byte resolution.
+    optional int64 min = 1 [deprecated = true];
+    optional int64 average = 2 [deprecated = true];
+    optional int64 max = 3 [deprecated = true];
 
-    optional int64 average = 2;
-
-    optional int64 max = 3;
+    // These are all in kilobyte resolution. Can fit in int32, so smaller on the wire than the above
+    // int64 fields.
+    optional int32 mean_kb = 4;
+    optional int32 max_kb = 5;
 }
 
+// A reduced subset of process states; reducing the number of possible states allows more
+// aggressive device-side aggregation of statistics and hence reduces metric upload size.
+enum ProcessStateAggregated {
+    PROCESS_STATE_UNKNOWN = 0;
+    // Persistent system process.
+    PROCESS_STATE_PERSISTENT = 1;
+    // Top activity; actually any visible activity.
+    PROCESS_STATE_TOP = 2;
+    // Process binding to top or a foreground service.
+    PROCESS_STATE_BOUND_TOP_OR_FGS = 3;
+    // Processing running a foreground service.
+    PROCESS_STATE_FGS = 4;
+    // Important foreground process (ime, wallpaper, etc).
+    PROCESS_STATE_IMPORTANT_FOREGROUND = 5;
+    // Important background process.
+    PROCESS_STATE_BACKGROUND = 6;
+    // Process running a receiver.
+    PROCESS_STATE_RECEIVER = 7;
+    // All kinds of cached processes.
+    PROCESS_STATE_CACHED = 8;
+}
+
+// Next tag: 13
 message ProcessStatsStateProto {
     optional android.service.procstats.ScreenState screen_state = 1;
 
-    optional android.service.procstats.MemoryState memory_state = 2;
+    optional android.service.procstats.MemoryState memory_state = 2 [deprecated = true];
 
     // this enum list is from frameworks/base/core/java/com/android/internal/app/procstats/ProcessStats.java
     // and not frameworks/base/core/java/android/app/ActivityManager.java
-    optional android.service.procstats.ProcessState process_state = 3;
+    optional android.service.procstats.ProcessState process_state = 3 [deprecated = true];
+
+    optional ProcessStateAggregated process_state_aggregated = 10;
 
     // Millisecond uptime duration spent in this state
-    optional int64 duration_millis = 4;
+    optional int64 duration_millis = 4 [deprecated = true];
+    // Same as above, but with minute resolution so it fits into an int32.
+    optional int32 duration_minutes = 11;
 
     // Millisecond elapsed realtime duration spent in this state
-    optional int64 realtime_duration_millis = 9;
+    optional int64 realtime_duration_millis = 9 [deprecated = true];
+    // Same as above, but with minute resolution so it fits into an int32.
+    optional int32 realtime_duration_minutes = 12;
 
     // # of samples taken
     optional int32 sample_size = 5;
 
     // PSS is memory reserved for this process
-    optional AggStats pss = 6;
+    optional AggStats pss = 6 [deprecated = true];
 
     // USS is memory shared between processes, divided evenly for accounting
-    optional AggStats uss = 7;
+    optional AggStats uss = 7 [deprecated = true];
 
     // RSS is memory resident for this process
     optional AggStats rss = 8;
@@ -4777,7 +5128,7 @@ message ProcessStatsProto {
         // PSS stats during cached kill
         optional AggStats cached_pss = 3;
     }
-    optional Kill kill = 3;
+    optional Kill kill = 3 [deprecated = true];
 
     // Time and memory spent in various states.
     repeated ProcessStatsStateProto states = 5;
@@ -6560,6 +6911,7 @@ message TrainInfo {
         INSTALL_FAILURE_DOWNLOAD = 23;
         INSTALL_FAILURE_STATE_MISMATCH = 24;
         INSTALL_FAILURE_COMMIT = 25;
+        REBOOT_TRIGGERED = 26;
     }
     optional Status status = 4;
 }
@@ -6702,8 +7054,24 @@ message GpuStatsAppInfo {
  * Pulled from StatsCompanionService.
  */
 message SystemIonHeapSize {
+    // Deprecated due to limited support of ion stats in debugfs.
+    // Use `IonHeapSize` instead.
+    option deprecated = true;
+
     // Size of the system ion heap in bytes.
+    // Read from debugfs.
     optional int64 size_in_bytes = 1;
+}
+
+/*
+ * Logs the total size of the ion heap.
+ *
+ * Pulled from StatsCompanionService.
+ */
+message IonHeapSize {
+    // Total size of all ion heaps in kilobytes.
+    // Read from: /sys/kernel/ion/total_heaps_kb.
+    optional int32 total_size_kb = 1;
 }
 
 /*
@@ -6844,7 +7212,7 @@ message AppOps {
     // Uid of the package requesting the op
     optional int32 uid = 1 [(is_uid) = true];
 
-    // Nmae of the package performing the op
+    // Name of the package performing the op
     optional string package_name = 2;
 
     // operation id; maps to the OP_* constants in AppOpsManager.java
@@ -7338,6 +7706,17 @@ message UpdateEngineSuccessfulUpdateReported {
 }
 
 /**
+ * Reported when the RebootEscrow HAL has attempted to recover the escrowed
+ * key to indicate whether it was successful or not.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/locksettings/RebootEscrowManager.java
+ */
+message RebootEscrowRecoveryReported {
+    optional bool successful = 1;
+}
+
+/**
  * Global display pipeline metrics reported by SurfaceFlinger.
  * Pulled from:
  *    frameworks/native/services/surfaceflinger/TimeStats/TimeStats.cpp
@@ -7553,3 +7932,139 @@ message DangerousPermissionStateSampled {
     optional int32 permission_flags = 4;
 }
 
+/**
+ * HWUI renders pipeline type: GL (0) or Vulkan (1).
+ */
+enum PipelineType {
+    GL = 0;
+    VULKAN = 1;
+}
+
+/**
+ * HWUI stats for a given app.
+ */
+message GraphicsStats {
+    // The package name of the app
+    optional string package_name = 1;
+
+    // The version code of the app
+    optional int64 version_code = 2;
+
+    // The start & end timestamps in UTC as
+    // milliseconds since January 1, 1970
+    // Compatible with java.util.Date#setTime()
+    optional int64 stats_start = 3;
+
+    optional int64 stats_end = 4;
+
+    // HWUI renders pipeline type: GL or Vulkan.
+    optional PipelineType pipeline = 5;
+
+    // Distinct frame count.
+    optional int32 total_frames = 6;
+
+    // Number of "missed vsync" events.
+    optional int32 missed_vsync_count = 7;
+
+    // Number of frames in triple-buffering scenario (high input latency)
+    optional int32 high_input_latency_count = 8;
+
+    // Number of "slow UI thread" events.
+    optional int32 slow_ui_thread_count = 9;
+
+    // Number of "slow bitmap upload" events.
+    optional int32 slow_bitmap_upload_count = 10;
+
+    // Number of "slow draw" events.
+    optional int32 slow_draw_count = 11;
+
+    // Number of frames that missed their deadline (aka, visibly janked)
+    optional int32 missed_deadline_count = 12;
+
+    // The frame time histogram for the package
+    optional FrameTimingHistogram cpu_histogram = 13
+    [(android.os.statsd.log_mode) = MODE_BYTES];
+
+    // The gpu frame time histogram for the package
+    optional FrameTimingHistogram gpu_histogram = 14
+    [(android.os.statsd.log_mode) = MODE_BYTES];
+
+    // UI mainline module version.
+    optional int64 version_ui_module = 15;
+
+    // If true, these are HWUI stats for up to a 24h period for a given app from today.
+    // If false, these are HWUI stats for a 24h period for a given app from the last complete
+    // day (yesterday). Stats from yesterday stay constant, while stats from today may change as
+    // more apps are running / rendering.
+    optional bool is_today = 16;
+}
+
+/**
+ * Message related to dangerous (runtime) app ops access
+ */
+message RuntimeAppOpsAccess {
+    // Uid of the package accessing app op
+    optional int32 uid = 1 [(is_uid) = true];
+
+    // Name of the package accessing app op
+    optional string package_name = 2;
+
+    // operation id; maps to the OP_* constants in AppOpsManager.java
+    optional int32 op_id = 3;
+
+    // feature id; provided by developer when accessing related API, limited at 50 chars by API.
+    // Features must be provided through manifest using <feature> tag available in R and above.
+    optional string feature_id = 4;
+
+    // message related to app op access, limited to 600 chars by API
+    optional string message = 5;
+
+    enum SamplingStrategy {
+        DEFAULT = 0;
+        UNIFORM = 1;
+        RARELY_USED = 2;
+    }
+
+    // sampling strategy used to collect this message
+    optional SamplingStrategy sampling_strategy = 6;
+}
+
+/*
+ * Logs userspace reboot outcome and duration.
+ *
+ * Logged from:
+ *   frameworks/base/core/java/com/android/server/BootReceiver.java
+ */
+message UserspaceRebootReported {
+    // Possible outcomes of userspace reboot.
+    enum Outcome {
+        // Default value in case platform failed to determine the outcome.
+        OUTCOME_UNKNOWN = 0;
+        // Userspace reboot succeeded (i.e. boot completed without a fall back to hard reboot).
+        SUCCESS = 1;
+        // Userspace reboot shutdown sequence was aborted.
+        FAILED_SHUTDOWN_SEQUENCE_ABORTED = 2;
+        // Remounting userdata into checkpointing mode failed.
+        FAILED_USERDATA_REMOUNT = 3;
+        // Device didn't finish booting before timeout and userspace reboot watchdog issued a hard
+        // reboot.
+        FAILED_USERSPACE_REBOOT_WATCHDOG_TRIGGERED = 4;
+    }
+    // Outcome of userspace reboot. Always set.
+    optional Outcome outcome = 1;
+    // Duration of userspace reboot in case it has a successful outcome.
+    // Duration is measured as time between userspace reboot was initiated and until boot completed
+    // (e.g. sys.boot_completed=1).
+    optional int64 duration_millis = 2;
+    // State of primary user's (user0) credential encryption storage.
+    enum UserEncryptionState {
+        // Default value.
+        USER_ENCRYPTION_STATE_UNKNOWN = 0;
+        // Credential encrypted storage is unlocked.
+        UNLOCKED = 1;
+        // Credential encrypted storage is locked.
+        LOCKED = 2;
+    }
+    // State of primary user's encryption storage at the moment boot completed. Always set.
+    optional UserEncryptionState user_encryption_state = 3;
+}

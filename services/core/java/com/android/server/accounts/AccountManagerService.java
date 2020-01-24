@@ -2131,17 +2131,6 @@ public class AccountManagerService
     }
 
     @Override
-    public void removeAccount(IAccountManagerResponse response, Account account,
-            boolean expectActivityLaunch) {
-        android.util.SeempLog.record(17);
-        removeAccountAsUser(
-                response,
-                account,
-                expectActivityLaunch,
-                UserHandle.getCallingUserId());
-    }
-
-    @Override
     public void removeAccountAsUser(IAccountManagerResponse response, Account account,
             boolean expectActivityLaunch, int userId) {
         final int callingUid = Binder.getCallingUid();
@@ -4458,12 +4447,6 @@ public class AccountManagerService
             accountList.toArray(accountArray);
             return accountArray;
         }
-    }
-
-    @Override
-    @NonNull
-    public Account[] getAccounts(String type, String opPackageName) {
-        return getAccountsAsUser(type, UserHandle.getCallingUserId(), opPackageName);
     }
 
     @Override

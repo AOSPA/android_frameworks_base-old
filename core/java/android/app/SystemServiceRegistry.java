@@ -54,6 +54,7 @@ import android.content.integrity.AppIntegrityManager;
 import android.content.integrity.IAppIntegrityManager;
 import android.content.om.IOverlayManager;
 import android.content.om.OverlayManager;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.CrossProfileApps;
 import android.content.pm.DataLoaderManager;
 import android.content.pm.ICrossProfileApps;
@@ -147,6 +148,7 @@ import android.os.RecoverySystem;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ServiceManager.ServiceNotFoundException;
+import android.os.SystemConfigManager;
 import android.os.SystemUpdateManager;
 import android.os.SystemVibrator;
 import android.os.UserHandle;
@@ -170,6 +172,7 @@ import android.service.persistentdata.IPersistentDataBlockService;
 import android.service.persistentdata.PersistentDataBlockManager;
 import android.service.vr.IVrManager;
 import android.telecom.TelecomManager;
+import android.telephony.MmsManager;
 import android.telephony.TelephonyFrameworkInitializer;
 import android.telephony.TelephonyRegistryManager;
 import android.util.ArrayMap;
@@ -344,6 +347,14 @@ public final class SystemServiceRegistry {
                 return ServiceManager.getServiceOrThrow(Context.NETD_SERVICE);
             }
         });
+
+        registerService(Context.NETWORK_STACK_SERVICE, IBinder.class,
+                new StaticServiceFetcher<IBinder>() {
+                    @Override
+                    public IBinder createService() {
+                        return ServiceManager.getService(Context.NETWORK_STACK_SERVICE);
+                    }
+                });
 
         registerService(Context.TETHERING_SERVICE, TetheringManager.class,
                 new CachedServiceFetcher<TetheringManager>() {
@@ -617,6 +628,13 @@ public final class SystemServiceRegistry {
                         return new SystemUpdateManager(service);
                     }});
 
+        registerService(Context.SYSTEM_CONFIG_SERVICE, SystemConfigManager.class,
+                new CachedServiceFetcher<SystemConfigManager>() {
+                    @Override
+                    public SystemConfigManager createService(ContextImpl ctx) {
+                        return new SystemConfigManager();
+                    }});
+
         registerService(Context.TELEPHONY_REGISTRY_SERVICE, TelephonyRegistryManager.class,
             new CachedServiceFetcher<TelephonyRegistryManager>() {
                 @Override
@@ -630,6 +648,13 @@ public final class SystemServiceRegistry {
             public TelecomManager createService(ContextImpl ctx) {
                 return new TelecomManager(ctx.getOuterContext());
             }});
+
+        registerService(Context.MMS_SERVICE, MmsManager.class,
+                new CachedServiceFetcher<MmsManager>() {
+                    @Override
+                    public MmsManager createService(ContextImpl ctx) {
+                        return new MmsManager(ctx.getOuterContext());
+                    }});
 
         registerService(Context.UI_MODE_SERVICE, UiModeManager.class,
                 new CachedServiceFetcher<UiModeManager>() {
@@ -677,20 +702,20 @@ public final class SystemServiceRegistry {
                     throws ServiceNotFoundException {
                 final IBinder b = ServiceManager.getService(Context.WALLPAPER_SERVICE);
                 if (b == null) {
-                    // There are 2 reason service can be null:
-                    // 1.Device doesn't support it - that's fine
-                    // 2.App is running on instant mode - should fail
-                    final boolean enabled = Resources.getSystem()
-                            .getBoolean(com.android.internal.R.bool.config_enableWallpaperService);
-                    if (!enabled) {
-                        // Life moves on...
-                        return DisabledWallpaperManager.getInstance();
-                    }
-                    if (ctx.getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.P) {
+                    ApplicationInfo appInfo = ctx.getApplicationInfo();
+                    if (appInfo.targetSdkVersion >= Build.VERSION_CODES.P
+                            && appInfo.isInstantApp()) {
                         // Instant app
                         throw new ServiceNotFoundException(Context.WALLPAPER_SERVICE);
                     }
+                    final boolean enabled = Resources.getSystem()
+                            .getBoolean(com.android.internal.R.bool.config_enableWallpaperService);
+                    if (!enabled) {
+                        // Device doesn't support wallpaper, return a limited manager
+                        return DisabledWallpaperManager.getInstance();
+                    }
                     // Bad state - WallpaperManager methods will throw exception
+                    Log.e(TAG, "No wallpaper service");
                 }
                 IWallpaperManager service = IWallpaperManager.Stub.asInterface(b);
                 return new WallpaperManager(service, ctx.getOuterContext(),

@@ -36,8 +36,12 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
+import android.graphics.Bitmap;
+import android.graphics.Point;
+import android.graphics.Rect;
 import android.graphics.Region;
 import android.hardware.display.DisplayManager;
+import android.hardware.display.DisplayManagerGlobal;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -54,6 +58,7 @@ import android.util.SparseArray;
 import android.view.Display;
 import android.view.KeyEvent;
 import android.view.MagnificationSpec;
+import android.view.SurfaceControl;
 import android.view.View;
 import android.view.WindowInfo;
 import android.view.accessibility.AccessibilityCache;
@@ -75,6 +80,7 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -90,6 +96,7 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
     private static final String LOG_TAG = "AbstractAccessibilityServiceConnection";
     private static final int WAIT_WINDOWS_TIMEOUT_MILLIS = 5000;
 
+    protected static final String TAKE_SCREENSHOT = "takeScreenshot";
     protected final Context mContext;
     protected final SystemSupport mSystemSupport;
     protected final WindowManagerInternal mWindowManagerService;
@@ -769,6 +776,16 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
     }
 
     @Override
+    public @NonNull List<AccessibilityNodeInfo.AccessibilityAction> getSystemActions() {
+        synchronized (mLock) {
+            if (!hasRightsToCurrentUserLocked()) {
+                return Collections.emptyList();
+            }
+        }
+        return mSystemActionPerformer.getSystemActions();
+    }
+
+    @Override
     public boolean isFingerprintGestureDetectionAvailable() {
         if (!mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) {
             return false;
@@ -934,6 +951,54 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
         mInvocationHandler.setSoftKeyboardCallbackEnabled(enabled);
     }
 
+    @Nullable
+    @Override
+    public Bitmap takeScreenshot(int displayId) {
+        synchronized (mLock) {
+            if (!hasRightsToCurrentUserLocked()) {
+                return null;
+            }
+
+            if (!mSecurityPolicy.canTakeScreenshotLocked(this)) {
+                return null;
+            }
+        }
+
+        if (!mSecurityPolicy.checkAccessibilityAccess(this)) {
+            return null;
+        }
+
+        final Display display = DisplayManagerGlobal.getInstance()
+                .getRealDisplay(displayId);
+        if (display == null) {
+            return null;
+        }
+        final Point displaySize = new Point();
+        display.getRealSize(displaySize);
+
+        final int rotation = display.getRotation();
+        Bitmap screenShot = null;
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            final Rect crop = new Rect(0, 0, displaySize.x, displaySize.y);
+            // TODO (b/145893483): calling new API with the display as a parameter
+            // when surface control supported.
+            screenShot = SurfaceControl.screenshot(crop, displaySize.x, displaySize.y,
+                    rotation);
+            if (screenShot != null) {
+                // Optimization for telling the bitmap that all of the pixels are known to be
+                // opaque (false). This is meant as a drawing hint, as in some cases a bitmap
+                // that is known to be opaque can take a faster drawing case than one that may
+                // have non-opaque per-pixel alpha values.
+                screenShot.setHasAlpha(false);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+        return screenShot;
+    }
+
     @Override
     public void dump(FileDescriptor fd, final PrintWriter pw, String[] args) {
         if (!DumpUtils.checkDumpPermission(mContext, LOG_TAG, pw)) return;
@@ -1015,6 +1080,20 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
     public IBinder getOverlayWindowToken(int displayId) {
         synchronized (mLock) {
             return mOverlayWindowTokens.get(displayId);
+        }
+    }
+
+    /**
+     * Gets windowId of given token.
+     *
+     * @param token The token
+     * @return window id
+     */
+    @Override
+    public int getWindowIdForLeashToken(@NonNull IBinder token) {
+        synchronized (mLock) {
+            // TODO: Add a method to lookup window ID by given leash token.
+            return -1;
         }
     }
 
@@ -1184,6 +1263,11 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
                 gestureEvent).sendToTarget();
     }
 
+    public void notifySystemActionsChangedLocked() {
+        mInvocationHandler.sendEmptyMessage(
+                InvocationHandler.MSG_ON_SYSTEM_ACTIONS_CHANGED);
+    }
+
     public void notifyClearAccessibilityNodeInfoCache() {
         mInvocationHandler.sendEmptyMessage(
                 InvocationHandler.MSG_CLEAR_ACCESSIBILITY_CACHE);
@@ -1278,6 +1362,18 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
             } catch (RemoteException re) {
                 Slog.e(LOG_TAG, "Error during sending gesture " + gestureInfo
                         + " to " + mService, re);
+            }
+        }
+    }
+
+    private void notifySystemActionsChangedInternal() {
+        final IAccessibilityServiceClient listener = getServiceInterfaceSafely();
+        if (listener != null) {
+            try {
+                listener.onSystemActionsChanged();
+            } catch (RemoteException re) {
+                Slog.e(LOG_TAG, "Error sending system actions change to " + mService,
+                        re);
             }
         }
     }
@@ -1476,6 +1572,7 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
         private static final int MSG_ON_SOFT_KEYBOARD_STATE_CHANGED = 6;
         private static final int MSG_ON_ACCESSIBILITY_BUTTON_CLICKED = 7;
         private static final int MSG_ON_ACCESSIBILITY_BUTTON_AVAILABILITY_CHANGED = 8;
+        private static final int MSG_ON_SYSTEM_ACTIONS_CHANGED = 9;
 
         /** List of magnification callback states, mapping from displayId -> Boolean */
         @GuardedBy("mlock")
@@ -1523,7 +1620,10 @@ abstract class AbstractAccessibilityServiceConnection extends IAccessibilityServ
                     final boolean available = (message.arg1 != 0);
                     notifyAccessibilityButtonAvailabilityChangedInternal(available);
                 } break;
-
+                case MSG_ON_SYSTEM_ACTIONS_CHANGED: {
+                    notifySystemActionsChangedInternal();
+                    break;
+                }
                 default: {
                     throw new IllegalArgumentException("Unknown message: " + type);
                 }

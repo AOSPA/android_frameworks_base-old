@@ -125,7 +125,8 @@ public class WifiSignalController extends
     public void notifyListeners(SignalCallback callback) {
         // only show wifi in the cluster if connected or if wifi-only
         boolean wifiVisible = mCurrentState.enabled
-                && (mCurrentState.connected || !mHasMobileData);
+                && ((mCurrentState.connected && mCurrentState.inetCondition == 1)
+                    || !mHasMobileData);
         String wifiDesc = wifiVisible ? mCurrentState.ssid : null;
         boolean ssidPresent = wifiVisible && mCurrentState.ssid != null;
         String contentDescription = getStringIfExists(getContentDescription());

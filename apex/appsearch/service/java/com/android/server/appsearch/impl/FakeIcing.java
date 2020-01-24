@@ -25,6 +25,7 @@ import android.util.SparseArray;
 import com.google.android.icing.proto.DocumentProto;
 import com.google.android.icing.proto.PropertyProto;
 import com.google.android.icing.proto.SearchResultProto;
+import com.google.android.icing.proto.StatusProto;
 
 import java.util.Locale;
 import java.util.Map;
@@ -36,8 +37,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>
  * Currently, only queries by single exact term are supported. There is no support for persistence,
  * namespaces, i18n tokenization, or schema.
- *
- * @hide
  */
 public class FakeIcing {
     private final AtomicInteger mNextDocId = new AtomicInteger();
@@ -99,10 +98,12 @@ public class FakeIcing {
     public SearchResultProto query(@NonNull String term) {
         String normTerm = normalizeString(term);
         Set<Integer> docIds = mIndex.get(normTerm);
+        SearchResultProto.Builder results = SearchResultProto.newBuilder()
+                .setStatus(StatusProto.newBuilder().setCode(StatusProto.Code.OK));
         if (docIds == null || docIds.isEmpty()) {
-            return SearchResultProto.getDefaultInstance();
+            return results.build();
         }
-        SearchResultProto.Builder results = SearchResultProto.newBuilder();
+
         for (int docId : docIds) {
             DocumentProto document = mDocStore.get(docId);
             if (document != null) {

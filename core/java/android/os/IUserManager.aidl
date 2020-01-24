@@ -41,11 +41,11 @@ interface IUserManager {
      * END OF DO NOT MOVE
      */
 
-    UserInfo createUser(in String name, in String userType, int flags);
-    UserInfo preCreateUser(in String userType);
-    UserInfo createProfileForUser(in String name, in String userType, int flags, int userId,
+    UserInfo createUserWithThrow(in String name, in String userType, int flags);
+    UserInfo preCreateUserWithThrow(in String userType);
+    UserInfo createProfileForUserWithThrow(in String name, in String userType, int flags, int userId,
             in String[] disallowedPackages);
-    UserInfo createRestrictedProfile(String name, int parentUserHandle);
+    UserInfo createRestrictedProfileWithThrow(String name, int parentUserHandle);
     void setUserEnabled(int userId);
     void setUserAdmin(int userId);
     void evictCredentialEncryptionKey(int userId);
@@ -62,7 +62,7 @@ interface IUserManager {
     boolean canAddMoreManagedProfiles(int userId, boolean allowedToRemoveOne);
     UserInfo getProfileParent(int userId);
     boolean isSameProfileGroup(int userId, int otherUserHandle);
-    String getUserTypeForUser(int userId);
+    boolean isUserOfType(int userId, in String userType);
     @UnsupportedAppUsage
     UserInfo getUserInfo(int userId);
     String getUserAccount(int userId);
@@ -100,7 +100,7 @@ interface IUserManager {
     boolean isManagedProfile(int userId);
     boolean isDemoUser(int userId);
     boolean isPreCreated(int userId);
-    UserInfo createProfileForUserEvenWhenDisallowed(in String name, in String userType, int flags,
+    UserInfo createProfileForUserEvenWhenDisallowedWithThrow(in String name, in String userType, int flags,
             int userId, in String[] disallowedPackages);
     boolean isUserUnlockingOrUnlocked(int userId);
     int getUserIconBadgeResId(int userId);
@@ -113,7 +113,7 @@ interface IUserManager {
     boolean isUserRunning(int userId);
     boolean isUserNameSet(int userId);
     boolean hasRestrictedProfiles();
-    boolean requestQuietModeEnabled(String callingPackage, boolean enableQuietMode, int userId, in IntentSender target);
+    boolean requestQuietModeEnabled(String callingPackage, boolean enableQuietMode, int userId, in IntentSender target, int flags);
     String getUserName();
     long getUserStartRealtime();
     long getUserUnlockRealtime();

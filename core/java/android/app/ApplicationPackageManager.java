@@ -133,6 +133,10 @@ public class ApplicationPackageManager extends PackageManager {
     // Default flags to use with PackageManager when no flags are given.
     private final static int sDefaultFlags = PackageManager.GET_SHARED_LIBRARY_FILES;
 
+    // Name of the resource which provides background permission button string
+    public static final String APP_PERMISSION_BUTTON_ALLOW_ALWAYS =
+            "app_permission_button_allow_always";
+
     private final Object mLock = new Object();
 
     @GuardedBy("mLock")
@@ -614,13 +618,70 @@ public class ApplicationPackageManager extends PackageManager {
         return hasSystemFeature(name, 0);
     }
 
-    @Override
-    public boolean hasSystemFeature(String name, int version) {
+    private boolean hasSystemFeatureUncached(String name, int version) {
         try {
             return mPM.hasSystemFeature(name, version);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    // Make this cache relatively large.  There are many system features and
+    // none are ever invalidated.  MPTS tests suggests that the cache should
+    // hold at least 150 entries.
+    private static final int SYS_FEATURE_CACHE_SIZE = 256;
+    private static final String CACHE_KEY_SYS_FEATURE_PROPERTY = "cache_key.has_system_feature";
+
+    private class SystemFeatureQuery {
+        public final String name;
+        public final int version;
+        public SystemFeatureQuery(String n, int v) {
+            name = n;
+            version = v;
+        }
+        @Override
+        public String toString() {
+            return String.format("SystemFeatureQuery(name=\"%s\", version=%d)",
+                    name, version);
+        }
+        @Override
+        public boolean equals(Object o) {
+            if (o instanceof SystemFeatureQuery) {
+                SystemFeatureQuery r = (SystemFeatureQuery) o;
+                return Objects.equals(name, r.name) &&  version == r.version;
+            } else {
+                return false;
+            }
+        }
+        @Override
+        public int hashCode() {
+            return Objects.hashCode(name) + version;
+        }
+    }
+
+    private final PropertyInvalidatedCache<SystemFeatureQuery, Boolean> mSysFeatureCache =
+            new PropertyInvalidatedCache<SystemFeatureQuery, Boolean>(
+                SYS_FEATURE_CACHE_SIZE,
+                CACHE_KEY_SYS_FEATURE_PROPERTY) {
+                @Override
+                protected Boolean recompute(SystemFeatureQuery query) {
+                    return hasSystemFeatureUncached(query.name, query.version);
+                }
+            };
+
+    @Override
+    public boolean hasSystemFeature(String name, int version) {
+        return mSysFeatureCache.query(new SystemFeatureQuery(name, version)).booleanValue();
+    }
+
+    /** @hide */
+    public void disableSysFeatureCache() {
+        mSysFeatureCache.disableLocal();
+    }
+
+    /** @hide */
+    public static void invalidateSysFeatureCache() {
+        PropertyInvalidatedCache.invalidateCache(CACHE_KEY_SYS_FEATURE_PROPERTY);
     }
 
     @Override
@@ -804,6 +865,26 @@ public class ApplicationPackageManager extends PackageManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    @Override
+    public CharSequence getBackgroundPermissionOptionLabel() {
+        try {
+
+            String permissionController = getPermissionControllerPackageName();
+            Context context =
+                    mContext.createPackageContext(permissionController, 0);
+
+            int textId = context.getResources().getIdentifier(APP_PERMISSION_BUTTON_ALLOW_ALWAYS,
+                    "string", "com.android.permissioncontroller");
+//                    permissionController); STOPSHIP b/147434671
+            if (textId != 0) {
+                return context.getText(textId);
+            }
+        } catch (NameNotFoundException e) {
+            Log.e(TAG, "Permission controller not found.", e);
+        }
+        return "";
     }
 
     @Override
@@ -1651,6 +1732,10 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @UnsupportedAppUsage
+    protected ApplicationPackageManager(ContextImpl context, IPackageManager pm) {
+        this(context, pm, ActivityThread.getPermissionManager());
+    }
+
     protected ApplicationPackageManager(ContextImpl context, IPackageManager pm,
             IPermissionManager permissionManager) {
         mContext = context;

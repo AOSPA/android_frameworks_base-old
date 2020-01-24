@@ -27,6 +27,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.annotation.Nullable;
 import android.hardware.power.V1_0.PowerHint;
+import android.os.Handler;
 import android.os.PowerManagerInternal;
 import android.util.ArrayMap;
 import android.view.Choreographer;
@@ -57,6 +58,8 @@ class SurfaceAnimationRunner {
     @VisibleForTesting
     Choreographer mChoreographer;
 
+    private final Handler mAnimationThreadHandler = AnimationThread.getHandler();
+    private final Handler mSurfaceAnimationHandler = SurfaceAnimationThread.getHandler();
     private final Runnable mApplyTransactionRunnable = this::applyTransaction;
     private final AnimationHandler mAnimationHandler;
     private final Transaction mFrameTransaction;
@@ -75,6 +78,10 @@ class SurfaceAnimationRunner {
     @GuardedBy("mLock")
     private boolean mAnimationStartDeferred;
 
+    /**
+     * There should only ever be one instance of this class. Usual spot for it is with
+     * {@link WindowManagerService}
+     */
     SurfaceAnimationRunner(Supplier<Transaction> transactionFactory,
             PowerManagerInternal powerManagerInternal) {
         this(null /* callbackProvider */, null /* animatorFactory */,
@@ -85,7 +92,7 @@ class SurfaceAnimationRunner {
     SurfaceAnimationRunner(@Nullable AnimationFrameCallbackProvider callbackProvider,
             AnimatorFactory animatorFactory, Transaction frameTransaction,
             PowerManagerInternal powerManagerInternal) {
-        SurfaceAnimationThread.getHandler().runWithScissors(() -> mChoreographer = getSfInstance(),
+        mSurfaceAnimationHandler.runWithScissors(() -> mChoreographer = getSfInstance(),
                 0 /* timeout */);
         mFrameTransaction = frameTransaction;
         mAnimationHandler = new AnimationHandler();
@@ -152,7 +159,7 @@ class SurfaceAnimationRunner {
                 synchronized (mCancelLock) {
                     anim.mCancelled = true;
                 }
-                SurfaceAnimationThread.getHandler().post(() -> {
+                mSurfaceAnimationHandler.post(() -> {
                     anim.mAnim.cancel();
                     applyTransaction();
                 });
@@ -211,7 +218,7 @@ class SurfaceAnimationRunner {
                         if (!a.mCancelled) {
 
                             // Post on other thread that we can push final state without jank.
-                            AnimationThread.getHandler().post(a.mFinishCallback);
+                            mAnimationThreadHandler.post(a.mFinishCallback);
                         }
                     }
                 }

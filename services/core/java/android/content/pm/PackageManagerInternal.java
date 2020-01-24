@@ -41,6 +41,7 @@ import com.android.server.pm.PackageList;
 import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Collection;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -319,6 +320,12 @@ public abstract class PackageManagerInternal {
             int deviceOwnerUserId, String deviceOwner, SparseArray<String> profileOwners);
 
     /**
+     * Called by DevicePolicyManagerService to set the package names protected by the device
+     * owner.
+     */
+    public abstract void setDeviceOwnerProtectedPackages(List<String> packageNames);
+
+    /**
      * Returns {@code true} if a given package can't be wiped. Otherwise, returns {@code false}.
      */
     public abstract boolean isPackageDataProtected(int userId, String packageName);
@@ -472,10 +479,12 @@ public abstract class PackageManagerInternal {
      *                            will be disabled. Pass in null or an empty list to disable
      *                            all overlays. The order of the items is significant if several
      *                            overlays modify the same resource.
+     * @param outUpdatedPackageNames An output list that contains the package names of packages
+     *                               affected by the update of enabled overlays.
      * @return true if all packages names were known by the package manager, false otherwise
      */
     public abstract boolean setEnabledOverlayPackages(int userId, String targetPackageName,
-            List<String> overlayPackageNames);
+            List<String> overlayPackageNames, Collection<String> outUpdatedPackageNames);
 
     /**
      * Resolves an activity intent, allowing instant apps to be resolved.
@@ -803,6 +812,12 @@ public abstract class PackageManagerInternal {
      * Returns {@code true} if given {@code packageName} is an apex package.
      */
     public abstract boolean isApexPackage(String packageName);
+
+    /**
+     * Returns list of {@code packageName} of apks inside the given apex.
+     * @param apexPackageName Package name of the apk container of apex
+     */
+    public abstract List<String> getApksInApex(String apexPackageName);
 
     /**
      * Uninstalls given {@code packageName}.

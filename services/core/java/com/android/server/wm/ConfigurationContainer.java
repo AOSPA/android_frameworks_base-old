@@ -134,8 +134,8 @@ public abstract class ConfigurationContainer<E extends ConfigurationContainer> {
         resolveOverrideConfiguration(newParentConfig);
         mFullConfiguration.setTo(newParentConfig);
         mFullConfiguration.updateFrom(mResolvedOverrideConfiguration);
+        onMergedOverrideConfigurationChanged();
         if (!mResolvedTmpConfig.equals(mResolvedOverrideConfiguration)) {
-            onMergedOverrideConfigurationChanged();
             // This depends on the assumption that change-listeners don't do
             // their own override resolution. This way, dependent hierarchies
             // can stay properly synced-up with a primary hierarchy's constraints.
@@ -146,6 +146,10 @@ public abstract class ConfigurationContainer<E extends ConfigurationContainer> {
                 mChangeListeners.get(i).onRequestedOverrideConfigurationChanged(
                         mResolvedOverrideConfiguration);
             }
+        }
+        for (int i = mChangeListeners.size() - 1; i >= 0; --i) {
+            mChangeListeners.get(i).onMergedOverrideConfigurationChanged(
+                    mMergedOverrideConfiguration);
         }
         if (forwardToChildren) {
             for (int i = getChildCount() - 1; i >= 0; --i) {
@@ -545,6 +549,7 @@ public abstract class ConfigurationContainer<E extends ConfigurationContainer> {
         }
         mChangeListeners.add(listener);
         listener.onRequestedOverrideConfigurationChanged(mResolvedOverrideConfiguration);
+        listener.onMergedOverrideConfigurationChanged(mMergedOverrideConfiguration);
     }
 
     void unregisterConfigurationChangeListener(ConfigurationContainerListener listener) {
@@ -624,6 +629,21 @@ public abstract class ConfigurationContainer<E extends ConfigurationContainer> {
         return mFullConfiguration.windowConfiguration.isAlwaysOnTop();
     }
 
+    /**
+     * Returns {@code true} if this container is focusable. Generally, if a parent is not focusable,
+     * this will not be focusable either.
+     */
+    boolean isFocusable() {
+        // TODO(split): Move this to WindowContainer once Split-screen is based on a WindowContainer
+        //              like DisplayArea vs. TaskTiles.
+        ConfigurationContainer parent = getParent();
+        return parent == null || parent.isFocusable();
+    }
+
+    boolean setFocusable(boolean focusable) {
+        return false;
+    }
+
     boolean hasChild() {
         return getChildCount() > 0;
     }
@@ -665,5 +685,9 @@ public abstract class ConfigurationContainer<E extends ConfigurationContainer> {
             sb.append('}');
             return sb.toString();
         }
+    }
+
+    RemoteToken getRemoteToken() {
+        return mRemoteToken;
     }
 }

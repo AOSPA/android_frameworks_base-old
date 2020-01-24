@@ -39,10 +39,10 @@ import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.notification.collection.GroupEntry;
 import com.android.systemui.statusbar.notification.collection.ListEntry;
-import com.android.systemui.statusbar.notification.collection.NotifCollection;
+import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
-import com.android.systemui.statusbar.notification.collection.listbuilder.NotifListBuilder;
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifFilter;
+import com.android.systemui.statusbar.notification.collection.provider.HighPriorityProvider;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 
 import javax.inject.Inject;
@@ -62,6 +62,7 @@ public class KeyguardCoordinator implements Coordinator {
     private final BroadcastDispatcher mBroadcastDispatcher;
     private final StatusBarStateController mStatusBarStateController;
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    private final HighPriorityProvider mHighPriorityProvider;
 
     @Inject
     public KeyguardCoordinator(
@@ -71,21 +72,22 @@ public class KeyguardCoordinator implements Coordinator {
             NotificationLockscreenUserManager lockscreenUserManager,
             BroadcastDispatcher broadcastDispatcher,
             StatusBarStateController statusBarStateController,
-            KeyguardUpdateMonitor keyguardUpdateMonitor) {
+            KeyguardUpdateMonitor keyguardUpdateMonitor,
+            HighPriorityProvider highPriorityProvider) {
         mContext = context;
         mMainHandler = mainThreadHandler;
         mKeyguardStateController = keyguardStateController;
         mLockscreenUserManager = lockscreenUserManager;
-
         mBroadcastDispatcher = broadcastDispatcher;
         mStatusBarStateController = statusBarStateController;
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
+        mHighPriorityProvider = highPriorityProvider;
     }
 
     @Override
-    public void attach(NotifCollection notifCollection, NotifListBuilder notifListBuilder) {
+    public void attach(NotifPipeline pipeline) {
         setupInvalidateNotifListCallbacks();
-        notifListBuilder.addPreRenderFilter(mNotifFilter);
+        pipeline.addPreRenderFilter(mNotifFilter);
     }
 
     private final NotifFilter mNotifFilter = new NotifFilter(TAG) {
@@ -151,7 +153,7 @@ public class KeyguardCoordinator implements Coordinator {
         }
         if (NotificationUtils.useNewInterruptionModel(mContext)
                 && hideSilentNotificationsOnLockscreen()) {
-            return entry.isHighPriority();
+            return mHighPriorityProvider.isHighPriority(entry);
         } else {
             return entry.getRepresentativeEntry() != null
                     && !entry.getRepresentativeEntry().getRanking().isAmbient();

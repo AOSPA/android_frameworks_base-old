@@ -21,15 +21,17 @@ import static android.net.TetheringManager.TETHER_ERROR_NO_ACCESS_TETHERING_PERM
 import static android.net.TetheringManager.TETHER_ERROR_NO_CHANGE_TETHERING_PERMISSION;
 import static android.net.TetheringManager.TETHER_ERROR_NO_ERROR;
 import static android.net.TetheringManager.TETHER_ERROR_UNSUPPORTED;
+import static android.net.dhcp.IDhcpServer.STATUS_UNKNOWN_ERROR;
 
 import android.app.Service;
+import android.bluetooth.BluetoothAdapter;
 import android.content.Context;
 import android.content.Intent;
-import android.net.ConnectivityManager;
 import android.net.IIntResultListener;
 import android.net.INetworkStackConnector;
 import android.net.ITetheringConnector;
 import android.net.ITetheringEventCallback;
+import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.net.dhcp.DhcpServerCallbacks;
 import android.net.dhcp.DhcpServingParamsParcel;
@@ -41,7 +43,6 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
-import android.os.ServiceManager;
 import android.os.SystemProperties;
 import android.os.UserManager;
 import android.provider.Settings;
@@ -84,6 +85,7 @@ public class TetheringService extends Service {
      */
     @VisibleForTesting
     public Tethering makeTethering(TetheringDependencies deps) {
+        System.loadLibrary("tetherutilsjni");
         return new Tethering(deps);
     }
 
@@ -305,9 +307,15 @@ public class TetheringService extends Service {
             mDeps = new TetheringDependencies() {
                 @Override
                 public NetworkRequest getDefaultNetworkRequest() {
-                    ConnectivityManager cm = (ConnectivityManager) mContext.getSystemService(
-                            Context.CONNECTIVITY_SERVICE);
-                    return cm.getDefaultRequest();
+                    // TODO: b/147280869, add a proper system API to replace this.
+                    final NetworkRequest trackDefaultRequest = new NetworkRequest.Builder()
+                            .clearCapabilities()
+                            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+                            .addCapability(NetworkCapabilities.NET_CAPABILITY_TRUSTED)
+                            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                            .build();
+                    return trackDefaultRequest;
                 }
 
                 @Override
@@ -339,7 +347,10 @@ public class TetheringService extends Service {
 
                                 service.makeDhcpServer(ifName, params, cb);
                             } catch (RemoteException e) {
-                                e.rethrowFromSystemServer();
+                                Log.e(TAG, "Fail to make dhcp server");
+                                try {
+                                    cb.onDhcpServerCreated(STATUS_UNKNOWN_ERROR, null);
+                                } catch (RemoteException re) { }
                             }
                         }
                     };
@@ -352,7 +363,7 @@ public class TetheringService extends Service {
                     IBinder connector;
                     try {
                         final long before = System.currentTimeMillis();
-                        while ((connector = ServiceManager.getService(
+                        while ((connector = (IBinder) mContext.getSystemService(
                                 Context.NETWORK_STACK_SERVICE)) == null) {
                             if (System.currentTimeMillis() - before > NETWORKSTACK_TIMEOUT_MS) {
                                 Log.wtf(TAG, "Timeout, fail to get INetworkStackConnector");
@@ -365,6 +376,11 @@ public class TetheringService extends Service {
                         return null;
                     }
                     return INetworkStackConnector.Stub.asInterface(connector);
+                }
+
+                @Override
+                public BluetoothAdapter getBluetoothAdapter() {
+                    return BluetoothAdapter.getDefaultAdapter();
                 }
             };
         }

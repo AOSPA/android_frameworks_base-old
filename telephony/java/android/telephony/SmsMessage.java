@@ -16,11 +16,18 @@
 
 package android.telephony;
 
+import com.android.telephony.Rlog;
+
 import static android.telephony.TelephonyManager.PHONE_TYPE_CDMA;
 
+import android.Manifest;
+import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.StringDef;
-import android.annotation.UnsupportedAppUsage;
+import android.annotation.SystemApi;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.res.Resources;
 import android.os.Binder;
 import android.text.TextUtils;
@@ -29,8 +36,10 @@ import com.android.internal.telephony.GsmAlphabet;
 import com.android.internal.telephony.GsmAlphabet.TextEncodingDetails;
 import com.android.internal.telephony.Sms7BitEncodingTranslator;
 import com.android.internal.telephony.SmsConstants;
+import com.android.internal.telephony.SmsHeader;
 import com.android.internal.telephony.SmsMessageBase;
 import com.android.internal.telephony.SmsMessageBase.SubmitPduBase;
+import com.android.internal.telephony.cdma.sms.UserData;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -53,6 +62,16 @@ public class SmsMessage {
     public enum MessageClass{
         UNKNOWN, CLASS_0, CLASS_1, CLASS_2, CLASS_3;
     }
+
+    /** @hide */
+    @IntDef(prefix = { "ENCODING_" }, value = {
+            ENCODING_UNKNOWN,
+            ENCODING_7BIT,
+            ENCODING_8BIT,
+            ENCODING_16BIT
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface EncodingSize {}
 
     /** User data text encoding code unit size */
     public static final int ENCODING_UNKNOWN = 0;
@@ -259,41 +278,24 @@ public class SmsMessage {
     }
 
     /**
-     * Create an SmsMessage from an SMS EF record.
+     * Creates an SmsMessage from an SMS EF record.
      *
-     * @param index Index of SMS record. This should be index in ArrayList
-     *              returned by SmsManager.getAllMessagesFromSim + 1.
+     * @param index Index of SMS EF record.
      * @param data Record data.
      * @return An SmsMessage representing the record.
      *
      * @hide
      */
     public static SmsMessage createFromEfRecord(int index, byte[] data) {
-        SmsMessageBase wrappedMessage;
-
-        if (isCdmaVoice()) {
-            wrappedMessage = com.android.internal.telephony.cdma.SmsMessage.createFromEfRecord(
-                    index, data);
-        } else {
-            wrappedMessage = com.android.internal.telephony.gsm.SmsMessage.createFromEfRecord(
-                    index, data);
-        }
-
-        if (wrappedMessage != null) {
-            return new SmsMessage(wrappedMessage);
-        } else {
-            Rlog.e(LOG_TAG, "createFromEfRecord(): wrappedMessage is null");
-            return null;
-        }
+        return createFromEfRecord(index, data, SmsManager.getDefaultSmsSubscriptionId());
     }
 
     /**
-     * Create an SmsMessage from an SMS EF record.
+     * Creates an SmsMessage from an SMS EF record.
      *
-     * @param index Index of SMS record. This should be index in ArrayList
-     *              returned by SmsManager.getAllMessagesFromSim + 1.
+     * @param index Index of SMS EF record.
      * @param data Record data.
-     * @param subId Subscription Id of the SMS
+     * @param subId Subscription Id associated with the record.
      * @return An SmsMessage representing the record.
      *
      * @hide
@@ -307,6 +309,34 @@ public class SmsMessage {
         } else {
             wrappedMessage = com.android.internal.telephony.gsm.SmsMessage.createFromEfRecord(
                     index, data);
+        }
+
+        return wrappedMessage != null ? new SmsMessage(wrappedMessage) : null;
+    }
+
+    /**
+     * Create an SmsMessage from a native SMS-Submit PDU, specified by Bluetooth Message Access
+     * Profile Specification v1.4.2 5.8.
+     * This is used by Bluetooth MAP profile to decode message when sending non UTF-8 SMS messages.
+     *
+     * @param data Message data.
+     * @param isCdma Indicates weather the type of the SMS is CDMA.
+     * @return An SmsMessage representing the message.
+     *
+     * @hide
+     */
+    @SystemApi
+    @Nullable
+    public static SmsMessage createFromNativeSmsSubmitPdu(@NonNull byte[] data, boolean isCdma) {
+        SmsMessageBase wrappedMessage;
+
+        if (isCdma) {
+            wrappedMessage = com.android.internal.telephony.cdma.SmsMessage.createFromEfRecord(
+                    0, data);
+        } else {
+            // Bluetooth uses its own method to decode GSM PDU so this part is not called.
+            wrappedMessage = com.android.internal.telephony.gsm.SmsMessage.createFromEfRecord(
+                    0, data);
         }
 
         return wrappedMessage != null ? new SmsMessage(wrappedMessage) : null;
@@ -555,13 +585,15 @@ public class SmsMessage {
      */
 
     /**
-     * Get an SMS-SUBMIT PDU for a destination address and a message.
+     * Gets an SMS-SUBMIT PDU for a destination address and a message.
      * This method will not attempt to use any GSM national language 7 bit encodings.
      *
-     * @param scAddress Service Centre address.  Null means use default.
-     * @return a <code>SubmitPdu</code> containing the encoded SC
-     *         address, if applicable, and the encoded message.
-     *         Returns null on encode error.
+     * @param scAddress Service Centre address. Null means use default.
+     * @param destinationAddress the address of the destination for the message.
+     * @param message string representation of the message payload.
+     * @param statusReportRequested indicates whether a report is requested for this message.
+     * @return a <code>SubmitPdu</code> containing the encoded SC address if applicable and the
+     *         encoded message. Returns null on encode error.
      */
     public static SubmitPdu getSubmitPdu(String scAddress,
             String destinationAddress, String message, boolean statusReportRequested) {
@@ -574,17 +606,16 @@ public class SmsMessage {
     }
 
     /**
-     * Get an SMS-SUBMIT PDU for a destination address and a message.
+     * Gets an SMS-SUBMIT PDU for a destination address and a message.
      * This method will not attempt to use any GSM national language 7 bit encodings.
      *
-     * @param scAddress Service Centre address.  Null means use default.
+     * @param scAddress Service Centre address. Null means use default.
      * @param destinationAddress the address of the destination for the message.
-     * @param message String representation of the message payload.
-     * @param statusReportRequested Indicates whether a report is requested for this message.
-     * @param subId Subscription of the message
-     * @return a <code>SubmitPdu</code> containing the encoded SC
-     *         address, if applicable, and the encoded message.
-     *         Returns null on encode error.
+     * @param message string representation of the message payload.
+     * @param statusReportRequested indicates whether a report is requested for this message.
+     * @param subId subscription of the message.
+     * @return a <code>SubmitPdu</code> containing the encoded SC address if applicable and the
+     *         encoded message. Returns null on encode error.
      * @hide
      */
     public static SubmitPdu getSubmitPdu(String scAddress,
@@ -602,17 +633,16 @@ public class SmsMessage {
     }
 
     /**
-     * Get an SMS-SUBMIT PDU for a data message to a destination address &amp; port.
+     * Gets an SMS-SUBMIT PDU for a data message to a destination address &amp; port.
      * This method will not attempt to use any GSM national language 7 bit encodings.
      *
-     * @param scAddress Service Centre address. null == use default
-     * @param destinationAddress the address of the destination for the message
-     * @param destinationPort the port to deliver the message to at the
-     *        destination
-     * @param data the data for the message
-     * @return a <code>SubmitPdu</code> containing the encoded SC
-     *         address, if applicable, and the encoded message.
-     *         Returns null on encode error.
+     * @param scAddress Service Centre address. Null means use default.
+     * @param destinationAddress the address of the destination for the message.
+     * @param destinationPort the port to deliver the message to at the destination.
+     * @param data the data for the message.
+     * @param statusReportRequested indicates whether a report is requested for this message.
+     * @return a <code>SubmitPdu</code> containing the encoded SC address if applicable and the
+     *         encoded message. Returns null on encode error.
      */
     public static SubmitPdu getSubmitPdu(String scAddress,
             String destinationAddress, short destinationPort, byte[] data,
@@ -628,6 +658,132 @@ public class SmsMessage {
         }
 
         return new SubmitPdu(spb);
+    }
+
+    // TODO: SubmitPdu class is used for SMS-DELIVER also now. Refactor for SubmitPdu and new
+    // DeliverPdu accordingly.
+
+    /**
+     * Gets an SMS PDU to store in the ICC.
+     *
+     * @param subId subscription of the message.
+     * @param status message status. One of these status:
+     *               <code>SmsManager.STATUS_ON_ICC_READ</code>
+     *               <code>SmsManager.STATUS_ON_ICC_UNREAD</code>
+     *               <code>SmsManager.STATUS_ON_ICC_SENT</code>
+     *               <code>SmsManager.STATUS_ON_ICC_UNSENT</code>
+     * @param scAddress Service Centre address. Null means use default.
+     * @param address destination or originating address.
+     * @param message string representation of the message payload.
+     * @param date the time stamp the message was received.
+     * @return a <code>SubmitPdu</code> containing the encoded SC address if applicable and the
+     *         encoded message. Returns null on encode error.
+     * @hide
+     */
+    @SystemApi
+    @Nullable
+    public static SubmitPdu getSmsPdu(int subId, @SmsManager.StatusOnIcc int status,
+            @Nullable String scAddress, @NonNull String address, @NonNull String message,
+            long date) {
+        SubmitPduBase spb;
+        if (isCdmaVoice(subId)) { // 3GPP2 format
+            if (status == SmsManager.STATUS_ON_ICC_READ
+                    || status == SmsManager.STATUS_ON_ICC_UNREAD) { // Deliver PDU
+                spb = com.android.internal.telephony.cdma.SmsMessage.getDeliverPdu(address,
+                        message, date);
+            } else { // Submit PDU
+                spb = com.android.internal.telephony.cdma.SmsMessage.getSubmitPdu(scAddress,
+                        address, message, false /* statusReportRequested */, null /* smsHeader */);
+            }
+        } else { // 3GPP format
+            if (status == SmsManager.STATUS_ON_ICC_READ
+                    || status == SmsManager.STATUS_ON_ICC_UNREAD) { // Deliver PDU
+                spb = com.android.internal.telephony.gsm.SmsMessage.getDeliverPdu(scAddress,
+                        address, message, date);
+            } else { // Submit PDU
+                spb = com.android.internal.telephony.gsm.SmsMessage.getSubmitPdu(scAddress,
+                        address, message, false /* statusReportRequested */, null /* header */);
+            }
+        }
+
+        return spb != null ? new SubmitPdu(spb) : null;
+    }
+
+    /**
+     * Get an SMS-SUBMIT PDU's encoded message.
+     * This is used by Bluetooth MAP profile to handle long non UTF-8 SMS messages.
+     *
+     * @param isTypeGsm true when message's type is GSM, false when type is CDMA
+     * @param destinationAddress the address of the destination for the message
+     * @param message message content
+     * @param encoding User data text encoding code unit size
+     * @param languageTable GSM national language table to use, specified by 3GPP
+     *                      23.040 9.2.3.24.16
+     * @param languageShiftTable GSM national language shift table to use, specified by 3GPP
+     *                           23.040 9.2.3.24.15
+     * @param refNumber parameter to create SmsHeader
+     * @param seqNumber parameter to create SmsHeader
+     * @param msgCount parameter to create SmsHeader
+     * @return a byte[] containing the encoded message
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @SystemApi
+    @NonNull
+    public static byte[] getSubmitPduEncodedMessage(boolean isTypeGsm,
+            @NonNull String destinationAddress,
+            @NonNull String message,
+            @EncodingSize int encoding, int languageTable,
+            int languageShiftTable, int refNumber,
+            int seqNumber, int msgCount) {
+        byte[] data;
+        SmsHeader.ConcatRef concatRef = new SmsHeader.ConcatRef();
+        concatRef.refNumber = refNumber;
+        concatRef.seqNumber = seqNumber;  // 1-based sequence
+        concatRef.msgCount = msgCount;
+        // We currently set this to true since our messaging app will never
+        // send more than 255 parts (it converts the message to MMS well before that).
+        // However, we should support 3rd party messaging apps that might need 16-bit
+        // references
+        // Note:  It's not sufficient to just flip this bit to true; it will have
+        // ripple effects (several calculations assume 8-bit ref).
+        concatRef.isEightBits = true;
+        SmsHeader smsHeader = new SmsHeader();
+        smsHeader.concatRef = concatRef;
+
+        /* Depending on the type, call either GSM or CDMA getSubmitPdu(). The encoding
+         * will be determined(again) by getSubmitPdu().
+         * All packets need to be encoded using the same encoding, as the bMessage
+         * only have one filed to describe the encoding for all messages in a concatenated
+         * SMS... */
+        if (encoding == ENCODING_7BIT) {
+            smsHeader.languageTable = languageTable;
+            smsHeader.languageShiftTable = languageShiftTable;
+        }
+
+        if (isTypeGsm) {
+            data = com.android.internal.telephony.gsm.SmsMessage.getSubmitPdu(null,
+                    destinationAddress, message, false,
+                    SmsHeader.toByteArray(smsHeader), encoding, languageTable,
+                    languageShiftTable).encodedMessage;
+        } else { // SMS_TYPE_CDMA
+            UserData uData = new UserData();
+            uData.payloadStr = message;
+            uData.userDataHeader = smsHeader;
+            if (encoding == ENCODING_7BIT) {
+                uData.msgEncoding = UserData.ENCODING_GSM_7BIT_ALPHABET;
+            } else { // assume UTF-16
+                uData.msgEncoding = UserData.ENCODING_UNICODE_16;
+            }
+            uData.msgEncodingSet = true;
+            data = com.android.internal.telephony.cdma.SmsMessage.getSubmitPdu(
+                    destinationAddress, uData, false).encodedMessage;
+        }
+        if (data == null) {
+            return new byte[0];
+        }
+        return data;
     }
 
     /**

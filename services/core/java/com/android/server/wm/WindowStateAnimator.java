@@ -272,7 +272,8 @@ class WindowStateAnimator {
 
         mWin.checkPolicyVisibilityChange();
         final DisplayContent displayContent = mWin.getDisplayContent();
-        if (mAttrType == LayoutParams.TYPE_STATUS_BAR && mWin.isVisibleByPolicy()) {
+        if ((mAttrType == LayoutParams.TYPE_STATUS_BAR
+                || mAttrType == LayoutParams.TYPE_NOTIFICATION_SHADE) && mWin.isVisibleByPolicy()) {
             // Upon completion of a not-visible to visible status bar animation a relayout is
             // required.
             displayContent.setLayoutNeeded();
@@ -1012,7 +1013,7 @@ class WindowStateAnimator {
                         mSurfaceController.deferTransactionUntil(mSurfaceController.mSurfaceControl,
                                 mWin.getFrameNumber());
                     } else {
-                        final ActivityStack stack = mWin.getStack();
+                        final ActivityStack stack = mWin.getRootTask();
                         mTmpPos.x = 0;
                         mTmpPos.y = 0;
                         if (stack != null) {
@@ -1398,7 +1399,7 @@ class WindowStateAnimator {
             mWin.getDisplayContent().adjustForImeIfNeeded();
         }
 
-        return mWin.isAnimating(TRANSITION | PARENTS);
+        return mWin.isAnimating(PARENTS);
     }
 
     void dumpDebug(ProtoOutputStream proto, long fieldId) {

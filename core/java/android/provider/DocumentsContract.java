@@ -16,14 +16,17 @@
 
 package android.provider;
 
+import static android.annotation.SystemApi.Client.MODULE_APPS;
+
 import static com.android.internal.util.Preconditions.checkCollectionElementsNotNull;
 import static com.android.internal.util.Preconditions.checkCollectionNotEmpty;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ContentInterface;
+import android.content.ContentProvider;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
@@ -47,6 +50,7 @@ import android.os.ParcelFileDescriptor.OnCloseListener;
 import android.os.Parcelable;
 import android.os.ParcelableException;
 import android.os.RemoteException;
+import android.os.UserHandle;
 import android.util.Log;
 
 import com.android.internal.util.Preconditions;
@@ -363,7 +367,7 @@ public final class DocumentsContract {
          * <p>
          * Type: INTEGER (int)
          *
-         * @see #FLAG_DIR_BLOCKS_TREE
+         * @see #FLAG_DIR_BLOCKS_OPEN_DOCUMENT_TREE
          * @see #FLAG_DIR_PREFERS_GRID
          * @see #FLAG_DIR_PREFERS_LAST_MODIFIED
          * @see #FLAG_DIR_SUPPORTS_CREATE
@@ -553,7 +557,9 @@ public final class DocumentsContract {
         /**
          * Flag indicating that a document is a directory that wants to block itself
          * from being selected when the user launches an {@link Intent#ACTION_OPEN_DOCUMENT_TREE}
-         * intent. Only valid when {@link #COLUMN_MIME_TYPE} is {@link #MIME_TYPE_DIR}.
+         * intent. Individual files can still be selected when launched via other intents
+         * like {@link Intent#ACTION_OPEN_DOCUMENT} and {@link Intent#ACTION_GET_CONTENT}.
+         * Only valid when {@link #COLUMN_MIME_TYPE} is {@link #MIME_TYPE_DIR}.
          * <p>
          * Note that this flag <em>only</em> applies to the single directory to which it is
          * applied. It does <em>not</em> block the user from selecting either a parent or
@@ -565,7 +571,7 @@ public final class DocumentsContract {
          * @see Intent#ACTION_OPEN_DOCUMENT_TREE
          * @see #COLUMN_FLAGS
          */
-        public static final int FLAG_DIR_BLOCKS_TREE = 1 << 15;
+        public static final int FLAG_DIR_BLOCKS_OPEN_DOCUMENT_TREE = 1 << 15;
     }
 
     /**
@@ -941,6 +947,20 @@ public final class DocumentsContract {
      */
     public static Uri buildDocumentUri(String authority, String documentId) {
         return getBaseDocumentUriBuilder(authority).appendPath(documentId).build();
+    }
+
+    /**
+     * Builds URI as described in {@link #buildDocumentUri(String, String)}, but such that it will
+     * be associated with the given user.
+     *
+     * @hide
+     */
+    @SystemApi(client = MODULE_APPS)
+    @NonNull
+    public static Uri buildDocumentUriAsUser(
+            @NonNull String authority, @NonNull String documentId, @NonNull UserHandle user) {
+        return ContentProvider.maybeAddUserId(
+                buildDocumentUri(authority, documentId), user.getIdentifier());
     }
 
     /** {@hide} */

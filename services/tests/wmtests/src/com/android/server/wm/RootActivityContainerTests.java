@@ -131,7 +131,7 @@ public class RootActivityContainerTests extends ActivityTestsBase {
                 0f /*aspectRatio*/, "initialMove");
 
         final DisplayContent display = mFullscreenStack.getDisplay();
-        ActivityStack pinnedStack = display.getPinnedStack();
+        ActivityStack pinnedStack = display.getRootPinnedTask();
         // Ensure a task has moved over.
         ensureStackPlacement(pinnedStack, firstActivity);
         ensureStackPlacement(mFullscreenStack, secondActivity);
@@ -141,7 +141,7 @@ public class RootActivityContainerTests extends ActivityTestsBase {
                 0f /*aspectRatio*/, "secondMove");
 
         // Need to get stacks again as a new instance might have been created.
-        pinnedStack = display.getPinnedStack();
+        pinnedStack = display.getRootPinnedTask();
         mFullscreenStack = display.getStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);
         // Ensure stacks have swapped tasks.
         ensureStackPlacement(pinnedStack, secondActivity);
@@ -253,12 +253,12 @@ public class RootActivityContainerTests extends ActivityTestsBase {
 
         // Under split screen primary we should be focusable when not minimized
         mRootWindowContainer.setDockedStackMinimized(false);
-        assertTrue(stack.isFocusable());
+        assertTrue(stack.isTopActivityFocusable());
         assertTrue(activity.isFocusable());
 
         // Under split screen primary we should not be focusable when minimized
         mRootWindowContainer.setDockedStackMinimized(true);
-        assertFalse(stack.isFocusable());
+        assertFalse(stack.isTopActivityFocusable());
         assertFalse(activity.isFocusable());
 
         final ActivityStack pinnedStack = mRootWindowContainer.getDefaultDisplay().createStack(
@@ -267,19 +267,19 @@ public class RootActivityContainerTests extends ActivityTestsBase {
                 .setStack(pinnedStack).build();
 
         // We should not be focusable when in pinned mode
-        assertFalse(pinnedStack.isFocusable());
+        assertFalse(pinnedStack.isTopActivityFocusable());
         assertFalse(pinnedActivity.isFocusable());
 
         // Add flag forcing focusability.
         pinnedActivity.info.flags |= FLAG_ALWAYS_FOCUSABLE;
 
         // We should not be focusable when in pinned mode
-        assertTrue(pinnedStack.isFocusable());
+        assertTrue(pinnedStack.isTopActivityFocusable());
         assertTrue(pinnedActivity.isFocusable());
 
         // Without the overridding activity, stack should not be focusable.
         pinnedStack.removeChild(pinnedActivity.getTask(), "testFocusability");
-        assertFalse(pinnedStack.isFocusable());
+        assertFalse(pinnedStack.isTopActivityFocusable());
     }
 
     /**
@@ -417,7 +417,7 @@ public class RootActivityContainerTests extends ActivityTestsBase {
     @Test
     public void testResumeFocusedStacksStartsHomeActivity_NoActivities() {
         mFullscreenStack.removeIfPossible();
-        mService.mRootWindowContainer.getDisplayContent(DEFAULT_DISPLAY).getHomeStack()
+        mService.mRootWindowContainer.getDisplayContent(DEFAULT_DISPLAY).getRootHomeTask()
                 .removeIfPossible();
         mService.mRootWindowContainer.getDisplayContent(DEFAULT_DISPLAY)
                 .createStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, ON_TOP);
@@ -440,7 +440,7 @@ public class RootActivityContainerTests extends ActivityTestsBase {
     @Test
     public void testResumeFocusedStacksStartsHomeActivity_ActivityOnSecondaryScreen() {
         mFullscreenStack.removeIfPossible();
-        mService.mRootWindowContainer.getDisplayContent(DEFAULT_DISPLAY).getHomeStack()
+        mService.mRootWindowContainer.getDisplayContent(DEFAULT_DISPLAY).getRootHomeTask()
                 .removeIfPossible();
         mService.mRootWindowContainer.getDisplayContent(DEFAULT_DISPLAY)
                 .createStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, ON_TOP);
@@ -638,7 +638,7 @@ public class RootActivityContainerTests extends ActivityTestsBase {
         final ActivityRecord resolverActivity = mRootWindowContainer.topRunningActivity();
 
         assertEquals(info, resolverActivity.info);
-        assertEquals(ACTIVITY_TYPE_STANDARD, resolverActivity.getActivityStack().getActivityType());
+        assertEquals(ACTIVITY_TYPE_STANDARD, resolverActivity.getRootTask().getActivityType());
     }
 
     /**

@@ -39,8 +39,10 @@ import android.media.MediaRouter;
 import android.media.MediaRouterClientState;
 import android.media.RemoteDisplayState;
 import android.media.RemoteDisplayState.RemoteDisplayInfo;
-import android.media.RouteSessionInfo;
+import android.media.RouteDiscoveryPreference;
+import android.media.RoutingSessionInfo;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -442,6 +444,12 @@ public final class MediaRouterService extends IMediaRouterService.Stub
 
     // Binder call
     @Override
+    public RoutingSessionInfo getSystemSessionInfo() {
+        return mService2.getSystemSessionInfo();
+    }
+
+    // Binder call
+    @Override
     public void registerClient2(IMediaRouter2Client client, String packageName) {
         final int uid = Binder.getCallingUid();
         if (!validatePackageName(uid, packageName)) {
@@ -459,8 +467,8 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     // Binder call
     @Override
     public void requestCreateSession(IMediaRouter2Client client, MediaRoute2Info route,
-            String controlCategory, int requestId) {
-        mService2.requestCreateSession(client, route, controlCategory, requestId);
+            int requestId, Bundle sessionHints) {
+        mService2.requestCreateSession(client, route, requestId, sessionHints);
     }
 
     // Binder call
@@ -480,6 +488,12 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     public void transferToRoute(IMediaRouter2Client client, String sessionId,
             MediaRoute2Info route) {
         mService2.transferToRoute(client, sessionId, route);
+    }
+
+    // Binder call
+    @Override
+    public void releaseSession(IMediaRouter2Client client, String sessionId) {
+        mService2.releaseSession(client, sessionId);
     }
 
     // Binder call
@@ -513,8 +527,8 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     }
     // Binder call
     @Override
-    public void setControlCategories(IMediaRouter2Client client, List<String> categories) {
-        mService2.setControlCategories(client, categories);
+    public void setDiscoveryRequest2(IMediaRouter2Client client, RouteDiscoveryPreference request) {
+        mService2.setDiscoveryRequest2(client, request);
     }
 
     // Binder call
@@ -545,8 +559,35 @@ public final class MediaRouterService extends IMediaRouterService.Stub
 
     // Binder call
     @Override
-    public List<RouteSessionInfo> getActiveSessions(IMediaRouter2Manager manager) {
+    public List<RoutingSessionInfo> getActiveSessions(IMediaRouter2Manager manager) {
         return mService2.getActiveSessions(manager);
+    }
+
+    // Binder call
+    @Override
+    public void selectClientRoute(IMediaRouter2Manager manager, String sessionId,
+            MediaRoute2Info route) {
+        mService2.selectClientRoute(manager, sessionId, route);
+    }
+
+    // Binder call
+    @Override
+    public void deselectClientRoute(IMediaRouter2Manager manager, String sessionId,
+            MediaRoute2Info route) {
+        mService2.deselectClientRoute(manager, sessionId, route);
+    }
+
+    // Binder call
+    @Override
+    public void transferToClientRoute(IMediaRouter2Manager manager, String sessionId,
+            MediaRoute2Info route) {
+        mService2.transferToClientRoute(manager, sessionId, route);
+    }
+
+    // Binder call
+    @Override
+    public void releaseClientSession(IMediaRouter2Manager manager, String sessionId) {
+        mService2.releaseClientSession(manager, sessionId);
     }
 
     void restoreBluetoothA2dp() {
@@ -572,7 +613,8 @@ public final class MediaRouterService extends IMediaRouterService.Stub
     void restoreRoute(int uid) {
         ClientRecord clientRecord = null;
         synchronized (mLock) {
-            UserRecord userRecord = mUserRecords.get(UserHandle.getUserId(uid));
+            UserRecord userRecord = mUserRecords.get(
+                    UserHandle.getUserHandleForUid(uid).getIdentifier());
             if (userRecord != null && userRecord.mClientRecords != null) {
                 for (ClientRecord cr : userRecord.mClientRecords) {
                     if (validatePackageName(uid, cr.mPackageName)) {

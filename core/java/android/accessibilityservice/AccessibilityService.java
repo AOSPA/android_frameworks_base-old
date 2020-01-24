@@ -17,6 +17,7 @@
 package android.accessibilityservice;
 
 import android.accessibilityservice.GestureDescription.MotionEventGenerator;
+import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -26,12 +27,15 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ParceledListSlice;
+import android.graphics.Bitmap;
 import android.graphics.Region;
+import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
+import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.util.ArrayMap;
 import android.util.Log;
@@ -44,14 +48,19 @@ import android.view.WindowManagerImpl;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityInteractionClient;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.view.accessibility.AccessibilityWindowInfo;
 
 import com.android.internal.os.HandlerCaller;
 import com.android.internal.os.SomeArgs;
+import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
 /**
  * Accessibility services should only be used to assist users with disabilities in using
@@ -385,7 +394,8 @@ public abstract class AccessibilityService extends Service {
     private static final String LOG_TAG = "AccessibilityService";
 
     /**
-     * Interface used by IAccessibilityServiceWrapper to call the service from its main thread.
+     * Interface used by IAccessibilityServiceClientWrapper to call the service from its main
+     * thread.
      * @hide
      */
     public interface Callbacks {
@@ -406,6 +416,8 @@ public abstract class AccessibilityService extends Service {
         /** Accessbility button clicked callbacks for different displays */
         void onAccessibilityButtonClicked(int displayId);
         void onAccessibilityButtonAvailabilityChanged(boolean available);
+        /** This is called when the system action list is changed. */
+        void onSystemActionsChanged();
     }
 
     /**
@@ -482,6 +494,9 @@ public abstract class AccessibilityService extends Service {
     private final Object mLock = new Object();
 
     private FingerprintGestureController mFingerprintGestureController;
+
+    /** @hide */
+    public static final String KEY_ACCESSIBILITY_SCREENSHOT = "screenshot";
 
     /**
      * Callback for {@link android.view.accessibility.AccessibilityEvent}s.
@@ -1547,6 +1562,34 @@ public abstract class AccessibilityService extends Service {
             void onShowModeChanged(@NonNull SoftKeyboardController controller,
                     @SoftKeyboardShowMode int showMode);
         }
+
+        /**
+         * Switches the current IME for the user for whom the service is enabled. The change will
+         * persist until the current IME is explicitly changed again, and may persist beyond the
+         * life cycle of the requesting service.
+         *
+         * @param imeId The ID of the input method to make current. This IME must be installed and
+         *              enabled.
+         * @return {@code true} if the current input method was successfully switched to the input
+         *         method by {@code imeId},
+         *         {@code false} if the input method specified is not installed, not enabled, or
+         *         otherwise not available to become the current IME
+         *
+         * @see android.view.inputmethod.InputMethodInfo#getId()
+         */
+        public boolean switchToInputMethod(@NonNull String imeId) {
+            final IAccessibilityServiceConnection connection =
+                    AccessibilityInteractionClient.getInstance().getConnection(
+                            mService.mConnectionId);
+            if (connection != null) {
+                try {
+                    return connection.switchToInputMethod(imeId);
+                } catch (RemoteException re) {
+                    throw new RuntimeException(re);
+                }
+            }
+            return false;
+        }
     }
 
     /**
@@ -1603,6 +1646,29 @@ public abstract class AccessibilityService extends Service {
     private void onAccessibilityButtonAvailabilityChanged(boolean available) {
         getAccessibilityButtonController().dispatchAccessibilityButtonAvailabilityChanged(
                 available);
+    }
+
+    /** This is called when the system action list is changed. */
+    public void onSystemActionsChanged() {
+    }
+
+    /**
+     * Returns a list of system actions available in the system right now.
+     *
+     * @return A list of available system actions.
+     */
+    public final @NonNull List<AccessibilityAction> getSystemActions() {
+        IAccessibilityServiceConnection connection =
+                AccessibilityInteractionClient.getInstance().getConnection(mConnectionId);
+        if (connection != null) {
+            try {
+                return connection.getSystemActions();
+            } catch (RemoteException re) {
+                Log.w(LOG_TAG, "Error while calling getSystemActions", re);
+                re.rethrowFromSystemServer();
+            }
+        }
+        return Collections.emptyList();
     }
 
     /**
@@ -1733,6 +1799,51 @@ public abstract class AccessibilityService extends Service {
     }
 
     /**
+     * Takes a screenshot of the specified display and returns it by {@link Bitmap.Config#HARDWARE}
+     * format.
+     * <p>
+     * <strong>Note:</strong> In order to take screenshot your service has
+     * to declare the capability to take screenshot by setting the
+     * {@link android.R.styleable#AccessibilityService_canTakeScreenshot}
+     * property in its meta-data. For details refer to {@link #SERVICE_META_DATA}.
+     * Besides, This API is only supported for default display now
+     * {@link Display#DEFAULT_DISPLAY}.
+     * </p>
+     *
+     * @param displayId The logic display id, must be {@link Display#DEFAULT_DISPLAY} for
+     *                  default display.
+     * @param executor Executor on which to run the callback.
+     * @param callback The callback invoked when the taking screenshot is done.
+     *
+     * @return {@code true} if the taking screenshot accepted, {@code false} if not.
+     */
+    public boolean takeScreenshot(int displayId, @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<Bitmap> callback) {
+        Preconditions.checkNotNull(executor, "executor cannot be null");
+        Preconditions.checkNotNull(callback, "callback cannot be null");
+        final IAccessibilityServiceConnection connection =
+                AccessibilityInteractionClient.getInstance().getConnection(
+                        mConnectionId);
+        if (connection == null) {
+            return false;
+        }
+        try {
+            connection.takeScreenshotWithCallback(displayId, new RemoteCallback((result) -> {
+                final Bitmap screenshot = result.getParcelable(KEY_ACCESSIBILITY_SCREENSHOT);
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> callback.accept(screenshot));
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+            }));
+        } catch (RemoteException re) {
+            throw new RuntimeException(re);
+        }
+        return true;
+    }
+
+    /**
      * Implement to return the implementation of the internal accessibility
      * service interface.
      */
@@ -1811,6 +1922,11 @@ public abstract class AccessibilityService extends Service {
             public void onAccessibilityButtonAvailabilityChanged(boolean available) {
                 AccessibilityService.this.onAccessibilityButtonAvailabilityChanged(available);
             }
+
+            @Override
+            public void onSystemActionsChanged() {
+                AccessibilityService.this.onSystemActionsChanged();
+            }
         });
     }
 
@@ -1835,6 +1951,7 @@ public abstract class AccessibilityService extends Service {
         private static final int DO_ON_FINGERPRINT_GESTURE = 11;
         private static final int DO_ACCESSIBILITY_BUTTON_CLICKED = 12;
         private static final int DO_ACCESSIBILITY_BUTTON_AVAILABILITY_CHANGED = 13;
+        private static final int DO_ON_SYSTEM_ACTIONS_CHANGED = 14;
 
         private final HandlerCaller mCaller;
 
@@ -1931,6 +2048,11 @@ public abstract class AccessibilityService extends Service {
             mCaller.sendMessage(message);
         }
 
+        /** This is called when the system action list is changed. */
+        public void onSystemActionsChanged() {
+            mCaller.sendMessage(mCaller.obtainMessage(DO_ON_SYSTEM_ACTIONS_CHANGED));
+        }
+
         @Override
         public void executeMessage(Message message) {
             switch (message.what) {
@@ -1952,14 +2074,14 @@ public abstract class AccessibilityService extends Service {
                             /* ignore - best effort */
                         }
                     }
-                } return;
-
+                    return;
+                }
                 case DO_ON_INTERRUPT: {
                     if (mConnectionId != AccessibilityInteractionClient.NO_ID) {
                         mCallback.onInterrupt();
                     }
-                } return;
-
+                    return;
+                }
                 case DO_INIT: {
                     mConnectionId = message.arg1;
                     SomeArgs args = (SomeArgs) message.obj;
@@ -1979,18 +2101,18 @@ public abstract class AccessibilityService extends Service {
                         AccessibilityInteractionClient.getInstance().clearCache();
                         mCallback.init(AccessibilityInteractionClient.NO_ID, null);
                     }
-                } return;
-
+                    return;
+                }
                 case DO_ON_GESTURE: {
                     if (mConnectionId != AccessibilityInteractionClient.NO_ID) {
                         mCallback.onGesture((AccessibilityGestureEvent) message.obj);
                     }
-                } return;
-
+                    return;
+                }
                 case DO_CLEAR_ACCESSIBILITY_CACHE: {
                     AccessibilityInteractionClient.getInstance().clearCache();
-                } return;
-
+                    return;
+                }
                 case DO_ON_KEY_EVENT: {
                     KeyEvent event = (KeyEvent) message.obj;
                     try {
@@ -2013,8 +2135,8 @@ public abstract class AccessibilityService extends Service {
                             /* ignore - best effort */
                         }
                     }
-                } return;
-
+                    return;
+                }
                 case DO_ON_MAGNIFICATION_CHANGED: {
                     if (mConnectionId != AccessibilityInteractionClient.NO_ID) {
                         final SomeArgs args = (SomeArgs) message.obj;
@@ -2027,45 +2149,53 @@ public abstract class AccessibilityService extends Service {
                         mCallback.onMagnificationChanged(displayId, region, scale,
                                 centerX, centerY);
                     }
-                } return;
-
+                    return;
+                }
                 case DO_ON_SOFT_KEYBOARD_SHOW_MODE_CHANGED: {
                     if (mConnectionId != AccessibilityInteractionClient.NO_ID) {
                         final int showMode = (int) message.arg1;
                         mCallback.onSoftKeyboardShowModeChanged(showMode);
                     }
-                } return;
-
+                    return;
+                }
                 case DO_GESTURE_COMPLETE: {
                     if (mConnectionId != AccessibilityInteractionClient.NO_ID) {
                         final boolean successfully = message.arg2 == 1;
                         mCallback.onPerformGestureResult(message.arg1, successfully);
                     }
-                } return;
+                    return;
+                }
                 case DO_ON_FINGERPRINT_ACTIVE_CHANGED: {
                     if (mConnectionId != AccessibilityInteractionClient.NO_ID) {
                         mCallback.onFingerprintCapturingGesturesChanged(message.arg1 == 1);
                     }
-                } return;
+                    return;
+                }
                 case DO_ON_FINGERPRINT_GESTURE: {
                     if (mConnectionId != AccessibilityInteractionClient.NO_ID) {
                         mCallback.onFingerprintGesture(message.arg1);
                     }
-                } return;
-
-                case (DO_ACCESSIBILITY_BUTTON_CLICKED): {
+                    return;
+                }
+                case DO_ACCESSIBILITY_BUTTON_CLICKED: {
                     if (mConnectionId != AccessibilityInteractionClient.NO_ID) {
                         mCallback.onAccessibilityButtonClicked(message.arg1);
                     }
-                } return;
-
-                case (DO_ACCESSIBILITY_BUTTON_AVAILABILITY_CHANGED): {
+                    return;
+                }
+                case DO_ACCESSIBILITY_BUTTON_AVAILABILITY_CHANGED: {
                     if (mConnectionId != AccessibilityInteractionClient.NO_ID) {
                         final boolean available = (message.arg1 != 0);
                         mCallback.onAccessibilityButtonAvailabilityChanged(available);
                     }
-                } return;
-
+                    return;
+                }
+                case DO_ON_SYSTEM_ACTIONS_CHANGED: {
+                    if (mConnectionId != AccessibilityInteractionClient.NO_ID) {
+                        mCallback.onSystemActionsChanged();
+                    }
+                    return;
+                }
                 default :
                     Log.w(LOG_TAG, "Unknown message type " + message.what);
             }

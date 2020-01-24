@@ -24,15 +24,19 @@ import android.net.MacAddress;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.text.TextUtils;
+import android.util.Log;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.Executor;
 
 /**
  * Configuration for a soft access point (a.k.a. Soft AP, SAP, Hotspot).
@@ -41,19 +45,25 @@ import java.util.concurrent.Executor;
  * framework how it should configure a hotspot.
  *
  * System apps can use this to configure a tethered hotspot using
- * {@link WifiManager#startTetheredHotspot(SoftApConfiguration)} and
- * {@link WifiManager#setSoftApConfiguration(SoftApConfiguration)}
+ * {@code WifiManager#startTetheredHotspot(SoftApConfiguration)} and
+ * {@code WifiManager#setSoftApConfiguration(SoftApConfiguration)}
  * or local-only hotspot using
- * {@link WifiManager#startLocalOnlyHotspot(SoftApConfiguration, Executor,
+ * {@code WifiManager#startLocalOnlyHotspot(SoftApConfiguration, Executor,
  * WifiManager.LocalOnlyHotspotCallback)}.
  *
  * Instances of this class are immutable; use {@link SoftApConfiguration.Builder} and its methods to
  * create a new instance.
  *
- * @hide
  */
-@SystemApi
 public final class SoftApConfiguration implements Parcelable {
+
+    private static final String TAG = "SoftApConfiguration";
+
+    @VisibleForTesting
+    static final int PSK_MIN_LEN = 8;
+
+    @VisibleForTesting
+    static final int PSK_MAX_LEN = 63;
 
     /**
      * 2GHz band.
@@ -142,9 +152,10 @@ public final class SoftApConfiguration implements Parcelable {
     private final @Nullable MacAddress mBssid;
 
     /**
-     * Pre-shared key for WPA2-PSK encryption (non-null enables WPA2-PSK).
+     * Pre-shared key for WPA2-PSK or WPA3-SAE-Transition or WPA3-SAE encryption which depends on
+     * the security type.
      */
-    private final @Nullable String mWpa2Passphrase;
+    private final @Nullable String mPassphrase;
 
     /**
      * This is a network that does not broadcast its SSID, so an
@@ -175,29 +186,62 @@ public final class SoftApConfiguration implements Parcelable {
     private final @SecurityType int mSecurityType;
 
     /**
-     * Security types we support.
+     * The flag to indicate client need to authorize by user
+     * when client is connecting to AP.
      */
-    /** @hide */
-    @SystemApi
+    private final boolean mClientControlByUser;
+
+    /**
+     * The list of blocked client that can't associate to the AP.
+     */
+    private final List<MacAddress> mBlockedClientList;
+
+    /**
+     * The list of allowed client that can associate to the AP.
+     */
+    private final List<MacAddress> mAllowedClientList;
+
+    /**
+     * Delay in milliseconds before shutting down soft AP when
+     * there are no connected devices.
+     */
+    private final int mShutdownTimeoutMillis;
+
+    /**
+     * THe definition of security type OPEN.
+     */
     public static final int SECURITY_TYPE_OPEN = 0;
 
-    /** @hide */
-    @SystemApi
+    /**
+     * The definition of security type WPA2-PSK.
+     */
     public static final int SECURITY_TYPE_WPA2_PSK = 1;
 
-    /** @hide */
-    @SystemApi
-    public static final int SECURITY_TYPE_OWE = 2;
+    /**
+     * The definition of security type WPA3-SAE Transition mode.
+     */
+    public static final int SECURITY_TYPE_WPA3_SAE_TRANSITION = 2;
+
+    /**
+     * The definition of security type WPA3-SAE.
+     */
+    public static final int SECURITY_TYPE_WPA3_SAE = 3;
 
     /** @hide */
     @SystemApi
-    public static final int SECURITY_TYPE_SAE = 3;
+    public static final int SECURITY_TYPE_OWE = 4;
+
+    /** @hide */
+    @SystemApi
+    public static final int SECURITY_TYPE_SAE = 5;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef(prefix = { "SECURITY_TYPE" }, value = {
+    @IntDef(prefix = { "SECURITY_TYPE_" }, value = {
         SECURITY_TYPE_OPEN,
         SECURITY_TYPE_WPA2_PSK,
+        SECURITY_TYPE_WPA3_SAE_TRANSITION,
+        SECURITY_TYPE_WPA3_SAE,
         SECURITY_TYPE_OWE,
         SECURITY_TYPE_SAE,
     })
@@ -210,16 +254,22 @@ public final class SoftApConfiguration implements Parcelable {
 
     /** Private constructor for Builder and Parcelable implementation. */
     private SoftApConfiguration(@Nullable String ssid, @Nullable MacAddress bssid,
-            @Nullable String wpa2Passphrase, boolean hiddenSsid, @BandType int band, int channel,
-            @SecurityType int securityType, int maxNumberOfClients, @Nullable String oweTransIfaceName) {
+            @Nullable String passphrase, boolean hiddenSsid, @BandType int band, int channel,
+            @SecurityType int securityType, int maxNumberOfClients, int shutdownTimeoutMillis,
+            boolean clientControlByUser, @NonNull List<MacAddress> blockedList,
+            @NonNull List<MacAddress> allowedList, @Nullable String oweTransIfaceName) {
         mSsid = ssid;
         mBssid = bssid;
-        mWpa2Passphrase = wpa2Passphrase;
+        mPassphrase = passphrase;
         mHiddenSsid = hiddenSsid;
         mBand = band;
         mChannel = channel;
         mSecurityType = securityType;
         mMaxNumberOfClients = maxNumberOfClients;
+        mShutdownTimeoutMillis = shutdownTimeoutMillis;
+        mClientControlByUser = clientControlByUser;
+        mBlockedClientList = new ArrayList<>(blockedList);
+        mAllowedClientList = new ArrayList<>(allowedList);
         mOweTransIfaceName = oweTransIfaceName;
     }
 
@@ -234,19 +284,24 @@ public final class SoftApConfiguration implements Parcelable {
         SoftApConfiguration other = (SoftApConfiguration) otherObj;
         return Objects.equals(mSsid, other.mSsid)
                 && Objects.equals(mBssid, other.mBssid)
-                && Objects.equals(mWpa2Passphrase, other.mWpa2Passphrase)
+                && Objects.equals(mPassphrase, other.mPassphrase)
                 && mHiddenSsid == other.mHiddenSsid
                 && mBand == other.mBand
                 && mChannel == other.mChannel
                 && mSecurityType == other.mSecurityType
                 && mMaxNumberOfClients == other.mMaxNumberOfClients
+                && mShutdownTimeoutMillis == other.mShutdownTimeoutMillis
+                && mClientControlByUser == other.mClientControlByUser
+                && Objects.equals(mBlockedClientList, other.mBlockedClientList)
+                && Objects.equals(mAllowedClientList, other.mAllowedClientList)
                 && mOweTransIfaceName == other.mOweTransIfaceName;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(mSsid, mBssid, mWpa2Passphrase, mHiddenSsid,
-                mBand, mChannel, mSecurityType, mMaxNumberOfClients, mOweTransIfaceName);
+        return Objects.hash(mSsid, mBssid, mPassphrase, mHiddenSsid,
+                mBand, mChannel, mSecurityType, mMaxNumberOfClients, mShutdownTimeoutMillis,
+                mClientControlByUser, mBlockedClientList, mAllowedClientList, mOweTransIfaceName);
     }
 
     @Override
@@ -254,13 +309,17 @@ public final class SoftApConfiguration implements Parcelable {
         StringBuilder sbuf = new StringBuilder();
         sbuf.append("ssid=").append(mSsid);
         if (mBssid != null) sbuf.append(" \n bssid=").append(mBssid.toString());
-        sbuf.append(" \n Wpa2Passphrase =").append(
-                TextUtils.isEmpty(mWpa2Passphrase) ? "<empty>" : "<non-empty>");
+        sbuf.append(" \n Passphrase =").append(
+                TextUtils.isEmpty(mPassphrase) ? "<empty>" : "<non-empty>");
         sbuf.append(" \n HiddenSsid =").append(mHiddenSsid);
         sbuf.append(" \n Band =").append(mBand);
         sbuf.append(" \n Channel =").append(mChannel);
         sbuf.append(" \n SecurityType=").append(getSecurityType());
         sbuf.append(" \n MaxClient=").append(mMaxNumberOfClients);
+        sbuf.append(" \n ShutdownTimeoutMillis=").append(mShutdownTimeoutMillis);
+        sbuf.append(" \n ClientControlByUser=").append(mClientControlByUser);
+        sbuf.append(" \n BlockedClientList=").append(mBlockedClientList);
+        sbuf.append(" \n AllowedClientList=").append(mAllowedClientList);
         sbuf.append(" \n OWE Transition mode Iface =").append(mOweTransIfaceName);
         return sbuf.toString();
     }
@@ -269,12 +328,16 @@ public final class SoftApConfiguration implements Parcelable {
     public void writeToParcel(@NonNull Parcel dest, int flags) {
         dest.writeString(mSsid);
         dest.writeParcelable(mBssid, flags);
-        dest.writeString(mWpa2Passphrase);
+        dest.writeString(mPassphrase);
         dest.writeBoolean(mHiddenSsid);
         dest.writeInt(mBand);
         dest.writeInt(mChannel);
         dest.writeInt(mSecurityType);
         dest.writeInt(mMaxNumberOfClients);
+        dest.writeInt(mShutdownTimeoutMillis);
+        dest.writeBoolean(mClientControlByUser);
+        dest.writeTypedList(mBlockedClientList);
+        dest.writeTypedList(mAllowedClientList);
         dest.writeString(mOweTransIfaceName);
     }
 
@@ -291,7 +354,9 @@ public final class SoftApConfiguration implements Parcelable {
                     in.readString(),
                     in.readParcelable(MacAddress.class.getClassLoader()),
                     in.readString(), in.readBoolean(), in.readInt(), in.readInt(), in.readInt(),
-                    in.readInt(), in.readString());
+                    in.readInt(), in.readInt(), in.readBoolean(),
+                    in.createTypedArrayList(MacAddress.CREATOR),
+                    in.createTypedArrayList(MacAddress.CREATOR), in.readString());
         }
 
         @Override
@@ -302,7 +367,7 @@ public final class SoftApConfiguration implements Parcelable {
 
     /**
      * Return String set to be the SSID for the AP.
-     * {@link #setSsid(String)}.
+     * {@link Builder#setSsid(String)}.
      */
     @Nullable
     public String getSsid() {
@@ -319,12 +384,12 @@ public final class SoftApConfiguration implements Parcelable {
     }
 
     /**
-     * Returns String set to be passphrase for the WPA2-PSK AP.
-     * {@link Builder#setWpa2Passphrase(String)}.
+     * Returns String set to be passphrase for current AP.
+     * {@link Builder#setPassphrase(String, int)}.
      */
     @Nullable
-    public String getWpa2Passphrase() {
-        return mWpa2Passphrase;
+    public String getPassphrase() {
+        return mPassphrase;
     }
 
     /**
@@ -339,7 +404,10 @@ public final class SoftApConfiguration implements Parcelable {
     /**
      * Returns {@link BandType} set to be the band for the AP.
      * {@link Builder#setBand(@BandType int)}.
+     *
+     * @hide
      */
+    @SystemApi
     public @BandType int getBand() {
         return mBand;
     }
@@ -347,7 +415,10 @@ public final class SoftApConfiguration implements Parcelable {
     /**
      * Returns Integer set to be the channel for the AP.
      * {@link Builder#setChannel(int)}.
+     *
+     * @hide
      */
+    @SystemApi
     public int getChannel() {
         return mChannel;
     }
@@ -355,7 +426,11 @@ public final class SoftApConfiguration implements Parcelable {
     /**
      * Get security type params which depends on which security passphrase to set.
      *
-     * @return One of the security types from {@link SecurityType}.
+     * @return One of:
+     * {@link #SECURITY_TYPE_OPEN},
+     * {@link #SECURITY_TYPE_WPA2_PSK},
+     * {@link #SECURITY_TYPE_WPA3_SAE_TRANSITION},
+     * {@link #SECURITY_TYPE_WPA3_SAE}
      */
     public @SecurityType int getSecurityType() {
         return mSecurityType;
@@ -364,9 +439,113 @@ public final class SoftApConfiguration implements Parcelable {
     /**
      * Returns the maximum number of clients that can associate to the AP.
      * {@link Builder#setMaxNumberOfClients(int)}.
+     *
+     * @hide
      */
+    @SystemApi
     public int getMaxNumberOfClients() {
         return mMaxNumberOfClients;
+    }
+
+    /**
+     * Returns the shutdown timeout in milliseconds.
+     * The Soft AP will shutdown when there are no devices associated to it for
+     * the timeout duration. See {@link Builder#setShutdownTimeoutMillis(int)}.
+     *
+     * @hide
+     */
+    @SystemApi
+    public int getShutdownTimeoutMillis() {
+        return mShutdownTimeoutMillis;
+    }
+
+    /**
+     * Returns a flag indicating whether clients need to be pre-approved by the user.
+     * (true: authorization required) or not (false: not required).
+     * {@link Builder#enableClientControlByUser(Boolean)}.
+     *
+     * @hide
+     */
+    @SystemApi
+    public boolean isClientControlByUserEnabled() {
+        return mClientControlByUser;
+    }
+
+    /**
+     * Returns List of clients which aren't allowed to associate to the AP.
+     *
+     * Clients are configured using {@link Builder#setClientList(List, List)}
+     *
+     * @hide
+     */
+    @NonNull
+    @SystemApi
+    public List<MacAddress> getBlockedClientList() {
+        return mBlockedClientList;
+    }
+
+    /**
+     * List of clients which are allowed to associate to the AP.
+     * Clients are configured using {@link Builder#setClientList(List, List)}
+     *
+     * @hide
+     */
+    @NonNull
+    @SystemApi
+    public List<MacAddress> getAllowedClientList() {
+        return mAllowedClientList;
+    }
+
+    /**
+     * Returns a {@link WifiConfiguration} representation of this {@link SoftApConfiguration}.
+     * Note that SoftApConfiguration may contain configuration which is cannot be represented
+     * by the legacy WifiConfiguration, in such cases a null will be returned.
+     *
+     * <li> SoftAp band in {@link WifiConfiguration.apBand} only supports
+     * 2GHz, 5GHz, 2GHz+5GHz bands, so conversion is limited to these bands. </li>
+     *
+     * <li> SoftAp security type in {@link WifiConfiguration.KeyMgmt} only supports
+     * NONE, WPA2_PSK, so conversion is limited to these security type.</li>
+     * @hide
+     */
+    @Nullable
+    @SystemApi
+    public WifiConfiguration toWifiConfiguration() {
+        WifiConfiguration wifiConfig = new WifiConfiguration();
+        wifiConfig.SSID = mSsid;
+        if (mBssid != null) {
+            wifiConfig.BSSID = mBssid.toString();
+        }
+        wifiConfig.preSharedKey = mPassphrase;
+        wifiConfig.hiddenSSID = mHiddenSsid;
+        wifiConfig.apChannel = mChannel;
+        switch (mSecurityType) {
+            case SECURITY_TYPE_OPEN:
+                wifiConfig.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+                break;
+            case SECURITY_TYPE_WPA2_PSK:
+                wifiConfig.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA2_PSK);
+                break;
+            default:
+                Log.e(TAG, "Convert fail, unsupported security type :" + mSecurityType);
+                return null;
+        }
+
+        switch (mBand) {
+            case BAND_2GHZ:
+                wifiConfig.apBand  = WifiConfiguration.AP_BAND_2GHZ;
+                break;
+            case BAND_5GHZ:
+                wifiConfig.apBand  = WifiConfiguration.AP_BAND_5GHZ;
+                break;
+            case BAND_ANY:
+                wifiConfig.apBand  = WifiConfiguration.AP_BAND_ANY;
+                break;
+            default:
+                Log.e(TAG, "Convert fail, unsupported band setting :" + mBand);
+                return null;
+        }
+        return wifiConfig;
     }
 
     /**
@@ -386,28 +565,24 @@ public final class SoftApConfiguration implements Parcelable {
      *
      * All fields are optional. By default, SSID and BSSID are automatically chosen by the
      * framework, and an open network is created.
+     *
+     * @hide
      */
+    @SystemApi
     public static final class Builder {
         private String mSsid;
         private MacAddress mBssid;
-        private String mWpa2Passphrase;
+        private String mPassphrase;
         private boolean mHiddenSsid;
         private int mBand;
         private int mChannel;
         private int mMaxNumberOfClients;
+        private int mSecurityType;
+        private int mShutdownTimeoutMillis;
+        private boolean mClientControlByUser;
+        private List<MacAddress> mBlockedClientList;
+        private List<MacAddress> mAllowedClientList;
         private String mOweTransIfaceName;
-
-        private int setSecurityType() {
-            int securityType = SECURITY_TYPE_OPEN;
-            if (!TextUtils.isEmpty(mWpa2Passphrase)) { // WPA2-PSK network.
-                securityType = SECURITY_TYPE_WPA2_PSK;
-            }
-            return securityType;
-        }
-
-        private void clearAllPassphrase() {
-            mWpa2Passphrase = null;
-        }
 
         /**
          * Constructs a Builder with default values (see {@link Builder}).
@@ -415,11 +590,16 @@ public final class SoftApConfiguration implements Parcelable {
         public Builder() {
             mSsid = null;
             mBssid = null;
-            mWpa2Passphrase = null;
+            mPassphrase = null;
             mHiddenSsid = false;
             mBand = BAND_2GHZ;
             mChannel = 0;
             mMaxNumberOfClients = 0;
+            mSecurityType = SECURITY_TYPE_OPEN;
+            mShutdownTimeoutMillis = 0;
+            mClientControlByUser = false;
+            mBlockedClientList = new ArrayList<>();
+            mAllowedClientList = new ArrayList<>();
             mOweTransIfaceName = null;
         }
 
@@ -431,11 +611,16 @@ public final class SoftApConfiguration implements Parcelable {
 
             mSsid = other.mSsid;
             mBssid = other.mBssid;
-            mWpa2Passphrase = other.mWpa2Passphrase;
+            mPassphrase = other.mPassphrase;
             mHiddenSsid = other.mHiddenSsid;
             mBand = other.mBand;
             mChannel = other.mChannel;
             mMaxNumberOfClients = other.mMaxNumberOfClients;
+            mSecurityType = other.mSecurityType;
+            mShutdownTimeoutMillis = other.mShutdownTimeoutMillis;
+            mClientControlByUser = other.mClientControlByUser;
+            mBlockedClientList = new ArrayList<>(other.mBlockedClientList);
+            mAllowedClientList = new ArrayList<>(other.mAllowedClientList);
             mOweTransIfaceName = other.mOweTransIfaceName;
         }
 
@@ -446,8 +631,10 @@ public final class SoftApConfiguration implements Parcelable {
          */
         @NonNull
         public SoftApConfiguration build() {
-            return new SoftApConfiguration(mSsid, mBssid, mWpa2Passphrase,
-                mHiddenSsid, mBand, mChannel, setSecurityType(), mMaxNumberOfClients, mOweTransIfaceName);
+            return new SoftApConfiguration(mSsid, mBssid, mPassphrase,
+                    mHiddenSsid, mBand, mChannel, mSecurityType, mMaxNumberOfClients,
+                    mShutdownTimeoutMillis, mClientControlByUser, mBlockedClientList,
+                    mAllowedClientList, mOweTransIfaceName);
         }
 
         /**
@@ -495,26 +682,43 @@ public final class SoftApConfiguration implements Parcelable {
         }
 
         /**
-         * Specifies that this AP should use WPA2-PSK with the given ASCII WPA2 passphrase.
-         * When set to null, an open network is created.
-         * <p>
+         * Specifies that this AP should use specific security type with the given ASCII passphrase.
          *
-         * @param passphrase The passphrase to use, or null to unset a previously-set WPA2-PSK
-         *                   configuration.
+         * @param securityType one of the security types from {@link @SecurityType}.
+         * @param passphrase The passphrase to use for sepcific {@link @SecurityType} configuration
+         * or null with {@link @SecurityType#SECURITY_TYPE_OPEN}.
+         *
          * @return Builder for chaining.
-         * @throws IllegalArgumentException when the passphrase is the empty string
+         * @throws IllegalArgumentException when the passphrase length is invalid and
+         *         {@code securityType} is not {@link @SecurityType#SECURITY_TYPE_OPEN}
+         *         or non-null passphrase and {@code securityType} is
+         *         {@link @SecurityType#SECURITY_TYPE_OPEN}.
          */
         @NonNull
-        public Builder setWpa2Passphrase(@Nullable String passphrase) {
-            if (passphrase != null) {
+        public Builder setPassphrase(@Nullable String passphrase, @SecurityType int securityType) {
+            if (securityType == SECURITY_TYPE_OPEN) {
+                if (passphrase != null) {
+                    throw new IllegalArgumentException(
+                            "passphrase should be null when security type is open");
+                }
+            } else {
+                Preconditions.checkStringNotEmpty(passphrase);
                 final CharsetEncoder asciiEncoder = StandardCharsets.US_ASCII.newEncoder();
                 if (!asciiEncoder.canEncode(passphrase)) {
                     throw new IllegalArgumentException("passphrase not ASCII encodable");
                 }
-                Preconditions.checkStringNotEmpty(passphrase);
+                if (securityType == SECURITY_TYPE_WPA2_PSK
+                        || securityType == SECURITY_TYPE_WPA3_SAE_TRANSITION) {
+                    if (passphrase.length() < PSK_MIN_LEN || passphrase.length() > PSK_MAX_LEN) {
+                        throw new IllegalArgumentException(
+                                "Password size must be at least " + PSK_MIN_LEN
+                                + " and no more than " + PSK_MAX_LEN
+                                + " for WPA2_PSK and WPA3_SAE_TRANSITION Mode");
+                    }
+                }
             }
-            clearAllPassphrase();
-            mWpa2Passphrase = passphrase;
+            mSecurityType = securityType;
+            mPassphrase = passphrase;
             return this;
         }
 
@@ -620,6 +824,108 @@ public final class SoftApConfiguration implements Parcelable {
                 throw new IllegalArgumentException("maxNumberOfClients should be not negative");
             }
             mMaxNumberOfClients = maxNumberOfClients;
+            return this;
+        }
+
+        /**
+         * Specifies the shutdown timeout in milliseconds.
+         * The Soft AP will shut down when there are no devices connected to it for
+         * the timeout duration.
+         *
+         * Specify a value of 0 to have the framework automatically use default timeout
+         * setting which defined in {@link R.integer.config_wifi_framework_soft_ap_timeout_delay}
+         *
+         * <p>
+         * <li>If not set, defaults to 0</li>
+         * <li>The shut down timout will apply when
+         * {@link Settings.Global.SOFT_AP_TIMEOUT_ENABLED} is true</li>
+         *
+         * @param timeoutMillis milliseconds of the timeout delay.
+         * @return Builder for chaining.
+         */
+        @NonNull
+        public Builder setShutdownTimeoutMillis(int timeoutMillis) {
+            if (timeoutMillis < 0) {
+                throw new IllegalArgumentException("Invalid timeout value");
+            }
+            mShutdownTimeoutMillis = timeoutMillis;
+            return this;
+        }
+
+        /**
+         * Configure the Soft AP to require manual user control of client association.
+         * If disabled (the default) then any client can associate to this Soft AP using the
+         * correct credentials until the Soft AP capacity is reached (capacity is hardware, carrier,
+         * or user limited - using {@link #setMaxNumberOfClients(int)}).
+         *
+         * If manual user control is enabled then clients will be accepted, rejected, or require
+         * a user approval based on the configuration provided by
+         * {@link #setClientList(List, List)}.
+         *
+         * <p>
+         * This method requires hardware support. Hardware support can be determined using
+         * {@link WifiManager.SoftApCallback#onCapabilityChanged(SoftApCapability)} and
+         * {@link SoftApCapability#isFeatureSupported(int)}
+         * with {@link SoftApCapability.SOFTAP_FEATURE_CLIENT_FORCE_DISCONNECT}
+         *
+         * <p>
+         * If the method is called on a device without hardware support then starting the soft AP
+         * using {@link WifiManager#startTetheredHotspot(SoftApConfiguration)} will fail with
+         * {@link WifiManager#SAP_START_FAILURE_UNSUPPORTED_CONFIGURATION}.
+         *
+         * <p>
+         * <li>If not set, defaults to false (i.e The authoriztion is not required).</li>
+         *
+         * @param enabled true for enabling the control by user, false otherwise.
+         * @return Builder for chaining.
+         */
+        @NonNull
+        public Builder enableClientControlByUser(boolean enabled) {
+            mClientControlByUser = enabled;
+            return this;
+        }
+
+
+        /**
+         * This method together with {@link enableClientControlByUser(boolean)} control client
+         * connections to the AP. If {@link enableClientControlByUser(false)} is configured than
+         * this API has no effect and clients are allowed to associate to the AP (within limit of
+         * max number of clients).
+         *
+         * If {@link enableClientControlByUser(true)} is configured then this API configures
+         * 2 lists:
+         * <ul>
+         * <li>List of clients which are blocked. These are rejected.</li>
+         * <li>List of clients which are explicitly allowed. These are auto-accepted.</li>
+         * </ul>
+         *
+         * <p>
+         * All other clients which attempt to associate, whose MAC addresses are on neither list,
+         * are:
+         * <ul>
+         * <li>Rejected</li>
+         * <li>A callback {@link WifiManager.SoftApCallback#onBlockedClientConnecting(WifiClient)}
+         * is issued (which allows the user to add them to the allowed client list if desired).<li>
+         * </ul>
+         *
+         * @param blockedClientList list of clients which are not allowed to associate to the AP.
+         * @param allowedClientList list of clients which are allowed to associate to the AP
+         *                          without user pre-approval.
+         * @return Builder for chaining.
+         */
+        @NonNull
+        public Builder setClientList(@NonNull List<MacAddress> blockedClientList,
+                @NonNull List<MacAddress> allowedClientList) {
+            mBlockedClientList = new ArrayList<>(blockedClientList);
+            mAllowedClientList = new ArrayList<>(allowedClientList);
+            Iterator<MacAddress> iterator = mAllowedClientList.iterator();
+            while (iterator.hasNext()) {
+                MacAddress client = iterator.next();
+                int index = mBlockedClientList.indexOf(client);
+                if (index != -1) {
+                    throw new IllegalArgumentException("A MacAddress exist in both list");
+                }
+            }
             return this;
         }
 

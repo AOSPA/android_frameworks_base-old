@@ -15,6 +15,9 @@
  */
 package com.android.systemui.statusbar.policy;
 
+import static android.telephony.AccessNetworkConstants.TRANSPORT_TYPE_WWAN;
+import static android.telephony.NetworkRegistrationInfo.DOMAIN_PS;
+
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -26,6 +29,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.provider.Settings.Global;
+import android.telephony.Annotation;
+import android.telephony.CdmaEriInformation;
 import android.telephony.CellSignalStrength;
 import android.telephony.CellSignalStrengthCdma;
 import android.telephony.CellSignalStrengthNr;
@@ -41,14 +46,12 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
-import android.util.SparseArray;
 
 import com.android.ims.ImsException;
 import com.android.ims.ImsManager;
 import com.android.ims.FeatureConnector;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.TelephonyIntents;
-import com.android.internal.telephony.cdma.EriInfo;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.PhoneConstants.DataState;
 import com.android.settingslib.Utils;
@@ -65,7 +68,9 @@ import com.android.systemui.statusbar.policy.NetworkControllerImpl.SubscriptionD
 
 import java.io.PrintWriter;
 import java.util.BitSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.regex.Matcher;
@@ -89,12 +94,14 @@ public class MobileSignalController extends SignalController<
     final SubscriptionInfo mSubscriptionInfo;
 
     // @VisibleForDemoMode
-    final SparseArray<MobileIconGroup> mNetworkToIconLookup;
+    final Map<String, MobileIconGroup> mNetworkToIconLookup;
 
     // Since some pieces of the phone state are interdependent we store it locally,
     // this could potentially become part of MobileState for simplification/complication
     // of code.
     private int mDataNetType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
+    private boolean mCA = false;
+    private boolean mCAPlus = false;
     private int mDataState = TelephonyManager.DATA_DISCONNECTED;
     private DataState mMMSDataState = DataState.DISCONNECTED;
     private ServiceState mServiceState;
@@ -106,9 +113,6 @@ public class MobileSignalController extends SignalController<
     boolean mInflateSignalStrengths = false;
     @VisibleForTesting
     boolean mIsShowingIconGracefully = false;
-    // Some specific carriers have 5GE network which is special LTE CA network.
-    private static final int NETWORK_TYPE_LTE_CA_5GE =
-            TelephonyManager.getAllNetworkTypes().length + 1;
 
     private int mCallState = TelephonyManager.CALL_STATE_IDLE;
 
@@ -133,7 +137,7 @@ public class MobileSignalController extends SignalController<
         super("MobileSignalController(" + info.getSubscriptionId() + ")", context,
                 NetworkCapabilities.TRANSPORT_CELLULAR, callbackHandler,
                 networkController);
-        mNetworkToIconLookup = new SparseArray<>();
+        mNetworkToIconLookup = new HashMap<>();
         mConfig = config;
         mPhone = phone;
         mDefaults = defaults;
@@ -276,30 +280,40 @@ public class MobileSignalController extends SignalController<
     private void mapIconSets() {
         mNetworkToIconLookup.clear();
 
-        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EVDO_0, TelephonyIcons.THREE_G);
-        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EVDO_A, TelephonyIcons.THREE_G);
-        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EVDO_B, TelephonyIcons.THREE_G);
-        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EHRPD, TelephonyIcons.THREE_G);
-        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_UMTS, TelephonyIcons.THREE_G);
-        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_TD_SCDMA, TelephonyIcons.THREE_G);
-        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_NR, TelephonyIcons.FIVE_G_SA);
+        mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_EVDO_0),
+                TelephonyIcons.THREE_G);
+        mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_EVDO_A),
+                TelephonyIcons.THREE_G);
+        mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_EVDO_B),
+                TelephonyIcons.THREE_G);
+        mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_EHRPD),
+                TelephonyIcons.THREE_G);
+        mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_UMTS),
+                TelephonyIcons.THREE_G);
+        mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_TD_SCDMA),
+                TelephonyIcons.THREE_G);
+        mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_NR),
+                TelephonyIcons.FIVE_G_SA);
 
         if (!mConfig.showAtLeast3G) {
-            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_UNKNOWN,
+            mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_UNKNOWN),
                     TelephonyIcons.UNKNOWN);
-            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EDGE, TelephonyIcons.E);
-            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_CDMA, TelephonyIcons.ONE_X);
-            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_1xRTT, TelephonyIcons.ONE_X);
+            mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_EDGE),
+                    TelephonyIcons.E);
+            mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_CDMA),
+                    TelephonyIcons.ONE_X);
+            mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_1xRTT),
+                    TelephonyIcons.ONE_X);
 
             mDefaultIcons = TelephonyIcons.G;
         } else {
-            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_UNKNOWN,
+            mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_UNKNOWN),
                     TelephonyIcons.THREE_G);
-            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EDGE,
+            mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_EDGE),
                     TelephonyIcons.THREE_G);
-            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_CDMA,
+            mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_CDMA),
                     TelephonyIcons.THREE_G);
-            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_1xRTT,
+            mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_1xRTT),
                     TelephonyIcons.THREE_G);
             mDefaultIcons = TelephonyIcons.THREE_G;
         }
@@ -314,33 +328,59 @@ public class MobileSignalController extends SignalController<
             hPlusGroup = TelephonyIcons.H_PLUS;
         }
 
-        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_HSDPA, hGroup);
-        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_HSUPA, hGroup);
-        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_HSPA, hGroup);
-        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_HSPAP, hPlusGroup);
+        mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_HSDPA), hGroup);
+        mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_HSUPA), hGroup);
+        mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_HSPA), hGroup);
+        mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_HSPAP), hPlusGroup);
 
         if (mConfig.show4gForLte) {
-            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE, TelephonyIcons.FOUR_G);
+            mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_LTE),
+                    TelephonyIcons.FOUR_G);
             if (mConfig.hideLtePlus) {
-                mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE_CA,
+                mNetworkToIconLookup.put(toIconKeyCA(TelephonyManager.NETWORK_TYPE_LTE),
                         TelephonyIcons.FOUR_G);
             } else {
-                mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE_CA,
+                mNetworkToIconLookup.put(toIconKeyCA(TelephonyManager.NETWORK_TYPE_LTE),
                         TelephonyIcons.FOUR_G_PLUS);
             }
         } else {
-            mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE, TelephonyIcons.LTE);
+            mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_LTE),
+                    TelephonyIcons.LTE);
             if (mConfig.hideLtePlus) {
-                mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE_CA,
+                mNetworkToIconLookup.put(toIconKeyCA(TelephonyManager.NETWORK_TYPE_LTE),
                         TelephonyIcons.LTE);
             } else {
-                mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_LTE_CA,
+                mNetworkToIconLookup.put(toIconKeyCA(TelephonyManager.NETWORK_TYPE_LTE),
                         TelephonyIcons.LTE_PLUS);
             }
         }
-        mNetworkToIconLookup.put(NETWORK_TYPE_LTE_CA_5GE,
+        mNetworkToIconLookup.put(toIconKeyCAPlus(TelephonyManager.NETWORK_TYPE_LTE),
                 TelephonyIcons.LTE_CA_5G_E);
-        mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_IWLAN, TelephonyIcons.WFC);
+        mNetworkToIconLookup.put(toIconKey(TelephonyManager.NETWORK_TYPE_IWLAN),
+                TelephonyIcons.WFC);
+    }
+
+    private String getIconKey() {
+        if (mCA) {
+            return toIconKeyCA(mDataNetType);
+        } else if (mCAPlus) {
+            return toIconKeyCAPlus(mDataNetType);
+        } else {
+            return toIconKey(mDataNetType);
+        }
+    }
+
+    // Some specific carriers have 5GE network which is special CA network.
+    private String toIconKeyCAPlus(@Annotation.NetworkType int networkType) {
+        return toIconKeyCA(networkType) + "_Plus";
+    }
+
+    private String toIconKeyCA(@Annotation.NetworkType int networkType) {
+        return toIconKey(networkType) + "_CA";
+    }
+
+    private String toIconKey(@Annotation.NetworkType int networkType) {
+        return Integer.toString(networkType);
     }
 
     private void updateInflateSignalStrength() {
@@ -531,10 +571,10 @@ public class MobileSignalController extends SignalController<
             return false;
         }
         if (isCdma() && mServiceState != null) {
-            final int iconMode = mServiceState.getCdmaEriIconMode();
-            return mServiceState.getCdmaEriIconIndex() != EriInfo.ROAMING_INDICATOR_OFF
-                    && (iconMode == EriInfo.ROAMING_ICON_MODE_NORMAL
-                    || iconMode == EriInfo.ROAMING_ICON_MODE_FLASH);
+            final int iconMode = mPhone.getCdmaEriInformation().getEriIconMode();
+            return mPhone.getCdmaEriInformation().getEriIconIndex() != CdmaEriInformation.ERI_OFF
+                    && (iconMode == CdmaEriInformation.ERI_ICON_MODE_NORMAL
+                    || iconMode == CdmaEriInformation.ERI_ICON_MODE_FLASH);
         } else {
             return mServiceState != null && mServiceState.getRoaming();
         }
@@ -553,7 +593,7 @@ public class MobileSignalController extends SignalController<
                     intent.getBooleanExtra(TelephonyIntents.EXTRA_SHOW_PLMN, false),
                     intent.getStringExtra(TelephonyIntents.EXTRA_PLMN));
             notifyListenersIfNecessary();
-        } else if (action.equals(TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED)) {
+        } else if (action.equals(TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED)) {
             updateDataSim();
             notifyListenersIfNecessary();
         }else if (action.equals(TelephonyIntents.ACTION_ANY_DATA_CONNECTION_STATE_CHANGED)) {
@@ -706,10 +746,11 @@ public class MobileSignalController extends SignalController<
             nr5GIconGroup = adjustNr5GIconGroupByDisplayGraceTime(nr5GIconGroup);
         }
 
+        String iconKey = getIconKey();
         if (nr5GIconGroup != null) {
             mCurrentState.iconGroup = nr5GIconGroup;
-        } else if (mNetworkToIconLookup.indexOfKey(mDataNetType) >= 0) {
-            mCurrentState.iconGroup = mNetworkToIconLookup.get(mDataNetType);
+        } else if (mNetworkToIconLookup.get(iconKey) != null) {
+            mCurrentState.iconGroup = mNetworkToIconLookup.get(iconKey);
         } else {
             mCurrentState.iconGroup = mDefaultIcons;
         }
@@ -786,11 +827,8 @@ public class MobileSignalController extends SignalController<
                         iconType = getVoiceNetworkType();
                     }
                 }
-                if (mNetworkToIconLookup.indexOfKey(iconType) >= 0) {
-                    mCurrentState.iconGroup = mNetworkToIconLookup.get(iconType);
-                } else {
-                    mCurrentState.iconGroup = mDefaultIcons;
-                }
+                mCurrentState.iconGroup = mNetworkToIconLookup.getOrDefault(toIconKey(iconType),
+                        mDefaultIcons);
             }
         }
 
@@ -891,7 +929,7 @@ public class MobileSignalController extends SignalController<
     }
 
     boolean isDataDisabled() {
-        return !mPhone.isDataCapable();
+        return !mPhone.isDataConnectionEnabled();
     }
 
     private boolean isDataNetworkTypeAvailable() {
@@ -1007,6 +1045,8 @@ public class MobileSignalController extends SignalController<
         pw.println("  mSignalStrength=" + mSignalStrength + ",");
         pw.println("  mDataState=" + mDataState + ",");
         pw.println("  mDataNetType=" + mDataNetType + ",");
+        pw.println("  mCA=" + mCA + ",");
+        pw.println("  mCAPlus=" + mCAPlus + ",");
         pw.println("  mInflateSignalStrengths=" + mInflateSignalStrengths + ",");
         pw.println("  isDataDisabled=" + isDataDisabled() + ",");
         pw.println("  mIsShowingIconGracefully=" + mIsShowingIconGracefully + ",");
@@ -1057,7 +1097,11 @@ public class MobileSignalController extends SignalController<
             }
             mServiceState = state;
             if (mServiceState != null) {
-                updateDataNetType(mServiceState.getDataNetworkType());
+                NetworkRegistrationInfo regInfo = mServiceState.getNetworkRegistrationInfo(
+                        DOMAIN_PS, TRANSPORT_TYPE_WWAN);
+                if (regInfo != null) {
+                    updateDataNetType(regInfo.getAccessNetworkTechnology());
+                }
             }
             updateTelephony();
         }
@@ -1075,11 +1119,13 @@ public class MobileSignalController extends SignalController<
 
         private void updateDataNetType(int networkType) {
             mDataNetType = networkType;
+            mCA = false;
+            mCAPlus = false;
             if (mDataNetType == TelephonyManager.NETWORK_TYPE_LTE) {
                 if (isCarrierSpecificDataIcon()) {
-                    mDataNetType = NETWORK_TYPE_LTE_CA_5GE;
+                    mCAPlus = true;
                 } else if (mServiceState != null && mServiceState.isUsingCarrierAggregation()) {
-                    mDataNetType = TelephonyManager.NETWORK_TYPE_LTE_CA;
+                    mCA = true;
                 }
             }
         }

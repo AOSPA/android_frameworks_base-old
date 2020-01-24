@@ -20,7 +20,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.PackageManager;
 import android.net.IpConfiguration;
 import android.net.IpConfiguration.ProxySettings;
@@ -29,6 +29,7 @@ import android.net.NetworkSpecifier;
 import android.net.ProxyInfo;
 import android.net.StaticIpConfiguration;
 import android.net.Uri;
+import android.net.util.MacAddressUtils;
 import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -38,6 +39,8 @@ import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.SparseArray;
+
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -272,9 +275,12 @@ public class WifiConfiguration implements Parcelable {
         /** LEAP/Network EAP (only used with LEAP) */
         public static final int LEAP = 2;
 
+        /** SAE (Used only for WPA3-Personal) */
+        public static final int SAE = 3;
+
         public static final String varName = "auth_alg";
 
-        public static final String[] strings = { "OPEN", "SHARED", "LEAP" };
+        public static final String[] strings = { "OPEN", "SHARED", "LEAP", "SAE" };
     }
 
     /**
@@ -386,7 +392,6 @@ public class WifiConfiguration implements Parcelable {
      * ECDHE_ECDSA
      * ECDHE_RSA
      * </pre>
-     * @hide
      */
     public static class SuiteBCipher {
         private SuiteBCipher() { }
@@ -416,33 +421,33 @@ public class WifiConfiguration implements Parcelable {
         public static final String[] strings = { "current", "disabled", "enabled" };
     }
 
-    /**
-     * Security types we support.
-     */
-    /** @hide */
+    /** Security type for an open network. */
     public static final int SECURITY_TYPE_OPEN = 0;
-    /** @hide */
+    /** Security type for a WEP network. */
     public static final int SECURITY_TYPE_WEP = 1;
-    /** @hide */
+    /** Security type for a PSK network. */
     public static final int SECURITY_TYPE_PSK = 2;
-    /** @hide */
+    /** Security type for an EAP network. */
     public static final int SECURITY_TYPE_EAP = 3;
-    /** @hide */
+    /** Security type for an SAE network. */
     public static final int SECURITY_TYPE_SAE = 4;
-    /** @hide */
+    /** Security type for an EAP Suite B network. */
     public static final int SECURITY_TYPE_EAP_SUITE_B = 5;
-    /** @hide */
+    /** Security type for an OWE network. */
     public static final int SECURITY_TYPE_OWE = 6;
-    /** @hide */
+    /** Security type for a WAPI PSK network. */
     public static final int SECURITY_TYPE_WAPI_PSK = 7;
-    /** @hide */
+    /** Security type for a WAPI Certificate network. */
     public static final int SECURITY_TYPE_WAPI_CERT = 8;
     /** @hide */
     public static final int SECURITY_TYPE_FILS_SHA256 = 9;
     /** @hide */
     public static final int SECURITY_TYPE_FILS_SHA384 = 10;
 
-    /** @hide */
+    /**
+     * Security types we support.
+     * @hide
+     */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = { "SECURITY_TYPE_" }, value = {
             SECURITY_TYPE_OPEN,
@@ -460,10 +465,19 @@ public class WifiConfiguration implements Parcelable {
     public @interface SecurityType {}
 
     /**
-     * @hide
-     * Set security params (sets the various bitsets exposed in WifiConfiguration).
+     * Set the various security params to correspond to the provided security type.
+     * This is accomplished by setting the various BitSets exposed in WifiConfiguration.
      *
-     * @param securityType One of the security types from {@link SecurityType}.
+     * @param securityType One of the following security types:
+     * {@link #SECURITY_TYPE_OPEN},
+     * {@link #SECURITY_TYPE_WEP},
+     * {@link #SECURITY_TYPE_PSK},
+     * {@link #SECURITY_TYPE_EAP},
+     * {@link #SECURITY_TYPE_SAE},
+     * {@link #SECURITY_TYPE_EAP_SUITE_B},
+     * {@link #SECURITY_TYPE_OWE},
+     * {@link #SECURITY_TYPE_WAPI_PSK}, or
+     * {@link #SECURITY_TYPE_WAPI_CERT}
      */
     public void setSecurityParams(@SecurityType int securityType) {
         // Clear all the bitsets.
@@ -493,10 +507,13 @@ public class WifiConfiguration implements Parcelable {
                 break;
             case SECURITY_TYPE_SAE:
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.SAE);
+                allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
+                allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
                 requirePMF = true;
                 break;
             case SECURITY_TYPE_EAP_SUITE_B:
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.SUITE_B_192);
+                allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.GCMP_256);
                 allowedGroupCiphers.set(WifiConfiguration.GroupCipher.GCMP_256);
                 allowedGroupManagementCiphers.set(WifiConfiguration.GroupMgmtCipher.BIP_GMAC_256);
                 // Note: allowedSuiteBCiphers bitset will be set by the service once the
@@ -505,6 +522,8 @@ public class WifiConfiguration implements Parcelable {
                 break;
             case SECURITY_TYPE_OWE:
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.OWE);
+                allowedPairwiseCiphers.set(WifiConfiguration.PairwiseCipher.CCMP);
+                allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP);
                 requirePMF = true;
                 break;
             case SECURITY_TYPE_WAPI_PSK:
@@ -895,18 +914,6 @@ public class WifiConfiguration implements Parcelable {
 
     /**
      * @hide
-     * For debug: date at which the config was last updated
-     */
-    public String updateTime;
-
-    /**
-     * @hide
-     * For debug: date at which the config was last updated
-     */
-    public String creationTime;
-
-    /**
-     * @hide
      * The WiFi configuration is considered to have no internet access for purpose of autojoining
      * if there has been a report of it having no internet access, and, it never have had
      * internet access in the past.
@@ -989,8 +996,10 @@ public class WifiConfiguration implements Parcelable {
     }
 
     /**
-     * Indicate whther the network is trusted or not. Networks are considered trusted
+     * Indicate whether the network is trusted or not. Networks are considered trusted
      * if the user explicitly allowed this network connection.
+     * This bit can be used by suggestion network, see
+     * {@link WifiNetworkSuggestion.Builder#setUnTrusted(boolean)}
      * @hide
      */
     public boolean trusted;
@@ -1205,7 +1214,7 @@ public class WifiConfiguration implements Parcelable {
      * @return true if mac is good to use
      */
     public static boolean isValidMacAddressForRandomization(MacAddress mac) {
-        return mac != null && !mac.isMulticastAddress() && mac.isLocallyAssigned()
+        return mac != null && !MacAddressUtils.isMulticastAddress(mac) && mac.isLocallyAssigned()
                 && !MacAddress.fromString(WifiInfo.DEFAULT_MAC_ADDRESS).equals(mac);
     }
 
@@ -1272,22 +1281,27 @@ public class WifiConfiguration implements Parcelable {
      */
     @SystemApi
     public static class NetworkSelectionStatus {
-        // Quality Network Selection Status enable, temporary disabled, permanently disabled
+        /** @hide */
+        @Retention(RetentionPolicy.SOURCE)
+        @IntDef(prefix = "NETWORK_SELECTION_",
+                value = {
+                NETWORK_SELECTION_ENABLED,
+                NETWORK_SELECTION_TEMPORARY_DISABLED,
+                NETWORK_SELECTION_PERMANENTLY_DISABLED})
+        public @interface NetworkEnabledStatus {}
         /**
-         * This network is allowed to join Quality Network Selection
-         * @hide
+         * This network will be considered as a potential candidate to connect to during network
+         * selection.
          */
         public static final int NETWORK_SELECTION_ENABLED = 0;
         /**
-         * network was temporary disabled. Can be re-enabled after a time period expire
-         * @hide
+         * This network was temporary disabled. May be re-enabled after a time out.
          */
-        public static final int NETWORK_SELECTION_TEMPORARY_DISABLED  = 1;
+        public static final int NETWORK_SELECTION_TEMPORARY_DISABLED = 1;
         /**
-         * network was permanently disabled.
-         * @hide
+         * This network was permanently disabled.
          */
-        public static final int NETWORK_SELECTION_PERMANENTLY_DISABLED  = 2;
+        public static final int NETWORK_SELECTION_PERMANENTLY_DISABLED = 2;
         /**
          * Maximum Network selection status
          * @hide
@@ -1519,6 +1533,7 @@ public class WifiConfiguration implements Parcelable {
          * Network selection status, should be in one of three status: enable, temporaily disabled
          * or permanently disabled
          */
+        @NetworkEnabledStatus
         private int mStatus;
 
         /**
@@ -1547,12 +1562,6 @@ public class WifiConfiguration implements Parcelable {
          * configKey is : "SSID"-WEP-WPA_PSK-WPA_EAP
          */
         private String mConnectChoice;
-
-        /**
-         * The system timestamp when we records the connectChoice. This value is obtained from
-         * System.currentTimeMillis
-         */
-        private long mConnectChoiceTimestamp = INVALID_NETWORK_SELECTION_DISABLE_TIMESTAMP;
 
         /**
          * Used to cache the temporary candidate during the network selection procedure. It will be
@@ -1657,25 +1666,6 @@ public class WifiConfiguration implements Parcelable {
             mConnectChoice = newConnectChoice;
         }
 
-        /**
-         * get the timeStamp when user select a choice over this configuration
-         * @return returns when current connectChoice is set (time from System.currentTimeMillis)
-         * @hide
-         */
-        public long getConnectChoiceTimestamp() {
-            return mConnectChoiceTimestamp;
-        }
-
-        /**
-         * set the timeStamp when user select a choice over this configuration
-         * @param timeStamp, the timestamp set to connectChoiceTimestamp, expected timestamp should
-         *        be obtained from System.currentTimeMillis
-         * @hide
-         */
-        public void setConnectChoiceTimestamp(long timeStamp) {
-            mConnectChoiceTimestamp = timeStamp;
-        }
-
         /** Get the current Quality network selection status as a String (for debugging). */
         @NonNull
         public String getNetworkStatusString() {
@@ -1696,6 +1686,58 @@ public class WifiConfiguration implements Parcelable {
         public NetworkSelectionStatus() {
             // previously stored configs will not have this parameter, so we default to false.
             mHasEverConnected = false;
+        }
+
+        /**
+         * NetworkSelectionStatus exports an immutable public API.
+         * However, test code has a need to construct a NetworkSelectionStatus in a specific state.
+         * (Note that mocking using Mockito does not work if the object needs to be parceled and
+         * unparceled.)
+         * Export a @SystemApi Builder to allow tests to construct a NetworkSelectionStatus object
+         * in the desired state, without sacrificing NetworkSelectionStatus's immutability.
+         */
+        @VisibleForTesting
+        public static final class Builder {
+            private final NetworkSelectionStatus mNetworkSelectionStatus =
+                    new NetworkSelectionStatus();
+
+            /**
+             * Set the current network selection status.
+             * One of:
+             * {@link #NETWORK_SELECTION_ENABLED},
+             * {@link #NETWORK_SELECTION_TEMPORARY_DISABLED},
+             * {@link #NETWORK_SELECTION_PERMANENTLY_DISABLED}
+             * @see NetworkSelectionStatus#getNetworkSelectionStatus()
+             */
+            @NonNull
+            public Builder setNetworkSelectionStatus(@NetworkEnabledStatus int status) {
+                mNetworkSelectionStatus.setNetworkSelectionStatus(status);
+                return this;
+            }
+
+            /**
+             *
+             * Set the current network's disable reason.
+             * One of the {@link #NETWORK_SELECTION_ENABLE} or DISABLED_* constants.
+             * e.g. {@link #DISABLED_ASSOCIATION_REJECTION}.
+             * @see NetworkSelectionStatus#getNetworkSelectionDisableReason()
+             */
+            @NonNull
+            public Builder setNetworkSelectionDisableReason(
+                    @NetworkSelectionDisableReason int reason) {
+                mNetworkSelectionStatus.setNetworkSelectionDisableReason(reason);
+                return this;
+            }
+
+            /**
+             * Build a NetworkSelectionStatus object.
+             */
+            @NonNull
+            public NetworkSelectionStatus build() {
+                NetworkSelectionStatus status = new NetworkSelectionStatus();
+                status.copy(mNetworkSelectionStatus);
+                return status;
+            }
         }
 
         /**
@@ -1724,10 +1766,13 @@ public class WifiConfiguration implements Parcelable {
         }
 
         /**
-         * get current network network selection status
-         * @return return current network network selection status
-         * @hide
+         * Get the current network network selection status.
+         * One of:
+         * {@link #NETWORK_SELECTION_ENABLED},
+         * {@link #NETWORK_SELECTION_TEMPORARY_DISABLED},
+         * {@link #NETWORK_SELECTION_PERMANENTLY_DISABLED}
          */
+        @NetworkEnabledStatus
         public int getNetworkSelectionStatus() {
             return mStatus;
         }
@@ -1905,7 +1950,6 @@ public class WifiConfiguration implements Parcelable {
             setCandidate(source.getCandidate());
             setCandidateScore(source.getCandidateScore());
             setConnectChoice(source.getConnectChoice());
-            setConnectChoiceTimestamp(source.getConnectChoiceTimestamp());
             setHasEverConnected(source.getHasEverConnected());
         }
 
@@ -1922,7 +1966,6 @@ public class WifiConfiguration implements Parcelable {
             if (getConnectChoice() != null) {
                 dest.writeInt(CONNECT_CHOICE_EXISTS);
                 dest.writeString(getConnectChoice());
-                dest.writeLong(getConnectChoiceTimestamp());
             } else {
                 dest.writeInt(CONNECT_CHOICE_NOT_EXISTS);
             }
@@ -1941,10 +1984,8 @@ public class WifiConfiguration implements Parcelable {
             setNetworkSelectionBSSID(in.readString());
             if (in.readInt() == CONNECT_CHOICE_EXISTS) {
                 setConnectChoice(in.readString());
-                setConnectChoiceTimestamp(in.readLong());
             } else {
                 setConnectChoice(null);
-                setConnectChoiceTimestamp(INVALID_NETWORK_SELECTION_DISABLE_TIMESTAMP);
             }
             setHasEverConnected(in.readInt() != 0);
         }
@@ -2029,10 +2070,11 @@ public class WifiConfiguration implements Parcelable {
     }
 
     /**
-     * Set the network selection status
+     * Set the network selection status.
      * @hide
      */
-    public void setNetworkSelectionStatus(NetworkSelectionStatus status) {
+    @SystemApi
+    public void setNetworkSelectionStatus(@NonNull NetworkSelectionStatus status) {
         mNetworkSelectionStatus = status;
     }
 
@@ -2172,9 +2214,6 @@ public class WifiConfiguration implements Parcelable {
         }
         if (mNetworkSelectionStatus.getConnectChoice() != null) {
             sbuf.append(" connect choice: ").append(mNetworkSelectionStatus.getConnectChoice());
-            sbuf.append(" connect choice set time: ")
-                    .append(logTimeOfDay(
-                            mNetworkSelectionStatus.getConnectChoiceTimestamp()));
         }
         sbuf.append(" hasEverConnected: ")
                 .append(mNetworkSelectionStatus.getHasEverConnected()).append("\n");
@@ -2185,12 +2224,6 @@ public class WifiConfiguration implements Parcelable {
         if (this.numNoInternetAccessReports > 0) {
             sbuf.append(" numNoInternetAccessReports ");
             sbuf.append(this.numNoInternetAccessReports).append("\n");
-        }
-        if (this.updateTime != null) {
-            sbuf.append(" update ").append(this.updateTime).append("\n");
-        }
-        if (this.creationTime != null) {
-            sbuf.append(" creation ").append(this.creationTime).append("\n");
         }
         if (this.validatedInternetAccess) sbuf.append(" validatedInternetAccess");
         if (this.ephemeral) sbuf.append(" ephemeral");
@@ -2521,7 +2554,8 @@ public class WifiConfiguration implements Parcelable {
         } else if (allowedKeyManagement.get(KeyMgmt.WPA_EAP)
                 || allowedKeyManagement.get(KeyMgmt.IEEE8021X)) {
             key = SSID + KeyMgmt.strings[KeyMgmt.WPA_EAP];
-        } else if (wepKeys[0] != null) {
+        } else if (wepTxKeyIndex >= 0 && wepTxKeyIndex < wepKeys.length
+                && wepKeys[wepTxKeyIndex] != null) {
             key = SSID + "WEP";
         } else if (allowedKeyManagement.get(KeyMgmt.OWE)) {
             key = SSID + KeyMgmt.strings[KeyMgmt.OWE];
@@ -2685,9 +2719,8 @@ public class WifiConfiguration implements Parcelable {
         return mPasspointManagementObjectTree;
     }
 
-    /** copy constructor {@hide} */
-    @UnsupportedAppUsage
-    public WifiConfiguration(WifiConfiguration source) {
+    /** Copy constructor */
+    public WifiConfiguration(@NonNull WifiConfiguration source) {
         if (source != null) {
             networkId = source.networkId;
             status = source.status;
@@ -2757,8 +2790,6 @@ public class WifiConfiguration implements Parcelable {
             allowAutojoin = source.allowAutojoin;
             numNoInternetAccessReports = source.numNoInternetAccessReports;
             noInternetAccessExpected = source.noInternetAccessExpected;
-            creationTime = source.creationTime;
-            updateTime = source.updateTime;
             shared = source.shared;
             recentFailure.setAssociationStatus(source.recentFailure.getAssociationStatus());
             mRandomizedMacAddress = source.mRandomizedMacAddress;

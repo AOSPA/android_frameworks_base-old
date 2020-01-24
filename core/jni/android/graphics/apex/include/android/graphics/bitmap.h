@@ -17,8 +17,11 @@
 #define ANDROID_GRAPHICS_BITMAP_H
 
 #include <android/bitmap.h>
+#include <android/data_space.h>
 #include <jni.h>
 #include <sys/cdefs.h>
+
+struct AHardwareBuffer;
 
 __BEGIN_DECLS
 
@@ -49,12 +52,30 @@ void ABitmap_acquireRef(ABitmap* bitmap);
 void ABitmap_releaseRef(ABitmap* bitmap);
 
 AndroidBitmapInfo ABitmap_getInfo(ABitmap* bitmap);
+ADataSpace ABitmap_getDataSpace(ABitmap* bitmap);
 
 void* ABitmap_getPixels(ABitmap* bitmap);
 void ABitmap_notifyPixelsChanged(ABitmap* bitmap);
 
 AndroidBitmapFormat ABitmapConfig_getFormatFromConfig(JNIEnv* env, jobject bitmapConfigObj);
 jobject ABitmapConfig_getConfigFromFormat(JNIEnv* env, AndroidBitmapFormat format);
+
+// NDK access
+int ABitmap_compress(const AndroidBitmapInfo* info, ADataSpace dataSpace, const void* pixels,
+                     AndroidBitmapCompressFormat format, int32_t quality, void* userContext,
+                     AndroidBitmap_compress_write_fn);
+/**
+ *  Retrieve the native object associated with a HARDWARE Bitmap.
+ *
+ *  Client must not modify it while a Bitmap is wrapping it.
+ *
+ *  @param bitmap Handle to an android.graphics.Bitmap.
+ *  @return on success, a pointer to the
+ *         AHardwareBuffer associated with bitmap. This acquires
+ *         a reference on the buffer, and the client must call
+ *         AHardwareBuffer_release when finished with it.
+ */
+AHardwareBuffer* ABitmap_getHardwareBuffer(ABitmap* bitmap);
 
 __END_DECLS
 
@@ -106,8 +127,10 @@ namespace graphics {
         ABitmap* get() const { return mBitmap; }
 
         AndroidBitmapInfo getInfo() const { return ABitmap_getInfo(mBitmap); }
+        ADataSpace getDataSpace() const { return ABitmap_getDataSpace(mBitmap); }
         void* getPixels() const { return ABitmap_getPixels(mBitmap); }
         void notifyPixelsChanged() const { ABitmap_notifyPixelsChanged(mBitmap); }
+        AHardwareBuffer* getHardwareBuffer() const { return ABitmap_getHardwareBuffer(mBitmap); }
 
     private:
         // takes ownership of the provided ABitmap

@@ -2217,6 +2217,16 @@
             Corresponds to <code>LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER</code>.
             -->
             <enum name="never" value="2" />
+            <!-- <p>
+            The window is always allowed to extend into the <code>DisplayCutout</code> areas on the
+            all edges of the screen.
+            <p>
+            The window must make sure that no important content overlaps with the
+            <code>DisplayCutout</code>.
+            <p>
+            Corresponds to <code>LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS</code>.
+            -->
+            <enum name="always" value="3" />
         </attr>
     </declare-styleable>
 
@@ -3752,6 +3762,8 @@
              </p>
          -->
         <attr name="canRequestFingerprintGestures" format="boolean" />
+        <!-- Attribute whether the accessibility service wants to be able to take screenshot. -->
+        <attr name="canTakeScreenshot" format="boolean" />
 
         <!-- Animated image of the accessibility service purpose or behavior, to help users
              understand how the service can help them.-->
@@ -8315,6 +8327,26 @@
         <attr name="errorColor" format="color|reference" />
         <!-- The success color -->
         <attr name="successColor" format="color|reference"/>
+    </declare-styleable>
+
+    <!-- =============================== -->
+    <!-- QuickAccessWallet attributes -->
+    <!-- =============================== -->
+    <eat-comment />
+
+    <!-- Use <code>quickaccesswallet-service</code> as the root tag of the XML resource
+         that describes a {@link android.service.quickaccesswallet.QuickAccessWalletService},
+         which is referenced from its
+         {@link android.service.quickaccesswallet.QuickAccessWalletService#SERVICE_META_DATA}
+         meta-data entry.
+    -->
+    <declare-styleable name="QuickAccessWalletService">
+        <!-- Fully qualified class name of an activity that allows the user to modify
+             the settings for this service. -->
+        <attr name="settingsActivity"/>
+        <!-- Fully qualified class name of an activity that allows the user to view
+             their entire wallet -->
+        <attr name="targetActivity"/>
     </declare-styleable>
 
     <!-- Use <code>recognition-service</code> as the root tag of the XML resource that

@@ -142,12 +142,21 @@ public final class UsageStatsManager {
 
     /**
      * The app has not be used for several days and/or is unlikely to be used for several days.
-     * Apps in this bucket will have the most restrictions, including network restrictions, except
+     * Apps in this bucket will have more restrictions, including network restrictions, except
      * during certain short periods (at a minimum, once a day) when they are allowed to execute
      * jobs, access the network, etc.
      * @see #getAppStandbyBucket()
      */
     public static final int STANDBY_BUCKET_RARE = 40;
+
+    /**
+     * The app has not be used for several days, is unlikely to be used for several days, and has
+     * been misbehaving in some manner.
+     * Apps in this bucket will have the most restrictions, including network restrictions and
+     * additional restrictions on jobs.
+     * @see #getAppStandbyBucket()
+     */
+    public static final int STANDBY_BUCKET_RESTRICTED = 45;
 
     /**
      * The app has never been used.
@@ -163,7 +172,6 @@ public final class UsageStatsManager {
     /**
      * The app spent sufficient time in the old bucket without any substantial event so it reached
      * the timeout threshold to have its bucket lowered.
-     *
      * @hide
      */
     public static final int REASON_MAIN_TIMEOUT =   0x0200;
@@ -173,15 +181,25 @@ public final class UsageStatsManager {
      */
     public static final int REASON_MAIN_USAGE =     0x0300;
     /**
-     * Forced by a core UID.
+     * Forced by the user/developer, either explicitly or implicitly through some action. If user
+     * action was not involved and this is purely due to the system,
+     * {@link #REASON_MAIN_FORCED_BY_SYSTEM} should be used instead.
      * @hide
      */
-    public static final int REASON_MAIN_FORCED =    0x0400;
+    public static final int REASON_MAIN_FORCED_BY_USER = 0x0400;
     /**
-     * Set by a privileged system app.
+     * Set by a privileged system app. This may be overridden by
+     * {@link #REASON_MAIN_FORCED_BY_SYSTEM} or user action.
      * @hide
      */
     public static final int REASON_MAIN_PREDICTED = 0x0500;
+    /**
+     * Forced by the system, independent of user action. If user action is involved,
+     * {@link #REASON_MAIN_FORCED_BY_USER} should be used instead. When this is used, only
+     * {@link #REASON_MAIN_FORCED_BY_SYSTEM} or user action can change the bucket.
+     * @hide
+     */
+    public static final int REASON_MAIN_FORCED_BY_SYSTEM = 0x0600;
 
     /** @hide */
     public static final int REASON_SUB_MASK = 0x00FF;
@@ -269,6 +287,26 @@ public final class UsageStatsManager {
      * @hide
      */
     public static final int REASON_SUB_PREDICTED_RESTORED       = 0x0001;
+    /**
+     * The reason for restricting the app is unknown or undefined.
+     * @hide
+     */
+    public static final int REASON_SUB_RESTRICT_UNDEFINED = 0x0000;
+    /**
+     * The app was unnecessarily using system resources (battery, memory, etc) in the background.
+     * @hide
+     */
+    public static final int REASON_SUB_RESTRICT_BACKGROUND_RESOURCE_USAGE = 0x0001;
+    /**
+     * The app was deemed to be intentionally abusive.
+     * @hide
+     */
+    public static final int REASON_SUB_RESTRICT_ABUSE = 0x0002;
+    /**
+     * The app was displaying buggy behavior.
+     * @hide
+     */
+    public static final int REASON_SUB_RESTRICT_BUGGY = 0x0003;
 
 
     /** @hide */
@@ -278,6 +316,7 @@ public final class UsageStatsManager {
             STANDBY_BUCKET_WORKING_SET,
             STANDBY_BUCKET_FREQUENT,
             STANDBY_BUCKET_RARE,
+            STANDBY_BUCKET_RESTRICTED,
             STANDBY_BUCKET_NEVER,
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -589,7 +628,7 @@ public final class UsageStatsManager {
      * state of the app based on app usage patterns. Standby buckets determine how much an app will
      * be restricted from running background tasks such as jobs and alarms.
      * <p>Restrictions increase progressively from {@link #STANDBY_BUCKET_ACTIVE} to
-     * {@link #STANDBY_BUCKET_RARE}, with {@link #STANDBY_BUCKET_ACTIVE} being the least
+     * {@link #STANDBY_BUCKET_RESTRICTED}, with {@link #STANDBY_BUCKET_ACTIVE} being the least
      * restrictive. The battery level of the device might also affect the restrictions.
      * <p>Apps in buckets &le; {@link #STANDBY_BUCKET_ACTIVE} have no standby restrictions imposed.
      * Apps in buckets &gt; {@link #STANDBY_BUCKET_FREQUENT} may have network access restricted when
@@ -633,7 +672,8 @@ public final class UsageStatsManager {
     /**
      * {@hide}
      * Changes an app's standby bucket to the provided value. The caller can only set the standby
-     * bucket for a different app than itself.
+     * bucket for a different app than itself. The caller will not be able to change an app's
+     * standby bucket if that app is in the {@link #STANDBY_BUCKET_RESTRICTED} bucket.
      * @param packageName the package name of the app to set the bucket for. A SecurityException
      *                    will be thrown if the package name is that of the caller.
      * @param bucket the standby bucket to set it to, which should be one of STANDBY_BUCKET_*.
@@ -679,7 +719,8 @@ public final class UsageStatsManager {
     /**
      * {@hide}
      * Changes the app standby bucket for multiple apps at once. The Map is keyed by the package
-     * name and the value is one of STANDBY_BUCKET_*.
+     * name and the value is one of STANDBY_BUCKET_*. The caller will not be able to change an
+     * app's standby bucket if that app is in the {@link #STANDBY_BUCKET_RESTRICTED} bucket.
      * @param appBuckets a map of package name to bucket value.
      */
     @SystemApi
@@ -1016,7 +1057,24 @@ public final class UsageStatsManager {
             case REASON_MAIN_DEFAULT:
                 sb.append("d");
                 break;
-            case REASON_MAIN_FORCED:
+            case REASON_MAIN_FORCED_BY_SYSTEM:
+                sb.append("s");
+                switch (standbyReason & REASON_SUB_MASK) {
+                    case REASON_SUB_RESTRICT_ABUSE:
+                        sb.append("-ra");
+                        break;
+                    case REASON_SUB_RESTRICT_BACKGROUND_RESOURCE_USAGE:
+                        sb.append("-rbru");
+                        break;
+                    case REASON_SUB_RESTRICT_BUGGY:
+                        sb.append("-rb");
+                        break;
+                    case REASON_SUB_RESTRICT_UNDEFINED:
+                        sb.append("-r");
+                        break;
+                }
+                break;
+            case REASON_MAIN_FORCED_BY_USER:
                 sb.append("f");
                 break;
             case REASON_MAIN_PREDICTED:

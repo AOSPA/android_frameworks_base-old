@@ -54,11 +54,11 @@ import android.net.LocalSocket;
 import android.net.LocalSocketAddress;
 import android.net.Network;
 import android.net.NetworkAgent;
+import android.net.NetworkAgentConfig;
 import android.net.NetworkCapabilities;
-import android.net.NetworkFactory;
 import android.net.NetworkInfo;
 import android.net.NetworkInfo.DetailedState;
-import android.net.NetworkMisc;
+import android.net.NetworkProvider;
 import android.net.RouteInfo;
 import android.net.UidRange;
 import android.net.VpnService;
@@ -850,7 +850,11 @@ public class Vpn {
     }
 
     public int getNetId() {
-        return mNetworkAgent != null ? mNetworkAgent.netId : NETID_UNSET;
+        final NetworkAgent agent = mNetworkAgent;
+        if (null == agent) return NETID_UNSET;
+        final Network network = agent.getNetwork();
+        if (null == network) return NETID_UNSET;
+        return network.netId;
     }
 
     private LinkProperties makeLinkProperties() {
@@ -916,7 +920,7 @@ public class Vpn {
      * has certain changes, in which case this method would just return {@code false}.
      */
     private boolean updateLinkPropertiesInPlaceIfPossible(NetworkAgent agent, VpnConfig oldConfig) {
-        // NetworkMisc cannot be updated without registering a new NetworkAgent.
+        // NetworkAgentConfig cannot be updated without registering a new NetworkAgent.
         if (oldConfig.allowBypass != mConfig.allowBypass) {
             Log.i(TAG, "Handover not possible due to changes to allowBypass");
             return false;
@@ -949,8 +953,8 @@ public class Vpn {
 
         mNetworkInfo.setDetailedState(DetailedState.CONNECTING, null, null);
 
-        NetworkMisc networkMisc = new NetworkMisc();
-        networkMisc.allowBypass = mConfig.allowBypass && !mLockdown;
+        NetworkAgentConfig networkAgentConfig = new NetworkAgentConfig();
+        networkAgentConfig.allowBypass = mConfig.allowBypass && !mLockdown;
 
         mNetworkCapabilities.setEstablishingVpnAppUid(Binder.getCallingUid());
         mNetworkCapabilities.setUids(createUserAndRestrictedProfilesRanges(mUserHandle,
@@ -959,8 +963,8 @@ public class Vpn {
         try {
             mNetworkAgent = new NetworkAgent(mLooper, mContext, NETWORKTYPE /* logtag */,
                     mNetworkInfo, mNetworkCapabilities, lp,
-                    ConnectivityConstants.VPN_DEFAULT_SCORE, networkMisc,
-                    NetworkFactory.SerialNumber.VPN) {
+                    ConnectivityConstants.VPN_DEFAULT_SCORE, networkAgentConfig,
+                    NetworkProvider.ID_VPN) {
                             @Override
                             public void unwanted() {
                                 // We are user controlled, not driven by NetworkRequest.

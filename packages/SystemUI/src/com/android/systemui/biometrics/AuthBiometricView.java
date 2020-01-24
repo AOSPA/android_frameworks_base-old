@@ -162,6 +162,7 @@ public abstract class AuthBiometricView extends LinearLayout {
     private Bundle mBiometricPromptBundle;
     private boolean mRequireConfirmation;
     private int mUserId;
+    private int mEffectiveUserId;
     @AuthDialog.DialogSize int mSize = AuthDialog.SIZE_UNKNOWN;
 
     private TextView mTitleView;
@@ -280,6 +281,10 @@ public abstract class AuthBiometricView extends LinearLayout {
         mUserId = userId;
     }
 
+    public void setEffectiveUserId(int effectiveUserId) {
+        mEffectiveUserId = effectiveUserId;
+    }
+
     public void setRequireConfirmation(boolean requireConfirmation) {
         mRequireConfirmation = requireConfirmation;
     }
@@ -375,16 +380,7 @@ public abstract class AuthBiometricView extends LinearLayout {
                     0 /* animateDurationMs */);
             mSize = newSize;
         } else if (newSize == AuthDialog.SIZE_LARGE) {
-            final boolean isManagedProfile = Utils.isManagedProfile(mContext, mUserId);
-
-            // If it's a managed profile, animate the contents and panel down, since the credential
-            // contents will be shown on the same "layer" as the background. If it's not a managed
-            // profile, animate the contents up and expand the panel to full-screen - the credential
-            // contents will be shown on the same "layer" as the panel.
-            final float translationY = isManagedProfile ?
-                    -getResources().getDimension(
-                            R.dimen.biometric_dialog_animation_translation_offset)
-                    : getResources().getDimension(
+            final float translationY = getResources().getDimension(
                             R.dimen.biometric_dialog_medium_to_large_translation_offset);
             final AuthBiometricView biometricView = this;
 
@@ -415,26 +411,20 @@ public abstract class AuthBiometricView extends LinearLayout {
                 biometricView.setAlpha(opacity);
             });
 
-            if (!isManagedProfile) {
-                mPanelController.setUseFullScreen(true);
-                mPanelController.updateForContentDimensions(
-                        mPanelController.getContainerWidth(),
-                        mPanelController.getContainerHeight(),
-                        mInjector.getMediumToLargeAnimationDurationMs());
-            }
+            mPanelController.setUseFullScreen(true);
+            mPanelController.updateForContentDimensions(
+                    mPanelController.getContainerWidth(),
+                    mPanelController.getContainerHeight(),
+                    mInjector.getMediumToLargeAnimationDurationMs());
 
             // Start the animations together
             AnimatorSet as = new AnimatorSet();
             List<Animator> animators = new ArrayList<>();
             animators.add(translationAnimator);
             animators.add(opacityAnimator);
-            if (isManagedProfile) {
-                animators.add(mPanelController.getTranslationAnimator(translationY));
-                animators.add(mPanelController.getAlphaAnimator(0));
-            }
+
             as.playTogether(animators);
-            as.setDuration(isManagedProfile ? mInjector.getMediumToLargeAnimationDurationMs()
-                    : mInjector.getMediumToLargeAnimationDurationMs() * 2 / 3);
+            as.setDuration(mInjector.getMediumToLargeAnimationDurationMs() * 2 / 3);
             as.start();
         } else {
             Log.e(TAG, "Unknown transition from: " + mSize + " to: " + newSize);
@@ -650,8 +640,9 @@ public abstract class AuthBiometricView extends LinearLayout {
         if (isDeviceCredentialAllowed()) {
 
             final @Utils.CredentialType int credentialType =
-                    Utils.getCredentialType(mContext, mUserId);
-            switch(credentialType) {
+                    Utils.getCredentialType(mContext, mEffectiveUserId);
+
+            switch (credentialType) {
                 case Utils.CREDENTIAL_PIN:
                     negativeText = getResources().getString(R.string.biometric_dialog_use_pin);
                     break;

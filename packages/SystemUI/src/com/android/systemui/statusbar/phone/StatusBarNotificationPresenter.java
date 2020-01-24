@@ -66,7 +66,7 @@ import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
-import com.android.systemui.statusbar.notification.collection.NotificationRowBinderImpl;
+import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl;
 import com.android.systemui.statusbar.notification.row.ActivatableNotificationView;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
@@ -107,7 +107,7 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
     private final NotificationGutsManager mGutsManager =
             Dependency.get(NotificationGutsManager.class);
 
-    private final NotificationPanelView mNotificationPanel;
+    private final NotificationPanelViewController mNotificationPanel;
     private final HeadsUpManagerPhone mHeadsUpManager;
     private final AboveShelfObserver mAboveShelfObserver;
     private final DozeScrimController mDozeScrimController;
@@ -132,9 +132,9 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
     private int mMaxKeyguardNotifications;
 
     public StatusBarNotificationPresenter(Context context,
-            NotificationPanelView panel,
+            NotificationPanelViewController panel,
             HeadsUpManagerPhone headsUp,
-            StatusBarWindowView statusBarWindow,
+            NotificationShadeWindowView statusBarWindow,
             ViewGroup stackScroller,
             DozeScrimController dozeScrimController,
             ScrimController scrimController,
@@ -172,7 +172,7 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
                 ServiceManager.getService(Context.STATUS_BAR_SERVICE));
 
         if (MULTIUSER_DEBUG) {
-            mNotificationPanelDebugText = mNotificationPanel.findViewById(R.id.header_debug_info);
+            mNotificationPanelDebugText = mNotificationPanel.getHeaderDebugInfo();
             mNotificationPanelDebugText.setVisibility(View.VISIBLE);
         }
 
@@ -191,7 +191,7 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
                 Dependency.get(NotificationRemoteInputManager.Callback.class),
                 mNotificationPanel.createRemoteInputDelegate());
         remoteInputManager.getController().addCallback(
-                Dependency.get(StatusBarWindowController.class));
+                Dependency.get(NotificationShadeWindowController.class));
 
         NotificationListContainer notifListContainer = (NotificationListContainer) stackScroller;
         initController.addPostInitTask(() -> {
@@ -217,7 +217,7 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
             mEntryManager.addNotificationLifetimeExtenders(
                     remoteInputManager.getLifetimeExtenders());
             notificationRowBinder.setUpWithPresenter(this, notifListContainer, mHeadsUpManager,
-                    mEntryManager, this);
+                    this);
             mNotificationInterruptionStateProvider.setUpWithPresenter(
                     this, mHeadsUpManager, this::canHeadsUp);
             mLockscreenUserManager.setUpWithPresenter(this);

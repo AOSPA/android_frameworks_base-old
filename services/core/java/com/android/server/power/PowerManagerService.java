@@ -16,6 +16,8 @@
 
 package com.android.server.power;
 
+import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_DEFAULT;
+import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_CRITICAL;
 import static android.os.PowerManagerInternal.WAKEFULNESS_ASLEEP;
 import static android.os.PowerManagerInternal.WAKEFULNESS_AWAKE;
 import static android.os.PowerManagerInternal.WAKEFULNESS_DOZING;
@@ -72,6 +74,7 @@ import android.provider.Settings.SettingNotFoundException;
 import android.service.dreams.DreamManagerInternal;
 import android.service.vr.IVrManager;
 import android.service.vr.IVrStateCallbacks;
+import android.util.ArraySet;
 import android.util.KeyValueListParser;
 import android.util.PrintWriterPrinter;
 import android.util.Slog;
@@ -109,6 +112,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * The power manager service is responsible for coordinating power management
@@ -346,7 +350,8 @@ public final class PowerManagerService extends SystemService
     // True if systemReady() has been called.
     private boolean mSystemReady;
 
-    // True if boot completed occurred.  We keep the screen on until this happens.
+    // True if boot completed occurred. We keep the screen on until this happens.
+    // The screen will be off if we are in quiescent mode.
     private boolean mBootCompleted;
 
     // True if auto-suspend mode is enabled.
@@ -563,6 +568,9 @@ public final class PowerManagerService extends SystemService
     // Transition to Doze is in progress.  We have transitioned to WAKEFULNESS_DOZING,
     // but the DreamService has not yet been told to start (it's an async process).
     private boolean mDozeStartInProgress;
+
+    // Set of all tokens suppressing ambient display.
+    private final Set<String> mAmbientDisplaySuppressionTokens = new ArraySet<>();
 
     private final class ForegroundProfileObserver extends SynchronousUserSwitchObserver {
         @Override
@@ -843,7 +851,8 @@ public final class PowerManagerService extends SystemService
 
     @Override
     public void onStart() {
-        publishBinderService(Context.POWER_SERVICE, mBinderService);
+        publishBinderService(Context.POWER_SERVICE, mBinderService, /* allowIsolated= */ false,
+                DUMP_FLAG_PRIORITY_DEFAULT | DUMP_FLAG_PRIORITY_CRITICAL);
         publishLocalService(PowerManagerInternal.class, mLocalService);
 
         Watchdog.getInstance().addMonitor(this);
@@ -864,6 +873,12 @@ public final class PowerManagerService extends SystemService
                 mBatterySaverStateMachine.onBootCompleted();
                 userActivityNoUpdateLocked(
                         now, PowerManager.USER_ACTIVITY_EVENT_OTHER, 0, Process.SYSTEM_UID);
+
+                if (sQuiescent) {
+                    goToSleepNoUpdateLocked(SystemClock.uptimeMillis(),
+                            PowerManager.GO_TO_SLEEP_REASON_QUIESCENT,
+                            PowerManager.GO_TO_SLEEP_FLAG_NO_DOZE, Process.SYSTEM_UID);
+                }
                 updatePowerStateLocked();
             }
         }
@@ -1430,8 +1445,7 @@ public final class PowerManagerService extends SystemService
                     + ", uid=" + uid);
         }
 
-        if (eventTime < mLastSleepTime || eventTime < mLastWakeTime
-                || !mBootCompleted || !mSystemReady) {
+        if (eventTime < mLastSleepTime || eventTime < mLastWakeTime || !mSystemReady) {
             return false;
         }
 
@@ -1508,7 +1522,7 @@ public final class PowerManagerService extends SystemService
         }
 
         if (eventTime < mLastSleepTime || mWakefulness == WAKEFULNESS_AWAKE
-                || !mBootCompleted || !mSystemReady || mForceSuspendActive) {
+                || mForceSuspendActive || !mSystemReady) {
             return false;
         }
 
@@ -1530,6 +1544,10 @@ public final class PowerManagerService extends SystemService
             mNotifier.onWakeUp(reason, details, reasonUid, opPackageName, opUid);
             userActivityNoUpdateLocked(
                     eventTime, PowerManager.USER_ACTIVITY_EVENT_OTHER, 0, reasonUid);
+
+            if (sQuiescent) {
+                mDirty |= DIRTY_QUIESCENT;
+            }
         } finally {
             Trace.traceEnd(Trace.TRACE_TAG_POWER);
         }
@@ -1561,7 +1579,8 @@ public final class PowerManagerService extends SystemService
         if (eventTime < mLastWakeTime
                 || mWakefulness == WAKEFULNESS_ASLEEP
                 || mWakefulness == WAKEFULNESS_DOZING
-                || !mBootCompleted || !mSystemReady) {
+                || !mSystemReady
+                || !mBootCompleted) {
             return false;
         }
 
@@ -2645,6 +2664,10 @@ public final class PowerManagerService extends SystemService
                 | DIRTY_ACTUAL_DISPLAY_POWER_STATE_UPDATED | DIRTY_BOOT_COMPLETED
                 | DIRTY_SETTINGS | DIRTY_SCREEN_BRIGHTNESS_BOOST | DIRTY_VR_MODE_CHANGED |
                 DIRTY_QUIESCENT)) != 0) {
+            if ((dirty & DIRTY_QUIESCENT) != 0) {
+                sQuiescent = false;
+            }
+
             mDisplayPowerRequest.policy = getDesiredScreenPolicyLocked();
 
             // Determine appropriate screen brightness and auto-brightness adjustments.
@@ -2694,9 +2717,6 @@ public final class PowerManagerService extends SystemService
                     mRequestWaitForNegativeProximity);
             mRequestWaitForNegativeProximity = false;
 
-            if ((dirty & DIRTY_QUIESCENT) != 0) {
-                sQuiescent = false;
-            }
             if (DEBUG_SPEW) {
                 Slog.d(TAG, "updateDisplayPowerStateLocked: mDisplayReady=" + mDisplayReady
                         + ", policy=" + mDisplayPowerRequest.policy
@@ -3343,6 +3363,26 @@ public final class PowerManagerService extends SystemService
         synchronized (mLock) {
             mDozeAfterScreenOff = on;
         }
+    }
+
+    private void suppressAmbientDisplayInternal(String token, boolean suppress) {
+        if (DEBUG_SPEW) {
+            Slog.d(TAG, "Suppress ambient display for token " + token + ": " + suppress);
+        }
+
+        if (suppress) {
+            mAmbientDisplaySuppressionTokens.add(token);
+        } else {
+            mAmbientDisplaySuppressionTokens.remove(token);
+        }
+
+        Settings.Secure.putInt(mContext.getContentResolver(),
+                Settings.Secure.SUPPRESS_DOZE,
+                Math.min(mAmbientDisplaySuppressionTokens.size(), 1));
+    }
+
+    private String createAmbientDisplayToken(String token, int callingUid) {
+        return callingUid + "_" + token;
     }
 
     private void boostScreenBrightnessInternal(long eventTime, int uid) {
@@ -4989,6 +5029,61 @@ public final class PowerManagerService extends SystemService
             final long ident = Binder.clearCallingIdentity();
             try {
                 setDozeAfterScreenOffInternal(on);
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        @Override // Binder call
+        public boolean isAmbientDisplayAvailable() {
+            mContext.enforceCallingOrSelfPermission(
+                    android.Manifest.permission.READ_DREAM_STATE, null);
+
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                return mAmbientDisplayConfiguration.ambientDisplayAvailable();
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        @Override // Binder call
+        public void suppressAmbientDisplay(@NonNull String token, boolean suppress) {
+            mContext.enforceCallingOrSelfPermission(
+                    android.Manifest.permission.WRITE_DREAM_STATE, null);
+
+            final int uid = Binder.getCallingUid();
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                suppressAmbientDisplayInternal(createAmbientDisplayToken(token, uid), suppress);
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        @Override // Binder call
+        public boolean isAmbientDisplaySuppressedForToken(@NonNull String token) {
+            mContext.enforceCallingOrSelfPermission(
+                    android.Manifest.permission.READ_DREAM_STATE, null);
+
+            final int uid = Binder.getCallingUid();
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                return mAmbientDisplaySuppressionTokens.contains(
+                        createAmbientDisplayToken(token, uid));
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        @Override // Binder call
+        public boolean isAmbientDisplaySuppressed() {
+            mContext.enforceCallingOrSelfPermission(
+                    android.Manifest.permission.READ_DREAM_STATE, null);
+
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                return mAmbientDisplaySuppressionTokens.size() > 0;
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }

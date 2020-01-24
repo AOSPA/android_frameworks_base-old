@@ -37,6 +37,7 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioAttributes.AttributeSystemUsage;
 import android.media.audiopolicy.AudioPolicy;
 import android.media.audiopolicy.AudioPolicy.AudioPolicyFocusListener;
 import android.media.audiopolicy.AudioProductStrategy;
@@ -1262,6 +1263,39 @@ public class AudioManager {
         final IAudioService service = getService();
         try {
             return service.getMinVolumeIndexForAttributes(attr);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Set the system usages to be supported on this device.
+     * @param systemUsages array of system usages to support {@link AttributeSystemUsage}
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void setSupportedSystemUsages(@NonNull @AttributeSystemUsage int[] systemUsages) {
+        Objects.requireNonNull(systemUsages, "systemUsages must not be null");
+        final IAudioService service = getService();
+        try {
+            service.setSupportedSystemUsages(systemUsages);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get the system usages supported on this device.
+     * @return array of supported system usages {@link AttributeSystemUsage}
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public @NonNull @AttributeSystemUsage int[] getSupportedSystemUsages() {
+        final IAudioService service = getService();
+        try {
+            return service.getSupportedSystemUsages();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4346,6 +4380,26 @@ public class AudioManager {
             return AudioSystem.getDevicesForStream(streamType);
         default:
             return 0;
+        }
+    }
+
+    /**
+     * @hide
+     * Get the audio devices that would be used for the routing of the given audio attributes.
+     * @param attributes the {@link AudioAttributes} for which the routing is being queried
+     * @return an empty list if there was an issue with the request, a list of audio devices
+     *   otherwise (typically one device, except for duplicated paths).
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public @NonNull List<AudioDeviceAddress> getDevicesForAttributes(
+            @NonNull AudioAttributes attributes) {
+        Objects.requireNonNull(attributes);
+        final IAudioService service = getService();
+        try {
+            return service.getDevicesForAttributes(attributes);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 

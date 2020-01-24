@@ -13,17 +13,21 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertThrows;
 
+import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.AppOpsManager;
 import android.app.IApplicationThread;
+import android.app.admin.DevicePolicyManagerInternal;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.IPackageManager;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
+import android.content.pm.PermissionInfo;
 import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.os.UserHandle;
@@ -76,6 +80,10 @@ public class CrossProfileAppsServiceImplTest {
     private ActivityManagerInternal mActivityManagerInternal;
     @Mock
     private ActivityTaskManagerInternal mActivityTaskManagerInternal;
+    @Mock
+    private IPackageManager mIPackageManager;
+    @Mock
+    private DevicePolicyManagerInternal mDevicePolicyManagerInternal;
 
     private TestInjector mTestInjector;
     private ActivityInfo mActivityInfo;
@@ -88,6 +96,7 @@ public class CrossProfileAppsServiceImplTest {
     public void initCrossProfileAppsServiceImpl() {
         mTestInjector = new TestInjector();
         mCrossProfileAppsServiceImpl = new CrossProfileAppsServiceImpl(mContext, mTestInjector);
+        when(mContext.getPackageManager()).thenReturn(mPackageManager);
     }
 
     @Before
@@ -358,6 +367,11 @@ public class CrossProfileAppsServiceImplTest {
 
     @Test
     public void startAnyActivityAsUser_profile_notExported() {
+        try {
+            when(mPackageManager.getPermissionInfo(anyString(), anyInt()))
+                    .thenReturn(new PermissionInfo());
+        } catch (PackageManager.NameNotFoundException ignored) {
+        }
         mActivityInfo.exported = false;
 
         assertThrows(
@@ -516,9 +530,14 @@ public class CrossProfileAppsServiceImplTest {
     private class TestInjector implements CrossProfileAppsServiceImpl.Injector {
         private int mCallingUid;
         private int mCallingUserId;
+        private int mCallingPid;
 
         public void setCallingUid(int uid) {
             mCallingUid = uid;
+        }
+
+        public void setCallingPid(int pid) {
+            mCallingPid = pid;
         }
 
         public void setCallingUserId(int userId) {
@@ -528,6 +547,11 @@ public class CrossProfileAppsServiceImplTest {
         @Override
         public int getCallingUid() {
             return mCallingUid;
+        }
+
+        @Override
+        public int getCallingPid() {
+            return mCallingPid;
         }
 
         @Override
@@ -577,6 +601,27 @@ public class CrossProfileAppsServiceImplTest {
         @Override
         public ActivityTaskManagerInternal getActivityTaskManagerInternal() {
             return mActivityTaskManagerInternal;
+        }
+
+        @Override
+        public IPackageManager getIPackageManager() {
+            return mIPackageManager;
+        }
+
+        @Override
+        public DevicePolicyManagerInternal getDevicePolicyManagerInternal() {
+            return mDevicePolicyManagerInternal;
+        }
+
+        @Override
+        public void sendBroadcastAsUser(Intent intent, UserHandle user) {
+            mContext.sendBroadcastAsUser(intent, user);
+        }
+
+        @Override
+        public int checkComponentPermission(
+                String permission, int uid, int owningUid, boolean exported) {
+            return ActivityManager.checkComponentPermission(permission, uid, owningUid, exported);
         }
     }
 }

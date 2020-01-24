@@ -18,13 +18,15 @@ package android.media;
 
 import android.media.MediaRoute2ProviderInfo;
 import android.media.MediaRoute2Info;
+import android.media.RoutingSessionInfo;
 
 /**
  * {@hide}
  */
 oneway interface IMediaRouter2Manager {
-    void notifyRouteSelected(String packageName, in MediaRoute2Info route);
-    void notifyControlCategoriesChanged(String packageName, in List<String> categories);
+    void notifySessionCreated(in RoutingSessionInfo sessionInfo);
+    void notifySessionsUpdated();
+    void notifyPreferredFeaturesChanged(String packageName, in List<String> preferredFeatures);
     void notifyRoutesAdded(in List<MediaRoute2Info> routes);
     void notifyRoutesRemoved(in List<MediaRoute2Info> routes);
     void notifyRoutesChanged(in List<MediaRoute2Info> routes);

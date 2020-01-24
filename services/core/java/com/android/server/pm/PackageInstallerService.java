@@ -188,7 +188,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         }
     };
 
-    public PackageInstallerService(Context context, PackageManagerService pm, ApexManager am) {
+    public PackageInstallerService(Context context, PackageManagerService pm) {
         mContext = context;
         mPm = pm;
         mPermissionManager = LocalServices.getService(PermissionManagerServiceInternal.class);
@@ -206,9 +206,8 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         mSessionsDir = new File(Environment.getDataSystemDirectory(), "install_sessions");
         mSessionsDir.mkdirs();
 
-        mApexManager = am;
-
-        mStagingManager = new StagingManager(this, am, context);
+        mApexManager = ApexManager.getInstance();
+        mStagingManager = new StagingManager(this, context);
     }
 
     boolean okToSendBroadcasts()  {
@@ -260,11 +259,13 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         // atomic install which needs to query sessions, which requires lock on mSessions.
         boolean isDeviceUpgrading = mPm.isDeviceUpgrading();
         for (PackageInstallerSession session : stagedSessionsToRestore) {
-            if (isDeviceUpgrading && !session.isStagedAndInTerminalState()) {
+            if (!session.isStagedAndInTerminalState() && session.hasParentSessionId()
+                    && getSession(session.getParentSessionId()) == null) {
                 session.setStagedSessionFailed(SessionInfo.STAGED_SESSION_ACTIVATION_FAILED,
-                        "Build fingerprint has changed");
+                        "An orphan staged session " + session.sessionId + " is found, "
+                                + "parent " + session.getParentSessionId() + " is missing");
             }
-            mStagingManager.restoreSession(session);
+            mStagingManager.restoreSession(session, isDeviceUpgrading);
         }
         // Broadcasts are not sent while we restore sessions on boot, since no processes would be
         // ready to listen to them. From now on, we greedily assume that broadcasts requests are
@@ -636,7 +637,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             }
         }
         InstallSource installSource = InstallSource.create(installerPackageName,
-                originatingPackageName, requestedInstallerPackageName, false);
+                originatingPackageName, requestedInstallerPackageName);
         session = new PackageInstallerSession(mInternalCallback, mContext, mPm, this,
                 mInstallThread.getLooper(), mStagingManager, sessionId, userId, callingUid,
                 installSource, params, createdMillis,

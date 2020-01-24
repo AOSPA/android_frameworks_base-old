@@ -17,6 +17,7 @@
 package android.telephony;
 
 import android.Manifest;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -24,17 +25,18 @@ import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
+import android.net.ipsec.ike.SaProposal;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
-import android.os.ServiceManager;
 import android.service.carrier.CarrierService;
 import android.telecom.TelecomManager;
 import android.telephony.ims.ImsReasonInfo;
 
 import com.android.internal.telephony.ICarrierConfigLoader;
+import com.android.telephony.Rlog;
 
 /**
  * Provides access to telephony configuration values that are carrier-specific.
@@ -299,7 +301,6 @@ public class CarrierConfigManager {
 
     /**
      * A string array containing numbers that shouldn't be included in the call log.
-     * @hide
      */
     public static final String KEY_UNLOGGABLE_NUMBERS_STRING_ARRAY =
             "unloggable_numbers_string_array";
@@ -312,12 +313,11 @@ public class CarrierConfigManager {
             KEY_HIDE_CARRIER_NETWORK_SETTINGS_BOOL = "hide_carrier_network_settings_bool";
 
     /**
-     * Do only allow auto selection in Advanced Network Settings when in home network.
+     * Only allow auto selection in Advanced Network Settings when in home network.
      * Manual selection is allowed when in roaming network.
-     * @hide
      */
-    public static final String
-            KEY_ONLY_AUTO_SELECT_IN_HOME_NETWORK_BOOL = "only_auto_select_in_home_network";
+    public static final String KEY_ONLY_AUTO_SELECT_IN_HOME_NETWORK_BOOL =
+            "only_auto_select_in_home_network";
 
     /**
      * Control whether users receive a simplified network settings UI and improved network
@@ -581,9 +581,6 @@ public class CarrierConfigManager {
      * registration state to change.  That is, turning on or off mobile data will not cause VT to be
      * enabled or disabled.
      * When {@code false}, disabling mobile data will cause VT to be de-registered.
-     * <p>
-     * See also {@link #KEY_VILTE_DATA_IS_METERED_BOOL}.
-     * @hide
      */
     public static final String KEY_IGNORE_DATA_ENABLED_CHANGED_FOR_VIDEO_CALLS =
             "ignore_data_enabled_changed_for_video_calls";
@@ -667,7 +664,6 @@ public class CarrierConfigManager {
     /**
      * Default WFC_IMS_enabled: true VoWiFi by default is on
      *                          false VoWiFi by default is off
-     * @hide
      */
     public static final String KEY_CARRIER_DEFAULT_WFC_IMS_ENABLED_BOOL =
             "carrier_default_wfc_ims_enabled_bool";
@@ -689,6 +685,12 @@ public class CarrierConfigManager {
      */
     public static final String KEY_CARRIER_PROMOTE_WFC_ON_CALL_FAIL_BOOL =
             "carrier_promote_wfc_on_call_fail_bool";
+
+    /**
+     * Flag specifying whether provisioning is required for RCS.
+     */
+    public static final String KEY_CARRIER_RCS_PROVISIONING_REQUIRED_BOOL =
+            "carrier_rcs_provisioning_required_bool";
 
     /**
      * Flag specifying whether provisioning is required for VoLTE, Video Telephony, and WiFi
@@ -733,9 +735,7 @@ public class CarrierConfigManager {
      *
      * As of now, Verizon is the only carrier enforcing this dependency in their
      * WFC awareness and activation requirements.
-     *
-     * @hide
-     *  */
+     */
     public static final String KEY_CARRIER_VOLTE_OVERRIDE_WFC_PROVISIONING_BOOL
             = "carrier_volte_override_wfc_provisioning_bool";
 
@@ -867,9 +867,12 @@ public class CarrierConfigManager {
             "carrier_force_disable_etws_cmas_test_bool";
 
     /**
-     * The default flag specifying whether "Turn on Notifications" option will be always shown in
-     * Settings->More->Emergency broadcasts menu regardless developer options is turned on or not.
+     * The default flag specifying whether "Allow alerts" option will be always shown in
+     * emergency alerts settings regardless developer options is turned on or not.
+     *
+     * @deprecated The allow alerts option is always shown now. No longer need a config for that.
      */
+    @Deprecated
     public static final String KEY_ALWAYS_SHOW_EMERGENCY_ALERT_ONOFF_BOOL =
             "always_show_emergency_alert_onoff_bool";
 
@@ -1093,7 +1096,6 @@ public class CarrierConfigManager {
      *
      * When {@code false}, the old behavior is used, where the toggle in accessibility settings is
      * used to set the IMS stack's RTT enabled state.
-     * @hide
      */
     public static final String KEY_IGNORE_RTT_MODE_SETTING_BOOL =
             "ignore_rtt_mode_setting_bool";
@@ -1134,7 +1136,6 @@ public class CarrierConfigManager {
      * Determines whether the IMS conference merge process supports and returns its participants
      * data. When {@code true}, on merge complete, conference call would have a list of its
      * participants returned in XML format, {@code false otherwise}.
-     * @hide
      */
     public static final String KEY_SUPPORT_IMS_CONFERENCE_EVENT_PACKAGE_BOOL =
             "support_ims_conference_event_package_bool";
@@ -1207,20 +1208,18 @@ public class CarrierConfigManager {
     public static final String KEY_ENABLE_APPS_STRING_ARRAY = "enable_apps_string_array";
 
     /**
-     * Determine whether user can switch Wi-Fi preferred or Cellular preferred in calling preference.
+     * Determine whether user can switch Wi-Fi preferred or Cellular preferred
+     * in calling preference.
      * Some operators support Wi-Fi Calling only, not VoLTE.
      * They don't need "Cellular preferred" option.
-     * In this case, set uneditalbe attribute for preferred preference.
-     * @hide
+     * In this case, set uneditable attribute for preferred preference.
      */
     public static final String KEY_EDITABLE_WFC_MODE_BOOL = "editable_wfc_mode_bool";
 
-     /**
-      * Flag to indicate if Wi-Fi needs to be disabled in ECBM
-      * @hide
-      **/
-     public static final String
-              KEY_CONFIG_WIFI_DISABLE_IN_ECBM = "config_wifi_disable_in_ecbm";
+    /**
+     * Flag to indicate if Wi-Fi needs to be disabled in ECBM.
+     */
+    public static final String KEY_CONFIG_WIFI_DISABLE_IN_ECBM = "config_wifi_disable_in_ecbm";
 
     /**
      * List operator-specific error codes and indices of corresponding error strings in
@@ -1284,9 +1283,8 @@ public class CarrierConfigManager {
     public static final String KEY_WFC_SPN_USE_ROOT_LOCALE = "wfc_spn_use_root_locale";
 
     /**
-     * The Component Name of the activity that can setup the emergency addrees for WiFi Calling
+     * The Component Name of the activity that can setup the emergency address for WiFi Calling
      * as per carrier requirement.
-     * @hide
      */
      public static final String KEY_WFC_EMERGENCY_ADDRESS_CARRIER_APP_STRING =
             "wfc_emergency_address_carrier_app_string";
@@ -1450,22 +1448,19 @@ public class CarrierConfigManager {
     public static final String KEY_ALLOW_ADDING_APNS_BOOL = "allow_adding_apns_bool";
 
     /**
-     * APN types that user is not allowed to modify
-     * @hide
+     * APN types that user is not allowed to modify.
      */
     public static final String KEY_READ_ONLY_APN_TYPES_STRING_ARRAY =
             "read_only_apn_types_string_array";
 
     /**
-     * APN fields that user is not allowed to modify
-     * @hide
+     * APN fields that user is not allowed to modify.
      */
     public static final String KEY_READ_ONLY_APN_FIELDS_STRING_ARRAY =
             "read_only_apn_fields_string_array";
 
     /**
      * Default value of APN types field if not specified by user when adding/modifying an APN.
-     * @hide
      */
     public static final String KEY_APN_SETTINGS_DEFAULT_APN_TYPES_STRING_ARRAY =
             "apn_settings_default_apn_types_string_array";
@@ -1496,29 +1491,25 @@ public class CarrierConfigManager {
             "hide_digits_helper_text_on_stk_input_screen_bool";
 
     /**
-     * Boolean indicating if show data RAT icon on status bar even when data is disabled
-     * @hide
+     * Boolean indicating if show data RAT icon on status bar even when data is disabled.
      */
     public static final String KEY_ALWAYS_SHOW_DATA_RAT_ICON_BOOL =
             "always_show_data_rat_icon_bool";
 
     /**
-     * Boolean indicating if default data account should show LTE or 4G icon
-     * @hide
+     * Boolean indicating if default data account should show LTE or 4G icon.
      */
     public static final String KEY_SHOW_4G_FOR_LTE_DATA_ICON_BOOL =
             "show_4g_for_lte_data_icon_bool";
 
     /**
      * Boolean indicating if default data account should show 4G icon when in 3G.
-     * @hide
      */
     public static final String KEY_SHOW_4G_FOR_3G_DATA_ICON_BOOL =
             "show_4g_for_3g_data_icon_bool";
 
     /**
-     * Boolean indicating if lte+ icon should be shown if available
-     * @hide
+     * Boolean indicating if LTE+ icon should be shown if available.
      */
     public static final String KEY_HIDE_LTE_PLUS_DATA_ICON_BOOL =
             "hide_lte_plus_data_icon_bool";
@@ -1533,10 +1524,8 @@ public class CarrierConfigManager {
             "operator_name_filter_pattern_string";
 
     /**
-     * The string is used to compare with operator name. If it matches the pattern then show
-     * specific data icon.
-     *
-     * @hide
+     * The string is used to compare with operator name.
+     * If it matches the pattern then show specific data icon.
      */
     public static final String KEY_SHOW_CARRIER_DATA_ICON_PATTERN_STRING =
             "show_carrier_data_icon_pattern_string";
@@ -1556,32 +1545,27 @@ public class CarrierConfigManager {
 
     /**
      * Boolean to decide whether lte is enabled.
-     * @hide
      */
     public static final String KEY_LTE_ENABLED_BOOL = "lte_enabled_bool";
 
     /**
      * Boolean to decide whether TD-SCDMA is supported.
-     * @hide
      */
     public static final String KEY_SUPPORT_TDSCDMA_BOOL = "support_tdscdma_bool";
 
     /**
      * A list of mcc/mnc that support TD-SCDMA for device when connect to the roaming network.
-     * @hide
      */
     public static final String KEY_SUPPORT_TDSCDMA_ROAMING_NETWORKS_STRING_ARRAY =
             "support_tdscdma_roaming_networks_string_array";
 
     /**
      * Boolean to decide whether world mode is enabled.
-     * @hide
      */
     public static final String KEY_WORLD_MODE_ENABLED_BOOL = "world_mode_enabled_bool";
 
     /**
      * Flatten {@link android.content.ComponentName} of the carrier's settings activity.
-     * @hide
      */
     public static final String KEY_CARRIER_SETTINGS_ACTIVITY_COMPONENT_NAME_STRING =
             "carrier_settings_activity_component_name_string";
@@ -1619,7 +1603,10 @@ public class CarrierConfigManager {
     public static final String KEY_MMS_UA_PROF_TAG_NAME_STRING = "uaProfTagName";
     public static final String KEY_MMS_UA_PROF_URL_STRING = "uaProfUrl";
     public static final String KEY_MMS_USER_AGENT_STRING = "userAgent";
-    /** @hide */
+    /**
+     * If true, add "Connection: close" header to MMS HTTP requests so the connection
+     * is immediately closed (disabling keep-alive).
+     */
     public static final String KEY_MMS_CLOSE_CONNECTION_BOOL = "mmsCloseConnection";
 
     /**
@@ -1635,25 +1622,23 @@ public class CarrierConfigManager {
     /**
      * Defines carrier-specific actions which act upon
      * com.android.internal.telephony.CARRIER_SIGNAL_REDIRECTED, used for customization of the
-     * default carrier app
+     * default carrier app.
      * Format: "CARRIER_ACTION_IDX, ..."
      * Where {@code CARRIER_ACTION_IDX} is an integer defined in
-     * {@link com.android.carrierdefaultapp.CarrierActionUtils CarrierActionUtils}
+     * com.android.carrierdefaultapp.CarrierActionUtils
      * Example:
-     * {@link com.android.carrierdefaultapp.CarrierActionUtils#CARRIER_ACTION_DISABLE_METERED_APNS
-     * disable_metered_apns}
-     * @hide
+     * com.android.carrierdefaultapp.CarrierActionUtils#CARRIER_ACTION_DISABLE_METERED_APNS
+     * disables metered APNs
      */
-    @UnsupportedAppUsage
+    @SuppressLint("IntentName")
     public static final String KEY_CARRIER_DEFAULT_ACTIONS_ON_REDIRECTION_STRING_ARRAY =
             "carrier_default_actions_on_redirection_string_array";
 
     /**
-     * Defines carrier-specific actions which act upon
-     * com.android.internal.telephony.CARRIER_SIGNAL_REQUEST_NETWORK_FAILED
+     * Defines carrier-specific actions which act upon CARRIER_SIGNAL_REQUEST_NETWORK_FAILED
      * and configured signal args:
-     * {@link com.android.internal.telephony.TelephonyIntents#EXTRA_APN_TYPE_KEY apnType},
-     * {@link com.android.internal.telephony.TelephonyIntents#EXTRA_ERROR_CODE_KEY errorCode}
+     * android.telephony.TelephonyManager#EXTRA_APN_TYPE,
+     * android.telephony.TelephonyManager#EXTRA_ERROR_CODE
      * used for customization of the default carrier app
      * Format:
      * {
@@ -1661,42 +1646,41 @@ public class CarrierConfigManager {
      *     "APN_1, ERROR_CODE_2 : CARRIER_ACTION_IDX_1 "
      * }
      * Where {@code APN_1} is a string defined in
-     * {@link com.android.internal.telephony.PhoneConstants PhoneConstants}
+     * com.android.internal.telephony.PhoneConstants
      * Example: "default"
      *
-     * {@code ERROR_CODE_1} is an integer defined in
-     * {@link DataFailCause DcFailure}
+     * {@code ERROR_CODE_1} is an integer defined in android.telephony.DataFailCause
      * Example:
-     * {@link DataFailCause#MISSING_UNKNOWN_APN}
+     * android.telephony.DataFailCause#MISSING_UNKNOWN_APN
      *
      * {@code CARRIER_ACTION_IDX_1} is an integer defined in
-     * {@link com.android.carrierdefaultapp.CarrierActionUtils CarrierActionUtils}
+     * com.android.carrierdefaultapp.CarrierActionUtils
      * Example:
-     * {@link com.android.carrierdefaultapp.CarrierActionUtils#CARRIER_ACTION_DISABLE_METERED_APNS}
-     * @hide
+     * com.android.carrierdefaultapp.CarrierActionUtils#CARRIER_ACTION_DISABLE_METERED_APNS
+     * disables metered APNs
      */
+    @SuppressLint("IntentName")
     public static final String KEY_CARRIER_DEFAULT_ACTIONS_ON_DCFAILURE_STRING_ARRAY =
             "carrier_default_actions_on_dcfailure_string_array";
 
     /**
-     * Defines carrier-specific actions which act upon
-     * com.android.internal.telephony.CARRIER_SIGNAL_RESET, used for customization of the
-     * default carrier app
+     * Defines carrier-specific actions which act upon CARRIER_SIGNAL_RESET,
+     * used for customization of the default carrier app.
      * Format: "CARRIER_ACTION_IDX, ..."
      * Where {@code CARRIER_ACTION_IDX} is an integer defined in
-     * {@link com.android.carrierdefaultapp.CarrierActionUtils CarrierActionUtils}
+     * com.android.carrierdefaultapp.CarrierActionUtils
      * Example:
-     * {@link com.android.carrierdefaultapp.CarrierActionUtils
-     * #CARRIER_ACTION_CANCEL_ALL_NOTIFICATIONS clear all notifications on reset}
-     * @hide
+     * com.android.carrierdefaultapp.CarrierActionUtils#CARRIER_ACTION_CANCEL_ALL_NOTIFICATIONS
+     * clears all notifications on reset
      */
+    @SuppressLint("IntentName")
     public static final String KEY_CARRIER_DEFAULT_ACTIONS_ON_RESET =
             "carrier_default_actions_on_reset_string_array";
 
     /**
      * Defines carrier-specific actions which act upon
      * com.android.internal.telephony.CARRIER_SIGNAL_DEFAULT_NETWORK_AVAILABLE,
-     * used for customization of the default carrier app
+     * used for customization of the default carrier app.
      * Format:
      * {
      *     "true : CARRIER_ACTION_IDX_1",
@@ -1704,17 +1688,17 @@ public class CarrierConfigManager {
      * }
      * Where {@code true} is a boolean indicates default network available/unavailable
      * Where {@code CARRIER_ACTION_IDX} is an integer defined in
-     * {@link com.android.carrierdefaultapp.CarrierActionUtils CarrierActionUtils}
+     * com.android.carrierdefaultapp.CarrierActionUtils CarrierActionUtils
      * Example:
-     * {@link com.android.carrierdefaultapp.CarrierActionUtils
-     * #CARRIER_ACTION_ENABLE_DEFAULT_URL_HANDLER enable the app as the default URL handler}
-     * @hide
+     * com.android.carrierdefaultapp.CarrierActionUtils#CARRIER_ACTION_ENABLE_DEFAULT_URL_HANDLER
+     * enables the app as the default URL handler
      */
+    @SuppressLint("IntentName")
     public static final String KEY_CARRIER_DEFAULT_ACTIONS_ON_DEFAULT_NETWORK_AVAILABLE =
             "carrier_default_actions_on_default_network_available_string_array";
+
     /**
-     * Defines a list of acceptable redirection url for default carrier app
-     * @hides
+     * Defines a list of acceptable redirection url for default carrier app.
      */
     public static final String KEY_CARRIER_DEFAULT_REDIRECTION_URL_STRING_ARRAY =
             "carrier_default_redirection_url_string_array";
@@ -1842,10 +1826,10 @@ public class CarrierConfigManager {
 
     /**
      * Determines whether to enable enhanced call blocking feature on the device.
-     * @see SystemContract#ENHANCED_SETTING_KEY_BLOCK_UNREGISTERED
-     * @see SystemContract#ENHANCED_SETTING_KEY_BLOCK_PRIVATE
-     * @see SystemContract#ENHANCED_SETTING_KEY_BLOCK_PAYPHONE
-     * @see SystemContract#ENHANCED_SETTING_KEY_BLOCK_UNKNOWN
+     * android.provider.BlockedNumberContract.SystemContract#ENHANCED_SETTING_KEY_BLOCK_UNREGISTERED
+     * android.provider.BlockedNumberContract.SystemContract#ENHANCED_SETTING_KEY_BLOCK_PRIVATE
+     * android.provider.BlockedNumberContract.SystemContract#ENHANCED_SETTING_KEY_BLOCK_PAYPHONE
+     * android.provider.BlockedNumberContract.SystemContract#ENHANCED_SETTING_KEY_BLOCK_UNKNOWN
      *
      * <p>
      * 1. For Single SIM(SS) device, it can be customized in both carrier_config_mccmnc.xml
@@ -1855,7 +1839,6 @@ public class CarrierConfigManager {
      *    function is used regardless of SIM.
      * <p>
      * If {@code true} enable enhanced call blocking feature on the device, {@code false} otherwise.
-     * @hide
      */
     public static final String KEY_SUPPORT_ENHANCED_CALL_BLOCKING_BOOL =
             "support_enhanced_call_blocking_bool";
@@ -1966,7 +1949,6 @@ public class CarrierConfigManager {
 
     /**
      * Flag indicating whether the carrier supports call deflection for an incoming IMS call.
-     * @hide
      */
     public static final String KEY_CARRIER_ALLOW_DEFLECT_IMS_CALL_BOOL =
             "carrier_allow_deflect_ims_call_bool";
@@ -2031,8 +2013,6 @@ public class CarrierConfigManager {
     /**
      * Whether system apps are allowed to use fallback if carrier video call is not available.
      * Defaults to {@code true}.
-     *
-     * @hide
      */
     public static final String KEY_ALLOW_VIDEO_CALLING_FALLBACK_BOOL =
             "allow_video_calling_fallback_bool";
@@ -2070,9 +2050,8 @@ public class CarrierConfigManager {
             "enhanced_4g_lte_title_variant_bool";
 
     /**
-     * The index indicates the carrier specified title string of Enahnce 4G LTE Mode settings.
+     * The index indicates the carrier specified title string of Enhanced 4G LTE Mode settings.
      * Default value is 0, which indicates the default title string.
-     * @hide
      */
     public static final String KEY_ENHANCED_4G_LTE_TITLE_VARIANT_INT =
             "enhanced_4g_lte_title_variant_int";
@@ -2116,15 +2095,13 @@ public class CarrierConfigManager {
      *                 {@link #KEY_USE_WFC_HOME_NETWORK_MODE_IN_ROAMING_NETWORK_BOOL} is false. If
      *                 {@link #KEY_USE_WFC_HOME_NETWORK_MODE_IN_ROAMING_NETWORK_BOOL} is true, this
      *                 configuration is ignored and roaming preference cannot be changed.
-     * @hide
      */
     public static final String KEY_EDITABLE_WFC_ROAMING_MODE_BOOL =
             "editable_wfc_roaming_mode_bool";
 
     /**
-     * Flag specifying wether to show blocking pay phone option in blocked numbers screen. Only show
-     * the option if payphone call presentation represents in the carrier's region.
-     * @hide
+     * Flag specifying whether to show blocking pay phone option in blocked numbers screen.
+     * Only show the option if payphone call presentation is present in the carrier's region.
      */
     public static final java.lang.String KEY_SHOW_BLOCKING_PAY_PHONE_OPTION_BOOL =
             "show_blocking_pay_phone_option_bool";
@@ -2134,7 +2111,6 @@ public class CarrierConfigManager {
      * {@code false} - roaming preference can be selected separately from the home preference.
      * {@code true}  - roaming preference is the same as home preference and
      *                 {@link #KEY_CARRIER_DEFAULT_WFC_IMS_MODE_INT} is used as the default value.
-     * @hide
      */
     public static final String KEY_USE_WFC_HOME_NETWORK_MODE_IN_ROAMING_NETWORK_BOOL =
             "use_wfc_home_network_mode_in_roaming_network_bool";
@@ -2162,7 +2138,6 @@ public class CarrierConfigManager {
      * while the device is registered over WFC. Default value is -1, which indicates
      * that this notification is not pertinent for a particular carrier. We've added a delay
      * to prevent false positives.
-     * @hide
      */
     public static final String KEY_EMERGENCY_NOTIFICATION_DELAY_INT =
             "emergency_notification_delay_int";
@@ -2213,7 +2188,6 @@ public class CarrierConfigManager {
     /**
      * Flag specifying whether to show an alert dialog for video call charges.
      * By default this value is {@code false}.
-     * @hide
      */
     public static final String KEY_SHOW_VIDEO_CALL_CHARGES_ALERT_DIALOG_BOOL =
             "show_video_call_charges_alert_dialog_bool";
@@ -2500,13 +2474,11 @@ public class CarrierConfigManager {
     /**
      * Identifies if the key is available for WLAN or EPDG or both. The value is a bitmask.
      * 0 indicates that neither EPDG or WLAN is enabled.
-     * 1 indicates that key type {@link TelephonyManager#KEY_TYPE_EPDG} is enabled.
-     * 2 indicates that key type {@link TelephonyManager#KEY_TYPE_WLAN} is enabled.
+     * 1 indicates that key type TelephonyManager#KEY_TYPE_EPDG is enabled.
+     * 2 indicates that key type TelephonyManager#KEY_TYPE_WLAN is enabled.
      * 3 indicates that both are enabled.
-     * @hide
      */
     public static final String IMSI_KEY_AVAILABILITY_INT = "imsi_key_availability_int";
-
 
     /**
      * Key identifying if the CDMA Caller ID presentation and suppression MMI codes
@@ -2522,7 +2494,6 @@ public class CarrierConfigManager {
     /**
      * Flag specifying whether IMS registration state menu is shown in Status Info setting,
      * default to false.
-     * @hide
      */
     public static final String KEY_SHOW_IMS_REGISTRATION_STATUS_BOOL =
             "show_ims_registration_status_bool";
@@ -2584,7 +2555,6 @@ public class CarrierConfigManager {
 
     /**
      * The flag to disable the popup dialog which warns the user of data charges.
-     * @hide
      */
     public static final String KEY_DISABLE_CHARGE_INDICATION_BOOL =
             "disable_charge_indication_bool";
@@ -2649,15 +2619,13 @@ public class CarrierConfigManager {
     /**
      * Determines whether any carrier has been identified and its specific config has been applied,
      * default to false.
-     * @hide
      */
     public static final String KEY_CARRIER_CONFIG_APPLIED_BOOL = "carrier_config_applied_bool";
 
     /**
      * Determines whether we should show a warning asking the user to check with their carrier
-     * on pricing when the user enabled data roaming.
+     * on pricing when the user enabled data roaming,
      * default to false.
-     * @hide
      */
     public static final String KEY_CHECK_PRICING_WITH_CARRIER_FOR_DATA_ROAMING_BOOL =
             "check_pricing_with_carrier_data_roaming_bool";
@@ -2809,10 +2777,10 @@ public class CarrierConfigManager {
      * Specifies a carrier-defined {@link android.telecom.CallRedirectionService} which Telecom
      * will bind to for outgoing calls.  An empty string indicates that no carrier-defined
      * {@link android.telecom.CallRedirectionService} is specified.
-     * @hide
      */
     public static final String KEY_CALL_REDIRECTION_SERVICE_COMPONENT_NAME_STRING =
             "call_redirection_service_component_name_string";
+
     /**
      * Support for the original string display of CDMA MO call.
      * By default, it is disabled.
@@ -2925,8 +2893,8 @@ public class CarrierConfigManager {
             "call_waiting_service_class_int";
 
     /**
-     * This configuration allow the system UI to display different 5G icon for different 5G
-     * scenario.
+     * This configuration allows the system UI to display different 5G icons for different 5G
+     * scenarios.
      *
      * There are five 5G scenarios:
      * 1. connected_mmwave: device currently connected to 5G cell as the secondary cell and using
@@ -2943,24 +2911,22 @@ public class CarrierConfigManager {
      *    5G cell as a secondary cell) but the use of 5G is restricted.
      *
      * The configured string contains multiple key-value pairs separated by comma. For each pair,
-     * the key and value is separated by a colon. The key is corresponded to a 5G status above and
+     * the key and value are separated by a colon. The key corresponds to a 5G status above and
      * the value is the icon name. Use "None" as the icon name if no icon should be shown in a
      * specific 5G scenario. If the scenario is "None", config can skip this key and value.
      *
      * Icon name options: "5G_Plus", "5G".
      *
      * Here is an example:
-     * UE want to display 5G_Plus icon for scenario#1, and 5G icon for scenario#2; otherwise no
+     * UE wants to display 5G_Plus icon for scenario#1, and 5G icon for scenario#2; otherwise not
      * define.
      * The configuration is: "connected_mmwave:5G_Plus,connected:5G"
-     *
-     * @hide
      */
     public static final String KEY_5G_ICON_CONFIGURATION_STRING =
             "5g_icon_configuration_string";
 
     /**
-     * Timeout in second for displaying 5G icon, default value is 0 which means the timer is
+     * Timeout in seconds for displaying 5G icon, default value is 0 which means the timer is
      * disabled.
      *
      * System UI will show the 5G icon and start a timer with the timeout from this config when the
@@ -2969,8 +2935,6 @@ public class CarrierConfigManager {
      *
      * If 5G is reacquired during this timer, the timer is canceled and restarted when 5G is next
      * lost. Allows us to momentarily lose 5G without blinking the icon.
-     *
-     * @hide
      */
     public static final String KEY_5G_ICON_DISPLAY_GRACE_PERIOD_SEC_INT =
             "5g_icon_display_grace_period_sec_int";
@@ -3135,8 +3099,6 @@ public class CarrierConfigManager {
      * signal bar of primary network. By default it will be false, meaning whenever data
      * is going over opportunistic network, signal bar will reflect signal strength and rat
      * icon of that network.
-     *
-     * @hide
      */
     public static final String KEY_ALWAYS_SHOW_PRIMARY_SIGNAL_BAR_IN_OPPORTUNISTIC_NETWORK_BOOLEAN =
             "always_show_primary_signal_bar_in_opportunistic_network_boolean";
@@ -3150,6 +3112,15 @@ public class CarrierConfigManager {
      */
     public static final String KEY_DATA_SWITCH_VALIDATION_TIMEOUT_LONG =
             "data_switch_validation_timeout_long";
+
+    /**
+     * Specifies whether the system should prefix the EAP method to the anonymous identity.
+     * The following prefix will be added if this key is set to TRUE:
+     *   EAP-AKA: "0"
+     *   EAP-SIM: "1"
+     *   EAP-AKA_PRIME: "6"
+     */
+    public static final String ENABLE_EAP_METHOD_PREFIX_BOOL = "enable_eap_method_prefix_bool";
 
     /**
      * GPS configs. See the GNSS HAL documentation for more details.
@@ -3349,8 +3320,6 @@ public class CarrierConfigManager {
 
     /**
      * Determines whether wifi calling location privacy policy is shown.
-     *
-     * @hide
      */
     public static final String KEY_SHOW_WFC_LOCATION_PRIVACY_POLICY_BOOL =
             "show_wfc_location_privacy_policy_bool";
@@ -3422,12 +3391,17 @@ public class CarrierConfigManager {
         /** Prefix of all Ims.KEY_* constants. */
         public static final String KEY_PREFIX = "ims.";
 
-        //TODO: Add configs related to IMS.
+        /**
+         * Delay in milliseconds to turn off wifi when IMS is registered over wifi.
+         */
+        public static final String KEY_WIFI_OFF_DEFERRING_TIME_INT =
+                KEY_PREFIX + "wifi_off_deferring_time_int";
 
         private Ims() {}
 
         private static PersistableBundle getDefaults() {
             PersistableBundle defaults = new PersistableBundle();
+            defaults.putInt(KEY_WIFI_OFF_DEFERRING_TIME_INT, 0);
             return defaults;
         }
     }
@@ -3456,8 +3430,8 @@ public class CarrierConfigManager {
             "support_wps_over_ims_bool";
 
     /**
-     * Holds the list of carrier certificate hashes. Note that each carrier has its own certificates
-     * @hide
+     * Holds the list of carrier certificate hashes.
+     * Note that each carrier has its own certificates.
      */
     public static final String KEY_CARRIER_CERTIFICATE_STRING_ARRAY =
             "carrier_certificate_string_array";
@@ -3476,6 +3450,369 @@ public class CarrierConfigManager {
      */
     public static final String KEY_PREVENT_CLIR_ACTIVATION_AND_DEACTIVATION_CODE_BOOL =
             "prevent_clir_activation_and_deactivation_code_bool";
+
+    /**
+     * Configs used for epdg tunnel bring up.
+     *
+     * @see <a href="https://tools.ietf.org/html/rfc7296">RFC 7296, Internet Key Exchange
+     *        Protocol Version 2 (IKEv2)</a>
+     */
+    public static final class Iwlan {
+        /** Prefix of all Epdg.KEY_* constants. */
+        public static final String KEY_PREFIX = "iwlan.";
+
+        /**
+         * Time in seconds after which the child security association session is terminated if
+         * rekey procedure is not successful. If not set or set to <= 0, the default value is
+         * 3600 seconds.
+         */
+        public static final String KEY_CHILD_SA_REKEY_HARD_TIMER_SEC_INT =
+                KEY_PREFIX + "child_sa_rekey_hard_timer_sec_int";
+
+        /**
+         * Time in seconds after which the child session rekey procedure is started. If not set or
+         * set to <= 0, default value is 3000 seconds.
+         */
+        public static final String KEY_CHILD_SA_REKEY_SOFT_TIMER_SEC_INT =
+                KEY_PREFIX + "child_sa_rekey_soft_timer_sec_int";
+
+        /** Supported DH groups for IKE negotiation.
+         * Possible values are {@link #DH_GROUP_NONE}, {@link #DH_GROUP_1024_BIT_MODP},
+         * {@link #DH_GROUP_2048_BIT_MODP}
+         */
+        public static final String KEY_DIFFIE_HELLMAN_GROUPS_INT_ARRAY =
+                KEY_PREFIX + "diffie_hellman_groups_int_array";
+
+        /**
+         * Time in seconds after which a dead peer detection (DPD) request is sent.
+         * If not set or set to <= 0, default value is 120 seconds.
+         */
+        public static final String KEY_DPD_TIMER_SEC_INT = KEY_PREFIX + "dpd_timer_sec_int";
+
+        /**
+         * Method used to authenticate epdg server.
+         * Possible values are {@link #AUTHENTICATION_METHOD_EAP_ONLY},
+         * {@link #AUTHENTICATION_METHOD_CERT}
+         */
+        public static final String KEY_EPDG_AUTHENTICATION_METHOD_INT =
+                KEY_PREFIX + "epdg_authentication_method_int";
+
+        /**
+         * A priority list of ePDG addresses to be used.
+         * Possible values are {@link #EPDG_ADDRESS_STATIC}, {@link #EPDG_ADDRESS_PLMN},
+         * {@link #EPDG_ADDRESS_PCO}
+         */
+        public static final String KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY =
+                KEY_PREFIX + "epdg_address_priority_int_array";
+
+        /** Epdg static IP address or FQDN */
+        public static final String KEY_EPDG_STATIC_ADDRESS_STRING =
+                KEY_PREFIX + "epdg_static_address_string";
+
+        /** Epdg static IP address or FQDN for roaming */
+        public static final String KEY_EPDG_STATIC_ADDRESS_ROAMING_STRING =
+                KEY_PREFIX + "epdg_static_address_roaming_string";
+
+        /**
+         * List of supported key sizes for AES Cipher Block Chaining (CBC) encryption mode of child
+         * session.
+         * Possible values are {@link #KEY_LEN_UNUSED}, {@link #KEY_LEN_AES_128},
+         * {@link #KEY_LEN_AES_192}, {@link #KEY_LEN_AES_256}
+         */
+        public static final String KEY_CHILD_SESSION_AES_CBC_KEY_SIZE_INT_ARRAY =
+                KEY_PREFIX + "child_session_aes_cbc_key_size_int_array";
+
+        /**
+         * List of supported key sizes for AES counter (CTR) encryption mode of child session.
+         * Possible values are {@link #KEY_LEN_UNUSED}, {@link #KEY_LEN_AES_128},
+         * {@link #KEY_LEN_AES_192}, {@link #KEY_LEN_AES_256}
+         */
+        public static final String KEY_CHILD_SESSION_AES_CTR_KEY_SIZE_INT_ARRAY =
+                KEY_PREFIX + "child_encryption_aes_ctr_key_size_int_array";
+
+        /**
+         * List of supported encryption algorithms for child session.
+         * Possible values are {@link #ENCRYPTION_ALGORITHM_3DES},
+         * {@link #ENCRYPTION_ALGORITHM_AES_CBC}, {@link #ENCRYPTION_ALGORITHM_AES_GCM_8},
+         * {@link #ENCRYPTION_ALGORITHM_AES_GCM_12}, {@link #ENCRYPTION_ALGORITHM_AES_GCM_16}
+         */
+        public static final String KEY_SUPPORTED_CHILD_SESSION_ENCRYPTION_ALGORITHMS_INT_ARRAY =
+                KEY_PREFIX + "supported_child_session_encryption_algorithms_int_array";
+
+        /** Controls if IKE message fragmentation is enabled. */
+        public static final String KEY_IKE_FRAGMENTATION_ENABLED_BOOL =
+                KEY_PREFIX + "ike_fragmentation_enabled_bool";
+
+        /**
+         * Time in seconds after which the IKE session is terminated if rekey procedure is not
+         * successful. If not set or set to <= 0, default value is 3600 seconds.
+         */
+        public static final String KEY_IKE_REKEY_HARD_TIMER_SEC_INT =
+                KEY_PREFIX + "ike_rekey_hard_timer_in_sec";
+
+        /**
+         * Time in seconds after which the IKE session rekey procedure is started. If not set or
+         * set to <= 0, default value is 3000 seconds.
+         */
+        public static final String KEY_IKE_REKEY_SOFT_TIMER_SEC_INT =
+                KEY_PREFIX + "ike_rekey_soft_timer_sec_int";
+
+        /**
+         * List of supported key sizes for AES Cipher Block Chaining (CBC) encryption mode of IKE
+         * session.
+         * Possible values - {@link #KEY_LEN_UNUSED}, {@link #KEY_LEN_AES_128},
+         *         {@link #KEY_LEN_AES_192}, {@link #KEY_LEN_AES_256}
+         */
+        public static final String KEY_IKE_SESSION_AES_CBC_KEY_SIZE_INT_ARRAY =
+                KEY_PREFIX + "ike_session_encryption_aes_cbc_key_size_int_array";
+
+        /**
+         * List of supported key sizes for AES counter (CTR) encryption mode of IKE session.
+         * Possible values - {@link #KEY_LEN_UNUSED}, {@link #KEY_LEN_AES_128},
+         *         {@link #KEY_LEN_AES_192}, {@link #KEY_LEN_AES_256}
+         */
+        public static final String KEY_IKE_SESSION_AES_CTR_KEY_SIZE_INT_ARRAY =
+                KEY_PREFIX + "ike_session_aes_ctr_key_size_int_array";
+
+        /**
+        * List of supported encryption algorithms for IKE session.
+        * Possible values are {@link #ENCRYPTION_ALGORITHM_3DES},
+         * {@link #ENCRYPTION_ALGORITHM_AES_CBC}, {@link #ENCRYPTION_ALGORITHM_AES_GCM_8},
+         * {@link #ENCRYPTION_ALGORITHM_AES_GCM_12}, {@link #ENCRYPTION_ALGORITHM_AES_GCM_16}
+        */
+        public static final String KEY_SUPPORTED_IKE_SESSION_ENCRYPTION_ALGORITHMS_INT_ARRAY =
+                KEY_PREFIX + "supported_ike_session_encryption_algorithms_int_array";
+
+        /**
+         * List of supported integrity algorithms for IKE session
+         * Possible values are {@link #INTEGRITY_ALGORITHM_NONE},
+         * {@link #INTEGRITY_ALGORITHM_HMAC_SHA1_96}, {@link #INTEGRITY_ALGORITHM_AES_XCBC_96},
+         * {@link #INTEGRITY_ALGORITHM_HMAC_SHA2_256_128},
+         * {@link #INTEGRITY_ALGORITHM_HMAC_SHA2_384_192},
+         * {@link #INTEGRITY_ALGORITHM_HMAC_SHA2_512_256}
+         */
+        public static final String KEY_SUPPORTED_INTEGRITY_ALGORITHMS_INT_ARRAY =
+                KEY_PREFIX + "supported_integrity_algorithms_int_array";
+
+        /** Maximum number of retries for tunnel establishment. */
+        public static final String KEY_MAX_RETRIES_INT = KEY_PREFIX + "max_retries_int";
+
+        /** Controls if nat traversal should be enabled. */
+        public static final String KEY_NATT_ENABLED_BOOL = KEY_PREFIX + "natt_enabled_bool";
+
+        /**
+         * Time in seconds after which a NATT keep alive message is sent. If not set or set to <= 0,
+         * default value is 20 seconds.
+         */
+        public static final String KEY_NATT_KEEP_ALIVE_TIMER_SEC_INT =
+                KEY_PREFIX + "natt_keep_alive_timer_sec_int";
+
+        /** List of comma separated MCC/MNCs used to create ePDG FQDN as per 3GPP TS 23.003 */
+        public static final String KEY_MCC_MNCS_STRING_ARRAY = KEY_PREFIX + "mcc_mncs_string_array";
+
+        /**
+         * List of supported pseudo random function algorithms for IKE session
+         * Possible values are {@link #PSEUDORANDOM_FUNCTION_HMAC_SHA1},
+         * {@link #PSEUDORANDOM_FUNCTION_AES128_XCBC}
+         */
+        public static final String KEY_SUPPORTED_PRF_ALGORITHMS_INT_ARRAY = KEY_PREFIX +
+                "supported_prf_algorithms_int_array";
+
+        /**
+         * Time in seconds after which IKE message is retransmitted. If not set or set to <= 0,
+         * default value is 2 seconds.
+         */
+        public static final String KEY_RETRANSMIT_TIMER_SEC_INT =
+                KEY_PREFIX + "retransmit_timer_sec_int";
+
+        /** @hide */
+        @IntDef({
+                AUTHENTICATION_METHOD_EAP_ONLY,
+                AUTHENTICATION_METHOD_CERT
+        })
+        public @interface AuthenticationMethodType {}
+
+        /**
+         * Certificate sent from the server is ignored. Only Extensible Authentication Protocol
+         * (EAP) is used to authenticate the server.
+         * EAP_ONLY_AUTH payload is added to IKE_AUTH request if supported.
+         * @see <a href="https://tools.ietf.org/html/rfc5998">RFC 5998</a>
+         */
+        public static final int AUTHENTICATION_METHOD_EAP_ONLY = 0;
+        /** Server is authenticated using its certificate. */
+        public static final int AUTHENTICATION_METHOD_CERT = 1;
+
+        /** @hide */
+        @IntDef({
+                EPDG_ADDRESS_STATIC,
+                EPDG_ADDRESS_PLMN,
+                EPDG_ADDRESS_PCO
+        })
+        public @interface EpdgAddressType {}
+
+        /** Use static epdg address. */
+        public static final int EPDG_ADDRESS_STATIC = 0;
+        /** Construct the epdg address using plmn. */
+        public static final int EPDG_ADDRESS_PLMN = 1;
+        /**
+         * Use the epdg address received in protocol configuration options (PCO) from the
+         * network.
+         */
+        public static final int EPDG_ADDRESS_PCO = 2;
+
+        /** @hide */
+        @IntDef({
+                KEY_LEN_UNUSED,
+                KEY_LEN_AES_128,
+                KEY_LEN_AES_192,
+                KEY_LEN_AES_256
+        })
+        public @interface EncrpytionKeyLengthType {}
+
+        public static final int KEY_LEN_UNUSED = SaProposal.KEY_LEN_UNUSED;
+        /** AES Encryption/Ciphering Algorithm key length 128 bits. */
+        public static final int KEY_LEN_AES_128 = SaProposal.KEY_LEN_AES_128;
+        /** AES Encryption/Ciphering Algorithm key length 192 bits. */
+        public static final int KEY_LEN_AES_192 = SaProposal.KEY_LEN_AES_192;
+        /** AES Encryption/Ciphering Algorithm key length 256 bits. */
+        public static final int KEY_LEN_AES_256 = SaProposal.KEY_LEN_AES_256;
+
+        /** @hide */
+        @IntDef({
+                DH_GROUP_NONE,
+                DH_GROUP_1024_BIT_MODP,
+                DH_GROUP_2048_BIT_MODP
+        })
+        public @interface DhGroup {}
+
+        /** None Diffie-Hellman Group. */
+        public static final int DH_GROUP_NONE = SaProposal.DH_GROUP_NONE;
+        /** 1024-bit MODP Diffie-Hellman Group. */
+        public static final int DH_GROUP_1024_BIT_MODP = SaProposal.DH_GROUP_1024_BIT_MODP;
+        /** 2048-bit MODP Diffie-Hellman Group. */
+        public static final int DH_GROUP_2048_BIT_MODP = SaProposal.DH_GROUP_2048_BIT_MODP;
+
+        /** @hide */
+        @IntDef({
+                ENCRYPTION_ALGORITHM_3DES,
+                ENCRYPTION_ALGORITHM_AES_CBC,
+                ENCRYPTION_ALGORITHM_AES_GCM_8,
+                ENCRYPTION_ALGORITHM_AES_GCM_12,
+                ENCRYPTION_ALGORITHM_AES_GCM_16
+        })
+        public @interface EncryptionAlgorithm {}
+
+        /** 3DES Encryption/Ciphering Algorithm. */
+        public static final int ENCRYPTION_ALGORITHM_3DES = SaProposal.ENCRYPTION_ALGORITHM_3DES;
+        /** AES-CBC Encryption/Ciphering Algorithm. */
+        public static final int ENCRYPTION_ALGORITHM_AES_CBC =
+                SaProposal.ENCRYPTION_ALGORITHM_AES_CBC;
+
+        /**
+         * AES-GCM Authentication/Integrity + Encryption/Ciphering Algorithm with 8-octet ICV
+         * (truncation).
+         */
+        public static final int ENCRYPTION_ALGORITHM_AES_GCM_8 =
+                SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_8;
+        /**
+         * AES-GCM Authentication/Integrity + Encryption/Ciphering Algorithm with 12-octet ICV
+         * (truncation).
+         */
+        public static final int ENCRYPTION_ALGORITHM_AES_GCM_12 =
+                SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_12;
+        /**
+         * AES-GCM Authentication/Integrity + Encryption/Ciphering Algorithm with 16-octet ICV
+         * (truncation).
+         */
+        public static final int ENCRYPTION_ALGORITHM_AES_GCM_16 =
+                SaProposal.ENCRYPTION_ALGORITHM_AES_GCM_16;
+
+        /** @hide */
+        @IntDef({
+                INTEGRITY_ALGORITHM_NONE,
+                INTEGRITY_ALGORITHM_HMAC_SHA1_96,
+                INTEGRITY_ALGORITHM_AES_XCBC_96,
+                INTEGRITY_ALGORITHM_HMAC_SHA2_256_128,
+                INTEGRITY_ALGORITHM_HMAC_SHA2_384_192,
+                INTEGRITY_ALGORITHM_HMAC_SHA2_512_256
+        })
+        public @interface IntegrityAlgorithm {}
+
+        /** None Authentication/Integrity Algorithm. */
+        public static final int INTEGRITY_ALGORITHM_NONE = SaProposal.INTEGRITY_ALGORITHM_NONE;
+        /** HMAC-SHA1 Authentication/Integrity Algorithm. */
+        public static final int INTEGRITY_ALGORITHM_HMAC_SHA1_96 =
+                SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA1_96;
+        /** AES-XCBC-96 Authentication/Integrity Algorithm. */
+        public static final int INTEGRITY_ALGORITHM_AES_XCBC_96 =
+                SaProposal.INTEGRITY_ALGORITHM_AES_XCBC_96;
+        /** HMAC-SHA256 Authentication/Integrity Algorithm with 128-bit truncation. */
+        public static final int INTEGRITY_ALGORITHM_HMAC_SHA2_256_128 =
+                SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_256_128;
+        /** HMAC-SHA384 Authentication/Integrity Algorithm with 192-bit truncation. */
+        public static final int INTEGRITY_ALGORITHM_HMAC_SHA2_384_192 =
+                SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_384_192;
+        /** HMAC-SHA512 Authentication/Integrity Algorithm with 256-bit truncation. */
+        public static final int INTEGRITY_ALGORITHM_HMAC_SHA2_512_256 =
+                SaProposal.INTEGRITY_ALGORITHM_HMAC_SHA2_512_256;
+
+        /** @hide */
+        @IntDef({
+                PSEUDORANDOM_FUNCTION_HMAC_SHA1,
+                PSEUDORANDOM_FUNCTION_AES128_XCBC
+        })
+        public @interface PseudorandomFunction {}
+
+        /** HMAC-SHA1 Pseudorandom Function. */
+        public static final int PSEUDORANDOM_FUNCTION_HMAC_SHA1 =
+                SaProposal.PSEUDORANDOM_FUNCTION_HMAC_SHA1;
+        /** AES128-XCBC Pseudorandom Function. */
+        public static final int PSEUDORANDOM_FUNCTION_AES128_XCBC =
+                SaProposal.PSEUDORANDOM_FUNCTION_AES128_XCBC;
+
+        private Iwlan() {}
+
+        private static PersistableBundle getDefaults() {
+            PersistableBundle defaults = new PersistableBundle();
+            defaults.putInt(KEY_IKE_REKEY_SOFT_TIMER_SEC_INT, 3000);
+            defaults.putInt(KEY_IKE_REKEY_HARD_TIMER_SEC_INT, 3600);
+            defaults.putInt(KEY_CHILD_SA_REKEY_SOFT_TIMER_SEC_INT, 3000);
+            defaults.putInt(KEY_CHILD_SA_REKEY_HARD_TIMER_SEC_INT, 3600);
+            defaults.putInt(KEY_RETRANSMIT_TIMER_SEC_INT, 2);
+            defaults.putInt(KEY_DPD_TIMER_SEC_INT, 120);
+            defaults.putInt(KEY_MAX_RETRIES_INT, 3);
+            defaults.putIntArray(KEY_DIFFIE_HELLMAN_GROUPS_INT_ARRAY,
+                    new int[]{DH_GROUP_1024_BIT_MODP, DH_GROUP_2048_BIT_MODP});
+            defaults.putIntArray(KEY_SUPPORTED_IKE_SESSION_ENCRYPTION_ALGORITHMS_INT_ARRAY,
+                    new int[]{ENCRYPTION_ALGORITHM_3DES, ENCRYPTION_ALGORITHM_AES_CBC});
+            defaults.putIntArray(KEY_SUPPORTED_CHILD_SESSION_ENCRYPTION_ALGORITHMS_INT_ARRAY,
+                    new int[]{ENCRYPTION_ALGORITHM_3DES, ENCRYPTION_ALGORITHM_AES_CBC});
+            defaults.putIntArray(KEY_SUPPORTED_INTEGRITY_ALGORITHMS_INT_ARRAY,
+                    new int[]{INTEGRITY_ALGORITHM_AES_XCBC_96, INTEGRITY_ALGORITHM_HMAC_SHA1_96,
+                            INTEGRITY_ALGORITHM_HMAC_SHA2_256_128});
+            defaults.putIntArray(KEY_SUPPORTED_PRF_ALGORITHMS_INT_ARRAY,
+                    new int[]{PSEUDORANDOM_FUNCTION_HMAC_SHA1, PSEUDORANDOM_FUNCTION_AES128_XCBC});
+            defaults.putBoolean(KEY_NATT_ENABLED_BOOL, true);
+            defaults.putInt(KEY_EPDG_AUTHENTICATION_METHOD_INT, AUTHENTICATION_METHOD_CERT);
+            defaults.putString(KEY_EPDG_STATIC_ADDRESS_STRING, "");
+            defaults.putString(KEY_EPDG_STATIC_ADDRESS_ROAMING_STRING, "");
+            defaults.putInt(KEY_NATT_KEEP_ALIVE_TIMER_SEC_INT, 20);
+            defaults.putIntArray(KEY_IKE_SESSION_AES_CBC_KEY_SIZE_INT_ARRAY,
+                    new int[]{KEY_LEN_AES_128, KEY_LEN_AES_256});
+            defaults.putIntArray(KEY_IKE_SESSION_AES_CTR_KEY_SIZE_INT_ARRAY,
+                    new int[]{KEY_LEN_AES_128});
+            defaults.putIntArray(KEY_CHILD_SESSION_AES_CBC_KEY_SIZE_INT_ARRAY,
+                    new int[]{KEY_LEN_AES_128, KEY_LEN_AES_256});
+            defaults.putIntArray(KEY_CHILD_SESSION_AES_CTR_KEY_SIZE_INT_ARRAY,
+                    new int[]{KEY_LEN_AES_128});
+            defaults.putBoolean(KEY_IKE_FRAGMENTATION_ENABLED_BOOL, false);
+            defaults.putIntArray(KEY_EPDG_ADDRESS_PRIORITY_INT_ARRAY, new int[]{EPDG_ADDRESS_PLMN,
+                    EPDG_ADDRESS_STATIC});
+            defaults.putStringArray(KEY_MCC_MNCS_STRING_ARRAY, new String[]{});
+
+            return defaults;
+        }
+    }
 
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
@@ -3517,6 +3854,7 @@ public class CarrierConfigManager {
         sDefaults.putInt(KEY_CARRIER_DEFAULT_WFC_IMS_MODE_INT, 2);
         sDefaults.putInt(KEY_CARRIER_DEFAULT_WFC_IMS_ROAMING_MODE_INT, 2);
         sDefaults.putBoolean(KEY_CARRIER_FORCE_DISABLE_ETWS_CMAS_TEST_BOOL, false);
+        sDefaults.putBoolean(KEY_CARRIER_RCS_PROVISIONING_REQUIRED_BOOL, true);
         sDefaults.putBoolean(KEY_CARRIER_VOLTE_PROVISIONING_REQUIRED_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_UT_PROVISIONING_REQUIRED_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_SS_OVER_UT_BOOL, false);
@@ -3970,6 +4308,8 @@ public class CarrierConfigManager {
                 CellSignalStrengthLte.USE_RSRP | CellSignalStrengthLte.USE_RSSNR);
         // Default wifi configurations.
         sDefaults.putAll(Wifi.getDefaults());
+        sDefaults.putBoolean(ENABLE_EAP_METHOD_PREFIX_BOOL, false);
+        sDefaults.putAll(Iwlan.getDefaults());
     }
 
     /**
@@ -4231,8 +4571,11 @@ public class CarrierConfigManager {
     /** @hide */
     @Nullable
     private ICarrierConfigLoader getICarrierConfigLoader() {
-        return ICarrierConfigLoader.Stub
-                .asInterface(ServiceManager.getService(Context.CARRIER_CONFIG_SERVICE));
+        return ICarrierConfigLoader.Stub.asInterface(
+                TelephonyFrameworkInitializer
+                        .getTelephonyServiceManager()
+                        .getCarrierConfigServiceRegisterer()
+                        .get());
     }
 
     /**

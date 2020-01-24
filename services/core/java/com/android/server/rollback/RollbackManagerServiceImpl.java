@@ -17,8 +17,10 @@
 package com.android.server.rollback;
 
 import android.Manifest;
+import android.annotation.AnyThread;
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
+import android.annotation.WorkerThread;
 import android.app.AppOpsManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -41,6 +43,7 @@ import android.content.rollback.RollbackManager;
 import android.os.Binder;
 import android.os.Environment;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.HandlerThread;
 import android.os.Process;
 import android.os.SystemClock;
@@ -76,11 +79,17 @@ import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Implementation of service that manages APK level rollbacks.
+ *
+ * Threading model:
+ *
+ * - @AnyThread annotates thread-safe methods.
+ * - @WorkerThread annotates methods that should be called from the handler thread only.
  */
 class RollbackManagerServiceImpl extends IRollbackManager.Stub {
 
@@ -127,6 +136,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
 
     private final Context mContext;
     private final HandlerThread mHandlerThread;
+    private final Executor mExecutor;
     private final Installer mInstaller;
     private final RollbackPackageHealthObserver mPackageHealthObserver;
     private final AppDataRollbackHelper mAppDataRollbackHelper;
@@ -166,6 +176,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         mHandlerThread = new HandlerThread("RollbackManagerServiceHandler");
         mHandlerThread.start();
         Watchdog.getInstance().addThread(getHandler(), HANDLER_THREAD_TIMEOUT_DURATION_MILLIS);
+        mExecutor = new HandlerExecutor(getHandler());
 
         for (UserInfo userInfo : UserManager.get(mContext).getUsers(true)) {
             registerUserCallbacks(userInfo.getUserHandle());
@@ -228,11 +239,16 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
                         Slog.v(TAG, "broadcast=ACTION_CANCEL_ENABLE_ROLLBACK token=" + token);
                     }
                     synchronized (mLock) {
-                        for (NewRollback rollback : mNewRollbacks) {
-                            if (rollback.hasToken(token)) {
-                                rollback.setCancelled();
-                                return;
+                        NewRollback found = null;
+                        for (NewRollback newRollback : mNewRollbacks) {
+                            if (newRollback.rollback.hasToken(token)) {
+                                found = newRollback;
+                                break;
                             }
+                        }
+                        if (found != null) {
+                            mNewRollbacks.remove(found);
+                            found.rollback.delete(mAppDataRollbackHelper);
                         }
                     }
                 }
@@ -256,6 +272,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         registerTimeChangeReceiver();
     }
 
+    @AnyThread
     private void registerUserCallbacks(UserHandle user) {
         Context context = getContextAsUser(user);
         if (context == null) {
@@ -338,6 +355,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
                     callerPackageName, statusReceiver));
     }
 
+    @AnyThread
     private void registerTimeChangeReceiver() {
         final BroadcastReceiver timeChangeIntentReceiver = new BroadcastReceiver() {
             @Override
@@ -362,6 +380,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
                 null /* broadcastPermission */, getHandler());
     }
 
+    @AnyThread
     private static long calculateRelativeBootTime() {
         return System.currentTimeMillis() - SystemClock.elapsedRealtime();
     }
@@ -371,6 +390,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
      * The work is done on the current thread. This may be a long running
      * operation.
      */
+    @WorkerThread
     private void commitRollbackInternal(int rollbackId, List<VersionedPackage> causePackages,
             String callerPackageName, IntentSender statusReceiver) {
         Slog.i(TAG, "commitRollback id=" + rollbackId + " caller=" + callerPackageName);
@@ -393,7 +413,6 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
 
         CountDownLatch latch = new CountDownLatch(1);
         getHandler().post(() -> {
-            updateRollbackLifetimeDurationInMillis();
             synchronized (mLock) {
                 mRollbacks.clear();
                 mRollbacks.addAll(mRollbackStore.loadRollbacks());
@@ -422,10 +441,14 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
                     rollback.delete(mAppDataRollbackHelper);
                 }
             }
-            for (NewRollback newRollback : mNewRollbacks) {
+            Iterator<NewRollback> iter2 = mNewRollbacks.iterator();
+            while (iter2.hasNext()) {
+                NewRollback newRollback = iter2.next();
                 if (newRollback.rollback.includesPackage(packageName)) {
-                    newRollback.setCancelled();
+                    iter2.remove();
+                    newRollback.rollback.delete(mAppDataRollbackHelper);
                 }
+
             }
         }
     }
@@ -440,6 +463,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         });
     }
 
+    @WorkerThread
     private void queueSleepIfNeeded() {
         if (mSleepDuration.size() == 0) {
             return;
@@ -486,6 +510,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         }
     }
 
+    @WorkerThread
     private void updateRollbackLifetimeDurationInMillis() {
         mRollbackLifetimeDurationInMillis = DeviceConfig.getLong(
                 DeviceConfig.NAMESPACE_ROLLBACK_BOOT,
@@ -496,12 +521,15 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         }
     }
 
+    @AnyThread
     void onBootCompleted() {
-        getHandler().post(() -> updateRollbackLifetimeDurationInMillis());
-        // Also posts to handler thread
-        scheduleExpiration(0);
+        DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_ROLLBACK_BOOT,
+                mExecutor, properties -> updateRollbackLifetimeDurationInMillis());
 
         getHandler().post(() -> {
+            updateRollbackLifetimeDurationInMillis();
+            runExpiration();
+
             // Check to see if any rollback-enabled staged sessions or staged
             // rollback sessions been applied.
             List<Rollback> enabling = new ArrayList<>();
@@ -564,6 +592,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
      * Removes all backups for the package not matching the currently
      * installed package version.
      */
+    @WorkerThread
     private void onPackageReplaced(String packageName) {
         // TODO: Could this end up incorrectly deleting a rollback for a
         // package that is about to be installed?
@@ -588,6 +617,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
      * Called when a package has been completely removed from the device.
      * Removes all backups and rollback history for the given package.
      */
+    @WorkerThread
     private void onPackageFullyRemoved(String packageName) {
         expireRollbackForPackage(packageName);
     }
@@ -599,6 +629,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
      * @param status the RollbackManager.STATUS_* code with the failure.
      * @param message the failure message.
      */
+    @AnyThread
     static void sendFailure(Context context, IntentSender statusReceiver,
             @RollbackManager.Status int status, String message) {
         Slog.e(TAG, message);
@@ -614,6 +645,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
 
     // Check to see if anything needs expiration, and if so, expire it.
     // Schedules future expiration as appropriate.
+    @WorkerThread
     private void runExpiration() {
         Instant now = Instant.now();
         Instant oldest = null;
@@ -649,10 +681,12 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
      * Schedules an expiration check to be run after the given duration in
      * milliseconds has gone by.
      */
+    @AnyThread
     private void scheduleExpiration(long duration) {
         getHandler().postDelayed(() -> runExpiration(), duration);
     }
 
+    @AnyThread
     private Handler getHandler() {
         return mHandlerThread.getThreadHandler();
     }
@@ -660,6 +694,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
     // Returns true if <code>session</code> has installFlags and code path
     // matching the installFlags and new package code path given to
     // enableRollback.
+    @WorkerThread
     private boolean sessionMatchesForEnableRollback(PackageInstaller.SessionInfo session,
             int installFlags, File newPackageCodePath) {
         if (session == null || session.resolvedBaseCodePath == null) {
@@ -674,6 +709,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         return false;
     }
 
+    @AnyThread
     private Context getContextAsUser(UserHandle user) {
         try {
             return mContext.createPackageContextAsUser(mContext.getPackageName(), 0, user);
@@ -693,6 +729,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
      * @param token the distinct rollback token sent by package manager.
      * @return true if enabling the rollback succeeds, false otherwise.
      */
+    @WorkerThread
     private boolean enableRollback(
             int installFlags, File newPackageCodePath, @UserIdInt int user, int token) {
         if (LOCAL_LOGV) {
@@ -775,9 +812,37 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
                 mNewRollbacks.add(newRollback);
             }
         }
-        newRollback.addToken(token);
+        newRollback.rollback.addToken(token);
 
         return enableRollbackForPackageSession(newRollback.rollback, packageSession);
+    }
+
+    @WorkerThread
+    private void removeRollbackForPackageSessionId(int sessionId) {
+        if (LOCAL_LOGV) {
+            Slog.v(TAG, "removeRollbackForPackageSessionId=" + sessionId);
+        }
+
+        synchronized (mLock) {
+            NewRollback newRollback = getNewRollbackForPackageSessionLocked(sessionId);
+            if (newRollback != null) {
+                Slog.w(TAG, "Delete new rollback id=" + newRollback.rollback.info.getRollbackId()
+                        + " for session id=" + sessionId);
+                mNewRollbacks.remove(newRollback);
+                newRollback.rollback.delete(mAppDataRollbackHelper);
+            }
+            Iterator<Rollback> iter = mRollbacks.iterator();
+            while (iter.hasNext()) {
+                Rollback rollback = iter.next();
+                if (rollback.getStagedSessionId() == sessionId) {
+                    Slog.w(TAG, "Delete rollback id=" + rollback.info.getRollbackId()
+                            + " for session id=" + sessionId);
+                    iter.remove();
+                    rollback.delete(mAppDataRollbackHelper);
+                    break;
+                }
+            }
+        }
     }
 
     /**
@@ -787,6 +852,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
      *
      * @return true on success, false on failure.
      */
+    @WorkerThread
     private boolean enableRollbackForPackageSession(Rollback rollback,
             PackageInstaller.SessionInfo session) {
         // TODO: Don't attempt to enable rollback for split installs.
@@ -839,9 +905,36 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         }
 
         ApplicationInfo appInfo = pkgInfo.applicationInfo;
-        return rollback.enableForPackage(packageName, newPackage.versionCode,
+        boolean success = rollback.enableForPackage(packageName, newPackage.versionCode,
                 pkgInfo.getLongVersionCode(), isApex, appInfo.sourceDir,
                 appInfo.splitSourceDirs, session.rollbackDataPolicy);
+        if (!success) {
+            return success;
+        }
+
+        if (isApex) {
+            // Check if this apex contains apks inside it. If true, then they should be added as
+            // a RollbackPackageInfo into this rollback
+            final PackageManagerInternal pmi = LocalServices.getService(
+                    PackageManagerInternal.class);
+            List<String> apksInApex = pmi.getApksInApex(packageName);
+            for (String apkInApex : apksInApex) {
+                // Get information about the currently installed package.
+                final PackageInfo apkPkgInfo;
+                try {
+                    apkPkgInfo = getPackageInfo(apkInApex);
+                } catch (PackageManager.NameNotFoundException e) {
+                    // TODO: Support rolling back fresh package installs rather than
+                    // fail here. Test this case.
+                    Slog.e(TAG, apkInApex + " is not installed");
+                    return false;
+                }
+                success = rollback.enableForPackageInApex(
+                        apkInApex, apkPkgInfo.getLongVersionCode(), session.rollbackDataPolicy);
+                if (!success) return success;
+            }
+        }
+        return true;
     }
 
     @Override
@@ -855,12 +948,17 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         getHandler().post(() -> {
             snapshotUserDataInternal(packageName, userIds);
             restoreUserDataInternal(packageName, userIds, appId, seInfo);
-            final PackageManagerInternal pmi = LocalServices.getService(
-                    PackageManagerInternal.class);
-            pmi.finishPackageInstall(token, false);
+            // When this method is called as part of the install flow, a positive token number is
+            // passed to it. Need to notify the PackageManager when we are done.
+            if (token > 0) {
+                final PackageManagerInternal pmi = LocalServices.getService(
+                        PackageManagerInternal.class);
+                pmi.finishPackageInstall(token, false);
+            }
         });
     }
 
+    @WorkerThread
     private void snapshotUserDataInternal(String packageName, int[] userIds) {
         if (LOCAL_LOGV) {
             Slog.v(TAG, "snapshotUserData pkg=" + packageName
@@ -880,6 +978,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         }
     }
 
+    @WorkerThread
     private void restoreUserDataInternal(
             String packageName, int[] userIds, int appId, String seInfo) {
         if (LOCAL_LOGV) {
@@ -944,7 +1043,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
                 }
             }
 
-            Rollback rollback = completeEnableRollback(newRollback, true);
+            Rollback rollback = completeEnableRollback(newRollback);
             if (rollback == null) {
                 result.offer(-1);
             } else {
@@ -994,6 +1093,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
      * Returns true if the installer is allowed to enable rollback for the
      * given named package, false otherwise.
      */
+    @AnyThread
     private boolean enableRollbackAllowed(String installerPackageName, String packageName) {
         if (installerPackageName == null) {
             return false;
@@ -1016,6 +1116,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
     /**
      * Returns true is this package is eligible for enabling rollback.
      */
+    @AnyThread
     private boolean isRollbackWhitelisted(String packageName) {
         // TODO: Remove #isModule when the white list is ready.
         return SystemConfig.getInstance().getRollbackWhitelistedPackages().contains(packageName)
@@ -1024,6 +1125,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
     /**
      * Returns true if the package name is the name of a module.
      */
+    @AnyThread
     private boolean isModule(String packageName) {
         PackageManager pm = mContext.getPackageManager();
         final ModuleInfo moduleInfo;
@@ -1040,6 +1142,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
      * Gets the version of the package currently installed.
      * Returns -1 if the package is not currently installed.
      */
+    @AnyThread
     private long getInstalledPackageVersion(String packageName) {
         PackageInfo pkgInfo;
         try {
@@ -1056,6 +1159,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
      *
      * @throws PackageManager.NameNotFoundException if no such package is installed.
      */
+    @AnyThread
     private PackageInfo getPackageInfo(String packageName)
             throws PackageManager.NameNotFoundException {
         PackageManager pm = mContext.getPackageManager();
@@ -1070,6 +1174,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         }
     }
 
+    @WorkerThread
     private class SessionCallback extends PackageInstaller.SessionCallback {
 
         @Override
@@ -1089,23 +1194,29 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
             if (LOCAL_LOGV) {
                 Slog.v(TAG, "SessionCallback.onFinished id=" + sessionId + " success=" + success);
             }
-            NewRollback newRollback;
-            synchronized (mLock) {
-                newRollback = getNewRollbackForPackageSessionLocked(sessionId);
+
+            if (success) {
+                NewRollback newRollback;
+                synchronized (mLock) {
+                    newRollback = getNewRollbackForPackageSessionLocked(sessionId);
+                    if (newRollback != null && newRollback.notifySessionWithSuccess()) {
+                        mNewRollbacks.remove(newRollback);
+                    } else {
+                        // Not all child sessions finished with success.
+                        // Don't enable the rollback yet.
+                        newRollback = null;
+                    }
+                }
+
                 if (newRollback != null) {
-                    mNewRollbacks.remove(newRollback);
+                    Rollback rollback = completeEnableRollback(newRollback);
+                    if (rollback != null && !rollback.isStaged()) {
+                        makeRollbackAvailable(rollback);
+                    }
                 }
+            } else {
+                removeRollbackForPackageSessionId(sessionId);
             }
-
-            if (newRollback != null) {
-                Rollback rollback = completeEnableRollback(newRollback, success);
-                if (rollback != null && !rollback.isStaged()) {
-                    makeRollbackAvailable(rollback);
-                }
-            }
-
-            // Clear the queue so it will never be leaked to next tests.
-            mSleepDuration.clear();
         }
     }
 
@@ -1116,25 +1227,18 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
      * @return the Rollback instance for a successfully enable-completed rollback,
      * or null on error.
      */
-    private Rollback completeEnableRollback(NewRollback newRollback, boolean success) {
+    @WorkerThread
+    private Rollback completeEnableRollback(NewRollback newRollback) {
         Rollback rollback = newRollback.rollback;
         if (LOCAL_LOGV) {
-            Slog.v(TAG, "completeEnableRollback id="
-                    + rollback.info.getRollbackId() + " success=" + success);
-        }
-        if (!success) {
-            // The install session was aborted, clean up the pending install.
-            rollback.delete(mAppDataRollbackHelper);
-            return null;
+            Slog.v(TAG, "completeEnableRollback id=" + rollback.info.getRollbackId());
         }
 
-        if (newRollback.isCancelled()) {
-            Slog.e(TAG, "Rollback has been cancelled by PackageManager");
-            rollback.delete(mAppDataRollbackHelper);
-            return null;
-        }
-
-        if (rollback.getPackageCount() != newRollback.getPackageSessionIdCount()) {
+        // We are checking if number of packages (excluding apk-in-apex) we enabled for rollback is
+        // equal to the number of sessions we are installing, to ensure we didn't skip enabling
+        // of any sessions. If we successfully enable an apex, then we can assume we enabled
+        // rollback for the embedded apk-in-apex, if any.
+        if (rollback.getPackageCount(0 /*flags*/) != newRollback.getPackageSessionIdCount()) {
             Slog.e(TAG, "Failed to enable rollback for all packages in session.");
             rollback.delete(mAppDataRollbackHelper);
             return null;
@@ -1158,6 +1262,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         return rollback;
     }
 
+    @WorkerThread
     @GuardedBy("rollback.getLock")
     private void makeRollbackAvailable(Rollback rollback) {
         if (LOCAL_LOGV) {
@@ -1178,6 +1283,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
     /*
      * Returns the rollback with the given rollbackId, if any.
      */
+    @WorkerThread
     private Rollback getRollbackForId(int rollbackId) {
         synchronized (mLock) {
             for (int i = 0; i < mRollbacks.size(); ++i) {
@@ -1191,6 +1297,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         return null;
     }
 
+    @WorkerThread
     @GuardedBy("mLock")
     private int allocateRollbackIdLocked() {
         int n = 0;
@@ -1220,6 +1327,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         }
     }
 
+    @AnyThread
     private void enforceManageRollbacks(@NonNull String message) {
         if ((PackageManager.PERMISSION_GRANTED != mContext.checkCallingOrSelfPermission(
                         Manifest.permission.MANAGE_ROLLBACKS))
@@ -1235,73 +1343,25 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         public final Rollback rollback;
 
         /**
-         * This array holds all of the rollback tokens associated with package sessions included in
-         * this rollback.
-         */
-        @GuardedBy("mNewRollbackLock")
-        private final IntArray mTokens = new IntArray();
-
-        /**
          * Session ids for all packages in the install. For multi-package sessions, this is the list
          * of child session ids. For normal sessions, this list is a single element with the normal
          * session id.
          */
         private final int[] mPackageSessionIds;
 
+        /**
+         * The number of sessions in the install which are notified with success by
+         * {@link PackageInstaller.SessionCallback#onFinished(int, boolean)}.
+         * This NewRollback will be enabled only after all child sessions finished with success.
+         */
         @GuardedBy("mNewRollbackLock")
-        private boolean mIsCancelled = false;
+        private int mNumPackageSessionsWithSuccess;
 
         private final Object mNewRollbackLock = new Object();
 
         NewRollback(Rollback rollback, int[] packageSessionIds) {
             this.rollback = rollback;
             this.mPackageSessionIds = packageSessionIds;
-        }
-
-        /**
-         * Adds a rollback token to be associated with this NewRollback. This may be used to
-         * identify which rollback should be cancelled in case {@link PackageManager} sends an
-         * {@link Intent#ACTION_CANCEL_ENABLE_ROLLBACK} intent.
-         */
-        void addToken(int token) {
-            synchronized (mNewRollbackLock) {
-                mTokens.add(token);
-            }
-        }
-
-        /**
-         * Returns true if this NewRollback is associated with the provided {@code token}.
-         */
-        boolean hasToken(int token) {
-            synchronized (mNewRollbackLock) {
-                return mTokens.indexOf(token) != -1;
-            }
-        }
-
-        /**
-         * Returns true if this NewRollback has been cancelled.
-         *
-         * <p>Rollback could be invalidated and cancelled if RollbackManager receives
-         * {@link Intent#ACTION_CANCEL_ENABLE_ROLLBACK} from {@link PackageManager}.
-         *
-         * <p>The main underlying assumption here is that if enabling the rollback times out, then
-         * {@link PackageManager} will NOT send
-         * {@link PackageInstaller.SessionCallback#onFinished(int, boolean)} before it broadcasts
-         * {@link Intent#ACTION_CANCEL_ENABLE_ROLLBACK}.
-         */
-        boolean isCancelled() {
-            synchronized (mNewRollbackLock) {
-                return mIsCancelled;
-            }
-        }
-
-        /**
-         * Sets this NewRollback to be marked as cancelled.
-         */
-        void setCancelled() {
-            synchronized (mNewRollbackLock) {
-                mIsCancelled = true;
-            }
         }
 
         /**
@@ -1322,8 +1382,20 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
         int getPackageSessionIdCount() {
             return mPackageSessionIds.length;
         }
+
+        /**
+         * Called when a child session finished with success.
+         * Returns true when all child sessions are notified with success. This NewRollback will be
+         * enabled only after all child sessions finished with success.
+         */
+        boolean notifySessionWithSuccess() {
+            synchronized (mNewRollbackLock) {
+                return ++mNumPackageSessionsWithSuccess == mPackageSessionIds.length;
+            }
+        }
     }
 
+    @WorkerThread
     @GuardedBy("mLock")
     private NewRollback createNewRollbackLocked(PackageInstaller.SessionInfo parentSession) {
         int rollbackId = allocateRollbackIdLocked();
@@ -1365,6 +1437,7 @@ class RollbackManagerServiceImpl extends IRollbackManager.Stub {
      * Returns null if no NewRollback is found for the given package
      * session.
      */
+    @WorkerThread
     @GuardedBy("mLock")
     NewRollback getNewRollbackForPackageSessionLocked(int packageSessionId) {
         // We expect mNewRollbacks to be a very small list; linear search

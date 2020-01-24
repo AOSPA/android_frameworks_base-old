@@ -22,7 +22,6 @@ import android.annotation.NonNull;
 import android.annotation.SdkConstant;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityManager;
 import android.app.INotificationManager;
 import android.app.Notification;
@@ -33,6 +32,7 @@ import android.app.NotificationManager;
 import android.app.Person;
 import android.app.Service;
 import android.companion.CompanionDeviceManager;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -1383,6 +1383,22 @@ public abstract class NotificationListenerService extends Service {
         }
 
         @Override
+        public void onPanelRevealed(int items) throws RemoteException {
+            // no-op in the listener
+        }
+
+        @Override
+        public void onPanelHidden() throws RemoteException {
+            // no-op in the listener
+        }
+
+        @Override
+        public void onNotificationVisibilityChanged(
+                String key, boolean isVisible) {
+            // no-op in the listener
+        }
+
+        @Override
         public void onNotificationSnoozedUntilContext(
                 IStatusBarNotificationHolder notificationHolder, String snoozeCriterionId)
                 throws RemoteException {
@@ -1523,6 +1539,7 @@ public abstract class NotificationListenerService extends Service {
         private ArrayList<CharSequence> mSmartReplies;
         private boolean mCanBubble;
         private boolean mVisuallyInterruptive;
+        private boolean mIsConversation;
 
         private static final int PARCEL_VERSION = 2;
 
@@ -1555,6 +1572,7 @@ public abstract class NotificationListenerService extends Service {
             out.writeCharSequenceList(mSmartReplies);
             out.writeBoolean(mCanBubble);
             out.writeBoolean(mVisuallyInterruptive);
+            out.writeBoolean(mIsConversation);
         }
 
         /** @hide */
@@ -1588,6 +1606,7 @@ public abstract class NotificationListenerService extends Service {
             mSmartReplies = in.readCharSequenceList();
             mCanBubble = in.readBoolean();
             mVisuallyInterruptive = in.readBoolean();
+            mIsConversation = in.readBoolean();
         }
 
 
@@ -1785,6 +1804,14 @@ public abstract class NotificationListenerService extends Service {
         }
 
         /**
+         * Returns whether this notification is a conversation notification.
+         * @hide
+         */
+        public boolean isConversation() {
+            return mIsConversation;
+        }
+
+        /**
          * @hide
          */
         @VisibleForTesting
@@ -1796,7 +1823,7 @@ public abstract class NotificationListenerService extends Service {
                 int userSentiment, boolean hidden, long lastAudiblyAlertedMs,
                 boolean noisy, ArrayList<Notification.Action> smartActions,
                 ArrayList<CharSequence> smartReplies, boolean canBubble,
-                boolean visuallyInterruptive) {
+                boolean visuallyInterruptive, boolean isConversation) {
             mKey = key;
             mRank = rank;
             mIsAmbient = importance < NotificationManager.IMPORTANCE_LOW;
@@ -1818,6 +1845,7 @@ public abstract class NotificationListenerService extends Service {
             mSmartReplies = smartReplies;
             mCanBubble = canBubble;
             mVisuallyInterruptive = visuallyInterruptive;
+            mIsConversation = isConversation;
         }
 
         /**
@@ -1843,7 +1871,8 @@ public abstract class NotificationListenerService extends Service {
                     other.mSmartActions,
                     other.mSmartReplies,
                     other.mCanBubble,
-                    other.mVisuallyInterruptive);
+                    other.mVisuallyInterruptive,
+                    other.mIsConversation);
         }
 
         /**
@@ -1896,7 +1925,8 @@ public abstract class NotificationListenerService extends Service {
                         == (other.mSmartActions == null ? 0 : other.mSmartActions.size()))
                     && Objects.equals(mSmartReplies, other.mSmartReplies)
                     && Objects.equals(mCanBubble, other.mCanBubble)
-                    && Objects.equals(mVisuallyInterruptive, other.mVisuallyInterruptive);
+                    && Objects.equals(mVisuallyInterruptive, other.mVisuallyInterruptive)
+                    && Objects.equals(mIsConversation, other.mIsConversation);
         }
     }
 

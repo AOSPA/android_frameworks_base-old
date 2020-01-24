@@ -920,6 +920,10 @@
     <string name="quick_settings_dark_mode_secondary_label_on_at_sunset">On at sunset</string>
     <!-- QuickSettings: Secondary text for when the Dark Mode will be on until sunrise. [CHAR LIMIT=20] -->
     <string name="quick_settings_dark_mode_secondary_label_until_sunrise">Until sunrise</string>
+    <!-- QuickSettings: Secondary text for when the Dark theme will be enabled at some user-selected time. [CHAR LIMIT=20] -->
+    <string name="quick_settings_dark_mode_secondary_label_on_at">On at <xliff:g id="time" example="10 pm">%s</xliff:g></string>
+    <!-- QuickSettings: Secondary text for when the Dark theme or some other tile will be on until some user-selected time. [CHAR LIMIT=20] -->
+    <string name="quick_settings_dark_mode_secondary_label_until">Until <xliff:g id="time" example="7 am">%s</xliff:g></string>
 
     <!-- QuickSettings: NFC tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_nfc_label">NFC</string>
@@ -927,6 +931,13 @@
     <string name="quick_settings_nfc_off">NFC is disabled</string>
     <!-- QuickSettings: NFC (on) [CHAR LIMIT=NONE] -->
     <string name="quick_settings_nfc_on">NFC is enabled</string>
+
+    <!-- QuickSettings: Screen record tile [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_screen_record_label">Screen Record</string>
+    <!-- QuickSettings: Text to prompt the user to begin a new recording [CHAR LIMIT=20] -->
+    <string name="quick_settings_screen_record_start">Start</string>
+    <!-- QuickSettings: Text to prompt the user to stop an ongoing recording [CHAR LIMIT=20] -->
+    <string name="quick_settings_screen_record_stop">Stop</string>
 
     <!-- Recents: Text that shows above the navigation bar after launching a few apps. [CHAR LIMIT=NONE] -->
     <string name="recents_swipe_up_onboarding">Swipe up to switch apps</string>
@@ -1162,6 +1173,9 @@
 
     <!-- Section title for notifications that do not vibrate or make noise. [CHAR LIMIT=40] -->
     <string name="notification_section_header_gentle">Silent notifications</string>
+
+    <!-- Section title for conversational notifications. [CHAR LIMIT=40] -->
+    <string name="notification_section_header_conversations">Conversations</string>
 
     <!-- Content description for accessibility: Tapping this button will dismiss all gentle notifications [CHAR LIMIT=NONE] -->
     <string name="accessibility_notification_section_header_gentle_clear_all">Clear all silent notifications</string>
@@ -1788,6 +1802,29 @@
     <string name="notification_done">Done</string>
     <!-- Notification: inline controls: undo block button -->
     <string name="inline_undo">Undo</string>
+    <!-- Notification: Conversation: control panel, label for button that demotes notification from conversation to normal notification -->
+    <string name="demote">Mark this notification as not a conversation</string>
+
+    <!-- [CHAR LIMIT=100] Mark this conversation as a favorite -->
+    <string name="notification_conversation_favorite">Favorite</string>
+
+    <!-- [CHAR LIMIT=100] Unmark this conversation as a favorite -->
+    <string name="notification_conversation_unfavorite">Unfavorite</string>
+
+    <!-- [CHAR LIMIT=100] Mute this conversation -->
+    <string name="notification_conversation_mute">Mute</string>
+
+    <!-- [CHAR LIMIT=100] Umute this conversation -->
+    <string name="notification_conversation_unmute">Unmute</string>
+
+    <!-- [CHAR LIMIT=100] Show notification as bubble -->
+    <string name="notification_conversation_bubble">Show as bubble</string>
+
+    <!-- [CHAR LIMIT=100] Turn off bubbles for notification -->
+    <string name="notification_conversation_unbubble">Turn off bubbles</string>
+
+    <!-- [CHAR LIMIT=100] Add this conversation to home screen -->
+    <string name="notification_conversation_home_screen">Add to home screen</string>
 
     <!-- Notification: Menu row: Content description for menu items. [CHAR LIMIT=NONE] -->
     <string name="notification_menu_accessibility"><xliff:g id="app_name" example="YouTube">%1$s</xliff:g> <xliff:g id="menu_description" example="notification controls">%2$s</xliff:g></string>

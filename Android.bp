@@ -53,6 +53,7 @@ filegroup {
         "core/java/android/view/DisplayAdjustments.java",
     ],
     path: "core/java",
+    visibility: ["//frameworks/base/test-mock"],
 }
 
 filegroup {
@@ -70,6 +71,14 @@ filegroup {
         "graphics/java/**/*.aidl",
     ],
     path: "graphics/java",
+}
+
+filegroup {
+    name: "framework-identity-sources",
+    srcs: [
+        "identity/java/**/*.java",
+    ],
+    path: "identity/java",
 }
 
 filegroup {
@@ -209,6 +218,7 @@ filegroup {
         ":framework-graphics-sources",
         ":framework-jobscheduler-sources", // jobscheduler is not a module for R
         ":framework-keystore-sources",
+        ":framework-identity-sources",
         ":framework-location-sources",
         ":framework-lowpan-sources",
         ":framework-mca-effect-sources",
@@ -221,16 +231,17 @@ filegroup {
         ":framework-sax-sources",
         ":framework-telecomm-sources",
         ":framework-telephony-common-sources",
-        ":framework-telephony-sources",
         ":framework-wifi-annotations",
         ":framework-wifi-non-updatable-sources",
         ":PacProcessor-aidl-sources",
         ":ProxyHandler-aidl-sources",
+        ":net-utils-framework-common-srcs",
 
         // AIDL from frameworks/base/native/
         ":platform-compat-native-aidl",
 
         // AIDL sources from external directories
+        ":credstore_aidl",
         ":dumpstate_aidl",
         ":framework_native_aidl",
         ":gatekeeper_aidl",
@@ -255,6 +266,9 @@ filegroup {
         // etc.
         ":framework-javastream-protos",
         ":framework-statslog-gen",
+
+        // telephony annotations
+        ":framework-telephony-annotations",
     ],
 }
 
@@ -262,12 +276,15 @@ filegroup {
     name: "framework-updatable-sources",
     srcs: [
         ":framework-appsearch-sources",
-        ":framework-sdkext-sources",
+        ":framework-sdkextensions-sources",
         ":framework-statsd-sources",
         ":framework-tethering-srcs",
         ":updatable-media-srcs",
         ":framework-mediaprovider-sources",
+        ":framework-permission-sources",
         ":framework-wifi-updatable-sources",
+        ":framework-telephony-sources",
+        ":ike-srcs",
     ]
 }
 
@@ -284,10 +301,11 @@ java_defaults {
     name: "framework-aidl-export-defaults",
     aidl: {
         export_include_dirs: [
-            "apex/media/java",
+            "apex/media/framework/java",
             "core/java",
             "drm/java",
             "graphics/java",
+            "identity/java",
             "keystore/java",
             "location/java",
             "lowpan/java",
@@ -300,8 +318,7 @@ java_defaults {
             "rs/java",
             "sax/java",
             "telecomm/java",
-            "telephony/java",
-            "wifi/java",
+            "wifi/aidl-export",
         ],
     },
 
@@ -322,8 +339,9 @@ java_library {
         "framework-protos",
         "game-driver-protos",
         "android.hidl.base-V1.0-java",
-        "android.hardware.cas-V1.1-java",
         "android.hardware.cas-V1.0-java",
+        "android.hardware.cas-V1.1-java",
+        "android.hardware.cas-V1.2-java",
         "android.hardware.contexthub-V1.0-java",
         "android.hardware.gnss-V1.0-java",
         "android.hardware.health-V1.0-java-constants",
@@ -347,7 +365,6 @@ java_library {
         "android.hardware.vibrator-V1.1-java",
         "android.hardware.vibrator-V1.2-java",
         "android.hardware.vibrator-V1.3-java",
-        "android.hardware.wifi-V1.0-java-constants",
         "devicepolicyprotosnano",
 
         "com.android.sysprop.apex",
@@ -381,6 +398,7 @@ java_defaults {
         "updatable_media_stubs",
         "framework_mediaprovider_stubs",
         "framework-tethering",
+        "framework-telephony-stubs",
     ],
 
     jarjar_rules: ":framework-jarjar-rules",
@@ -408,10 +426,18 @@ filegroup {
 filegroup {
     name: "libincident_aidl",
     srcs: [
+        "core/java/android/os/IIncidentDumpCallback.aidl",
         "core/java/android/os/IIncidentManager.aidl",
         "core/java/android/os/IIncidentReportStatusListener.aidl",
     ],
     path: "core/java",
+}
+
+filegroup {
+    name: "graphicsstats_proto",
+    srcs: [
+        "libs/hwui/protos/graphicsstats.proto",
+    ],
 }
 
 filegroup {
@@ -429,9 +455,11 @@ java_library {
     srcs: [":framework-non-updatable-sources"],
     libs: [
         "framework-appsearch-stubs",
-        // TODO(b/146167933): Use framework-statsd-stubs
-        "framework-statsd",
+        "framework-sdkextensions-stubs-systemapi",
+        "framework-statsd", // TODO(b/146167933): Use framework-statsd-stubs
+        "framework-permission-stubs",
         "framework-wifi-stubs",
+        "ike-stubs",
     ],
     installable: true,
     javac_shard_size: 150,
@@ -440,8 +468,6 @@ java_library {
         "libcore-platform-compat-config",
         "services-platform-compat-config",
         "media-provider-platform-compat-config",
-        "services-devicepolicy-platform-compat-config",
-        "services-core-platform-compat-config",
     ],
     static_libs: [
         // If MimeMap ever becomes its own APEX, then this dependency would need to be removed
@@ -451,6 +477,17 @@ java_library {
     // For backwards compatibility.
     stem: "framework",
     apex_available: ["//apex_available:platform"],
+    visibility: [
+        "//frameworks/base",
+        // TODO(b/144149403) remove the below lines
+        "//frameworks/base/apex/appsearch/framework",
+        "//frameworks/base/apex/blobstore/framework",
+        "//frameworks/base/apex/jobscheduler/framework",
+        "//frameworks/base/apex/permission/framework",
+        "//frameworks/base/apex/statsd/service",
+        "//frameworks/base/telephony",
+        "//frameworks/opt/net/wifi/service",
+    ],
 }
 
 // This "framework" module is NOT installed to the device. It's
@@ -471,12 +508,17 @@ java_library {
         "updatable_media_stubs",
         "framework_mediaprovider_stubs",
         "framework-appsearch", // TODO(b/146218515): should be framework-appsearch-stubs
-        "framework-sdkext-stubs-systemapi",
+        "framework-permission-stubs",
+        "framework-sdkextensions-stubs-systemapi",
         // TODO(b/146167933): Use framework-statsd-stubs instead.
         "framework-statsd",
-        // TODO(b/140299412): should be framework-wifi-stubs
-        "framework-wifi",
-        // TODO(jiyong): add more stubs for APEXes here
+        "framework-wifi-stubs",
+        "ike-stubs",
+        // TODO(b/147200698): should be the stub of framework-tethering
+        "framework-tethering",
+        // TODO (b/147688669) should be framework-telephony-stubs
+        "framework-telephony",
+        // TODO(jiyong): add stubs for APEXes here
     ],
     sdk_version: "core_platform",
     apex_available: ["//apex_available:platform"],
@@ -487,7 +529,11 @@ java_library {
     defaults: ["framework-defaults"],
     srcs: [":framework-all-sources"],
     installable: false,
-    static_libs: ["exoplayer2-core"],
+    static_libs: [
+        "exoplayer2-core",
+        "android.hardware.wifi-V1.0-java-constants",
+    ],
+    libs: ["icing-java-proto-lite"],
     apex_available: ["//apex_available:platform"],
 }
 
@@ -505,7 +551,8 @@ java_library {
         "compat-changeid-annotation-processor",
     ],
     static_libs: [
-        "exoplayer2-core"
+        "exoplayer2-core",
+        "android.hardware.wifi-V1.0-java-constants",
     ]
 }
 
@@ -551,7 +598,7 @@ java_library {
 genrule {
     name: "framework-statslog-gen",
     tools: ["stats-log-api-gen"],
-    cmd: "$(location stats-log-api-gen) --java $(out)",
+    cmd: "$(location stats-log-api-gen) --java $(out) --worksource",
     out: ["android/util/StatsLogInternal.java"],
 }
 
@@ -576,6 +623,7 @@ gensrcs {
         "&& $(location soong_zip) -jar -o $(out) -C $(genDir)/$(in) -D $(genDir)/$(in)",
 
     srcs: [
+        ":ipconnectivity-proto-src",
         "core/proto/**/*.proto",
         "libs/incident/**/*.proto",
     ],
@@ -585,17 +633,22 @@ gensrcs {
 filegroup {
     name: "framework-annotations",
     srcs: [
+        "core/java/android/annotation/CallbackExecutor.java",
+        "core/java/android/annotation/CheckResult.java",
         "core/java/android/annotation/IntDef.java",
         "core/java/android/annotation/IntRange.java",
         "core/java/android/annotation/NonNull.java",
         "core/java/android/annotation/Nullable.java",
         "core/java/android/annotation/RequiresPermission.java",
         "core/java/android/annotation/SdkConstant.java",
+        "core/java/android/annotation/StringDef.java",
         "core/java/android/annotation/SystemApi.java",
+        "core/java/android/annotation/SystemService.java",
         "core/java/android/annotation/TestApi.java",
         "core/java/android/annotation/UnsupportedAppUsage.java",
         "core/java/com/android/internal/annotations/GuardedBy.java",
         "core/java/com/android/internal/annotations/VisibleForTesting.java",
+        "core/java/com/android/internal/annotations/Immutable.java",
     ],
 }
 
@@ -603,6 +656,19 @@ java_library {
     name: "framework-annotations-lib",
     srcs: [ ":framework-annotations" ],
     sdk_version: "core_current",
+}
+
+filegroup {
+    name: "framework-ike-shared-srcs",
+    visibility: ["//frameworks/opt/net/ike"],
+    srcs: [
+        "core/java/android/annotation/StringDef.java",
+        "core/java/android/net/annotations/PolicyDirection.java",
+        "core/java/com/android/internal/util/IState.java",
+        "core/java/com/android/internal/util/State.java",
+        "core/java/com/android/internal/util/StateMachine.java",
+        "telephony/java/android/telephony/Annotation.java",
+    ],
 }
 
 filegroup {
@@ -622,6 +688,7 @@ filegroup {
         "core/java/com/android/internal/util/StateMachine.java",
         "core/java/com/android/internal/util/TrafficStatsConstants.java",
         "core/java/com/android/internal/util/WakeupMessage.java",
+        "core/java/com/android/internal/util/TokenBucket.java",
         "core/java/android/net/shared/*.java",
     ],
 }
@@ -631,13 +698,14 @@ filegroup {
     name: "framework-tethering-shared-srcs",
     srcs: [
         "core/java/android/util/LocalLog.java",
-        "core/java/com/android/internal/util/BitUtils.java",
         "core/java/com/android/internal/util/IndentingPrintWriter.java",
         "core/java/com/android/internal/util/IState.java",
         "core/java/com/android/internal/util/MessageUtils.java",
         "core/java/com/android/internal/util/Preconditions.java",
         "core/java/com/android/internal/util/State.java",
         "core/java/com/android/internal/util/StateMachine.java",
+        "core/java/com/android/internal/util/TrafficStatsConstants.java",
+        "core/java/android/net/shared/Inet4AddressUtils.java",
     ],
 }
 
@@ -670,6 +738,7 @@ java_library {
 java_library_host {
     name: "platformprotos",
     srcs: [
+        ":ipconnectivity-proto-src",
         "cmds/am/proto/instrumentation_data.proto",
         "cmds/statsd/src/**/*.proto",
         "core/proto/**/*.proto",
@@ -698,6 +767,7 @@ java_library {
     ],
     sdk_version: "9",
     srcs: [
+        ":ipconnectivity-proto-src",
         "core/proto/**/*.proto",
         "libs/incident/proto/android/os/**/*.proto",
     ],
@@ -712,6 +782,7 @@ java_library {
     },
 
     srcs: [
+        ":ipconnectivity-proto-src",
         "core/proto/**/*.proto",
         "libs/incident/proto/android/os/**/*.proto",
     ],
@@ -742,6 +813,7 @@ cc_defaults {
     ],
 
     srcs: [
+        ":ipconnectivity-proto-src",
         "core/proto/**/*.proto",
     ],
 }
@@ -1071,9 +1143,10 @@ genrule {
 }
 
 // Avoid including Parcelable classes as we don't want to have two copies of
-// Parcelable cross the process.
+// Parcelable cross the libraries. This is used by telephony-common (frameworks/opt/telephony)
+// and TeleService app (packages/services/Telephony).
 filegroup {
-    name: "framework-telephony-stack-shared-srcs",
+    name: "framework-telephony-common-shared-srcs",
     srcs: [
         "core/java/android/os/BasicShellCommandHandler.java",
         "core/java/android/os/RegistrantList.java",
@@ -1082,6 +1155,7 @@ filegroup {
         "core/java/android/util/TimeUtils.java",
         "core/java/com/android/internal/os/SomeArgs.java",
         "core/java/com/android/internal/util/AsyncChannel.java",
+        "core/java/com/android/internal/util/AsyncService.java",
         "core/java/com/android/internal/util/BitwiseInputStream.java",
         "core/java/com/android/internal/util/FastXmlSerializer.java",
         "core/java/com/android/internal/util/HexDump.java",
@@ -1091,6 +1165,21 @@ filegroup {
         "core/java/com/android/internal/util/State.java",
         "core/java/com/android/internal/util/StateMachine.java",
         "core/java/com/android/internal/util/UserIcons.java",
+    ],
+}
+
+// Avoid including Parcelable classes as we don't want to have two copies of
+// Parcelable cross the process. This is used by framework-telephony (frameworks/base/telephony).
+filegroup {
+    name: "framework-telephony-shared-srcs",
+    srcs: [
+        "core/java/android/util/RecurrenceRule.java",
+        "core/java/com/android/internal/os/SomeArgs.java",
+        "core/java/com/android/internal/util/BitwiseInputStream.java",
+        "core/java/com/android/internal/util/BitwiseOutputStream.java",
+        "core/java/com/android/internal/util/HexDump.java",
+        "core/java/com/android/internal/util/IndentingPrintWriter.java",
+        "core/java/com/android/internal/util/Preconditions.java",
     ],
 }
 
@@ -1118,12 +1207,37 @@ filegroup {
     ],
 }
 
+// utility classes statically linked into framework-wifi and dynamically linked
+// into wifi-service
+java_library {
+    name: "framework-wifi-util-lib",
+    sdk_version: "core_current",
+    srcs: [
+        "core/java/android/content/pm/BaseParceledListSlice.java",
+        "core/java/android/content/pm/ParceledListSlice.java",
+        "core/java/android/net/shared/Inet4AddressUtils.java",
+        "core/java/android/os/HandlerExecutor.java",
+        "core/java/com/android/internal/util/AsyncChannel.java",
+        "core/java/com/android/internal/util/AsyncService.java",
+        "core/java/com/android/internal/util/Protocol.java",
+        "core/java/com/android/internal/util/Preconditions.java",
+        "telephony/java/android/telephony/Annotation.java",
+        ":net-utils-framework-wifi-common-srcs",
+    ],
+    libs: [
+        "framework-annotations-lib",
+        "unsupportedappusage",
+        "android_system_stubs_current",
+    ],
+    visibility: ["//frameworks/base/wifi"],
+}
+
+// utility classes statically linked into wifi-service
 filegroup {
     name: "framework-wifi-service-shared-srcs",
     srcs: [
-        ":framework-annotations",
         "core/java/android/net/InterfaceConfiguration.java",
-        "core/java/android/os/HandlerExecutor.java",
+        "core/java/android/os/BasicShellCommandHandler.java",
         "core/java/android/util/BackupUtils.java",
         "core/java/android/util/LocalLog.java",
         "core/java/android/util/Rational.java",
@@ -1131,12 +1245,11 @@ filegroup {
         "core/java/com/android/internal/util/HexDump.java",
         "core/java/com/android/internal/util/IState.java",
         "core/java/com/android/internal/util/MessageUtils.java",
-        "core/java/com/android/internal/util/Preconditions.java",
         "core/java/com/android/internal/util/State.java",
         "core/java/com/android/internal/util/StateMachine.java",
         "core/java/com/android/internal/util/WakeupMessage.java",
-        "core/java/com/android/internal/util/XmlUtils.java",
     ],
+    visibility: ["//frameworks/opt/net/wifi/service"],
 }
 
 // TODO(b/145644363): move this to under StubLibraries.bp or ApiDocs.bp
@@ -1155,3 +1268,85 @@ build = [
     "StubLibraries.bp",
     "ApiDocs.bp",
 ]
+
+// TODO(b/147699819): move to frameworks/base/telephony/ folder
+droidstubs {
+    name: "framework-telephony-stubs-srcs",
+    srcs: [
+        ":framework-telephony-sources",
+        ":framework_native_aidl",
+        ":framework-javastream-protos",
+    ],
+    aidl: {
+        local_include_dirs: [
+            "core/java",
+            "telecomm/java"
+        ],
+    },
+    libs: [
+        "framework-annotations-lib",
+        "android.hardware.radio-V1.5-java",
+    ],
+    defaults: ["framework-module-stubs-defaults-systemapi"],
+    filter_packages: ["android.telephony"],
+    sdk_version: "system_current",
+}
+
+java_library {
+    name: "framework-telephony-stubs",
+    srcs: [":framework-telephony-stubs-srcs"],
+    // TODO(b/147699819): move public aidls to a separate folder and potentially remove
+    // below aidl exports.
+    aidl: {
+        export_include_dirs: ["telephony/java"],
+    },
+    sdk_version: "core_current",
+    libs: ["android_system_stubs_current"],
+}
+
+java_library {
+    name: "framework-telephony",
+    srcs: [
+        ":framework-telephony-sources",
+        ":framework-telephony-shared-srcs",
+    ],
+    // TODO: change to framework-system-stub to build against system APIs.
+    libs: [
+        "framework-minus-apex",
+        "unsupportedappusage",
+        "ike-stubs",
+    ],
+    static_libs: [
+        "libphonenumber-platform",
+        "app-compat-annotations",
+    ],
+    sdk_version: "core_platform",
+    aidl: {
+        export_include_dirs: ["telephony/java"],
+        include_dirs: [
+            "frameworks/native/aidl/binder",
+            "frameworks/native/aidl/gui",
+        ]
+    },
+    jarjar_rules: ":framework-telephony-jarjar-rules",
+    dxflags: [
+        "--core-library",
+        "--multi-dex",
+    ],
+    // This is to break the dependency from boot jars.
+    dex_preopt: {
+        enabled: false,
+    },
+    installable: true,
+}
+
+filegroup {
+    // TODO (b/147690217): move to frameworks/base/telephony/common.
+    name: "framework-telephony-annotations",
+    srcs: ["telephony/java/android/telephony/Annotation.java"],
+}
+
+filegroup {
+    name: "framework-telephony-jarjar-rules",
+    srcs: ["telephony/framework-telephony-jarjar-rules.txt"],
+}

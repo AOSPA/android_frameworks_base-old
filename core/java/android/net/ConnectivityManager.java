@@ -27,8 +27,8 @@ import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.app.PendingIntent;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
 import android.net.IpSecManager.UdpEncapsulationSocket;
@@ -363,7 +363,7 @@ public class ConnectivityManager {
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     @UnsupportedAppUsage
     public static final String ACTION_TETHER_STATE_CHANGED =
-            "android.net.conn.TETHER_STATE_CHANGED";
+            TetheringManager.ACTION_TETHER_STATE_CHANGED;
 
     /**
      * @hide
@@ -371,14 +371,14 @@ public class ConnectivityManager {
      * tethering and currently available for tethering.
      */
     @UnsupportedAppUsage
-    public static final String EXTRA_AVAILABLE_TETHER = "availableArray";
+    public static final String EXTRA_AVAILABLE_TETHER = TetheringManager.EXTRA_AVAILABLE_TETHER;
 
     /**
      * @hide
      * gives a String[] listing all the interfaces currently in local-only
      * mode (ie, has DHCPv4+IPv6-ULA support and no packet forwarding)
      */
-    public static final String EXTRA_ACTIVE_LOCAL_ONLY = "localOnlyArray";
+    public static final String EXTRA_ACTIVE_LOCAL_ONLY = TetheringManager.EXTRA_ACTIVE_LOCAL_ONLY;
 
     /**
      * @hide
@@ -386,7 +386,7 @@ public class ConnectivityManager {
      * (ie, has DHCPv4 support and packets potentially forwarded/NATed)
      */
     @UnsupportedAppUsage
-    public static final String EXTRA_ACTIVE_TETHER = "tetherArray";
+    public static final String EXTRA_ACTIVE_TETHER = TetheringManager.EXTRA_ACTIVE_TETHER;
 
     /**
      * @hide
@@ -395,7 +395,7 @@ public class ConnectivityManager {
      * for any interfaces listed here.
      */
     @UnsupportedAppUsage
-    public static final String EXTRA_ERRORED_TETHER = "erroredArray";
+    public static final String EXTRA_ERRORED_TETHER = TetheringManager.EXTRA_ERRORED_TETHER;
 
     /**
      * Broadcast Action: The captive portal tracker has finished its test.
@@ -445,7 +445,7 @@ public class ConnectivityManager {
      * @see #startTethering(int, boolean, OnStartTetheringCallback)
      * @hide
      */
-    public static final int TETHERING_INVALID   = -1;
+    public static final int TETHERING_INVALID   = TetheringManager.TETHERING_INVALID;
 
     /**
      * Wifi tethering type.
@@ -453,7 +453,7 @@ public class ConnectivityManager {
      * @hide
      */
     @SystemApi
-    public static final int TETHERING_WIFI      = 0;
+    public static final int TETHERING_WIFI      = TetheringManager.TETHERING_WIFI;
 
     /**
      * USB tethering type.
@@ -461,7 +461,7 @@ public class ConnectivityManager {
      * @hide
      */
     @SystemApi
-    public static final int TETHERING_USB       = 1;
+    public static final int TETHERING_USB       = TetheringManager.TETHERING_USB;
 
     /**
      * Bluetooth tethering type.
@@ -469,7 +469,7 @@ public class ConnectivityManager {
      * @hide
      */
     @SystemApi
-    public static final int TETHERING_BLUETOOTH = 2;
+    public static final int TETHERING_BLUETOOTH = TetheringManager.TETHERING_BLUETOOTH;
 
     /**
      * Wifi P2p tethering type.
@@ -477,7 +477,7 @@ public class ConnectivityManager {
      * need to start from #startTethering(int, boolean, OnStartTetheringCallback).
      * @hide
      */
-    public static final int TETHERING_WIFI_P2P = 3;
+    public static final int TETHERING_WIFI_P2P = TetheringManager.TETHERING_WIFI_P2P;
 
     /**
      * WIGIG tethering type. Use a separate type to prevent
@@ -491,40 +491,40 @@ public class ConnectivityManager {
      * enable if any.
      * @hide
      */
-    public static final String EXTRA_ADD_TETHER_TYPE = "extraAddTetherType";
+    public static final String EXTRA_ADD_TETHER_TYPE = TetheringManager.EXTRA_ADD_TETHER_TYPE;
 
     /**
      * Extra used for communicating with the TetherService. Includes the type of tethering for
      * which to cancel provisioning.
      * @hide
      */
-    public static final String EXTRA_REM_TETHER_TYPE = "extraRemTetherType";
+    public static final String EXTRA_REM_TETHER_TYPE = TetheringManager.EXTRA_REM_TETHER_TYPE;
 
     /**
      * Extra used for communicating with the TetherService. True to schedule a recheck of tether
      * provisioning.
      * @hide
      */
-    public static final String EXTRA_SET_ALARM = "extraSetAlarm";
+    public static final String EXTRA_SET_ALARM = TetheringManager.EXTRA_SET_ALARM;
 
     /**
      * Tells the TetherService to run a provision check now.
      * @hide
      */
-    public static final String EXTRA_RUN_PROVISION = "extraRunProvision";
+    public static final String EXTRA_RUN_PROVISION = TetheringManager.EXTRA_RUN_PROVISION;
 
     /**
      * Extra used for communicating with the TetherService. Contains the {@link ResultReceiver}
      * which will receive provisioning results. Can be left empty.
      * @hide
      */
-    public static final String EXTRA_PROVISION_CALLBACK = "extraProvisionCallback";
+    public static final String EXTRA_PROVISION_CALLBACK = TetheringManager.EXTRA_PROVISION_CALLBACK;
 
     /**
      * The absence of a connection type.
      * @hide
      */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 130143562)
+    @SystemApi
     public static final int TYPE_NONE        = -1;
 
     /**
@@ -669,7 +669,7 @@ public class ConnectivityManager {
      * {@hide}
      */
     @Deprecated
-    @UnsupportedAppUsage
+    @SystemApi
     public static final int TYPE_WIFI_P2P    = 13;
 
     /**
@@ -3079,6 +3079,7 @@ public class ConnectivityManager {
      * @hide
      */
     @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_AIRPLANE_MODE,
             android.Manifest.permission.NETWORK_SETTINGS,
             android.Manifest.permission.NETWORK_SETUP_WIZARD,
             android.Manifest.permission.NETWORK_STACK})
@@ -3113,6 +3114,61 @@ public class ConnectivityManager {
         }
     }
 
+    /**
+     * Registers the specified {@link NetworkProvider}.
+     * Each listener must only be registered once. The listener can be unregistered with
+     * {@link #unregisterNetworkProvider}.
+     *
+     * @param provider the provider to register
+     * @return the ID of the provider. This ID must be used by the provider when registering
+     *         {@link android.net.NetworkAgent}s.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_FACTORY)
+    public int registerNetworkProvider(@NonNull NetworkProvider provider) {
+        if (provider.getProviderId() != NetworkProvider.ID_NONE) {
+            throw new IllegalStateException("NetworkProviders can only be registered once");
+        }
+
+        try {
+            int providerId = mService.registerNetworkProvider(provider.getMessenger(),
+                    provider.getName());
+            provider.setProviderId(providerId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        return provider.getProviderId();
+    }
+
+    /**
+     * Unregisters the specified NetworkProvider.
+     *
+     * @param provider the provider to unregister
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.NETWORK_FACTORY)
+    public void unregisterNetworkProvider(@NonNull NetworkProvider provider) {
+        try {
+            mService.unregisterNetworkProvider(provider.getMessenger());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        provider.setProviderId(NetworkProvider.ID_NONE);
+    }
+
+
+    /** @hide exposed via the NetworkProvider class. */
+    @RequiresPermission(android.Manifest.permission.NETWORK_FACTORY)
+    public void declareNetworkRequestUnfulfillable(@NonNull NetworkRequest request) {
+        try {
+            mService.declareNetworkRequestUnfulfillable(request);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
     // TODO : remove this method. It is a stopgap measure to help sheperding a number
     // of dependent changes that would conflict throughout the automerger graph. Having this
     // temporarily helps with the process of going through with all these dependent changes across
@@ -3120,26 +3176,24 @@ public class ConnectivityManager {
     /**
      * @hide
      * Register a NetworkAgent with ConnectivityService.
-     * @return NetID corresponding to NetworkAgent.
+     * @return Network corresponding to NetworkAgent.
      */
     @RequiresPermission(android.Manifest.permission.NETWORK_FACTORY)
-    public int registerNetworkAgent(Messenger messenger, NetworkInfo ni, LinkProperties lp,
-            NetworkCapabilities nc, int score, NetworkMisc misc) {
-        return registerNetworkAgent(messenger, ni, lp, nc, score, misc,
-                NetworkFactory.SerialNumber.NONE);
+    public Network registerNetworkAgent(Messenger messenger, NetworkInfo ni, LinkProperties lp,
+            NetworkCapabilities nc, int score, NetworkAgentConfig config) {
+        return registerNetworkAgent(messenger, ni, lp, nc, score, config, NetworkProvider.ID_NONE);
     }
 
     /**
      * @hide
      * Register a NetworkAgent with ConnectivityService.
-     * @return NetID corresponding to NetworkAgent.
+     * @return Network corresponding to NetworkAgent.
      */
     @RequiresPermission(android.Manifest.permission.NETWORK_FACTORY)
-    public int registerNetworkAgent(Messenger messenger, NetworkInfo ni, LinkProperties lp,
-            NetworkCapabilities nc, int score, NetworkMisc misc, int factorySerialNumber) {
+    public Network registerNetworkAgent(Messenger messenger, NetworkInfo ni, LinkProperties lp,
+            NetworkCapabilities nc, int score, NetworkAgentConfig config, int providerId) {
         try {
-            return mService.registerNetworkAgent(messenger, ni, lp, nc, score, misc,
-                    factorySerialNumber);
+            return mService.registerNetworkAgent(messenger, ni, lp, nc, score, config, providerId);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3575,14 +3629,26 @@ public class ConnectivityManager {
     /**
      * Helper function to request a network with a particular legacy type.
      *
-     * This is temporarily public @hide so it can be called by system code that uses the
-     * NetworkRequest API to request networks but relies on CONNECTIVITY_ACTION broadcasts for
-     * instead network notifications.
+     * @deprecated This is temporarily public for tethering to backwards compatibility that uses
+     * the NetworkRequest API to request networks with legacy type and relies on
+     * CONNECTIVITY_ACTION broadcasts instead of NetworkCallbacks. New caller should use
+     * {@link #requestNetwork(NetworkRequest, NetworkCallback, Handler)} instead.
      *
      * TODO: update said system code to rely on NetworkCallbacks and make this method private.
+
+     * @param request {@link NetworkRequest} describing this request.
+     * @param networkCallback The {@link NetworkCallback} to be utilized for this request. Note
+     *                        the callback must not be shared - it uniquely specifies this request.
+     * @param timeoutMs The time in milliseconds to attempt looking for a suitable network
+     *                  before {@link NetworkCallback#onUnavailable()} is called. The timeout must
+     *                  be a positive value (i.e. >0).
+     * @param legacyType to specify the network type(#TYPE_*).
+     * @param handler {@link Handler} to specify the thread upon which the callback will be invoked.
      *
      * @hide
      */
+    @SystemApi
+    @Deprecated
     public void requestNetwork(@NonNull NetworkRequest request,
             @NonNull NetworkCallback networkCallback, int timeoutMs, int legacyType,
             @NonNull Handler handler) {

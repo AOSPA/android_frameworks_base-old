@@ -21,32 +21,20 @@ import static android.net.ConnectivityManager.TYPE_ETHERNET;
 import static android.net.ConnectivityManager.TYPE_MOBILE;
 import static android.net.ConnectivityManager.TYPE_MOBILE_DUN;
 import static android.net.ConnectivityManager.TYPE_MOBILE_HIPRI;
-import static android.provider.Settings.Global.TETHER_ENABLE_LEGACY_DHCP_SERVER;
+import static android.provider.DeviceConfig.NAMESPACE_CONNECTIVITY;
 
-import static com.android.internal.R.array.config_mobile_hotspot_provision_app;
-import static com.android.internal.R.array.config_tether_bluetooth_regexs;
-import static com.android.internal.R.array.config_tether_dhcp_range;
-import static com.android.internal.R.array.config_tether_upstream_types;
-import static com.android.internal.R.array.config_tether_usb_regexs;
-import static com.android.internal.R.array.config_tether_wifi_p2p_regexs;
-import static com.android.internal.R.array.config_tether_wifi_regexs;
-import static com.android.internal.R.bool.config_tether_upstream_automatic;
-import static com.android.internal.R.integer.config_mobile_hotspot_provision_check_period;
-import static com.android.internal.R.string.config_mobile_hotspot_provision_app_no_ui;
-
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
-import android.net.ConnectivityManager;
 import android.os.SystemProperties;
 import android.net.TetheringConfigurationParcel;
 import android.net.util.SharedLog;
-import android.provider.Settings;
+import android.provider.DeviceConfig;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.networkstack.tethering.R;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -86,6 +74,12 @@ public class TetheringConfiguration {
 
     private static final String[] DEFAULT_IPV4_DNS = {"8.8.4.4", "8.8.8.8"};
 
+    /**
+     * Use the old dnsmasq DHCP server for tethering instead of the framework implementation.
+     */
+    public static final String TETHER_ENABLE_LEGACY_DHCP_SERVER =
+            "tether_enable_legacy_dhcp_server";
+
     public final String[] tetherableUsbRegexs;
     public final String[] tetherableWifiRegexs;
     public final String[] tetherableWifiP2pRegexs;
@@ -101,40 +95,43 @@ public class TetheringConfiguration {
     public final String provisioningAppNoUi;
     public final int provisioningCheckPeriod;
 
-    public final int subId;
+    public final int activeDataSubId;
     private static String fstInterfaceName = "bond0";
 
     public TetheringConfiguration(Context ctx, SharedLog log, int id) {
         final SharedLog configLog = log.forSubComponent("config");
 
-        subId = id;
-        Resources res = getResources(ctx, subId);
+        activeDataSubId = id;
+        Resources res = getResources(ctx, activeDataSubId);
 
-        tetherableUsbRegexs = getResourceStringArray(res, config_tether_usb_regexs);
+        tetherableUsbRegexs = getResourceStringArray(res, R.array.config_tether_usb_regexs);
         // TODO: Evaluate deleting this altogether now that Wi-Fi always passes
         // us an interface name. Careful consideration needs to be given to
         // implications for Settings and for provisioning checks.
         if (SystemProperties.getInt("persist.vendor.fst.softap.en", 0) == 1) {
             tetherableWifiRegexs = new String[] { fstInterfaceName };
         } else {
-            tetherableWifiRegexs = getResourceStringArray(res, config_tether_wifi_regexs);
+            tetherableWifiRegexs = getResourceStringArray(res, R.array.config_tether_wifi_regexs);
         }
-        tetherableWifiP2pRegexs = getResourceStringArray(res, config_tether_wifi_p2p_regexs);
-        tetherableBluetoothRegexs = getResourceStringArray(res, config_tether_bluetooth_regexs);
+        tetherableWifiP2pRegexs = getResourceStringArray(
+                res, R.array.config_tether_wifi_p2p_regexs);
+        tetherableBluetoothRegexs = getResourceStringArray(
+                res, R.array.config_tether_bluetooth_regexs);
 
-        isDunRequired = checkDunRequired(ctx, subId);
+        isDunRequired = checkDunRequired(ctx);
 
-        chooseUpstreamAutomatically = getResourceBoolean(res, config_tether_upstream_automatic);
+        chooseUpstreamAutomatically = getResourceBoolean(
+                res, R.bool.config_tether_upstream_automatic);
         preferredUpstreamIfaceTypes = getUpstreamIfaceTypes(res, isDunRequired);
 
         legacyDhcpRanges = getLegacyDhcpRanges(res);
         defaultIPv4DNS = copy(DEFAULT_IPV4_DNS);
-        enableLegacyDhcpServer = getEnableLegacyDhcpServer(ctx);
+        enableLegacyDhcpServer = getEnableLegacyDhcpServer(res);
 
-        provisioningApp = getResourceStringArray(res, config_mobile_hotspot_provision_app);
+        provisioningApp = getResourceStringArray(res, R.array.config_mobile_hotspot_provision_app);
         provisioningAppNoUi = getProvisioningAppNoUi(res);
         provisioningCheckPeriod = getResourceInteger(res,
-                config_mobile_hotspot_provision_check_period,
+                R.integer.config_mobile_hotspot_provision_check_period,
                 0 /* No periodic re-check */);
 
         configLog.log(toString());
@@ -180,8 +177,8 @@ public class TetheringConfiguration {
 
     /** Does the dumping.*/
     public void dump(PrintWriter pw) {
-        pw.print("subId: ");
-        pw.println(subId);
+        pw.print("activeDataSubId: ");
+        pw.println(activeDataSubId);
 
         dumpStringArray(pw, "tetherableUsbRegexs", tetherableUsbRegexs);
         dumpStringArray(pw, "tetherableWifiRegexs", tetherableWifiRegexs);
@@ -193,8 +190,8 @@ public class TetheringConfiguration {
 
         pw.print("chooseUpstreamAutomatically: ");
         pw.println(chooseUpstreamAutomatically);
-        dumpStringArray(pw, "preferredUpstreamIfaceTypes",
-                preferredUpstreamNames(preferredUpstreamIfaceTypes));
+        pw.print("legacyPreredUpstreamIfaceTypes: ");
+        pw.println(Arrays.toString(toIntArray(preferredUpstreamIfaceTypes)));
 
         dumpStringArray(pw, "legacyDhcpRanges", legacyDhcpRanges);
         dumpStringArray(pw, "defaultIPv4DNS", defaultIPv4DNS);
@@ -210,7 +207,7 @@ public class TetheringConfiguration {
     /** Returns the string representation of this object.*/
     public String toString() {
         final StringJoiner sj = new StringJoiner(" ");
-        sj.add(String.format("subId:%d", subId));
+        sj.add(String.format("activeDataSubId:%d", activeDataSubId));
         sj.add(String.format("tetherableUsbRegexs:%s", makeString(tetherableUsbRegexs)));
         sj.add(String.format("tetherableWifiRegexs:%s", makeString(tetherableWifiRegexs)));
         sj.add(String.format("tetherableWifiP2pRegexs:%s", makeString(tetherableWifiP2pRegexs)));
@@ -219,7 +216,7 @@ public class TetheringConfiguration {
         sj.add(String.format("isDunRequired:%s", isDunRequired));
         sj.add(String.format("chooseUpstreamAutomatically:%s", chooseUpstreamAutomatically));
         sj.add(String.format("preferredUpstreamIfaceTypes:%s",
-                makeString(preferredUpstreamNames(preferredUpstreamIfaceTypes))));
+                toIntArray(preferredUpstreamIfaceTypes)));
         sj.add(String.format("provisioningApp:%s", makeString(provisioningApp)));
         sj.add(String.format("provisioningAppNoUi:%s", provisioningAppNoUi));
         sj.add(String.format("enableLegacyDhcpServer:%s", enableLegacyDhcpServer));
@@ -248,29 +245,16 @@ public class TetheringConfiguration {
         return sj.toString();
     }
 
-    private static String[] preferredUpstreamNames(Collection<Integer> upstreamTypes) {
-        String[] upstreamNames = null;
-
-        if (upstreamTypes != null) {
-            upstreamNames = new String[upstreamTypes.size()];
-            int i = 0;
-            for (Integer netType : upstreamTypes) {
-                upstreamNames[i] = ConnectivityManager.getNetworkTypeName(netType);
-                i++;
-            }
-        }
-
-        return upstreamNames;
-    }
-
     /** Check whether dun is required. */
-    public static boolean checkDunRequired(Context ctx, int id) {
+    public static boolean checkDunRequired(Context ctx) {
         final TelephonyManager tm = (TelephonyManager) ctx.getSystemService(TELEPHONY_SERVICE);
-        return (tm != null) ? tm.isTetheringApnRequired(id) : false;
+        // TelephonyManager would uses the active data subscription, which should be the one used
+        // by tethering.
+        return (tm != null) ? tm.isTetheringApnRequired() : false;
     }
 
     private static Collection<Integer> getUpstreamIfaceTypes(Resources res, boolean dunRequired) {
-        final int[] ifaceTypes = res.getIntArray(config_tether_upstream_types);
+        final int[] ifaceTypes = res.getIntArray(R.array.config_tether_upstream_types);
         final ArrayList<Integer> upstreamIfaceTypes = new ArrayList<>(ifaceTypes.length);
         for (int i : ifaceTypes) {
             switch (i) {
@@ -320,7 +304,7 @@ public class TetheringConfiguration {
     }
 
     private static String[] getLegacyDhcpRanges(Resources res) {
-        final String[] fromResource = getResourceStringArray(res, config_tether_dhcp_range);
+        final String[] fromResource = getResourceStringArray(res, R.array.config_tether_dhcp_range);
         if ((fromResource.length > 0) && (fromResource.length % 2 == 0)) {
             return fromResource;
         }
@@ -329,7 +313,7 @@ public class TetheringConfiguration {
 
     private static String getProvisioningAppNoUi(Resources res) {
         try {
-            return res.getString(config_mobile_hotspot_provision_app_no_ui);
+            return res.getString(R.string.config_mobile_hotspot_provision_app_no_ui);
         } catch (Resources.NotFoundException e) {
             return "";
         }
@@ -360,10 +344,14 @@ public class TetheringConfiguration {
         }
     }
 
-    private static boolean getEnableLegacyDhcpServer(Context ctx) {
-        final ContentResolver cr = ctx.getContentResolver();
-        final int intVal = Settings.Global.getInt(cr, TETHER_ENABLE_LEGACY_DHCP_SERVER, 0);
-        return intVal != 0;
+    private boolean getEnableLegacyDhcpServer(final Resources res) {
+        return getResourceBoolean(res, R.bool.config_tether_enable_legacy_dhcp_server)
+                || getDeviceConfigBoolean(TETHER_ENABLE_LEGACY_DHCP_SERVER);
+    }
+
+    @VisibleForTesting
+    protected boolean getDeviceConfigBoolean(final String name) {
+        return DeviceConfig.getBoolean(NAMESPACE_CONNECTIVITY, name, false /** defaultValue */);
     }
 
     private Resources getResources(Context ctx, int subId) {
@@ -400,24 +388,28 @@ public class TetheringConfiguration {
         return false;
     }
 
+    private static int[] toIntArray(Collection<Integer> values) {
+        final int[] result = new int[values.size()];
+        int index = 0;
+        for (Integer value : values) {
+            result[index++] = value;
+        }
+        return result;
+    }
+
     /**
      * Convert this TetheringConfiguration to a TetheringConfigurationParcel.
      */
     public TetheringConfigurationParcel toStableParcelable() {
         final TetheringConfigurationParcel parcel = new TetheringConfigurationParcel();
-        parcel.subId = subId;
+        parcel.subId = activeDataSubId;
         parcel.tetherableUsbRegexs = tetherableUsbRegexs;
         parcel.tetherableWifiRegexs = tetherableWifiRegexs;
         parcel.tetherableBluetoothRegexs = tetherableBluetoothRegexs;
         parcel.isDunRequired = isDunRequired;
         parcel.chooseUpstreamAutomatically = chooseUpstreamAutomatically;
 
-        int[] preferredTypes = new int[preferredUpstreamIfaceTypes.size()];
-        int index = 0;
-        for (Integer type : preferredUpstreamIfaceTypes) {
-            preferredTypes[index++] = type;
-        }
-        parcel.preferredUpstreamIfaceTypes = preferredTypes;
+        parcel.preferredUpstreamIfaceTypes = toIntArray(preferredUpstreamIfaceTypes);
 
         parcel.legacyDhcpRanges = legacyDhcpRanges;
         parcel.defaultIPv4DNS = defaultIPv4DNS;

@@ -505,9 +505,19 @@ MissingNullability: android.app.AsyncNotedAppOp#writeToParcel(android.os.Parcel,
     
 MissingNullability: android.app.SyncNotedAppOp#equals(Object) parameter #0:
     
+MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#CHORASMIAN:
+    Missing nullability on field `CHORASMIAN` in class `class android.icu.lang.UCharacter.UnicodeBlock`
+MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#CJK_UNIFIED_IDEOGRAPHS_EXTENSION_G:
+    Missing nullability on field `CJK_UNIFIED_IDEOGRAPHS_EXTENSION_G` in class `class android.icu.lang.UCharacter.UnicodeBlock`
+MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#DIVES_AKURU:
+    Missing nullability on field `DIVES_AKURU` in class `class android.icu.lang.UCharacter.UnicodeBlock`
 MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#EGYPTIAN_HIEROGLYPH_FORMAT_CONTROLS:
     
 MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#ELYMAIC:
+    
+MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#KHITAN_SMALL_SCRIPT:
+    
+MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#LISU_SUPPLEMENT:
     
 MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#NANDINAGARI:
     
@@ -519,26 +529,34 @@ MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#SMALL_KANA_EXTENSIO
     
 MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#SYMBOLS_AND_PICTOGRAPHS_EXTENDED_A:
     
+MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#SYMBOLS_FOR_LEGACY_COMPUTING:
+    
 MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#TAMIL_SUPPLEMENT:
     
+MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#TANGUT_SUPPLEMENT:
+    
 MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#WANCHO:
+    
+MissingNullability: android.icu.lang.UCharacter.UnicodeBlock#YEZIDI:
     
 MissingNullability: android.icu.text.DateTimePatternGenerator#getFieldDisplayName(int, android.icu.text.DateTimePatternGenerator.DisplayWidth):
     
 MissingNullability: android.icu.text.DateTimePatternGenerator#getFieldDisplayName(int, android.icu.text.DateTimePatternGenerator.DisplayWidth) parameter #1:
     
 MissingNullability: android.icu.util.MeasureUnit#ATMOSPHERE:
-    Missing nullability on field `ATMOSPHERE` in class `class android.icu.util.MeasureUnit`
+    
 MissingNullability: android.icu.util.MeasureUnit#PERCENT:
-    Missing nullability on field `PERCENT` in class `class android.icu.util.MeasureUnit`
+    
 MissingNullability: android.icu.util.MeasureUnit#PERMILLE:
-    Missing nullability on field `PERMILLE` in class `class android.icu.util.MeasureUnit`
+    
 MissingNullability: android.icu.util.MeasureUnit#PETABYTE:
-    Missing nullability on field `PETABYTE` in class `class android.icu.util.MeasureUnit`
+    
 MissingNullability: android.icu.util.VersionInfo#UNICODE_12_0:
     
 MissingNullability: android.icu.util.VersionInfo#UNICODE_12_1:
     
+MissingNullability: android.icu.util.VersionInfo#UNICODE_13_0:
+    Missing nullability on field `UNICODE_13_0` in class `class android.icu.util.VersionInfo`
 MissingNullability: android.media.MediaMetadataRetriever#getFrameAtTime(long, int, android.media.MediaMetadataRetriever.BitmapParams):
     
 MissingNullability: android.media.MediaMetadataRetriever#getScaledFrameAtTime(long, int, int, int, android.media.MediaMetadataRetriever.BitmapParams):

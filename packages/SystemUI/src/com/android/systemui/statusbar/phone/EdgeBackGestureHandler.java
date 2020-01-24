@@ -31,7 +31,6 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.util.Log;
-import android.util.StatsLog;
 import android.view.ISystemGestureExclusionListener;
 import android.view.InputChannel;
 import android.view.InputDevice;
@@ -54,6 +53,7 @@ import com.android.systemui.plugins.PluginListener;
 import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.system.QuickStepContract;
+import com.android.systemui.shared.system.SysUiStatsLog;
 
 import java.io.PrintWriter;
 import java.util.concurrent.Executor;
@@ -97,6 +97,8 @@ public class EdgeBackGestureHandler implements DisplayListener,
 
     // The edge width where touch down is allowed
     private int mEdgeWidth;
+    // The bottom gesture area height
+    private int mBottomGestureHeight;
     // The slop to distinguish between horizontal and vertical motion
     private final float mTouchSlop;
     // Duration after which we consider the event as longpress.
@@ -131,23 +133,23 @@ public class EdgeBackGestureHandler implements DisplayListener,
                     mOverviewProxyService.notifyBackAction(true, (int) mDownPoint.x,
                             (int) mDownPoint.y, false /* isButton */, !mIsOnLeftEdge);
                     int backtype = (mInRejectedExclusion
-                            ? StatsLog.BACK_GESTURE__TYPE__COMPLETED_REJECTED :
-                            StatsLog.BACK_GESTURE__TYPE__COMPLETED);
-                    StatsLog.write(StatsLog.BACK_GESTURE_REPORTED_REPORTED, backtype,
+                            ? SysUiStatsLog.BACK_GESTURE__TYPE__COMPLETED_REJECTED :
+                            SysUiStatsLog.BACK_GESTURE__TYPE__COMPLETED);
+                    SysUiStatsLog.write(SysUiStatsLog.BACK_GESTURE_REPORTED_REPORTED, backtype,
                             (int) mDownPoint.y, mIsOnLeftEdge
-                                    ? StatsLog.BACK_GESTURE__X_LOCATION__LEFT :
-                                    StatsLog.BACK_GESTURE__X_LOCATION__RIGHT);
+                                    ? SysUiStatsLog.BACK_GESTURE__X_LOCATION__LEFT :
+                                    SysUiStatsLog.BACK_GESTURE__X_LOCATION__RIGHT);
                 }
 
                 @Override
                 public void cancelBack() {
                     mOverviewProxyService.notifyBackAction(false, (int) mDownPoint.x,
                             (int) mDownPoint.y, false /* isButton */, !mIsOnLeftEdge);
-                    int backtype = StatsLog.BACK_GESTURE__TYPE__INCOMPLETE;
-                    StatsLog.write(StatsLog.BACK_GESTURE_REPORTED_REPORTED, backtype,
+                    int backtype = SysUiStatsLog.BACK_GESTURE__TYPE__INCOMPLETE;
+                    SysUiStatsLog.write(SysUiStatsLog.BACK_GESTURE_REPORTED_REPORTED, backtype,
                             (int) mDownPoint.y, mIsOnLeftEdge
-                                    ? StatsLog.BACK_GESTURE__X_LOCATION__LEFT :
-                                    StatsLog.BACK_GESTURE__X_LOCATION__RIGHT);
+                                    ? SysUiStatsLog.BACK_GESTURE__X_LOCATION__LEFT :
+                                    SysUiStatsLog.BACK_GESTURE__X_LOCATION__RIGHT);
                 }
             };
 
@@ -174,6 +176,8 @@ public class EdgeBackGestureHandler implements DisplayListener,
     public void updateCurrentUserResources(Resources res) {
         mEdgeWidth = res.getDimensionPixelSize(
                 com.android.internal.R.dimen.config_backGestureInset);
+        mBottomGestureHeight = res.getDimensionPixelSize(
+                com.android.internal.R.dimen.navigation_bar_gesture_height);
     }
 
     /**
@@ -316,6 +320,11 @@ public class EdgeBackGestureHandler implements DisplayListener,
             return false;
         }
 
+        // Disallow if we are in the bottom gesture area
+        if (y >= (mDisplaySize.y - mBottomGestureHeight)) {
+            return false;
+        }
+
         // Always allow if the user is in a transient sticky immersive state
         if (mIsNavBarShownTransiently) {
             return true;
@@ -325,10 +334,10 @@ public class EdgeBackGestureHandler implements DisplayListener,
         if (isInExcludedRegion) {
             mOverviewProxyService.notifyBackAction(false /* completed */, -1, -1,
                     false /* isButton */, !mIsOnLeftEdge);
-            StatsLog.write(StatsLog.BACK_GESTURE_REPORTED_REPORTED,
-                    StatsLog.BACK_GESTURE__TYPE__INCOMPLETE_EXCLUDED, y,
-                    mIsOnLeftEdge ? StatsLog.BACK_GESTURE__X_LOCATION__LEFT :
-                            StatsLog.BACK_GESTURE__X_LOCATION__RIGHT);
+            SysUiStatsLog.write(SysUiStatsLog.BACK_GESTURE_REPORTED_REPORTED,
+                    SysUiStatsLog.BACK_GESTURE__TYPE__INCOMPLETE_EXCLUDED, y,
+                    mIsOnLeftEdge ? SysUiStatsLog.BACK_GESTURE__X_LOCATION__LEFT :
+                            SysUiStatsLog.BACK_GESTURE__X_LOCATION__RIGHT);
         } else {
             mInRejectedExclusion = mUnrestrictedExcludeRegion.contains(x, y);
         }

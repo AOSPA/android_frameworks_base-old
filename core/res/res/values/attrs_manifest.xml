@@ -1520,6 +1520,22 @@
         <!-- Managing a media projection session, e.g, for screen recording or taking
              screenshots.-->
         <flag name="mediaProjection" value="0x20" />
+        <!-- Use the camera device or record video.
+
+            <p>For apps with <code>targetSdkVersion</code> {@link android.os.Build.VERSION_CODES#R}
+            and above, a foreground service will not be able to access the camera if this type is
+            not specified in the manifest and in
+            {@link android.app.Service#startForeground(int, android.app.Notification, int)}.
+            -->
+        <flag name="camera" value="0x40" />
+        <!--Use the microphone device or record audio.
+
+            <p>For apps with <code>targetSdkVersion</code> {@link android.os.Build.VERSION_CODES#R}
+            and above, a foreground service will not be able to access the microphone if this type
+            is not specified in the manifest and in
+            {@link android.app.Service#startForeground(int, android.app.Notification, int)}.
+            -->
+        <flag name="microphone" value="0x80" />
     </attr>
 
 
@@ -2003,6 +2019,15 @@
              of later versions of the platform when you know you have
              incompatibility with them. -->
         <attr name="maxSdkVersion" />
+    </declare-styleable>
+
+    <!-- The <code>extension-sdk</code> tag is a child of the <uses-sdk> tag,
+         and specifies required extension sdk features. -->
+    <declare-styleable name="AndroidManifestExtensionSdk">
+        <!-- The extension SDK version that this tag refers to. -->
+        <attr name="sdkVersion" format="integer" />
+        <!-- The minimum version of the extension SDK this application requires.-->
+        <attr name="minExtensionVersion" format="integer" />
     </declare-styleable>
 
     <!-- The <code>library</code> tag declares that this apk is providing itself

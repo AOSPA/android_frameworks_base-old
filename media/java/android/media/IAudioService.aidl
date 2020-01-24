@@ -105,6 +105,10 @@ interface IAudioService {
 
     int getLastAudibleStreamVolume(int streamType);
 
+    void setSupportedSystemUsages(in int[] systemUsages);
+
+    int[] getSupportedSystemUsages();
+
     List<AudioProductStrategy> getAudioProductStrategies();
 
     boolean isMicrophoneMuted();
@@ -274,6 +278,8 @@ interface IAudioService {
     int removePreferredDeviceForStrategy(in int strategy);
 
     AudioDeviceAddress getPreferredDeviceForStrategy(in int strategy);
+
+    List<AudioDeviceAddress> getDevicesForAttributes(in AudioAttributes attributes);
 
     // WARNING: read warning at top of file, new methods that need to be used by native
     // code via IAudioManager.h need to be added to the top section.

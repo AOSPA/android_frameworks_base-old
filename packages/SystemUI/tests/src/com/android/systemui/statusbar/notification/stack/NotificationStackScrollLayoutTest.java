@@ -46,13 +46,13 @@ import androidx.test.filters.SmallTest;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto;
-import com.android.systemui.ActivityStarterDelegate;
 import com.android.systemui.ExpandHelper;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.classifier.FalsingManagerFake;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.statusbar.EmptyShadeView;
+import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationPresenter;
@@ -70,8 +70,9 @@ import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder;
 import com.android.systemui.statusbar.notification.collection.NotificationRankingManager;
+import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinder;
+import com.android.systemui.statusbar.notification.collection.provider.HighPriorityProvider;
 import com.android.systemui.statusbar.notification.logging.NotifLog;
-import com.android.systemui.statusbar.notification.people.PeopleHubSectionFooterViewAdapter;
 import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.FooterView;
@@ -84,9 +85,8 @@ import com.android.systemui.statusbar.phone.NotificationIconAreaController;
 import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBar;
-import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.ZenModeController;
-import com.android.systemui.util.DeviceConfigProxyFake;
+import com.android.systemui.util.leak.LeakDetector;
 
 import org.junit.After;
 import org.junit.Before;
@@ -128,6 +128,8 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
     @Mock private NotificationRoundnessManager mNotificationRoundnessManager;
     @Mock private KeyguardBypassController mKeyguardBypassController;
     @Mock private ZenModeController mZenModeController;
+    @Mock private NotificationSectionsManager mNotificationSectionsManager;
+    @Mock private NotificationSection mNotificationSection;
     private TestableNotificationEntryManager mEntryManager;
     private int mOriginalInterruptionModelSetting;
 
@@ -164,15 +166,23 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
                         mock(NotificationFilter.class),
                         mock(NotifLog.class),
                         mock(NotificationSectionsFeatureManager.class),
-                        mock(PeopleNotificationIdentifier.class)
+                        mock(PeopleNotificationIdentifier.class),
+                        mock(HighPriorityProvider.class)
                 ),
-                mock(NotificationEntryManager.KeyguardEnvironment.class));
+                mock(NotificationEntryManager.KeyguardEnvironment.class),
+                mock(FeatureFlags.class),
+                () -> mock(NotificationRowBinder.class),
+                () -> mRemoteInputManager,
+                mock(LeakDetector.class));
         mDependency.injectTestDependency(NotificationEntryManager.class, mEntryManager);
         mEntryManager.setUpForTest(mock(NotificationPresenter.class), null, mHeadsUpManager);
 
 
         NotificationShelf notificationShelf = mock(NotificationShelf.class);
-
+        when(mNotificationSectionsManager.createSectionsForBuckets()).thenReturn(
+                new NotificationSection[]{
+                        mNotificationSection
+                });
         // The actual class under test.  You may need to work with this class directly when
         // testing anonymous class members of mStackScroller, like mMenuEventListener,
         // which refer to members of NotificationStackScrollLayout. The spy
@@ -181,17 +191,14 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         mStackScrollerInternal = new NotificationStackScrollLayout(getContext(), null,
                 true /* allowLongPress */, mNotificationRoundnessManager,
                 mock(DynamicPrivacyController.class),
-                mock(ConfigurationController.class),
-                mock(ActivityStarterDelegate.class),
                 mock(SysuiStatusBarStateController.class),
                 mHeadsUpManager,
                 mKeyguardBypassController,
                 new FalsingManagerFake(),
                 mock(NotificationLockscreenUserManager.class),
                 mock(NotificationGutsManager.class),
-                new NotificationSectionsFeatureManager(new DeviceConfigProxyFake(), mContext),
-                mock(PeopleHubSectionFooterViewAdapter.class),
-                mZenModeController);
+                mZenModeController,
+                mNotificationSectionsManager);
         mStackScroller = spy(mStackScrollerInternal);
         mStackScroller.setShelf(notificationShelf);
         mStackScroller.setStatusBar(mBar);

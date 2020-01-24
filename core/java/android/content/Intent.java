@@ -752,6 +752,22 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_PICK = "android.intent.action.PICK";
 
     /**
+     * Activity Action: Creates a reminder.
+     * <p>Input: {@link #EXTRA_TITLE} The title of the reminder that will be shown to the user.
+     * {@link #EXTRA_TEXT} The reminder text that will be shown to the user. The intent should at
+     * least specify a title or a text. {@link #EXTRA_TIME} The time when the reminder will be shown
+     * to the user. The time is specified in milliseconds since the Epoch (optional).
+     * </p>
+     * <p>Output: Nothing.</p>
+     *
+     * @see #EXTRA_TITLE
+     * @see #EXTRA_TEXT
+     * @see #EXTRA_TIME
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_CREATE_REMINDER = "android.intent.action.CREATE_REMINDER";
+
+    /**
      * Activity Action: Creates a shortcut.
      * <p>Input: Nothing.</p>
      * <p>Output: An Intent representing the {@link android.content.pm.ShortcutInfo} result.</p>
@@ -4017,6 +4033,7 @@ public class Intent implements Parcelable, Cloneable {
      * <p>
      * @see #EXTRA_SIM_STATE
      * @see #EXTRA_SIM_LOCKED_REASON
+     * @see #EXTRA_REBROADCAST_ON_UNLOCK
      *
      * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED} or
      * {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
@@ -4193,6 +4210,18 @@ public class Intent implements Parcelable, Cloneable {
     public static final String SIM_ABSENT_ON_PERM_DISABLED = "PERM_DISABLED";
 
     /**
+     * The extra used with {@link #ACTION_SIM_STATE_CHANGED} for indicating whether this broadcast
+     * is a rebroadcast on unlock. Defaults to {@code false} if not specified.
+     *
+     * @hide
+     * @deprecated Use {@link #ACTION_SIM_CARD_STATE_CHANGED} or
+     * {@link #ACTION_SIM_APPLICATION_STATE_CHANGED}
+     */
+    @Deprecated
+    @SystemApi
+    public static final String EXTRA_REBROADCAST_ON_UNLOCK = "rebroadcastOnUnlock";
+
+    /**
      * Broadcast Action: indicate that the phone service state has changed.
      * The intent will have the following extra values:</p>
      * <p>
@@ -4236,9 +4265,10 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_SERVICE_STATE = "android.intent.action.SERVICE_STATE";
 
     /**
-     * Used for looking up a Data Loader Service providers.
+     * Used for looking up a Data Loader Service provider.
      * @hide
      */
+    @SystemApi
     @SdkConstant(SdkConstant.SdkConstantType.SERVICE_ACTION)
     public static final String ACTION_LOAD_DATA = "android.intent.action.LOAD_DATA";
 
@@ -5737,6 +5767,15 @@ public class Intent implements Parcelable, Cloneable {
             = "android.intent.extra.SHUTDOWN_USERSPACE_ONLY";
 
     /**
+     * Optional extra specifying a time in milliseconds since the Epoch. The value must be
+     * non-negative.
+     * <p>
+     * Type: long
+     * </p>
+     */
+    public static final String EXTRA_TIME = "android.intent.extra.TIME";
+
+    /**
      * Optional int extra for {@link #ACTION_TIME_CHANGED} that indicates the
      * user has set their time format preference. See {@link #EXTRA_TIME_PREF_VALUE_USE_12_HOUR},
      * {@link #EXTRA_TIME_PREF_VALUE_USE_24_HOUR} and
@@ -6451,19 +6490,22 @@ public class Intent implements Parcelable, Cloneable {
      */
     public static final int FLAG_RECEIVER_NO_ABORT = 0x08000000;
     /**
-     * If set, when sending a broadcast <i>before boot has completed</i> only
+     * If set, when sending a broadcast <i>before the system has fully booted up
+     * (which is even before {@link #ACTION_LOCKED_BOOT_COMPLETED} has been sent)"</i> only
      * registered receivers will be called -- no BroadcastReceiver components
      * will be launched.  Sticky intent state will be recorded properly even
      * if no receivers wind up being called.  If {@link #FLAG_RECEIVER_REGISTERED_ONLY}
      * is specified in the broadcast intent, this flag is unnecessary.
      *
-     * <p>This flag is only for use by system sevices as a convenience to
-     * avoid having to implement a more complex mechanism around detection
+     * <p>This flag is only for use by system services (even services from mainline modules) as a
+     * convenience to avoid having to implement a more complex mechanism around detection
      * of boot completion.
+     *
+     * <p>This is useful to system server mainline modules
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
     public static final int FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT = 0x04000000;
     /**
      * Set when this broadcast is for a boot upgrade, a special mode that

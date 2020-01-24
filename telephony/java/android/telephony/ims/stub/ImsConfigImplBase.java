@@ -17,11 +17,13 @@
 package android.telephony.ims.stub;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.content.Context;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
+import android.telephony.ims.ProvisioningManager;
 import android.telephony.ims.aidl.IImsConfig;
 import android.telephony.ims.aidl.IImsConfigCallback;
 import android.util.Log;
@@ -199,6 +201,12 @@ public class ImsConfigImplBase {
             }
         }
 
+        @Override
+        public void notifyRcsAutoConfigurationReceived(byte[] config, boolean isCompressed)
+                throws RemoteException {
+            getImsConfigImpl().notifyRcsAutoConfigurationReceived(config, isCompressed);
+        }
+
         private void notifyImsConfigChanged(int item, int value) throws RemoteException {
             getImsConfigImpl().notifyConfigChanged(item, value);
         }
@@ -228,7 +236,8 @@ public class ImsConfigImplBase {
      * The configuration requested resulted in an unknown result. This may happen if the
      * IMS configurations are unavailable.
      */
-    public static final int CONFIG_RESULT_UNKNOWN = -1;
+    public static final int CONFIG_RESULT_UNKNOWN = ProvisioningManager.PROVISIONING_RESULT_UNKNOWN;
+
     /**
      * Setting the configuration value completed.
      */
@@ -356,9 +365,9 @@ public class ImsConfigImplBase {
      * @param config The XML file to be read, if not compressed, it should be in ASCII/UTF8 format.
      * @param isCompressed The XML file is compressed in gzip format and must be decompressed
      *         before being read.
-     * @hide
+     *
      */
-    public void notifyRcsAutoConfigurationReceived(byte[] config, boolean isCompressed) {
+    public void notifyRcsAutoConfigurationReceived(@NonNull byte[] config, boolean isCompressed) {
     }
 
     /**

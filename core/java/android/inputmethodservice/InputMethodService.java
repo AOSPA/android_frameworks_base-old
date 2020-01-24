@@ -34,9 +34,9 @@ import android.annotation.IntDef;
 import android.annotation.MainThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityManager;
 import android.app.Dialog;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -46,11 +46,13 @@ import android.database.ContentObserver;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.net.Uri;
+import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.SystemClock;
@@ -450,6 +452,16 @@ public class InputMethodService extends AbstractInputMethodService {
     @Nullable
     private InlineSuggestionsRequestInfo mInlineSuggestionsRequestInfo = null;
 
+    /**
+     * An opaque {@link Binder} token of window requesting {@link InputMethodImpl#showSoftInput}
+     * The original app window token is passed from client app window.
+     * {@link com.android.server.inputmethod.InputMethodManagerService} creates a unique dummy
+     * token to identify this window.
+     * This dummy token is only valid for a single call to {@link InputMethodImpl#showSoftInput},
+     * after which it is set null until next call.
+     */
+    private IBinder mCurShowInputToken;
+
     private final Handler mHandler = new Handler(Looper.getMainLooper(), null, true);
 
     final ViewTreeObserver.OnComputeInternalInsetsListener mInsetsComputer = info -> {
@@ -491,6 +503,9 @@ public class InputMethodService extends AbstractInputMethodService {
      * all of the standard behavior for an input method.
      */
     public class InputMethodImpl extends AbstractInputMethodImpl {
+
+        private boolean mSystemCallingShowSoftInput;
+
         /**
          * {@inheritDoc}
          * @hide
@@ -517,7 +532,9 @@ public class InputMethodService extends AbstractInputMethodService {
         @Override
         public void onCreateInlineSuggestionsRequest(ComponentName componentName,
                 AutofillId autofillId, IInlineSuggestionsRequestCallback cb) {
-            Log.d(TAG, "InputMethodService received onCreateInlineSuggestionsRequest()");
+            if (DEBUG) {
+                Log.d(TAG, "InputMethodService received onCreateInlineSuggestionsRequest()");
+            }
             handleOnCreateInlineSuggestionsRequest(componentName, autofillId, cb);
         }
 
@@ -657,11 +674,33 @@ public class InputMethodService extends AbstractInputMethodService {
 
         /**
          * {@inheritDoc}
+         * @hide
+         */
+        @MainThread
+        @Override
+        public void showSoftInputWithToken(int flags, ResultReceiver resultReceiver,
+                IBinder showInputToken) {
+            mSystemCallingShowSoftInput = true;
+            mCurShowInputToken = showInputToken;
+            showSoftInput(flags, resultReceiver);
+            mCurShowInputToken = null;
+            mSystemCallingShowSoftInput = false;
+        }
+
+        /**
+         * {@inheritDoc}
          */
         @MainThread
         @Override
         public void showSoftInput(int flags, ResultReceiver resultReceiver) {
             if (DEBUG) Log.v(TAG, "showSoftInput()");
+            // TODO(b/148086656): Disallow IME developers from calling InputMethodImpl methods.
+            if (getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.R
+                    && !mSystemCallingShowSoftInput) {
+                Log.e(TAG," IME shouldn't call showSoftInput on itself."
+                        + " Use requestShowSelf(int) itself");
+                return;
+            }
             final boolean wasVisible = mIsPreRendered
                     ? mDecorViewVisible && mWindowVisible : isInputViewShown();
             if (dispatchOnShowInputRequested(flags, false)) {
@@ -695,6 +734,15 @@ public class InputMethodService extends AbstractInputMethodService {
         @Override
         public void changeInputMethodSubtype(InputMethodSubtype subtype) {
             dispatchOnCurrentInputMethodSubtypeChanged(subtype);
+        }
+
+        /**
+         * {@inheritDoc}
+         * @hide
+         */
+        @Override
+        public void setCurrentShowInputToken(IBinder showInputToken) {
+            mCurShowInputToken = showInputToken;
         }
     }
 
@@ -755,7 +803,12 @@ public class InputMethodService extends AbstractInputMethodService {
     private void handleOnCreateInlineSuggestionsRequest(@NonNull ComponentName componentName,
             @NonNull AutofillId autofillId, @NonNull IInlineSuggestionsRequestCallback callback) {
         if (!mInputStarted) {
-            Log.w(TAG, "onStartInput() not called yet");
+            try {
+                Log.w(TAG, "onStartInput() not called yet");
+                callback.onInlineSuggestionsUnsupported();
+            } catch (RemoteException e) {
+                Log.w(TAG, "Failed to call onInlineSuggestionsUnsupported.", e);
+            }
             return;
         }
 
@@ -768,8 +821,12 @@ public class InputMethodService extends AbstractInputMethodService {
     private void handleOnInlineSuggestionsResponse(@NonNull ComponentName componentName,
             @NonNull AutofillId autofillId, @NonNull InlineSuggestionsResponse response) {
         if (!mInlineSuggestionsRequestInfo.validate(componentName)) {
-            Log.d(TAG, "Response component=" + componentName + " differs from request component="
-                    + mInlineSuggestionsRequestInfo.mComponentName + ", ignoring response");
+            if (DEBUG) {
+                Log.d(TAG,
+                        "Response component=" + componentName + " differs from request component="
+                                + mInlineSuggestionsRequestInfo.mComponentName
+                                + ", ignoring response");
+            }
             return;
         }
         onInlineSuggestionsResponse(response);
@@ -841,7 +898,7 @@ public class InputMethodService extends AbstractInputMethodService {
          */
         public boolean validate(ComponentName componentName) {
             final boolean result = componentName.equals(mComponentName);
-            if (!result) {
+            if (DEBUG && !result) {
                 Log.d(TAG, "Cached request info ComponentName=" + mComponentName
                         + " differs from received ComponentName=" + componentName);
             }
@@ -2170,7 +2227,7 @@ public class InputMethodService extends AbstractInputMethodService {
         if (!isVisibilityAppliedUsingInsetsConsumer()) {
             return;
         }
-        mPrivOps.applyImeVisibility(setVisible);
+        mPrivOps.applyImeVisibility(mCurShowInputToken, setVisible);
     }
 
     private boolean isVisibilityAppliedUsingInsetsConsumer() {

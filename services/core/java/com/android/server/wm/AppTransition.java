@@ -436,9 +436,10 @@ public class AppTransition implements Dump {
         mNextAppTransition = TRANSIT_UNSET;
         mNextAppTransitionFlags = 0;
         setAppTransitionState(APP_STATE_RUNNING);
-        final AnimationAdapter topOpeningAnim = topOpeningApp != null
-                ? topOpeningApp.getAnimation()
-                : null;
+        final WindowContainer wc =
+                topOpeningApp != null ? topOpeningApp.getAnimatingContainer() : null;
+        final AnimationAdapter topOpeningAnim = wc != null ? wc.getAnimation() : null;
+
         int redoLayout = notifyAppTransitionStartingLocked(transit,
                 topOpeningAnim != null ? topOpeningAnim.getDurationHint() : 0,
                 topOpeningAnim != null

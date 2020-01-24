@@ -42,6 +42,7 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.logWithStack;
+import static com.android.server.wm.WindowManagerService.sHierarchicalAnimations;
 import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_AFTER_ANIM;
 
 import android.annotation.CallSuper;
@@ -246,6 +247,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     private MagnificationSpec mLastMagnificationSpec;
 
+    private boolean mIsFocusable = true;
+
     WindowContainer(WindowManagerService wms) {
         mWmService = wms;
         mPendingTransaction = wms.mTransactionFactory.get();
@@ -342,7 +345,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         if (mSurfaceControl == null) {
             // If we don't yet have a surface, but we now have a parent, we should
             // build a surface.
-            mSurfaceControl = makeSurface().build();
+            setSurfaceControl(makeSurface().build());
             getPendingTransaction().show(mSurfaceControl);
             updateSurfacePosition();
         } else {
@@ -496,7 +499,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 mParent.getPendingTransaction().merge(getPendingTransaction());
             }
 
-            mSurfaceControl = null;
+            setSurfaceControl(null);
             mLastSurfacePosition.set(0, 0);
             scheduleAnimation();
         }
@@ -557,6 +560,13 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             }
         }
         return false;
+    }
+
+    /** @return true if this window container is a descendant of the input container. */
+    boolean isDescendantOf(WindowContainer ancestor) {
+        final WindowContainer parent = getParent();
+        if (parent == ancestor) return true;
+        return (parent != null) && parent.isDescendantOf(ancestor);
     }
 
     /**
@@ -785,7 +795,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      *         {@code ActivityRecord#isAnimating(TRANSITION)}, {@code false} otherwise.
      */
     boolean isAppTransitioning() {
-        return getActivity(app -> app.isAnimating(TRANSITION)) != null;
+        return getActivity(app -> app.isAnimating(PARENTS | TRANSITION)) != null;
     }
 
     /**
@@ -848,6 +858,21 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             }
         }
         return false;
+    }
+
+    @Override
+    boolean isFocusable() {
+        return super.isFocusable() && mIsFocusable;
+    }
+
+    /** Set whether this container or its children can be focusable */
+    @Override
+    boolean setFocusable(boolean focusable) {
+        if (mIsFocusable == focusable) {
+            return false;
+        }
+        mIsFocusable = focusable;
+        return true;
     }
 
     /**
@@ -1069,6 +1094,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             mChildren.get(i).switchUser(userId);
         }
+    }
+
+    boolean showToCurrentUser() {
+        return true;
     }
 
     /**
@@ -1810,13 +1839,19 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @param anim The animation to run.
      * @param hidden Whether our container is currently hidden. TODO This should use isVisible at
      *               some point but the meaning is too weird to work for all containers.
+     * @param animationFinishedCallback The callback being triggered when the animation finishes.
      */
-    void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden) {
+    void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden,
+            @Nullable Runnable animationFinishedCallback) {
         if (DEBUG_ANIM) Slog.v(TAG, "Starting animation on " + this + ": " + anim);
 
         // TODO: This should use isVisible() but because isVisible has a really weird meaning at
         // the moment this doesn't work for all animatable window containers.
-        mSurfaceAnimator.startAnimation(t, anim, hidden);
+        mSurfaceAnimator.startAnimation(t, anim, hidden, animationFinishedCallback);
+    }
+
+    void startAnimation(Transaction t, AnimationAdapter anim, boolean hidden) {
+        startAnimation(t, anim, hidden, null /* animationFinishedCallback */);
     }
 
     void transferAnimation(WindowContainer from) {
@@ -1851,7 +1886,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     // TODO: Remove this and use #getBounds() instead once we set an app transition animation
     // on TaskStack.
     Rect getAnimationBounds(int appStackClipMode) {
-        return getBounds();
+        return getDisplayedBounds();
     }
 
     /**
@@ -1869,7 +1904,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @see #getAnimationAdapter
      */
     boolean applyAnimation(WindowManager.LayoutParams lp, int transit, boolean enter,
-                           boolean isVoiceInteraction) {
+            boolean isVoiceInteraction, @Nullable Runnable animationFinishedCallback) {
         if (mWmService.mDisableTransitionAnimation) {
             ProtoLog.v(WM_DEBUG_APP_TRANSITIONS_ANIM,
                     "applyAnimation: transition animation is disabled or skipped. "
@@ -1889,9 +1924,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 AnimationAdapter adapter = adapters.first;
                 AnimationAdapter thumbnailAdapter = adapters.second;
                 if (adapter != null) {
-                    startAnimation(getPendingTransaction(), adapter, !isVisible());
+                    startAnimation(getPendingTransaction(), adapter, !isVisible(),
+                            animationFinishedCallback);
                     if (adapter.getShowWallpaper()) {
-                        mDisplayContent.pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
+                        getDisplayContent().pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
                     }
                     if (thumbnailAdapter != null) {
                         mThumbnail.startAnimation(
@@ -1925,7 +1961,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
         // Separate position and size for use in animators.
         mTmpRect.set(getAnimationBounds(appStackClipMode));
-        mTmpPoint.set(mTmpRect.left, mTmpRect.top);
+        if (sHierarchicalAnimations) {
+            getRelativeDisplayedPosition(mTmpPoint);
+        } else {
+            mTmpPoint.set(mTmpRect.left, mTmpRect.top);
+        }
         mTmpRect.offsetTo(0, 0);
 
         final RemoteAnimationController controller =
@@ -2036,7 +2076,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     boolean okToDisplay() {
-        return mDisplayContent != null && mDisplayContent.okToDisplay();
+        final DisplayContent dc = getDisplayContent();
+        return dc != null && dc.okToDisplay();
     }
 
     boolean okToAnimate() {
@@ -2044,7 +2085,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     boolean okToAnimate(boolean ignoreFrozen) {
-        return mDisplayContent != null && mDisplayContent.okToAnimate(ignoreFrozen);
+        final DisplayContent dc = getDisplayContent();
+        return dc != null && dc.okToAnimate(ignoreFrozen);
     }
 
     @Override
@@ -2083,6 +2125,21 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      */
     AnimationAdapter getAnimation() {
         return mSurfaceAnimator.getAnimation();
+    }
+
+    /**
+     * @return The {@link WindowContainer} which is running an animation.
+     *
+     * It traverses from the current container to its parents recursively. If nothing is animating,
+     * it will return {@code null}.
+     */
+    @Nullable
+    WindowContainer getAnimatingContainer() {
+        if (isAnimating()) {
+            return this;
+        }
+        final WindowContainer parent = getParent();
+        return (parent != null) ? parent.getAnimatingContainer() : null;
     }
 
     /**
@@ -2187,5 +2244,19 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             return null;
         }
         return mParent.getDimmer();
+    }
+
+    void setSurfaceControl(SurfaceControl sc) {
+        mSurfaceControl = sc;
+    }
+
+    /** Cheap way of doing cast and instanceof. */
+    Task asTask() {
+        return null;
+    }
+
+    /** Cheap way of doing cast and instanceof. */
+    ActivityRecord asActivityRecord() {
+        return null;
     }
 }

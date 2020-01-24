@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 The Android Open Source Project
+ * Copyright (C) 2020 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,10 +15,27 @@
  */
 package com.android.server.appsearch;
 
+import android.annotation.NonNull;
+import android.app.appsearch.AppSearchBatchResult;
 import android.app.appsearch.IAppSearchManager;
 import android.content.Context;
+import android.os.Binder;
+import android.os.UserHandle;
 
+import com.android.internal.infra.AndroidFuture;
+import com.android.internal.util.Preconditions;
 import com.android.server.SystemService;
+import com.android.server.appsearch.impl.AppSearchImpl;
+import com.android.server.appsearch.impl.FakeIcing;
+import com.android.server.appsearch.impl.ImplInstanceManager;
+
+import com.google.android.icing.proto.DocumentProto;
+import com.google.android.icing.proto.SchemaProto;
+import com.google.android.icing.proto.SearchResultProto;
+import com.google.android.icing.proto.SearchSpecProto;
+import com.google.android.icing.protobuf.InvalidProtocolBufferException;
+
+import java.util.List;
 
 /**
  * TODO(b/142567528): add comments when implement this class
@@ -27,7 +44,10 @@ public class AppSearchManagerService extends SystemService {
 
     public AppSearchManagerService(Context context) {
         super(context);
+        mFakeIcing = new FakeIcing();
     }
+
+    private final FakeIcing mFakeIcing;
 
     @Override
     public void onStart() {
@@ -35,5 +55,70 @@ public class AppSearchManagerService extends SystemService {
     }
 
     private class Stub extends IAppSearchManager.Stub {
+        @Override
+        public void setSchema(byte[] schemaBytes, boolean forceOverride, AndroidFuture callback) {
+            Preconditions.checkNotNull(schemaBytes);
+            Preconditions.checkNotNull(callback);
+            int callingUid = Binder.getCallingUidOrThrow();
+            int callingUserId = UserHandle.getUserId(callingUid);
+            long callingIdentity = Binder.clearCallingIdentity();
+            try {
+                SchemaProto schema = SchemaProto.parseFrom(schemaBytes);
+                AppSearchImpl impl = ImplInstanceManager.getInstance(getContext(), callingUserId);
+                impl.setSchema(callingUid, schema, forceOverride);
+                callback.complete(null);
+            } catch (Throwable t) {
+                callback.completeExceptionally(t);
+            } finally {
+                Binder.restoreCallingIdentity(callingIdentity);
+            }
+        }
+
+        @Override
+        public void putDocuments(
+                List documentsBytes, AndroidFuture<AppSearchBatchResult> callback) {
+            Preconditions.checkNotNull(documentsBytes);
+            Preconditions.checkNotNull(callback);
+            int callingUid = Binder.getCallingUidOrThrow();
+            int callingUserId = UserHandle.getUserId(callingUid);
+            long callingIdentity = Binder.clearCallingIdentity();
+            try {
+                AppSearchImpl impl = ImplInstanceManager.getInstance(getContext(), callingUserId);
+                AppSearchBatchResult.Builder<String, Void> resultBuilder =
+                        AppSearchBatchResult.newBuilder();
+                for (int i = 0; i < documentsBytes.size(); i++) {
+                    byte[] documentBytes = (byte[]) documentsBytes.get(i);
+                    DocumentProto document = DocumentProto.parseFrom(documentBytes);
+                    try {
+                        impl.putDocument(callingUid, document);
+                        resultBuilder.setSuccess(document.getUri(), /*value=*/ null);
+                    } catch (Throwable t) {
+                        resultBuilder.setFailure(document.getUri(), t);
+                    }
+                }
+                callback.complete(resultBuilder.build());
+            } catch (Throwable t) {
+                callback.completeExceptionally(t);
+            } finally {
+                Binder.restoreCallingIdentity(callingIdentity);
+            }
+        }
+        // TODO(sidchhabra):Init FakeIcing properly.
+        // TODO(sidchhabra): Do this in a threadpool.
+        @Override
+        public void query(@NonNull String queryExpression, @NonNull byte[] searchSpec,
+                AndroidFuture callback) {
+            Preconditions.checkNotNull(queryExpression);
+            Preconditions.checkNotNull(searchSpec);
+            SearchSpecProto searchSpecProto = null;
+            try {
+                searchSpecProto = SearchSpecProto.parseFrom(searchSpec);
+            } catch (InvalidProtocolBufferException e) {
+                throw new RuntimeException(e);
+            }
+            SearchResultProto searchResults =
+                    mFakeIcing.query(queryExpression);
+            callback.complete(searchResults.toByteArray());
+        }
     }
 }

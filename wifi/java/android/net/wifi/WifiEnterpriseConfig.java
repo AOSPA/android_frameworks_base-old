@@ -19,7 +19,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.text.TextUtils;
@@ -1042,8 +1042,10 @@ public class WifiEnterpriseConfig implements Parcelable {
     }
 
     /**
-     * @hide
+     * Get the client private key as supplied in {@link #setClientKeyEntryWithCertificateChain}, or
+     * null if unset.
      */
+    @Nullable
     public PrivateKey getClientPrivateKey() {
         return mClientPrivateKey;
     }
@@ -1350,20 +1352,18 @@ public class WifiEnterpriseConfig implements Parcelable {
     }
 
     /**
-     * If the current authentication method needs SIM card.
-     * @return true if the credential information require SIM card for current authentication
+     * Utility method to determine whether the configuration's authentication method is SIM-based.
+     *
+     * @return true if the credential information requires SIM card for current authentication
      * method, otherwise it returns false.
-     * @hide
      */
-    public boolean requireSimCredential() {
+    public boolean isAuthenticationSimBased() {
         if (mEapMethod == Eap.SIM || mEapMethod == Eap.AKA || mEapMethod == Eap.AKA_PRIME) {
             return true;
         }
         if (mEapMethod == Eap.PEAP) {
-            if (mPhase2Method == Phase2.SIM || mPhase2Method == Phase2.AKA
-                    || mPhase2Method == Phase2.AKA_PRIME) {
-                return true;
-            }
+            return mPhase2Method == Phase2.SIM || mPhase2Method == Phase2.AKA
+                    || mPhase2Method == Phase2.AKA_PRIME;
         }
         return false;
     }

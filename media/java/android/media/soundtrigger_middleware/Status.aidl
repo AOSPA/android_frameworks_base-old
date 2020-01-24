@@ -26,4 +26,8 @@ enum Status {
     RESOURCE_CONTENTION = 1,
     /** Operation is not supported in this implementation. This is a permanent condition. */
     OPERATION_NOT_SUPPORTED = 2,
+    /** Temporary lack of permission. */
+    TEMPORARY_PERMISSION_DENIED = 3,
+    /** The object on which this method is called is dead and all of its state is lost. */
+    DEAD_OBJECT = 4,
 }

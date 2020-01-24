@@ -21,8 +21,8 @@ import static android.widget.RemoteViews.RemoteView;
 
 import android.annotation.NonNull;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityManager;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -422,7 +422,7 @@ public class TextClock extends TextView {
     /**
      * Update the displayed time if necessary and invalidate the view.
      */
-    public void refresh() {
+    public void refreshTime() {
         onTimeChanged();
         invalidate();
     }

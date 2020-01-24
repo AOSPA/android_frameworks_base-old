@@ -44,7 +44,7 @@ public class ShadeControllerImpl implements ShadeController {
 
     private final CommandQueue mCommandQueue;
     private final StatusBarStateController mStatusBarStateController;
-    protected final StatusBarWindowController mStatusBarWindowController;
+    protected final NotificationShadeWindowController mNotificationShadeWindowController;
     private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
     private final int mDisplayId;
     protected final Lazy<StatusBar> mStatusBarLazy;
@@ -57,7 +57,7 @@ public class ShadeControllerImpl implements ShadeController {
     public ShadeControllerImpl(
             CommandQueue commandQueue,
             StatusBarStateController statusBarStateController,
-            StatusBarWindowController statusBarWindowController,
+            NotificationShadeWindowController notificationShadeWindowController,
             StatusBarKeyguardViewManager statusBarKeyguardViewManager,
             WindowManager windowManager,
             Lazy<StatusBar> statusBarLazy,
@@ -66,7 +66,7 @@ public class ShadeControllerImpl implements ShadeController {
     ) {
         mCommandQueue = commandQueue;
         mStatusBarStateController = statusBarStateController;
-        mStatusBarWindowController = statusBarWindowController;
+        mNotificationShadeWindowController = notificationShadeWindowController;
         mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
         mDisplayId = windowManager.getDefaultDisplay().getDisplayId();
         // TODO: Remove circular reference to StatusBar when possible.
@@ -79,7 +79,7 @@ public class ShadeControllerImpl implements ShadeController {
     public void instantExpandNotificationsPanel() {
         // Make our window larger and the panel expanded.
         getStatusBar().makeExpandedVisible(true /* force */);
-        getNotificationPanelView().expand(false /* animate */);
+        getNotificationPanelViewController().expand(false /* animate */);
         mCommandQueue.recomputeDisableFlags(mDisplayId, false /* animate */);
     }
 
@@ -122,13 +122,15 @@ public class ShadeControllerImpl implements ShadeController {
         }
 
         // TODO(b/62444020): remove when this bug is fixed
-        Log.v(TAG, "mStatusBarWindow: " + getStatusBarWindowView() + " canPanelBeCollapsed(): "
-                + getNotificationPanelView().canPanelBeCollapsed());
-        if (getStatusBarWindowView() != null && getNotificationPanelView().canPanelBeCollapsed()) {
+        Log.v(TAG, "NotificationShadeWindow: " + getNotificationShadeWindowView()
+                + " canPanelBeCollapsed(): "
+                + getNotificationPanelViewController().canPanelBeCollapsed());
+        if (getNotificationShadeWindowView() != null
+                && getNotificationPanelViewController().canPanelBeCollapsed()) {
             // release focus immediately to kick off focus change transition
-            mStatusBarWindowController.setStatusBarFocusable(false);
+            mNotificationShadeWindowController.setNotificationShadeFocusable(false);
 
-            getStatusBar().getStatusBarWindowViewController().cancelExpandHelper();
+            getStatusBar().getNotificationShadeWindowViewController().cancelExpandHelper();
             getStatusBarView().collapsePanel(true /* animate */, delayed, speedUpFactor);
         } else {
             mBubbleControllerLazy.get().collapseStack();
@@ -138,7 +140,7 @@ public class ShadeControllerImpl implements ShadeController {
 
     @Override
     public boolean closeShadeIfOpen() {
-        if (!getNotificationPanelView().isFullyCollapsed()) {
+        if (!getNotificationPanelViewController().isFullyCollapsed()) {
             mCommandQueue.animateCollapsePanels(
                     CommandQueue.FLAG_EXCLUDE_RECENTS_PANEL, true /* force */);
             getStatusBar().visibilityChanged(false);
@@ -149,15 +151,13 @@ public class ShadeControllerImpl implements ShadeController {
 
     @Override
     public void postOnShadeExpanded(Runnable executable) {
-        getNotificationPanelView().getViewTreeObserver().addOnGlobalLayoutListener(
+        getNotificationPanelViewController().addOnGlobalLayoutListener(
                 new ViewTreeObserver.OnGlobalLayoutListener() {
                     @Override
                     public void onGlobalLayout() {
-                        if (getStatusBar().getStatusBarWindow().getHeight()
-                                != getStatusBar().getStatusBarHeight()) {
-                            getNotificationPanelView().getViewTreeObserver()
-                                    .removeOnGlobalLayoutListener(this);
-                            getNotificationPanelView().post(executable);
+                        if (getStatusBar().getNotificationShadeWindowView().isVisibleToUser()) {
+                            getNotificationPanelViewController().removeOnGlobalLayoutListener(this);
+                            getNotificationPanelViewController().getView().post(executable);
                         }
                     }
                 });
@@ -187,7 +187,7 @@ public class ShadeControllerImpl implements ShadeController {
 
     @Override
     public boolean collapsePanel() {
-        if (!getNotificationPanelView().isFullyCollapsed()) {
+        if (!getNotificationPanelViewController().isFullyCollapsed()) {
             // close the shade if it was open
             animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_RECENTS_PANEL,
                     true /* force */, true /* delayed */);
@@ -222,15 +222,15 @@ public class ShadeControllerImpl implements ShadeController {
         return getStatusBar().getPresenter();
     }
 
-    protected StatusBarWindowView getStatusBarWindowView() {
-        return getStatusBar().getStatusBarWindow();
+    protected NotificationShadeWindowView getNotificationShadeWindowView() {
+        return getStatusBar().getNotificationShadeWindowView();
     }
 
     protected PhoneStatusBarView getStatusBarView() {
         return (PhoneStatusBarView) getStatusBar().getStatusBarView();
     }
 
-    private NotificationPanelView getNotificationPanelView() {
-        return getStatusBar().getPanel();
+    private NotificationPanelViewController getNotificationPanelViewController() {
+        return getStatusBar().getPanelController();
     }
 }

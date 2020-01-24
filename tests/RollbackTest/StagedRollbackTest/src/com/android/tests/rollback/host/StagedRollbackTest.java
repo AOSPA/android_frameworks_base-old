@@ -17,16 +17,19 @@
 package com.android.tests.rollback.host;
 
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 import static org.testng.Assert.assertThrows;
 
+import com.android.compatibility.common.tradefed.build.CompatibilityBuildHelper;
 import com.android.tradefed.testtype.DeviceJUnit4ClassRunner;
 import com.android.tradefed.testtype.junit4.BaseHostJUnit4Test;
 
+import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.io.File;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -48,8 +51,32 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
                     phase));
     }
 
+    private static final String APK_IN_APEX_TESTAPEX_NAME = "com.android.apex.apkrollback.test";
+
     @Before
     public void setUp() throws Exception {
+        if (!getDevice().isAdbRoot()) {
+            getDevice().enableAdbRoot();
+        }
+        getDevice().remountSystemWritable();
+        getDevice().executeShellCommand(
+                "rm -f /system/apex/" + APK_IN_APEX_TESTAPEX_NAME + "*.apex "
+                        + "/data/apex/active/" + APK_IN_APEX_TESTAPEX_NAME + "*.apex");
+        getDevice().reboot();
+        runPhase("testCleanUp");
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        runPhase("testCleanUp");
+
+        if (!getDevice().isAdbRoot()) {
+            getDevice().enableAdbRoot();
+        }
+        getDevice().remountSystemWritable();
+        getDevice().executeShellCommand(
+                "rm -f /system/apex/" + APK_IN_APEX_TESTAPEX_NAME + "*.apex "
+                        + "/data/apex/active/" + APK_IN_APEX_TESTAPEX_NAME + "*.apex");
         getDevice().reboot();
     }
 
@@ -70,7 +97,6 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
 
     @Test
     public void testNativeWatchdogTriggersRollback() throws Exception {
-        //Stage install ModuleMetadata package - this simulates a Mainline module update
         runPhase("testNativeWatchdogTriggersRollback_Phase1");
 
         // Reboot device to activate staged package
@@ -94,6 +120,40 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
 
         // verify rollback committed
         runPhase("testNativeWatchdogTriggersRollback_Phase3");
+    }
+
+    @Test
+    public void testNativeWatchdogTriggersRollbackForAll() throws Exception {
+        // This test requires committing multiple staged rollbacks
+        assumeTrue(isCheckpointSupported());
+
+        // Install a package with rollback enabled.
+        runPhase("testNativeWatchdogTriggersRollbackForAll_Phase1");
+        getDevice().reboot();
+
+        // Once previous staged install is applied, install another package
+        runPhase("testNativeWatchdogTriggersRollbackForAll_Phase2");
+        getDevice().reboot();
+
+        // Verify the new staged install has also been applied successfully.
+        runPhase("testNativeWatchdogTriggersRollbackForAll_Phase3");
+
+        // crash system_server enough times to trigger a rollback
+        crashProcess("system_server", NATIVE_CRASHES_THRESHOLD);
+
+        // Rollback should be committed automatically now.
+        // Give time for rollback to be committed. This could take a while,
+        // because we need all of the following to happen:
+        // 1. system_server comes back up and boot completes.
+        // 2. Rollback health observer detects updatable crashing signal.
+        // 3. Staged rollback session becomes ready.
+        // 4. Device actually reboots.
+        // So we give a generous timeout here.
+        assertTrue(getDevice().waitForDeviceNotAvailable(TimeUnit.MINUTES.toMillis(5)));
+        getDevice().waitForDeviceAvailable();
+
+        // verify all available rollbacks have been committed
+        runPhase("testNativeWatchdogTriggersRollbackForAll_Phase4");
     }
 
     /**
@@ -128,21 +188,8 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
      * Tests passed network health check does not trigger watchdog staged rollbacks.
      */
     @Test
-    @Ignore("b/143514090")
     public void testNetworkPassedDoesNotRollback() throws Exception {
-        // Remove available rollbacks and uninstall NetworkStack on /data/
         runPhase("testNetworkPassedDoesNotRollback_Phase1");
-        // Reduce health check deadline, here unlike the network failed case, we use
-        // a longer deadline because joining a network can take a much longer time for
-        // reasons external to the device than 'not joining'
-        getDevice().executeShellCommand("device_config put rollback "
-                + "watchdog_request_timeout_millis 300000");
-        // Simulate re-installation of new NetworkStack with rollbacks enabled
-        getDevice().executeShellCommand("pm install -r --staged --enable-rollback "
-                + getNetworkStackPath());
-
-        // Sleep to allow writes to disk before reboot
-        Thread.sleep(5000);
         // Reboot device to activate staged package
         getDevice().reboot();
 
@@ -157,8 +204,6 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
         // on mobile data
         getDevice().waitForDeviceAvailable();
 
-        // Sleep for > health check deadline
-        Thread.sleep(310000);
         // Verify rollback was not executed after health check deadline
         runPhase("testNetworkPassedDoesNotRollback_Phase3");
     }
@@ -180,16 +225,9 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
      */
     @Test
     public void testRollbackWhitelistedApp() throws Exception {
-        try {
-            runPhase("testRollbackWhitelistedApp_Phase1");
-            getDevice().reboot();
-            runPhase("testRollbackWhitelistedApp_Phase2");
-        } finally {
-            // testNativeWatchdogTriggersRollback will fail if multiple staged sessions are
-            // committed on a device which doesn't support checkpoint. Let's clean up the rollback
-            // so there is only one rollback to commit when testing native crashes.
-            runPhase("testRollbackWhitelistedApp_cleanUp");
-        }
+        runPhase("testRollbackWhitelistedApp_Phase1");
+        getDevice().reboot();
+        runPhase("testRollbackWhitelistedApp_Phase2");
     }
 
     @Test
@@ -199,6 +237,56 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
         runPhase("testRollbackDataPolicy_Phase2");
         getDevice().reboot();
         runPhase("testRollbackDataPolicy_Phase3");
+    }
+
+    /**
+     * Tests that userdata of apk-in-apex is restored when apex is rolled back.
+     */
+    @Test
+    public void testRollbackApexWithApk() throws Exception {
+        getDevice().uninstallPackage("com.android.cts.install.lib.testapp.A");
+        CompatibilityBuildHelper buildHelper = new CompatibilityBuildHelper(getBuild());
+        final String fileName = APK_IN_APEX_TESTAPEX_NAME + "_v1.apex";
+        final File apex = buildHelper.getTestFile(fileName);
+        if (!getDevice().isAdbRoot()) {
+            getDevice().enableAdbRoot();
+        }
+        getDevice().remountSystemWritable();
+        assertTrue(getDevice().pushFile(apex, "/system/apex/" + fileName));
+        getDevice().reboot();
+        runPhase("testRollbackApexWithApk_Phase1");
+        getDevice().reboot();
+        runPhase("testRollbackApexWithApk_Phase2");
+        getDevice().reboot();
+        runPhase("testRollbackApexWithApk_Phase3");
+    }
+
+    /**
+     * Tests that RollbackPackageHealthObserver is observing apk-in-apex.
+     */
+    @Test
+    public void testRollbackApexWithApkCrashing() throws Exception {
+        getDevice().uninstallPackage("com.android.cts.install.lib.testapp.A");
+        CompatibilityBuildHelper buildHelper = new CompatibilityBuildHelper(getBuild());
+        final String fileName = APK_IN_APEX_TESTAPEX_NAME + "_v1.apex";
+        final File apex = buildHelper.getTestFile(fileName);
+        if (!getDevice().isAdbRoot()) {
+            getDevice().enableAdbRoot();
+        }
+        getDevice().remountSystemWritable();
+        assertTrue(getDevice().pushFile(apex, "/system/apex/" + fileName));
+        getDevice().reboot();
+
+        // Install an apex with apk that crashes
+        runPhase("testRollbackApexWithApkCrashing_Phase1");
+        getDevice().reboot();
+        // Verify apex was installed and then crash the apk
+        runPhase("testRollbackApexWithApkCrashing_Phase2");
+        // Wait for crash to trigger rollback
+        assertTrue(getDevice().waitForDeviceNotAvailable(TimeUnit.MINUTES.toMillis(5)));
+        getDevice().waitForDeviceAvailable();
+        // Verify rollback occurred due to crash of apk-in-apex
+        runPhase("testRollbackApexWithApkCrashing_Phase3");
     }
 
     private void crashProcess(String processName, int numberOfCrashes) throws Exception {
@@ -218,5 +306,14 @@ public class StagedRollbackTest extends BaseHostJUnit4Test {
     private String getNetworkStackPath() throws Exception {
         // Find the NetworkStack path (can be NetworkStack.apk or NetworkStackNext.apk)
         return getDevice().executeShellCommand("ls /system/priv-app/NetworkStack*/*.apk");
+    }
+
+    private boolean isCheckpointSupported() throws Exception {
+        try {
+            runPhase("isCheckpointSupported");
+            return true;
+        } catch (AssertionError ignore) {
+            return false;
+        }
     }
 }

@@ -3000,13 +3000,18 @@
     <public-group type="attr" first-id="0x01010607">
       <public name="importantForContentCapture" />
       <public name="forceQueryable" />
-      <!-- @hide @SystemApi -->
       <public name="resourcesMap" />
       <public name="animatedImageDrawable"/>
       <public name="htmlDescription"/>
       <public name="preferMinimalPostProcessing"/>
       <public name="featureId" />
       <public name="supportsInlineSuggestions" />
+      <public name="crossProfile" />
+      <public name="canTakeScreenshot"/>
+      <!-- @hide @SystemApi -->
+      <public name="sdkVersion" />
+      <!-- @hide @SystemApi -->
+      <public name="minExtensionVersion" />
     </public-group>
 
     <public-group type="drawable" first-id="0x010800b5">
@@ -3030,6 +3035,8 @@
       <public name="config_defaultCallRedirection" />
       <!-- @hide @SystemApi -->
       <public name="config_defaultCallScreening" />
+      <!-- @hide @SystemApi @TestApi -->
+      <public name="config_systemGallery" />
     </public-group>
 
     <public-group type="bool" first-id="0x01110005">

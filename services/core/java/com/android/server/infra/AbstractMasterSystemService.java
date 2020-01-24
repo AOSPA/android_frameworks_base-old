@@ -41,7 +41,6 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.content.PackageMonitor;
 import com.android.internal.infra.AbstractRemoteService;
 import com.android.internal.os.BackgroundThread;
-import com.android.internal.util.Preconditions;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 
@@ -50,6 +49,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Base class for {@link SystemService SystemServices} that support multi user.
@@ -373,7 +373,7 @@ public abstract class AbstractMasterSystemService<M extends AbstractMasterSystem
                 + durationMs + "ms");
         enforceCallingPermissionForManagement();
 
-        Preconditions.checkNotNull(componentName);
+        Objects.requireNonNull(componentName);
         final int maxDurationMs = getMaximumTemporaryServiceDurationMs();
         if (durationMs > maxDurationMs) {
             throw new IllegalArgumentException(
@@ -712,8 +712,8 @@ public abstract class AbstractMasterSystemService<M extends AbstractMasterSystem
     }
 
     /**
-     * Gets a list of all supported users (i.e., those that pass the {@link #isSupported(UserInfo)}
-     * check).
+     * Gets a list of all supported users (i.e., those that pass the
+     * {@link #isSupportedUser(TargetUser)}check).
      */
     @NonNull
     protected List<UserInfo> getSupportedUsers() {
@@ -722,7 +722,7 @@ public abstract class AbstractMasterSystemService<M extends AbstractMasterSystem
         final List<UserInfo> supportedUsers = new ArrayList<>(size);
         for (int i = 0; i < size; i++) {
             final UserInfo userInfo = allUsers[i];
-            if (isSupported(userInfo)) {
+            if (isSupportedUser(new TargetUser(userInfo))) {
                 supportedUsers.add(userInfo);
             }
         }
@@ -735,7 +735,7 @@ public abstract class AbstractMasterSystemService<M extends AbstractMasterSystem
      * @throws SecurityException when it's not...
      */
     protected final void assertCalledByPackageOwner(@NonNull String packageName) {
-        Preconditions.checkNotNull(packageName);
+        Objects.requireNonNull(packageName);
         final int uid = Binder.getCallingUid();
         final String[] packages = getContext().getPackageManager().getPackagesForUid(uid);
         if (packages != null) {
@@ -952,6 +952,35 @@ public abstract class AbstractMasterSystemService<M extends AbstractMasterSystem
                     }
                 }
                 onServicePackageRestartedLocked(userId);
+            }
+
+            @Override
+            public void onPackageModified(String packageName) {
+                if (verbose) Slog.v(mTag, "onPackageModified(): " + packageName);
+
+                final int userId = getChangingUserId();
+                final String serviceName = mServiceNameResolver.getDefaultServiceName(userId);
+                if (serviceName == null) {
+                    return;
+                }
+
+                final ComponentName serviceComponentName =
+                        ComponentName.unflattenFromString(serviceName);
+                if (serviceComponentName == null
+                        || !serviceComponentName.getPackageName().equals(packageName)) {
+                    return;
+                }
+
+                // The default service package has changed, update the cached if the service
+                // exists but no active component.
+                final S service = peekServiceForUserLocked(userId);
+                if (service != null) {
+                    final ComponentName componentName = service.getServiceComponentName();
+                    if (componentName == null) {
+                        if (verbose) Slog.v(mTag, "update cached");
+                        updateCachedServiceLocked(userId);
+                    }
+                }
             }
 
             private String getActiveServicePackageNameLocked() {

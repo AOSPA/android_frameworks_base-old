@@ -22,6 +22,7 @@ import static android.app.ActivityThread.PROC_START_SEQ_IDENT;
 import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_AUTO;
 import static android.net.NetworkPolicyManager.isProcStateAllowedWhileIdleOrPowerSaveMode;
 import static android.net.NetworkPolicyManager.isProcStateAllowedWhileOnRestrictBackground;
+import static android.os.MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Process.THREAD_PRIORITY_BACKGROUND;
 import static android.os.Process.getFreeMemory;
@@ -53,23 +54,33 @@ import android.app.ActivityManager;
 import android.app.ActivityThread;
 import android.app.AppGlobals;
 import android.app.AppProtoEnums;
+import android.app.ApplicationExitInfo;
+import android.app.ApplicationExitInfo.Reason;
+import android.app.ApplicationExitInfo.SubReason;
 import android.app.IApplicationThread;
+import android.app.IUidObserver;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.res.Resources;
 import android.graphics.Point;
+import android.net.LocalSocket;
+import android.net.LocalSocketAddress;
 import android.os.AppZygote;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.DropBoxManager;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
+import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.StrictMode;
@@ -80,9 +91,7 @@ import android.os.UserHandle;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageManagerInternal;
 import android.provider.DeviceConfig;
-import android.system.ErrnoException;
 import android.system.Os;
-import android.system.OsConstants;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.EventLog;
@@ -104,6 +113,7 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.MemInfoReader;
 import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
+import com.android.server.SystemConfig;
 import com.android.server.Watchdog;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.pm.dex.DexManager;
@@ -113,6 +123,7 @@ import com.android.server.wm.WindowManagerService;
 import dalvik.system.VMRuntime;
 
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
@@ -282,6 +293,10 @@ public final class ProcessList {
     private static final String PROPERTY_USE_APP_IMAGE_STARTUP_CACHE =
             "persist.device_config.runtime_native.use_app_image_startup_cache";
 
+    // The socket path for zygote to send unsolicited msg.
+    // Must keep sync with com_android_internal_os_Zygote.cpp.
+    private static final String UNSOL_ZYGOTE_MSG_SOCKET_PATH = "/data/system/unsolzygotesocket";
+
     // Low Memory Killer Daemon command codes.
     // These must be kept in sync with lmk_cmd definitions in lmkd.h
     //
@@ -311,12 +326,7 @@ public final class ProcessList {
     /**
      * How long between a process kill and we actually receive its death recipient
      */
-    private static final long PROC_KILL_TIMEOUT = 2000; // 2 seconds;
-
-    /**
-     * How long between polls to check if the given process is dead or not.
-     */
-    private static final long PROC_DEATH_POLL_INTERVAL = 100;
+    private static final int PROC_KILL_TIMEOUT = 2000; // 2 seconds;
 
     ActivityManagerService mService = null;
 
@@ -357,6 +367,8 @@ public final class ProcessList {
     private boolean mOomLevelsSet = false;
 
     private boolean mAppDataIsolationEnabled = false;
+
+    private ArrayList<String> mAppDataIsolationWhitelistedApps;
 
     /**
      * Temporary to avoid allocations.  Protected by main lock.
@@ -414,12 +426,6 @@ public final class ProcessList {
     ActiveUids mActiveUids;
 
     /**
-     * The listener who is intereted with the lmkd kills.
-     */
-    @GuardedBy("mService")
-    private LmkdKillListener mLmkdKillListener = null;
-
-    /**
      * The currently running isolated processes.
      */
     final SparseArray<ProcessRecord> mIsolatedProcesses = new SparseArray<>();
@@ -430,12 +436,40 @@ public final class ProcessList {
     final ProcessMap<AppZygote> mAppZygotes = new ProcessMap<AppZygote>();
 
     /**
+     * Managees the {@link android.app.ApplicationExitInfo} records.
+     */
+    @GuardedBy("mAppExitInfoTracker")
+    final AppExitInfoTracker mAppExitInfoTracker = new AppExitInfoTracker();
+
+    /**
      * The processes that are forked off an application zygote.
      */
     final ArrayMap<AppZygote, ArrayList<ProcessRecord>> mAppZygoteProcesses =
             new ArrayMap<AppZygote, ArrayList<ProcessRecord>>();
 
     private PlatformCompat mPlatformCompat = null;
+
+    /**
+     * The server socket in system_server, zygote will connect to it
+     * in order to send unsolicited messages to system_server.
+     */
+    private LocalSocket mSystemServerSocketForZygote;
+
+    /**
+     * Maximum number of bytes that an incoming unsolicited zygote message could be.
+     * To be updated if new message type needs to be supported.
+     */
+    private static final int MAX_ZYGOTE_UNSOLICITED_MESSAGE_SIZE = 16;
+
+    /**
+     * The buffer to be used to receive the incoming unsolicited zygote message.
+     */
+    private final byte[] mZygoteUnsolicitedMessage = new byte[MAX_ZYGOTE_UNSOLICITED_MESSAGE_SIZE];
+
+    /**
+     * The buffer to be used to receive the SIGCHLD data, it includes pid/uid/status.
+     */
+    private final int[] mZygoteSigChldMessage = new int[3];
 
     interface LmkdKillListener {
         /**
@@ -599,7 +633,6 @@ public final class ProcessList {
     final class KillHandler extends Handler {
         static final int KILL_PROCESS_GROUP_MSG = 4000;
         static final int LMKD_RECONNECT_MSG = 4001;
-        static final int LMKD_PROC_KILLED_MSG = 4002;
 
         public KillHandler(Looper looper) {
             super(looper, null, true);
@@ -622,15 +655,16 @@ public final class ProcessList {
                                 KillHandler.LMKD_RECONNECT_MSG), LMKD_RECONNECT_DELAY_MS);
                     }
                     break;
-                case LMKD_PROC_KILLED_MSG:
-                    handleLmkdProcKilled(msg.arg1 /* pid */, msg.arg2 /* uid */);
-                    break;
-
                 default:
                     super.handleMessage(msg);
             }
         }
     }
+
+    /**
+     * A runner to handle the imperceptible killings.
+     */
+    ImperceptibleKillRunner mImperceptibleKillRunner;
 
     ////////////////////  END FIELDS  ////////////////////
 
@@ -649,7 +683,9 @@ public final class ProcessList {
         // Get this after boot, and won't be changed until it's rebooted, as we don't
         // want some apps enabled while some apps disabled
         mAppDataIsolationEnabled =
-                SystemProperties.getBoolean(ANDROID_APP_DATA_ISOLATION_ENABLED_PROPERTY, false);
+                SystemProperties.getBoolean(ANDROID_APP_DATA_ISOLATION_ENABLED_PROPERTY, true);
+        mAppDataIsolationWhitelistedApps = new ArrayList<>(
+                SystemConfig.getInstance().getAppDataIsolationWhitelistedApps());
 
         if (sKillHandler == null) {
             sKillThread = new ServiceThread(TAG + ":kill",
@@ -692,9 +728,8 @@ public final class ProcessList {
                                     if (receivedLen != 12) {
                                         return false;
                                     }
-                                    sKillHandler.obtainMessage(KillHandler.LMKD_PROC_KILLED_MSG,
-                                            dataReceived.getInt(4), dataReceived.getInt(8))
-                                            .sendToTarget();
+                                    mAppExitInfoTracker.scheduleNoteLmkdProcKilled(
+                                            dataReceived.getInt(4), dataReceived.getInt(8));
                                     return true;
                                 default:
                                     return false;
@@ -702,7 +737,20 @@ public final class ProcessList {
                         }
                     }
             );
+            // Start listening on incoming connections from zygotes.
+            mSystemServerSocketForZygote = createSystemServerSocketForZygote();
+            if (mSystemServerSocketForZygote != null) {
+                sKillHandler.getLooper().getQueue().addOnFileDescriptorEventListener(
+                        mSystemServerSocketForZygote.getFileDescriptor(),
+                        EVENT_INPUT, this::handleZygoteMessages);
+            }
+            mAppExitInfoTracker.init(mService, sKillThread.getLooper());
+            mImperceptibleKillRunner = new ImperceptibleKillRunner(sKillThread.getLooper());
         }
+    }
+
+    void onSystemReady() {
+        mAppExitInfoTracker.onSystemReady();
     }
 
     void applyDisplaySize(WindowManagerService wm) {
@@ -1437,7 +1485,10 @@ public final class ProcessList {
                             proc.lastCachedPss, holder.appVersion);
                 }
             }
-            proc.kill(Long.toString(proc.lastCachedPss) + "k from cached", true);
+            proc.kill(Long.toString(proc.lastCachedPss) + "k from cached",
+                    ApplicationExitInfo.REASON_OTHER,
+                    ApplicationExitInfo.SUBREASON_LARGE_CACHED,
+                    true);
         } else if (proc != null && !keepIfLarge
                 && mService.mLastMemoryLevel > ProcessStats.ADJ_MEM_FACTOR_NORMAL
                 && proc.setProcState >= ActivityManager.PROCESS_STATE_CACHED_EMPTY) {
@@ -1456,7 +1507,10 @@ public final class ProcessList {
                                 proc.lastCachedPss, holder.appVersion);
                     }
                 }
-                proc.kill(Long.toString(proc.lastCachedPss) + "k from cached", true);
+                proc.kill(Long.toString(proc.lastCachedPss) + "k from cached",
+                        ApplicationExitInfo.REASON_OTHER,
+                        ApplicationExitInfo.SUBREASON_LARGE_CACHED,
+                        true);
             }
         }
         return proc;
@@ -1560,20 +1614,26 @@ public final class ProcessList {
                 } catch (RemoteException e) {
                     throw e.rethrowAsRuntimeException();
                 }
-
+                int numGids = 3;
+                if (mountExternal == Zygote.MOUNT_EXTERNAL_ANDROID_WRITABLE) {
+                    numGids++;
+                }
                 /*
                  * Add shared application and profile GIDs so applications can share some
                  * resources like shared libraries and access user-wide resources
                  */
                 if (ArrayUtils.isEmpty(permGids)) {
-                    gids = new int[3];
+                    gids = new int[numGids];
                 } else {
-                    gids = new int[permGids.length + 3];
-                    System.arraycopy(permGids, 0, gids, 3, permGids.length);
+                    gids = new int[permGids.length + numGids];
+                    System.arraycopy(permGids, 0, gids, numGids, permGids.length);
                 }
                 gids[0] = UserHandle.getSharedAppGid(UserHandle.getAppId(uid));
                 gids[1] = UserHandle.getCacheAppGid(UserHandle.getAppId(uid));
                 gids[2] = UserHandle.getUserGid(UserHandle.getUserId(uid));
+                if (numGids > 3) {
+                    gids[3] = Process.SDCARD_RW_GID;
+                }
 
                 // Replace any invalid GIDs
                 if (gids[0] == UserHandle.ERR_GID) gids[0] = gids[2];
@@ -1910,6 +1970,16 @@ public final class ProcessList {
                 result.put(packageName, Pair.create(volumeUuid, inode));
             }
         }
+        if (mAppDataIsolationWhitelistedApps != null) {
+            for (String packageName : mAppDataIsolationWhitelistedApps) {
+                String volumeUuid = pmInt.getPackage(packageName).getVolumeUuid();
+                long inode = pmInt.getCeDataInode(packageName, userId);
+                if (inode != 0) {
+                    result.put(packageName, Pair.create(volumeUuid, inode));
+                }
+            }
+        }
+
         return result;
     }
 
@@ -2104,28 +2174,6 @@ public final class ProcessList {
     }
 
     /**
-     * A lite version of checking if a process is alive or not, by using kill(2) with signal 0.
-     *
-     * <p>
-     * Note that, zombie processes are stil "alive" in this case, use the {@link
-     * ActivityManagerService#isProcessAliveLocked} if zombie processes need to be excluded.
-     * </p>
-     */
-    @GuardedBy("mService")
-    private boolean isProcessAliveLiteLocked(ProcessRecord app) {
-        // If somehow the pid is invalid, let's think it's dead.
-        if (app.pid <= 0) {
-            return false;
-        }
-        try {
-            Os.kill(app.pid, 0);
-        } catch (ErrnoException e) {
-            return e.errno != OsConstants.ESRCH;
-        }
-        return true;
-    }
-
-    /**
      * Kill (if asked to) and wait for the given process died if necessary
      * @param app - The process record to kill
      * @param doKill - Kill the given process record
@@ -2142,24 +2190,16 @@ public final class ProcessList {
         if (doKill) {
             // do the killing
             ProcessList.killProcessGroup(app.uid, app.pid);
+            noteAppKill(app, ApplicationExitInfo.REASON_OTHER,
+                    ApplicationExitInfo.SUBREASON_UNKNOWN,
+                    String.format(formatString, ""));
         }
 
         // wait for the death
         if (wait) {
-            boolean isAlive = true;
-            // ideally we should use pidfd_open(2) but it's available on kernel 5.3 or later
-
-            final long timeout = SystemClock.uptimeMillis() + PROC_KILL_TIMEOUT;
-            isAlive = isProcessAliveLiteLocked(app);
-            while (timeout > SystemClock.uptimeMillis() && isAlive) {
-                try {
-                    Thread.sleep(PROC_DEATH_POLL_INTERVAL);
-                } catch (InterruptedException e) {
-                }
-                isAlive = isProcessAliveLiteLocked(app);
-            }
-
-            if (isAlive) {
+            try {
+                Process.waitForProcessDeath(app.pid, PROC_KILL_TIMEOUT);
+            } catch (Exception e) {
                 // Maybe the process goes into zombie, use an expensive API to check again.
                 if (mService.isProcessAliveLocked(app)) {
                     Slog.w(TAG, String.format(formatString,
@@ -2220,6 +2260,8 @@ public final class ProcessList {
             app.pendingStart = false;
             killProcessQuiet(pid);
             Process.killProcessGroup(app.uid, app.pid);
+            noteAppKill(app, ApplicationExitInfo.REASON_OTHER,
+                    ApplicationExitInfo.SUBREASON_UNKNOWN, reason);
             return false;
         }
         mService.mBatteryStatsService.noteProcessStart(app.processName, app.info.uid);
@@ -2305,6 +2347,8 @@ public final class ProcessList {
                     if (app.pid > 0) {
                         killProcessQuiet(app.pid);
                         ProcessList.killProcessGroup(app.uid, app.pid);
+                        noteAppKill(app, ApplicationExitInfo.REASON_OTHER,
+                                ApplicationExitInfo.SUBREASON_UNKNOWN, "hasn't been killed");
                     } else {
                         app.pendingStart = false;
                     }
@@ -2435,6 +2479,12 @@ public final class ProcessList {
     @GuardedBy("mService")
     boolean removeProcessLocked(ProcessRecord app,
             boolean callerWillRestart, boolean allowRestart, String reason) {
+        return removeProcessLocked(app, callerWillRestart, allowRestart, reason,
+                ApplicationExitInfo.REASON_OTHER);
+    }
+
+    boolean removeProcessLocked(ProcessRecord app,
+            boolean callerWillRestart, boolean allowRestart, String reason, int reasonCode) {
         final String name = app.processName;
         final int uid = app.uid;
         if (DEBUG_PROCESSES) Slog.d(TAG_PROCESSES,
@@ -2470,7 +2520,7 @@ public final class ProcessList {
                     needRestart = true;
                 }
             }
-            app.kill(reason, true);
+            app.kill(reason, reasonCode, true);
             mService.handleAppDiedLocked(app, willRestart, allowRestart);
             if (willRestart) {
                 removeLruProcessLocked(app);
@@ -2555,6 +2605,7 @@ public final class ProcessList {
                 // the uid of the isolated process is specified by the caller.
                 uid = isolatedUid;
             }
+            mAppExitInfoTracker.mIsolatedUidRecords.addIsolatedUid(uid, info.uid);
             mService.getPackageManagerInternalLocked().addIsolatedUid(uid, info.uid);
 
             // Register the isolated UID with this application so BatteryStats knows to
@@ -3528,27 +3579,382 @@ public final class ProcessList {
         }
     }
 
-    void setLmkdKillListener(final LmkdKillListener listener) {
-        synchronized (mService) {
-            mLmkdKillListener = listener;
+    /**
+     * Create a server socket in system_server, zygote will connect to it
+     * in order to send unsolicited messages to system_server.
+     */
+    private LocalSocket createSystemServerSocketForZygote() {
+        // The file system entity for this socket is created with 0666 perms, owned
+        // by system:system. selinux restricts things so that only zygotes can
+        // access it.
+        final File socketFile = new File(UNSOL_ZYGOTE_MSG_SOCKET_PATH);
+        if (socketFile.exists()) {
+            socketFile.delete();
         }
+
+        LocalSocket serverSocket = null;
+        try {
+            serverSocket = new LocalSocket(LocalSocket.SOCKET_DGRAM);
+            serverSocket.bind(new LocalSocketAddress(
+                    UNSOL_ZYGOTE_MSG_SOCKET_PATH, LocalSocketAddress.Namespace.FILESYSTEM));
+            Os.chmod(UNSOL_ZYGOTE_MSG_SOCKET_PATH, 0666);
+        } catch (Exception e) {
+            if (serverSocket != null) {
+                try {
+                    serverSocket.close();
+                } catch (IOException ex) {
+                }
+                serverSocket = null;
+            }
+        }
+        return serverSocket;
     }
 
-    private void handleLmkdProcKilled(final int pid, final int uid) {
-        // Log only now
+    /**
+     * Handle the unsolicited message from zygote.
+     */
+    private int handleZygoteMessages(FileDescriptor fd, int events) {
+        final int eventFd = fd.getInt$();
+        if ((events & EVENT_INPUT) != 0) {
+            // An incoming message from zygote
+            try {
+                final int len = Os.read(fd, mZygoteUnsolicitedMessage, 0,
+                        mZygoteUnsolicitedMessage.length);
+                if (len > 0 && mZygoteSigChldMessage.length == Zygote.nativeParseSigChld(
+                        mZygoteUnsolicitedMessage, len, mZygoteSigChldMessage)) {
+                    mAppExitInfoTracker.handleZygoteSigChld(
+                            mZygoteSigChldMessage[0] /* pid */,
+                            mZygoteSigChldMessage[1] /* uid */,
+                            mZygoteSigChldMessage[2] /* status */);
+                }
+            } catch (Exception e) {
+                Slog.w(TAG, "Exception in reading unsolicited zygote message: " + e);
+            }
+        }
+        return EVENT_INPUT;
+    }
+
+    /**
+     * Called by ActivityManagerService when a process died.
+     */
+    @GuardedBy("mService")
+    void noteProcessDiedLocked(final ProcessRecord app) {
         if (DEBUG_PROCESSES) {
-            Slog.i(TAG, "lmkd kill: pid=" + pid + " uid=" + uid);
+            Slog.i(TAG, "note: " + app + " died, saving the exit info");
         }
 
-        if (mService == null) {
+        mAppExitInfoTracker.scheduleNoteProcessDiedLocked(app);
+    }
+
+    /**
+     * Called by ActivityManagerService when it decides to kill an application process.
+     */
+    void noteAppKill(final ProcessRecord app, final @Reason int reason,
+            final @SubReason int subReason, final String msg) {
+        if (DEBUG_PROCESSES) {
+            Slog.i(TAG, "note: " + app + " is being killed, reason: " + reason
+                    + ", sub-reason: " + subReason + ", message: " + msg);
+        }
+        mAppExitInfoTracker.scheduleNoteAppKill(app, reason, subReason, msg);
+    }
+
+    void noteAppKill(final int pid, final int uid, final @Reason int reason,
+            final @SubReason int subReason, final String msg) {
+        if (DEBUG_PROCESSES) {
+            Slog.i(TAG, "note: " + pid + " is being killed, reason: " + reason
+                    + ", sub-reason: " + subReason + ", message: " + msg);
+        }
+
+        mAppExitInfoTracker.scheduleNoteAppKill(pid, uid, reason, subReason, msg);
+    }
+
+    /**
+     * Schedule to kill the given pids when the device is idle
+     */
+    void killProcessesWhenImperceptible(int[] pids, String reason, int requester) {
+        if (ArrayUtils.isEmpty(pids)) {
             return;
         }
-        // Notify any interesed party regarding the lmkd kills
+
         synchronized (mService) {
-            final LmkdKillListener listener = mLmkdKillListener;
-            if (listener != null) {
-                mService.mHandler.post(()-> listener.onLmkdKillOccurred(pid, uid));
+            ProcessRecord app;
+            for (int i = 0; i < pids.length; i++) {
+                synchronized (mService.mPidsSelfLocked) {
+                    app = mService.mPidsSelfLocked.get(pids[i]);
+                }
+                if (app != null) {
+                    mImperceptibleKillRunner.enqueueLocked(app, reason, requester);
+                }
             }
         }
     }
+
+    private final class ImperceptibleKillRunner extends IUidObserver.Stub {
+        private static final String EXTRA_PID = "pid";
+        private static final String EXTRA_UID = "uid";
+        private static final String EXTRA_TIMESTAMP = "timestamp";
+        private static final String EXTRA_REASON = "reason";
+        private static final String EXTRA_REQUESTER = "requester";
+
+        private static final String DROPBOX_TAG_IMPERCEPTIBLE_KILL = "imperceptible_app_kill";
+
+        // uid -> killing information mapping
+        private SparseArray<List<Bundle>> mWorkItems = new SparseArray<List<Bundle>>();
+
+        // The last time the various processes have been killed by us.
+        private ProcessMap<Long> mLastProcessKillTimes = new ProcessMap<>();
+
+        // Device idle or not.
+        private volatile boolean mIdle;
+        private boolean mUidObserverEnabled;
+        private Handler mHandler;
+        private IdlenessReceiver mReceiver;
+
+        private final class H extends Handler {
+            static final int MSG_DEVICE_IDLE = 0;
+            static final int MSG_UID_GONE = 1;
+            static final int MSG_UID_STATE_CHANGED = 2;
+
+            H(Looper looper) {
+                super(looper);
+            }
+
+            @Override
+            public void handleMessage(Message msg) {
+                switch (msg.what) {
+                    case MSG_DEVICE_IDLE:
+                        handleDeviceIdle();
+                        break;
+                    case MSG_UID_GONE:
+                        handleUidGone(msg.arg1 /* uid */);
+                        break;
+                    case MSG_UID_STATE_CHANGED:
+                        handleUidStateChanged(msg.arg1 /* uid */, msg.arg2 /* procState */);
+                        break;
+                }
+            }
+        }
+
+        private final class IdlenessReceiver extends BroadcastReceiver {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                final PowerManager pm = mService.mContext.getSystemService(PowerManager.class);
+                switch (intent.getAction()) {
+                    case PowerManager.ACTION_LIGHT_DEVICE_IDLE_MODE_CHANGED:
+                        notifyDeviceIdleness(pm.isLightDeviceIdleMode());
+                        break;
+                    case PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED:
+                        notifyDeviceIdleness(pm.isDeviceIdleMode());
+                        break;
+                }
+            }
+        }
+
+        ImperceptibleKillRunner(Looper looper) {
+            mHandler = new H(looper);
+        }
+
+        @GuardedBy("mService")
+        boolean enqueueLocked(ProcessRecord app, String reason, int requester) {
+            // Throttle the killing request for potential bad app to avoid cpu thrashing
+            Long last = app.isolated ? null : mLastProcessKillTimes.get(app.processName, app.uid);
+            if (last != null && SystemClock.uptimeMillis() < last + MIN_CRASH_INTERVAL) {
+                return false;
+            }
+
+            final Bundle bundle = new Bundle();
+            bundle.putInt(EXTRA_PID, app.pid);
+            bundle.putInt(EXTRA_UID, app.uid);
+            // Since the pid could be reused, let's get the actual start time of each process
+            bundle.putLong(EXTRA_TIMESTAMP, app.startTime);
+            bundle.putString(EXTRA_REASON, reason);
+            bundle.putInt(EXTRA_REQUESTER, requester);
+            List<Bundle> list = mWorkItems.get(app.uid);
+            if (list == null) {
+                list = new ArrayList<Bundle>();
+                mWorkItems.put(app.uid, list);
+            }
+            list.add(bundle);
+            if (mReceiver == null) {
+                mReceiver = new IdlenessReceiver();
+                IntentFilter filter = new IntentFilter(
+                        PowerManager.ACTION_LIGHT_DEVICE_IDLE_MODE_CHANGED);
+                filter.addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED);
+                mService.mContext.registerReceiver(mReceiver, filter);
+            }
+            return true;
+        }
+
+        void notifyDeviceIdleness(boolean idle) {
+            // No lock is held regarding mIdle, this function is the only updater and caller
+            // won't re-entry.
+            boolean diff = mIdle != idle;
+            mIdle = idle;
+            if (diff && idle) {
+                synchronized (this) {
+                    if (mWorkItems.size() > 0) {
+                        mHandler.sendEmptyMessage(H.MSG_DEVICE_IDLE);
+                    }
+                }
+            }
+        }
+
+        private void handleDeviceIdle() {
+            final DropBoxManager dbox = mService.mContext.getSystemService(DropBoxManager.class);
+            final boolean logToDropbox = dbox != null
+                    && dbox.isTagEnabled(DROPBOX_TAG_IMPERCEPTIBLE_KILL);
+
+            synchronized (mService) {
+                final int size = mWorkItems.size();
+                for (int i = size - 1; mIdle && i >= 0; i--) {
+                    List<Bundle> list = mWorkItems.valueAt(i);
+                    final int len = list.size();
+                    for (int j = len - 1; mIdle && j >= 0; j--) {
+                        Bundle bundle = list.get(j);
+                        if (killProcessLocked(
+                                bundle.getInt(EXTRA_PID),
+                                bundle.getInt(EXTRA_UID),
+                                bundle.getLong(EXTRA_TIMESTAMP),
+                                bundle.getString(EXTRA_REASON),
+                                bundle.getInt(EXTRA_REQUESTER),
+                                dbox, logToDropbox)) {
+                            list.remove(j);
+                        }
+                    }
+                    if (list.size() == 0) {
+                        mWorkItems.removeAt(i);
+                    }
+                }
+                registerUidObserverIfNecessaryLocked();
+            }
+        }
+
+        @GuardedBy("mService")
+        private void registerUidObserverIfNecessaryLocked() {
+            // If there are still works remaining, register UID observer
+            if (!mUidObserverEnabled && mWorkItems.size() > 0) {
+                mUidObserverEnabled = true;
+                mService.registerUidObserver(this,
+                        ActivityManager.UID_OBSERVER_PROCSTATE | ActivityManager.UID_OBSERVER_GONE,
+                        ActivityManager.PROCESS_STATE_UNKNOWN, "android");
+            } else if (mUidObserverEnabled && mWorkItems.size() == 0) {
+                mUidObserverEnabled = false;
+                mService.unregisterUidObserver(this);
+            }
+        }
+
+        /**
+         * Kill the given processes, if they are not exempted.
+         *
+         * @return True if the process is killed, or it's gone already, or we are not allowed to
+         *         kill it (one of the packages in this process is being exempted).
+         */
+        @GuardedBy("mService")
+        private boolean killProcessLocked(final int pid, final int uid, final long timestamp,
+                final String reason, final int requester, final DropBoxManager dbox,
+                final boolean logToDropbox) {
+            ProcessRecord app = null;
+            synchronized (mService.mPidsSelfLocked) {
+                app = mService.mPidsSelfLocked.get(pid);
+            }
+
+            if (app == null || app.pid != pid || app.uid != uid || app.startTime != timestamp) {
+                // This process record has been reused for another process, meaning the old process
+                // has been gone.
+                return true;
+            }
+
+            final int pkgSize = app.pkgList.size();
+            for (int ip = 0; ip < pkgSize; ip++) {
+                if (mService.mConstants.IMPERCEPTIBLE_KILL_EXEMPT_PACKAGES.contains(
+                        app.pkgList.keyAt(ip))) {
+                    // One of the packages in this process is exempted
+                    return true;
+                }
+            }
+
+            if (mService.mConstants.IMPERCEPTIBLE_KILL_EXEMPT_PROC_STATES.contains(
+                    app.getReportedProcState())) {
+                // We need to reschedule it.
+                return false;
+            }
+
+            app.kill(reason, ApplicationExitInfo.REASON_OTHER, true);
+
+            if (!app.isolated) {
+                mLastProcessKillTimes.put(app.processName, app.uid, SystemClock.uptimeMillis());
+            }
+
+            if (logToDropbox) {
+                final long now = SystemClock.elapsedRealtime();
+                final StringBuilder sb = new StringBuilder();
+                mService.appendDropBoxProcessHeaders(app, app.processName, sb);
+                sb.append("Reason: " + reason).append("\n");
+                sb.append("Requester UID: " + requester).append("\n");
+                dbox.addText(DROPBOX_TAG_IMPERCEPTIBLE_KILL, sb.toString());
+            }
+            return true;
+        }
+
+        private void handleUidStateChanged(int uid, int procState) {
+            final DropBoxManager dbox = mService.mContext.getSystemService(DropBoxManager.class);
+            final boolean logToDropbox = dbox != null
+                    && dbox.isTagEnabled(DROPBOX_TAG_IMPERCEPTIBLE_KILL);
+            synchronized (mService) {
+                if (mIdle && !mService.mConstants
+                        .IMPERCEPTIBLE_KILL_EXEMPT_PROC_STATES.contains(procState)) {
+                    List<Bundle> list = mWorkItems.get(uid);
+                    if (list != null) {
+                        final int len = list.size();
+                        for (int j = len - 1; mIdle && j >= 0; j--) {
+                            Bundle bundle = list.get(j);
+                            if (killProcessLocked(
+                                    bundle.getInt(EXTRA_PID),
+                                    bundle.getInt(EXTRA_UID),
+                                    bundle.getLong(EXTRA_TIMESTAMP),
+                                    bundle.getString(EXTRA_REASON),
+                                    bundle.getInt(EXTRA_REQUESTER),
+                                    dbox, logToDropbox)) {
+                                list.remove(j);
+                            }
+                        }
+                        if (list.size() == 0) {
+                            mWorkItems.remove(uid);
+                        }
+                        registerUidObserverIfNecessaryLocked();
+                    }
+                }
+            }
+        }
+
+        private void handleUidGone(int uid) {
+            synchronized (mService) {
+                mWorkItems.remove(uid);
+                registerUidObserverIfNecessaryLocked();
+            }
+        }
+
+        @Override
+        public void onUidGone(int uid, boolean disabled) {
+            mHandler.obtainMessage(H.MSG_UID_GONE, uid, 0).sendToTarget();
+        }
+
+        @Override
+        public void onUidActive(int uid) {
+        }
+
+        @Override
+        public void onUidIdle(int uid, boolean disabled) {
+        }
+
+        @Override
+        public void onUidStateChanged(int uid, int procState, long procStateSeq, int capability) {
+            mHandler.obtainMessage(H.MSG_UID_STATE_CHANGED, uid, procState).sendToTarget();
+        }
+
+        @Override
+        public void onUidCachedChanged(int uid, boolean cached) {
+        }
+    };
 }
+

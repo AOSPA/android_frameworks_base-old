@@ -274,6 +274,7 @@ public final class StatsLog extends StatsLogInternal {
      * @param statsEvent    The StatsEvent object containing the encoded buffer of data to write.
      * @hide
      */
+    @SystemApi
     public static void write(@NonNull final StatsEvent statsEvent) {
         writeImpl(statsEvent.getBytes(), statsEvent.getNumBytes(), statsEvent.getAtomId());
         statsEvent.release();

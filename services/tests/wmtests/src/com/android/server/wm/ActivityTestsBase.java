@@ -111,6 +111,7 @@ class ActivityTestsBase extends SystemServiceTestsBase {
         private int mConfigChanges;
         private int mLaunchedFromPid;
         private int mLaunchedFromUid;
+        private WindowProcessController mWpc;
 
         ActivityBuilder(ActivityTaskManagerService service) {
             mService = service;
@@ -201,6 +202,11 @@ class ActivityTestsBase extends SystemServiceTestsBase {
             return this;
         }
 
+        ActivityBuilder setUseProcess(WindowProcessController wpc) {
+            mWpc = wpc;
+            return this;
+        }
+
         ActivityRecord build() {
             try {
                 mService.deferWindowLayout();
@@ -263,10 +269,16 @@ class ActivityTestsBase extends SystemServiceTestsBase {
                 activity.setVisible(true);
             }
 
-            final WindowProcessController wpc = new WindowProcessController(mService,
-                    mService.mContext.getApplicationInfo(), mProcessName, mUid,
-                    UserHandle.getUserId(12345), mock(Object.class),
-                    mock(WindowProcessListener.class));
+            final WindowProcessController wpc;
+            if (mWpc != null) {
+                wpc = mWpc;
+            } else {
+                wpc = new WindowProcessController(mService,
+                        mService.mContext.getApplicationInfo(), mProcessName, mUid,
+                        UserHandle.getUserId(12345), mock(Object.class),
+                        mock(WindowProcessListener.class));
+                wpc.setThread(mock(IApplicationThread.class));
+            }
             wpc.setThread(mock(IApplicationThread.class));
             activity.setProcess(wpc);
             doReturn(wpc).when(mService).getProcessController(
@@ -363,7 +375,7 @@ class ActivityTestsBase extends SystemServiceTestsBase {
             intent.setComponent(mComponent);
             intent.setFlags(mFlags);
 
-            final Task task = new Task(mSupervisor.mService, mTaskId, aInfo,
+            final Task task = new ActivityStack(mSupervisor.mService, mTaskId, aInfo,
                     intent /*intent*/, mVoiceSession, null /*_voiceInteractor*/,
                     null /*taskDescription*/, mStack);
             spyOn(task);
@@ -386,6 +398,8 @@ class ActivityTestsBase extends SystemServiceTestsBase {
         private int mActivityType = ACTIVITY_TYPE_STANDARD;
         private boolean mOnTop = true;
         private boolean mCreateActivity = true;
+        private ActivityInfo mInfo;
+        private Intent mIntent;
 
         StackBuilder(RootWindowContainer root) {
             mRootWindowContainer = root;
@@ -422,12 +436,21 @@ class ActivityTestsBase extends SystemServiceTestsBase {
             return this;
         }
 
+        StackBuilder setActivityInfo(ActivityInfo info) {
+            mInfo = info;
+            return this;
+        }
+
+        StackBuilder setIntent(Intent intent) {
+            mIntent = intent;
+            return this;
+        }
+
         ActivityStack build() {
             final int stackId = mStackId >= 0 ? mStackId : mDisplay.getNextStackId();
-            final ActivityStack stack;
+            final ActivityStack stack = mDisplay.createStackUnchecked(mWindowingMode,
+                    mActivityType, stackId, mOnTop, mInfo, mIntent);
             final ActivityStackSupervisor supervisor = mRootWindowContainer.mStackSupervisor;
-
-            stack = mDisplay.createStackUnchecked(mWindowingMode, mActivityType, stackId, mOnTop);
 
             if (mCreateActivity) {
                 new ActivityBuilder(supervisor.mService)

@@ -18,6 +18,7 @@ package android.app;
 
 import android.app.ActivityManager;
 import android.app.ApplicationErrorReport;
+import android.app.ApplicationExitInfo;
 import android.app.ContentProviderHolder;
 import android.app.GrantedUriPermission;
 import android.app.IApplicationThread;
@@ -188,6 +189,16 @@ interface IActivityManager {
      */
     @UnsupportedAppUsage
     boolean updateConfiguration(in Configuration values);
+    /**
+     * Updates mcc mnc configuration and applies changes to the entire system.
+     *
+     * @param mcc mcc configuration to update.
+     * @param mnc mnc configuration to update.
+     * @throws RemoteException; IllegalArgumentException if mcc or mnc is null.
+     * @return Returns {@code true} if the configuration was updated;
+     *         {@code false} otherwise.
+     */
+    boolean updateMccMncConfiguration(in String mcc, in String mnc);
     boolean stopServiceToken(in ComponentName className, in IBinder token, int startId);
     @UnsupportedAppUsage
     void setProcessLimit(int max);
@@ -345,6 +356,12 @@ interface IActivityManager {
             in Bundle options, int userId);
     @UnsupportedAppUsage
     int stopUser(int userid, boolean force, in IStopUserCallback callback);
+    /**
+     * Check {@link com.android.server.am.ActivityManagerService#stopUserWithDelayedLocking(int, boolean, IStopUserCallback)}
+     * for details.
+     */
+    int stopUserWithDelayedLocking(int userid, boolean force, in IStopUserCallback callback);
+
     @UnsupportedAppUsage
     void registerUserSwitchObserver(in IUserSwitchObserver observer, in String name);
     void unregisterUserSwitchObserver(in IUserSwitchObserver observer);
@@ -588,4 +605,36 @@ interface IActivityManager {
      * Method for the app to tell system that it's wedged and would like to trigger an ANR.
      */
     void appNotResponding(String reason);
+
+    /**
+     * Return a list of {@link ApplicationExitInfo} records.
+     *
+     * <p class="note"> Note: System stores these historical information in a ring buffer, older
+     * records would be overwritten by newer records. </p>
+     *
+     * <p class="note"> Note: In the case that this application bound to an external service with
+     * flag {@link android.content.Context#BIND_EXTERNAL_SERVICE}, the process of that external
+     * service will be included in this package's exit info. </p>
+     *
+     * @param packageName Optional, an empty value means match all packages belonging to the
+     *                    caller's UID. If this package belongs to another UID, you must hold
+     *                    {@link android.Manifest.permission#DUMP} in order to retrieve it.
+     * @param pid         Optional, it could be a process ID that used to belong to this package but
+     *                    died later; A value of 0 means to ignore this parameter and return all
+     *                    matching records.
+     * @param maxNum      Optional, the maximum number of results should be returned; A value of 0
+     *                    means to ignore this parameter and return all matching records
+     * @param userId      The userId in the multi-user environment.
+     *
+     * @return a list of {@link ApplicationExitInfo} records with the matching criteria, sorted in
+     *         the order from most recent to least recent.
+     */
+    ParceledListSlice<ApplicationExitInfo> getHistoricalProcessExitReasons(String packageName,
+            int pid, int maxNum, int userId);
+
+    /*
+     * Kill the given PIDs, but the killing will be delayed until the device is idle
+     * and the given process is imperceptible.
+     */
+    void killProcessesWhenImperceptible(in int[] pids, String reason);
 }

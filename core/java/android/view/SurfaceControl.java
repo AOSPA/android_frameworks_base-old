@@ -122,10 +122,14 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeSetColor(long transactionObj, long nativeObject, float[] color);
     private static native void nativeSetFlags(long transactionObj, long nativeObject,
             int flags, int mask);
+    private static native void nativeSetFrameRateSelectionPriority(long transactionObj,
+            long nativeObject, int priority);
     private static native void nativeSetWindowCrop(long transactionObj, long nativeObject,
             int l, int t, int r, int b);
     private static native void nativeSetCornerRadius(long transactionObj, long nativeObject,
             float cornerRadius);
+    private static native void nativeSetBackgroundBlurRadius(long transactionObj, long nativeObject,
+            int blurRadius);
     private static native void nativeSetLayerStack(long transactionObj, long nativeObject,
             int layerStack);
 
@@ -157,7 +161,6 @@ public final class SurfaceControl implements Parcelable {
     private static native DisplayedContentSample nativeGetDisplayedContentSample(
             IBinder displayToken, long numFrames, long timestamp);
     private static native int nativeGetActiveConfig(IBinder displayToken);
-    private static native boolean nativeSetActiveConfig(IBinder displayToken, int id);
     private static native boolean nativeSetDesiredDisplayConfigSpecs(IBinder displayToken,
             SurfaceControl.DesiredDisplayConfigSpecs desiredDisplayConfigSpecs);
     private static native SurfaceControl.DesiredDisplayConfigSpecs
@@ -680,6 +683,22 @@ public final class SurfaceControl implements Parcelable {
         }
 
         /**
+         * Set the initial visibility for the SurfaceControl.
+         *
+         * @param hidden Whether the Surface is initially HIDDEN.
+         * @hide
+         */
+        @NonNull
+        public Builder setHidden(boolean hidden) {
+            if (hidden) {
+                mFlags |= HIDDEN;
+            } else {
+                mFlags &= ~HIDDEN;
+            }
+            return this;
+        }
+
+        /**
          * Set a parent surface for our new SurfaceControl.
          *
          * Child surfaces are constrained to the onscreen region of their parent.
@@ -792,8 +811,7 @@ public final class SurfaceControl implements Parcelable {
      * @param name     The surface name, must not be null.
      * @param w        The surface initial width.
      * @param h        The surface initial height.
-     * @param flags    The surface creation flags.  Should always include {@link #HIDDEN}
-     *                 in the creation flags.
+     * @param flags    The surface creation flags.
      * @param metadata Initial metadata.
      * @throws throws OutOfResourcesException If the SurfaceControl cannot be created.
      */
@@ -802,15 +820,6 @@ public final class SurfaceControl implements Parcelable {
                     throws OutOfResourcesException, IllegalArgumentException {
         if (name == null) {
             throw new IllegalArgumentException("name must not be null");
-        }
-
-        if ((flags & SurfaceControl.HIDDEN) == 0) {
-            Log.w(TAG, "Surfaces should always be created with the HIDDEN flag set "
-                    + "to ensure that they are not made visible prematurely before "
-                    + "all of the surface's properties have been configured.  "
-                    + "Set the other properties and make the surface visible within "
-                    + "a transaction.  New surface name: " + name,
-                    new Throwable());
         }
 
         mName = name;
@@ -1475,16 +1484,6 @@ public final class SurfaceControl implements Parcelable {
         return nativeGetDisplayedContentSample(displayToken, maxFrames, timestamp);
     }
 
-
-    /**
-     * @hide
-     */
-    public static boolean setActiveConfig(IBinder displayToken, int id) {
-        if (displayToken == null) {
-            throw new IllegalArgumentException("displayToken must not be null");
-        }
-        return nativeSetActiveConfig(displayToken, id);
-    }
 
     /**
      * Contains information about desired display configuration.
@@ -2242,6 +2241,19 @@ public final class SurfaceControl implements Parcelable {
         }
 
         /**
+         * This information is passed to SurfaceFlinger to decide which window should have a
+         * priority when deciding about the refresh rate of the display. All windows have the
+         * lowest priority by default.
+         * @hide
+         */
+        @NonNull
+        public Transaction setFrameRateSelectionPriority(@NonNull SurfaceControl sc, int priority) {
+            sc.checkNotReleased();
+            nativeSetFrameRateSelectionPriority(mNativeObject, sc.mNativeObject, priority);
+            return this;
+        }
+
+        /**
          * Request that a given surface and it's sub-tree be shown.
          *
          * @param sc The surface to show.
@@ -2494,6 +2506,20 @@ public final class SurfaceControl implements Parcelable {
             checkPreconditions(sc);
             nativeSetCornerRadius(mNativeObject, sc.mNativeObject, cornerRadius);
 
+            return this;
+        }
+
+        /**
+         * Sets the background blur radius of the {@link SurfaceControl}.
+         *
+         * @param sc SurfaceControl.
+         * @param radius Blur radius in pixels.
+         * @return itself.
+         * @hide
+         */
+        public Transaction setBackgroundBlurRadius(SurfaceControl sc, int radius) {
+            checkPreconditions(sc);
+            nativeSetBackgroundBlurRadius(mNativeObject, sc.mNativeObject, radius);
             return this;
         }
 

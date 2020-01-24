@@ -23,7 +23,6 @@ import static android.view.WindowManager.INPUT_CONSUMER_RECENTS_ANIMATION;
 import static android.view.WindowManager.INPUT_CONSUMER_WALLPAPER;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_DISABLE_WALLPAPER_TOUCH_EVENTS;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_KEYGUARD;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 
 import static com.android.server.wm.ProtoLogGroup.WM_DEBUG_FOCUS_LIGHT;
@@ -47,7 +46,6 @@ import android.view.InputEventReceiver;
 import android.view.InputWindowHandle;
 import android.view.SurfaceControl;
 
-import com.android.server.AnimationThread;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.protolog.common.ProtoLog;
 
@@ -152,12 +150,12 @@ final class InputMonitor {
 
     private final UpdateInputWindows mUpdateInputWindows = new UpdateInputWindows();
 
-    public InputMonitor(WindowManagerService service, int displayId) {
+    InputMonitor(WindowManagerService service, DisplayContent displayContent) {
         mService = service;
-        mDisplayContent = mService.mRoot.getDisplayContent(displayId);
-        mDisplayId = displayId;
+        mDisplayContent = displayContent;
+        mDisplayId = displayContent.getDisplayId();
         mInputTransaction = mService.mTransactionFactory.get();
-        mHandler = AnimationThread.getHandler();
+        mHandler = mService.mAnimationHandler;
         mUpdateInputForAllWindowsConsumer = new UpdateInputForAllWindowsConsumer();
     }
 
@@ -279,6 +277,19 @@ final class InputMonitor {
         // and we could probably deprecate the "left/right/top/bottom" concept.
         // we avoid reintroducing this concept by just choosing one of them here.
         inputWindowHandle.surfaceInset = child.getAttrs().surfaceInsets.left;
+
+        /**
+         * If the window is in a TaskManaged by a TaskOrganizer then most cropping
+         * will be applied using the SurfaceControl hierarchy from the Organizer.
+         * This means we need to make sure that these changes in crop are reflected
+         * in the input windows, and so ensure this flag is set so that
+         * the input crop always reflects the surface hierarchy.
+         * we may have some issues with modal-windows, but I guess we can
+         * cross that bridge when we come to implementing full-screen TaskOrg
+         */
+        if (child.getTask() != null && child.getTask().isControlledByTaskOrganizer()) {
+            inputWindowHandle.replaceTouchableRegionWithCrop(null /* Use this surfaces crop */);
+        }
 
         if (child.mGlobalScale != 1) {
             // If we are scaling the window, input coordinates need
@@ -515,7 +526,7 @@ final class InputMonitor {
                 mDisableWallpaperTouchEvents = true;
             }
             final boolean hasWallpaper = wallpaperController.isWallpaperTarget(w)
-                    && (privateFlags & PRIVATE_FLAG_KEYGUARD) == 0
+                    && !mService.mPolicy.isKeyguardShowing()
                     && !mDisableWallpaperTouchEvents;
 
             // If there's a drag in progress and 'child' is a potential drop target,

@@ -408,6 +408,16 @@ public class SystemServicesTestRule implements TestRule {
         }
     }
 
+    /**
+     * Throws if caller doesn't hold the given lock.
+     * @param lock the lock
+     */
+    static void checkHoldsLock(Object lock) {
+        if (!Thread.holdsLock(lock)) {
+            throw new IllegalStateException("Caller doesn't hold global lock.");
+        }
+    }
+
     protected class TestActivityTaskManagerService extends ActivityTaskManagerService {
         // ActivityStackSupervisor may be created more than once while setting up AMS and ATMS.
         // We keep the reference in order to prevent creating it twice.
@@ -484,8 +494,8 @@ public class SystemServicesTestRule implements TestRule {
             spyOn(this);
 
             // Do not schedule idle that may touch methods outside the scope of the test.
-            doNothing().when(this).scheduleIdleLocked();
-            doNothing().when(this).scheduleIdleTimeoutLocked(any());
+            doNothing().when(this).scheduleIdle();
+            doNothing().when(this).scheduleIdleTimeout(any());
             // unit test version does not handle launch wake lock
             doNothing().when(this).acquireLaunchWakelock();
             doReturn(mock(KeyguardController.class)).when(this).getKeyguardController();

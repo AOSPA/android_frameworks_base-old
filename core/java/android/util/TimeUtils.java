@@ -19,7 +19,7 @@ package android.util;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Build;
 import android.os.SystemClock;
 
@@ -30,6 +30,7 @@ import libcore.timezone.ZoneInfoDB;
 
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
@@ -88,7 +89,7 @@ public class TimeUtils {
      *
      * <p>The list returned may be different from other on-device sources like
      * {@link android.icu.util.TimeZone#getRegion(String)} as it can be curated to avoid
-     * contentious mappings.
+     * contentious or obsolete mappings.
      *
      * @param countryCode the ISO 3166-1 alpha-2 code for the country as can be obtained using
      *     {@link java.util.Locale#getCountry()}
@@ -379,6 +380,28 @@ public class TimeUtils {
      */
     public static void dumpTime(PrintWriter pw, long time) {
         pw.print(sDumpDateFormat.format(new Date(time)));
+    }
+
+    /**
+     * This method is used to find if a clock time is inclusively between two other clock times
+     * @param reference The time of the day we want check if it is between start and end
+     * @param start The start time reference
+     * @param end The end time
+     * @return true if the reference time is between the two clock times, and false otherwise.
+     */
+    public static boolean isTimeBetween(@NonNull LocalTime reference,
+                                        @NonNull LocalTime start,
+                                        @NonNull LocalTime end) {
+        //    ////////E----+-----S////////
+        if ((reference.isBefore(start) && reference.isAfter(end)
+                //    -----+----S//////////E------
+                || (reference.isBefore(end) && reference.isBefore(start) && start.isBefore(end))
+                //    ---------S//////////E---+---
+                || (reference.isAfter(end) && reference.isAfter(start)) && start.isBefore(end))) {
+            return false;
+        } else {
+            return true;
+        }
     }
 
     /**

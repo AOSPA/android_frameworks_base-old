@@ -16,8 +16,6 @@
 
 package com.android.server.backup;
 
-import static com.android.internal.util.Preconditions.checkNotNull;
-
 import static java.util.Collections.emptySet;
 
 import android.Manifest;
@@ -68,6 +66,7 @@ import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -124,7 +123,7 @@ public class BackupManagerService extends IBackupManager.Stub {
     static BackupManagerService sInstance;
 
     static BackupManagerService getInstance() {
-        return checkNotNull(sInstance);
+        return Objects.requireNonNull(sInstance);
     }
 
     private final Context mContext;
@@ -1407,10 +1406,7 @@ public class BackupManagerService extends IBackupManager.Stub {
         long oldId = Binder.clearCallingIdentity();
         final int[] userIds;
         try {
-            userIds =
-                    mContext
-                            .getSystemService(UserManager.class)
-                            .getProfileIds(callingUserId, false);
+            userIds = getUserManager().getProfileIds(callingUserId, false);
         } finally {
             Binder.restoreCallingIdentity(oldId);
         }
@@ -1453,6 +1449,11 @@ public class BackupManagerService extends IBackupManager.Stub {
         if (!DumpUtils.checkDumpAndUsageStatsPermission(mContext, TAG, pw)) {
             return;
         }
+        dumpWithoutCheckingPermission(fd, pw, args);
+    }
+
+    @VisibleForTesting
+    void dumpWithoutCheckingPermission(FileDescriptor fd, PrintWriter pw, String[] args) {
         int userId = binderGetCallingUserId();
         if (!isUserReadyForBackup(userId)) {
             pw.println("Inactive");
@@ -1461,7 +1462,16 @@ public class BackupManagerService extends IBackupManager.Stub {
 
         if (args != null) {
             for (String arg : args) {
-                if ("users".equals(arg.toLowerCase())) {
+                if ("-h".equals(arg)) {
+                    pw.println("'dumpsys backup' optional arguments:");
+                    pw.println("  -h       : this help text");
+                    pw.println("  a[gents] : dump information about defined backup agents");
+                    pw.println("  transportclients : dump information about transport clients");
+                    pw.println("  transportstats : dump transport statts");
+                    pw.println("  users    : dump the list of users for which backup service "
+                            + "is running");
+                    return;
+                } else if ("users".equals(arg.toLowerCase())) {
                     pw.print(DUMP_RUNNING_USERS_MESSAGE);
                     for (int i = 0; i < mUserServices.size(); i++) {
                         pw.print(" " + mUserServices.keyAt(i));
@@ -1472,11 +1482,12 @@ public class BackupManagerService extends IBackupManager.Stub {
             }
         }
 
-        UserBackupManagerService userBackupManagerService =
-                getServiceForUserIfCallerHasPermission(UserHandle.USER_SYSTEM, "dump()");
-
-        if (userBackupManagerService != null) {
-            userBackupManagerService.dump(fd, pw, args);
+        for (int i = 0; i < mUserServices.size(); i++) {
+            UserBackupManagerService userBackupManagerService =
+                    getServiceForUserIfCallerHasPermission(mUserServices.keyAt(i), "dump()");
+            if (userBackupManagerService != null) {
+                userBackupManagerService.dump(fd, pw, args);
+            }
         }
     }
 

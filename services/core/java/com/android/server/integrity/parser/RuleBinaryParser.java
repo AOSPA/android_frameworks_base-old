@@ -17,6 +17,7 @@
 package com.android.server.integrity.parser;
 
 import static com.android.server.integrity.model.ComponentBitSize.ATOMIC_FORMULA_START;
+import static com.android.server.integrity.model.ComponentBitSize.BYTE_BITS;
 import static com.android.server.integrity.model.ComponentBitSize.COMPOUND_FORMULA_END;
 import static com.android.server.integrity.model.ComponentBitSize.COMPOUND_FORMULA_START;
 import static com.android.server.integrity.model.ComponentBitSize.CONNECTOR_BITS;
@@ -28,55 +29,91 @@ import static com.android.server.integrity.model.ComponentBitSize.OPERATOR_BITS;
 import static com.android.server.integrity.model.ComponentBitSize.SEPARATOR_BITS;
 import static com.android.server.integrity.model.ComponentBitSize.SIGNAL_BIT;
 import static com.android.server.integrity.model.ComponentBitSize.VALUE_SIZE_BITS;
+import static com.android.server.integrity.parser.BinaryFileOperations.getBooleanValue;
+import static com.android.server.integrity.parser.BinaryFileOperations.getIntValue;
+import static com.android.server.integrity.parser.BinaryFileOperations.getStringValue;
 
 import android.content.integrity.AtomicFormula;
 import android.content.integrity.CompoundFormula;
 import android.content.integrity.Formula;
 import android.content.integrity.Rule;
 
-import com.android.server.integrity.IntegrityUtils;
 import com.android.server.integrity.model.BitInputStream;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /** A helper class to parse rules into the {@link Rule} model from Binary representation. */
 public class RuleBinaryParser implements RuleParser {
 
-    private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
-
     @Override
     public List<Rule> parse(byte[] ruleBytes) throws RuleParseException {
-        try {
-            BitInputStream bitInputStream = new BitInputStream(ruleBytes);
-            return parseRules(bitInputStream);
-        } catch (Exception e) {
-            throw new RuleParseException(e.getMessage(), e);
-        }
+        return parse(RandomAccessObject.ofBytes(ruleBytes), Collections.emptyList());
     }
 
     @Override
-    public List<Rule> parse(InputStream inputStream) throws RuleParseException {
-        try {
-            BitInputStream bitInputStream = new BitInputStream(inputStream);
-            return parseRules(bitInputStream);
+    public List<Rule> parse(RandomAccessObject randomAccessObject, List<RuleIndexRange> indexRanges)
+            throws RuleParseException {
+        try (RandomAccessInputStream randomAccessInputStream =
+                new RandomAccessInputStream(randomAccessObject)) {
+            return parseRules(randomAccessInputStream, indexRanges);
         } catch (Exception e) {
             throw new RuleParseException(e.getMessage(), e);
         }
     }
 
-    private List<Rule> parseRules(BitInputStream bitInputStream) throws IOException {
-        List<Rule> parsedRules = new ArrayList<>();
+    private List<Rule> parseRules(
+            RandomAccessInputStream randomAccessInputStream,
+            List<RuleIndexRange> indexRanges)
+            throws IOException {
 
         // Read the rule binary file format version.
-        bitInputStream.getNext(FORMAT_VERSION_BITS);
+        randomAccessInputStream.skip(FORMAT_VERSION_BITS / BYTE_BITS);
 
-        while (bitInputStream.hasNext()) {
-            if (bitInputStream.getNext(SIGNAL_BIT) == 1) {
-                parsedRules.add(parseRule(bitInputStream));
+        return indexRanges.isEmpty()
+                ? parseAllRules(randomAccessInputStream)
+                : parseIndexedRules(randomAccessInputStream, indexRanges);
+    }
+
+    private List<Rule> parseAllRules(RandomAccessInputStream randomAccessInputStream)
+            throws IOException {
+        List<Rule> parsedRules = new ArrayList<>();
+
+        BitInputStream inputStream =
+                new BitInputStream(new BufferedInputStream(randomAccessInputStream));
+        while (inputStream.hasNext()) {
+            if (inputStream.getNext(SIGNAL_BIT) == 1) {
+                parsedRules.add(parseRule(inputStream));
+            }
+        }
+
+        return parsedRules;
+    }
+
+    private List<Rule> parseIndexedRules(
+            RandomAccessInputStream randomAccessInputStream,
+            List<RuleIndexRange> indexRanges)
+            throws IOException {
+        List<Rule> parsedRules = new ArrayList<>();
+
+        for (RuleIndexRange range : indexRanges) {
+            randomAccessInputStream.seek(range.getStartIndex());
+
+            BitInputStream inputStream =
+                    new BitInputStream(
+                            new BufferedInputStream(
+                                    new LimitInputStream(
+                                            randomAccessInputStream,
+                                            range.getEndIndex() - range.getStartIndex())));
+
+            // Read the rules until we reach the end index. available() here is not reliable.
+            while (inputStream.hasNext()) {
+                if (inputStream.getNext(SIGNAL_BIT) == 1) {
+                    parsedRules.add(parseRule(inputStream));
+                }
             }
         }
 
@@ -144,34 +181,5 @@ public class RuleBinaryParser implements RuleParser {
             default:
                 throw new IllegalArgumentException(String.format("Unknown key: %d", key));
         }
-    }
-
-    // Get value string from stream.
-    // If the value is not hashed, get its raw form directly.
-    // If the value is hashed, get the hex-encoding of the value. Serialized values are in raw form.
-    // All hashed values are hex-encoded.
-    private static String getStringValue(
-            BitInputStream bitInputStream, int valueSize, boolean isHashedValue)
-            throws IOException {
-        if (!isHashedValue) {
-            StringBuilder value = new StringBuilder();
-            while (valueSize-- > 0) {
-                value.append((char) bitInputStream.getNext(/* numOfBits= */ 8));
-            }
-            return value.toString();
-        }
-        ByteBuffer byteBuffer = ByteBuffer.allocate(valueSize);
-        while (valueSize-- > 0) {
-            byteBuffer.put((byte) (bitInputStream.getNext(/* numOfBits= */ 8) & 0xFF));
-        }
-        return IntegrityUtils.getHexDigest(byteBuffer.array());
-    }
-
-    private static int getIntValue(BitInputStream bitInputStream) throws IOException {
-        return bitInputStream.getNext(/* numOfBits= */ 32);
-    }
-
-    private static boolean getBooleanValue(BitInputStream bitInputStream) throws IOException {
-        return bitInputStream.getNext(/* numOfBits= */ 1) == 1;
     }
 }

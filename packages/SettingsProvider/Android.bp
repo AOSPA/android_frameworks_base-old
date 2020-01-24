@@ -8,6 +8,7 @@ android_app {
     libs: [
         "telephony-common",
         "ims-common",
+        "unsupportedappusage",
     ],
     static_libs: [
         "junit",
@@ -29,7 +30,7 @@ android_test {
         "src/com/android/providers/settings/SettingsBackupAgent.java",
         "src/com/android/providers/settings/SettingsState.java",
         "src/com/android/providers/settings/SettingsHelper.java",
-        "src/com/android/providers/settings/WifiSoftApBandChangedNotifier.java",
+        "src/com/android/providers/settings/WifiSoftApConfigChangedNotifier.java",
     ],
     static_libs: [
         "androidx.test.rules",
@@ -40,6 +41,7 @@ android_test {
     libs: [
         "android.test.base",
         "android.test.mock",
+        "unsupportedappusage",
     ],
     resource_dirs: ["res"],
     aaptflags: [

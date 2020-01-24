@@ -16,6 +16,7 @@
 
 package android.view;
 
+import static android.view.InsetsController.LAYOUT_INSETS_DURING_ANIMATION_SHOWN;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
@@ -24,7 +25,10 @@ import static android.view.WindowInsets.Type.systemBars;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -90,6 +94,8 @@ public class InsetsAnimationControlImplTest {
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
+        doNothing().when(mMockController).updateCompatSysUiVisibility(
+                anyInt(), anyBoolean(), anyBoolean());
         mTopLeash = new SurfaceControl.Builder(mSession)
                 .setName("testSurface")
                 .build();
@@ -116,7 +122,7 @@ public class InsetsAnimationControlImplTest {
         mController = new InsetsAnimationControlImpl(controls,
                 new Rect(0, 0, 500, 500), mInsetsState, mMockListener, systemBars(),
                 mMockController, 10 /* durationMs */,
-                false /* fade */);
+                false /* fade */, LAYOUT_INSETS_DURING_ANIMATION_SHOWN);
     }
 
     @Test

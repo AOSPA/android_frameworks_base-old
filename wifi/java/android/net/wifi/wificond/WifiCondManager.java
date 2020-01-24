@@ -1097,6 +1097,22 @@ public class WifiCondManager {
     }
 
     /**
+     * Get the device phy capabilities for a given interface
+     */
+    @Nullable public DeviceWiphyCapabilities getDeviceWiphyCapabilities(@NonNull String ifaceName) {
+        if (mWificond == null) {
+            Log.e(TAG, "Can not query for device wiphy capabilities at this time");
+            return null;
+        }
+
+        try {
+            return mWificond.getDeviceWiphyCapabilities(ifaceName);
+        } catch (RemoteException e) {
+            return null;
+        }
+    }
+
+    /**
      * Register the provided callback handler for SoftAp events. Note that the Soft AP itself is
      * configured using {@link #setupInterfaceForSoftApMode(String)}.
      *
@@ -1198,6 +1214,70 @@ public class WifiCondManager {
         mApInterfaces.clear();
         mApInterfaceListeners.clear();
         mSendMgmtFrameInProgress.set(false);
+    }
+
+    /**
+     * OEM parsed security type
+     */
+    public static class OemSecurityType {
+        /** The protocol defined in {@link android.net.wifi.WifiAnnotations.Protocol}. */
+        public final @WifiAnnotations.Protocol int protocol;
+        /**
+         * Supported key management types defined
+         * in {@link android.net.wifi.WifiAnnotations.KeyMgmt}.
+         */
+        @NonNull public final List<Integer> keyManagement;
+        /**
+         * Supported pairwise cipher types defined
+         * in {@link android.net.wifi.WifiAnnotations.Cipher}.
+         */
+        @NonNull public final List<Integer> pairwiseCipher;
+        /** The group cipher type defined in {@link android.net.wifi.WifiAnnotations.Cipher}. */
+        public final @WifiAnnotations.Cipher int groupCipher;
+        /**
+         * Default constructor for OemSecurityType
+         *
+         * @param protocol The protocol defined in
+         *                 {@link android.net.wifi.WifiAnnotations.Protocol}.
+         * @param keyManagement Supported key management types defined
+         *                      in {@link android.net.wifi.WifiAnnotations.KeyMgmt}.
+         * @param pairwiseCipher Supported pairwise cipher types defined
+         *                       in {@link android.net.wifi.WifiAnnotations.Cipher}.
+         * @param groupCipher The group cipher type defined
+         *                    in {@link android.net.wifi.WifiAnnotations.Cipher}.
+         */
+        public OemSecurityType(
+                @WifiAnnotations.Protocol int protocol,
+                @NonNull List<Integer> keyManagement,
+                @NonNull List<Integer> pairwiseCipher,
+                @WifiAnnotations.Cipher int groupCipher) {
+            this.protocol = protocol;
+            this.keyManagement = (keyManagement != null)
+                ? keyManagement : new ArrayList<Integer>();
+            this.pairwiseCipher = (pairwiseCipher != null)
+                ? pairwiseCipher : new ArrayList<Integer>();
+            this.groupCipher = groupCipher;
+        }
+    }
+
+    /**
+     * OEM information element parser for security types not parsed by the framework.
+     *
+     * The OEM method should use the method inputs {@code id}, {@code idExt}, and {@code bytes}
+     * to perform the parsing. The method should place the results in an OemSecurityType objct.
+     *
+     * @param id The information element id.
+     * @param idExt The information element extension id. This is valid only when id is
+     *        the extension id, {@code 255}.
+     * @param bytes The raw bytes of information element data, 'Element ID' and 'Length' are
+     *              stripped off already.
+     * @return an OemSecurityType object if this IE is parsed successfully, null otherwise.
+     */
+    @Nullable public static OemSecurityType parseOemSecurityTypeElement(
+            int id,
+            int idExt,
+            @NonNull byte[] bytes) {
+        return null;
     }
 
     /** @hide **/

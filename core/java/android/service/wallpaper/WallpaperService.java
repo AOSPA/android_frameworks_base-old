@@ -20,17 +20,18 @@ import android.annotation.Nullable;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
-import android.annotation.UnsupportedAppUsage;
 import android.app.Service;
 import android.app.WallpaperColors;
 import android.app.WallpaperInfo;
 import android.app.WallpaperManager;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.PixelFormat;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManager;
@@ -188,6 +189,7 @@ public abstract class WallpaperService extends Service {
         DisplayCutout mDispatchedDisplayCutout = DisplayCutout.NO_CUTOUT;
         final InsetsState mInsetsState = new InsetsState();
         final MergedConfiguration mMergedConfiguration = new MergedConfiguration();
+        private final Point mSurfaceSize = new Point();
 
         final WindowManager.LayoutParams mLayout
                 = new WindowManager.LayoutParams();
@@ -838,12 +840,13 @@ public abstract class WallpaperService extends Service {
                     } else {
                         mLayout.surfaceInsets.set(0, 0, 0, 0);
                     }
+
                     final int relayoutResult = mSession.relayout(
                         mWindow, mWindow.mSeq, mLayout, mWidth, mHeight,
                             View.VISIBLE, 0, -1, mWinFrame, mContentInsets,
                             mVisibleInsets, mStableInsets, mBackdropFrame,
                             mDisplayCutout, mMergedConfiguration, mSurfaceControl,
-                            mInsetsState);
+                            mInsetsState, mSurfaceSize);
                     if (mSurfaceControl.isValid()) {
                         mSurfaceHolder.mSurface.copyFrom(mSurfaceControl);
                         mSurfaceControl.release();

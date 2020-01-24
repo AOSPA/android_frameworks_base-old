@@ -21,6 +21,7 @@ import "frameworks/base/core/proto/android/os/backtrace.proto";
 import "frameworks/base/core/proto/android/os/batterytype.proto";
 import "frameworks/base/core/proto/android/os/cpufreq.proto";
 import "frameworks/base/core/proto/android/os/cpuinfo.proto";
+import "frameworks/base/core/proto/android/os/cpu_usage.proto";
 import "frameworks/base/core/proto/android/os/data.proto";
 import "frameworks/base/core/proto/android/os/header.proto";
 import "frameworks/base/core/proto/android/os/kernelwake.proto";
@@ -55,6 +56,7 @@ import "frameworks/base/core/proto/android/util/event_log_tags.proto";
 import "frameworks/base/core/proto/android/util/log.proto";
 import "frameworks/base/core/proto/android/privacy.proto";
 import "frameworks/base/core/proto/android/section.proto";
+import "frameworks/base/proto/src/ipconnectivity.proto";
 
 package android.os;
 
@@ -162,6 +164,11 @@ message IncidentProto {
     optional android.util.LogProto last_security_logs = 1115 [
         (section).type = SECTION_LOG,
         (section).args = "security -L"
+    ];
+
+    optional android.util.PersistedLogProto persisted_logs = 1116 [
+        (section).type = SECTION_COMMAND,
+        (section).args = "/system/bin/sh /system/bin/incident-helper-cmd -l run persisted_logs --limit 10MB"
     ];
 
     // Stack dumps
@@ -467,6 +474,16 @@ message IncidentProto {
     optional android.service.dropbox.DropBoxManagerServiceDumpProto dropbox_subsystem_restart = 3046 [
         (section).type = SECTION_DUMPSYS,
         (section).args = "dropbox --proto SubsystemRestart"
+    ];
+
+    optional CpuUsageProto process_cpu_usage = 3047 [
+        (section).type = SECTION_DUMPSYS,
+        (section).args = "cpuinfo --proto"
+    ];
+
+    optional .clearcut.connectivity.IpConnectivityLog ip_connectivity_metrics = 3049 [
+        (section).type = SECTION_DUMPSYS,
+        (section).args = "connmetrics --proto"
     ];
 
     // Reserved for OEMs.
