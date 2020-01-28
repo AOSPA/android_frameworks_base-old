@@ -484,7 +484,7 @@ public class ConnectivityManager {
      * conflicts with TETHERING_WIFI
      * @hide
      */
-    public static final int TETHERING_WIGIG = 4;
+    public static final int TETHERING_WIGIG = TetheringManager.TETHERING_WIGIG;
 
     /**
      * Extra used for communicating with the TetherService. Includes the type of tethering to
