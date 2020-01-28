@@ -28,7 +28,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.database.Cursor;
-import android.location.Country;
 import android.net.Uri;
 import android.os.PersistableBundle;
 import android.provider.Contacts;
@@ -113,7 +112,6 @@ public class PhoneNumberUtils {
     private static final String BCD_EF_ADN_EXTENDED = "*#,N;";
     private static final String BCD_CALLED_PARTY_EXTENDED = "*#abc";
 
-    private static Country sCountryDetector = null;
     /*
      * global-phone-number = ["+"] 1*( DIGIT / written-sep )
      * written-sep         = ("-"/".")
@@ -2196,28 +2194,6 @@ public class PhoneNumberUtils {
                                                           Context context,
                                                           boolean useExactMatch) {
         return isEmergencyNumberInternal(subId, number, null /* unused */, useExactMatch);
-    }
-
-    private static String getCountryIso(Context context) {
-        Rlog.w(LOG_TAG, "getCountryIso " + sCountryDetector);
-        if (sCountryDetector == null) {
-            CountryDetector detector = (CountryDetector) context.getSystemService(
-                Context.COUNTRY_DETECTOR);
-            if (detector != null) {
-                sCountryDetector = detector.detectCountry();
-            }
-        }
-
-        if (sCountryDetector == null) {
-            return null;
-        } else {
-            return sCountryDetector.getCountryIso();
-        }
-    }
-
-    /** @hide */
-    public static void resetCountryDetectorInfo() {
-        sCountryDetector = null;
     }
 
     /**
