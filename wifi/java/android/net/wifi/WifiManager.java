@@ -602,6 +602,7 @@ public class WifiManager {
      *
      * @hide
      */
+    @SystemApi
     public static final String EXTRA_WIFI_AP_FAILURE_DESCRIPTION = "wifi_ap_error_description";
     /**
      *  If Wi-Fi AP start failed with SAP_START_FAILURE_NO_CHANNEL reason code and has this
@@ -609,6 +610,7 @@ public class WifiManager {
      *
      *  @hide
      */
+    @SystemApi
     public static final String WIFI_AP_FAILURE_DESC_NO_5GHZ_SUPPORT = "wifi_ap_error_no_5g_support";
     /**
      * The previous Wi-Fi state.
@@ -1160,6 +1162,7 @@ public class WifiManager {
      *
      * @hide
      */
+    @SystemApi
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String WIFI_COUNTRY_CODE_CHANGED_ACTION =
             "android.net.wifi.COUNTRY_CODE_CHANGED";
@@ -1362,12 +1365,16 @@ public class WifiManager {
 
     /* Wi-Fi generation codes */
     /** @hide */
+    @SystemApi
     public static final int WIFI_GENERATION_DEFAULT = 0;
     /** @hide */
+    @SystemApi
     public static final int WIFI_GENERATION_4 = 4;
     /** @hide */
+    @SystemApi
     public static final int WIFI_GENERATION_5 = 5;
     /** @hide */
+    @SystemApi
     public static final int WIFI_GENERATION_6 = 6;
 
     /**
@@ -1667,6 +1674,7 @@ public class WifiManager {
       *
       * @hide no intent to publish
       */
+      @SystemApi
       public boolean isExtendingWifi() {
           try {
               return mService.isExtendingWifi();
@@ -1682,6 +1690,7 @@ public class WifiManager {
       *
       * @hide no intent to publish
       */
+      @SystemApi
       public boolean isWifiCoverageExtendFeatureEnabled() {
           try {
               return mService.isWifiCoverageExtendFeatureEnabled();
@@ -1695,6 +1704,7 @@ public class WifiManager {
       *
       * @hide no intent to publish
       */
+      @SystemApi
       public void enableWifiCoverageExtendFeature(boolean enable) {
           try {
               mService.enableWifiCoverageExtendFeature(enable);
@@ -1710,6 +1720,7 @@ public class WifiManager {
       *
       * @hide no intent to publish
       */
+      @SystemApi
       public int getSoftApWifiGeneration() {
           try {
               return mService.getSoftApWifiGeneration();
@@ -5374,7 +5385,9 @@ public class WifiManager {
      * @return String of capabilities from driver for type capaParameter.
      * {@hide}
      */
-    public String getCapabilities(String capaType) {
+    @SystemApi
+    @NonNull
+    public String getCapabilities(@NonNull String capaType) {
         try {
             return mService.getCapabilities(capaType);
         } catch (RemoteException e) {

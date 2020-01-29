@@ -211,16 +211,19 @@ public class WifiConfiguration implements Parcelable {
         * IEEE 802.11ai FILS SK with SHA256
          * @hide
         */
+        @SystemApi
         public static final int FILS_SHA256 = 15;
         /**
          * IEEE 802.11ai FILS SK with SHA384:
          * @hide
          */
+        @SystemApi
         public static final int FILS_SHA384 = 16;
         /**
          * Device Provisioning Protocol
          * @hide
          */
+        @SystemApi
         public static final int DPP = 17;
 
         public static final String varName = "key_mgmt";
@@ -710,6 +713,7 @@ public class WifiConfiguration implements Parcelable {
      * @hide
      * This configuration is used in AP to extend the coverage.
      */
+    @SystemApi
     public boolean shareThisAp;
 
     /**

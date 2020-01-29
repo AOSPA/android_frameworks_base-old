@@ -903,6 +903,7 @@ public class WifiInfo implements Parcelable {
     }
 
     /** @hide */
+    @SystemApi
     public int getWifiGeneration() {
         return mWifiGeneration;
     }
@@ -913,6 +914,7 @@ public class WifiInfo implements Parcelable {
     }
 
     /** @hide */
+    @SystemApi
     public boolean isVhtMax8SpatialStreamsSupported() {
         return mVhtMax8SpatialStreamsSupport;
     }
@@ -923,6 +925,7 @@ public class WifiInfo implements Parcelable {
     }
 
     /** @hide */
+    @SystemApi
     public boolean isTwtSupported() {
         return mTwtSupport;
     }

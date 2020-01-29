@@ -11,6 +11,8 @@ ActionValue: android.location.Location#EXTRA_NO_GPS_LOCATION:
     
 ActionValue: android.net.wifi.WifiManager#ACTION_LINK_CONFIGURATION_CHANGED:
     
+ActionValue: android.net.wifi.WifiManager#EXTRA_WIFI_AP_FAILURE_DESCRIPTION:
+    Inconsistent extra value; expected `android.net.wifi.extra.WIFI_AP_FAILURE_DESCRIPTION`, was `wifi_ap_error_description`
 
 
 ArrayReturn: android.bluetooth.BluetoothCodecStatus#BluetoothCodecStatus(android.bluetooth.BluetoothCodecConfig, android.bluetooth.BluetoothCodecConfig[], android.bluetooth.BluetoothCodecConfig[]) parameter #1:
@@ -65,6 +67,10 @@ HeavyBitSet: android.net.wifi.wificond.NativeScanResult#getCapabilities():
 
 IntentBuilderName: android.content.Context#registerReceiverForAllUsers(android.content.BroadcastReceiver, android.content.IntentFilter, String, android.os.Handler):
     Methods creating an Intent should be named `create<Foo>Intent()`, was `registerReceiverForAllUsers`
+
+
+IntentName: android.net.wifi.WifiManager#WIFI_COUNTRY_CODE_CHANGED_ACTION:
+    Intent action constant name must be ACTION_FOO: WIFI_COUNTRY_CODE_CHANGED_ACTION
 
 
 KotlinKeyword: android.app.Notification#when:
@@ -213,10 +219,28 @@ MutableBareField: android.net.wifi.WifiConfiguration#requirePMF:
     
 MutableBareField: android.net.wifi.WifiConfiguration#saePasswordId:
     
+MutableBareField: android.net.wifi.WifiConfiguration#shareThisAp:
+    
 MutableBareField: android.net.wifi.WifiConfiguration#shared:
     
 MutableBareField: android.net.wifi.WifiScanner.ScanSettings#type:
     
+MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#htSupport2g:
+    Bare field htSupport2g must be marked final, or moved behind accessors if mutable
+MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#htSupport5g:
+    Bare field htSupport5g must be marked final, or moved behind accessors if mutable
+MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#sapHeSupport2g:
+    Bare field sapHeSupport2g must be marked final, or moved behind accessors if mutable
+MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#sapHeSupport5g:
+    Bare field sapHeSupport5g must be marked final, or moved behind accessors if mutable
+MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#staHeSupport2g:
+    Bare field staHeSupport2g must be marked final, or moved behind accessors if mutable
+MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#staHeSupport5g:
+    Bare field staHeSupport5g must be marked final, or moved behind accessors if mutable
+MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#vhtSupport2g:
+    Bare field vhtSupport2g must be marked final, or moved behind accessors if mutable
+MutableBareField: android.net.wifi.wificond.WifiCondManager.WifiGenerationCapabilities#vhtSupport5g:
+    Bare field vhtSupport5g must be marked final, or moved behind accessors if mutable
 
 
 NoClone: android.service.contentcapture.ContentCaptureService#dump(java.io.FileDescriptor, java.io.PrintWriter, String[]) parameter #0:

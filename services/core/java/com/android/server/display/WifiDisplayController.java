@@ -795,7 +795,7 @@ final class WifiDisplayController implements DumpUtils.Dump {
         *R2 source - R1 sink ->2
         *R2 source - R2 sink ->3*/
         if(WFDR2Info==2 || WFDR2Info==3){
-            WifiP2pWfdInfo wfdInfo = mThisDevice.wfdInfo;
+            WifiP2pWfdInfo wfdInfo = mThisDevice.getWfdInfo();
             mWifiP2pManager.setWFDR2Info(getWifiP2pChannel(), wfdInfo, new ActionListener() {
                     @Override
                     public void onSuccess() {
@@ -1145,7 +1145,7 @@ final class WifiDisplayController implements DumpUtils.Dump {
                 if (info == null) {
                     return;
                 }
-                if (info.contains(device)) {
+                if (contains(info, device)) {
                     Slog.i(TAG, "already connected to the desired device: " + device.deviceName);
                     updateConnection();
                     handleConnectionChanged(mNetworkInfo);

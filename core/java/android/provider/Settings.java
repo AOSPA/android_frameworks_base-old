@@ -6227,6 +6227,7 @@ public final class Settings {
          * Setting to configure Wifi disconnect delay duration in seconds.
          * @hide
          **/
+        @SystemApi
         public static final String WIFI_DISCONNECT_DELAY_DURATION =
                 "wifi_disconnect_delay_duration";
 
@@ -10356,6 +10357,7 @@ public final class Settings {
         * will enable it.
         * @hide
         */
+       @SystemApi
        public static final String WIFI_COVERAGE_EXTEND_FEATURE_ENABLED =
                "wifi_coverage_extend_feature_enabled";
 

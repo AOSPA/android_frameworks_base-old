@@ -250,12 +250,14 @@ public class WifiCondManager {
          * Invoked when the station connected to Any AP.
          * @hide
          */
+        @SystemApi
         void onStaConnected(@NonNull String bssidStr);
 
         /**
          * Invoked when the station disconnected to Any AP.
          * @hide
          */
+        @SystemApi
         void onStaDisconnected(@NonNull String bssidStr);
     }
 
@@ -618,6 +620,7 @@ public class WifiCondManager {
      * @return Returns true on success.
      * @hide
      */
+    @SystemApi
     public boolean unsubscribeScan(@NonNull String ifaceName) {
         if (getClientInterface(ifaceName) == null) {
             Log.e(TAG, "No valid wificond client interface handler");
@@ -1281,17 +1284,36 @@ public class WifiCondManager {
     }
 
     /** @hide **/
+    @SystemApi
     public static class WifiGenerationCapabilities {
 
+        /** @hide */
+        @SystemApi
         public boolean htSupport2g = false;
+        /** @hide */
+        @SystemApi
         public boolean vhtSupport2g = false;
+        /** @hide */
+        @SystemApi
         public boolean staHeSupport2g = false;
+        /** @hide */
+        @SystemApi
         public boolean sapHeSupport2g = false;
+        /** @hide */
+        @SystemApi
         public boolean htSupport5g = false;
+        /** @hide */
+        @SystemApi
         public boolean vhtSupport5g = false;
+        /** @hide */
+        @SystemApi
         public boolean staHeSupport5g = false;
+        /** @hide */
+        @SystemApi
         public boolean sapHeSupport5g = false;
 
+        /** @hide */
+        @SystemApi
         public WifiGenerationCapabilities() {
         }
     }
@@ -1302,6 +1324,7 @@ public class WifiCondManager {
      * @return WifiGenerationCapabilities object, or null for error.
      * @hide
      */
+    @SystemApi
     @Nullable public WifiGenerationCapabilities getWifiGenerationCapabilities() {
         if (!retrieveWificondAndRegisterForDeath()) {
             return null;

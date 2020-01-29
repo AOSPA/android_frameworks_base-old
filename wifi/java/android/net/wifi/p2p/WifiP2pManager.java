@@ -1702,9 +1702,10 @@ public class WifiP2pManager {
     }
 
     /** @hide */
+    @SystemApi
     public void setWFDR2Info(
-            Channel c, WifiP2pWfdInfo wfdInfo,
-            ActionListener listener) {
+            @NonNull Channel c, @NonNull WifiP2pWfdInfo wfdInfo,
+            @Nullable ActionListener listener) {
         checkChannel(c);
         try {
             mService.checkConfigureWifiDisplayPermission();
