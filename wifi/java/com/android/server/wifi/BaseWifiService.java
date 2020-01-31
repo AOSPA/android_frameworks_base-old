@@ -608,7 +608,7 @@ public class BaseWifiService extends IWifiManager.Stub {
 
     @Override
     public boolean isWhitelistNetworkRoamingFeatureEnabled() {
-        throw new UnsupportedOperationException();
+        return false;
     }
 
     @Override
@@ -618,7 +618,7 @@ public class BaseWifiService extends IWifiManager.Stub {
 
     @Override
     public boolean isUnsavedNetworkLinkingFeatureEnabled() {
-        throw new UnsupportedOperationException();
+        return false;
     }
 
     @Override
