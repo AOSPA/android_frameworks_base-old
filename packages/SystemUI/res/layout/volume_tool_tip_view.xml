@@ -57,7 +57,7 @@
         android:id="@+id/arrow"
         android:layout_width="8dp"
         android:layout_height="10dp"
-        android:layout_marginLeft="-2dp"
+        android:layout_marginStart="-2dp"
         android:layout_gravity="center_vertical"/>
 
 </com.android.systemui.volume.VolumeToolTipView>

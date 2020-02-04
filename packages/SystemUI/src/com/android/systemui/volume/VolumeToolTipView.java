@@ -61,8 +61,10 @@ public class VolumeToolTipView extends LinearLayout {
     private void drawArrow() {
         View arrowView = findViewById(R.id.arrow);
         ViewGroup.LayoutParams arrowLp = arrowView.getLayoutParams();
+        boolean isPointingLeft = getContext().getResources()
+                .getBoolean(R.bool.config_audioPanelOnLeftSide);
         ShapeDrawable arrowDrawable = new ShapeDrawable(TriangleShape.createHorizontal(
-                arrowLp.width, arrowLp.height, false));
+                arrowLp.width, arrowLp.height, isPointingLeft));
         Paint arrowPaint = arrowDrawable.getPaint();
         TypedValue typedValue = new TypedValue();
         getContext().getTheme().resolveAttribute(android.R.attr.colorAccent, typedValue, true);
