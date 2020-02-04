@@ -937,5 +937,6 @@
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"Eraman behealdera, eskuinetara"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"Baztertu"</string>
     <string name="notification_content_system_nav_changed" msgid="7218093915747788444">"Eguneratu da sistemaren nabigazioa. Aldaketak egiteko, joan Ezarpenak atalera."</string>
+    <string name="media_output_title" msgid="115223550977351699">"Erreproduzitu multimedia-edukia hemen"</string>
     <string name="notification_content_gesture_nav_available" msgid="8111130443656460792">"Sistemaren nabigazioa eguneratzeko, joan Ezarpenak atalera"</string>
 </resources>
