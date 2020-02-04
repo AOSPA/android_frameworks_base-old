@@ -937,5 +937,6 @@
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"ညာအောက်ခြေသို့ ရွှေ့ပါ"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"ပယ်ရန်"</string>
     <string name="notification_content_system_nav_changed" msgid="7218093915747788444">"စနစ်လမ်းညွှန်ခြင်း အပ်ဒိတ်လုပ်ပြီးပါပြီ။ အပြောင်းအလဲများ ပြုလုပ်ရန် \'ဆက်တင်များ\' သို့သွားပါ။"</string>
+    <string name="media_output_title" msgid="115223550977351699">"မီဒီယာကို အောက်ပါစက်တွင် ဖွင့်ရန်"</string>
     <string name="notification_content_gesture_nav_available" msgid="8111130443656460792">"စနစ်လမ်းညွှန်ခြင်း အပ်ဒိတ်လုပ်ရန် \'ဆက်တင်များ\' သို့သွားပါ"</string>
 </resources>
