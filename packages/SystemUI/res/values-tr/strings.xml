@@ -937,5 +937,6 @@
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"Sağ alta taşı"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"Kapat"</string>
     <string name="notification_content_system_nav_changed" msgid="7218093915747788444">"Sistemde gezinme yöntemi güncellendi. Değişiklik yapmak için Ayarlar\'a gidin."</string>
+    <string name="media_output_title" msgid="115223550977351699">"Medyayı oynatma yeri"</string>
     <string name="notification_content_gesture_nav_available" msgid="8111130443656460792">"Sistemde gezinme yöntemini güncellemek için Ayarlar\'a gidin"</string>
 </resources>

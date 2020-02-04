@@ -937,6 +937,7 @@
     <string name="privacy_type_camera" msgid="1676604631892420333">"الكاميرا"</string>
     <string name="privacy_type_location" msgid="6435497989657286700">"الموقع"</string>
     <string name="privacy_type_microphone" msgid="4153045784928554506">"الميكروفون"</string>
+    <string name="media_output_title" msgid="115223550977351699">"تشغيل الوسائط على"</string>
     <string name="sensor_privacy_mode" msgid="8982771253020769598">"إيقاف أجهزة الاستشعار"</string>
     <string name="device_services" msgid="1191212554435440592">"خدمات الأجهزة"</string>
     <string name="music_controls_no_title" msgid="5236895307087002011">"بلا عنوان"</string>

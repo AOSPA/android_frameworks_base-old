@@ -937,5 +937,6 @@
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"Déplacer en bas à droite"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"Ignorer"</string>
     <string name="notification_content_system_nav_changed" msgid="7218093915747788444">"Navigation système mise à jour. Pour apporter des modifications, accédez aux paramètres."</string>
+    <string name="media_output_title" msgid="115223550977351699">"Diffuser des contenus multimédias sur"</string>
     <string name="notification_content_gesture_nav_available" msgid="8111130443656460792">"Accédez aux paramètres pour mettre à jour la navigation système"</string>
 </resources>

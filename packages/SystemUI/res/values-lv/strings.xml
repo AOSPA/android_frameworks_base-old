@@ -937,6 +937,7 @@
     <string name="bubble_content_description_stack" msgid="8666349184095622232">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> no lietotnes “<xliff:g id="APP_NAME">%2$s</xliff:g>” un vēl <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g>"</string>
     <string name="bubble_accessibility_action_move" msgid="1794879742234803840">"Pārvietot"</string>
     <string name="bubble_accessibility_action_move_top_left" msgid="104736832249802724">"Pārvietot augšpusē pa kreisi"</string>
+    <string name="media_output_title" msgid="115223550977351699">"Atskaņot multivides saturu šeit"</string>
     <string name="bubble_accessibility_action_move_top_right" msgid="1671844272347036806">"Pārvietot augšpusē pa labi"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="206369104473183217">"Pārvietot apakšpusē pa kreisi"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"Pārvietot apakšpusē pa labi"</string>

@@ -937,5 +937,6 @@
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"Pindahkan ke kanan bawah"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"Tutup"</string>
     <string name="notification_content_system_nav_changed" msgid="7218093915747788444">"Navigasi sistem diupdate. Untuk melakukan perubahan, buka Setelan."</string>
+    <string name="media_output_title" msgid="115223550977351699">"Putar media ke"</string>
     <string name="notification_content_gesture_nav_available" msgid="8111130443656460792">"Buka Setelan untuk mengupdate navigasi sistem"</string>
 </resources>

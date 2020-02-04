@@ -937,6 +937,7 @@
     <string name="ask_me_later_bubbles" msgid="2147688438402939029">"Pitaj me kasnije"</string>
     <string name="bubble_content_description_single" msgid="1184462974339387516">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> od aplikacije <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="8666349184095622232">"Obavještenje <xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> aplikacije <xliff:g id="APP_NAME">%2$s</xliff:g> i još <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g>"</string>
+    <string name="media_output_title" msgid="115223550977351699">"Reproduciranje medija"</string>
     <string name="bubble_accessibility_action_move" msgid="1794879742234803840">"Pomjeri"</string>
     <string name="bubble_accessibility_action_move_top_left" msgid="104736832249802724">"Pomjeri gore lijevo"</string>
     <string name="bubble_accessibility_action_move_top_right" msgid="1671844272347036806">"Pomjerite gore desno"</string>

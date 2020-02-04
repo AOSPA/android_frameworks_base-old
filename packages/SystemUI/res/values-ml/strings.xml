@@ -937,5 +937,6 @@
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"ചുവടെ വലതുഭാഗത്തേക്ക് നീക്കുക"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"ഡിസ്‌മിസ് ചെയ്യുക"</string>
     <string name="notification_content_system_nav_changed" msgid="7218093915747788444">"സിസ്‌റ്റം നാവിഗേഷൻ അപ്‌ഡേറ്റ് ചെയ്‌തു. മാറ്റങ്ങൾ വരുത്താൻ ക്രമീകരണത്തിലേക്ക് പോവുക."</string>
+    <string name="media_output_title" msgid="115223550977351699">"ഇതിലേക്ക് മീഡിയ പ്ലേ ചെയ്യുക"</string>
     <string name="notification_content_gesture_nav_available" msgid="8111130443656460792">"സിസ്‌റ്റം നാവിഗേഷൻ അപ്‌ഡേറ്റ് ചെയ്യാൻ ക്രമീകരണത്തിലേക്ക് പോവുക"</string>
 </resources>

@@ -937,5 +937,6 @@
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"Ilipat sa kanan sa ibaba"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"I-dismiss"</string>
     <string name="notification_content_system_nav_changed" msgid="7218093915747788444">"Na-update na ang pag-navigate ng system. Para gumawa ng mga pagbabago, pumunta sa Mga Setting."</string>
+    <string name="media_output_title" msgid="115223550977351699">"I-play ang media sa"</string>
     <string name="notification_content_gesture_nav_available" msgid="8111130443656460792">"Pumunta sa Mga Setting para i-update ang pag-navigate sa system"</string>
 </resources>
