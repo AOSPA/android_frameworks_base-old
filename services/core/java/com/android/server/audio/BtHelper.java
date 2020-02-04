@@ -141,6 +141,12 @@ public class BtHelper {
         public int getCodec() {
             return mCodec;
         }
+
+        // redefine equality op so we can match messages intended for this device
+        @Override
+        public boolean equals(Object o) {
+            return mBtDevice.equals(o);
+        }
     }
 
     // A2DP device events
@@ -576,9 +582,9 @@ public class BtHelper {
             return;
         }
         final BluetoothDevice btDevice = deviceList.get(0);
-        final @BluetoothProfile.BtProfileState int state = mA2dp.getConnectionState(btDevice);
-        mDeviceBroker.handleSetA2dpSinkConnectionState(
-                state, new BluetoothA2dpDeviceInfo(btDevice));
+        // the device is guaranteed CONNECTED
+        mDeviceBroker.postBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(btDevice,
+                BluetoothA2dp.STATE_CONNECTED, BluetoothProfile.A2DP_SINK, true, -1);
     }
 
     /*package*/ synchronized void onA2dpSinkProfileConnected(BluetoothProfile profile) {
@@ -659,7 +665,9 @@ public class BtHelper {
             return true;
         }
         String address = btDevice.getAddress();
-        BluetoothClass btClass = btDevice.getBluetoothClass();
+        String dummyAddress = "00:00:00:00:00:00";
+        BluetoothClass btClass = dummyAddress.equals(address) ? null :
+                                 btDevice.getBluetoothClass();
         int inDevice = AudioSystem.DEVICE_IN_BLUETOOTH_SCO_HEADSET;
         int[] outDeviceTypes = {
                 AudioSystem.DEVICE_OUT_BLUETOOTH_SCO,
