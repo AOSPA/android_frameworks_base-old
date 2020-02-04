@@ -937,6 +937,7 @@
     <string name="bubble_accessibility_action_move" msgid="1794879742234803840">"Verschieben"</string>
     <string name="bubble_accessibility_action_move_top_left" msgid="104736832249802724">"Nach oben links verschieben"</string>
     <string name="bubble_accessibility_action_move_top_right" msgid="1671844272347036806">"Nach rechts oben verschieben"</string>
+    <string name="media_output_title" msgid="115223550977351699">"Medien hier abspielen"</string>
     <string name="bubble_accessibility_action_move_bottom_left" msgid="206369104473183217">"Nach unten links verschieben"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"Nach unten rechts verschieben"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"Schließen"</string>

@@ -937,5 +937,6 @@
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"ਹੇਠਾਂ ਵੱਲ ਸੱਜੇ ਲਿਜਾਓ"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"ਖਾਰਜ ਕਰੋ"</string>
     <string name="notification_content_system_nav_changed" msgid="7218093915747788444">"ਸਿਸਟਮ ਨੈਵੀਗੇਸ਼ਨ ਅੱਪਡੇਟ ਹੋ ਗਿਆ। ਤਬਦੀਲੀਆਂ ਕਰਨ ਲਈ, ਸੈਟਿੰਗਾਂ \'ਤੇ ਜਾਓ।"</string>
+    <string name="media_output_title" msgid="115223550977351699">"ਇਸ 'ਤੇ ਮੀਡੀਆ ਚਲਾਓ"</string>
     <string name="notification_content_gesture_nav_available" msgid="8111130443656460792">"ਸਿਸਟਮ ਨੈਵੀਗੇਸ਼ਨ ਨੂੰ ਅੱਪਡੇਟ ਕਰਨ ਲਈ ਸੈਟਿੰਗਾਂ \'ਤੇ ਜਾਓ"</string>
 </resources>

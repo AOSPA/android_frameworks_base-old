@@ -937,5 +937,6 @@
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"오른쪽 하단으로 이동"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"닫기"</string>
     <string name="notification_content_system_nav_changed" msgid="7218093915747788444">"시스템 탐색이 업데이트되었습니다. 변경하려면 설정으로 이동하세요."</string>
+    <string name="media_output_title" msgid="115223550977351699">"미디어 출력 대상"</string>
     <string name="notification_content_gesture_nav_available" msgid="8111130443656460792">"설정으로 이동하여 시스템 탐색을 업데이트하세요."</string>
 </resources>

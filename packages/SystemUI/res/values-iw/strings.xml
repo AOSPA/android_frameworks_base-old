@@ -937,6 +937,7 @@
     <string name="manage_bubbles_text" msgid="7027739766859191408">"ניהול"</string>
     <string name="no_bubbles" msgid="337101288173078247">"אני לא מרשה"</string>
     <string name="yes_bubbles" msgid="668809525728633841">"כן, זה בסדר"</string>
+    <string name="media_output_title" msgid="115223550977351699">"הפעלת מדיה באמצעות"</string>
     <string name="ask_me_later_bubbles" msgid="2147688438402939029">"אחליט מאוחר יותר"</string>
     <string name="bubble_content_description_single" msgid="1184462974339387516">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> מהאפליקציה <xliff:g id="APP_NAME">%2$s</xliff:g>"</string>
     <string name="bubble_content_description_stack" msgid="8666349184095622232">"<xliff:g id="NOTIFICATION_TITLE">%1$s</xliff:g> מ-<xliff:g id="APP_NAME">%2$s</xliff:g> ועוד <xliff:g id="BUBBLE_COUNT">%3$d</xliff:g>"</string>

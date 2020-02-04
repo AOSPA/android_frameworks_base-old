@@ -937,5 +937,6 @@
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"নিচে ডান দিকে সরান"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"খারিজ করুন"</string>
     <string name="notification_content_system_nav_changed" msgid="7218093915747788444">"সিস্টেম নেভিগেশন আপডেট হয়েছে। পরিবর্তন করার জন্য সেটিংসে যান।"</string>
+    <string name="media_output_title" msgid="115223550977351699">"মিডিয়া এতে চালান"</string>
     <string name="notification_content_gesture_nav_available" msgid="8111130443656460792">"সিস্টেম নেভিগেশন আপডেট করতে সেটিংসে যান"</string>
 </resources>

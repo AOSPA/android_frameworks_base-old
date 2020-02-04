@@ -937,6 +937,7 @@
     <string name="bubbles_settings_button_description" msgid="2970630476657287189">"Налады дыялогаў у праграме \"<xliff:g id="APP_NAME">%1$s</xliff:g>\""</string>
     <string name="bubbles_prompt" msgid="8807968030159469710">"Дазволіць дыялогі з праграмы \"<xliff:g id="APP_NAME">%1$s</xliff:g>\"?"</string>
     <string name="manage_bubbles_text" msgid="7027739766859191408">"Кіраваць"</string>
+    <string name="media_output_title" msgid="115223550977351699">"Прайграваць медыяфайлы на"</string>
     <string name="no_bubbles" msgid="337101288173078247">"Адмовіць"</string>
     <string name="yes_bubbles" msgid="668809525728633841">"Дазволіць"</string>
     <string name="ask_me_later_bubbles" msgid="2147688438402939029">"Спытаць пазней"</string>

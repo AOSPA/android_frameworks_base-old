@@ -937,6 +937,7 @@
     <string name="bubble_accessibility_action_move_bottom_left" msgid="206369104473183217">"移至左下方"</string>
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"移至右下方"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"關閉"</string>
+    <string name="media_output_title" msgid="115223550977351699">"播放媒體"</string>
     <string name="notification_content_system_nav_changed" msgid="7218093915747788444">"系統操作機制已更新。如要進行變更，請前往「設定」。"</string>
     <string name="notification_content_gesture_nav_available" msgid="8111130443656460792">"請前往「設定」更新系統操作機制"</string>
 </resources>

@@ -937,5 +937,6 @@
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‏‏‎‎‎‏‏‎‏‎‎‎‎‏‎‏‏‎‏‏‏‏‏‎‎‏‎‎‎‏‎‏‏‎‏‏‎‎‎‏‎‎‎‏‏‏‏‎‏‎‏‎‎‎‎‎‎‏‎‎‏‎Move bottom right‎‏‎‎‏‎"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‎‏‏‏‏‎‏‏‎‏‎‏‎‎‏‏‎‎‎‏‎‏‎‎‏‏‏‎‏‎‎‎‏‏‏‎‎‏‏‎‎‏‏‏‏‏‎‎‎‏‎‏‏‏‎‎‎‎‏‎‎‎Dismiss‎‏‎‎‏‎"</string>
     <string name="notification_content_system_nav_changed" msgid="7218093915747788444">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‎‎‏‎‎‎‎‏‎‏‎‏‏‏‏‎‏‎‎‏‎‎‎‏‎‏‏‎‎‎‏‎‏‏‎‏‏‏‎‎‎‏‏‏‎‎‎‏‎‎‏‏‎‏‎‎‏‏‏‎‎‎System navigation updated. To make changes, go to Settings.‎‏‎‎‏‎"</string>
+    <string name="media_output_title" msgid="115223550977351699">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‎‎‏‏‏‎‎‏‏‎‎‏‎‏‎‏‏‎‏‏‎‎‏‏‎‏‎‏‏‎‎‎‏‎‎‏‏‏‎‎‎‎‏‏‏‎‏‎‎‎‎‎‎‎‎‏‎‎‏‏‎Play media to‎‏‎‎‏‎"</string>
     <string name="notification_content_gesture_nav_available" msgid="8111130443656460792">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‎‏‎‎‏‎‎‎‎‏‏‏‏‏‏‏‏‏‏‎‎‎‎‏‎‎‏‎‎‎‎‏‎‎‎‎‏‏‎‎‎‏‎‏‎‎‏‏‏‏‏‎‏‎‎‏‏‏‏‏‏‏‏‏‏‏‏‏‎‎‏‏‏‏‏‏‎‎‎‎Go to Settings to update system navigation‎‏‎‎‏‎"</string>
 </resources>

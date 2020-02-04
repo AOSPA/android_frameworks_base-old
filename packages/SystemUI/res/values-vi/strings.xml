@@ -937,5 +937,6 @@
     <string name="bubble_accessibility_action_move_bottom_right" msgid="8705660152384312329">"Chuyển tới dưới cùng bên phải"</string>
     <string name="bubble_dismiss_text" msgid="8028337712674081668">"Loại bỏ"</string>
     <string name="notification_content_system_nav_changed" msgid="7218093915747788444">"Đã cập nhật chế độ di chuyển trên hệ thống. Để thay đổi, hãy chuyển đến phần Cài đặt."</string>
+    <string name="media_output_title" msgid="115223550977351699">"Phát phương tiện tới"</string>
     <string name="notification_content_gesture_nav_available" msgid="8111130443656460792">"Chuyển đến phần Cài đặt để cập nhật chế độ di chuyển trên hệ thống"</string>
 </resources>
