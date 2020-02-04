@@ -25,8 +25,8 @@
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:paddingStart="16dp"
-        android:paddingEnd="4dp"
+        android:paddingStart="4dp"
+        android:paddingEnd="16dp"
         android:background="@drawable/volume_tool_tip_rounded_bg"
         android:orientation="horizontal">
 
@@ -57,7 +57,7 @@
         android:id="@+id/arrow"
         android:layout_width="8dp"
         android:layout_height="10dp"
-        android:layout_marginLeft="-2dp"
+        android:layout_marginEnd="-2dp"
         android:layout_gravity="center_vertical"/>
 
 </com.android.systemui.volume.VolumeToolTipView>
