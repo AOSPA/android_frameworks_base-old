@@ -326,6 +326,19 @@ public class AccessibilitySecurityPolicy {
     }
 
     /**
+     * Checks if a service can take screenshot.
+     *
+     * @param service The service requesting access
+     *
+     * @return Whether ot not the service may take screenshot
+     */
+    public boolean canTakeScreenshotLocked(
+            @NonNull AbstractAccessibilityServiceConnection service) {
+        return (service.getCapabilities()
+                & AccessibilityServiceInfo.CAPABILITY_CAN_TAKE_SCREENSHOT) != 0;
+    }
+
+    /**
      * Returns the parent userId of the profile according to the specified userId.
      *
      * @param userId The userId to check
@@ -426,6 +439,7 @@ public class AccessibilitySecurityPolicy {
                 return false;
             }
         }
+        // TODO: Check parent windowId if the giving windowId is from embedded view hierarchy.
         if (windowId == mAccessibilityWindowManager.getActiveWindowId(userId)) {
             return true;
         }
@@ -534,6 +548,19 @@ public class AccessibilitySecurityPolicy {
                     uid, packageName) == AppOpsManager.MODE_ALLOWED;
         } finally {
             Binder.restoreCallingIdentity(identityToken);
+        }
+    }
+
+    /**
+     * Enforcing permission check to IPC caller or grant it if it's not through IPC.
+     *
+     * @param permission The permission to check
+     */
+    public void enforceCallingOrSelfPermission(@NonNull String permission) {
+        if (mContext.checkCallingOrSelfPermission(permission)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("Caller does not hold permission "
+                    + permission);
         }
     }
 }

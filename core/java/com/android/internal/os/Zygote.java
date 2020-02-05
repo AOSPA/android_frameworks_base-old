@@ -35,6 +35,7 @@ import android.system.ErrnoException;
 import android.system.Os;
 import android.util.Log;
 
+import dalvik.annotation.optimization.FastNative;
 import dalvik.system.ZygoteHooks;
 
 import libcore.io.IoUtils;
@@ -144,6 +145,11 @@ public final class Zygote {
 
     /** The lower file system should be bind mounted directly on external storage */
     public static final int MOUNT_EXTERNAL_PASS_THROUGH = IVold.REMOUNT_MODE_PASS_THROUGH;
+
+    /** Use the regular scoped storage filesystem, but Android/ should be writable.
+     * Used to support the applications hosting DownloadManager and the MTP server.
+     */
+    public static final int MOUNT_EXTERNAL_ANDROID_WRITABLE = IVold.REMOUNT_MODE_ANDROID_WRITABLE;
 
     /** Number of bytes sent to the Zygote over USAP pipes or the pool event FD */
     static final int USAP_MANAGEMENT_MESSAGE_BYTES = 8;
@@ -1013,4 +1019,19 @@ public final class Zygote {
             command.append(" '").append(arg.replace("'", "'\\''")).append("'");
         }
     }
+
+    /**
+     * Parse the given unsolicited zygote message as type SIGCHLD,
+     * extract the payload information into the given output buffer.
+     *
+     * @param in The unsolicited zygote message to be parsed
+     * @param length The number of bytes in the message
+     * @param out The output buffer where the payload information will be placed
+     * @return Number of elements being place into output buffer, or -1 if
+     *         either the message is malformed or not the type as expected here.
+     *
+     * @hide
+     */
+    @FastNative
+    public static native int nativeParseSigChld(byte[] in, int length, int[] out);
 }

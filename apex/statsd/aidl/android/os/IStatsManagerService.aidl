@@ -17,6 +17,7 @@
 package android.os;
 
 import android.app.PendingIntent;
+import android.os.IPullAtomCallback;
 
 /**
   * Binder interface to communicate with the Java-based statistics service helper.
@@ -30,10 +31,17 @@ interface IStatsManagerService {
      * memory consumed by the metrics for this configuration approach the pre-defined limits. There
      * can be at most one listener per config key.
      *
-     * Requires Manifest.permission.DUMP.
+     * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS.
      */
-    void setDataFetchOperation(long configKey, in PendingIntent pendingIntent,
+    void setDataFetchOperation(long configId, in PendingIntent pendingIntent,
         in String packageName);
+
+    /**
+     * Removes the data fetch operation for the specified configuration.
+     *
+     * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS.
+     */
+    void removeDataFetchOperation(long configId, in String packageName);
 
     /**
      * Registers the given pending intent for this packagename. This intent is invoked when the
@@ -44,6 +52,13 @@ interface IStatsManagerService {
      * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS.
      */
     long[] setActiveConfigsChangedOperation(in PendingIntent pendingIntent, in String packageName);
+
+    /**
+     * Removes the active configs changed operation for the specified package name.
+     *
+     * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS.
+     */
+    void removeActiveConfigsChangedOperation(in String packageName);
 
     /**
      * Set the PendingIntent to be used when broadcasting subscriber
@@ -58,8 +73,64 @@ interface IStatsManagerService {
      * This function can only be called by the owner (uid) of the config. It must be called each
      * time statsd starts. Later calls overwrite previous calls; only one PendingIntent is stored.
      *
-     * Requires Manifest.permission.DUMP.
+     * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS.
      */
     void setBroadcastSubscriber(long configKey, long subscriberId, in PendingIntent pendingIntent,
                                 in String packageName);
+
+    /**
+     * Undoes setBroadcastSubscriber() for the (configKey, subscriberId) pair.
+     * Any broadcasts associated with subscriberId will henceforth not be sent.
+     * No-op if this (configKey, subscriberId) pair was not associated with an PendingIntent.
+     *
+     * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS.
+     */
+    void unsetBroadcastSubscriber(long configKey, long subscriberId, in String packageName);
+
+    /**
+     * Returns the most recently registered experiment IDs.
+     *
+     * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS.
+     */
+    long[] getRegisteredExperimentIds();
+
+    /**
+     * Fetches metadata across statsd. Returns byte array representing wire-encoded proto.
+     *
+     * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS.
+     */
+    byte[] getMetadata(in String packageName);
+
+    /**
+     * Fetches data for the specified configuration key. Returns a byte array representing proto
+     * wire-encoded of ConfigMetricsReportList.
+     *
+     * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS.
+     */
+    byte[] getData(in long key, in String packageName);
+
+    /**
+     * Sets a configuration with the specified config id and subscribes to updates for this
+     * configuration id. Broadcasts will be sent if this configuration needs to be collected.
+     * The configuration must be a wire-encoded StatsdConfig. The receiver for this data is
+     * registered in a separate function.
+     *
+     * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS.
+     */
+    void addConfiguration(in long configId, in byte[] config, in String packageName);
+
+    /**
+     * Removes the configuration with the matching config id. No-op if this config id does not
+     * exist.
+     *
+     * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS.
+     */
+    void removeConfiguration(in long configId, in String packageName);
+
+    /** Tell StatsManagerService to register a puller for the given atom tag with statsd. */
+    oneway void registerPullAtomCallback(int atomTag, long coolDownNs, long timeoutNs,
+            in int[] additiveFields, IPullAtomCallback pullerCallback);
+
+    /** Tell StatsManagerService to unregister the pulller for the given atom tag from statsd. */
+    oneway void unregisterPullAtomCallback(int atomTag);
 }

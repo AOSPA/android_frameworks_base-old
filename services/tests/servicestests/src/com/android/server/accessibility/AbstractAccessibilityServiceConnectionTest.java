@@ -75,6 +75,7 @@ import android.os.IBinder;
 import android.os.IPowerManager;
 import android.os.PowerManager;
 import android.os.Process;
+import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.testing.DexmakerShareClassLoaderRule;
 import android.view.Display;
@@ -85,6 +86,7 @@ import android.view.accessibility.IAccessibilityInteractionConnection;
 import android.view.accessibility.IAccessibilityInteractionConnectionCallback;
 
 import com.android.server.accessibility.AccessibilityWindowManager.RemoteAccessibilityConnection;
+import com.android.server.accessibility.test.MessageCapturingHandler;
 import com.android.server.wm.WindowManagerInternal;
 
 import org.junit.Before;
@@ -493,6 +495,13 @@ public class AbstractAccessibilityServiceConnectionTest {
     }
 
     @Test
+    public void getSystemActions() {
+        List<AccessibilityNodeInfo.AccessibilityAction> actions =
+                mServiceConnection.getSystemActions();
+        verify(mMockSystemActionPerformer).getSystemActions();
+    }
+
+    @Test
     public void isFingerprintGestureDetectionAvailable_hasFingerPrintSupport_returnTrue() {
         when(mMockFingerprintGestureDispatcher.isFingerprintGestureDetectionAvailable())
                 .thenReturn(true);
@@ -692,6 +701,18 @@ public class AbstractAccessibilityServiceConnectionTest {
         assertThat(result, is(false));
     }
 
+    @Test
+    public void takeScreenshot_returnNull() {
+        // no canTakeScreenshot, should return null.
+        when(mMockSecurityPolicy.canTakeScreenshotLocked(mServiceConnection)).thenReturn(false);
+        assertThat(mServiceConnection.takeScreenshot(Display.DEFAULT_DISPLAY), is(nullValue()));
+
+        // no checkAccessibilityAccess, should return null.
+        when(mMockSecurityPolicy.canTakeScreenshotLocked(mServiceConnection)).thenReturn(true);
+        when(mMockSecurityPolicy.checkAccessibilityAccess(mServiceConnection)).thenReturn(false);
+        assertThat(mServiceConnection.takeScreenshot(Display.DEFAULT_DISPLAY), is(nullValue()));
+    }
+
     private void updateServiceInfo(AccessibilityServiceInfo serviceInfo, int eventType,
             int feedbackType, int flags, String[] packageNames, int notificationTimeout) {
         serviceInfo.eventTypes = eventType;
@@ -803,6 +824,11 @@ public class AbstractAccessibilityServiceConnectionTest {
         }
 
         @Override
+        public boolean switchToInputMethod(String imeId) {
+            return false;
+        }
+
+        @Override
         public boolean isAccessibilityButtonAvailable() throws RemoteException {
             return false;
         }
@@ -826,5 +852,8 @@ public class AbstractAccessibilityServiceConnectionTest {
 
         @Override
         public void onFingerprintGesture(int gesture) {}
+
+        @Override
+        public void takeScreenshotWithCallback(int displayId, RemoteCallback callback) {}
     }
 }

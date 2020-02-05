@@ -27,8 +27,8 @@ import android.annotation.CallSuper;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.StringRes;
-import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityTaskManager;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -58,6 +58,7 @@ import android.util.TypedValue;
 import android.view.Gravity;
 
 import com.android.internal.R;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.DataClass;
 import com.android.internal.util.XmlUtils;
 
@@ -465,7 +466,8 @@ public class ComponentParseUtils {
         }
 
         public void setPermission(String permission) {
-            this.permission = TextUtils.safeIntern(permission);
+            // Empty string must be converted to null
+            this.permission = TextUtils.isEmpty(permission) ? null : permission.intern();
         }
 
         public String getPermission() {
@@ -551,6 +553,7 @@ public class ComponentParseUtils {
         public String requestedVrComponent;
         public int rotationAnimation = -1;
         public int colorMode;
+        public boolean preferMinimalPostProcessing;
         public int order;
 
         public ActivityInfo.WindowLayout windowLayout;
@@ -638,6 +641,7 @@ public class ComponentParseUtils {
             dest.writeString(this.requestedVrComponent);
             dest.writeInt(this.rotationAnimation);
             dest.writeInt(this.colorMode);
+            dest.writeBoolean(this.preferMinimalPostProcessing);
             dest.writeInt(this.order);
             dest.writeBundle(this.metaData);
 
@@ -683,6 +687,7 @@ public class ComponentParseUtils {
             this.requestedVrComponent = in.readString();
             this.rotationAnimation = in.readInt();
             this.colorMode = in.readInt();
+            this.preferMinimalPostProcessing = in.readByte() != 0;
             this.order = in.readInt();
             this.metaData = in.readBundle();
             if (in.readInt() == 1) {
@@ -813,6 +818,11 @@ public class ComponentParseUtils {
             return exported;
         }
 
+        @VisibleForTesting
+        public void setExported(boolean exported) {
+            this.exported = exported;
+        }
+
         public List<ParsedProviderIntentInfo> getIntents() {
             return intents;
         }
@@ -842,7 +852,9 @@ public class ComponentParseUtils {
         }
 
         public void setReadPermission(String readPermission) {
-            this.readPermission = TextUtils.safeIntern(readPermission);
+            // Empty string must be converted to null
+            this.readPermission = TextUtils.isEmpty(readPermission)
+                    ? null : readPermission.intern();
         }
 
         public String getReadPermission() {
@@ -850,7 +862,9 @@ public class ComponentParseUtils {
         }
 
         public void setWritePermission(String writePermission) {
-            this.writePermission = TextUtils.safeIntern(writePermission);
+            // Empty string must be converted to null
+            this.writePermission = TextUtils.isEmpty(writePermission)
+                    ? null : writePermission.intern();
         }
 
         public String getWritePermission() {
@@ -1633,6 +1647,10 @@ public class ComponentParseUtils {
 
                 result.colorMode = sa.getInt(R.styleable.AndroidManifestActivity_colorMode,
                         ActivityInfo.COLOR_MODE_DEFAULT);
+
+                result.preferMinimalPostProcessing = sa.getBoolean(
+                        R.styleable.AndroidManifestActivity_preferMinimalPostProcessing,
+                        ActivityInfo.MINIMAL_POST_PROCESSING_DEFAULT);
 
                 if (sa.getBoolean(R.styleable.AndroidManifestActivity_showWhenLocked, false)) {
                     result.flags |= ActivityInfo.FLAG_SHOW_WHEN_LOCKED;

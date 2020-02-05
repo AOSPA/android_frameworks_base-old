@@ -16,13 +16,13 @@
 
 package com.android.systemui.statusbar.notification.people
 
-import android.app.Notification
+import android.service.notification.NotificationListenerService.Ranking
 import android.service.notification.StatusBarNotification
 import javax.inject.Inject
 import javax.inject.Singleton
 
 interface PeopleNotificationIdentifier {
-    fun isPeopleNotification(sbn: StatusBarNotification): Boolean
+    fun isPeopleNotification(sbn: StatusBarNotification, ranking: Ranking): Boolean
 }
 
 @Singleton
@@ -30,7 +30,6 @@ class PeopleNotificationIdentifierImpl @Inject constructor(
     private val personExtractor: NotificationPersonExtractor
 ) : PeopleNotificationIdentifier {
 
-    override fun isPeopleNotification(sbn: StatusBarNotification) =
-            sbn.notification.notificationStyle == Notification.MessagingStyle::class.java ||
-                    personExtractor.isPersonNotification(sbn)
+    override fun isPeopleNotification(sbn: StatusBarNotification, ranking: Ranking) =
+            ranking.isConversation || personExtractor.isPersonNotification(sbn)
 }

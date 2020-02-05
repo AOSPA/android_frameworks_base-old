@@ -18,11 +18,13 @@ package android.telephony;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.telephony.gsm.GsmCellLocation;
 import android.text.TextUtils;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -47,6 +49,12 @@ public final class CellIdentityWcdma extends CellIdentity {
     @UnsupportedAppUsage
     private final int mUarfcn;
 
+    // a list of additional PLMN-IDs reported for this cell
+    private final List<String> mAdditionalPlmns;
+
+    @Nullable
+    private final ClosedSubscriberGroupInfo mCsgInfo;
+
     /**
      * @hide
      */
@@ -56,6 +64,8 @@ public final class CellIdentityWcdma extends CellIdentity {
         mCid = CellInfo.UNAVAILABLE;
         mPsc = CellInfo.UNAVAILABLE;
         mUarfcn = CellInfo.UNAVAILABLE;
+        mAdditionalPlmns = Collections.emptyList();
+        mCsgInfo = null;
     }
 
     /**
@@ -68,40 +78,57 @@ public final class CellIdentityWcdma extends CellIdentity {
      * @param mncStr 2 or 3-digit Mobile Network Code in string format
      * @param alphal long alpha Operator Name String or Enhanced Operator Name String
      * @param alphas short alpha Operator Name String or Enhanced Operator Name String
+     * @param additionalPlmns a list of additional PLMN IDs broadcast by the cell
+     * @param csgInfo info about the closed subscriber group broadcast by the cell
      *
      * @hide
      */
     public CellIdentityWcdma (int lac, int cid, int psc, int uarfcn,
-                              String mccStr, String mncStr, String alphal, String alphas) {
+                              String mccStr, String mncStr, String alphal, String alphas,
+                              @NonNull List<String> additionalPlmns,
+                              @Nullable ClosedSubscriberGroupInfo csgInfo) {
         super(TAG, CellInfo.TYPE_WCDMA, mccStr, mncStr, alphal, alphas);
         mLac = inRangeOrUnavailable(lac, 0, MAX_LAC);
         mCid = inRangeOrUnavailable(cid, 0, MAX_CID);
         mPsc = inRangeOrUnavailable(psc, 0, MAX_PSC);
         mUarfcn = inRangeOrUnavailable(uarfcn, 0, MAX_UARFCN);
+        mAdditionalPlmns = additionalPlmns;
+        mCsgInfo = csgInfo;
     }
 
     /** @hide */
     public CellIdentityWcdma(android.hardware.radio.V1_0.CellIdentityWcdma cid) {
-        this(cid.lac, cid.cid, cid.psc, cid.uarfcn, cid.mcc, cid.mnc, "", "");
+        this(cid.lac, cid.cid, cid.psc, cid.uarfcn, cid.mcc, cid.mnc, "", "",
+                Collections.emptyList(), null);
     }
 
     /** @hide */
     public CellIdentityWcdma(android.hardware.radio.V1_2.CellIdentityWcdma cid) {
         this(cid.base.lac, cid.base.cid, cid.base.psc, cid.base.uarfcn,
                 cid.base.mcc, cid.base.mnc, cid.operatorNames.alphaLong,
-                cid.operatorNames.alphaShort);
+                cid.operatorNames.alphaShort, Collections.emptyList(), null);
+    }
+
+    /** @hide */
+    public CellIdentityWcdma(android.hardware.radio.V1_5.CellIdentityWcdma cid) {
+        this(cid.base.base.lac, cid.base.base.cid, cid.base.base.psc, cid.base.base.uarfcn,
+                cid.base.base.mcc, cid.base.base.mnc, cid.base.operatorNames.alphaLong,
+                cid.base.operatorNames.alphaShort, cid.additionalPlmns,
+                cid.optionalCsgInfo.csgInfo() != null
+                        ? new ClosedSubscriberGroupInfo(cid.optionalCsgInfo.csgInfo()) : null);
     }
 
     private CellIdentityWcdma(CellIdentityWcdma cid) {
         this(cid.mLac, cid.mCid, cid.mPsc, cid.mUarfcn, cid.mMccStr,
-                cid.mMncStr, cid.mAlphaLong, cid.mAlphaShort);
+                cid.mMncStr, cid.mAlphaLong, cid.mAlphaShort, cid.mAdditionalPlmns, cid.mCsgInfo);
     }
 
     /** @hide */
-    public CellIdentityWcdma sanitizeLocationInfo() {
+    @Override
+    public @NonNull CellIdentityWcdma sanitizeLocationInfo() {
         return new CellIdentityWcdma(CellInfo.UNAVAILABLE, CellInfo.UNAVAILABLE,
                 CellInfo.UNAVAILABLE, CellInfo.UNAVAILABLE, mMccStr, mMncStr,
-                mAlphaLong, mAlphaShort);
+                mAlphaLong, mAlphaShort, mAdditionalPlmns, null);
     }
 
     CellIdentityWcdma copy() {
@@ -179,7 +206,7 @@ public final class CellIdentityWcdma extends CellIdentity {
 
     @Override
     public int hashCode() {
-        return Objects.hash(mLac, mCid, mPsc, super.hashCode());
+        return Objects.hash(mLac, mCid, mPsc, mAdditionalPlmns.hashCode(), super.hashCode());
     }
 
     /**
@@ -194,6 +221,22 @@ public final class CellIdentityWcdma extends CellIdentity {
     @Override
     public int getChannelNumber() {
         return mUarfcn;
+    }
+
+    /**
+     * @return a list of additional PLMN IDs supported by this cell.
+     */
+    @NonNull
+    public List<String> getAdditionalPlmns() {
+        return mAdditionalPlmns;
+    }
+
+    /**
+     * @return closed subscriber group information about the cell if available, otherwise null.
+     */
+    @Nullable
+    public ClosedSubscriberGroupInfo getClosedSubscriberGroupInfo() {
+        return mCsgInfo;
     }
 
     /** @hide */
@@ -227,6 +270,8 @@ public final class CellIdentityWcdma extends CellIdentity {
                 && mUarfcn == o.mUarfcn
                 && TextUtils.equals(mMccStr, o.mMccStr)
                 && TextUtils.equals(mMncStr, o.mMncStr)
+                && mAdditionalPlmns.equals(o.mAdditionalPlmns)
+                && Objects.equals(mCsgInfo, o.mCsgInfo)
                 && super.equals(other);
     }
 
@@ -241,6 +286,8 @@ public final class CellIdentityWcdma extends CellIdentity {
         .append(" mMnc=").append(mMncStr)
         .append(" mAlphaLong=").append(mAlphaLong)
         .append(" mAlphaShort=").append(mAlphaShort)
+        .append(" mAdditionalPlmns=").append(mAdditionalPlmns)
+        .append(" mCsgInfo=").append(mCsgInfo)
         .append("}").toString();
     }
 
@@ -253,6 +300,8 @@ public final class CellIdentityWcdma extends CellIdentity {
         dest.writeInt(mCid);
         dest.writeInt(mPsc);
         dest.writeInt(mUarfcn);
+        dest.writeList(mAdditionalPlmns);
+        dest.writeParcelable(mCsgInfo, flags);
     }
 
     /** Construct from Parcel, type has already been processed */
@@ -262,6 +311,8 @@ public final class CellIdentityWcdma extends CellIdentity {
         mCid = in.readInt();
         mPsc = in.readInt();
         mUarfcn = in.readInt();
+        mAdditionalPlmns = in.readArrayList(null);
+        mCsgInfo = in.readParcelable(null);
         if (DBG) log(toString());
     }
 

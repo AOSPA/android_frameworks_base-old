@@ -1,5 +1,6 @@
 package com.android.server.usage;
 
+import android.annotation.NonNull;
 import android.annotation.UserIdInt;
 import android.app.usage.AppStandbyInfo;
 import android.app.usage.UsageEvents;
@@ -99,8 +100,31 @@ public interface AppStandbyInternal {
 
     List<AppStandbyInfo> getAppStandbyBuckets(int userId);
 
-    void setAppStandbyBucket(String packageName, int userId, @StandbyBuckets int newBucket,
-            int reason, long elapsedRealtime, boolean resetTimeout);
+    /**
+     * Changes an app's standby bucket to the provided value. The caller can only set the standby
+     * bucket for a different app than itself.
+     * If attempting to automatically place an app in the RESTRICTED bucket, use
+     * {@link #restrictApp(String, int, int)} instead.
+     */
+    void setAppStandbyBucket(@NonNull String packageName, int bucket, int userId, int callingUid,
+            int callingPid);
+
+    /**
+     * Changes the app standby bucket for multiple apps at once.
+     */
+    void setAppStandbyBuckets(@NonNull List<AppStandbyInfo> appBuckets, int userId, int callingUid,
+            int callingPid);
+
+    /**
+     * Put the specified app in the
+     * {@link android.app.usage.UsageStatsManager#STANDBY_BUCKET_RESTRICTED}
+     * bucket. If it has been used by the user recently, the restriction will delayed until an
+     * appropriate time.
+     *
+     * @param restrictReason The restrictReason for restricting the app. Should be one of the
+     *                       UsageStatsManager.REASON_SUB_RESTRICT_* reasons.
+     */
+    void restrictApp(@NonNull String packageName, int userId, int restrictReason);
 
     void addActiveDeviceAdmin(String adminPkg, int userId);
 

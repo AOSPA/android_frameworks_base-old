@@ -63,12 +63,12 @@ applications that come with the platform
 
     <privapp-permissions package="com.android.location.fused">
         <permission name="android.permission.INSTALL_LOCATION_PROVIDER"/>
+        <permission name="android.permission.UPDATE_DEVICE_STATS"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.managedprovisioning">
         <permission name="android.permission.CHANGE_COMPONENT_ENABLED_STATE"/>
         <permission name="android.permission.CHANGE_CONFIGURATION"/>
-        <permission name="android.permission.CONNECTIVITY_INTERNAL"/>
         <permission name="android.permission.CRYPT_KEEPER"/>
         <permission name="android.permission.DELETE_PACKAGES"/>
         <permission name="android.permission.INSTALL_PACKAGES"/>
@@ -153,6 +153,7 @@ applications that come with the platform
         <permission name="android.permission.MODIFY_PHONE_STATE"/>
         <permission name="android.permission.PACKAGE_USAGE_STATS"/>
         <permission name="android.permission.PERFORM_CDMA_PROVISIONING"/>
+        <permission name="android.permission.READ_CARRIER_APP_INFO"/>
         <permission name="android.permission.READ_NETWORK_USAGE_HISTORY"/>
         <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
         <permission name="android.permission.READ_SEARCH_INDEXABLES"/>
@@ -160,12 +161,12 @@ applications that come with the platform
         <permission name="android.permission.REGISTER_CALL_PROVIDER"/>
         <permission name="android.permission.REGISTER_SIM_SUBSCRIPTION"/>
         <permission name="android.permission.SEND_RESPOND_VIA_MESSAGE"/>
-        <permission name="android.permission.SET_TIME"/>
         <permission name="android.permission.SET_TIME_ZONE"/>
         <permission name="android.permission.SHUTDOWN"/>
         <permission name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"/>
         <permission name="android.permission.STATUS_BAR"/>
         <permission name="android.permission.STOP_APP_SWITCHES"/>
+        <permission name="android.permission.SUGGEST_PHONE_TIME_AND_ZONE"/>
         <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
         <permission name="android.permission.UPDATE_DEVICE_STATS"/>
         <permission name="android.permission.UPDATE_LOCK"/>
@@ -243,7 +244,9 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_USB"/>
         <permission name="android.permission.MODIFY_PHONE_STATE"/>
         <permission name="android.permission.READ_NETWORK_USAGE_HISTORY"/>
+        <permission name="android.permission.TETHER_PRIVILEGED"/>
         <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
+        <permission name="android.permission.UPDATE_DEVICE_STATS"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.server.telecom">
@@ -309,6 +312,7 @@ applications that come with the platform
         <!-- Needed for test only -->
         <permission name="android.permission.PACKET_KEEPALIVE_OFFLOAD" />
         <permission name="android.permission.POWER_SAVER" />
+        <permission name="android.permission.READ_CARRIER_APP_INFO"/>
         <permission name="android.permission.READ_FRAME_BUFFER"/>
         <permission name="android.permission.READ_LOWPAN_CREDENTIAL"/>
         <!-- Needed for test only -->
@@ -371,7 +375,6 @@ applications that come with the platform
     </privapp-permissions>
 
     <privapp-permissions package="com.android.vpndialogs">
-        <permission name="android.permission.CONNECTIVITY_INTERNAL"/>
         <permission name="android.permission.CONTROL_VPN"/>
     </privapp-permissions>
 

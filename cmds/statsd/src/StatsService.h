@@ -30,6 +30,7 @@
 #include <android/frameworks/stats/1.0/IStats.h>
 #include <android/frameworks/stats/1.0/types.h>
 #include <android/os/BnStatsd.h>
+#include <android/os/IPendingIntentRef.h>
 #include <android/os/IStatsCompanionService.h>
 #include <android/os/IStatsd.h>
 #include <binder/IResultReceiver.h>
@@ -98,15 +99,14 @@ public:
      * Binder call for clients to request data for this configuration key.
      */
     virtual Status getData(int64_t key,
-                           const String16& packageName,
+                           const int32_t callingUid,
                            vector<uint8_t>* output) override;
 
 
     /**
      * Binder call for clients to get metadata across all configs in statsd.
      */
-    virtual Status getMetadata(const String16& packageName,
-                               vector<uint8_t>* output) override;
+    virtual Status getMetadata(vector<uint8_t>* output) override;
 
 
     /**
@@ -115,53 +115,52 @@ public:
      */
     virtual Status addConfiguration(int64_t key,
                                     const vector<uint8_t>& config,
-                                    const String16& packageName) override;
+                                    const int32_t callingUid) override;
 
     /**
      * Binder call to let clients register the data fetch operation for a configuration.
      */
     virtual Status setDataFetchOperation(int64_t key,
-                                         const sp<android::IBinder>& intentSender,
-                                         const String16& packageName) override;
+                                         const sp<IPendingIntentRef>& pir,
+                                         const int32_t callingUid) override;
 
     /**
      * Binder call to remove the data fetch operation for the specified config key.
      */
     virtual Status removeDataFetchOperation(int64_t key,
-                                            const String16& packageName) override;
+                                            const int32_t callingUid) override;
 
     /**
      * Binder call to let clients register the active configs changed operation.
      */
-    virtual Status setActiveConfigsChangedOperation(const sp<android::IBinder>& intentSender,
-                                                    const String16& packageName,
+    virtual Status setActiveConfigsChangedOperation(const sp<IPendingIntentRef>& pir,
+                                                    const int32_t callingUid,
                                                     vector<int64_t>* output) override;
 
     /**
      * Binder call to remove the active configs changed operation for the specified package..
      */
-    virtual Status removeActiveConfigsChangedOperation(const String16& packageName) override;
+    virtual Status removeActiveConfigsChangedOperation(const int32_t callingUid) override;
     /**
      * Binder call to allow clients to remove the specified configuration.
      */
     virtual Status removeConfiguration(int64_t key,
-                                       const String16& packageName) override;
+                                       const int32_t callingUid) override;
 
     /**
-     * Binder call to associate the given config's subscriberId with the given intentSender.
-     * intentSender must be convertible into an IntentSender (in Java) using IntentSender(IBinder).
+     * Binder call to associate the given config's subscriberId with the given pendingIntentRef.
      */
     virtual Status setBroadcastSubscriber(int64_t configId,
                                           int64_t subscriberId,
-                                          const sp<android::IBinder>& intentSender,
-                                          const String16& packageName) override;
+                                          const sp<IPendingIntentRef>& pir,
+                                          const int32_t callingUid) override;
 
     /**
-     * Binder call to unassociate the given config's subscriberId with any intentSender.
+     * Binder call to unassociate the given config's subscriberId with any pendingIntentRef.
      */
     virtual Status unsetBroadcastSubscriber(int64_t configId,
                                             int64_t subscriberId,
-                                            const String16& packageName) override;
+                                            const int32_t callingUid) override;
 
     /** Inform statsCompanion that statsd is ready. */
     virtual void sayHiToStatsCompanion();
@@ -170,14 +169,6 @@ public:
      * Binder call to get AppBreadcrumbReported atom.
      */
     virtual Status sendAppBreadcrumbAtom(int32_t label, int32_t state) override;
-
-    /**
-     * Binder call to register a callback function for a vendor pulled atom.
-     * Note: this atom must NOT have uid as a field.
-     */
-    virtual Status registerPullerCallback(int32_t atomTag,
-        const sp<android::os::IStatsPullerCallback>& pullerCallback,
-        const String16& packageName) override;
 
     /**
      * Binder call to register a callback function for a pulled atom.
@@ -194,14 +185,14 @@ public:
             const sp<android::os::IPullAtomCallback>& pullerCallback) override;
 
     /**
-     * Binder call to unregister any existing callback function for a vendor pulled atom.
-     */
-    virtual Status unregisterPullerCallback(int32_t atomTag, const String16& packageName) override;
-
-    /**
      * Binder call to unregister any existing callback for the given uid and atom.
      */
     virtual Status unregisterPullAtomCallback(int32_t uid, int32_t atomTag) override;
+
+    /**
+     * Binder call to unregister any existing callback for the given atom and calling uid.
+     */
+    virtual Status unregisterNativePullAtomCallback(int32_t atomTag) override;
 
     /**
      * Binder call to log BinaryPushStateChanged atom.

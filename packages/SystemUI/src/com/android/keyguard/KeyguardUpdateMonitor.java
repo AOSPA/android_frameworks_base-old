@@ -31,8 +31,8 @@ import static android.os.BatteryManager.EXTRA_MAX_CHARGING_VOLTAGE;
 import static android.os.BatteryManager.EXTRA_PLUGGED;
 import static android.os.BatteryManager.EXTRA_STATUS;
 import static android.telephony.PhoneStateListener.LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE;
+import static android.telephony.TelephonyManager.MODEM_COUNT_DUAL_MODEM;
 
-import static com.android.internal.telephony.PhoneConstants.MAX_PHONE_COUNT_DUAL_SIM;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_BOOT;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_DPM_LOCK_NOW;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_LOCKOUT;
@@ -92,7 +92,6 @@ import android.util.Log;
 import android.util.SparseBooleanArray;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.settingslib.WirelessUtils;
@@ -114,6 +113,7 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.TimeZone;
 import java.util.function.Consumer;
@@ -335,6 +335,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private SparseBooleanArray mUserFingerprintAuthenticated = new SparseBooleanArray();
     private SparseBooleanArray mUserFaceAuthenticated = new SparseBooleanArray();
     private SparseBooleanArray mUserFaceUnlockRunning = new SparseBooleanArray();
+    private Map<Integer, Intent> mSecondaryLockscreenRequirement = new HashMap<Integer, Intent>();
 
     private static int sCurrentUser;
     private Runnable mUpdateBiometricListeningState = this::updateBiometricListeningState;
@@ -446,7 +447,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
      */
     public List<SubscriptionInfo> getFilteredSubscriptionInfo(boolean forceReload) {
         List<SubscriptionInfo> subscriptions = getSubscriptionInfo(false);
-        if (subscriptions.size() == MAX_PHONE_COUNT_DUAL_SIM) {
+        if (subscriptions.size() == MODEM_COUNT_DUAL_MODEM) {
             SubscriptionInfo info1 = subscriptions.get(0);
             SubscriptionInfo info2 = subscriptions.get(1);
             if (info1.getGroupUuid() != null && info1.getGroupUuid().equals(info2.getGroupUuid())) {
@@ -929,6 +930,45 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         return mUserTrustIsManaged.get(userId) && !isTrustDisabled(userId);
     }
 
+    private void updateSecondaryLockscreenRequirement(int userId) {
+        Intent oldIntent = mSecondaryLockscreenRequirement.get(userId);
+        boolean enabled = mDevicePolicyManager.isSecondaryLockscreenEnabled(userId);
+        boolean changed = false;
+
+        if (enabled && (oldIntent == null)) {
+            ResolveInfo resolveInfo =
+                    mContext.getPackageManager().resolveService(
+                            new Intent(
+                                    DevicePolicyManager.ACTION_BIND_SECONDARY_LOCKSCREEN_SERVICE),
+                            0);
+            if (resolveInfo != null) {
+                Intent newIntent = new Intent();
+                newIntent.setComponent(resolveInfo.serviceInfo.getComponentName());
+                mSecondaryLockscreenRequirement.put(userId, newIntent);
+                changed = true;
+            }
+        } else if (!enabled && (oldIntent != null)) {
+            mSecondaryLockscreenRequirement.put(userId, null);
+            changed = true;
+        }
+        if (changed) {
+            for (int i = 0; i < mCallbacks.size(); i++) {
+                KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
+                if (cb != null) {
+                    cb.onSecondaryLockscreenRequirementChanged(userId);
+                }
+            }
+        }
+    }
+
+    /**
+     * Returns an Intent by which to bind to a service that will provide additional security screen
+     * content that must be shown prior to dismissing the keyguard for this user.
+     */
+    public Intent getSecondaryLockscreenRequirement(int userId) {
+        return mSecondaryLockscreenRequirement.get(userId);
+    }
+
     /**
      * Cached version of {@link TrustManager#isTrustUsuallyManaged(int)}.
      */
@@ -1049,7 +1089,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 // keep compatibility with apps that aren't direct boot aware.
                 // SysUI should just ignore this broadcast because it was already received
                 // and processed previously.
-                if (intent.getBooleanExtra(TelephonyIntents.EXTRA_REBROADCAST_ON_UNLOCK, false)) {
+                if (intent.getBooleanExtra(Intent.EXTRA_REBROADCAST_ON_UNLOCK, false)) {
                     // Guarantee mTelephonyCapable state after SysUI crash and restart
                     if (args.simState == TelephonyManager.SIM_STATE_ABSENT) {
                         mHandler.obtainMessage(MSG_TELEPHONY_CAPABLE, true).sendToTarget();
@@ -1072,9 +1112,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 mHandler.sendMessage(mHandler.obtainMessage(MSG_PHONE_STATE_CHANGED, state));
             } else if (Intent.ACTION_AIRPLANE_MODE_CHANGED.equals(action)) {
                 mHandler.sendEmptyMessage(MSG_AIRPLANE_MODE_CHANGED);
-            } else if (TelephonyIntents.ACTION_SERVICE_STATE_CHANGED.equals(action)) {
+            } else if (Intent.ACTION_SERVICE_STATE.equals(action)) {
                 ServiceState serviceState = ServiceState.newFromBundle(intent.getExtras());
-                int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY,
+                int subId = intent.getIntExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,
                         SubscriptionManager.INVALID_SUBSCRIPTION_ID);
                 if (DEBUG) {
                     Log.v(TAG, "action " + action + " serviceState=" + serviceState + " subId="
@@ -1114,7 +1154,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                         getSendingUserId()));
             } else if (DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED
                     .equals(action)) {
-                mHandler.sendEmptyMessage(MSG_DPM_STATE_CHANGED);
+                mHandler.sendMessage(mHandler.obtainMessage(MSG_DPM_STATE_CHANGED,
+                        getSendingUserId()));
             } else if (ACTION_USER_UNLOCKED.equals(action)) {
                 mHandler.sendMessage(mHandler.obtainMessage(MSG_USER_UNLOCKED,
                         getSendingUserId(), 0));
@@ -1236,8 +1277,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 throw new IllegalArgumentException("only handles intent ACTION_SIM_STATE_CHANGED");
             }
             String stateExtra = intent.getStringExtra(Intent.EXTRA_SIM_STATE);
-            int slotId = intent.getIntExtra(PhoneConstants.PHONE_KEY, 0);
-            int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY,
+            int slotId = intent.getIntExtra(SubscriptionManager.EXTRA_SLOT_INDEX, 0);
+            int subId = intent.getIntExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,
                     SubscriptionManager.INVALID_SUBSCRIPTION_ID);
             if (Intent.SIM_STATE_ABSENT.equals(stateExtra)) {
                 final String absentReason = intent
@@ -1531,7 +1572,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                         handleDeviceProvisioned();
                         break;
                     case MSG_DPM_STATE_CHANGED:
-                        handleDevicePolicyManagerStateChanged();
+                        handleDevicePolicyManagerStateChanged(msg.arg1);
                         break;
                     case MSG_USER_SWITCHING:
                         handleUserSwitching(msg.arg1, (IRemoteCallback) msg.obj);
@@ -1633,12 +1674,12 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
         filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
         filter.addAction(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
-        filter.addAction(TelephonyIntents.ACTION_SERVICE_STATE_CHANGED);
-        filter.addAction(TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED);
+        filter.addAction(Intent.ACTION_SERVICE_STATE);
+        filter.addAction(TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED);
         filter.addAction(TelephonyManager.ACTION_PHONE_STATE_CHANGED);
         filter.addAction(AudioManager.RINGER_MODE_CHANGED_ACTION);
         filter.addAction(DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
-        broadcastDispatcher.registerReceiver(mBroadcastReceiver, filter, mHandler);
+        broadcastDispatcher.registerReceiverWithHandler(mBroadcastReceiver, filter, mHandler);
 
         final IntentFilter allUserFilter = new IntentFilter();
         allUserFilter.addAction(Intent.ACTION_USER_INFO_CHANGED);
@@ -1649,8 +1690,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         allUserFilter.addAction(ACTION_USER_UNLOCKED);
         allUserFilter.addAction(ACTION_USER_STOPPED);
         allUserFilter.addAction(ACTION_USER_REMOVED);
-        broadcastDispatcher.registerReceiver(mBroadcastAllReceiver, allUserFilter, mHandler,
-                UserHandle.ALL);
+        broadcastDispatcher.registerReceiverWithHandler(mBroadcastAllReceiver, allUserFilter,
+                mHandler, UserHandle.ALL);
 
         mSubscriptionManager.addOnSubscriptionsChangedListener(mSubscriptionListener);
         try {
@@ -1707,6 +1748,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         mUserIsUnlocked.put(user, mUserManager.isUserUnlocked(user));
         mDevicePolicyManager = context.getSystemService(DevicePolicyManager.class);
         mLogoutEnabled = mDevicePolicyManager.isLogoutEnabled();
+        updateSecondaryLockscreenRequirement(user);
         List<UserInfo> allUsers = mUserManager.getUsers();
         for (UserInfo userInfo : allUsers) {
             mUserTrustIsUsuallyManaged.put(userInfo.id,
@@ -2047,9 +2089,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     /**
      * Handle {@link #MSG_DPM_STATE_CHANGED}
      */
-    private void handleDevicePolicyManagerStateChanged() {
+    private void handleDevicePolicyManagerStateChanged(int userId) {
         checkIsHandlerThread();
         updateFingerprintListeningState();
+        updateSecondaryLockscreenRequirement(userId);
         for (int i = 0; i < mCallbacks.size(); i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
             if (cb != null) {

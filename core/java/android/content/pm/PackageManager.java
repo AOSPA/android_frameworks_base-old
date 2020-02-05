@@ -50,6 +50,7 @@ import android.content.pm.dex.ArtManager;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
 import android.graphics.Rect;
+import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.wifi.WifiManager;
 import android.os.Build;
@@ -229,7 +230,7 @@ public abstract class PackageManager {
             MATCH_ALL,
     })
     @Retention(RetentionPolicy.SOURCE)
-    public @interface ModuleInfoFlags {}
+    public @interface InstalledModulesFlags {}
 
     /** @hide */
     @IntDef(flag = true, prefix = { "GET_", "MATCH_" }, value = {
@@ -579,6 +580,22 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int ONLY_IF_NO_MATCH_FOUND = 0x00000004;
+
+    /** @hide */
+    @IntDef(flag = true, prefix = { "MODULE_" }, value = {
+            MODULE_APEX_NAME,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ModuleInfoFlags {}
+
+    /**
+     * Flag for {@link #getModuleInfo}: allow ModuleInfo to be retrieved using the apex module
+     * name, rather than the package name.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int MODULE_APEX_NAME = 0x00000001;
 
     /** @hide */
     @IntDef(prefix = { "PERMISSION_" }, value = {
@@ -1948,6 +1965,13 @@ public abstract class PackageManager {
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_CONSUMER_IR = "android.hardware.consumerir";
 
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device supports a Context Hub.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_CONTEXTHUB = "android.hardware.context_hub";
+
     /** {@hide} */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_CTS = "android.software.cts";
@@ -2918,6 +2942,18 @@ public abstract class PackageManager {
     public static final String FEATURE_IPSEC_TUNNELS = "android.software.ipsec_tunnels";
 
     /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device has
+     * the requisite hardware support to support reboot escrow of synthetic password for updates.
+     *
+     * <p>This feature implies that the device has the RebootEscrow HAL implementation.
+     *
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_REBOOT_ESCROW = "android.hardware.reboot_escrow";
+
+    /**
      * Extra field name for the URI to a verification file. Passed to a package
      * verifier.
      *
@@ -3360,6 +3396,10 @@ public abstract class PackageManager {
      * etc. This library is versioned and backwards compatible. Clients
      * should check its version via {@link android.ext.services.Version
      * #getVersionCode()} and avoid calling APIs added in later versions.
+     * <p>
+     * This shared library no longer exists since Android R.
+     *
+     * @see #getServicesSystemSharedLibraryPackageName()
      *
      * @hide
      */
@@ -3905,7 +3945,7 @@ public abstract class PackageManager {
      *         there are no installed modules, an empty list is returned.
      */
     @NonNull
-    public List<ModuleInfo> getInstalledModules(@ModuleInfoFlags int flags) {
+    public List<ModuleInfo> getInstalledModules(@InstalledModulesFlags int flags) {
         throw new UnsupportedOperationException(
                 "getInstalledModules not implemented in subclass");
     }
@@ -4370,6 +4410,21 @@ public abstract class PackageManager {
     public abstract boolean shouldShowRequestPermissionRationale(@NonNull String permName);
 
     /**
+     * Gets the localized label that corresponds to the option in settings for granting
+     * background access.
+     *
+     * <p>The intended use is for apps to reference this label in its instruction for users to grant
+     * a background permission.
+     *
+     * @return the localized label that corresponds to the settings option for granting
+     * background access
+     */
+    @NonNull
+    public CharSequence getBackgroundPermissionOptionLabel() {
+        return "";
+    }
+
+    /**
      * Returns an {@link android.content.Intent} suitable for passing to
      * {@link android.app.Activity#startActivityForResult(android.content.Intent, int)}
      * which prompts the user to grant permissions to this application.
@@ -4714,6 +4769,9 @@ public abstract class PackageManager {
 
     /**
      * Get the name of the package hosting the services shared library.
+     * <p>
+     * Note that this package is no longer a shared library since Android R. It is now a package
+     * that hosts for a bunch of updatable services that the system binds to.
      *
      * @return The library host package.
      *
@@ -6034,6 +6092,11 @@ public abstract class PackageManager {
      * If the calling application does not hold the INSTALL_PACKAGES permission then
      * the result will always return {@code null} from
      * {@link InstallSourceInfo#getOriginatingPackageName()}.
+     * <p>
+     * If the package that requested the install has been uninstalled, then information about it
+     * will only be returned from {@link InstallSourceInfo#getInitiatingPackageName()} and
+     * {@link InstallSourceInfo#getInitiatingPackageSigningInfo()} if the calling package is
+     * requesting its own install information and is not an instant app.
      *
      * @param packageName The name of the package to query
      * @throws NameNotFoundException if the given package name is not installed
@@ -7576,4 +7639,19 @@ public abstract class PackageManager {
             "sendDeviceCustomizationReadyBroadcast not implemented in subclass");
     }
 
+    /**
+     * Returns if the provided drawable represents the default activity icon provided by the system.
+     *
+     * PackageManager provides a default icon for any package/activity if the app itself does not
+     * define one or if the system encountered any error when loading the icon.
+     *
+     * @return true if the drawable represents the default activity icon, false otherwise
+     * @see #getDefaultActivityIcon()
+     */
+    public boolean isDefaultApplicationIcon(@NonNull Drawable drawable) {
+        int resId = drawable instanceof AdaptiveIconDrawable
+                ? ((AdaptiveIconDrawable) drawable).getSourceDrawableResId() : Resources.ID_NULL;
+        return resId == com.android.internal.R.drawable.sym_def_app_icon
+                || resId == com.android.internal.R.drawable.sym_app_on_sd_unavailable_icon;
+    }
 }

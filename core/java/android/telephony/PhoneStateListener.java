@@ -21,7 +21,7 @@ import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
@@ -168,6 +168,16 @@ public class PhoneStateListener {
     public static final int LISTEN_SIGNAL_STRENGTHS                         = 0x00000100;
 
     /**
+     * Listen for always reported changes of the network signal strengths (cellular),
+     * even in some situations such as the screen of the device is off.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.LISTEN_ALWAYS_REPORTED_SIGNAL_STRENGTH)
+    @SystemApi
+    public static final int LISTEN_ALWAYS_REPORTED_SIGNAL_STRENGTH          = 0x00000200;
+
+    /**
      * Listen for changes to observed cell info.
      *
      * @see #onCellInfoChanged
@@ -178,6 +188,10 @@ public class PhoneStateListener {
      * Listen for {@link android.telephony.Annotation.PreciseCallStates} of ringing,
      * background and foreground calls.
      *
+     * <p>Requires permission {@link android.Manifest.permission#READ_PRECISE_PHONE_STATE}
+     * or the calling app has carrier privileges
+     * (see {@link TelephonyManager#hasCarrierPrivileges}).
+     *
      * @hide
      */
     @RequiresPermission((android.Manifest.permission.READ_PRECISE_PHONE_STATE))
@@ -187,13 +201,13 @@ public class PhoneStateListener {
     /**
      * Listen for {@link PreciseDataConnectionState} on the data connection (cellular).
      *
-     * <p>Requires permission {@link android.Manifest.permission#MODIFY_PHONE_STATE}
+     * <p>Requires permission {@link android.Manifest.permission#READ_PRECISE_PHONE_STATE}
      * or the calling app has carrier privileges
      * (see {@link TelephonyManager#hasCarrierPrivileges}).
      *
      * @see #onPreciseDataConnectionStateChanged
      */
-    @RequiresPermission((android.Manifest.permission.MODIFY_PHONE_STATE))
+    @RequiresPermission((android.Manifest.permission.READ_PRECISE_PHONE_STATE))
     public static final int LISTEN_PRECISE_DATA_CONNECTION_STATE            = 0x00001000;
 
     /**
@@ -318,25 +332,35 @@ public class PhoneStateListener {
      * Listen for call disconnect causes which contains {@link DisconnectCause} and
      * {@link PreciseDisconnectCause}.
      *
+     * <p>Requires permission {@link android.Manifest.permission#READ_PRECISE_PHONE_STATE}
+     * or the calling app has carrier privileges
+     * (see {@link TelephonyManager#hasCarrierPrivileges}).
+     *
      */
     @RequiresPermission((android.Manifest.permission.READ_PRECISE_PHONE_STATE))
     public static final int LISTEN_CALL_DISCONNECT_CAUSES                  = 0x02000000;
 
     /**
      * Listen for changes to the call attributes of a currently active call.
-     * {@more}
-     * Requires Permission: {@link android.Manifest.permission#READ_PRECISE_PHONE_STATE
-     * READ_PRECISE_PHONE_STATE}
+     *
+     * <p>Requires permission {@link android.Manifest.permission#READ_PRECISE_PHONE_STATE}
+     * or the calling app has carrier privileges
+     * (see {@link TelephonyManager#hasCarrierPrivileges}).
      *
      * @see #onCallAttributesChanged
      * @hide
      */
     @SystemApi
+    @RequiresPermission((android.Manifest.permission.READ_PRECISE_PHONE_STATE))
     public static final int LISTEN_CALL_ATTRIBUTES_CHANGED                 = 0x04000000;
 
     /**
      * Listen for IMS call disconnect causes which contains
      * {@link android.telephony.ims.ImsReasonInfo}
+     *
+     * <p>Requires permission {@link android.Manifest.permission#READ_PRECISE_PHONE_STATE}
+     * or the calling app has carrier privileges
+     * (see {@link TelephonyManager#hasCarrierPrivileges}).
      *
      * @see #onImsCallDisconnectCauseChanged(ImsReasonInfo)
      */
@@ -368,6 +392,32 @@ public class PhoneStateListener {
     @TestApi
     @RequiresPermission(Manifest.permission.READ_ACTIVE_EMERGENCY_SESSION)
     public static final int LISTEN_OUTGOING_EMERGENCY_SMS                   = 0x20000000;
+
+    /**
+     * Listen for Registration Failures.
+     *
+     * Listen for indications that a registration procedure has failed in either the CS or PS
+     * domain. This indication does not necessarily indicate a change of service state, which should
+     * be tracked via {@link #LISTEN_SERVICE_STATE}.
+     *
+     * <p>Requires permission {@link android.Manifest.permission#READ_PHONE_STATE} or the calling
+     * app has carrier privileges (see {@link TelephonyManager#hasCarrierPrivileges}).
+     *
+     * @see #onRegistrationFailed()
+     */
+    @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
+    public static final int LISTEN_REGISTRATION_FAILURE = 0x40000000;
+
+    /**
+     * Listen for Barring Information for the current registered / camped cell.
+     *
+     * <p>Requires permission {@link android.Manifest.permission#READ_PHONE_STATE} or the calling
+     * app has carrier privileges (see {@link TelephonyManager#hasCarrierPrivileges}).
+     *
+     * @see #onBarringInfoChanged()
+     */
+    @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
+    public static final int LISTEN_BARRING_INFO = 0x80000000;
 
     /*
      * Subscription used to listen to the phone state changes
@@ -932,6 +982,52 @@ public class PhoneStateListener {
     }
 
     /**
+     * Report that Registration or a Location/Routing/Tracking Area update has failed.
+     *
+     * <p>Indicate whenever a registration procedure, including a location, routing, or tracking
+     * area update fails. This includes procedures that do not necessarily result in a change of
+     * the modem's registration status. If the modem's registration status changes, that is
+     * reflected in the onNetworkStateChanged() and subsequent get{Voice/Data}RegistrationState().
+     *
+     * <p>Because registration failures are ephemeral, this callback is not sticky.
+     * Registrants will not receive the most recent past value when registering.
+     *
+     * @param cellIdentity the CellIdentity, which must include the globally unique identifier
+     *        for the cell (for example, all components of the CGI or ECGI).
+     * @param chosenPlmn a 5 or 6 digit alphanumeric PLMN (MCC|MNC) among those broadcast by the
+     *         cell that was chosen for the failed registration attempt.
+     * @param domain DOMAIN_CS, DOMAIN_PS or both in case of a combined procedure.
+     * @param causeCode the primary failure cause code of the procedure.
+     *        For GSM/UMTS (MM), values are in TS 24.008 Sec 10.5.95
+     *        For GSM/UMTS (GMM), values are in TS 24.008 Sec 10.5.147
+     *        For LTE (EMM), cause codes are TS 24.301 Sec 9.9.3.9
+     *        For NR (5GMM), cause codes are TS 24.501 Sec 9.11.3.2
+     *        Integer.MAX_VALUE if this value is unused.
+     * @param additionalCauseCode the cause code of any secondary/combined procedure if appropriate.
+     *        For UMTS, if a combined attach succeeds for PS only, then the GMM cause code shall be
+     *        included as an additionalCauseCode. For LTE (ESM), cause codes are in
+     *        TS 24.301 9.9.4.4. Integer.MAX_VALUE if this value is unused.
+     */
+    public void onRegistrationFailed(@NonNull CellIdentity cellIdentity, @NonNull String chosenPlmn,
+            int domain, int causeCode, int additionalCauseCode) {
+        // default implementation empty
+    }
+
+    /**
+     * Report updated barring information for the current camped/registered cell.
+     *
+     * <p>Barring info is provided for all services applicable to the current camped/registered
+     * cell, for the registered PLMN and current access class/access category.
+     *
+     * @param barringInfo for all services on the current cell.
+     *
+     * @see android.telephony.BarringInfo
+     */
+    public void onBarringInfoChanged(@NonNull BarringInfo barringInfo) {
+        // default implementation empty
+    }
+
+    /**
      * The callback methods need to be called on the handler thread where
      * this object was created.  If the binder did that for us it'd be nice.
      *
@@ -1202,6 +1298,26 @@ public class PhoneStateListener {
                     () -> mExecutor.execute(
                             () -> psl.onImsCallDisconnectCauseChanged(disconnectCause)));
 
+        }
+
+        public void onRegistrationFailed(@NonNull CellIdentity cellIdentity,
+                @NonNull String chosenPlmn, int domain,
+                int causeCode, int additionalCauseCode) {
+            PhoneStateListener psl = mPhoneStateListenerWeakRef.get();
+            if (psl == null) return;
+
+            Binder.withCleanCallingIdentity(
+                    () -> mExecutor.execute(() -> psl.onRegistrationFailed(
+                            cellIdentity, chosenPlmn, domain, causeCode, additionalCauseCode)));
+            // default implementation empty
+        }
+
+        public void onBarringInfoChanged(BarringInfo barringInfo) {
+            PhoneStateListener psl = mPhoneStateListenerWeakRef.get();
+            if (psl == null) return;
+
+            Binder.withCleanCallingIdentity(
+                    () -> mExecutor.execute(() -> psl.onBarringInfoChanged(barringInfo)));
         }
     }
 

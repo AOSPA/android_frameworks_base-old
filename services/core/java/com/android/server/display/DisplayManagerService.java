@@ -39,6 +39,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
+import android.database.ContentObserver;
 import android.graphics.ColorSpace;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -60,6 +61,7 @@ import android.hardware.display.WifiDisplayStatus;
 import android.hardware.input.InputManagerInternal;
 import android.media.projection.IMediaProjection;
 import android.media.projection.IMediaProjectionManager;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
@@ -307,6 +309,13 @@ public final class DisplayManagerService extends SystemService {
 
     private SensorManager mSensorManager;
 
+    // Whether minimal post processing is allowed by the user.
+    @GuardedBy("mSyncRoot")
+    private boolean mMinimalPostProcessingAllowed;
+
+    // Receives notifications about changes to Settings.
+    private SettingsObserver mSettingsObserver;
+
     public DisplayManagerService(Context context) {
         this(context, new Injector());
     }
@@ -406,6 +415,7 @@ public final class DisplayManagerService extends SystemService {
                 BrightnessConfiguration config =
                         mPersistentDataStore.getBrightnessConfiguration(userSerial);
                 mDisplayPowerController.setBrightnessConfiguration(config);
+                handleSettingsChange();
             }
             mDisplayPowerController.onSwitchUser(newUserId);
         }
@@ -431,6 +441,8 @@ public final class DisplayManagerService extends SystemService {
             // Just in case the top inset changed before the system was ready. At this point, any
             // relevant configuration should be in place.
             recordTopInsetLocked(mLogicalDisplays.get(Display.DEFAULT_DISPLAY));
+
+            updateSettingsLocked();
         }
 
         mDisplayModeDirector.setDesiredDisplayModeSpecsListener(
@@ -438,6 +450,8 @@ public final class DisplayManagerService extends SystemService {
         mDisplayModeDirector.start(mSensorManager);
 
         mHandler.sendEmptyMessage(MSG_REGISTER_ADDITIONAL_DISPLAY_ADAPTERS);
+
+        mSettingsObserver = new SettingsObserver();
     }
 
     @VisibleForTesting
@@ -570,6 +584,33 @@ public final class DisplayManagerService extends SystemService {
                 mTempDisplayStateWorkQueue.clear();
             }
         }
+    }
+
+    private class SettingsObserver extends ContentObserver {
+        SettingsObserver() {
+            super(mHandler);
+
+            mContext.getContentResolver().registerContentObserver(
+                    Settings.Secure.getUriFor(
+                        Settings.Secure.MINIMAL_POST_PROCESSING_ALLOWED), false, this);
+        }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            handleSettingsChange();
+        }
+    }
+
+    private void handleSettingsChange() {
+        synchronized (mSyncRoot) {
+            updateSettingsLocked();
+            scheduleTraversalLocked(false);
+        }
+    }
+
+    private void updateSettingsLocked() {
+        mMinimalPostProcessingAllowed = Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                Settings.Secure.MINIMAL_POST_PROCESSING_ALLOWED, 1, UserHandle.USER_CURRENT) != 0;
     }
 
     private DisplayInfo getDisplayInfoInternal(int displayId, int callingUid) {
@@ -1208,7 +1249,7 @@ public final class DisplayManagerService extends SystemService {
     }
 
     private void setDisplayPropertiesInternal(int displayId, boolean hasContent,
-            float requestedRefreshRate, int requestedModeId, boolean requestedMinimalPostProcessing,
+            float requestedRefreshRate, int requestedModeId, boolean preferMinimalPostProcessing,
             boolean inTraversal) {
         synchronized (mSyncRoot) {
             LogicalDisplay display = mLogicalDisplays.get(displayId);
@@ -1236,14 +1277,13 @@ public final class DisplayManagerService extends SystemService {
             mDisplayModeDirector.getAppRequestObserver().setAppRequestedMode(
                     displayId, requestedModeId);
 
+            if (display.getDisplayInfoLocked().minimalPostProcessingSupported) {
+                boolean mppRequest = mMinimalPostProcessingAllowed && preferMinimalPostProcessing;
 
-            if (display.getDisplayInfoLocked().minimalPostProcessingSupported
-                    && (display.getRequestedMinimalPostProcessingLocked()
-                    != requestedMinimalPostProcessing)) {
-
-                display.setRequestedMinimalPostProcessingLocked(requestedMinimalPostProcessing);
-
-                shouldScheduleTraversal = true;
+                if (display.getRequestedMinimalPostProcessingLocked() != mppRequest) {
+                    display.setRequestedMinimalPostProcessingLocked(mppRequest);
+                    shouldScheduleTraversal = true;
+                }
             }
 
             if (shouldScheduleTraversal) {
@@ -1321,13 +1361,21 @@ public final class DisplayManagerService extends SystemService {
     }
 
     private SurfaceControl.ScreenshotGraphicBuffer screenshotInternal(int displayId) {
-        final IBinder token = getDisplayToken(displayId);
-        if (token == null) {
-            return null;
+        synchronized (mSyncRoot) {
+            final IBinder token = getDisplayToken(displayId);
+            if (token == null) {
+                return null;
+            }
+            final LogicalDisplay logicalDisplay = mLogicalDisplays.get(displayId);
+            if (logicalDisplay == null) {
+                return null;
+            }
+
+            final DisplayInfo displayInfo = logicalDisplay.getDisplayInfoLocked();
+            return SurfaceControl.screenshotToBufferWithSecureLayersUnsafe(token, new Rect(),
+                    displayInfo.getNaturalWidth(), displayInfo.getNaturalHeight(),
+                    false /* useIdentityTransform */, 0 /* rotation */);
         }
-        return SurfaceControl.screenshotToBufferWithSecureLayersUnsafe(
-                        token, new Rect(), 0 /* width */, 0 /* height */,
-                        false /* useIdentityTransform */, 0 /* rotation */);
     }
 
     @VisibleForTesting
@@ -1359,6 +1407,35 @@ public final class DisplayManagerService extends SystemService {
             return null;
         }
         return SurfaceControl.getDisplayedContentSample(token, maxFrames, timestamp);
+    }
+
+    void resetBrightnessConfiguration() {
+        setBrightnessConfigurationForUserInternal(null, mContext.getUserId(),
+                mContext.getPackageName());
+    }
+
+    void setAutoBrightnessLoggingEnabled(boolean enabled) {
+        if (mDisplayPowerController != null) {
+            synchronized (mSyncRoot) {
+                mDisplayPowerController.setAutoBrightnessLoggingEnabled(enabled);
+            }
+        }
+    }
+
+    void setDisplayWhiteBalanceLoggingEnabled(boolean enabled) {
+        if (mDisplayPowerController != null) {
+            synchronized (mSyncRoot) {
+                mDisplayPowerController.setDisplayWhiteBalanceLoggingEnabled(enabled);
+            }
+        }
+    }
+
+    void setAmbientColorTemperatureOverride(float cct) {
+        if (mDisplayPowerController != null) {
+            synchronized (mSyncRoot) {
+                mDisplayPowerController.setAmbientColorTemperatureOverride(cct);
+            }
+        }
     }
 
     private void onDesiredDisplayModeSpecsChangedInternal() {
@@ -2231,6 +2308,13 @@ public final class DisplayManagerService extends SystemService {
         }
 
         @Override // Binder call
+        public boolean isMinimalPostProcessingRequested(int displayId) {
+            synchronized (mSyncRoot) {
+                return mLogicalDisplays.get(displayId).getRequestedMinimalPostProcessingLocked();
+            }
+        }
+
+        @Override // Binder call
         public void setTemporaryBrightness(int brightness) {
             mContext.enforceCallingOrSelfPermission(
                     Manifest.permission.CONTROL_DISPLAY_BRIGHTNESS,
@@ -2264,13 +2348,8 @@ public final class DisplayManagerService extends SystemService {
         public void onShellCommand(FileDescriptor in, FileDescriptor out,
                 FileDescriptor err, String[] args, ShellCallback callback,
                 ResultReceiver resultReceiver) {
-            final long token = Binder.clearCallingIdentity();
-            try {
-                DisplayManagerShellCommand command = new DisplayManagerShellCommand(this);
-                command.exec(this, in, out, err, args, callback, resultReceiver);
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
+            new DisplayManagerShellCommand(DisplayManagerService.this).exec(this, in, out, err,
+                    args, callback, resultReceiver);
         }
 
         @Override // Binder call
@@ -2290,40 +2369,6 @@ public final class DisplayManagerService extends SystemService {
                 return getPreferredWideGamutColorSpaceIdInternal();
             } finally {
                 Binder.restoreCallingIdentity(token);
-            }
-        }
-
-        void setBrightness(int brightness) {
-            Settings.System.putIntForUser(mContext.getContentResolver(),
-                    Settings.System.SCREEN_BRIGHTNESS, brightness, UserHandle.USER_CURRENT);
-        }
-
-        void resetBrightnessConfiguration() {
-            setBrightnessConfigurationForUserInternal(null, mContext.getUserId(),
-                    mContext.getPackageName());
-        }
-
-        void setAutoBrightnessLoggingEnabled(boolean enabled) {
-            if (mDisplayPowerController != null) {
-                synchronized (mSyncRoot) {
-                    mDisplayPowerController.setAutoBrightnessLoggingEnabled(enabled);
-                }
-            }
-        }
-
-        void setDisplayWhiteBalanceLoggingEnabled(boolean enabled) {
-            if (mDisplayPowerController != null) {
-                synchronized (mSyncRoot) {
-                    mDisplayPowerController.setDisplayWhiteBalanceLoggingEnabled(enabled);
-                }
-            }
-        }
-
-        void setAmbientColorTemperatureOverride(float cct) {
-            if (mDisplayPowerController != null) {
-                synchronized (mSyncRoot) {
-                    mDisplayPowerController.setAmbientColorTemperatureOverride(cct);
-                }
             }
         }
 

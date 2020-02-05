@@ -13,6 +13,7 @@ cc_library_static {
     ],
 
     srcs: [
+        ":graphicsstats_proto",
         "BroadcastRadio/JavaRef.cpp",
         "BroadcastRadio/NativeCallbackThread.cpp",
         "BroadcastRadio/BroadcastRadioService.cpp",
@@ -50,7 +51,7 @@ cc_library_static {
         "com_android_server_VibratorService.cpp",
         "com_android_server_PersistentDataBlockService.cpp",
         "com_android_server_GraphicsStatsService.cpp",
-        "com_android_server_am_AppCompactor.cpp",
+        "com_android_server_am_CachedAppOptimizer.cpp",
         "com_android_server_am_LowMemDetector.cpp",
         "com_android_server_incremental_IncrementalManagerService.cpp",
         "com_android_server_activityTriggerService.cpp",
@@ -104,6 +105,11 @@ cc_defaults {
         "libinputflinger",
         "libinputflinger_base",
         "libinputservice",
+        "libprotobuf-cpp-lite",
+        "libprotoutil",
+        "libstatspull",
+        "libstatssocket",
+        "libstatslog",
         "libschedulerservicehidl",
         "libsensorservice",
         "libsensorservicehidl",
@@ -139,6 +145,7 @@ cc_defaults {
         "android.hardware.thermal@1.0",
         "android.hardware.tv.cec@1.0",
         "android.hardware.tv.input@1.0",
+        "android.hardware.vibrator-cpp",
         "android.hardware.vibrator@1.0",
         "android.hardware.vibrator@1.1",
         "android.hardware.vibrator@1.2",
@@ -149,7 +156,6 @@ cc_defaults {
         "android.system.suspend@1.0",
         "service.incremental",
         "suspend_control_aidl_interface-cpp",
-        "vintf-vibrator-cpp",
     ],
 
     static_libs: [

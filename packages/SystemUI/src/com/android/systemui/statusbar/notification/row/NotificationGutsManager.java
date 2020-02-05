@@ -23,7 +23,9 @@ import android.app.INotificationManager;
 import android.app.NotificationChannel;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
+import android.content.pm.ShortcutManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -53,6 +55,7 @@ import com.android.systemui.statusbar.StatusBarStateControllerImpl;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.collection.provider.HighPriorityProvider;
 import com.android.systemui.statusbar.notification.row.NotificationInfo.CheckSaveListener;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.phone.StatusBar;
@@ -81,6 +84,7 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
     private final Context mContext;
     private final VisualStabilityManager mVisualStabilityManager;
     private final AccessibilityManager mAccessibilityManager;
+    private final HighPriorityProvider mHighPriorityProvider;
 
     // Dependencies:
     private final NotificationLockscreenUserManager mLockscreenUserManager =
@@ -109,12 +113,14 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
     @Inject
     public NotificationGutsManager(Context context, VisualStabilityManager visualStabilityManager,
             Lazy<StatusBar> statusBarLazy, @Main Handler mainHandler,
-            AccessibilityManager accessibilityManager) {
+            AccessibilityManager accessibilityManager,
+            HighPriorityProvider highPriorityProvider) {
         mContext = context;
         mVisualStabilityManager = visualStabilityManager;
         mStatusBarLazy = statusBarLazy;
         mMainHandler = mainHandler;
         mAccessibilityManager = accessibilityManager;
+        mHighPriorityProvider = highPriorityProvider;
     }
 
     public void setUpWithPresenter(NotificationPresenter presenter,
@@ -224,6 +230,9 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
                 initializeAppOpsInfo(row, (AppOpsInfo) gutsView);
             } else if (gutsView instanceof NotificationInfo) {
                 initializeNotificationInfo(row, (NotificationInfo) gutsView);
+            } else if (gutsView instanceof NotificationConversationInfo) {
+                initializeConversationNotificationInfo(
+                        row, (NotificationConversationInfo) gutsView);
             }
             return true;
         } catch (Exception e) {
@@ -331,7 +340,66 @@ public class NotificationGutsManager implements Dumpable, NotificationLifetimeEx
                 row.getIsNonblockable(),
                 isForBlockingHelper,
                 row.getEntry().getImportance(),
-                row.getEntry().isHighPriority());
+                mHighPriorityProvider.isHighPriority(row.getEntry()));
+    }
+
+    /**
+     * Sets up the {@link NotificationConversationInfo} inside the notification row's guts.
+     * @param row view to set up the guts for
+     * @param notificationInfoView view to set up/bind within {@code row}
+     */
+    @VisibleForTesting
+    void initializeConversationNotificationInfo(
+            final ExpandableNotificationRow row,
+            NotificationConversationInfo notificationInfoView) throws Exception {
+        NotificationGuts guts = row.getGuts();
+        StatusBarNotification sbn = row.getEntry().getSbn();
+        String packageName = sbn.getPackageName();
+        // Settings link is only valid for notifications that specify a non-system user
+        NotificationConversationInfo.OnSettingsClickListener onSettingsClick = null;
+        UserHandle userHandle = sbn.getUser();
+        PackageManager pmUser = StatusBar.getPackageManagerForUser(
+                mContext, userHandle.getIdentifier());
+        LauncherApps launcherApps = mContext.getSystemService(LauncherApps.class);
+        ShortcutManager shortcutManager = mContext.getSystemService(ShortcutManager.class);
+        INotificationManager iNotificationManager = INotificationManager.Stub.asInterface(
+                ServiceManager.getService(Context.NOTIFICATION_SERVICE));
+        final NotificationConversationInfo.OnAppSettingsClickListener onAppSettingsClick =
+                (View v, Intent intent) -> {
+                    mMetricsLogger.action(MetricsProto.MetricsEvent.ACTION_APP_NOTE_SETTINGS);
+                    guts.resetFalsingCheck();
+                    mNotificationActivityStarter.startNotificationGutsIntent(intent, sbn.getUid(),
+                            row);
+                };
+
+        final NotificationConversationInfo.OnSnoozeClickListener onSnoozeClickListener =
+                (View v, int hours) -> {
+                    mListContainer.getSwipeActionHelper().snooze(sbn, hours);
+                };
+
+        if (!userHandle.equals(UserHandle.ALL)
+                || mLockscreenUserManager.getCurrentUserId() == UserHandle.USER_SYSTEM) {
+            onSettingsClick = (View v, NotificationChannel channel, int appUid) -> {
+                mMetricsLogger.action(MetricsProto.MetricsEvent.ACTION_NOTE_INFO);
+                guts.resetFalsingCheck();
+                mOnSettingsClickListener.onSettingsClick(sbn.getKey());
+                startAppNotificationSettingsActivity(packageName, appUid, channel, row);
+            };
+        }
+
+        notificationInfoView.bindNotification(
+                shortcutManager,
+                launcherApps,
+                pmUser,
+                iNotificationManager,
+                mVisualStabilityManager,
+                packageName,
+                row.getEntry().getChannel(),
+                row.getEntry(),
+                onSettingsClick,
+                onAppSettingsClick,
+                onSnoozeClickListener,
+                mDeviceProvisionedController.isDeviceProvisioned());
 
     }
 

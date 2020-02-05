@@ -120,10 +120,12 @@ import com.android.systemui.statusbar.notification.NotificationWakeUpCoordinator
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder;
-import com.android.systemui.statusbar.notification.collection.init.NewNotifPipeline;
+import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl;
+import com.android.systemui.statusbar.notification.collection.init.NotifPipelineInitializer;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
+import com.android.systemui.statusbar.phone.dagger.StatusBarComponent;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
@@ -172,6 +174,7 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private KeyguardIndicationController mKeyguardIndicationController;
     @Mock private NotificationStackScrollLayout mStackScroller;
     @Mock private HeadsUpManagerPhone mHeadsUpManager;
+    @Mock private NotificationPanelViewController mNotificationPanelViewController;
     @Mock private NotificationPanelView mNotificationPanelView;
     @Mock private IStatusBarService mBarService;
     @Mock private IDreamManager mDreamManager;
@@ -198,7 +201,7 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private NotificationLogger.ExpansionStateLogger mExpansionStateLogger;
     @Mock private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     @Mock private AmbientDisplayConfiguration mAmbientDisplayConfiguration;
-    @Mock private StatusBarWindowView mStatusBarWindowView;
+    @Mock private NotificationShadeWindowView mNotificationShadeWindowView;
     @Mock private BroadcastDispatcher mBroadcastDispatcher;
     @Mock private AssistManager mAssistManager;
     @Mock private NotificationGutsManager mNotificationGutsManager;
@@ -211,7 +214,7 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private NotificationWakeUpCoordinator mNotificationWakeUpCoordinator;
     @Mock private KeyguardBypassController mKeyguardBypassController;
     @Mock private DynamicPrivacyController mDynamicPrivacyController;
-    @Mock private NewNotifPipeline mNewNotifPipeline;
+    @Mock private NotifPipelineInitializer mNewNotifPipeline;
     @Mock private ZenModeController mZenModeController;
     @Mock private AutoHideController mAutoHideController;
     @Mock private NotificationViewHierarchyManager mNotificationViewHierarchyManager;
@@ -221,9 +224,9 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private BubbleController mBubbleController;
     @Mock private NotificationGroupManager mGroupManager;
     @Mock private NotificationGroupAlertTransferHelper mGroupAlertTransferHelper;
-    @Mock private StatusBarWindowController mStatusBarWindowController;
+    @Mock private NotificationShadeWindowController mNotificationShadeWindowController;
     @Mock private NotificationIconAreaController mNotificationIconAreaController;
-    @Mock private StatusBarWindowViewController mStatusBarWindowViewController;
+    @Mock private NotificationShadeWindowViewController mNotificationShadeWindowViewController;
     @Mock private DozeParameters mDozeParameters;
     @Mock private Lazy<LockscreenWallpaper> mLockscreenWallpaperLazy;
     @Mock private LockscreenWallpaper mLockscreenWallpaper;
@@ -253,6 +256,7 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private KeyguardDismissUtil mKeyguardDismissUtil;
     @Mock private ExtensionController mExtensionController;
     @Mock private UserInfoControllerImpl mUserInfoControllerImpl;
+    @Mock private NotificationRowBinderImpl mNotificationRowBinder;
     private ShadeController mShadeController;
     private FakeExecutor mUiBgExecutor = new FakeExecutor(new FakeSystemClock());
     private InitController mInitController = new InitController();
@@ -285,6 +289,7 @@ public class StatusBarTest extends SysuiTestCase {
         mContext.setTheme(R.style.Theme_SystemUI_Light);
 
         when(mStackScroller.generateLayoutParams(any())).thenReturn(new LayoutParams(0, 0));
+        when(mNotificationPanelViewController.getView()).thenReturn(mNotificationPanelView);
         when(mNotificationPanelView.getLayoutParams()).thenReturn(new LayoutParams(0, 0));
         when(powerManagerService.isInteractive()).thenReturn(true);
         when(mStackScroller.getActivatedChild()).thenReturn(null);
@@ -319,11 +324,11 @@ public class StatusBarTest extends SysuiTestCase {
 
         when(mStatusBarComponentBuilderProvider.get()).thenReturn(mStatusBarComponentBuilder);
         when(mStatusBarComponentBuilder.build()).thenReturn(mStatusBarComponent);
-        when(mStatusBarComponent.getStatusBarWindowViewController()).thenReturn(
-                mStatusBarWindowViewController);
+        when(mStatusBarComponent.getNotificationShadeWindowViewController()).thenReturn(
+                mNotificationShadeWindowViewController);
 
         mShadeController = new ShadeControllerImpl(mCommandQueue,
-                mStatusBarStateController, mStatusBarWindowController,
+                mStatusBarStateController, mNotificationShadeWindowController,
                 mStatusBarKeyguardViewManager, mContext.getSystemService(WindowManager.class),
                 () -> mStatusBar, () -> mAssistManager, () -> mBubbleController);
 
@@ -341,7 +346,6 @@ public class StatusBarTest extends SysuiTestCase {
                 mHeadsUpManager,
                 mDynamicPrivacyController,
                 mBypassHeadsUpNotifier,
-                true,
                 () -> mNewNotifPipeline,
                 new FalsingManagerFake(),
                 mBroadcastDispatcher,
@@ -380,7 +384,7 @@ public class StatusBarTest extends SysuiTestCase {
                 () -> mAssistManager,
                 mNotificationListener,
                 configurationController,
-                mStatusBarWindowController,
+                mNotificationShadeWindowController,
                 mLockscreenLockIconController,
                 mDozeParameters,
                 mScrimController,
@@ -410,13 +414,14 @@ public class StatusBarTest extends SysuiTestCase {
                 mKeyguardDismissUtil,
                 mExtensionController,
                 mUserInfoControllerImpl,
+                mNotificationRowBinder,
                 mDismissCallbackRegistry);
 
-        when(mStatusBarWindowView.findViewById(R.id.lock_icon_container)).thenReturn(
+        when(mNotificationShadeWindowView.findViewById(R.id.lock_icon_container)).thenReturn(
                 mLockIconContainer);
 
         when(mKeyguardViewMediator.registerStatusBar(any(StatusBar.class), any(ViewGroup.class),
-                any(NotificationPanelView.class), any(BiometricUnlockController.class),
+                any(NotificationPanelViewController.class), any(BiometricUnlockController.class),
                 any(ViewGroup.class), any(ViewGroup.class), any(KeyguardBypassController.class)))
                 .thenReturn(mStatusBarKeyguardViewManager);
 
@@ -425,8 +430,8 @@ public class StatusBarTest extends SysuiTestCase {
 
         // TODO: we should be able to call mStatusBar.start() and have all the below values
         // initialized automatically.
-        mStatusBar.mStatusBarWindow = mStatusBarWindowView;
-        mStatusBar.mNotificationPanel = mNotificationPanelView;
+        mStatusBar.mNotificationShadeWindowView = mNotificationShadeWindowView;
+        mStatusBar.mNotificationPanelViewController = mNotificationPanelViewController;
         mStatusBar.mDozeScrimController = mDozeScrimController;
         mStatusBar.mNotificationIconAreaController = mNotificationIconAreaController;
         mStatusBar.mPresenter = mNotificationPresenter;
@@ -731,20 +736,20 @@ public class StatusBarTest extends SysuiTestCase {
         when(mCommandQueue.panelsEnabled()).thenReturn(false);
         mStatusBar.disable(DEFAULT_DISPLAY, StatusBarManager.DISABLE_NONE,
                 StatusBarManager.DISABLE2_NOTIFICATION_SHADE, false);
-        verify(mNotificationPanelView).setQsExpansionEnabled(false);
+        verify(mNotificationPanelViewController).setQsExpansionEnabled(false);
         mStatusBar.animateExpandNotificationsPanel();
-        verify(mNotificationPanelView, never()).expand(anyBoolean());
+        verify(mNotificationPanelViewController, never()).expand(anyBoolean());
         mStatusBar.animateExpandSettingsPanel(null);
-        verify(mNotificationPanelView, never()).expand(anyBoolean());
+        verify(mNotificationPanelViewController, never()).expand(anyBoolean());
 
         when(mCommandQueue.panelsEnabled()).thenReturn(true);
         mStatusBar.disable(DEFAULT_DISPLAY, StatusBarManager.DISABLE_NONE,
                 StatusBarManager.DISABLE2_NONE, false);
-        verify(mNotificationPanelView).setQsExpansionEnabled(true);
+        verify(mNotificationPanelViewController).setQsExpansionEnabled(true);
         mStatusBar.animateExpandNotificationsPanel();
-        verify(mNotificationPanelView).expandWithoutQs();
+        verify(mNotificationPanelViewController).expandWithoutQs();
         mStatusBar.animateExpandSettingsPanel(null);
-        verify(mNotificationPanelView).expandWithQs();
+        verify(mNotificationPanelViewController).expandWithQs();
     }
 
     @Test
@@ -834,12 +839,12 @@ public class StatusBarTest extends SysuiTestCase {
         when(mDozeServiceHost.getDozingRequested()).thenReturn(true);
         mStatusBar.updateIsKeyguard();
         // TODO: mNotificationPanelView.expand(false) gets called twice. Should be once.
-        verify(mNotificationPanelView, times(2)).expand(eq(false));
-        clearInvocations(mNotificationPanelView);
+        verify(mNotificationPanelViewController, times(2)).expand(eq(false));
+        clearInvocations(mNotificationPanelViewController);
 
         mStatusBar.mWakefulnessObserver.onStartedWakingUp();
         verify(mDozeServiceHost).stopDozing();
-        verify(mNotificationPanelView).expand(eq(false));
+        verify(mNotificationPanelViewController).expand(eq(false));
     }
 
     @Test
@@ -848,11 +853,11 @@ public class StatusBarTest extends SysuiTestCase {
         when(mStatusBarStateController.isKeyguardRequested()).thenReturn(true);
         when(mDozeServiceHost.getDozingRequested()).thenReturn(true);
         mStatusBar.updateIsKeyguard();
-        clearInvocations(mNotificationPanelView);
+        clearInvocations(mNotificationPanelViewController);
 
         mStatusBar.setBouncerShowing(true);
         mStatusBar.mWakefulnessObserver.onStartedWakingUp();
-        verify(mNotificationPanelView, never()).expand(anyBoolean());
+        verify(mNotificationPanelViewController, never()).expand(anyBoolean());
     }
 
     @Test

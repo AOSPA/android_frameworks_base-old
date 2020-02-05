@@ -6,7 +6,7 @@ filegroup {
 }
 
 filegroup {
-    name: "services-sources",
+    name: "services-all-sources",
     srcs: [
         ":services.core-sources",
         ":services.accessibility-sources",
@@ -29,6 +29,7 @@ filegroup {
         ":services.usage-sources",
         ":services.usb-sources",
         ":services.voiceinteraction-sources",
+        ":service-permission-sources",
     ],
     visibility: ["//visibility:private"],
 }
@@ -61,6 +62,7 @@ java_library {
         "services.devicepolicy",
         "services.midi",
         "services.net",
+        "services.people",
         "services.print",
         "services.restrictions",
         "services.startop",
@@ -109,10 +111,10 @@ filegroup {
 
 droidstubs {
     name: "services-stubs.sources",
-    srcs: [":services-sources"],
+    srcs: [":services-all-sources"],
     installable: false,
     // TODO: remove the --hide options below
-    args: " --show-single-annotation android.annotation.SystemApi\\(client=android.annotation.SystemApi.Client.MODULE_LIBRARIES,process=android.annotation.SystemApi.Process.SYSTEM_SERVER\\)" +
+    args: " --show-annotation android.annotation.SystemApi\\(client=android.annotation.SystemApi.Client.MODULE_LIBRARIES,process=android.annotation.SystemApi.Process.SYSTEM_SERVER\\)" +
         " --hide-annotation android.annotation.Hide" +
         " --hide-package com.google.android.startop.iorap" +
         " --hide ReferencesHidden" +

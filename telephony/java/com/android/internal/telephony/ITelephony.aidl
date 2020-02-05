@@ -38,8 +38,10 @@ import android.telephony.ICellInfoCallback;
 import android.telephony.ModemActivityInfo;
 import android.telephony.NeighboringCellInfo;
 import android.telephony.NetworkScanRequest;
+import android.telephony.PhoneCapability;
 import android.telephony.PhoneNumberRange;
 import android.telephony.RadioAccessFamily;
+import android.telephony.RadioAccessSpecifier;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.telephony.TelephonyHistogram;
@@ -54,6 +56,7 @@ import android.telephony.ims.aidl.IImsRegistration;
 import android.telephony.ims.aidl.IImsRegistrationCallback;
 import com.android.ims.internal.IImsServiceFeatureCallback;
 import com.android.internal.telephony.CellNetworkScanResult;
+import com.android.internal.telephony.IBooleanConsumer;
 import com.android.internal.telephony.IIntegerConsumer;
 import com.android.internal.telephony.INumberVerificationCallback;
 import com.android.internal.telephony.OperatorInfo;
@@ -922,6 +925,23 @@ interface ITelephony {
             int subId, in OperatorInfo operatorInfo, boolean persisSelection);
 
     /**
+     * Get the allowed network types that store in the telephony provider.
+     *
+     * @param subId the id of the subscription.
+     * @return allowedNetworkTypes the allowed network types.
+     */
+    long getAllowedNetworkTypes(int subId);
+
+    /**
+     * Set the allowed network types.
+     *
+     * @param subId the id of the subscription.
+     * @param allowedNetworkTypes the allowed network types.
+     * @return true on success; false on any failure.
+     */
+    boolean setAllowedNetworkTypes(int subId, long allowedNetworkTypes);
+
+    /**
      * Set the preferred network type.
      * Used for device configuration by some CDMA operators.
      *
@@ -971,6 +991,11 @@ interface ITelephony {
      * @return {@code true} if manual network selection is allowed, otherwise return {@code false}.
      */
      boolean isManualNetworkSelectionAllowed(int subId);
+
+    /**
+     * Enable or disable always reporting signal strength changes from radio.
+     */
+     void setAlwaysReportSignalStrength(int subId, boolean isEnable);
 
     /**
      * Get P-CSCF address from PCO after data connection is established or modified.
@@ -1803,12 +1828,17 @@ interface ITelephony {
     /**
      * Return the network selection mode on the subscription with id {@code subId}.
      */
-     int getNetworkSelectionMode(int subId);
+    int getNetworkSelectionMode(int subId);
 
-     /**
+    /**
+     * Return the PhoneCapability for the device.
+     */
+    PhoneCapability getPhoneCapability(int subId, String callingPackage, String callingFeatureId);
+
+    /**
      * Return true if the device is in emergency sms mode, false otherwise.
      */
-     boolean isInEmergencySmsMode();
+    boolean isInEmergencySmsMode();
 
     /**
      * Return the modem radio power state for slot index.
@@ -1977,6 +2007,17 @@ interface ITelephony {
      */
     boolean getImsProvisioningStatusForCapability(int subId, int capability, int tech);
 
+    /**
+     * Get the provisioning status for the IMS Rcs capability specified.
+     */
+    boolean getRcsProvisioningStatusForCapability(int subId, int capability);
+
+    /**
+     * Set the provisioning status for the IMS Rcs capability using the specified subscription.
+     */
+    void setRcsProvisioningStatusForCapability(int subId, int capability,
+            boolean isProvisioned);
+
     /** Is the capability and tech flagged as provisioned in the cache */
     boolean isMmTelCapabilityProvisionedInCache(int subId, int capability, int tech);
 
@@ -2076,6 +2117,11 @@ interface ITelephony {
     int getRadioHalVersion();
 
     /**
+     * Get the current calling package name.
+     */
+    String getCurrentPackageName();
+
+    /**
      * Returns true if the specified type of application (e.g. {@link #APPTYPE_CSIM} is present
      * on the UICC card.
      * @hide
@@ -2087,6 +2133,9 @@ interface ITelephony {
     boolean isDataEnabledForApn(int apnType, int subId, String callingPackage);
 
     boolean isApnMetered(int apnType, int subId);
+
+    oneway void setSystemSelectionChannels(in List<RadioAccessSpecifier> specifiers,
+            int subId, IBooleanConsumer resultCallback);
 
     boolean isMvnoMatched(int subId, int mvnoType, String mvnoMatchData);
 
@@ -2118,7 +2167,34 @@ interface ITelephony {
     boolean isDataAllowedInVoiceCall(int subId);
 
     /**
+     * Set whether a subscription always allows MMS connection.
+     */
+    boolean setAlwaysAllowMmsData(int subId, boolean allow);
+
+    /**
      * Command line command to enable or disable handling of CEP data for test purposes.
      */
     oneway void setCepEnabled(boolean isCepEnabled);
+
+    /**
+     * Notify Rcs auto config received.
+     */
+    void notifyRcsAutoConfigurationReceived(int subId, in byte[] config, boolean isCompressed);
+
+    boolean isIccLockEnabled(int subId);
+
+    int setIccLockEnabled(int subId, boolean enabled, String password);
+
+    int changeIccLockPassword(int subId, String oldPassword, String newPassword);
+
+    /**
+     * Request for receiving user activity notification
+     */
+    oneway void requestUserActivityNotification();
+
+    /**
+     * Called when userActivity is signalled in the power manager.
+     * This is safe to call from any thread, with any window manager locks held or not.
+     */
+    oneway void userActivity();
 }

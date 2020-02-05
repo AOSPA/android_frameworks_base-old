@@ -16,7 +16,6 @@
 
 package com.android.server.soundtrigger_middleware;
 
-import android.hardware.soundtrigger.V2_3.ISoundTriggerHw;
 import android.hardware.soundtrigger.V2_3.ModelParameterRange;
 import android.hidl.base.V1_0.IBase;
 import android.os.IHwBinder;
@@ -54,9 +53,10 @@ import android.os.IHwBinder;
  */
 public interface ISoundTriggerHw2 {
     /**
-     * @see android.hardware.soundtrigger.V2_2.ISoundTriggerHw#getProperties(android.hardware.soundtrigger.V2_0.ISoundTriggerHw.getPropertiesCallback
+     * @see android.hardware.soundtrigger.V2_3.ISoundTriggerHw#getPropertiesEx(
+     * android.hardware.soundtrigger.V2_3.ISoundTriggerHw.getPropertiesExCallback)
      */
-    android.hardware.soundtrigger.V2_1.ISoundTriggerHw.Properties getProperties();
+    android.hardware.soundtrigger.V2_3.Properties getProperties();
 
     /**
      * @see android.hardware.soundtrigger.V2_2.ISoundTriggerHw#loadSoundModel_2_1(android.hardware.soundtrigger.V2_1.ISoundTriggerHw.SoundModel,
@@ -92,12 +92,12 @@ public interface ISoundTriggerHw2 {
     void stopAllRecognitions();
 
     /**
-     * @see android.hardware.soundtrigger.V2_2.ISoundTriggerHw#startRecognition_2_1(int,
-     * android.hardware.soundtrigger.V2_1.ISoundTriggerHw.RecognitionConfig,
+     * @see android.hardware.soundtrigger.V2_3.ISoundTriggerHw#startRecognition_2_3(int,
+     * android.hardware.soundtrigger.V2_3.RecognitionConfig,
      * android.hardware.soundtrigger.V2_1.ISoundTriggerHwCallback, int)
      */
     void startRecognition(int modelHandle,
-            android.hardware.soundtrigger.V2_1.ISoundTriggerHw.RecognitionConfig config,
+            android.hardware.soundtrigger.V2_3.RecognitionConfig config,
             SoundTriggerHw2Compat.Callback callback, int cookie);
 
     /**

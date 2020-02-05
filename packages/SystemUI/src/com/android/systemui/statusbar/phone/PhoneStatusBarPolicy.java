@@ -182,7 +182,7 @@ public class PhoneStatusBarPolicy
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_REMOVED);
         filter.addAction(Intent.ACTION_BOOT_COMPLETED);
-        broadcastDispatcher.registerReceiver(mIntentReceiver, filter, mHandler);
+        broadcastDispatcher.registerReceiverWithHandler(mIntentReceiver, filter, mHandler);
 
         // listen for user / profile change.
         try {
@@ -615,8 +615,7 @@ public class PhoneStatusBarPolicy
                     break;
                 case TelephonyIntents.ACTION_SIM_STATE_CHANGED:
                     // Avoid rebroadcast because SysUI is direct boot aware.
-                    if (intent.getBooleanExtra(TelephonyIntents.EXTRA_REBROADCAST_ON_UNLOCK,
-                            false)) {
+                    if (intent.getBooleanExtra(Intent.EXTRA_REBROADCAST_ON_UNLOCK, false)) {
                         break;
                     }
                     updateSimState(intent);

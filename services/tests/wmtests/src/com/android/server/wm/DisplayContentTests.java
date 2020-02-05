@@ -39,6 +39,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
+import static android.view.WindowManager.LayoutParams.TYPE_NOTIFICATION_SHADE;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
@@ -56,6 +57,8 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.times;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
+
+import static com.google.common.truth.Truth.assertThat;
 
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
@@ -86,6 +89,7 @@ import android.view.IWindowManager;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.ViewRootImpl;
+import android.view.WindowManager;
 import android.view.test.InsetsModeSession;
 
 import androidx.test.filters.SmallTest;
@@ -136,6 +140,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 mChildAppWindowAbove,
                 mDockedDividerWindow,
                 mStatusBarWindow,
+                mNotificationShadeWindow,
                 mNavBarWindow,
                 mImeWindow,
                 mImeDialogWindow));
@@ -158,6 +163,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 mImeDialogWindow,
                 mDockedDividerWindow,
                 mStatusBarWindow,
+                mNotificationShadeWindow,
                 mNavBarWindow));
     }
 
@@ -174,6 +180,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 mImeDialogWindow,
                 mDockedDividerWindow,
                 mStatusBarWindow,
+                mNotificationShadeWindow,
                 mNavBarWindow));
     }
 
@@ -188,6 +195,24 @@ public class DisplayContentTests extends WindowTestsBase {
                 mChildAppWindowAbove,
                 mDockedDividerWindow,
                 mStatusBarWindow,
+                mImeWindow,
+                mImeDialogWindow,
+                mNotificationShadeWindow,
+                mNavBarWindow));
+    }
+
+    @Test
+    public void testForAllWindows_WithNotificationShadeImeTarget() throws Exception {
+        mDisplayContent.mInputMethodTarget = mNotificationShadeWindow;
+
+        assertForAllWindowsOrder(Arrays.asList(
+                mWallpaperWindow,
+                mChildAppWindowBelow,
+                mAppWindow,
+                mChildAppWindowAbove,
+                mDockedDividerWindow,
+                mStatusBarWindow,
+                mNotificationShadeWindow,
                 mImeWindow,
                 mImeDialogWindow,
                 mNavBarWindow));
@@ -208,6 +233,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 mDockedDividerWindow,
                 voiceInteractionWindow,
                 mStatusBarWindow,
+                mNotificationShadeWindow,
                 mNavBarWindow,
                 mImeWindow,
                 mImeDialogWindow));
@@ -561,8 +587,7 @@ public class DisplayContentTests extends WindowTestsBase {
         final DisplayContent dc = createNewDisplay();
         final WindowState win = createWindow(null /* parent */, TYPE_BASE_APPLICATION, dc, "w");
 
-        dc.setLayoutNeeded();
-        dc.performLayout(true /* initial */, false /* updateImeWindows */);
+        performLayout(dc);
 
         assertThat(win.mLayoutSeq, is(dc.mLayoutSeq));
     }
@@ -583,7 +608,7 @@ public class DisplayContentTests extends WindowTestsBase {
         final WindowState window = createWindow(null /* parent */, TYPE_BASE_APPLICATION, dc, "w");
         window.mActivityRecord.setOrientation(SCREEN_ORIENTATION_LANDSCAPE);
 
-        final WindowState keyguard = createWindow(null, TYPE_STATUS_BAR, dc, "keyguard");
+        final WindowState keyguard = createWindow(null, TYPE_NOTIFICATION_SHADE , dc, "keyguard");
         keyguard.mHasSurface = true;
         keyguard.mAttrs.screenOrientation = SCREEN_ORIENTATION_UNSPECIFIED;
 
@@ -829,8 +854,7 @@ public class DisplayContentTests extends WindowTestsBase {
         win.getAttrs().flags |= FLAG_LAYOUT_IN_SCREEN | FLAG_LAYOUT_INSET_DECOR;
         win.setSystemGestureExclusion(Collections.singletonList(new Rect(10, 20, 30, 40)));
 
-        dc.setLayoutNeeded();
-        dc.performLayout(true /* initial */, false /* updateImeWindows */);
+        performLayout(dc);
 
         win.setHasSurface(true);
         dc.updateSystemGestureExclusion();
@@ -866,8 +890,7 @@ public class DisplayContentTests extends WindowTestsBase {
         win2.getAttrs().flags |= FLAG_LAYOUT_IN_SCREEN | FLAG_LAYOUT_INSET_DECOR;
         win2.setSystemGestureExclusion(Collections.singletonList(new Rect(20, 30, 40, 50)));
 
-        dc.setLayoutNeeded();
-        dc.performLayout(true /* initial */, false /* updateImeWindows */);
+        performLayout(dc);
 
         win.setHasSurface(true);
         win2.setHasSurface(true);
@@ -898,8 +921,7 @@ public class DisplayContentTests extends WindowTestsBase {
         win2.getAttrs().height = 10;
         win2.setSystemGestureExclusion(Collections.emptyList());
 
-        dc.setLayoutNeeded();
-        dc.performLayout(true /* initial */, false /* updateImeWindows */);
+        performLayout(dc);
 
         win.setHasSurface(true);
         win2.setHasSurface(true);
@@ -922,8 +944,7 @@ public class DisplayContentTests extends WindowTestsBase {
                         | SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
         win.mActivityRecord.mTargetSdk = P;
 
-        dc.setLayoutNeeded();
-        dc.performLayout(true /* initial */, false /* updateImeWindows */);
+        performLayout(dc);
 
         win.setHasSurface(true);
 
@@ -932,6 +953,22 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals(expected, calculateSystemGestureExclusion(dc));
 
         win.setHasSurface(false);
+    }
+
+    @Test
+    public void testRequestResizeForEmptyFrames() {
+        final WindowState win = mChildAppWindowAbove;
+        makeWindowVisible(win, win.getParentWindow());
+        win.setRequestedSize(mDisplayContent.mBaseDisplayWidth, 0 /* height */);
+        win.mAttrs.width = win.mAttrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        win.mAttrs.gravity = Gravity.CENTER;
+        performLayout(mDisplayContent);
+
+        // The frame is empty because the requested height is zero.
+        assertTrue(win.getFrameLw().isEmpty());
+        // The window should be scheduled to resize then the client may report a new non-empty size.
+        win.updateResizingWindowIfNeeded();
+        assertThat(mWm.mResizingWindows).contains(win);
     }
 
     @Test
@@ -1009,6 +1046,11 @@ public class DisplayContentTests extends WindowTestsBase {
 
     private void updateFocusedWindow() {
         mWm.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL, false /* updateInputWindows */);
+    }
+
+    private void performLayout(DisplayContent dc) {
+        dc.setLayoutNeeded();
+        dc.performLayout(true /* initial */, false /* updateImeWindows */);
     }
 
     /**

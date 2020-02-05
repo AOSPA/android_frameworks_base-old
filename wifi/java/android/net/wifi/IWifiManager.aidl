@@ -35,7 +35,7 @@ import android.net.wifi.ISoftApCallback;
 import android.net.wifi.ISuggestionConnectionStatusListener;
 import android.net.wifi.ITrafficStateCallback;
 import android.net.wifi.ITxPacketCountListener;
-import android.net.wifi.ScanResult;
+import android.net.wifi.IWifiConnectedNetworkScorer;
 import android.net.wifi.SoftApConfiguration;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
@@ -61,9 +61,9 @@ interface IWifiManager
 
     ParceledListSlice getPrivilegedConfiguredNetworks(String packageName, String featureId);
 
-    Map getAllMatchingFqdnsForScanResults(in List<ScanResult> scanResult);
+    Map getAllMatchingFqdnsForScanResults(in List<android.net.wifi.ScanResult> scanResult);
 
-    Map getMatchingOsuProviders(in List<ScanResult> scanResult);
+    Map getMatchingOsuProviders(in List<android.net.wifi.ScanResult> scanResult);
 
     Map getMatchingPasspointConfigsForOsuProviders(in List<OsuProvider> osuProviders);
 
@@ -91,9 +91,13 @@ interface IWifiManager
 
     void allowAutojoin(int netId, boolean choice);
 
+    void allowAutojoinPasspoint(String fqdn, boolean enableAutoJoin);
+
+    void setMacRandomizationSettingPasspointEnabled(String fqdn, boolean enable);
+
     boolean startScan(String packageName, String featureId);
 
-    List<ScanResult> getScanResults(String callingPackage, String callingFeatureId);
+    List<android.net.wifi.ScanResult> getScanResults(String callingPackage, String callingFeatureId);
 
     boolean disconnect(String packageName);
 
@@ -112,6 +116,8 @@ interface IWifiManager
     boolean is5GHzBandSupported();
 
     boolean is6GHzBandSupported();
+
+    boolean isWifiStandardSupported(int standard);
 
     boolean needs5GHzToAnyApBandConversion();
 
@@ -277,6 +283,12 @@ interface IWifiManager
     void unregisterSuggestionConnectionStatusListener(int listenerIdentifier, String packageName);
 
     int calculateSignalLevel(int rssi);
+
+    List<WifiConfiguration> getWifiConfigForMatchedNetworkSuggestionsSharedWithUser(in List<android.net.wifi.ScanResult> scanResults);
+
+    boolean setWifiConnectedNetworkScorer(in IBinder binder, in IWifiConnectedNetworkScorer scorer);
+
+    void clearWifiConnectedNetworkScorer();
 
     int getSoftApWifiGeneration();
 }

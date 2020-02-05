@@ -3350,8 +3350,8 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     @Override
-    public void handleStartActivity(ActivityClientRecord r,
-            PendingTransactionActions pendingActions) {
+    public void handleStartActivity(IBinder token, PendingTransactionActions pendingActions) {
+        final ActivityClientRecord r = mActivities.get(token);
         final Activity activity = r.activity;
         if (r.activity == null) {
             // TODO(lifecycler): What do we do in this case?
@@ -3364,6 +3364,8 @@ public final class ActivityThread extends ClientTransactionHandler {
             // TODO(lifecycler): How can this happen?
             return;
         }
+
+        unscheduleGcIdler();
 
         // Start
         activity.performStart("handleStartActivity");
@@ -3401,6 +3403,9 @@ public final class ActivityThread extends ClientTransactionHandler {
                                 + " did not call through to super.onPostCreate()");
             }
         }
+
+        updateVisibility(r, true /* show */);
+        mSomeActivitiesChanged = true;
     }
 
     /**
@@ -4661,8 +4666,8 @@ public final class ActivityThread extends ClientTransactionHandler {
     @UnsupportedAppUsage
     final void performStopActivity(IBinder token, boolean saveState, String reason) {
         ActivityClientRecord r = mActivities.get(token);
-        performStopActivityInner(r, null /* stopInfo */, false /* keepShown */, saveState,
-                false /* finalStateRequest */, reason);
+        performStopActivityInner(r, null /* stopInfo */, saveState, false /* finalStateRequest */,
+                reason);
     }
 
     private static final class ProviderRefCount {
@@ -4688,25 +4693,19 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     /**
-     * Core implementation of stopping an activity.  Note this is a little
-     * tricky because the server's meaning of stop is slightly different
-     * than our client -- for the server, stop means to save state and give
-     * it the result when it is done, but the window may still be visible.
-     * For the client, we want to call onStop()/onStart() to indicate when
-     * the activity's UI visibility changes.
+     * Core implementation of stopping an activity.
      * @param r Target activity client record.
      * @param info Action that will report activity stop to server.
-     * @param keepShown Flag indicating whether the activity is still shown.
      * @param saveState Flag indicating whether the activity state should be saved.
      * @param finalStateRequest Flag indicating if this call is handling final lifecycle state
      *                          request for a transaction.
      * @param reason Reason for performing this operation.
      */
-    private void performStopActivityInner(ActivityClientRecord r, StopInfo info, boolean keepShown,
+    private void performStopActivityInner(ActivityClientRecord r, StopInfo info,
             boolean saveState, boolean finalStateRequest, String reason) {
         if (localLOGV) Slog.v(TAG, "Performing stop of " + r);
         if (r != null) {
-            if (!keepShown && r.stopped) {
+            if (r.stopped) {
                 if (r.activity.mFinished) {
                     // If we are finishing, we won't call onResume() in certain
                     // cases.  So here we likewise don't want to call onStop()
@@ -4741,9 +4740,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                 }
             }
 
-            if (!keepShown) {
-                callActivityOnStop(r, saveState, reason);
-            }
+            callActivityOnStop(r, saveState, reason);
         }
     }
 
@@ -4811,20 +4808,19 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     @Override
-    public void handleStopActivity(IBinder token, boolean show, int configChanges,
+    public void handleStopActivity(IBinder token, int configChanges,
             PendingTransactionActions pendingActions, boolean finalStateRequest, String reason) {
         final ActivityClientRecord r = mActivities.get(token);
         r.activity.mConfigChangeFlags |= configChanges;
 
         final StopInfo stopInfo = new StopInfo();
-        performStopActivityInner(r, stopInfo, show, true /* saveState */, finalStateRequest,
+        performStopActivityInner(r, stopInfo, true /* saveState */, finalStateRequest,
                 reason);
 
         if (localLOGV) Slog.v(
-            TAG, "Finishing stop of " + r + ": show=" + show
-            + " win=" + r.window);
+            TAG, "Finishing stop of " + r + ": win=" + r.window);
 
-        updateVisibility(r, show);
+        updateVisibility(r, false);
 
         // Make sure any pending writes are now committed.
         if (!r.isPreHoneycomb()) {
@@ -4858,34 +4854,6 @@ public final class ActivityThread extends ClientTransactionHandler {
                 r.setState(ON_START);
             }
         }
-    }
-
-    @Override
-    public void handleWindowVisibility(IBinder token, boolean show) {
-        ActivityClientRecord r = mActivities.get(token);
-
-        if (r == null) {
-            Log.w(TAG, "handleWindowVisibility: no activity for token " + token);
-            return;
-        }
-
-        if (!show && !r.stopped) {
-            performStopActivityInner(r, null /* stopInfo */, show, false /* saveState */,
-                    false /* finalStateRequest */, "handleWindowVisibility");
-        } else if (show && r.getLifecycleState() == ON_STOP) {
-            // If we are getting ready to gc after going to the background, well
-            // we are back active so skip it.
-            unscheduleGcIdler();
-
-            r.activity.performRestart(true /* start */, "handleWindowVisibility");
-            r.setState(ON_START);
-        }
-        if (r.activity.mDecor != null) {
-            if (false) Slog.v(
-                TAG, "Handle window " + r + " visibility: " + show);
-            updateVisibility(r, show);
-        }
-        mSomeActivitiesChanged = true;
     }
 
     // TODO: This method should be changed to use {@link #performStopActivityInner} to perform to

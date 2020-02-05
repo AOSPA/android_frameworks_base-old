@@ -88,6 +88,7 @@ interface ILockSettings {
             in byte[] recoveryKeyBlob,
             in List<WrappedApplicationKey> applicationKeys);
     void closeSession(in String sessionId);
+    boolean hasSecureLockScreen();
     void sanitizePassword();
     String getPassword();
 }

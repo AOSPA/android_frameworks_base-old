@@ -16,13 +16,19 @@
 
 package android.net.wifi;
 
+import static android.net.wifi.WifiConfiguration.SECURITY_TYPE_EAP_SUITE_B;
+import static android.net.wifi.WifiConfiguration.SECURITY_TYPE_OWE;
+import static android.net.wifi.WifiConfiguration.SECURITY_TYPE_SAE;
+
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 
 import android.net.MacAddress;
+import android.net.util.MacAddressUtils;
 import android.net.wifi.WifiConfiguration.KeyMgmt;
 import android.net.wifi.WifiConfiguration.NetworkSelectionStatus;
 import android.os.Parcel;
@@ -59,7 +65,7 @@ public class WifiConfigurationTest {
         config.updateIdentifier = "1234";
         config.fromWifiNetworkSpecifier = true;
         config.fromWifiNetworkSuggestion = true;
-        config.setRandomizedMacAddress(MacAddress.createRandomUnicastAddress());
+        config.setRandomizedMacAddress(MacAddressUtils.createRandomUnicastAddress());
         MacAddress macBeforeParcel = config.getRandomizedMacAddress();
         Parcel parcelW = Parcel.obtain();
         config.writeToParcel(parcelW, 0);
@@ -165,7 +171,7 @@ public class WifiConfigurationTest {
         MacAddress defaultMac = MacAddress.fromString(WifiInfo.DEFAULT_MAC_ADDRESS);
         assertEquals(defaultMac, config.getRandomizedMacAddress());
 
-        MacAddress macToChangeInto = MacAddress.createRandomUnicastAddress();
+        MacAddress macToChangeInto = MacAddressUtils.createRandomUnicastAddress();
         config.setRandomizedMacAddress(macToChangeInto);
         MacAddress macAfterChange = config.getRandomizedMacAddress();
 
@@ -270,7 +276,23 @@ public class WifiConfigurationTest {
         config.allowedKeyManagement.clear();
         assertEquals(mSsid + "WEP", config.getSsidAndSecurityTypeString());
 
+        // set WEP key and give a valid index.
         config.wepKeys[0] = null;
+        config.wepKeys[2] = "TestWep";
+        config.wepTxKeyIndex = 2;
+        config.allowedKeyManagement.clear();
+        assertEquals(mSsid + "WEP", config.getSsidAndSecurityTypeString());
+
+        // set WEP key but does not give a valid index.
+        config.wepKeys[0] = null;
+        config.wepKeys[2] = "TestWep";
+        config.wepTxKeyIndex = 0;
+        config.allowedKeyManagement.clear();
+        config.allowedKeyManagement.set(KeyMgmt.OWE);
+        assertEquals(mSsid + KeyMgmt.strings[KeyMgmt.OWE], config.getSsidAndSecurityTypeString());
+
+        config.wepKeys[0] = null;
+        config.wepTxKeyIndex = 0;
         config.allowedKeyManagement.clear();
         config.allowedKeyManagement.set(KeyMgmt.OWE);
         assertEquals(mSsid + KeyMgmt.strings[KeyMgmt.OWE], config.getSsidAndSecurityTypeString());
@@ -311,5 +333,97 @@ public class WifiConfigurationTest {
         for (int i = 0; i < NetworkSelectionStatus.NETWORK_SELECTION_DISABLED_MAX; i++) {
             assertNotNull(NetworkSelectionStatus.DISABLE_REASON_INFOS.get(i));
         }
+    }
+
+    /**
+     * Ensure that {@link WifiConfiguration#setSecurityParams(int)} sets up the
+     * {@link WifiConfiguration} object correctly for SAE security type.
+     * @throws Exception
+     */
+    @Test
+    public void testSetSecurityParamsForSae() throws Exception {
+        WifiConfiguration config = new WifiConfiguration();
+
+        config.setSecurityParams(SECURITY_TYPE_SAE);
+
+        assertTrue(config.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.SAE));
+        assertTrue(config.allowedPairwiseCiphers.get(WifiConfiguration.PairwiseCipher.CCMP));
+        assertTrue(config.allowedGroupCiphers.get(WifiConfiguration.GroupCipher.CCMP));
+        assertTrue(config.requirePMF);
+    }
+
+    /**
+     * Ensure that {@link WifiConfiguration#setSecurityParams(int)} sets up the
+     * {@link WifiConfiguration} object correctly for OWE security type.
+     * @throws Exception
+     */
+    @Test
+    public void testSetSecurityParamsForOwe() throws Exception {
+        WifiConfiguration config = new WifiConfiguration();
+
+        config.setSecurityParams(SECURITY_TYPE_OWE);
+
+        assertTrue(config.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.OWE));
+        assertTrue(config.allowedPairwiseCiphers.get(WifiConfiguration.PairwiseCipher.CCMP));
+        assertTrue(config.allowedGroupCiphers.get(WifiConfiguration.GroupCipher.CCMP));
+        assertTrue(config.requirePMF);
+    }
+
+    /**
+     * Ensure that {@link WifiConfiguration#setSecurityParams(int)} sets up the
+     * {@link WifiConfiguration} object correctly for Suite-B security type.
+     * @throws Exception
+     */
+    @Test
+    public void testSetSecurityParamsForSuiteB() throws Exception {
+        WifiConfiguration config = new WifiConfiguration();
+
+        config.setSecurityParams(SECURITY_TYPE_EAP_SUITE_B);
+
+        assertTrue(config.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.SUITE_B_192));
+        assertTrue(config.allowedPairwiseCiphers.get(WifiConfiguration.PairwiseCipher.GCMP_256));
+        assertTrue(config.allowedGroupCiphers.get(WifiConfiguration.GroupCipher.GCMP_256));
+        assertTrue(config.allowedGroupManagementCiphers
+                .get(WifiConfiguration.GroupMgmtCipher.BIP_GMAC_256));
+        assertTrue(config.requirePMF);
+    }
+
+    /**
+     * Test that the NetworkSelectionStatus Builder returns the same values that was set, and that
+     * calling build multiple times returns different instances.
+     */
+    @Test
+    public void testNetworkSelectionStatusBuilder() throws Exception {
+        NetworkSelectionStatus.Builder builder = new NetworkSelectionStatus.Builder()
+                .setNetworkSelectionDisableReason(
+                        NetworkSelectionStatus.DISABLED_ASSOCIATION_REJECTION)
+                .setNetworkSelectionStatus(
+                        NetworkSelectionStatus.NETWORK_SELECTION_PERMANENTLY_DISABLED);
+
+        NetworkSelectionStatus status1 = builder.build();
+
+        assertEquals(NetworkSelectionStatus.DISABLED_ASSOCIATION_REJECTION,
+                status1.getNetworkSelectionDisableReason());
+        assertEquals(NetworkSelectionStatus.NETWORK_SELECTION_PERMANENTLY_DISABLED,
+                status1.getNetworkSelectionStatus());
+
+        NetworkSelectionStatus status2 = builder
+                .setNetworkSelectionDisableReason(NetworkSelectionStatus.DISABLED_BY_WRONG_PASSWORD)
+                .build();
+
+        // different instances
+        assertNotSame(status1, status2);
+
+        // assert that status1 didn't change
+        assertEquals(NetworkSelectionStatus.DISABLED_ASSOCIATION_REJECTION,
+                status1.getNetworkSelectionDisableReason());
+        assertEquals(NetworkSelectionStatus.NETWORK_SELECTION_PERMANENTLY_DISABLED,
+                status1.getNetworkSelectionStatus());
+
+        // assert that status2 changed
+        assertEquals(NetworkSelectionStatus.DISABLED_BY_WRONG_PASSWORD,
+                status2.getNetworkSelectionDisableReason());
+        assertEquals(NetworkSelectionStatus.NETWORK_SELECTION_PERMANENTLY_DISABLED,
+                status2.getNetworkSelectionStatus());
     }
 }

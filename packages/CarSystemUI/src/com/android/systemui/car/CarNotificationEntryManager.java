@@ -18,13 +18,19 @@ package com.android.systemui.car;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 
+import com.android.systemui.statusbar.FeatureFlags;
+import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationRankingManager;
+import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinder;
 import com.android.systemui.statusbar.notification.logging.NotifLog;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
+import com.android.systemui.util.leak.LeakDetector;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+
+import dagger.Lazy;
 
 /**
  * Car specific notification entry manager that does nothing when adding a notification.
@@ -40,8 +46,13 @@ public class CarNotificationEntryManager extends NotificationEntryManager {
             NotifLog notifLog,
             NotificationGroupManager groupManager,
             NotificationRankingManager rankingManager,
-            KeyguardEnvironment keyguardEnvironment) {
-        super(notifLog, groupManager, rankingManager, keyguardEnvironment);
+            KeyguardEnvironment keyguardEnvironment,
+            FeatureFlags featureFlags,
+            Lazy<NotificationRowBinder> notificationRowBinderLazy,
+            Lazy<NotificationRemoteInputManager> notificationRemoteInputManagerLazy,
+            LeakDetector leakDetector) {
+        super(notifLog, groupManager, rankingManager, keyguardEnvironment, featureFlags,
+                notificationRowBinderLazy, notificationRemoteInputManagerLazy, leakDetector);
     }
 
     @Override

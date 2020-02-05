@@ -41,8 +41,10 @@ import android.system.StructRlimit;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
+import android.util.SparseArray;
 import android.util.StatsLog;
 
+import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.os.ZygoteConnectionConstants;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.wm.SurfaceAnimationThread;
@@ -614,8 +616,10 @@ public class Watchdog extends Thread {
             pids.add(Process.myPid());
             if (mPhonePid > 0) pids.add(mPhonePid);
 
+            long anrTime = SystemClock.uptimeMillis();
+            ProcessCpuTracker processCpuTracker = new ProcessCpuTracker(false);
             final File finalStack = ActivityManagerService.dumpStackTraces(
-                    pids, null, null, getInterestingNativePids());
+                    pids, processCpuTracker, new SparseArray<>(), getInterestingNativePids());
 
             //Collect Binder State logs to get status of all the transactions
             if (Build.IS_DEBUGGABLE) {
@@ -625,6 +629,9 @@ public class Watchdog extends Thread {
             // Give some extra time to make sure the stack traces get written.
             // The system's been hanging for a minute, another second or two won't hurt much.
             SystemClock.sleep(5000);
+
+            processCpuTracker.update();
+            String cpuInfo = processCpuTracker.printCurrentState(anrTime);
 
             File watchdogTraces;
             String newTracesPath = "traces_SystemServer_WDT"
@@ -685,7 +692,7 @@ public class Watchdog extends Thread {
                         if (mActivity != null) {
                             mActivity.addErrorToDropBox(
                                     "watchdog", null, "system_server", null, null, null,
-                                    subject, null, finalStack, null);
+                                    subject, cpuInfo, finalStack, null);
                         }
                         StatsLog.write(StatsLog.SYSTEM_SERVER_WATCHDOG_OCCURRED, subject);
                     }

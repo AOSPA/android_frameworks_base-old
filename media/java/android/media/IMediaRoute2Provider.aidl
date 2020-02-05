@@ -18,19 +18,20 @@ package android.media;
 
 import android.content.Intent;
 import android.media.IMediaRoute2ProviderClient;
+import android.os.Bundle;
 
 /**
  * {@hide}
  */
 oneway interface IMediaRoute2Provider {
     void setClient(IMediaRoute2ProviderClient client);
-    void requestCreateSession(String packageName, String routeId,
-            String controlCategory, long requestId);
-    void releaseSession(int sessionId);
+    void requestCreateSession(String packageName, String routeId, long requestId,
+            in @nullable Bundle sessionHints);
+    void releaseSession(String sessionId);
 
-    void selectRoute(int sessionId, String routeId);
-    void deselectRoute(int sessionId, String routeId);
-    void transferToRoute(int sessionId, String routeId);
+    void selectRoute(String sessionId, String routeId);
+    void deselectRoute(String sessionId, String routeId);
+    void transferToRoute(String sessionId, String routeId);
 
     void notifyControlRequestSent(String id, in Intent request);
     void requestSetVolume(String id, int volume);

@@ -31,6 +31,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
+import static android.view.WindowManager.LayoutParams.TYPE_NOTIFICATION_SHADE;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 
@@ -44,6 +45,7 @@ import android.view.Display;
 import android.view.DisplayInfo;
 import android.view.IWindow;
 import android.view.SurfaceControl.Transaction;
+import android.view.View;
 import android.view.WindowManager;
 
 import com.android.server.AttributeCache;
@@ -75,6 +77,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
     WindowState mImeWindow;
     WindowState mImeDialogWindow;
     WindowState mStatusBarWindow;
+    WindowState mNotificationShadeWindow;
     WindowState mDockedDividerWindow;
     WindowState mNavBarWindow;
     WindowState mAppWindow;
@@ -118,6 +121,8 @@ class WindowTestsBase extends SystemServiceTestsBase {
                 mImeDialogWindow = createCommonWindow(null, TYPE_INPUT_METHOD_DIALOG,
                         "mImeDialogWindow");
                 mStatusBarWindow = createCommonWindow(null, TYPE_STATUS_BAR, "mStatusBarWindow");
+                mNotificationShadeWindow = createCommonWindow(null, TYPE_NOTIFICATION_SHADE,
+                        "mNotificationShadeWindow");
                 mNavBarWindow = createCommonWindow(null, TYPE_NAVIGATION_BAR, "mNavBarWindow");
                 mDockedDividerWindow = createCommonWindow(null, TYPE_DOCK_DIVIDER,
                         "mDockedDividerWindow");
@@ -309,6 +314,16 @@ class WindowTestsBase extends SystemServiceTestsBase {
             // adding it to the token...
             token.addWindow(w);
             return w;
+        }
+    }
+
+    static void makeWindowVisible(WindowState... windows) {
+        for (WindowState win : windows) {
+            win.mViewVisibility = View.VISIBLE;
+            win.mRelayoutCalled = true;
+            win.mHasSurface = true;
+            win.mHidden = false;
+            win.showLw(false /* doAnimation */, false /* requestAnim */);
         }
     }
 

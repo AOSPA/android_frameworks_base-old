@@ -251,7 +251,7 @@ public final class LoadedApk {
     }
 
     private AppComponentFactory createAppFactory(ApplicationInfo appInfo, ClassLoader cl) {
-        if (appInfo.appComponentFactory != null && cl != null) {
+        if (mIncludeCode && appInfo.appComponentFactory != null && cl != null) {
             try {
                 return (AppComponentFactory)
                         cl.loadClass(appInfo.appComponentFactory).newInstance();
@@ -464,6 +464,9 @@ public final class LoadedApk {
                     || appDir.equals(instrumentedAppDir)) {
                 outZipPaths.clear();
                 outZipPaths.add(instrumentationAppDir);
+                if (!instrumentationAppDir.equals(instrumentedAppDir)) {
+                    outZipPaths.add(instrumentedAppDir);
+                }
 
                 // Only add splits if the app did not request isolated split loading.
                 if (!aInfo.requestsIsolatedSplitLoading()) {
@@ -472,7 +475,6 @@ public final class LoadedApk {
                     }
 
                     if (!instrumentationAppDir.equals(instrumentedAppDir)) {
-                        outZipPaths.add(instrumentedAppDir);
                         if (instrumentedSplitAppDirs != null) {
                             Collections.addAll(outZipPaths, instrumentedSplitAppDirs);
                         }

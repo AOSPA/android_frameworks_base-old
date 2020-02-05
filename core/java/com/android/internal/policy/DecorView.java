@@ -48,8 +48,8 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.app.WindowConfiguration;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -1240,9 +1240,6 @@ public class DecorView extends FrameLayout implements RootViewSurfaceTaker, Wind
         }
         updateBackgroundDrawable();
 
-        if (insets != null) {
-            insets = insets.consumeStableInsets();
-        }
         return insets;
     }
 

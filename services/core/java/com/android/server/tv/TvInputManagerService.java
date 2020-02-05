@@ -127,6 +127,9 @@ public final class TvInputManagerService extends SystemService {
     // A map from user id to UserState.
     private final SparseArray<UserState> mUserStates = new SparseArray<>();
 
+    // A map from session id to session state saved in userstate
+    private final Map<String, SessionState> mSessionIdToSessionStateMap = new HashMap<>();
+
     private final WatchLogHandler mWatchLogHandler;
 
     public TvInputManagerService(Context context) {
@@ -632,7 +635,8 @@ public final class TvInputManagerService extends SystemService {
         UserState userState = getOrCreateUserStateLocked(userId);
         SessionState sessionState = userState.sessionStateMap.get(sessionToken);
         if (DEBUG) {
-            Slog.d(TAG, "createSessionInternalLocked(inputId=" + sessionState.inputId + ")");
+            Slog.d(TAG, "createSessionInternalLocked(inputId="
+                    + sessionState.inputId + ", sessionId=" + sessionState.sessionId + ")");
         }
         InputChannel[] channels = InputChannel.openInputChannelPair(sessionToken.toString());
 
@@ -643,9 +647,11 @@ public final class TvInputManagerService extends SystemService {
         // Create a session. When failed, send a null token immediately.
         try {
             if (sessionState.isRecordingSession) {
-                service.createRecordingSession(callback, sessionState.inputId);
+                service.createRecordingSession(
+                        callback, sessionState.inputId, sessionState.sessionId);
             } else {
-                service.createSession(channels[1], callback, sessionState.inputId);
+                service.createSession(
+                        channels[1], callback, sessionState.inputId, sessionState.sessionId);
             }
         } catch (RemoteException e) {
             Slog.e(TAG, "error in createSession", e);
@@ -714,6 +720,8 @@ public final class TvInputManagerService extends SystemService {
                 sessionState.client.asBinder().unlinkToDeath(clientState, 0);
             }
         }
+
+        mSessionIdToSessionStateMap.remove(sessionState.sessionId);
 
         ServiceState serviceState = userState.serviceStateMap.get(sessionState.componentName);
         if (serviceState != null) {
@@ -1156,9 +1164,11 @@ public final class TvInputManagerService extends SystemService {
         public void createSession(final ITvInputClient client, final String inputId,
                 boolean isRecordingSession, int seq, int userId) {
             final int callingUid = Binder.getCallingUid();
-            final int resolvedUserId = resolveCallingUserId(Binder.getCallingPid(), callingUid,
+            final int callingPid = Binder.getCallingPid();
+            final int resolvedUserId = resolveCallingUserId(callingPid, callingUid,
                     userId, "createSession");
             final long identity = Binder.clearCallingIdentity();
+            StringBuilder sessionId = new StringBuilder();
             try {
                 synchronized (mLock) {
                     if (userId != mCurrentUserId && !isRecordingSession) {
@@ -1187,14 +1197,20 @@ public final class TvInputManagerService extends SystemService {
                         return;
                     }
 
+                    // Create a unique session id with pid, uid and resolved user id
+                    sessionId.append(callingUid).append(callingPid).append(resolvedUserId);
+
                     // Create a new session token and a session state.
                     IBinder sessionToken = new Binder();
                     SessionState sessionState = new SessionState(sessionToken, info.getId(),
                             info.getComponent(), isRecordingSession, client, seq, callingUid,
-                            resolvedUserId);
+                            callingPid, resolvedUserId, sessionId.toString());
 
                     // Add them to the global session state map of the current user.
                     userState.sessionStateMap.put(sessionToken, sessionState);
+
+                    // Map the session id to the sessionStateMap in the user state
+                    mSessionIdToSessionStateMap.put(sessionId.toString(), sessionState);
 
                     // Also, add them to the session state map of the current service.
                     serviceState.sessionTokens.add(sessionToken);
@@ -1720,8 +1736,9 @@ public final class TvInputManagerService extends SystemService {
 
         @Override
         public ITvInputHardware acquireTvInputHardware(int deviceId,
-                ITvInputHardwareCallback callback, TvInputInfo info, int userId)
-                throws RemoteException {
+                ITvInputHardwareCallback callback, TvInputInfo info, int userId,
+                String tvInputSessionId,
+                @TvInputService.PriorityHintUseCaseType int priorityHint) throws RemoteException {
             if (mContext.checkCallingPermission(android.Manifest.permission.TV_INPUT_HARDWARE)
                     != PackageManager.PERMISSION_GRANTED) {
                 return null;
@@ -1733,7 +1750,8 @@ public final class TvInputManagerService extends SystemService {
                     userId, "acquireTvInputHardware");
             try {
                 return mTvInputHardwareManager.acquireHardware(
-                        deviceId, callback, info, callingUid, resolvedUserId);
+                        deviceId, callback, info, callingUid, resolvedUserId,
+                        tvInputSessionId, priorityHint);
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
@@ -1814,8 +1832,8 @@ public final class TvInputManagerService extends SystemService {
         }
 
         @Override
-        public ParcelFileDescriptor openDvbDevice(DvbDeviceInfo info, int device)
-                throws RemoteException {
+        public ParcelFileDescriptor openDvbDevice(DvbDeviceInfo info,
+                @TvInputManager.DvbDeviceType int deviceType)  throws RemoteException {
             if (mContext.checkCallingPermission(android.Manifest.permission.DVB_DEVICE)
                     != PackageManager.PERMISSION_GRANTED) {
                 throw new SecurityException("Requires DVB_DEVICE permission");
@@ -1852,7 +1870,7 @@ public final class TvInputManagerService extends SystemService {
             final long identity = Binder.clearCallingIdentity();
             try {
                 String deviceFileName;
-                switch (device) {
+                switch (deviceType) {
                     case TvInputManager.DVB_DEVICE_DEMUX:
                         deviceFileName = String.format(dvbDeviceFound
                                 ? "/dev/dvb/adapter%d/demux%d" : "/dev/dvb%d.demux%d",
@@ -1869,14 +1887,14 @@ public final class TvInputManagerService extends SystemService {
                                 info.getAdapterId(), info.getDeviceId());
                         break;
                     default:
-                        throw new IllegalArgumentException("Invalid DVB device: " + device);
+                        throw new IllegalArgumentException("Invalid DVB device: " + deviceType);
                 }
                 try {
                     // The DVB frontend device only needs to be opened in read/write mode, which
                     // allows performing tuning operations. The DVB demux and DVR device are enough
                     // to be opened in read only mode.
                     return ParcelFileDescriptor.open(new File(deviceFileName),
-                            TvInputManager.DVB_DEVICE_FRONTEND == device
+                            TvInputManager.DVB_DEVICE_FRONTEND == deviceType
                                     ? ParcelFileDescriptor.MODE_READ_WRITE
                                     : ParcelFileDescriptor.MODE_READ_ONLY);
                 } catch (FileNotFoundException e) {
@@ -2003,6 +2021,43 @@ public final class TvInputManagerService extends SystemService {
         }
 
         @Override
+        public int getClientPid(String sessionId) {
+            ensureTunerResourceAccessPermission();
+            final long identity = Binder.clearCallingIdentity();
+
+            int clientPid = TvInputManager.UNKNOWN_CLIENT_PID;
+            try {
+                synchronized (mLock) {
+                    try {
+                        clientPid = getClientPidLocked(sessionId);
+                    } catch (ClientPidNotFoundException e) {
+                        Slog.e(TAG, "error in getClientPid", e);
+                    }
+                }
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+            return clientPid;
+        }
+
+        private int getClientPidLocked(String sessionId)
+                throws IllegalStateException {
+            if (mSessionIdToSessionStateMap.get(sessionId) == null) {
+                throw new IllegalStateException("Client Pid not found with sessionId "
+                        + sessionId);
+            }
+            return mSessionIdToSessionStateMap.get(sessionId).callingPid;
+        }
+
+        private void ensureTunerResourceAccessPermission() {
+            if (mContext.checkCallingPermission(
+                    android.Manifest.permission.TUNER_RESOURCE_ACCESS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                throw new SecurityException("Requires TUNER_RESOURCE_ACCESS permission");
+            }
+        }
+
+        @Override
         @SuppressWarnings("resource")
         protected void dump(FileDescriptor fd, final PrintWriter writer, String[] args) {
             final IndentingPrintWriter pw = new IndentingPrintWriter(writer, "  ");
@@ -2094,9 +2149,11 @@ public final class TvInputManagerService extends SystemService {
 
                         pw.increaseIndent();
                         pw.println("inputId: " + session.inputId);
+                        pw.println("sessionId: " + session.sessionId);
                         pw.println("client: " + session.client);
                         pw.println("seq: " + session.seq);
                         pw.println("callingUid: " + session.callingUid);
+                        pw.println("callingPid: " + session.callingPid);
                         pw.println("userId: " + session.userId);
                         pw.println("sessionToken: " + session.sessionToken);
                         pw.println("session: " + session.session);
@@ -2226,11 +2283,13 @@ public final class TvInputManagerService extends SystemService {
 
     private final class SessionState implements IBinder.DeathRecipient {
         private final String inputId;
+        private final String sessionId;
         private final ComponentName componentName;
         private final boolean isRecordingSession;
         private final ITvInputClient client;
         private final int seq;
         private final int callingUid;
+        private final int callingPid;
         private final int userId;
         private final IBinder sessionToken;
         private ITvInputSession session;
@@ -2240,7 +2299,7 @@ public final class TvInputManagerService extends SystemService {
 
         private SessionState(IBinder sessionToken, String inputId, ComponentName componentName,
                 boolean isRecordingSession, ITvInputClient client, int seq, int callingUid,
-                int userId) {
+                int callingPid, int userId, String sessionId) {
             this.sessionToken = sessionToken;
             this.inputId = inputId;
             this.componentName = componentName;
@@ -2248,7 +2307,9 @@ public final class TvInputManagerService extends SystemService {
             this.client = client;
             this.seq = seq;
             this.callingUid = callingUid;
+            this.callingPid = callingPid;
             this.userId = userId;
+            this.sessionId = sessionId;
         }
 
         @Override
@@ -2959,6 +3020,12 @@ public final class TvInputManagerService extends SystemService {
 
     private static class SessionNotFoundException extends IllegalArgumentException {
         public SessionNotFoundException(String name) {
+            super(name);
+        }
+    }
+
+    private static class ClientPidNotFoundException extends IllegalArgumentException {
+        public ClientPidNotFoundException(String name) {
             super(name);
         }
     }

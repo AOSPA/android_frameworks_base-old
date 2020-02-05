@@ -20,7 +20,9 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
+import android.net.util.LinkPropertiesUtils;
+import android.net.util.LinkPropertiesUtils.CompareResult;
 import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -63,12 +65,21 @@ public final class LinkProperties implements Parcelable {
     private String mPrivateDnsServerName;
     private String mDomains;
     private ArrayList<RouteInfo> mRoutes = new ArrayList<>();
+    private Inet4Address mDhcpServerAddress;
     private ProxyInfo mHttpProxy;
     private int mMtu;
     // in the format "rmem_min,rmem_def,rmem_max,wmem_min,wmem_def,wmem_max"
     private String mTcpBufferSizes;
     private IpPrefix mNat64Prefix;
     private boolean mWakeOnLanSupported;
+    private Uri mCaptivePortalApiUrl;
+    private CaptivePortalData mCaptivePortalData;
+
+    /**
+     * Indicates whether parceling should preserve fields that are set based on permissions of
+     * the process receiving the {@link LinkProperties}.
+     */
+    private final transient boolean mParcelSensitiveFields;
 
     private static final int MIN_MTU    = 68;
     private static final int MIN_MTU_V6 = 1280;
@@ -79,36 +90,6 @@ public final class LinkProperties implements Parcelable {
     // Stores the properties of links that are "stacked" above this link.
     // Indexed by interface name to allow modification and to prevent duplicates being added.
     private Hashtable<String, LinkProperties> mStackedLinks = new Hashtable<>();
-
-    /**
-     * @hide
-     */
-    public static class CompareResult<T> {
-        public final List<T> removed = new ArrayList<>();
-        public final List<T> added = new ArrayList<>();
-
-        public CompareResult() {}
-
-        public CompareResult(Collection<T> oldItems, Collection<T> newItems) {
-            if (oldItems != null) {
-                removed.addAll(oldItems);
-            }
-            if (newItems != null) {
-                for (T newItem : newItems) {
-                    if (!removed.remove(newItem)) {
-                        added.add(newItem);
-                    }
-                }
-            }
-        }
-
-        @Override
-        public String toString() {
-            return "removed=[" + TextUtils.join(",", removed)
-                    + "] added=[" + TextUtils.join(",", added)
-                    + "]";
-        }
-    }
 
     /**
      * @hide
@@ -173,6 +154,7 @@ public final class LinkProperties implements Parcelable {
      * Constructs a new {@code LinkProperties} with default values.
      */
     public LinkProperties() {
+        mParcelSensitiveFields = false;
     }
 
     /**
@@ -181,25 +163,32 @@ public final class LinkProperties implements Parcelable {
     @SystemApi
     @TestApi
     public LinkProperties(@Nullable LinkProperties source) {
-        if (source != null) {
-            mIfaceName = source.mIfaceName;
-            mLinkAddresses.addAll(source.mLinkAddresses);
-            mDnses.addAll(source.mDnses);
-            mValidatedPrivateDnses.addAll(source.mValidatedPrivateDnses);
-            mUsePrivateDns = source.mUsePrivateDns;
-            mPrivateDnsServerName = source.mPrivateDnsServerName;
-            mPcscfs.addAll(source.mPcscfs);
-            mDomains = source.mDomains;
-            mRoutes.addAll(source.mRoutes);
-            mHttpProxy = (source.mHttpProxy == null) ? null : new ProxyInfo(source.mHttpProxy);
-            for (LinkProperties l: source.mStackedLinks.values()) {
-                addStackedLink(l);
-            }
-            setMtu(source.mMtu);
-            mTcpBufferSizes = source.mTcpBufferSizes;
-            mNat64Prefix = source.mNat64Prefix;
-            mWakeOnLanSupported = source.mWakeOnLanSupported;
+        this(source, false /* parcelSensitiveFields */);
+    }
+
+    private LinkProperties(@Nullable LinkProperties source, boolean parcelSensitiveFields) {
+        mParcelSensitiveFields = parcelSensitiveFields;
+        if (source == null) return;
+        mIfaceName = source.mIfaceName;
+        mLinkAddresses.addAll(source.mLinkAddresses);
+        mDnses.addAll(source.mDnses);
+        mValidatedPrivateDnses.addAll(source.mValidatedPrivateDnses);
+        mUsePrivateDns = source.mUsePrivateDns;
+        mPrivateDnsServerName = source.mPrivateDnsServerName;
+        mPcscfs.addAll(source.mPcscfs);
+        mDomains = source.mDomains;
+        mRoutes.addAll(source.mRoutes);
+        mHttpProxy = (source.mHttpProxy == null) ? null : new ProxyInfo(source.mHttpProxy);
+        for (LinkProperties l: source.mStackedLinks.values()) {
+            addStackedLink(l);
         }
+        setMtu(source.mMtu);
+        setDhcpServerAddress(source.getDhcpServerAddress());
+        mTcpBufferSizes = source.mTcpBufferSizes;
+        mNat64Prefix = source.mNat64Prefix;
+        mWakeOnLanSupported = source.mWakeOnLanSupported;
+        mCaptivePortalApiUrl = source.mCaptivePortalApiUrl;
+        mCaptivePortalData = source.mCaptivePortalData;
     }
 
     /**
@@ -457,6 +446,24 @@ public final class LinkProperties implements Parcelable {
     @SystemApi
     public void setPrivateDnsServerName(@Nullable String privateDnsServerName) {
         mPrivateDnsServerName = privateDnsServerName;
+    }
+
+    /**
+     * Set DHCP server address.
+     *
+     * @param serverAddress the server address to set.
+     */
+    public void setDhcpServerAddress(@Nullable Inet4Address serverAddress) {
+        mDhcpServerAddress = serverAddress;
+    }
+
+     /**
+     * Get DHCP server address
+     *
+     * @return The current DHCP server address.
+     */
+    public @Nullable Inet4Address getDhcpServerAddress() {
+        return mDhcpServerAddress;
     }
 
     /**
@@ -840,6 +847,11 @@ public final class LinkProperties implements Parcelable {
      * Clears this object to its initial state.
      */
     public void clear() {
+        if (mParcelSensitiveFields) {
+            throw new UnsupportedOperationException(
+                    "Cannot clear LinkProperties when parcelSensitiveFields is set");
+        }
+
         mIfaceName = null;
         mLinkAddresses.clear();
         mDnses.clear();
@@ -851,9 +863,12 @@ public final class LinkProperties implements Parcelable {
         mHttpProxy = null;
         mStackedLinks.clear();
         mMtu = 0;
+        mDhcpServerAddress = null;
         mTcpBufferSizes = null;
         mNat64Prefix = null;
         mWakeOnLanSupported = false;
+        mCaptivePortalApiUrl = null;
+        mCaptivePortalData = null;
     }
 
     /**
@@ -917,6 +932,19 @@ public final class LinkProperties implements Parcelable {
 
         if (mWakeOnLanSupported) {
             resultJoiner.add("WakeOnLanSupported: true");
+        }
+
+        if (mDhcpServerAddress != null) {
+            resultJoiner.add("ServerAddress:");
+            resultJoiner.add(mDhcpServerAddress.toString());
+        }
+
+        if (mCaptivePortalApiUrl != null) {
+            resultJoiner.add("CaptivePortalApiUrl: " + mCaptivePortalApiUrl);
+        }
+
+        if (mCaptivePortalData != null) {
+            resultJoiner.add("CaptivePortalData: " + mCaptivePortalData);
         }
 
         if (mTcpBufferSizes != null) {
@@ -1269,7 +1297,18 @@ public final class LinkProperties implements Parcelable {
      */
     @UnsupportedAppUsage
     public boolean isIdenticalInterfaceName(@NonNull LinkProperties target) {
-        return TextUtils.equals(getInterfaceName(), target.getInterfaceName());
+        return LinkPropertiesUtils.isIdenticalInterfaceName(target, this);
+    }
+
+    /**
+     * Compares this {@code LinkProperties} DHCP server address against the target
+     *
+     * @param target LinkProperties to compare.
+     * @return {@code true} if both are identical, {@code false} otherwise.
+     * @hide
+     */
+    public boolean isIdenticalDhcpServerAddress(@NonNull LinkProperties target) {
+        return Objects.equals(mDhcpServerAddress, target.mDhcpServerAddress);
     }
 
     /**
@@ -1281,10 +1320,7 @@ public final class LinkProperties implements Parcelable {
      */
     @UnsupportedAppUsage
     public boolean isIdenticalAddresses(@NonNull LinkProperties target) {
-        Collection<InetAddress> targetAddresses = target.getAddresses();
-        Collection<InetAddress> sourceAddresses = getAddresses();
-        return (sourceAddresses.size() == targetAddresses.size()) ?
-                    sourceAddresses.containsAll(targetAddresses) : false;
+        return LinkPropertiesUtils.isIdenticalAddresses(target, this);
     }
 
     /**
@@ -1296,15 +1332,7 @@ public final class LinkProperties implements Parcelable {
      */
     @UnsupportedAppUsage
     public boolean isIdenticalDnses(@NonNull LinkProperties target) {
-        Collection<InetAddress> targetDnses = target.getDnsServers();
-        String targetDomains = target.getDomains();
-        if (mDomains == null) {
-            if (targetDomains != null) return false;
-        } else {
-            if (!mDomains.equals(targetDomains)) return false;
-        }
-        return (mDnses.size() == targetDnses.size()) ?
-                mDnses.containsAll(targetDnses) : false;
+        return LinkPropertiesUtils.isIdenticalDnses(target, this);
     }
 
     /**
@@ -1357,9 +1385,7 @@ public final class LinkProperties implements Parcelable {
      */
     @UnsupportedAppUsage
     public boolean isIdenticalRoutes(@NonNull LinkProperties target) {
-        Collection<RouteInfo> targetRoutes = target.getRoutes();
-        return (mRoutes.size() == targetRoutes.size()) ?
-                mRoutes.containsAll(targetRoutes) : false;
+        return LinkPropertiesUtils.isIdenticalRoutes(target, this);
     }
 
     /**
@@ -1371,8 +1397,7 @@ public final class LinkProperties implements Parcelable {
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public boolean isIdenticalHttpProxy(@NonNull LinkProperties target) {
-        return getHttpProxy() == null ? target.getHttpProxy() == null :
-                getHttpProxy().equals(target.getHttpProxy());
+        return LinkPropertiesUtils.isIdenticalHttpProxy(target, this);
     }
 
     /**
@@ -1442,6 +1467,28 @@ public final class LinkProperties implements Parcelable {
     }
 
     /**
+     * Compares this {@code LinkProperties}'s CaptivePortalApiUrl against the target.
+     *
+     * @param target LinkProperties to compare.
+     * @return {@code true} if both are identical, {@code false} otherwise.
+     * @hide
+     */
+    public boolean isIdenticalCaptivePortalApiUrl(LinkProperties target) {
+        return Objects.equals(mCaptivePortalApiUrl, target.mCaptivePortalApiUrl);
+    }
+
+    /**
+     * Compares this {@code LinkProperties}'s CaptivePortalData against the target.
+     *
+     * @param target LinkProperties to compare.
+     * @return {@code true} if both are identical, {@code false} otherwise.
+     * @hide
+     */
+    public boolean isIdenticalCaptivePortalData(LinkProperties target) {
+        return Objects.equals(mCaptivePortalData, target.mCaptivePortalData);
+    }
+
+    /**
      * Set whether the network interface supports WakeOnLAN
      *
      * @param supported WakeOnLAN supported value
@@ -1459,6 +1506,73 @@ public final class LinkProperties implements Parcelable {
      */
     public boolean isWakeOnLanSupported() {
         return mWakeOnLanSupported;
+    }
+
+    /**
+     * Set the URL of the captive portal API endpoint to get more information about the network.
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public void setCaptivePortalApiUrl(@Nullable Uri url) {
+        mCaptivePortalApiUrl = url;
+    }
+
+    /**
+     * Get the URL of the captive portal API endpoint to get more information about the network.
+     *
+     * <p>This is null unless the application has
+     * {@link android.Manifest.permission.NETWORK_SETTINGS} or
+     * {@link NetworkStack#PERMISSION_MAINLINE_NETWORK_STACK} permissions, and the network provided
+     * the URL.
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    @Nullable
+    public Uri getCaptivePortalApiUrl() {
+        return mCaptivePortalApiUrl;
+    }
+
+    /**
+     * Set the CaptivePortalData obtained from the captive portal API (RFC7710bis).
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    public void setCaptivePortalData(@Nullable CaptivePortalData data) {
+        mCaptivePortalData = data;
+    }
+
+    /**
+     * Get the CaptivePortalData obtained from the captive portal API (RFC7710bis).
+     *
+     * <p>This is null unless the application has
+     * {@link android.Manifest.permission.NETWORK_SETTINGS} or
+     * {@link NetworkStack#PERMISSION_MAINLINE_NETWORK_STACK} permissions.
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    @Nullable
+    public CaptivePortalData getCaptivePortalData() {
+        return mCaptivePortalData;
+    }
+
+    /**
+     * Create a copy of this {@link LinkProperties} that will preserve fields that were set
+     * based on the permissions of the process that received this {@link LinkProperties}.
+     *
+     * <p>By default {@link LinkProperties} does not preserve such fields during parceling, as
+     * they should not be shared outside of the process that receives them without appropriate
+     * checks.
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    @NonNull
+    public LinkProperties makeSensitiveFieldsParcelingCopy() {
+        return new LinkProperties(this, true /* parcelSensitiveFields */);
     }
 
     /**
@@ -1489,6 +1603,7 @@ public final class LinkProperties implements Parcelable {
          */
         return isIdenticalInterfaceName(target)
                 && isIdenticalAddresses(target)
+                && isIdenticalDhcpServerAddress(target)
                 && isIdenticalDnses(target)
                 && isIdenticalPrivateDns(target)
                 && isIdenticalValidatedPrivateDnses(target)
@@ -1499,27 +1614,9 @@ public final class LinkProperties implements Parcelable {
                 && isIdenticalMtu(target)
                 && isIdenticalTcpBufferSizes(target)
                 && isIdenticalNat64Prefix(target)
-                && isIdenticalWakeOnLan(target);
-    }
-
-    /**
-     * Compares the addresses in this LinkProperties with another
-     * LinkProperties, examining only addresses on the base link.
-     *
-     * @param target a LinkProperties with the new list of addresses
-     * @return the differences between the addresses.
-     * @hide
-     */
-    public @NonNull CompareResult<LinkAddress> compareAddresses(@Nullable LinkProperties target) {
-        /*
-         * Duplicate the LinkAddresses into removed, we will be removing
-         * address which are common between mLinkAddresses and target
-         * leaving the addresses that are different. And address which
-         * are in target but not in mLinkAddresses are placed in the
-         * addedAddresses.
-         */
-        return new CompareResult<>(mLinkAddresses,
-                target != null ? target.getLinkAddresses() : null);
+                && isIdenticalWakeOnLan(target)
+                && isIdenticalCaptivePortalApiUrl(target)
+                && isIdenticalCaptivePortalData(target);
     }
 
     /**
@@ -1613,10 +1710,12 @@ public final class LinkProperties implements Parcelable {
                 + mMtu * 51
                 + ((null == mTcpBufferSizes) ? 0 : mTcpBufferSizes.hashCode())
                 + (mUsePrivateDns ? 57 : 0)
+                + ((null == mDhcpServerAddress) ? 0 : mDhcpServerAddress.hashCode())
                 + mPcscfs.size() * 67
                 + ((null == mPrivateDnsServerName) ? 0 : mPrivateDnsServerName.hashCode())
                 + Objects.hash(mNat64Prefix)
-                + (mWakeOnLanSupported ? 71 : 0);
+                + (mWakeOnLanSupported ? 71 : 0)
+                + Objects.hash(mCaptivePortalApiUrl, mCaptivePortalData);
     }
 
     /**
@@ -1635,6 +1734,7 @@ public final class LinkProperties implements Parcelable {
         dest.writeString(mPrivateDnsServerName);
         writeAddresses(dest, mPcscfs);
         dest.writeString(mDomains);
+        writeAddress(dest, mDhcpServerAddress);
         dest.writeInt(mMtu);
         dest.writeString(mTcpBufferSizes);
         dest.writeInt(mRoutes.size());
@@ -1654,6 +1754,8 @@ public final class LinkProperties implements Parcelable {
         dest.writeList(stackedLinks);
 
         dest.writeBoolean(mWakeOnLanSupported);
+        dest.writeParcelable(mParcelSensitiveFields ? mCaptivePortalApiUrl : null, 0);
+        dest.writeParcelable(mParcelSensitiveFields ? mCaptivePortalData : null, 0);
     }
 
     private static void writeAddresses(@NonNull Parcel dest, @NonNull List<InetAddress> list) {
@@ -1663,8 +1765,9 @@ public final class LinkProperties implements Parcelable {
         }
     }
 
-    private static void writeAddress(@NonNull Parcel dest, @NonNull InetAddress addr) {
-        dest.writeByteArray(addr.getAddress());
+    private static void writeAddress(@NonNull Parcel dest, @Nullable InetAddress addr) {
+        byte[] addressBytes = (addr == null ? null : addr.getAddress());
+        dest.writeByteArray(addressBytes);
         if (addr instanceof Inet6Address) {
             final Inet6Address v6Addr = (Inet6Address) addr;
             final boolean hasScopeId = v6Addr.getScopeId() != 0;
@@ -1673,9 +1776,11 @@ public final class LinkProperties implements Parcelable {
         }
     }
 
-    @NonNull
+    @Nullable
     private static InetAddress readAddress(@NonNull Parcel p) throws UnknownHostException {
         final byte[] addr = p.createByteArray();
+        if (addr == null) return null;
+
         if (addr.length == INET6_ADDR_LENGTH) {
             final boolean hasScopeId = p.readBoolean();
             final int scopeId = hasScopeId ? p.readInt() : 0;
@@ -1722,6 +1827,10 @@ public final class LinkProperties implements Parcelable {
                     } catch (UnknownHostException e) { }
                 }
                 netProp.setDomains(in.readString());
+                try {
+                    netProp.setDhcpServerAddress((Inet4Address) InetAddress
+                            .getByAddress(in.createByteArray()));
+                } catch (UnknownHostException e) { }
                 netProp.setMtu(in.readInt());
                 netProp.setTcpBufferSizes(in.readString());
                 addressCount = in.readInt();
@@ -1738,6 +1847,9 @@ public final class LinkProperties implements Parcelable {
                     netProp.addStackedLink(stackedLink);
                 }
                 netProp.setWakeOnLanSupported(in.readBoolean());
+
+                netProp.setCaptivePortalApiUrl(in.readParcelable(null));
+                netProp.setCaptivePortalData(in.readParcelable(null));
                 return netProp;
             }
 

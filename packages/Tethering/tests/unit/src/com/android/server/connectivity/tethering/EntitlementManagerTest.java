@@ -16,12 +16,13 @@
 
 package com.android.server.connectivity.tethering;
 
-import static android.net.ConnectivityManager.TETHERING_BLUETOOTH;
-import static android.net.ConnectivityManager.TETHERING_USB;
-import static android.net.ConnectivityManager.TETHERING_WIFI;
-import static android.net.ConnectivityManager.TETHER_ERROR_ENTITLEMENT_UNKONWN;
-import static android.net.ConnectivityManager.TETHER_ERROR_NO_ERROR;
-import static android.net.ConnectivityManager.TETHER_ERROR_PROVISION_FAILED;
+import static android.net.TetheringManager.TETHERING_BLUETOOTH;
+import static android.net.TetheringManager.TETHERING_USB;
+import static android.net.TetheringManager.TETHERING_WIFI;
+import static android.net.TetheringManager.TETHER_ERROR_ENTITLEMENT_UNKONWN;
+import static android.net.TetheringManager.TETHER_ERROR_NO_ERROR;
+import static android.net.TetheringManager.TETHER_ERROR_PROVISION_FAILED;
+import static android.provider.DeviceConfig.NAMESPACE_CONNECTIVITY;
 import static android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
@@ -39,7 +40,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
 import android.net.util.SharedLog;
@@ -49,18 +49,16 @@ import android.os.PersistableBundle;
 import android.os.ResultReceiver;
 import android.os.SystemProperties;
 import android.os.test.TestLooper;
-import android.provider.Settings;
+import android.provider.DeviceConfig;
 import android.telephony.CarrierConfigManager;
-import android.test.mock.MockContentResolver;
 
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.internal.R;
 import com.android.internal.util.State;
 import com.android.internal.util.StateMachine;
 import com.android.internal.util.test.BroadcastInterceptingContext;
-import com.android.internal.util.test.FakeSettingsProvider;
+import com.android.networkstack.tethering.R;
 
 import org.junit.After;
 import org.junit.Before;
@@ -94,7 +92,6 @@ public final class EntitlementManagerTest {
     private final PersistableBundle mCarrierConfig = new PersistableBundle();
     private final TestLooper mLooper = new TestLooper();
     private Context mMockContext;
-    private MockContentResolver mContentResolver;
 
     private TestStateMachine mSM;
     private WrappedEntitlementManager mEnMgr;
@@ -109,11 +106,6 @@ public final class EntitlementManagerTest {
         @Override
         public Resources getResources() {
             return mResources;
-        }
-
-        @Override
-        public ContentResolver getContentResolver() {
-            return mContentResolver;
         }
     }
 
@@ -151,28 +143,33 @@ public final class EntitlementManagerTest {
         MockitoAnnotations.initMocks(this);
         mMockingSession = mockitoSession()
                 .initMocks(this)
-                .spyStatic(SystemProperties.class)
+                .mockStatic(SystemProperties.class)
+                .mockStatic(DeviceConfig.class)
                 .strictness(Strictness.WARN)
                 .startMocking();
         // Don't disable tethering provisioning unless requested.
         doReturn(false).when(
                 () -> SystemProperties.getBoolean(
                 eq(EntitlementManager.DISABLE_PROVISIONING_SYSPROP_KEY), anyBoolean()));
+        doReturn(false).when(
+                () -> DeviceConfig.getBoolean(eq(NAMESPACE_CONNECTIVITY),
+                eq(TetheringConfiguration.TETHER_ENABLE_LEGACY_DHCP_SERVER), anyBoolean()));
 
         when(mResources.getStringArray(R.array.config_tether_dhcp_range))
-            .thenReturn(new String[0]);
+                .thenReturn(new String[0]);
         when(mResources.getStringArray(R.array.config_tether_usb_regexs))
-            .thenReturn(new String[0]);
+                .thenReturn(new String[0]);
         when(mResources.getStringArray(R.array.config_tether_wifi_regexs))
-            .thenReturn(new String[0]);
+                .thenReturn(new String[0]);
         when(mResources.getStringArray(R.array.config_tether_bluetooth_regexs))
-            .thenReturn(new String[0]);
+                .thenReturn(new String[0]);
         when(mResources.getIntArray(R.array.config_tether_upstream_types))
-            .thenReturn(new int[0]);
+                .thenReturn(new int[0]);
+        when(mResources.getBoolean(R.bool.config_tether_enable_legacy_dhcp_server)).thenReturn(
+                false);
+        when(mResources.getString(R.string.config_wifi_tether_enable)).thenReturn("");
         when(mLog.forSubComponent(anyString())).thenReturn(mLog);
 
-        mContentResolver = new MockContentResolver();
-        mContentResolver.addProvider(Settings.AUTHORITY, new FakeSettingsProvider());
         mMockContext = new MockContext(mContext);
         mSM = new TestStateMachine();
         mEnMgr = new WrappedEntitlementManager(mMockContext, mSM, mLog, EVENT_EM_UPDATE);

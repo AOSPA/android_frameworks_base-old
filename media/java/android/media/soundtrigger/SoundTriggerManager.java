@@ -23,7 +23,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.hardware.soundtrigger.ModelParams;
@@ -44,6 +44,7 @@ import com.android.internal.app.ISoundTriggerService;
 import com.android.internal.util.Preconditions;
 
 import java.util.HashMap;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -175,19 +176,40 @@ public final class SoundTriggerManager {
          * Factory constructor to create a SoundModel instance for use with methods in this
          * class.
          */
-        public static Model create(UUID modelUuid, UUID vendorUuid, byte[] data) {
-            return new Model(new SoundTrigger.GenericSoundModel(modelUuid,
-                        vendorUuid, data));
+        @NonNull
+        public static Model create(@NonNull UUID modelUuid, @NonNull UUID vendorUuid,
+                @Nullable byte[] data, int version) {
+            Objects.requireNonNull(modelUuid);
+            Objects.requireNonNull(vendorUuid);
+            return new Model(new SoundTrigger.GenericSoundModel(modelUuid, vendorUuid, data,
+                    version));
         }
 
+        /**
+         * Factory constructor to create a SoundModel instance for use with methods in this
+         * class.
+         */
+        @NonNull
+        public static Model create(@NonNull UUID modelUuid, @NonNull UUID vendorUuid,
+                @Nullable byte[] data) {
+            return create(modelUuid, vendorUuid, data, -1);
+        }
+
+        @NonNull
         public UUID getModelUuid() {
             return mGenericSoundModel.uuid;
         }
 
+        @NonNull
         public UUID getVendorUuid() {
             return mGenericSoundModel.vendorUuid;
         }
 
+        public int getVersion() {
+            return mGenericSoundModel.version;
+        }
+
+        @Nullable
         public byte[] getModelData() {
             return mGenericSoundModel.data;
         }
@@ -428,8 +450,7 @@ public final class SoundTriggerManager {
      */
     @RequiresPermission(android.Manifest.permission.MANAGE_SOUND_TRIGGER)
     public int setParameter(@Nullable UUID soundModelId,
-            @ModelParams int modelParam, int value)
-            throws UnsupportedOperationException, IllegalArgumentException {
+            @ModelParams int modelParam, int value) {
         try {
             return mSoundTriggerService.setParameter(new ParcelUuid(soundModelId), modelParam,
                     value);
@@ -449,15 +470,10 @@ public final class SoundTriggerManager {
      * @param soundModelId UUID of model to get parameter
      * @param modelParam   {@link ModelParams}
      * @return value of parameter
-     * @throws UnsupportedOperationException if hal or model do not support this API.
-     *         {@link SoundTriggerManager#queryParameter} should be checked first.
-     * @throws IllegalArgumentException if invalid model handle or parameter is passed.
-     *         {@link SoundTriggerManager#queryParameter} should be checked first.
      */
     @RequiresPermission(android.Manifest.permission.MANAGE_SOUND_TRIGGER)
     public int getParameter(@NonNull UUID soundModelId,
-            @ModelParams int modelParam)
-            throws UnsupportedOperationException, IllegalArgumentException {
+            @ModelParams int modelParam) {
         try {
             return mSoundTriggerService.getParameter(new ParcelUuid(soundModelId), modelParam);
         } catch (RemoteException e) {
@@ -479,8 +495,7 @@ public final class SoundTriggerManager {
     public ModelParamRange queryParameter(@Nullable UUID soundModelId,
             @ModelParams int modelParam) {
         try {
-            return mSoundTriggerService.queryParameter(new ParcelUuid(soundModelId),
-                    modelParam);
+            return mSoundTriggerService.queryParameter(new ParcelUuid(soundModelId), modelParam);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

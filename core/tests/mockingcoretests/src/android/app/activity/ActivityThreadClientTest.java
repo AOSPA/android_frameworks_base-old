@@ -54,7 +54,6 @@ import android.view.WindowManagerGlobal;
 
 import androidx.test.annotation.UiThreadTest;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.MediumTest;
 import androidx.test.platform.app.InstrumentationRegistry;
 
@@ -76,140 +75,7 @@ import org.mockito.quality.Strictness;
 @RunWith(AndroidJUnit4.class)
 @MediumTest
 @Presubmit
-@FlakyTest(bugId = 143153552)
 public class ActivityThreadClientTest {
-
-    @Test
-    @UiThreadTest
-    public void testWindowVisibilityChange_OnCreate() throws Exception {
-        try (ClientMockSession clientSession = new ClientMockSession()) {
-            ActivityClientRecord r = clientSession.stubActivityRecord();
-
-            clientSession.launchActivity(r);
-            assertEquals(ON_CREATE, r.getLifecycleState());
-
-            clientSession.changeVisibility(r, true);
-            assertEquals(ON_CREATE, r.getLifecycleState());
-
-            clientSession.changeVisibility(r, false);
-            assertEquals(ON_CREATE, r.getLifecycleState());
-        }
-    }
-
-    @Test
-    @UiThreadTest
-    public void testWindowVisibilityChange_OnCreate_Finished() throws Exception {
-        try (ClientMockSession clientSession = new ClientMockSession()) {
-            ActivityClientRecord r = clientSession.stubActivityRecord();
-
-            Activity activity = clientSession.launchActivity(r);
-            activity.finish();
-            assertEquals(ON_CREATE, r.getLifecycleState());
-
-            clientSession.changeVisibility(r, true);
-            assertEquals(ON_CREATE, r.getLifecycleState());
-
-            clientSession.changeVisibility(r, false);
-            assertEquals(ON_CREATE, r.getLifecycleState());
-        }
-    }
-
-    @Test
-    @UiThreadTest
-    public void testWindowVisibilityChange_OnStart() throws Exception {
-        try (ClientMockSession clientSession = new ClientMockSession()) {
-            ActivityClientRecord r = clientSession.stubActivityRecord();
-
-            clientSession.launchActivity(r);
-            clientSession.startActivity(r);
-            assertEquals(ON_START, r.getLifecycleState());
-
-            clientSession.changeVisibility(r, false);
-            assertEquals(ON_STOP, r.getLifecycleState());
-
-            clientSession.changeVisibility(r, true);
-            assertEquals(ON_START, r.getLifecycleState());
-        }
-    }
-
-    @Test
-    @UiThreadTest
-    public void testWindowVisibilityChange_OnStart_Finished() throws Exception {
-        try (ClientMockSession clientSession = new ClientMockSession()) {
-            ActivityClientRecord r = clientSession.stubActivityRecord();
-
-            Activity activity = clientSession.launchActivity(r);
-            clientSession.startActivity(r);
-            activity.finish();
-            assertEquals(ON_START, r.getLifecycleState());
-
-            clientSession.changeVisibility(r, false);
-            assertEquals(ON_STOP, r.getLifecycleState());
-
-            clientSession.changeVisibility(r, true);
-            assertEquals(ON_START, r.getLifecycleState());
-        }
-    }
-
-    @Test
-    @UiThreadTest
-    public void testWindowVisibilityChange_OnResume() throws Exception {
-        try (ClientMockSession clientSession = new ClientMockSession()) {
-            ActivityClientRecord r = clientSession.stubActivityRecord();
-
-            clientSession.launchActivity(r);
-            clientSession.startActivity(r);
-            clientSession.resumeActivity(r);
-            assertEquals(ON_RESUME, r.getLifecycleState());
-
-            clientSession.changeVisibility(r, false);
-            assertEquals(ON_STOP, r.getLifecycleState());
-
-            clientSession.changeVisibility(r, true);
-            assertEquals(ON_START, r.getLifecycleState());
-        }
-    }
-
-    @Test
-    @UiThreadTest
-    public void testWindowVisibilityChange_OnPause() throws Exception {
-        try (ClientMockSession clientSession = new ClientMockSession()) {
-            ActivityClientRecord r = clientSession.stubActivityRecord();
-
-            clientSession.launchActivity(r);
-            clientSession.startActivity(r);
-            clientSession.resumeActivity(r);
-            clientSession.pauseActivity(r);
-            assertEquals(ON_PAUSE, r.getLifecycleState());
-
-            clientSession.changeVisibility(r, false);
-            assertEquals(ON_STOP, r.getLifecycleState());
-
-            clientSession.changeVisibility(r, true);
-            assertEquals(ON_START, r.getLifecycleState());
-        }
-    }
-
-    @Test
-    @UiThreadTest
-    public void testWindowVisibilityChange_OnStop() throws Exception {
-        try (ClientMockSession clientSession = new ClientMockSession()) {
-            ActivityClientRecord r = clientSession.stubActivityRecord();
-
-            clientSession.launchActivity(r);
-            clientSession.startActivity(r);
-            clientSession.resumeActivity(r);
-            clientSession.pauseActivity(r);
-            clientSession.stopActivity(r);
-            assertEquals(ON_STOP, r.getLifecycleState());
-
-            clientSession.changeVisibility(r, true);
-            assertEquals(ON_START, r.getLifecycleState());
-
-            clientSession.changeVisibility(r, false);
-            assertEquals(ON_STOP, r.getLifecycleState());
-        }
-    }
 
     @Test
     @UiThreadTest
@@ -310,7 +176,7 @@ public class ActivityThreadClientTest {
         }
 
         private void startActivity(ActivityClientRecord r) {
-            mThread.handleStartActivity(r, null /* pendingActions */);
+            mThread.handleStartActivity(r.token, null /* pendingActions */);
         }
 
         private void resumeActivity(ActivityClientRecord r) {
@@ -325,17 +191,13 @@ public class ActivityThreadClientTest {
         }
 
         private void stopActivity(ActivityClientRecord r) {
-            mThread.handleStopActivity(r.token, false /* show */, 0 /* configChanges */,
+            mThread.handleStopActivity(r.token, 0 /* configChanges */,
                     new PendingTransactionActions(), false /* finalStateRequest */, "test");
         }
 
         private void destroyActivity(ActivityClientRecord r) {
             mThread.handleDestroyActivity(r.token, true /* finishing */, 0 /* configChanges */,
                     false /* getNonConfigInstance */, "test");
-        }
-
-        private void changeVisibility(ActivityClientRecord r, boolean show) {
-            mThread.handleWindowVisibility(r.token, show);
         }
 
         private ActivityClientRecord stubActivityRecord() {

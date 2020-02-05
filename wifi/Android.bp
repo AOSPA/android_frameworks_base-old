@@ -12,9 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+filegroup {
+    name: "framework-wifi-updatable-exported-aidl-sources",
+    srcs: ["aidl-export/**/*.aidl"],
+    path: "aidl-export",
+    visibility: ["//visibility:private"],
+}
 
 filegroup {
-    name: "framework-wifi-updatable-sources",
+    name: "framework-wifi-updatable-java-sources",
     srcs: [
         "java/**/*.java",
         "java/**/*.aidl",
@@ -23,6 +29,15 @@ filegroup {
         ":framework-wifi-non-updatable-sources"
     ],
     path: "java",
+    visibility: ["//visibility:private"],
+}
+
+filegroup {
+    name: "framework-wifi-updatable-sources",
+    srcs: [
+        ":framework-wifi-updatable-java-sources",
+        ":framework-wifi-updatable-exported-aidl-sources",
+    ],
 }
 
 filegroup {
@@ -32,6 +47,7 @@ filegroup {
         // framework-wifi.jar. This is not a good idea, should move WifiNetworkScoreCache
         // to a separate package.
         "java/android/net/wifi/WifiNetworkScoreCache.java",
+        "java/android/net/wifi/WifiOemConfigStoreMigrationHook.java",
         "java/android/net/wifi/wificond/*.java",
         ":libwificond_ipc_aidl",
     ],
@@ -48,28 +64,72 @@ test_access_hidden_api_whitelist = [
     "//frameworks/opt/net/wifi/tests/wifitests:__subpackages__",
 
     "//frameworks/opt/net/wifi/libs/WifiTrackerLib/tests",
+    "//external/robolectric-shadows:__subpackages__",
+    "//frameworks/base/packages/SettingsLib/tests/integ",
+    "//external/sl4a:__subpackages__",
 ]
 
+// wifi-service needs pre-jarjared version of framework-wifi so it can reference copied utility
+// classes before they are renamed.
 java_library {
-    name: "framework-wifi",
-    // TODO(b/140299412) should be core_current once we build against framework-system-stubs
-    sdk_version: "core_platform",
+    name: "framework-wifi-pre-jarjar",
+    // TODO(b/146757305): sdk_version should be "module_lib_current"
+    sdk_version: "core_current",
+    static_libs: [
+        "framework-wifi-util-lib",
+        "android.hardware.wifi-V1.0-java-constants",
+    ],
     libs: [
-        // TODO(b/140299412) should be framework-system-stubs once we fix all @hide dependencies
-        "framework-minus-apex",
+        "framework-annotations-lib",
+        "unsupportedappusage", // for android.compat.annotation.UnsupportedAppUsage
+        "unsupportedappusage-annotation", // for dalvik.annotation.compat.UnsupportedAppUsage
+        "framework-telephony-stubs",
+        // TODO(b/146757305): should be unnecessary once
+        // sdk_version="module_lib_current"
+        "android_system_stubs_current",
     ],
     srcs: [
         ":framework-wifi-updatable-sources",
     ],
+    // java_api_finder must accompany `srcs`
+    plugins: ["java_api_finder"],
+    installable: false,
+    visibility: [
+        "//frameworks/opt/net/wifi/service",
+        "//frameworks/opt/net/wifi/tests/wifitests",
+    ],
+
+    // TODO(b/146757305): should be unnecessary once
+    // sdk_version="module_lib_current"
+    aidl: {
+        include_dirs: [
+            "frameworks/base/core/java",
+        ],
+    },
+}
+
+// post-jarjar version of framework-wifi
+java_library {
+    name: "framework-wifi",
+    // TODO(b/146757305): sdk_version should be "module_lib_current"
+    sdk_version: "core_current",
+    static_libs: [
+        "framework-wifi-pre-jarjar",
+    ],
+    jarjar_rules: ":wifi-jarjar-rules",
+
     installable: true,
     optimize: {
         enabled: false
     },
+    hostdex: true, // for hiddenapi check
     visibility: [
-        "//frameworks/base", // TODO(b/140299412) remove once all dependencies are fixed
         "//frameworks/opt/net/wifi/service:__subpackages__",
     ] + test_access_hidden_api_whitelist,
-    plugins: ["java_api_finder"],
+    apex_available: [
+        "com.android.wifi",
+        "test_com.android.wifi",
+    ],
 }
 
 droidstubs {
@@ -78,6 +138,8 @@ droidstubs {
         ":framework-annotations",
         ":framework-wifi-updatable-sources",
     ],
+    // This is needed as IOnWifiActivityEnergyInfoListener.aidl in framework-wifi depends on
+    // WifiActivityEnergyInfo.aidl in framework-minus-apex
     aidl: {
         include_dirs: ["frameworks/base/core/java"],
     },
@@ -89,11 +151,6 @@ droidstubs {
 java_library {
     name: "framework-wifi-stubs",
     srcs: [":framework-wifi-stubs-srcs"],
-    aidl: {
-        export_include_dirs: [
-            "java",
-        ],
-    },
     sdk_version: "core_current",
     libs: ["android_system_stubs_current"],
     installable: false,
@@ -104,11 +161,18 @@ java_defaults {
     name: "framework-wifi-test-defaults",
     sdk_version: "core_platform", // tests can use @CorePlatformApi's
     libs: [
+        // order matters: classes in framework-wifi are resolved before framework, meaning
+        // @hide APIs in framework-wifi are resolved before @SystemApi stubs in framework
         "framework-wifi",
-        "framework-minus-apex",
+        "framework",
 
         // if sdk_version="" this gets automatically included, but here we need to add manually.
         "framework-res",
     ],
     visibility: test_access_hidden_api_whitelist,
+}
+
+filegroup {
+    name: "wifi-jarjar-rules",
+    srcs: ["jarjar-rules.txt"],
 }

@@ -22,6 +22,7 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import android.Manifest;
 import android.annotation.DrawableRes;
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -65,6 +66,7 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.os.WorkSource;
 import android.util.ArrayMap;
 import android.util.DisplayMetrics;
@@ -78,6 +80,7 @@ import com.android.internal.os.RoSystemProperties;
 import com.android.internal.os.TransferPipe;
 import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.MemInfoReader;
+import com.android.internal.util.Preconditions;
 import com.android.server.LocalServices;
 
 import org.xmlpull.v1.XmlSerializer;
@@ -571,6 +574,8 @@ public class ActivityManager {
     @IntDef(flag = true, prefix = { "PROCESS_CAPABILITY_" }, value = {
             PROCESS_CAPABILITY_NONE,
             PROCESS_CAPABILITY_FOREGROUND_LOCATION,
+            PROCESS_CAPABILITY_FOREGROUND_CAMERA,
+            PROCESS_CAPABILITY_FOREGROUND_MICROPHONE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ProcessCapability {}
@@ -583,9 +588,19 @@ public class ActivityManager {
     @TestApi
     public static final int PROCESS_CAPABILITY_FOREGROUND_LOCATION = 1 << 0;
 
+    /** @hide Process can access camera while in foreground */
+    @TestApi
+    public static final int PROCESS_CAPABILITY_FOREGROUND_CAMERA = 1 << 1;
+
+    /** @hide Process can access microphone while in foreground */
+    @TestApi
+    public static final int PROCESS_CAPABILITY_FOREGROUND_MICROPHONE = 1 << 2;
+
     /** @hide all capabilities, the ORing of all flags in {@link ProcessCapability}*/
     @TestApi
-    public static final int PROCESS_CAPABILITY_ALL = PROCESS_CAPABILITY_FOREGROUND_LOCATION;
+    public static final int PROCESS_CAPABILITY_ALL = PROCESS_CAPABILITY_FOREGROUND_LOCATION
+            | PROCESS_CAPABILITY_FOREGROUND_CAMERA
+            | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE;
 
     // NOTE: If PROCESS_STATEs are added, then new fields must be added
     // to frameworks/base/core/proto/android/app/enums.proto and the following method must
@@ -3107,7 +3122,7 @@ public class ActivityManager {
         public static final int IMPORTANCE_CANT_SAVE_STATE_PRE_26 = 170;
 
         /**
-         * Constant for {@link #importance}: This process is contains services
+         * Constant for {@link #importance}: This process contains services
          * that should remain running.  These are background services apps have
          * started, not something the user is aware of, so they may be killed by
          * the system relatively freely (though it is generally desired that they
@@ -3476,6 +3491,50 @@ public class ActivityManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Return a list of {@link ApplicationExitInfo} records containing the reasons for the most
+     * recent app deaths.
+     *
+     * <p class="note"> Note: System stores this historical information in a ring buffer and only
+     * the most recent records will be returned. </p>
+     *
+     * <p class="note"> Note: In the case that this application was bound to an external service
+     * with flag {@link android.content.Context#BIND_EXTERNAL_SERVICE}, the process of that external
+     * service will be included in this package's exit info. </p>
+     *
+     * @param packageName Optional, a null value means match all packages belonging to the
+     *                    caller's UID. If this package belongs to another UID, you must hold
+     *                    {@link android.Manifest.permission#DUMP} in order to retrieve it.
+     * @param pid         A process ID that used to belong to this package but died later; a value
+     *                    of 0 means to ignore this parameter and return all matching records.
+     * @param maxNum      The maximum number of results to be returned; a value of 0
+     *                    means to ignore this parameter and return all matching records
+     *
+     * @return a list of {@link ApplicationExitInfo} records matching the criteria, sorted in
+     *         the order from most recent to least recent.
+     */
+    @Nullable
+    public List<ApplicationExitInfo> getHistoricalProcessExitReasons(@Nullable String packageName,
+            @IntRange(from = 0) int pid, @IntRange(from = 0) int maxNum) {
+        try {
+            ParceledListSlice<ApplicationExitInfo> r = getService().getHistoricalProcessExitReasons(
+                    packageName, pid, maxNum, mContext.getUserId());
+            return r == null ? null : r.getList();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /*
+     * @return Whether or not the low memory kill will be reported in
+     * {@link #getHistoricalProcessExitReasons}.
+     *
+     * @see {@link ApplicationExitInfo#REASON_LOW_MEMORY}
+     */
+    public static boolean isLowMemoryKillReportSupported() {
+        return SystemProperties.getBoolean("persist.sys.lmk.reportkills", false);
     }
 
     /**
@@ -4064,12 +4123,36 @@ public class ActivityManager {
      * @hide
      */
     @SystemApi
+    @TestApi
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public boolean switchUser(@NonNull UserHandle user) {
         if (user == null) {
             throw new IllegalArgumentException("UserHandle cannot be null.");
         }
         return switchUser(user.getIdentifier());
+    }
+
+    /**
+     * Updates mcc mnc configuration and applies changes to the entire system.
+     *
+     * @param mcc mcc configuration to update.
+     * @param mnc mnc configuration to update.
+     * @throws RemoteException; IllegalArgumentException if mcc or mnc is null;
+     * @return Returns {@code true} if the configuration was updated successfully;
+     *         {@code false} otherwise.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.CHANGE_CONFIGURATION)
+    public boolean updateMccMncConfiguration(@NonNull String mcc, @NonNull String mnc) {
+        if (mcc == null || mnc == null) {
+            throw new IllegalArgumentException("mcc or mnc cannot be null.");
+        }
+        try {
+            return getService().updateMccMncConfiguration(mcc, mnc);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -4439,6 +4522,53 @@ public class ActivityManager {
     }
 
     /**
+     * Return if a given profile is in the foreground.
+     * @param userHandle UserHandle to check
+     * @return Returns the boolean result.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.CREATE_USERS
+    })
+    public boolean isProfileForeground(@NonNull UserHandle userHandle) {
+        UserManager userManager = mContext.getSystemService(UserManager.class);
+        if (userManager != null) {
+            for (UserInfo userInfo : userManager.getProfiles(getCurrentUser())) {
+                if (userInfo.id == userHandle.getIdentifier()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Kill the given PIDs, but the killing will be delayed until the device is idle
+     * and the given process is imperceptible.
+     *
+     * <p>You must hold the permission
+     * {@link android.Manifest.permission#FORCE_STOP_PACKAGES} to be able to
+     * call this method.
+     * </p>
+     *
+     * @param pids The list of the pids to be killed
+     * @pram reason The reason of the kill
+     *
+     * @hide
+     */
+    @SystemApi @TestApi
+    @RequiresPermission(Manifest.permission.FORCE_STOP_PACKAGES)
+    public void killProcessesWhenImperceptible(@NonNull int[] pids, @NonNull String reason) {
+        try {
+            getService().killProcessesWhenImperceptible(pids, reason);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * The AppTask allows you to manage your own application's tasks.
      * See {@link android.app.ActivityManager#getAppTasks()}
      */
@@ -4556,6 +4686,37 @@ public class ActivityManager {
     public void appNotResponding(@NonNull final String reason) {
         try {
             getService().appNotResponding(reason);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Register with {@link HomeVisibilityObserver} with ActivityManager.
+     * @hide
+     */
+    @SystemApi
+    public void registerHomeVisibilityObserver(@NonNull HomeVisibilityObserver observer) {
+        Preconditions.checkNotNull(observer);
+        try {
+            observer.init(mContext, this);
+            getService().registerProcessObserver(observer.mObserver);
+            // Notify upon first registration.
+            observer.onHomeVisibilityChanged(observer.mIsHomeActivityVisible);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Unregister with {@link HomeVisibilityObserver} with ActivityManager.
+     * @hide
+     */
+    @SystemApi
+    public void unregisterHomeVisibilityObserver(@NonNull HomeVisibilityObserver observer) {
+        Preconditions.checkNotNull(observer);
+        try {
+            getService().unregisterProcessObserver(observer.mObserver);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

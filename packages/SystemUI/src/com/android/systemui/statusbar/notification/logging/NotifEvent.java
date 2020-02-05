@@ -22,8 +22,8 @@ import android.service.notification.StatusBarNotification;
 
 import com.android.systemui.log.RichEvent;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
-import com.android.systemui.statusbar.notification.collection.listbuilder.NotifListBuilder;
-import com.android.systemui.statusbar.notification.collection.notifcollection.GroupCoalescer;
+import com.android.systemui.statusbar.notification.collection.ShadeListBuilder;
+import com.android.systemui.statusbar.notification.collection.coalescer.GroupCoalescer;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -67,7 +67,7 @@ public class NotifEvent extends RichEvent {
     }
 
     /**
-     * @return if this event occurred in {@link NotifListBuilder}
+     * @return if this event occurred in {@link ShadeListBuilder}
      */
     static boolean isListBuilderEvent(@EventType int type) {
         return isBetweenInclusive(type, 0, TOTAL_LIST_BUILDER_EVENT_TYPES);
@@ -94,7 +94,7 @@ public class NotifEvent extends RichEvent {
             LIST_BUILD_COMPLETE,
             PRE_GROUP_FILTER_INVALIDATED,
             PROMOTER_INVALIDATED,
-            SECTIONS_PROVIDER_INVALIDATED,
+            SECTION_INVALIDATED,
             COMPARATOR_INVALIDATED,
             PARENT_CHANGED,
             FILTER_CHANGED,
@@ -112,7 +112,12 @@ public class NotifEvent extends RichEvent {
             LIFETIME_EXTENDED,
             REMOVE_INTERCEPTED,
             INFLATION_ABORTED,
-            INFLATED
+            INFLATED,
+
+            // GroupCoalescer
+            COALESCED_EVENT,
+            EARLY_BATCH_EMIT,
+            EMIT_EVENT_BATCH
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface EventType {}
@@ -127,12 +132,13 @@ public class NotifEvent extends RichEvent {
                     "ListBuildComplete",
                     "FilterInvalidated",
                     "PromoterInvalidated",
-                    "SectionsProviderInvalidated",
+                    "SectionInvalidated",
                     "ComparatorInvalidated",
                     "ParentChanged",
                     "FilterChanged",
                     "PromoterChanged",
                     "FinalFilterInvalidated",
+                    "SectionerChanged",
 
                     // NEM event labels:
                     "NotifAdded",
@@ -147,14 +153,17 @@ public class NotifEvent extends RichEvent {
                     "InflationAborted",
                     "Inflated",
 
+                    // GroupCoalescer labels:
                     "CoalescedEvent",
-                    "EarlyBatchEmit"
+                    "EarlyBatchEmit",
+                    "EmitEventBatch",
+                    "BatchMaxTimeout"
             };
 
     private static final int TOTAL_EVENT_LABELS = EVENT_LABELS.length;
 
     /**
-     * Events related to {@link NotifListBuilder}
+     * Events related to {@link ShadeListBuilder}
      */
     public static final int WARN = 0;
     public static final int ON_BUILD_LIST = 1;
@@ -163,36 +172,41 @@ public class NotifEvent extends RichEvent {
     public static final int LIST_BUILD_COMPLETE = 4;
     public static final int PRE_GROUP_FILTER_INVALIDATED = 5;
     public static final int PROMOTER_INVALIDATED = 6;
-    public static final int SECTIONS_PROVIDER_INVALIDATED = 7;
+    public static final int SECTION_INVALIDATED = 7;
     public static final int COMPARATOR_INVALIDATED = 8;
     public static final int PARENT_CHANGED = 9;
     public static final int FILTER_CHANGED = 10;
     public static final int PROMOTER_CHANGED = 11;
     public static final int PRE_RENDER_FILTER_INVALIDATED = 12;
-    private static final int TOTAL_LIST_BUILDER_EVENT_TYPES = 13;
+    public static final int SECTION_CHANGED = 13;
+    private static final int TOTAL_LIST_BUILDER_EVENT_TYPES = 14;
 
     /**
      * Events related to {@link NotificationEntryManager}
      */
-    public static final int NOTIF_ADDED = TOTAL_LIST_BUILDER_EVENT_TYPES;
-    public static final int NOTIF_REMOVED = TOTAL_LIST_BUILDER_EVENT_TYPES + 1;
-    public static final int NOTIF_UPDATED = TOTAL_LIST_BUILDER_EVENT_TYPES + 2;
-    public static final int FILTER = TOTAL_LIST_BUILDER_EVENT_TYPES + 3;
-    public static final int SORT = TOTAL_LIST_BUILDER_EVENT_TYPES + 4;
-    public static final int FILTER_AND_SORT = TOTAL_LIST_BUILDER_EVENT_TYPES + 5;
-    public static final int NOTIF_VISIBILITY_CHANGED = TOTAL_LIST_BUILDER_EVENT_TYPES + 6;
-    public static final int LIFETIME_EXTENDED = TOTAL_LIST_BUILDER_EVENT_TYPES + 7;
+    private static final int NEM_EVENT_START_INDEX = TOTAL_LIST_BUILDER_EVENT_TYPES;
+    public static final int NOTIF_ADDED = NEM_EVENT_START_INDEX;
+    public static final int NOTIF_REMOVED = NEM_EVENT_START_INDEX + 1;
+    public static final int NOTIF_UPDATED = NEM_EVENT_START_INDEX + 2;
+    public static final int FILTER = NEM_EVENT_START_INDEX + 3;
+    public static final int SORT = NEM_EVENT_START_INDEX + 4;
+    public static final int FILTER_AND_SORT = NEM_EVENT_START_INDEX + 5;
+    public static final int NOTIF_VISIBILITY_CHANGED = NEM_EVENT_START_INDEX + 6;
+    public static final int LIFETIME_EXTENDED = NEM_EVENT_START_INDEX + 7;
     // unable to remove notif - removal intercepted by {@link NotificationRemoveInterceptor}
-    public static final int REMOVE_INTERCEPTED = TOTAL_LIST_BUILDER_EVENT_TYPES + 8;
-    public static final int INFLATION_ABORTED = TOTAL_LIST_BUILDER_EVENT_TYPES + 9;
-    public static final int INFLATED = TOTAL_LIST_BUILDER_EVENT_TYPES + 10;
+    public static final int REMOVE_INTERCEPTED = NEM_EVENT_START_INDEX + 8;
+    public static final int INFLATION_ABORTED = NEM_EVENT_START_INDEX + 9;
+    public static final int INFLATED = NEM_EVENT_START_INDEX + 10;
     private static final int TOTAL_NEM_EVENT_TYPES = 11;
 
     /**
      * Events related to {@link GroupCoalescer}
      */
-    public static final int COALESCED_EVENT = TOTAL_NEM_EVENT_TYPES;
-    public static final int EARLY_BATCH_EMIT = TOTAL_NEM_EVENT_TYPES + 1;
-    public static final int EMIT_EVENT_BATCH = TOTAL_NEM_EVENT_TYPES + 2;
-    private static final int TOTAL_COALESCER_EVENT_TYPES = 2;
+    private static final int COALESCER_EVENT_START_INDEX = NEM_EVENT_START_INDEX
+            + TOTAL_NEM_EVENT_TYPES;
+    public static final int COALESCED_EVENT = COALESCER_EVENT_START_INDEX;
+    public static final int EARLY_BATCH_EMIT = COALESCER_EVENT_START_INDEX + 1;
+    public static final int EMIT_EVENT_BATCH = COALESCER_EVENT_START_INDEX + 2;
+    public static final int BATCH_MAX_TIMEOUT = COALESCER_EVENT_START_INDEX + 3;
+    private static final int TOTAL_COALESCER_EVENT_TYPES = 3;
 }

@@ -19,6 +19,7 @@ package android.view;
 import static android.Manifest.permission.CONFIGURE_DISPLAY_COLOR_MODE;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
@@ -453,7 +454,7 @@ public final class Display {
         mResources = res;
         mDisplayAdjustments = mResources != null
             ? new DisplayAdjustments(mResources.getConfiguration())
-            : daj != null ? new DisplayAdjustments(daj) : null;
+            : daj != null ? new DisplayAdjustments(daj) : new DisplayAdjustments();
         mIsValid = true;
 
         // Cache properties that cannot change as long as the display is valid.
@@ -1010,6 +1011,9 @@ public final class Display {
      * @return Supported WCG color spaces.
      * @hide
      */
+    @SuppressLint("VisiblySynchronized")
+    @NonNull
+    @TestApi
     public @ColorMode ColorSpace[] getSupportedWideColorGamut() {
         synchronized (this) {
             final ColorSpace[] defaultColorSpaces = new ColorSpace[0];

@@ -19,17 +19,15 @@ package com.android.systemui.biometrics;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.app.admin.DevicePolicyManager;
 import android.content.Context;
 import android.graphics.PixelFormat;
-import android.graphics.PorterDuff;
-import android.graphics.drawable.Drawable;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.UserManager;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -75,6 +73,7 @@ public class AuthContainerView extends LinearLayout
     @interface ContainerState {}
 
     final Config mConfig;
+    final int mEffectiveUserId;
     private final Handler mHandler;
     private final Injector mInjector;
     private final IBinder mWindowToken = new Binder();
@@ -166,9 +165,8 @@ public class AuthContainerView extends LinearLayout
                     R.layout.auth_container_view, root, false /* attachToRoot */);
         }
 
-        AuthPanelController getPanelController(Context context, View panelView,
-                boolean isManagedProfile) {
-            return new AuthPanelController(context, panelView, isManagedProfile);
+        AuthPanelController getPanelController(Context context, View panelView) {
+            return new AuthPanelController(context, panelView);
         }
 
         ImageView getBackgroundView(FrameLayout parent) {
@@ -181,6 +179,14 @@ public class AuthContainerView extends LinearLayout
 
         int getAnimateCredentialStartDelayMs() {
             return AuthDialog.ANIMATE_CREDENTIAL_START_DELAY_MS;
+        }
+
+        UserManager getUserManager(Context context) {
+            return UserManager.get(context);
+        }
+
+        int getCredentialType(Context context, int effectiveUserId) {
+            return Utils.getCredentialType(context, effectiveUserId);
         }
     }
 
@@ -230,6 +236,9 @@ public class AuthContainerView extends LinearLayout
         mConfig = config;
         mInjector = injector;
 
+        mEffectiveUserId = mInjector.getUserManager(mContext)
+                .getCredentialOwnerProfile(mConfig.mUserId);
+
         mHandler = new Handler(Looper.getMainLooper());
         mWindowManager = mContext.getSystemService(WindowManager.class);
         mWakefulnessLifecycle = Dependency.get(WakefulnessLifecycle.class);
@@ -243,10 +252,8 @@ public class AuthContainerView extends LinearLayout
         final LayoutInflater factory = LayoutInflater.from(mContext);
         mFrameLayout = mInjector.inflateContainerView(factory, this);
 
-        final boolean isManagedProfile = Utils.isManagedProfile(mContext, mConfig.mUserId);
-
         mPanelView = mInjector.getPanelView(mFrameLayout);
-        mPanelController = mInjector.getPanelController(mContext, mPanelView, isManagedProfile);
+        mPanelController = mInjector.getPanelController(mContext, mPanelView);
 
         // Inflate biometric view only if necessary.
         if (Utils.isBiometricAllowed(mConfig.mBiometricPromptBundle)) {
@@ -267,17 +274,6 @@ public class AuthContainerView extends LinearLayout
 
         mBiometricScrollView = mInjector.getBiometricScrollView(mFrameLayout);
         mBackgroundView = mInjector.getBackgroundView(mFrameLayout);
-
-
-        if (isManagedProfile) {
-            final Drawable image = getResources().getDrawable(R.drawable.work_challenge_background,
-                    mContext.getTheme());
-            final DevicePolicyManager dpm = mContext.getSystemService(DevicePolicyManager.class);
-            image.setColorFilter(dpm.getOrganizationColorForUser(mConfig.mUserId),
-                    PorterDuff.Mode.DARKEN);
-            mBackgroundView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            mBackgroundView.setImageDrawable(image);
-        }
 
         addView(mFrameLayout);
 
@@ -307,6 +303,7 @@ public class AuthContainerView extends LinearLayout
         mBiometricView.setCallback(mBiometricCallback);
         mBiometricView.setBackgroundView(mBackgroundView);
         mBiometricView.setUserId(mConfig.mUserId);
+        mBiometricView.setEffectiveUserId(mEffectiveUserId);
         mBiometricScrollView.addView(mBiometricView);
     }
 
@@ -318,7 +315,10 @@ public class AuthContainerView extends LinearLayout
      */
     private void addCredentialView(boolean animatePanel, boolean animateContents) {
         final LayoutInflater factory = LayoutInflater.from(mContext);
-        final int credentialType = Utils.getCredentialType(mContext, mConfig.mUserId);
+
+        final @Utils.CredentialType int credentialType = mInjector.getCredentialType(
+                mContext, mEffectiveUserId);
+
         switch (credentialType) {
             case Utils.CREDENTIAL_PATTERN:
                 mCredentialView = (AuthCredentialView) factory.inflate(
@@ -334,7 +334,8 @@ public class AuthContainerView extends LinearLayout
         }
 
         mCredentialView.setContainerView(this);
-        mCredentialView.setUser(mConfig.mUserId);
+        mCredentialView.setEffectiveUserId(mEffectiveUserId);
+        mCredentialView.setCredentialType(credentialType);
         mCredentialView.setCallback(mCredentialCallback);
         mCredentialView.setBiometricPromptBundle(mConfig.mBiometricPromptBundle);
         mCredentialView.setPanelController(mPanelController, animatePanel);

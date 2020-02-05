@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.notification.collection
 
 import android.app.Notification
+import android.app.NotificationChannel
 import android.app.NotificationManager.IMPORTANCE_DEFAULT
 import android.app.NotificationManager.IMPORTANCE_HIGH
 import android.app.NotificationManager.IMPORTANCE_LOW
@@ -28,6 +29,7 @@ import com.android.systemui.statusbar.NotificationEntryHelper.modifyRanking
 import com.android.systemui.statusbar.NotificationMediaManager
 import com.android.systemui.statusbar.notification.NotificationFilter
 import com.android.systemui.statusbar.notification.NotificationSectionsFeatureManager
+import com.android.systemui.statusbar.notification.collection.provider.HighPriorityProvider
 import com.android.systemui.statusbar.notification.logging.NotifLog
 import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier
 import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager.BUCKET_ALERTING
@@ -62,7 +64,8 @@ class NotificationRankingManagerTest : SysuiTestCase() {
                 mock(NotificationFilter::class.java),
                 mock(NotifLog::class.java),
                 mock(NotificationSectionsFeatureManager::class.java),
-                personNotificationIdentifier
+                personNotificationIdentifier,
+                HighPriorityProvider(personNotificationIdentifier)
         )
     }
 
@@ -79,6 +82,7 @@ class NotificationRankingManagerTest : SysuiTestCase() {
                 .setNotification(
                         Notification.Builder(mContext, "test")
                                 .build())
+                .setChannel(NotificationChannel("test", "", IMPORTANCE_DEFAULT))
                 .setUser(mContext.getUser())
                 .setOverrideGroupKey("")
                 .build()
@@ -92,6 +96,7 @@ class NotificationRankingManagerTest : SysuiTestCase() {
                 .setNotification(
                         Notification.Builder(mContext, "test")
                                 .build())
+                .setChannel(NotificationChannel("test", "", IMPORTANCE_DEFAULT))
                 .setUser(mContext.getUser())
                 .setOverrideGroupKey("")
                 .build()
@@ -114,6 +119,7 @@ class NotificationRankingManagerTest : SysuiTestCase() {
                 .setOpPkg("pkg")
                 .setTag("tag")
                 .setNotification(aN)
+                .setChannel(NotificationChannel("test", "", IMPORTANCE_DEFAULT))
                 .setUser(mContext.getUser())
                 .setOverrideGroupKey("")
                 .build()
@@ -128,6 +134,7 @@ class NotificationRankingManagerTest : SysuiTestCase() {
                 .setOpPkg("pkg2")
                 .setTag("tag")
                 .setNotification(bN)
+                .setChannel(NotificationChannel("test", "", IMPORTANCE_DEFAULT))
                 .setUser(mContext.getUser())
                 .setOverrideGroupKey("")
                 .build()
@@ -147,6 +154,7 @@ class NotificationRankingManagerTest : SysuiTestCase() {
                 .setTag("tag")
                 .setNotification(notif)
                 .setUser(mContext.user)
+                .setChannel(NotificationChannel("test", "", IMPORTANCE_DEFAULT))
                 .setOverrideGroupKey("")
                 .build()
 
@@ -166,6 +174,7 @@ class NotificationRankingManagerTest : SysuiTestCase() {
                 .setTag("tag")
                 .setNotification(notif)
                 .setUser(mContext.user)
+                .setChannel(NotificationChannel("test", "", IMPORTANCE_DEFAULT))
                 .setOverrideGroupKey("")
                 .build()
 
@@ -182,7 +191,8 @@ class NotificationRankingManagerTest : SysuiTestCase() {
         filter: NotificationFilter,
         notifLog: NotifLog,
         sectionsFeatureManager: NotificationSectionsFeatureManager,
-        peopleNotificationIdentifier: PeopleNotificationIdentifier
+        peopleNotificationIdentifier: PeopleNotificationIdentifier,
+        highPriorityProvider: HighPriorityProvider
     ) : NotificationRankingManager(
         mediaManager,
         groupManager,
@@ -190,7 +200,8 @@ class NotificationRankingManagerTest : SysuiTestCase() {
         filter,
         notifLog,
         sectionsFeatureManager,
-        peopleNotificationIdentifier
+        peopleNotificationIdentifier,
+        highPriorityProvider
     ) {
         fun applyTestRankingMap(r: RankingMap) {
             rankingMap = r

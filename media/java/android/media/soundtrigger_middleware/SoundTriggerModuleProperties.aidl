@@ -30,6 +30,14 @@ parcelable SoundTriggerModuleProperties {
      * Unique implementation ID. The UUID must change with each version of
        the engine implementation */
     String     uuid;
+    /**
+     * String naming the architecture used for running the supported models.
+     * (eg. a platform running models on a DSP could implement this string to convey the DSP
+     * architecture used)
+     * This property is supported for soundtrigger HAL v2.3 and above.
+     * If running a previous version, the string will be empty.
+     */
+    String supportedModelArch;
     /** Maximum number of concurrent sound models loaded */
     int maxSoundModels;
     /** Maximum number of key phrases */
@@ -50,4 +58,11 @@ parcelable SoundTriggerModuleProperties {
      * Rated power consumption when detection is active with TDB
      * silence/sound/speech ratio */
     int powerConsumptionMw;
+    /**
+     * Bit field encoding of the AudioCapabilities
+     * supported by the firmware.
+     * This property is supported for soundtrigger HAL v2.3 and above.
+     * If running a previous version, this value will be 0.
+     */
+    int audioCapabilities;
 }

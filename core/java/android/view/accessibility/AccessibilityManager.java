@@ -31,6 +31,7 @@ import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.annotation.UserIdInt;
+import android.app.RemoteAction;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
@@ -1194,6 +1195,19 @@ public final class AccessibilityManager {
     @TestApi
     @RequiresPermission(Manifest.permission.MANAGE_ACCESSIBILITY)
     public void performAccessibilityShortcut() {
+        performAccessibilityShortcut(null);
+    }
+
+    /**
+     * Perform the accessibility shortcut for the given target which is assigned to the shortcut.
+     *
+     * @param targetName The flattened {@link ComponentName} string or the class name of a system
+     *        class implementing a supported accessibility feature, or {@code null} if there's no
+     *        specified target.
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.MANAGE_ACCESSIBILITY)
+    public void performAccessibilityShortcut(@Nullable String targetName) {
         final IAccessibilityManager service;
         synchronized (mLock) {
             service = getServiceLocked();
@@ -1202,9 +1216,64 @@ public final class AccessibilityManager {
             }
         }
         try {
-            service.performAccessibilityShortcut();
+            service.performAccessibilityShortcut(targetName);
         } catch (RemoteException re) {
             Log.e(LOG_TAG, "Error performing accessibility shortcut. ", re);
+        }
+    }
+
+    /**
+     * Register the provided {@link RemoteAction} with the given actionId
+     *
+     * @param action The remote action to be registered with the given actionId as system action.
+     * @param actionId The id uniquely identify the system action.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.MANAGE_ACCESSIBILITY)
+    public void registerSystemAction(@NonNull RemoteAction action, int actionId) {
+        final IAccessibilityManager service;
+        synchronized (mLock) {
+            service = getServiceLocked();
+            if (service == null) {
+                return;
+            }
+        }
+        try {
+            service.registerSystemAction(action, actionId);
+
+            if (DEBUG) {
+                Log.i(LOG_TAG, "System action " + action.getTitle() + " is registered.");
+            }
+        } catch (RemoteException re) {
+            Log.e(LOG_TAG, "Error registering system action " + action.getTitle() + " ", re);
+        }
+    }
+
+   /**
+     * Unregister a system action with the given actionId
+     *
+     * @param actionId The id uniquely identify the system action to be unregistered.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.MANAGE_ACCESSIBILITY)
+    public void unregisterSystemAction(int actionId) {
+        final IAccessibilityManager service;
+        synchronized (mLock) {
+            service = getServiceLocked();
+            if (service == null) {
+                return;
+            }
+        }
+        try {
+            service.unregisterSystemAction(actionId);
+
+            if (DEBUG) {
+                Log.i(LOG_TAG, "System action with actionId " + actionId + " is unregistered.");
+            }
+        } catch (RemoteException re) {
+            Log.e(LOG_TAG, "Error unregistering system action with actionId " + actionId + " ", re);
         }
     }
 
@@ -1214,7 +1283,22 @@ public final class AccessibilityManager {
      * @param displayId The logical display id.
      * @hide
      */
+    @RequiresPermission(android.Manifest.permission.STATUS_BAR_SERVICE)
     public void notifyAccessibilityButtonClicked(int displayId) {
+        notifyAccessibilityButtonClicked(displayId, null);
+    }
+
+    /**
+     * Perform the accessibility button for the given target which is assigned to the button.
+     *
+     * @param displayId displayId The logical display id.
+     * @param targetName The flattened {@link ComponentName} string or the class name of a system
+     *        class implementing a supported accessibility feature, or {@code null} if there's no
+     *        specified target.
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.STATUS_BAR_SERVICE)
+    public void notifyAccessibilityButtonClicked(int displayId, @Nullable String targetName) {
         final IAccessibilityManager service;
         synchronized (mLock) {
             service = getServiceLocked();
@@ -1223,7 +1307,7 @@ public final class AccessibilityManager {
             }
         }
         try {
-            service.notifyAccessibilityButtonClicked(displayId);
+            service.notifyAccessibilityButtonClicked(displayId, targetName);
         } catch (RemoteException re) {
             Log.e(LOG_TAG, "Error while dispatching accessibility button click", re);
         }
@@ -1358,6 +1442,29 @@ public final class AccessibilityManager {
             Log.e(LOG_TAG, "Error while initializing AccessibilityShortcutInfo", exp);
         }
         return null;
+    }
+
+    /**
+     *
+     * Sets an {@link IWindowMagnificationConnection} that manipulates window magnification.
+     *
+     * @param connection The connection that manipulates window magnification.
+     * @hide
+     */
+    public void setWindowMagnificationConnection(@Nullable
+            IWindowMagnificationConnection connection) {
+        final IAccessibilityManager service;
+        synchronized (mLock) {
+            service = getServiceLocked();
+            if (service == null) {
+                return;
+            }
+        }
+        try {
+            service.setWindowMagnificationConnection(connection);
+        } catch (RemoteException re) {
+            Log.e(LOG_TAG, "Error setting window magnfication connection", re);
+        }
     }
 
     private IAccessibilityManager getServiceLocked() {

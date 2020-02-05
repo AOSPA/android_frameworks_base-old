@@ -58,7 +58,7 @@ public class HeadsUpAppearanceController implements OnHeadsUpChangedListener,
     private final View mClockView;
     private final View mOperatorNameView;
     private final DarkIconDispatcher mDarkIconDispatcher;
-    private final NotificationPanelView mPanelView;
+    private final NotificationPanelViewController mNotificationPanelViewController;
     private final Consumer<ExpandableNotificationRow>
             mSetTrackingHeadsUp = this::setTrackingHeadsUp;
     private final Runnable mUpdatePanelTranslation = this::updatePanelTranslation;
@@ -92,20 +92,22 @@ public class HeadsUpAppearanceController implements OnHeadsUpChangedListener,
 
     public HeadsUpAppearanceController(
             NotificationIconAreaController notificationIconAreaController,
-            HeadsUpManagerPhone headsUpManager, View statusbarView,
+            HeadsUpManagerPhone headsUpManager,
+            View notificationShadeView,
             SysuiStatusBarStateController statusBarStateController,
             KeyguardBypassController keyguardBypassController,
             KeyguardStateController keyguardStateController,
-            NotificationWakeUpCoordinator wakeUpCoordinator, CommandQueue commandQueue) {
+            NotificationWakeUpCoordinator wakeUpCoordinator, CommandQueue commandQueue,
+            NotificationPanelViewController notificationPanelViewController, View statusBarView) {
         this(notificationIconAreaController, headsUpManager, statusBarStateController,
                 keyguardBypassController, wakeUpCoordinator, keyguardStateController,
                 commandQueue,
-                statusbarView.findViewById(R.id.heads_up_status_bar_view),
-                statusbarView.findViewById(R.id.notification_stack_scroller),
-                statusbarView.findViewById(R.id.notification_panel),
-                statusbarView.findViewById(R.id.clock),
-                statusbarView.findViewById(R.id.operator_name_frame),
-                statusbarView.findViewById(R.id.centered_icon_area));
+                statusBarView.findViewById(R.id.heads_up_status_bar_view),
+                notificationShadeView.findViewById(R.id.notification_stack_scroller),
+                notificationPanelViewController,
+                statusBarView.findViewById(R.id.clock),
+                statusBarView.findViewById(R.id.operator_name_frame),
+                statusBarView.findViewById(R.id.centered_icon_area));
     }
 
     @VisibleForTesting
@@ -119,7 +121,7 @@ public class HeadsUpAppearanceController implements OnHeadsUpChangedListener,
             CommandQueue commandQueue,
             HeadsUpStatusBarView headsUpStatusBarView,
             NotificationStackScrollLayout stackScroller,
-            NotificationPanelView panelView,
+            NotificationPanelViewController notificationPanelViewController,
             View clockView,
             View operatorNameView,
             View centeredIconView) {
@@ -131,10 +133,10 @@ public class HeadsUpAppearanceController implements OnHeadsUpChangedListener,
         headsUpStatusBarView.setOnDrawingRectChangedListener(
                 () -> updateIsolatedIconLocation(true /* requireUpdate */));
         mStackScroller = stackScroller;
-        mPanelView = panelView;
-        panelView.addTrackingHeadsUpListener(mSetTrackingHeadsUp);
-        panelView.addVerticalTranslationListener(mUpdatePanelTranslation);
-        panelView.setHeadsUpAppearanceController(this);
+        mNotificationPanelViewController = notificationPanelViewController;
+        notificationPanelViewController.addTrackingHeadsUpListener(mSetTrackingHeadsUp);
+        notificationPanelViewController.addVerticalTranslationListener(mUpdatePanelTranslation);
+        notificationPanelViewController.setHeadsUpAppearanceController(this);
         mStackScroller.addOnExpandedHeightChangedListener(mSetExpandedHeight);
         mStackScroller.addOnLayoutChangeListener(mStackScrollLayoutChangeListener);
         mStackScroller.setHeadsUpAppearanceController(this);
@@ -169,9 +171,9 @@ public class HeadsUpAppearanceController implements OnHeadsUpChangedListener,
         mHeadsUpManager.removeListener(this);
         mHeadsUpStatusBarView.setOnDrawingRectChangedListener(null);
         mWakeUpCoordinator.removeListener(this);
-        mPanelView.removeTrackingHeadsUpListener(mSetTrackingHeadsUp);
-        mPanelView.removeVerticalTranslationListener(mUpdatePanelTranslation);
-        mPanelView.setHeadsUpAppearanceController(null);
+        mNotificationPanelViewController.removeTrackingHeadsUpListener(mSetTrackingHeadsUp);
+        mNotificationPanelViewController.removeVerticalTranslationListener(mUpdatePanelTranslation);
+        mNotificationPanelViewController.setHeadsUpAppearanceController(null);
         mStackScroller.removeOnExpandedHeightChangedListener(mSetExpandedHeight);
         mStackScroller.removeOnLayoutChangeListener(mStackScrollLayoutChangeListener);
         mDarkIconDispatcher.removeDarkReceiver(this);

@@ -91,7 +91,6 @@ import android.view.Display;
 import com.android.internal.compat.CompatibilityChangeConfig;
 import com.android.internal.util.HexDump;
 import com.android.internal.util.MemInfoReader;
-import com.android.internal.util.Preconditions;
 import com.android.server.compat.PlatformCompat;
 
 import java.io.BufferedReader;
@@ -217,6 +216,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runSetWatchHeap(pw);
                 case "clear-watch-heap":
                     return runClearWatchHeap(pw);
+                case "clear-exit-info":
+                    return runClearExitInfo(pw);
                 case "bug-report":
                     return runBugReport(pw);
                 case "force-stop":
@@ -1019,6 +1020,30 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    int runClearExitInfo(PrintWriter pw) throws RemoteException {
+        mInternal.enforceCallingPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS,
+                "runClearExitInfo()");
+        String opt;
+        int userId = UserHandle.USER_CURRENT;
+        String packageName = null;
+        while ((opt = getNextOption()) != null) {
+            if (opt.equals("--user")) {
+                userId = UserHandle.parseUserArg(getNextArgRequired());
+            } else {
+                packageName = opt;
+            }
+        }
+        if (userId == UserHandle.USER_CURRENT) {
+            UserInfo user = mInterface.getCurrentUser();
+            if (user == null) {
+                return -1;
+            }
+            userId = user.id;
+        }
+        mInternal.mProcessList.mAppExitInfoTracker.clearHistoryProcessExitInfo(packageName, userId);
+        return 0;
+    }
+
     int runBugReport(PrintWriter pw) throws RemoteException {
         String opt;
         boolean fullBugreport = true;
@@ -1145,7 +1170,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
 
         static final int RESULT_ANR_DIALOG = 0;
         static final int RESULT_ANR_KILL = 1;
-        static final int RESULT_ANR_WAIT = 1;
+        static final int RESULT_ANR_WAIT = 2;
 
         int mResult;
 
@@ -1734,7 +1759,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return 0;
     }
 
-    private void switchUserAndWaitForComplete(int userId) throws RemoteException {
+    private boolean switchUserAndWaitForComplete(int userId) throws RemoteException {
         // Register switch observer.
         final CountDownLatch switchLatch = new CountDownLatch(1);
         mInterface.registerUserSwitchObserver(
@@ -1748,7 +1773,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 }, ActivityManagerShellCommand.class.getName());
 
         // Switch.
-        mInterface.switchUser(userId);
+        boolean switched = mInterface.switchUser(userId);
 
         // Wait.
         try {
@@ -1756,6 +1781,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         } catch (InterruptedException e) {
             getErrPrintWriter().println("Thread interrupted unexpectedly.");
         }
+        return switched;
     }
 
     int runSwitchUser(PrintWriter pw) throws RemoteException {
@@ -1777,12 +1803,18 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
 
         int userId = Integer.parseInt(getNextArgRequired());
+        boolean switched;
         if (wait) {
-            switchUserAndWaitForComplete(userId);
+            switched = switchUserAndWaitForComplete(userId);
         } else {
-            mInterface.switchUser(userId);
+            switched = mInterface.switchUser(userId);
         }
-        return 0;
+        if (switched) {
+            return 0;
+        } else {
+            pw.printf("Failed to switch to user %d\n", userId);
+            return 1;
+        }
     }
 
     int runGetCurrentUser(PrintWriter pw) throws RemoteException {
@@ -2359,6 +2391,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
             return UsageStatsManager.STANDBY_BUCKET_FREQUENT;
         } else if (lower.startsWith("ra")) {
             return UsageStatsManager.STANDBY_BUCKET_RARE;
+        } else if (lower.startsWith("re")) {
+            return UsageStatsManager.STANDBY_BUCKET_RESTRICTED;
         } else if (lower.startsWith("ne")) {
             return UsageStatsManager.STANDBY_BUCKET_NEVER;
         } else {
@@ -2934,33 +2968,37 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
         ArraySet<Long> enabled = new ArraySet<>();
         ArraySet<Long> disabled = new ArraySet<>();
-        switch (toggleValue) {
-            case "enable":
-                enabled.add(changeId);
-                pw.println("Enabled change " + changeId + " for " + packageName + ".");
-                CompatibilityChangeConfig overrides =
-                        new CompatibilityChangeConfig(
-                                new Compatibility.ChangeConfig(enabled, disabled));
-                platformCompat.setOverrides(overrides, packageName);
-                return 0;
-            case "disable":
-                disabled.add(changeId);
-                pw.println("Disabled change " + changeId + " for " + packageName + ".");
-                overrides =
-                        new CompatibilityChangeConfig(
-                                new Compatibility.ChangeConfig(enabled, disabled));
-                platformCompat.setOverrides(overrides, packageName);
-                return 0;
-            case "reset":
-                if (platformCompat.clearOverride(changeId, packageName)) {
-                    pw.println("Reset change " + changeId + " for " + packageName
-                            + " to default value.");
-                } else {
-                    pw.println("No override exists for changeId " + changeId + ".");
-                }
-                return 0;
-            default:
-                pw.println("Invalid toggle value: '" + toggleValue + "'.");
+        try {
+            switch (toggleValue) {
+                case "enable":
+                    enabled.add(changeId);
+                    CompatibilityChangeConfig overrides =
+                            new CompatibilityChangeConfig(
+                                    new Compatibility.ChangeConfig(enabled, disabled));
+                    platformCompat.setOverrides(overrides, packageName);
+                    pw.println("Enabled change " + changeId + " for " + packageName + ".");
+                    return 0;
+                case "disable":
+                    disabled.add(changeId);
+                    overrides =
+                            new CompatibilityChangeConfig(
+                                    new Compatibility.ChangeConfig(enabled, disabled));
+                    platformCompat.setOverrides(overrides, packageName);
+                    pw.println("Disabled change " + changeId + " for " + packageName + ".");
+                    return 0;
+                case "reset":
+                    if (platformCompat.clearOverride(changeId, packageName)) {
+                        pw.println("Reset change " + changeId + " for " + packageName
+                                + " to default value.");
+                    } else {
+                        pw.println("No override exists for changeId " + changeId + ".");
+                    }
+                    return 0;
+                default:
+                    pw.println("Invalid toggle value: '" + toggleValue + "'.");
+            }
+        } catch (SecurityException e) {
+            pw.println(e.getMessage());
         }
         return -1;
     }
@@ -3004,6 +3042,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("    s[ervices] [COMP_SPEC ...]: service state");
             pw.println("    allowed-associations: current package association restrictions");
             pw.println("    as[sociations]: tracked app associations");
+            pw.println("    exit-info [PACKAGE_NAME]: historical process exit information");
             pw.println("    lmk: stats on low memory killer");
             pw.println("    lru: raw LRU process list");
             pw.println("    binder-proxies: stats on binder objects and IPCs");
@@ -3138,6 +3177,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      above <HEAP-LIMIT> then a heap dump is collected for the user to report.");
             pw.println("  clear-watch-heap");
             pw.println("      Clear the previously set-watch-heap.");
+            pw.println("  clear-exit-info [--user <USER_ID> | all | current] [package]");
+            pw.println("      Clear the process exit-info for given package");
             pw.println("  bug-report [--progress | --telephony]");
             pw.println("      Request bug report generation; will launch a notification");
             pw.println("        when done to select where it should be delivered. Options are:");

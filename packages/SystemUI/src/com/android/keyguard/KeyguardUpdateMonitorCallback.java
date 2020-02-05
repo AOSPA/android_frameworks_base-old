@@ -318,4 +318,9 @@ public class KeyguardUpdateMonitorCallback {
      */
     public void onBiometricsCleared() { }
 
+    /**
+     * Called when the secondary lock screen requirement changes.
+     */
+    public void onSecondaryLockscreenRequirementChanged(int userId) { }
+
 }

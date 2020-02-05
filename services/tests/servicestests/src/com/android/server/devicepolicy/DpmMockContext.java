@@ -219,6 +219,10 @@ public class DpmMockContext extends MockContext {
                 return mMockSystemServices.accountManager;
             case Context.TELEPHONY_SERVICE:
                 return mMockSystemServices.telephonyManager;
+            case Context.APP_OPS_SERVICE:
+                return mMockSystemServices.appOpsManager;
+            case Context.CROSS_PROFILE_APPS_SERVICE:
+                return mMockSystemServices.crossProfileApps;
         }
         throw new UnsupportedOperationException();
     }
@@ -252,6 +256,22 @@ public class DpmMockContext extends MockContext {
         }
         if (!permissions.contains(permission)) {
             throw new SecurityException("Caller doesn't have " + permission + " : " + message);
+        }
+    }
+
+    @Override
+    public int checkPermission(String permission, int pid, int uid) {
+        if (UserHandle.isSameApp(binder.getCallingUid(), SYSTEM_UID)) {
+            return PackageManager.PERMISSION_GRANTED; // Assume system has all permissions.
+        }
+        List<String> permissions = binder.callingPermissions.get(binder.getCallingUid());
+        if (permissions == null) {
+            permissions = callerPermissions;
+        }
+        if (permissions.contains(permission)) {
+            return PackageManager.PERMISSION_GRANTED;
+        } else {
+            return PackageManager.PERMISSION_DENIED;
         }
     }
 

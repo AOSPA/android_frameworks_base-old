@@ -241,7 +241,7 @@ static jobject ImageDecoder_nDecodeBitmap(JNIEnv* env, jobject /*clazz*/, jlong 
         doThrowISE(env, "Could not scale to target size!");
         return nullptr;
     }
-    if (requireUnpremul && !decoder->setOutAlphaType(kUnpremul_SkAlphaType)) {
+    if (requireUnpremul && !decoder->setUnpremultipliedRequired(true)) {
         doThrowISE(env, "Cannot scale unpremultiplied pixels!");
         return nullptr;
     }
@@ -301,11 +301,15 @@ static jobject ImageDecoder_nDecodeBitmap(JNIEnv* env, jobject /*clazz*/, jlong 
         }
     }
 
-    SkBitmap bm;
     SkImageInfo bitmapInfo = decoder->getOutputInfo();
+    if (decoder->opaque()) {
+        bitmapInfo = bitmapInfo.makeAlphaType(kOpaque_SkAlphaType);
+    }
     if (asAlphaMask && colorType == kGray_8_SkColorType) {
         bitmapInfo = bitmapInfo.makeColorType(kAlpha_8_SkColorType);
     }
+
+    SkBitmap bm;
     if (!bm.setInfo(bitmapInfo)) {
         doThrowIOE(env, "Failed to setInfo properly");
         return nullptr;
@@ -475,7 +479,7 @@ static void ImageDecoder_nClose(JNIEnv* /*env*/, jobject /*clazz*/, jlong native
 
 static jstring ImageDecoder_nGetMimeType(JNIEnv* env, jobject /*clazz*/, jlong nativePtr) {
     auto* decoder = reinterpret_cast<ImageDecoder*>(nativePtr);
-    return encodedFormatToString(env, decoder->mCodec->getEncodedFormat());
+    return getMimeTypeAsJavaString(env, decoder->mCodec->getEncodedFormat());
 }
 
 static jobject ImageDecoder_nGetColorSpace(JNIEnv* env, jobject /*clazz*/, jlong nativePtr) {

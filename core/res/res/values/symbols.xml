@@ -310,6 +310,7 @@
   <java-symbol type="bool" name="config_sip_wifi_only" />
   <java-symbol type="bool" name="config_sms_capable" />
   <java-symbol type="bool" name="config_sms_utf8_support" />
+  <java-symbol type="bool" name="config_mobile_data_capable" />
   <java-symbol type="bool" name="config_suspendWhenScreenOffDueToProximity" />
   <java-symbol type="bool" name="config_swipeDisambiguation" />
   <java-symbol type="bool" name="config_syncstorageengine_masterSyncAutomatically" />
@@ -434,7 +435,6 @@
   <java-symbol type="integer" name="config_ntpPollingInterval" />
   <java-symbol type="integer" name="config_ntpPollingIntervalShorter" />
   <java-symbol type="integer" name="config_ntpRetry" />
-  <java-symbol type="integer" name="config_ntpThreshold" />
   <java-symbol type="integer" name="config_ntpTimeout" />
   <java-symbol type="integer" name="config_shortPressOnPowerBehavior" />
   <java-symbol type="integer" name="config_toastDefaultGravity" />
@@ -1260,6 +1260,7 @@
   <java-symbol type="array" name="vendor_disallowed_apps_managed_user" />
   <java-symbol type="array" name="vendor_disallowed_apps_managed_profile" />
   <java-symbol type="array" name="vendor_disallowed_apps_managed_device" />
+  <java-symbol type="array" name="cross_profile_apps" />
 
   <java-symbol type="drawable" name="default_wallpaper" />
   <java-symbol type="drawable" name="default_lock_wallpaper" />
@@ -1821,7 +1822,6 @@
   <!-- From services -->
   <java-symbol type="anim" name="screen_rotate_0_enter" />
   <java-symbol type="anim" name="screen_rotate_0_exit" />
-  <java-symbol type="anim" name="screen_rotate_0_frame" />
   <java-symbol type="anim" name="screen_rotate_180_enter" />
   <java-symbol type="anim" name="screen_rotate_180_exit" />
   <java-symbol type="anim" name="screen_rotate_180_frame" />
@@ -1997,6 +1997,7 @@
   <java-symbol type="integer" name="config_virtualKeyQuietTimeMillis" />
   <java-symbol type="integer" name="config_brightness_ramp_rate_fast" />
   <java-symbol type="integer" name="config_brightness_ramp_rate_slow" />
+  <java-symbol type="integer" name="config_screen_rotation_color_transition" />
   <java-symbol type="layout" name="am_compat_mode_dialog" />
   <java-symbol type="layout" name="launch_warning" />
   <java-symbol type="layout" name="safe_mode" />
@@ -3054,6 +3055,9 @@
   <java-symbol type="string" name="app_suspended_more_details" />
   <java-symbol type="string" name="app_suspended_default_message" />
 
+  <java-symbol type="string" name="app_blocked_title" />
+  <java-symbol type="string" name="app_blocked_message" />
+
   <!-- Used internally for assistant to launch activity transitions -->
   <java-symbol type="id" name="cross_task_transition" />
 
@@ -3225,9 +3229,19 @@
   <java-symbol type="layout" name="accessibility_button_chooser_item" />
   <java-symbol type="id" name="accessibility_button_target_icon" />
   <java-symbol type="id" name="accessibility_button_target_label" />
+  <java-symbol type="id" name="accessibility_button_target_item_container" />
+  <java-symbol type="id" name="accessibility_button_target_view_item" />
+  <java-symbol type="id" name="accessibility_button_target_switch_item" />
   <java-symbol type="string" name="accessibility_magnification_chooser_text" />
+  <java-symbol type="string" name="edit_accessibility_shortcut_menu_button" />
+  <java-symbol type="string" name="cancel_accessibility_shortcut_menu_button" />
 
+  <java-symbol type="drawable" name="ic_accessibility_color_inversion" />
+  <java-symbol type="drawable" name="ic_accessibility_color_correction" />
   <java-symbol type="drawable" name="ic_accessibility_magnification" />
+
+  <java-symbol type="drawable" name="ic_delete_item" />
+  <java-symbol type="drawable" name="ic_open_in_new" />
 
   <!-- com.android.internal.widget.RecyclerView -->
   <java-symbol type="id" name="item_touch_helper_previous_elevation"/>
@@ -3240,6 +3254,7 @@
   <java-symbol type="layout" name="autofill_dataset_picker"/>
   <java-symbol type="layout" name="autofill_dataset_picker_fullscreen"/>
   <java-symbol type="layout" name="autofill_dataset_picker_header_footer"/>
+  <java-symbol type="layout" name="autofill_inline_suggestion" />
   <java-symbol type="id" name="autofill" />
   <java-symbol type="id" name="autofill_dataset_footer"/>
   <java-symbol type="id" name="autofill_dataset_header"/>
@@ -3247,6 +3262,10 @@
   <java-symbol type="id" name="autofill_dataset_list"/>
   <java-symbol type="id" name="autofill_dataset_picker"/>
   <java-symbol type="id" name="autofill_dataset_title" />
+  <java-symbol type="id" name="autofill_inline_suggestion_end_icon" />
+  <java-symbol type="id" name="autofill_inline_suggestion_start_icon" />
+  <java-symbol type="id" name="autofill_inline_suggestion_subtitle" />
+  <java-symbol type="id" name="autofill_inline_suggestion_title" />
   <java-symbol type="id" name="autofill_save_custom_subtitle" />
   <java-symbol type="id" name="autofill_save_icon" />
   <java-symbol type="id" name="autofill_save_no" />
@@ -3409,6 +3428,7 @@
   <java-symbol type="string" name="etws_primary_default_message_others" />
 
   <java-symbol type="bool" name="config_quickSettingsSupported" />
+  <java-symbol type="string" name="config_defaultExtraQuickSettingsTiles" />
 
   <java-symbol type="style" name="Theme.DeviceDefault.QuickSettings" />
 
@@ -3625,6 +3645,8 @@
 
   <java-symbol type="bool" name="config_maskMainBuiltInDisplayCutout" />
 
+  <java-symbol type="string" name="config_customCountryDetector" />
+
   <!-- For Foldables -->
   <java-symbol type="bool" name="config_lidControlsDisplayFold" />
   <java-symbol type="string" name="config_foldedArea" />
@@ -3663,11 +3685,8 @@
   <java-symbol type="bool" name="config_useSystemProvidedLauncherForSecondary" />
 
   <java-symbol type="string" name="battery_saver_notification_channel_name" />
-  <java-symbol type="string" name="battery_saver_sticky_disabled_notification_title" />
-  <java-symbol type="string" name="battery_saver_sticky_disabled_notification_summary" />
-  <java-symbol type="string" name="battery_saver_charged_notification_title" />
-  <java-symbol type="string" name="battery_saver_off_notification_summary" />
-  <java-symbol type="string" name="battery_saver_off_alternative_notification_summary" />
+  <java-symbol type="string" name="battery_saver_off_notification_title" />
+  <java-symbol type="string" name="battery_saver_charged_notification_summary" />
   <java-symbol type="string" name="dynamic_mode_notification_channel_name" />
   <java-symbol type="string" name="dynamic_mode_notification_title" />
   <java-symbol type="string" name="dynamic_mode_notification_summary" />
@@ -3732,6 +3751,9 @@
   <java-symbol type="string" name="mime_type_spreadsheet_ext" />
   <java-symbol type="string" name="mime_type_presentation" />
   <java-symbol type="string" name="mime_type_presentation_ext" />
+
+  <!-- For Bluetooth service -->
+  <java-symbol type="string" name="bluetooth_airplane_mode_toast" />
 
   <!-- For high refresh rate displays -->
   <java-symbol type="integer" name="config_defaultPeakRefreshRate" />
@@ -3817,8 +3839,29 @@
   <java-symbol type="string" name="config_rawContactsLocalAccountName" />
   <java-symbol type="string" name="config_rawContactsLocalAccountType" />
 
+  <!-- For App Standby -->
+  <java-symbol type="string" name="as_app_forced_to_restricted_bucket" />
+
   <!-- Assistant handles -->
   <java-symbol type="dimen" name="assist_handle_shadow_radius" />
+
+  <!-- For Waterfall Display -->
+  <java-symbol type="dimen" name="waterfall_display_left_edge_size" />
+  <java-symbol type="dimen" name="waterfall_display_top_edge_size" />
+  <java-symbol type="dimen" name="waterfall_display_right_edge_size" />
+  <java-symbol type="dimen" name="waterfall_display_bottom_edge_size" />
+
+  <!-- Accessibility take screenshot -->
+  <java-symbol type="string" name="capability_desc_canTakeScreenshot" />
+  <java-symbol type="string" name="capability_title_canTakeScreenshot" />
+
+  <java-symbol type="string" name="config_servicesExtensionPackage" />
+
+  <!-- For app process exit info tracking -->
+  <java-symbol type="integer" name="config_app_exit_info_history_list_size" />
+
+  <java-symbol type="array" name="config_defaultImperceptibleKillingExemptionPkgs" />
+  <java-symbol type="array" name="config_defaultImperceptibleKillingExemptionProcStates" />
 
   <!-- For Pdn throttle feature -->
   <java-symbol type="bool" name="config_pdp_retry_for_29_33_55_enabled" />

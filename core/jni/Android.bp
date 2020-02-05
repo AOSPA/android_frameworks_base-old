@@ -344,9 +344,9 @@ cc_library_static {
     cppflags: ["-Wno-conversion-null"],
 
     srcs: [
-        "android/graphics/apex/android_bitmap.cpp",
-        "android/graphics/apex/android_region.cpp",
+        "android/graphics/apex/android_matrix.cpp",
         "android/graphics/apex/android_paint.cpp",
+        "android/graphics/apex/android_region.cpp",
 
         "android_graphics_Canvas.cpp",
         "android_graphics_ColorSpace.cpp",
@@ -431,6 +431,7 @@ cc_library_static {
         android: {
             srcs: [ // sources that depend on android only libraries
                 "android/graphics/apex/android_canvas.cpp",
+                "android/graphics/apex/android_bitmap.cpp",
                 "android/graphics/apex/renderthread.cpp",
                 "android/graphics/apex/jni_runtime.cpp",
 

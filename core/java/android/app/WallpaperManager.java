@@ -543,6 +543,13 @@ public class WallpaperManager {
         mCmProxy = new ColorManagementProxy(context);
     }
 
+    // no-op constructor called just by DisabledWallpaperManager
+    /*package*/ WallpaperManager() {
+        mContext = null;
+        mCmProxy = null;
+        mWcgEnabled = false;
+    }
+
     /**
      * Retrieve a WallpaperManager associated with the given Context.
      */
@@ -568,8 +575,10 @@ public class WallpaperManager {
      *
      * @see Configuration#isScreenWideColorGamut()
      * @return True if wcg should be enabled for this device.
+     * @hide
      */
-    private boolean shouldEnableWideColorGamut() {
+    @TestApi
+    public boolean shouldEnableWideColorGamut() {
         return mWcgEnabled;
     }
 
@@ -877,6 +886,7 @@ public class WallpaperManager {
      * @see #FLAG_SYSTEM
      * @hide
      */
+    @TestApi
     @RequiresPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
     public boolean wallpaperSupportsWcg(int which) {
         if (!shouldEnableWideColorGamut()) {
@@ -893,6 +903,8 @@ public class WallpaperManager {
      *
      * @hide
      */
+    @TestApi
+    @Nullable
     @UnsupportedAppUsage
     public Bitmap getBitmap() {
         return getBitmap(false);
@@ -1552,6 +1564,8 @@ public class WallpaperManager {
      * @return The desired minimum width for the wallpaper. This value should
      * be honored by applications that set the wallpaper but it is not
      * mandatory.
+     *
+     * @see #getDesiredMinimumHeight()
      */
     public int getDesiredMinimumWidth() {
         if (sGlobals.mService == null) {
@@ -1578,6 +1592,8 @@ public class WallpaperManager {
      * @return The desired minimum height for the wallpaper. This value should
      * be honored by applications that set the wallpaper but it is not
      * mandatory.
+     *
+     * @see #getDesiredMinimumWidth()
      */
     public int getDesiredMinimumHeight() {
         if (sGlobals.mService == null) {
@@ -1597,12 +1613,11 @@ public class WallpaperManager {
      * a virtual wallpaper that is larger than the physical screen, matching
      * the size of their workspace.
      *
-     * <p>Note developers, who don't seem to be reading this.  This is
-     * for <em>home apps</em> to tell what size wallpaper they would like.
-     * Nobody else should be calling this!  Certainly not other non-home
-     * apps that change the wallpaper.  Those apps are supposed to
-     * <b>retrieve</b> the suggested size so they can construct a wallpaper
-     * that matches it.
+     * <p class="note">Calling this method from apps other than the active
+     * home app is not guaranteed to work properly.  Other apps that supply
+     * wallpaper imagery should use {@link #getDesiredMinimumWidth()} and
+     * {@link #getDesiredMinimumHeight()} and construct a wallpaper that
+     * matches those dimensions.
      *
      * <p>This method requires the caller to hold the permission
      * {@link android.Manifest.permission#SET_WALLPAPER_HINTS}.

@@ -18,11 +18,11 @@
 filegroup {
     name: "statsd_aidl",
     srcs: [
+        "android/os/IPendingIntentRef.aidl",
         "android/os/IPullAtomCallback.aidl",
         "android/os/IPullAtomResultReceiver.aidl",
         "android/os/IStatsCompanionService.aidl",
         "android/os/IStatsd.aidl",
-        "android/os/IStatsPullerCallback.aidl",
         "android/util/StatsEventParcel.aidl",
     ],
 }

@@ -291,6 +291,15 @@ int collate_atom(const Descriptor *atom, AtomDecl *atomDecl,
     }
 
     if (field->options().GetExtension(os::statsd::state_field_option).option() ==
+        os::statsd::StateField::PRIMARY_FIELD_FIRST_UID) {
+        if (javaType != JAVA_TYPE_ATTRIBUTION_CHAIN) {
+            errorCount++;
+        } else {
+            atomDecl->primaryFields.push_back(FIRST_UID_IN_CHAIN_ID);
+        }
+    }
+
+    if (field->options().GetExtension(os::statsd::state_field_option).option() ==
         os::statsd::StateField::EXCLUSIVE) {
         if (javaType == JAVA_TYPE_UNKNOWN ||
             javaType == JAVA_TYPE_ATTRIBUTION_CHAIN ||
@@ -434,7 +443,7 @@ int collate_atoms(const Descriptor *descriptor, Atoms *atoms) {
     AtomDecl nonChainedAtomDecl(atomField->number(), atomField->name(), atom->name());
     vector<java_type_t> nonChainedSignature;
     if (get_non_chained_node(atom, &nonChainedAtomDecl, &nonChainedSignature)) {
-        auto it = atoms->non_chained_signatures_to_modules.find(signature);
+        auto it = atoms->non_chained_signatures_to_modules.find(nonChainedSignature);
         if (it == atoms->non_chained_signatures_to_modules.end()) {
             set<string> modules_non_chained;
             if (atomDecl.hasModule) {

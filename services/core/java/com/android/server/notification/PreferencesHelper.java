@@ -16,6 +16,7 @@
 
 package com.android.server.notification;
 
+import static android.app.NotificationChannel.PLACEHOLDER_CONVERSATION_ID;
 import static android.app.NotificationManager.IMPORTANCE_NONE;
 import static android.app.NotificationManager.IMPORTANCE_UNSPECIFIED;
 
@@ -40,6 +41,7 @@ import android.service.notification.RankingHelperProto;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.FeatureFlagUtils;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseBooleanArray;
@@ -139,6 +141,8 @@ public class PreferencesHelper implements RankingConfig {
     private boolean mAreChannelsBypassingDnd;
     private boolean mHideSilentStatusBarIcons = DEFAULT_HIDE_SILENT_STATUS_BAR_ICONS;
 
+    private boolean mAllowInvalidShortcuts = false;
+
     private static final String BADGING_FORCED_TRUE = "force_badging_true_for_bug";
 
     // STOPSHIP (b/142218092) this should be removed before ship
@@ -164,6 +168,8 @@ public class PreferencesHelper implements RankingConfig {
         updateBadgingEnabled();
         updateBubblesEnabled();
         syncChannelsBypassingDnd(mContext.getUserId());
+        mAllowInvalidShortcuts = FeatureFlagUtils.isEnabled(mContext,
+                FeatureFlagUtils.NOTIF_CONVO_BYPASS_SHORTCUT_REQ);
     }
 
     public void readXml(XmlPullParser parser, boolean forRestore, int userId)
@@ -266,7 +272,14 @@ public class PreferencesHelper implements RankingConfig {
                                         }
                                         channel.setImportanceLockedByCriticalDeviceFunction(
                                                 r.defaultAppLockedImportance);
-                                        r.channels.put(id, channel);
+                                        boolean isInvalidShortcutChannel =
+                                                channel.getConversationId() != null &&
+                                                        channel.getConversationId().contains(
+                                                                PLACEHOLDER_CONVERSATION_ID);
+                                        if (mAllowInvalidShortcuts || (!mAllowInvalidShortcuts
+                                                && !isInvalidShortcutChannel)) {
+                                            r.channels.put(id, channel);
+                                        }
                                     }
                                 }
                                 // Delegate
@@ -770,6 +783,13 @@ public class PreferencesHelper implements RankingConfig {
                 channel.setShowBadge(false);
             }
             channel.setOriginalImportance(channel.getImportance());
+
+            // validate parent
+            if (channel.getParentChannelId() != null) {
+                Preconditions.checkArgument(r.channels.containsKey(channel.getParentChannelId()),
+                        "Tried to create a conversation channel without a preexisting parent");
+            }
+
             r.channels.put(channel.getId(), channel);
             if (channel.canBypassDnd() != mAreChannelsBypassingDnd) {
                 updateChannelsBypassingDnd(mContext.getUserId());
@@ -851,6 +871,14 @@ public class PreferencesHelper implements RankingConfig {
     public NotificationChannel getNotificationChannel(String pkg, int uid, String channelId,
             boolean includeDeleted) {
         Objects.requireNonNull(pkg);
+        return getConversationNotificationChannel(pkg, uid, channelId, null, true, includeDeleted);
+    }
+
+    @Override
+    public NotificationChannel getConversationNotificationChannel(String pkg, int uid,
+            String channelId, String conversationId, boolean returnParentIfNoConversationChannel,
+            boolean includeDeleted) {
+        Preconditions.checkNotNull(pkg);
         synchronized (mPackagePreferences) {
             PackagePreferences r = getOrCreatePackagePreferencesLocked(pkg, uid);
             if (r == null) {
@@ -859,11 +887,51 @@ public class PreferencesHelper implements RankingConfig {
             if (channelId == null) {
                 channelId = NotificationChannel.DEFAULT_CHANNEL_ID;
             }
-            final NotificationChannel nc = r.channels.get(channelId);
-            if (nc != null && (includeDeleted || !nc.isDeleted())) {
+            NotificationChannel channel = null;
+            if (conversationId != null) {
+                // look for an automatically created conversation specific channel
+                channel = findConversationChannel(r, channelId, conversationId, includeDeleted);
+            }
+            if (channel == null && returnParentIfNoConversationChannel) {
+                // look for it just based on its id
+                final NotificationChannel nc = r.channels.get(channelId);
+                if (nc != null && (includeDeleted || !nc.isDeleted())) {
+                    return nc;
+                }
+            }
+            return channel;
+        }
+    }
+
+    private NotificationChannel findConversationChannel(PackagePreferences p, String parentId,
+            String conversationId, boolean includeDeleted) {
+        for (NotificationChannel nc : p.channels.values()) {
+            if (conversationId.equals(nc.getConversationId())
+                    && parentId.equals(nc.getParentChannelId())
+                    && (includeDeleted || !nc.isDeleted())) {
                 return nc;
             }
-            return null;
+        }
+        return null;
+    }
+
+    public List<NotificationChannel> getNotificationChannelsByConversationId(String pkg, int uid,
+            String conversationId) {
+        Preconditions.checkNotNull(pkg);
+        Preconditions.checkNotNull(conversationId);
+        List<NotificationChannel> channels = new ArrayList<>();
+        synchronized (mPackagePreferences) {
+            PackagePreferences r = getOrCreatePackagePreferencesLocked(pkg, uid);
+            if (r == null) {
+                return channels;
+            }
+            for (NotificationChannel nc : r.channels.values()) {
+                if (conversationId.equals(nc.getConversationId())
+                        && !nc.isDeleted()) {
+                    channels.add(nc);
+                }
+            }
+            return channels;
         }
     }
 

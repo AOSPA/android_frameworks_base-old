@@ -27,8 +27,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import android.net.LinkProperties.CompareResult;
 import android.net.LinkProperties.ProvisioningChange;
+import android.net.util.LinkPropertiesUtils.CompareResult;
 import android.system.OsConstants;
 import android.util.ArraySet;
 
@@ -38,6 +38,7 @@ import androidx.test.runner.AndroidJUnit4;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -65,6 +66,7 @@ public class LinkPropertiesTest {
     private static final InetAddress GATEWAY62 = address("fe80::6:22%lo");
     private static final InetAddress TESTIPV4ADDR = address("192.168.47.42");
     private static final InetAddress TESTIPV6ADDR = address("fe80::7:33%43");
+    private static final Inet4Address DHCPSERVER = (Inet4Address) address("192.0.2.1");
     private static final String NAME = "qmi0";
     private static final String DOMAINS = "google.com";
     private static final String PRIV_DNS_SERVER_NAME = "private.dns.com";
@@ -73,6 +75,9 @@ public class LinkPropertiesTest {
     private static final LinkAddress LINKADDRV4 = new LinkAddress(ADDRV4, 32);
     private static final LinkAddress LINKADDRV6 = new LinkAddress(ADDRV6, 128);
     private static final LinkAddress LINKADDRV6LINKLOCAL = new LinkAddress("fe80::1/64");
+    private static final Uri CAPPORT_API_URL = Uri.parse("https://test.example.com/capportapi");
+    private static final CaptivePortalData CAPPORT_DATA = new CaptivePortalData.Builder()
+            .setVenueInfoUrl(Uri.parse("https://test.example.com/venue")).build();
 
     private static InetAddress address(String addrString) {
         return InetAddresses.parseNumericAddress(addrString);
@@ -93,11 +98,14 @@ public class LinkPropertiesTest {
         assertNull(lp.getHttpProxy());
         assertNull(lp.getTcpBufferSizes());
         assertNull(lp.getNat64Prefix());
+        assertNull(lp.getDhcpServerAddress());
         assertFalse(lp.isProvisioned());
         assertFalse(lp.isIpv4Provisioned());
         assertFalse(lp.isIpv6Provisioned());
         assertFalse(lp.isPrivateDnsActive());
         assertFalse(lp.isWakeOnLanSupported());
+        assertNull(lp.getCaptivePortalApiUrl());
+        assertNull(lp.getCaptivePortalData());
     }
 
     private LinkProperties makeTestObject() {
@@ -119,7 +127,10 @@ public class LinkPropertiesTest {
         lp.setMtu(MTU);
         lp.setTcpBufferSizes(TCP_BUFFER_SIZES);
         lp.setNat64Prefix(new IpPrefix("2001:db8:0:64::/96"));
+        lp.setDhcpServerAddress(DHCPSERVER);
         lp.setWakeOnLanSupported(true);
+        lp.setCaptivePortalApiUrl(CAPPORT_API_URL);
+        lp.setCaptivePortalData(CAPPORT_DATA);
         return lp;
     }
 
@@ -160,6 +171,12 @@ public class LinkPropertiesTest {
 
         assertTrue(source.isIdenticalWakeOnLan(target));
         assertTrue(target.isIdenticalWakeOnLan(source));
+
+        assertTrue(source.isIdenticalCaptivePortalApiUrl(target));
+        assertTrue(target.isIdenticalCaptivePortalApiUrl(source));
+
+        assertTrue(source.isIdenticalCaptivePortalData(target));
+        assertTrue(target.isIdenticalCaptivePortalData(source));
 
         // Check result of equals().
         assertTrue(source.equals(target));
@@ -959,12 +976,22 @@ public class LinkPropertiesTest {
         source.setNat64Prefix(new IpPrefix("2001:db8:1:2:64:64::/96"));
 
         source.setWakeOnLanSupported(true);
+        source.setCaptivePortalApiUrl(CAPPORT_API_URL);
+        source.setCaptivePortalData(CAPPORT_DATA);
+
+        source.setDhcpServerAddress((Inet4Address) GATEWAY1);
 
         final LinkProperties stacked = new LinkProperties();
         stacked.setInterfaceName("test-stacked");
         source.addStackedLink(stacked);
 
-        assertParcelSane(source, 15 /* fieldCount */);
+        assertParcelSane(source.makeSensitiveFieldsParcelingCopy(), 18 /* fieldCount */);
+
+        // Verify that without using a sensitiveFieldsParcelingCopy, sensitive fields are cleared.
+        final LinkProperties sanitized = new LinkProperties(source);
+        sanitized.setCaptivePortalApiUrl(null);
+        sanitized.setCaptivePortalData(null);
+        assertEquals(sanitized, parcelingRoundTrip(source));
     }
 
     @Test
@@ -1091,11 +1118,38 @@ public class LinkPropertiesTest {
     }
 
     @Test
+    public void testDhcpServerAddress() {
+        final LinkProperties lp = makeTestObject();
+        assertEquals(DHCPSERVER, lp.getDhcpServerAddress());
+
+        lp.clear();
+        assertNull(lp.getDhcpServerAddress());
+    }
+
+    @Test
     public void testWakeOnLanSupported() {
         final LinkProperties lp = makeTestObject();
         assertTrue(lp.isWakeOnLanSupported());
 
         lp.clear();
         assertFalse(lp.isWakeOnLanSupported());
+    }
+
+    @Test
+    public void testCaptivePortalApiUrl() {
+        final LinkProperties lp = makeTestObject();
+        assertEquals(CAPPORT_API_URL, lp.getCaptivePortalApiUrl());
+
+        lp.clear();
+        assertNull(lp.getCaptivePortalApiUrl());
+    }
+
+    @Test
+    public void testCaptivePortalData() {
+        final LinkProperties lp = makeTestObject();
+        assertEquals(CAPPORT_DATA, lp.getCaptivePortalData());
+
+        lp.clear();
+        assertNull(lp.getCaptivePortalData());
     }
 }

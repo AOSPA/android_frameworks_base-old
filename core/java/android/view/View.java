@@ -22,6 +22,7 @@ import static android.util.StatsLog.TOUCH_GESTURE_CLASSIFIED__CLASSIFICATION__LO
 import static android.util.StatsLog.TOUCH_GESTURE_CLASSIFIED__CLASSIFICATION__SINGLE_TAP;
 import static android.util.StatsLog.TOUCH_GESTURE_CLASSIFIED__CLASSIFICATION__UNKNOWN_CLASSIFICATION;
 import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
+import static android.view.WindowInsetsAnimationCallback.DISPATCH_MODE_CONTINUE_ON_SUBTREE;
 import static android.view.accessibility.AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED;
 
 import static java.lang.Math.max;
@@ -111,6 +112,7 @@ import android.view.AccessibilityIterators.WordTextSegmentIterator;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.WindowInsetsAnimationCallback.AnimationBounds;
 import android.view.WindowInsetsAnimationCallback.InsetsAnimation;
+import android.view.WindowInsetsAnimationCallback.DispatchMode;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityEventSource;
 import android.view.accessibility.AccessibilityManager;
@@ -130,7 +132,6 @@ import android.view.contentcapture.ContentCaptureManager;
 import android.view.contentcapture.ContentCaptureSession;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
-import android.view.inputmethod.InputMethodManager;
 import android.view.inspector.InspectableProperty;
 import android.view.inspector.InspectableProperty.EnumEntry;
 import android.view.inspector.InspectableProperty.FlagEntry;
@@ -950,22 +951,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private static boolean sAcceptZeroSizeDragShadow;
 
     /**
-     * Prior to Q, {@link #dispatchApplyWindowInsets} had some issues:
-     * <ul>
-     *     <li>The modified insets changed by {@link #onApplyWindowInsets} were passed to the
-     *     entire view hierarchy in prefix order, including siblings as well as siblings of parents
-     *     further down the hierarchy. This violates the basic concepts of the view hierarchy, and
-     *     thus, the hierarchical dispatching mechanism was hard to use for apps.</li>
-     *
-     *     <li>Dispatch was stopped after the insets were fully consumed. This is somewhat confusing
-     *     for developers, but more importantly, by adding more granular information to
-     *     {@link WindowInsets} it becomes really cumbersome to define what consumed actually means
-     *     </li>
-     * </ul>
-     *
+     * Prior to R, {@link #dispatchApplyWindowInsets} had an issue:
+     * <p>The modified insets changed by {@link #onApplyWindowInsets} were passed to the
+     * entire view hierarchy in prefix order, including siblings as well as siblings of parents
+     * further down the hierarchy. This violates the basic concepts of the view hierarchy, and
+     * thus, the hierarchical dispatching mechanism was hard to use for apps.
+     * <p>
      * In order to make window inset dispatching work properly, we dispatch window insets
-     * in the view hierarchy in a proper hierarchical manner and don't stop dispatching if the
-     * insets are consumed if this flag is set to {@code false}.
+     * in the view hierarchy in a proper hierarchical manner if this flag is set to {@code false}.
      */
     static boolean sBrokenInsetsDispatch;
 
@@ -4785,7 +4778,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private CheckForTap mPendingCheckForTap = null;
     private PerformClick mPerformClick;
     private SendViewScrolledAccessibilityEvent mSendViewScrolledAccessibilityEvent;
-
+    private SendAccessibilityEventThrottle mSendStateChangedAccessibilityEvent;
     private UnsetPressedState mUnsetPressedState;
 
     /**
@@ -5232,7 +5225,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             sAcceptZeroSizeDragShadow = targetSdkVersion < Build.VERSION_CODES.P;
 
             sBrokenInsetsDispatch = ViewRootImpl.sNewInsetsMode != NEW_INSETS_MODE_FULL
-                    || targetSdkVersion < Build.VERSION_CODES.Q;
+                    || targetSdkVersion < Build.VERSION_CODES.R;
 
             sBrokenWindowBackground = targetSdkVersion < Build.VERSION_CODES.Q;
 
@@ -7942,12 +7935,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             if (isPressed()) {
                 setPressed(false);
             }
-            if (mAttachInfo != null && mAttachInfo.mHasWindowFocus) {
-                notifyFocusChangeToInputMethodManager(false /* hasFocus */);
+            if (hasWindowFocus()) {
+                notifyFocusChangeToImeFocusController(false /* hasFocus */);
             }
             onFocusLost();
-        } else if (mAttachInfo != null && mAttachInfo.mHasWindowFocus) {
-            notifyFocusChangeToInputMethodManager(true /* hasFocus */);
+        } else if (hasWindowFocus()) {
+            notifyFocusChangeToImeFocusController(true /* hasFocus */);
         }
 
         invalidate(true);
@@ -7964,23 +7957,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Notify {@link InputMethodManager} about the focus change of the {@link View}.
-     *
-     * <p>Does nothing when {@link InputMethodManager} is not available.</p>
+     * Notify {@link ImeFocusController} about the focus change of the {@link View}.
      *
      * @param hasFocus {@code true} when the {@link View} is being focused.
      */
-    private void notifyFocusChangeToInputMethodManager(boolean hasFocus) {
-        final InputMethodManager imm =
-                getContext().getSystemService(InputMethodManager.class);
-        if (imm == null) {
+    private void notifyFocusChangeToImeFocusController(boolean hasFocus) {
+        if (mAttachInfo == null) {
             return;
         }
-        if (hasFocus) {
-            imm.focusIn(this);
-        } else {
-            imm.focusOut(this);
-        }
+        mAttachInfo.mViewRootImpl.getImeFocusController().onViewFocusChanged(this, hasFocus);
     }
 
     /** @hide */
@@ -8163,11 +8148,44 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if ((event.getEventType() & POPULATING_ACCESSIBILITY_EVENT_TYPES) != 0) {
             dispatchPopulateAccessibilityEvent(event);
         }
-        // In the beginning we called #isShown(), so we know that getParent() is not null.
+        SendAccessibilityEventThrottle throttle = getThrottleForAccessibilityEvent(event);
+        if (throttle != null) {
+            throttle.post(event);
+        } else {
+            requestParentSendAccessibilityEvent(event);
+        }
+    }
+
+    private void requestParentSendAccessibilityEvent(AccessibilityEvent event) {
         ViewParent parent = getParent();
         if (parent != null) {
             getParent().requestSendAccessibilityEvent(this, event);
         }
+    }
+
+    private SendAccessibilityEventThrottle getThrottleForAccessibilityEvent(
+            AccessibilityEvent event) {
+        if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+            if (mSendViewScrolledAccessibilityEvent == null) {
+                mSendViewScrolledAccessibilityEvent = new SendViewScrolledAccessibilityEvent();
+            }
+            return mSendViewScrolledAccessibilityEvent;
+        }
+        boolean isStateContentChanged = (event.getContentChangeTypes()
+                & AccessibilityEvent.CONTENT_CHANGE_TYPE_STATE_DESCRIPTION) != 0;
+        if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+                && isStateContentChanged) {
+            if (mSendStateChangedAccessibilityEvent == null) {
+                mSendStateChangedAccessibilityEvent = new SendAccessibilityEventThrottle();
+            }
+            return mSendStateChangedAccessibilityEvent;
+        }
+        return null;
+    }
+
+    private void clearAccessibilityThrottles() {
+        cancel(mSendViewScrolledAccessibilityEvent);
+        cancel(mSendStateChangedAccessibilityEvent);
     }
 
     /**
@@ -10390,8 +10408,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 && getImportantForAccessibility() == IMPORTANT_FOR_ACCESSIBILITY_AUTO) {
             setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
         }
-        notifyViewAccessibilityStateChangedIfNeeded(
-                AccessibilityEvent.CONTENT_CHANGE_TYPE_STATE_DESCRIPTION);
+        if (AccessibilityManager.getInstance(mContext).isEnabled()) {
+            AccessibilityEvent event = AccessibilityEvent.obtain();
+            event.setEventType(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+            event.setContentChangeTypes(AccessibilityEvent.CONTENT_CHANGE_TYPE_STATE_DESCRIPTION);
+            sendAccessibilityEventUnchecked(event);
+        }
     }
 
     /**
@@ -11109,7 +11131,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Sets a {@link WindowInsetsAnimationCallback} to be notified about animations of windows that
      * cause insets.
-     *
+     * <p>
+     * When setting a listener, it's {@link WindowInsetsAnimationCallback#getDispatchMode() dispatch
+     * mode} will be retrieved and recorded until another listener will be set.
+     * </p>
      * @param listener The listener to set.
      */
     public void setWindowInsetsAnimationCallback(@Nullable WindowInsetsAnimationCallback listener) {
@@ -11117,7 +11142,21 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Dispatches {@link WindowInsetsAnimationCallback#onStarted(InsetsAnimation, AnimationBounds)}
+     * Dispatches {@link WindowInsetsAnimationCallback#onPrepare(InsetsAnimation)}
+     * when Window Insets animation is being prepared.
+     * @param animation current animation
+     *
+     * @see WindowInsetsAnimationCallback#onPrepare(InsetsAnimation)
+     */
+    public void dispatchWindowInsetsAnimationPrepare(
+            @NonNull InsetsAnimation animation) {
+        if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationCallback != null) {
+            mListenerInfo.mWindowInsetsAnimationCallback.onPrepare(animation);
+        }
+    }
+
+    /**
+     * Dispatches {@link WindowInsetsAnimationCallback#onStart(InsetsAnimation, AnimationBounds)}
      * when Window Insets animation is started.
      * @param animation current animation
      * @param bounds the upper and lower {@link AnimationBounds} that provides range of
@@ -11125,10 +11164,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @return the upper and lower {@link AnimationBounds}.
      */
     @NonNull
-    public AnimationBounds dispatchWindowInsetsAnimationStarted(
+    public AnimationBounds dispatchWindowInsetsAnimationStart(
             @NonNull InsetsAnimation animation, @NonNull AnimationBounds bounds) {
         if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationCallback != null) {
-            return mListenerInfo.mWindowInsetsAnimationCallback.onStarted(animation, bounds);
+            return mListenerInfo.mWindowInsetsAnimationCallback.onStart(animation, bounds);
         }
         return bounds;
     }
@@ -11149,13 +11188,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Dispatches {@link WindowInsetsAnimationCallback#onFinished(InsetsAnimation)}
+     * Dispatches {@link WindowInsetsAnimationCallback#onFinish(InsetsAnimation)}
      * when Window Insets animation finishes.
      * @param animation The current ongoing {@link InsetsAnimation}.
      */
-    public void dispatchWindowInsetsAnimationFinished(@NonNull InsetsAnimation animation) {
+    public void dispatchWindowInsetsAnimationFinish(@NonNull InsetsAnimation animation) {
         if (mListenerInfo != null && mListenerInfo.mWindowInsetsAnimationCallback != null) {
-            mListenerInfo.mWindowInsetsAnimationCallback.onFinished(animation);
+            mListenerInfo.mWindowInsetsAnimationCallback.onFinish(animation);
         }
     }
 
@@ -12597,11 +12636,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 return findViewInsideOutShouldExist(root, mNextFocusForwardId);
             case FOCUS_BACKWARD: {
                 if (mID == View.NO_ID) return null;
-                final int id = mID;
                 return root.findViewByPredicateInsideOut(this, new Predicate<View>() {
                     @Override
                     public boolean test(View t) {
-                        return t.mNextFocusForwardId == id;
+                        return t.findViewById(t.mNextFocusForwardId) == View.this;
                     }
                 });
             }
@@ -13904,7 +13942,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         mPrivateFlags3 &= ~PFLAG3_TEMPORARY_DETACH;
         onFinishTemporaryDetach();
         if (hasWindowFocus() && hasFocus()) {
-            notifyFocusChangeToInputMethodManager(true /* hasFocus */);
+            notifyFocusChangeToImeFocusController(true /* hasFocus */);
         }
         notifyEnterOrExitForAutoFillIfNeeded(true);
         notifyAppearedOrDisappearedForContentCaptureIfNeeded(true);
@@ -14313,13 +14351,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             }
             mPrivateFlags3 &= ~PFLAG3_FINGER_DOWN;
             if ((mPrivateFlags & PFLAG_FOCUSED) != 0) {
-                notifyFocusChangeToInputMethodManager(false /* hasFocus */);
+                notifyFocusChangeToImeFocusController(false /* hasFocus */);
             }
             removeLongPressCallback();
             removeTapCallback();
             onFocusLost();
         } else if ((mPrivateFlags & PFLAG_FOCUSED) != 0) {
-            notifyFocusChangeToInputMethodManager(true /* hasFocus */);
+            notifyFocusChangeToImeFocusController(true /* hasFocus */);
         }
 
         refreshDrawableState();
@@ -14333,6 +14371,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public boolean hasWindowFocus() {
         return mAttachInfo != null && mAttachInfo.mHasWindowFocus;
+    }
+
+    /**
+     * @return {@code true} if this view is in a window that currently has IME focusable state.
+     * @hide
+     */
+    public boolean hasImeFocus() {
+        return mAttachInfo != null && mAttachInfo.mHasImeFocus;
     }
 
     /**
@@ -15978,10 +16024,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     protected void onScrollChanged(int l, int t, int oldl, int oldt) {
         notifySubtreeAccessibilityStateChangedIfNeeded();
-
-        if (AccessibilityManager.getInstance(mContext).isEnabled()) {
-            postSendViewScrolledAccessibilityEventCallback(l - oldl, t - oldt);
-        }
+        postSendViewScrolledAccessibilityEventCallback(l - oldl, t - oldt);
 
         mBackgroundSizeChanged = true;
         mDefaultFocusHighlightSizeChanged = true;
@@ -18704,10 +18747,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@link ViewConfiguration#getSendRecurringAccessibilityEventsInterval()}.
      */
     private void postSendViewScrolledAccessibilityEventCallback(int dx, int dy) {
-        if (mSendViewScrolledAccessibilityEvent == null) {
-            mSendViewScrolledAccessibilityEvent = new SendViewScrolledAccessibilityEvent();
+        if (AccessibilityManager.getInstance(mContext).isEnabled()) {
+            AccessibilityEvent event =
+                    AccessibilityEvent.obtain(AccessibilityEvent.TYPE_VIEW_SCROLLED);
+            event.setScrollDeltaX(dx);
+            event.setScrollDeltaY(dy);
+            sendAccessibilityEventUnchecked(event);
         }
-        mSendViewScrolledAccessibilityEvent.post(dx, dy);
     }
 
     /**
@@ -19634,7 +19680,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         rebuildOutline();
 
         if (isFocused()) {
-            notifyFocusChangeToInputMethodManager(true /* hasFocus */);
+            notifyFocusChangeToImeFocusController(true /* hasFocus */);
         }
     }
 
@@ -20005,7 +20051,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         removeUnsetPressCallback();
         removeLongPressCallback();
         removePerformClickCallback();
-        cancel(mSendViewScrolledAccessibilityEvent);
+        clearAccessibilityThrottles();
         stopNestedScroll();
 
         // Anything that started animating right before detach should already
@@ -20217,9 +20263,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         onDetachedFromWindow();
         onDetachedFromWindowInternal();
 
-        InputMethodManager imm = getContext().getSystemService(InputMethodManager.class);
-        if (imm != null) {
-            imm.onViewDetachedFromWindow(this);
+        if (info != null) {
+            info.mViewRootImpl.getImeFocusController().onViewDetachedFromWindow(this);
         }
 
         ListenerInfo li = mListenerInfo;
@@ -28555,6 +28600,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         boolean mHasWindowFocus;
 
         /**
+         * Indicates whether the view's window has IME focused.
+         */
+        boolean mHasImeFocus;
+
+        /**
          * The current visibility of the window.
          */
         int mWindowVisibility;
@@ -28985,49 +29035,67 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
     }
 
-    /**
-     * Resuable callback for sending
-     * {@link AccessibilityEvent#TYPE_VIEW_SCROLLED} accessibility event.
-     */
-    private class SendViewScrolledAccessibilityEvent implements Runnable {
+    private class SendAccessibilityEventThrottle implements Runnable {
         public volatile boolean mIsPending;
-        public int mDeltaX;
-        public int mDeltaY;
+        private AccessibilityEvent mAccessibilityEvent;
 
-        public void post(int dx, int dy) {
-            mDeltaX += dx;
-            mDeltaY += dy;
+        public void post(AccessibilityEvent accessibilityEvent) {
+            updateWithAccessibilityEvent(accessibilityEvent);
             if (!mIsPending) {
                 mIsPending = true;
-                postDelayed(this, ViewConfiguration.getSendRecurringAccessibilityEventsInterval());
+                postDelayed(this,
+                        ViewConfiguration.getSendRecurringAccessibilityEventsInterval());
             }
         }
 
         @Override
         public void run() {
             if (AccessibilityManager.getInstance(mContext).isEnabled()) {
-                AccessibilityEvent event = AccessibilityEvent.obtain(
-                        AccessibilityEvent.TYPE_VIEW_SCROLLED);
-                event.setScrollDeltaX(mDeltaX);
-                event.setScrollDeltaY(mDeltaY);
-                sendAccessibilityEventUnchecked(event);
+                requestParentSendAccessibilityEvent(mAccessibilityEvent);
             }
             reset();
         }
 
-        private void reset() {
+        public void updateWithAccessibilityEvent(AccessibilityEvent accessibilityEvent) {
+            mAccessibilityEvent = accessibilityEvent;
+        }
+
+        public void reset() {
             mIsPending = false;
+            mAccessibilityEvent = null;
+        }
+
+    }
+
+    /**
+     * Resuable callback for sending
+     * {@link AccessibilityEvent#TYPE_VIEW_SCROLLED} accessibility event.
+     */
+    private class SendViewScrolledAccessibilityEvent extends SendAccessibilityEventThrottle {
+        public int mDeltaX;
+        public int mDeltaY;
+
+        @Override
+        public void updateWithAccessibilityEvent(AccessibilityEvent accessibilityEvent) {
+            super.updateWithAccessibilityEvent(accessibilityEvent);
+            mDeltaX += accessibilityEvent.getScrollDeltaX();
+            mDeltaY += accessibilityEvent.getScrollDeltaY();
+            accessibilityEvent.setScrollDeltaX(mDeltaX);
+            accessibilityEvent.setScrollDeltaY(mDeltaY);
+        }
+
+        @Override
+        public void reset() {
+            super.reset();
             mDeltaX = 0;
             mDeltaY = 0;
         }
     }
-
     /**
-     * Remove the pending callback for sending a
-     * {@link AccessibilityEvent#TYPE_VIEW_SCROLLED} accessibility event.
+     * Remove the pending callback for sending a throttled accessibility event.
      */
     @UnsupportedAppUsage
-    private void cancel(@Nullable SendViewScrolledAccessibilityEvent callback) {
+    private void cancel(@Nullable SendAccessibilityEventThrottle callback) {
         if (callback == null || !callback.mIsPending) return;
         removeCallbacks(callback);
         callback.reset();
