@@ -28,7 +28,6 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Process;
 import android.os.UserHandle;
-import android.telephony.Rlog;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.util.Log;
@@ -521,7 +520,7 @@ public final class TelephonyPermissions {
             return;
         }
 
-        if (DBG) Rlog.d(LOG_TAG, "No modify permission, check carrier privilege next.");
+        if (DBG) Log.d(LOG_TAG, "No modify permission, check carrier privilege next.");
         enforceCallingOrSelfCarrierPrivilege(context, subId, message);
     }
 
@@ -539,7 +538,7 @@ public final class TelephonyPermissions {
         }
 
         if (DBG) {
-            Rlog.d(LOG_TAG, "No READ_PHONE_STATE permission, check carrier privilege next.");
+            Log.d(LOG_TAG, "No READ_PHONE_STATE permission, check carrier privilege next.");
         }
 
         enforceCallingOrSelfCarrierPrivilege(context, subId, message);
@@ -559,8 +558,35 @@ public final class TelephonyPermissions {
         }
 
         if (DBG) {
-            Rlog.d(LOG_TAG, "No READ_PRIVILEDED_PHONE_STATE permission, "
+            Log.d(LOG_TAG, "No READ_PRIVILEGED_PHONE_STATE permission, "
                     + "check carrier privilege next.");
+        }
+
+        enforceCallingOrSelfCarrierPrivilege(context, subId, message);
+    }
+
+    /**
+     * Ensure the caller (or self, if not processing an IPC) has
+     * {@link android.Manifest.permission#READ_PRIVILEGED_PHONE_STATE} or
+     * {@link android.Manifest.permission#READ_PRECISE_PHONE_STATE} or carrier privileges.
+     *
+     * @throws SecurityException if the caller does not have the required permission/privileges
+     */
+    public static void enforeceCallingOrSelfReadPrecisePhoneStatePermissionOrCarrierPrivilege(
+            Context context, int subId, String message) {
+        if (context.checkCallingOrSelfPermission(Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+                == PERMISSION_GRANTED) {
+            return;
+        }
+
+        if (context.checkCallingOrSelfPermission(Manifest.permission.READ_PRECISE_PHONE_STATE)
+                == PERMISSION_GRANTED) {
+            return;
+        }
+
+        if (DBG) {
+            Log.d(LOG_TAG, "No READ_PRIVILEGED_PHONE_STATE nor READ_PRECISE_PHONE_STATE permission"
+                    + ", check carrier privilege next.");
         }
 
         enforceCallingOrSelfCarrierPrivilege(context, subId, message);
@@ -584,7 +610,7 @@ public final class TelephonyPermissions {
             Context context, int subId, int uid, String message) {
         if (getCarrierPrivilegeStatus(context, subId, uid)
                 != TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS) {
-            if (DBG) Rlog.e(LOG_TAG, "No Carrier Privilege.");
+            if (DBG) Log.e(LOG_TAG, "No Carrier Privilege.");
             throw new SecurityException(message);
         }
     }
@@ -593,7 +619,7 @@ public final class TelephonyPermissions {
     private static boolean checkCarrierPrivilegeForAnySubId(Context context, int uid) {
         SubscriptionManager sm = (SubscriptionManager) context.getSystemService(
                 Context.TELEPHONY_SUBSCRIPTION_SERVICE);
-        int[] activeSubIds = sm.getActiveSubscriptionIdList(/* visibleOnly */ false);
+        int[] activeSubIds = sm.getActiveAndHiddenSubscriptionIdList();
         for (int activeSubId : activeSubIds) {
             if (getCarrierPrivilegeStatus(context, activeSubId, uid)
                     == TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS) {

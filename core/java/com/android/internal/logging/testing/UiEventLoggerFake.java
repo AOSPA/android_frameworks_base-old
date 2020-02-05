@@ -16,6 +16,7 @@
 
 package com.android.internal.logging.testing;
 
+import com.android.internal.logging.InstanceId;
 import com.android.internal.logging.UiEventLogger;
 
 import java.util.LinkedList;
@@ -30,29 +31,52 @@ public class UiEventLoggerFake implements UiEventLogger {
     /**
      * Immutable data class used to record fake log events.
      */
-    public class FakeUiEvent {
+    public static class FakeUiEvent {
         public final int eventId;
         public final int uid;
         public final String packageName;
+        public final InstanceId instanceId;  // Used only for WithInstanceId variant
 
-        public FakeUiEvent(int eventId, int uid, String packageName) {
+        FakeUiEvent(int eventId, int uid, String packageName) {
             this.eventId = eventId;
             this.uid = uid;
             this.packageName = packageName;
+            this.instanceId = null;
+        }
+
+        FakeUiEvent(int eventId, int uid, String packageName, InstanceId instanceId) {
+            this.eventId = eventId;
+            this.uid = uid;
+            this.packageName = packageName;
+            this.instanceId = instanceId;
         }
     }
 
-    private Queue<FakeUiEvent> mLogs = new LinkedList<FakeUiEvent>();
-
-    @Override
-    public void log(UiEventEnum event) {
-        final int eventId = event.getId();
-        if (eventId > 0) {
-            mLogs.offer(new FakeUiEvent(eventId, 0, null));
-        }
-    }
+    private Queue<FakeUiEvent> mLogs = new LinkedList<>();
 
     public Queue<FakeUiEvent> getLogs() {
         return mLogs;
+    }
+
+    @Override
+    public void log(UiEventEnum event) {
+        log(event, 0, null);
+    }
+
+    @Override
+    public void log(UiEventEnum event, int uid, String packageName) {
+        final int eventId = event.getId();
+        if (eventId > 0) {
+            mLogs.offer(new FakeUiEvent(eventId, uid, packageName));
+        }
+    }
+
+    @Override
+    public void logWithInstanceId(UiEventLogger.UiEventEnum event, int uid, String packageName,
+            InstanceId instance) {
+        final int eventId = event.getId();
+        if (eventId > 0) {
+            mLogs.offer(new FakeUiEvent(eventId, uid, packageName, instance));
+        }
     }
 }

@@ -16,12 +16,14 @@
 
 package android.service.notification;
 
+import static android.app.NotificationChannel.PLACEHOLDER_CONVERSATION_ID;
+import static android.util.FeatureFlagUtils.*;
+
 import android.annotation.NonNull;
-import android.annotation.SystemApi;
-import android.annotation.UnsupportedAppUsage;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.Person;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -30,6 +32,8 @@ import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.UserHandle;
+import android.text.TextUtils;
+import android.util.FeatureFlagUtils;
 
 import com.android.internal.logging.nano.MetricsProto;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
@@ -435,6 +439,19 @@ public class StatusBarNotification implements Parcelable {
             }
         }
         return logMaker;
+    }
+
+    /**
+     * @hide
+     */
+    public String getShortcutId(Context context) {
+        String conversationId = getNotification().getShortcutId();
+        if (isEnabled(context,  NOTIF_CONVO_BYPASS_SHORTCUT_REQ)
+                && getNotification().getNotificationStyle() == Notification.MessagingStyle.class
+                && TextUtils.isEmpty(conversationId)) {
+            conversationId = getId() + getTag() + PLACEHOLDER_CONVERSATION_ID;
+        }
+        return conversationId;
     }
 
     private String getGroupLogTag() {

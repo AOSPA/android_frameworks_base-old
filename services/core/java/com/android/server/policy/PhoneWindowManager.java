@@ -46,36 +46,21 @@ import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.LAST_SYSTEM_WINDOW;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_KEYGUARD;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_SYSTEM_ERROR;
-import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS;
 import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
-import static android.view.WindowManager.LayoutParams.TYPE_BOOT_PROGRESS;
-import static android.view.WindowManager.LayoutParams.TYPE_DISPLAY_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 import static android.view.WindowManager.LayoutParams.TYPE_DREAM;
-import static android.view.WindowManager.LayoutParams.TYPE_INPUT_CONSUMER;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG;
-import static android.view.WindowManager.LayoutParams.TYPE_MAGNIFICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
-import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL;
-import static android.view.WindowManager.LayoutParams.TYPE_PHONE;
-import static android.view.WindowManager.LayoutParams.TYPE_POINTER;
+import static android.view.WindowManager.LayoutParams.TYPE_NOTIFICATION_SHADE;
 import static android.view.WindowManager.LayoutParams.TYPE_PRESENTATION;
-import static android.view.WindowManager.LayoutParams.TYPE_PRIORITY_PHONE;
 import static android.view.WindowManager.LayoutParams.TYPE_PRIVATE_PRESENTATION;
 import static android.view.WindowManager.LayoutParams.TYPE_QS_DIALOG;
-import static android.view.WindowManager.LayoutParams.TYPE_SEARCH_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
-import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_PANEL;
-import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_SUB_PANEL;
-import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_TOAST;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
-import static android.view.WindowManager.LayoutParams.TYPE_VOLUME_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 import static android.view.WindowManager.LayoutParams.isSystemAlertWindowType;
 import static android.view.WindowManager.TAKE_SCREENSHOT_FULLSCREEN;
@@ -577,10 +562,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private boolean mScreenshotChordPowerKeyTriggered;
     private long mScreenshotChordPowerKeyTime;
 
-    private static final long MOVING_DISPLAY_TO_TOP_DURATION_MILLIS = 10;
-    private volatile boolean mMovingDisplayToTopKeyTriggered;
-    private volatile long mMovingDisplayToTopKeyTime;
-
     // Ringer toggle should reuse timing and triggering from screenshot power and a11y vol up
     private int mRingerToggleChord = VOLUME_HUSH_OFF;
 
@@ -648,7 +629,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private static final int MSG_POWER_VERY_LONG_PRESS = 25;
     private static final int MSG_NOTIFY_USER_ACTIVITY = 26;
     private static final int MSG_RINGER_TOGGLE_CHORD = 27;
-    private static final int MSG_MOVE_DISPLAY_TO_TOP = 28;
 
     private class PolicyHandler extends Handler {
         @Override
@@ -712,7 +692,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     accessibilityShortcutActivated();
                     break;
                 case MSG_BUGREPORT_TV:
-                    requestFullBugreport();
+                    requestFullBugreportOrLaunchHandlerApp();
                     break;
                 case MSG_ACCESSIBILITY_TV:
                     if (mAccessibilityShortcutController.isAccessibilityShortcutAvailable(false)) {
@@ -737,10 +717,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     break;
                 case MSG_RINGER_TOGGLE_CHORD:
                     handleRingerChordGesture();
-                    break;
-                case MSG_MOVE_DISPLAY_TO_TOP:
-                    mWindowManagerFuncs.moveDisplayToTop(msg.arg1);
-                    mMovingDisplayToTopKeyTriggered = false;
                     break;
             }
         }
@@ -1665,7 +1641,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // If a system window has focus, then it doesn't make sense
                 // right now to interact with applications.
                 if (info.layoutParamsType == TYPE_KEYGUARD_DIALOG
-                        || (info.layoutParamsPrivateFlags & PRIVATE_FLAG_KEYGUARD) != 0) {
+                        || (info.layoutParamsType == TYPE_NOTIFICATION_SHADE
+                        && isKeyguardShowing())) {
                     // the "app" is keyguard, so give it the key
                     return 0;
                 }
@@ -2191,52 +2168,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
     }
 
-    @Override
-    public boolean checkShowToOwnerOnly(WindowManager.LayoutParams attrs) {
-
-        // If this switch statement is modified, modify the comment in the declarations of
-        // the type in {@link WindowManager.LayoutParams} as well.
-        switch (attrs.type) {
-            default:
-                // These are the windows that by default are shown only to the user that created
-                // them. If this needs to be overridden, set
-                // {@link WindowManager.LayoutParams.SYSTEM_FLAG_SHOW_FOR_ALL_USERS} in
-                // {@link WindowManager.LayoutParams}. Note that permission
-                // {@link android.Manifest.permission.INTERNAL_SYSTEM_WINDOW} is required as well.
-                if ((attrs.privateFlags & SYSTEM_FLAG_SHOW_FOR_ALL_USERS) == 0) {
-                    return true;
-                }
-                break;
-
-            // These are the windows that by default are shown to all users. However, to
-            // protect against spoofing, check permissions below.
-            case TYPE_APPLICATION_STARTING:
-            case TYPE_BOOT_PROGRESS:
-            case TYPE_DISPLAY_OVERLAY:
-            case TYPE_INPUT_CONSUMER:
-            case TYPE_KEYGUARD_DIALOG:
-            case TYPE_MAGNIFICATION_OVERLAY:
-            case TYPE_NAVIGATION_BAR:
-            case TYPE_NAVIGATION_BAR_PANEL:
-            case TYPE_PHONE:
-            case TYPE_POINTER:
-            case TYPE_PRIORITY_PHONE:
-            case TYPE_SEARCH_BAR:
-            case TYPE_STATUS_BAR:
-            case TYPE_STATUS_BAR_PANEL:
-            case TYPE_STATUS_BAR_SUB_PANEL:
-            case TYPE_SYSTEM_DIALOG:
-            case TYPE_VOLUME_OVERLAY:
-            case TYPE_PRESENTATION:
-            case TYPE_PRIVATE_PRESENTATION:
-            case TYPE_DOCK_DIVIDER:
-                break;
-        }
-
-        // Check if third party app has set window to system window type.
-        return mContext.checkCallingOrSelfPermission(INTERNAL_SYSTEM_WINDOW) != PERMISSION_GRANTED;
-    }
-
     void readLidState() {
         mDefaultDisplayPolicy.setLidState(mWindowManagerFuncs.getLidState());
     }
@@ -2284,12 +2215,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     @Override
     public int getMaxWallpaperLayer() {
-        return getWindowLayerFromTypeLw(TYPE_STATUS_BAR);
+        return getWindowLayerFromTypeLw(TYPE_NOTIFICATION_SHADE);
     }
 
     @Override
     public boolean isKeyguardHostWindow(WindowManager.LayoutParams attrs) {
-        return attrs.type == TYPE_STATUS_BAR;
+        return attrs.type == TYPE_NOTIFICATION_SHADE;
     }
 
     @Override
@@ -2300,6 +2231,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             return false;
         }
         switch (win.getAttrs().type) {
+            case TYPE_NOTIFICATION_SHADE:
             case TYPE_STATUS_BAR:
             case TYPE_NAVIGATION_BAR:
             case TYPE_WALLPAPER:
@@ -2307,7 +2239,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 return false;
             default:
                 // Hide only windows below the keyguard host window.
-                return getWindowLayerLw(win) < getWindowLayerFromTypeLw(TYPE_STATUS_BAR);
+                return getWindowLayerLw(win) < getWindowLayerFromTypeLw(TYPE_NOTIFICATION_SHADE);
         }
     }
 
@@ -2614,36 +2546,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     /** {@inheritDoc} */
     @Override
     public long interceptKeyBeforeDispatching(IBinder focusedToken, KeyEvent event,
-            int policyFlags) {
-        final long result = interceptKeyBeforeDispatchingInner(focusedToken, event, policyFlags);
-        final int eventDisplayId = event.getDisplayId();
-        if (result == 0 && !mPerDisplayFocusEnabled
-                && eventDisplayId != INVALID_DISPLAY && eventDisplayId != mTopFocusedDisplayId) {
-            // An event is targeting a non-focused display. Try to move the display to top so that
-            // it can become the focused display to interact with the user.
-            final long eventDownTime = event.getDownTime();
-            if (mMovingDisplayToTopKeyTime < eventDownTime) {
-                // We have not handled this event yet. Move the display to top, and then tell
-                // dispatcher to try again later.
-                mMovingDisplayToTopKeyTime = eventDownTime;
-                mMovingDisplayToTopKeyTriggered = true;
-                mHandler.sendMessage(
-                        mHandler.obtainMessage(MSG_MOVE_DISPLAY_TO_TOP, eventDisplayId, 0));
-                return MOVING_DISPLAY_TO_TOP_DURATION_MILLIS;
-            } else if (mMovingDisplayToTopKeyTriggered) {
-                // The message has not been handled yet. Tell dispatcher to try again later.
-                return MOVING_DISPLAY_TO_TOP_DURATION_MILLIS;
-            }
-            // The target display is still not the top focused display. Drop the event because the
-            // display may not contain any window which can receive keys.
-            Slog.w(TAG, "Dropping key targeting non-focused display #" + eventDisplayId
-                    + " keyCode=" + KeyEvent.keyCodeToString(event.getKeyCode()));
-            return -1;
-        }
-        return result;
-    }
-
-    private long interceptKeyBeforeDispatchingInner(IBinder focusedToken, KeyEvent event,
             int policyFlags) {
         final boolean keyguardOn = keyguardOn();
         final int keyCode = event.getKeyCode();
@@ -3131,12 +3033,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         return mAccessibilityTvScheduled;
     }
 
-    private void requestFullBugreport() {
+    private void requestFullBugreportOrLaunchHandlerApp() {
         if ("1".equals(SystemProperties.get("ro.debuggable"))
                 || Settings.Global.getInt(mContext.getContentResolver(),
                         Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1) {
             try {
-                ActivityManager.getService().requestFullBugReport();
+                if (!ActivityManager.getService().launchBugReportHandlerApp()) {
+                    ActivityManager.getService().requestFullBugReport();
+                }
             } catch (RemoteException e) {
                 Slog.e(TAG, "Error taking bugreport", e);
             }
@@ -3552,7 +3456,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mKeyguardOccluded = false;
             mKeyguardDelegate.setOccluded(false, true /* animate */);
             if (mKeyguardCandidate != null) {
-                mKeyguardCandidate.getAttrs().privateFlags |= PRIVATE_FLAG_KEYGUARD;
                 if (!mKeyguardDelegate.hasLockscreenWallpaper()) {
                     mKeyguardCandidate.getAttrs().flags |= FLAG_SHOW_WALLPAPER;
                 }
@@ -3562,7 +3465,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mKeyguardOccluded = true;
             mKeyguardDelegate.setOccluded(true, false /* animate */);
             if (mKeyguardCandidate != null) {
-                mKeyguardCandidate.getAttrs().privateFlags &= ~PRIVATE_FLAG_KEYGUARD;
                 mKeyguardCandidate.getAttrs().flags &= ~FLAG_SHOW_WALLPAPER;
             }
             return true;
@@ -3684,7 +3586,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         final boolean canceled = event.isCanceled();
         final int keyCode = event.getKeyCode();
         final int displayId = event.getDisplayId();
-
         final boolean isInjected = (policyFlags & WindowManagerPolicy.FLAG_INJECTED) != 0;
 
         // If screen is off then we treat the case where the keyguard is open but hidden
@@ -4104,6 +4005,23 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (isWakeKey) {
             wakeUp(event.getEventTime(), mAllowTheaterModeWakeFromKey,
                     PowerManager.WAKE_REASON_WAKE_KEY, "android.policy:KEY");
+        }
+
+        if ((result & ACTION_PASS_TO_USER) != 0) {
+            // If the key event is targeted to a specific display, then the user is interacting with
+            // that display. Therefore, give focus to the display that the user is interacting with.
+            if (!mPerDisplayFocusEnabled
+                    && displayId != INVALID_DISPLAY && displayId != mTopFocusedDisplayId) {
+                // An event is targeting a non-focused display. Move the display to top so that
+                // it can become the focused display to interact with the user.
+                // This should be done asynchronously, once the focus logic is fully moved to input
+                // from windowmanager. Currently, we need to ensure the setInputWindows completes,
+                // which would force the focus event to be queued before the current key event.
+                // TODO(b/70668286): post call to 'moveDisplayToTop' to mHandler instead
+                Log.i(TAG, "Moving non-focused display " + displayId + " to top "
+                        + "because a key is targeting it");
+                mWindowManagerFuncs.moveDisplayToTop(displayId);
+            }
         }
 
         return result;
@@ -4750,6 +4668,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     @Override
+    public boolean isKeyguardShowing() {
+        if (mKeyguardDelegate == null) return false;
+        return mKeyguardDelegate.isShowing();
+    }
+
+    @Override
     public boolean isKeyguardShowingAndNotOccluded() {
         if (mKeyguardDelegate == null) return false;
         return mKeyguardDelegate.isShowing() && !mKeyguardOccluded;
@@ -5284,7 +5208,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     final Intent dock = createHomeDockIntent();
                     if (dock != null) {
                         int result = ActivityTaskManager.getService()
-                                .startActivityAsUser(null, null, dock,
+                                .startActivityAsUser(null, mContext.getBasePackageName(), dock,
                                         dock.resolveTypeIfNeeded(mContext.getContentResolver()),
                                         null, null, 0,
                                         ActivityManager.START_FLAG_ONLY_IF_NEEDED,
@@ -5295,7 +5219,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 }
                 int result = ActivityTaskManager.getService()
-                        .startActivityAsUser(null, null, mHomeIntent,
+                        .startActivityAsUser(null, mContext.getBasePackageName(), mHomeIntent,
                                 mHomeIntent.resolveTypeIfNeeded(mContext.getContentResolver()),
                                 null, null, 0,
                                 ActivityManager.START_FLAG_ONLY_IF_NEEDED,

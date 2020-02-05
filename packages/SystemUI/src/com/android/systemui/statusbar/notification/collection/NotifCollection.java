@@ -47,11 +47,19 @@ import android.util.ArrayMap;
 import android.util.Log;
 
 import com.android.internal.statusbar.IStatusBarService;
-import com.android.systemui.statusbar.notification.collection.notifcollection.CoalescedEvent;
-import com.android.systemui.statusbar.notification.collection.notifcollection.GroupCoalescer;
-import com.android.systemui.statusbar.notification.collection.notifcollection.GroupCoalescer.BatchableNotificationHandler;
+import com.android.systemui.DumpController;
+import com.android.systemui.Dumpable;
+import com.android.systemui.statusbar.notification.collection.coalescer.CoalescedEvent;
+import com.android.systemui.statusbar.notification.collection.coalescer.GroupCoalescer;
+import com.android.systemui.statusbar.notification.collection.coalescer.GroupCoalescer.BatchableNotificationHandler;
+import com.android.systemui.statusbar.notification.collection.notifcollection.CollectionReadyForBuildListener;
+import com.android.systemui.statusbar.notification.collection.notifcollection.DismissedByUserStats;
+import com.android.systemui.statusbar.notification.collection.notifcollection.NotifCollectionListener;
+import com.android.systemui.statusbar.notification.collection.notifcollection.NotifLifetimeExtender;
 import com.android.systemui.util.Assert;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
@@ -88,7 +96,7 @@ import javax.inject.Singleton;
  */
 @MainThread
 @Singleton
-public class NotifCollection {
+public class NotifCollection implements Dumpable {
     private final IStatusBarService mStatusBarService;
 
     private final Map<String, NotificationEntry> mNotificationSet = new ArrayMap<>();
@@ -103,9 +111,10 @@ public class NotifCollection {
     private boolean mAmDispatchingToOtherCode;
 
     @Inject
-    public NotifCollection(IStatusBarService statusBarService) {
+    public NotifCollection(IStatusBarService statusBarService, DumpController dumpController) {
         Assert.isMainThread();
         mStatusBarService = statusBarService;
+        dumpController.registerDumpable(TAG, this);
     }
 
     /** Initializes the NotifCollection and registers it to receive notification events. */
@@ -123,36 +132,25 @@ public class NotifCollection {
      * Sets the class responsible for converting the collection into the list of currently-visible
      * notifications.
      */
-    public void setBuildListener(CollectionReadyForBuildListener buildListener) {
+    void setBuildListener(CollectionReadyForBuildListener buildListener) {
         Assert.isMainThread();
         mBuildListener = buildListener;
     }
 
-    /**
-     * Returns the list of "active" notifications, i.e. the notifications that are currently posted
-     * to the phone. In general, this tracks closely to the list maintained by NotificationManager,
-     * but it can diverge slightly due to lifetime extenders.
-     *
-     * The returned list is read-only, unsorted, unfiltered, and ungrouped.
-     */
-    public Collection<NotificationEntry> getNotifs() {
+    /** @see NotifPipeline#getActiveNotifs() */
+    Collection<NotificationEntry> getActiveNotifs() {
         Assert.isMainThread();
         return mReadOnlyNotificationSet;
     }
 
-    /**
-     * Registers a listener to be informed when notifications are added, removed or updated.
-     */
-    public void addCollectionListener(NotifCollectionListener listener) {
+    /** @see NotifPipeline#addCollectionListener(NotifCollectionListener) */
+    void addCollectionListener(NotifCollectionListener listener) {
         Assert.isMainThread();
         mNotifCollectionListeners.add(listener);
     }
 
-    /**
-     * Registers a lifetime extender. Lifetime extenders can cause notifications that have been
-     * dismissed or retracted to be temporarily retained in the collection.
-     */
-    public void addNotificationLifetimeExtender(NotifLifetimeExtender extender) {
+    /** @see NotifPipeline#addNotificationLifetimeExtender(NotifLifetimeExtender) */
+    void addNotificationLifetimeExtender(NotifLifetimeExtender extender) {
         Assert.isMainThread();
         checkForReentrantCall();
         if (mLifetimeExtenders.contains(extender)) {
@@ -165,7 +163,7 @@ public class NotifCollection {
     /**
      * Dismiss a notification on behalf of the user.
      */
-    public void dismissNotification(
+    void dismissNotification(
             NotificationEntry entry,
             @CancellationReason int reason,
             @NonNull DismissedByUserStats stats) {
@@ -299,6 +297,14 @@ public class NotifCollection {
             if (!isLifetimeExtended(entry)) {
                 Ranking ranking = requireRanking(rankingMap, entry.getKey());
                 entry.setRanking(ranking);
+
+                // TODO: (b/145659174) update the sbn's overrideGroupKey in
+                //  NotificationEntry.setRanking instead of here once we fully migrate to the
+                //  NewNotifPipeline
+                final String newOverrideGroupKey = ranking.getOverrideGroupKey();
+                if (!Objects.equals(entry.getSbn().getOverrideGroupKey(), newOverrideGroupKey)) {
+                    entry.getSbn().setOverrideGroupKey(newOverrideGroupKey);
+                }
             }
         }
     }
@@ -438,7 +444,22 @@ public class NotifCollection {
             REASON_TIMEOUT,
     })
     @Retention(RetentionPolicy.SOURCE)
-    @interface CancellationReason {}
+    public @interface CancellationReason {}
 
     public static final int REASON_UNKNOWN = 0;
+
+    @Override
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        final List<NotificationEntry> entries = new ArrayList<>(getActiveNotifs());
+
+        pw.println("\t" + TAG + " unsorted/unfiltered notifications:");
+        if (entries.size() == 0) {
+            pw.println("\t\t None");
+        }
+        pw.println(
+                ListDumper.dumpList(
+                        entries,
+                        true,
+                        "\t\t"));
+    }
 }

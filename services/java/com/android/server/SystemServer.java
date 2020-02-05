@@ -72,11 +72,11 @@ import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Slog;
+import android.util.StatsLog;
 import android.view.WindowManager;
 import android.view.contentcapture.ContentCaptureManager;
 
 import com.android.internal.R;
-import com.android.internal.logging.MetricsLogger;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BinderInternal;
 import com.android.internal.util.ConcurrentUtils;
@@ -127,6 +127,7 @@ import com.android.server.om.OverlayManagerService;
 import com.android.server.os.BugreportManagerService;
 import com.android.server.os.DeviceIdentifiersPolicyService;
 import com.android.server.os.SchedulingPolicyService;
+import com.android.server.people.PeopleService;
 import com.android.server.pm.BackgroundDexOptService;
 import com.android.server.pm.CrossProfileAppsService;
 import com.android.server.pm.DataLoaderManagerService;
@@ -216,8 +217,12 @@ public final class SystemServer {
             "com.android.server.print.PrintManagerService";
     private static final String COMPANION_DEVICE_MANAGER_SERVICE_CLASS =
             "com.android.server.companion.CompanionDeviceManagerService";
+    private static final String STATS_COMPANION_APEX_PATH =
+            "/apex/com.android.os.statsd/javalib/service-statsd.jar";
     private static final String STATS_COMPANION_LIFECYCLE_CLASS =
             "com.android.server.stats.StatsCompanion$Lifecycle";
+    private static final String STATS_PULL_ATOM_SERVICE_CLASS =
+            "com.android.server.stats.pull.StatsPullAtomService";
     private static final String USB_SERVICE_CLASS =
             "com.android.server.usb.UsbService$Lifecycle";
     private static final String MIDI_SERVICE_CLASS =
@@ -442,10 +447,12 @@ public final class SystemServer {
 
             // Here we go!
             Slog.i(TAG, "Entered the Android system server!");
-            int uptimeMillis = (int) SystemClock.elapsedRealtime();
+            final long uptimeMillis = SystemClock.elapsedRealtime();
             EventLog.writeEvent(EventLogTags.BOOT_PROGRESS_SYSTEM_RUN, uptimeMillis);
             if (!mRuntimeRestart) {
-                MetricsLogger.histogram(null, "boot_system_server_init", uptimeMillis);
+                StatsLog.write(StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
+                        StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__SYSTEM_SERVER_INIT_START,
+                        uptimeMillis);
             }
 
             // In case the runtime switched since last boot (such as when
@@ -554,10 +561,12 @@ public final class SystemServer {
         StrictMode.initVmDefaults(null);
 
         if (!mRuntimeRestart && !isFirstBootOrUpgrade()) {
-            int uptimeMillis = (int) SystemClock.elapsedRealtime();
-            MetricsLogger.histogram(null, "boot_system_server_ready", uptimeMillis);
-            final int MAX_UPTIME_MILLIS = 60 * 1000;
-            if (uptimeMillis > MAX_UPTIME_MILLIS) {
+            final long uptimeMillis = SystemClock.elapsedRealtime();
+            StatsLog.write(StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
+                    StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__SYSTEM_SERVER_READY,
+                    uptimeMillis);
+            final long maxUptimeMillis = 60 * 1000;
+            if (uptimeMillis > maxUptimeMillis) {
                 Slog.wtf(SYSTEM_SERVER_TIMING_TAG,
                         "SystemServer init took too long. uptimeMillis=" + uptimeMillis);
             }
@@ -752,7 +761,8 @@ public final class SystemServer {
         // Now that we have the bare essentials of the OS up and running, take
         // note that we just booted, which might send out a rescue party if
         // we're stuck in a runtime restart loop.
-        RescueParty.noteBoot(mSystemContext);
+        RescueParty.registerHealthObserver(mSystemContext);
+        PackageWatchdog.getInstance(mSystemContext).noteBoot();
 
         // Manages LEDs and display backlight so we need it to bring up the display.
         t.traceBegin("StartLightsService");
@@ -789,8 +799,9 @@ public final class SystemServer {
 
         // Start the package manager.
         if (!mRuntimeRestart) {
-            MetricsLogger.histogram(null, "boot_package_manager_init_start",
-                    (int) SystemClock.elapsedRealtime());
+            StatsLog.write(StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
+                    StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__PACKAGE_MANAGER_INIT_START,
+                    SystemClock.elapsedRealtime());
         }
 
         t.traceBegin("StartPackageManagerService");
@@ -806,8 +817,9 @@ public final class SystemServer {
         mPackageManager = mSystemContext.getPackageManager();
         t.traceEnd();
         if (!mRuntimeRestart && !isFirstBootOrUpgrade()) {
-            MetricsLogger.histogram(null, "boot_package_manager_init_ready",
-                    (int) SystemClock.elapsedRealtime());
+            StatsLog.write(StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME_REPORTED,
+                    StatsLog.BOOT_TIME_EVENT_ELAPSED_TIME__EVENT__PACKAGE_MANAGER_INIT_READY,
+                    SystemClock.elapsedRealtime());
         }
         // Manages A/B OTA dexopting. This is a bootstrap service as we need it to rename
         // A/B artifacts after boot, before anything else might touch/need them.
@@ -887,6 +899,11 @@ public final class SystemServer {
      */
     private void startCoreServices(@NonNull TimingsTraceAndSlog t) {
         t.traceBegin("startCoreServices");
+
+        // Service for system config
+        t.traceBegin("StartSystemConfigService");
+        mSystemServiceManager.startService(SystemConfigService.class);
+        t.traceEnd();
 
         t.traceBegin("StartBatteryService");
         // Tracks the battery level.  Requires LightService.
@@ -1780,7 +1797,7 @@ public final class SystemServer {
             if (!isWatch && !disableNetworkTime) {
                 t.traceBegin("StartNetworkTimeUpdateService");
                 try {
-                    networkTimeUpdater = new NetworkTimeUpdateServiceImpl(context);
+                    networkTimeUpdater = new NetworkTimeUpdateService(context);
                     ServiceManager.addService("network_time_update_service", networkTimeUpdater);
                 } catch (Throwable e) {
                     reportWtf("starting NetworkTimeUpdate service", e);
@@ -1952,6 +1969,10 @@ public final class SystemServer {
             t.traceBegin("StartCrossProfileAppsService");
             mSystemServiceManager.startService(CrossProfileAppsService.class);
             t.traceEnd();
+
+            t.traceBegin("StartPeopleService");
+            mSystemServiceManager.startService(PeopleService.class);
+            t.traceEnd();
         }
 
         if (!isWatch) {
@@ -2009,7 +2030,13 @@ public final class SystemServer {
 
         // Statsd helper
         t.traceBegin("StartStatsCompanion");
-        mSystemServiceManager.startService(STATS_COMPANION_LIFECYCLE_CLASS);
+        mSystemServiceManager.startServiceFromJar(
+                STATS_COMPANION_LIFECYCLE_CLASS, STATS_COMPANION_APEX_PATH);
+        t.traceEnd();
+
+        // Statsd pulled atoms
+        t.traceBegin("StartStatsPullAtomService");
+        mSystemServiceManager.startService(STATS_PULL_ATOM_SERVICE_CLASS);
         t.traceEnd();
 
         // Incidentd and dumpstated helper

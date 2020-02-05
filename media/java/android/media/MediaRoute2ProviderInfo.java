@@ -25,6 +25,7 @@ import android.util.ArrayMap;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -92,6 +93,9 @@ public final class MediaRoute2ProviderInfo implements Parcelable {
 
     /**
      * Gets the route for the given route id or null if no matching route exists.
+     * Please note that id should be original id.
+     *
+     * @see MediaRoute2Info#getOriginalId()
      */
     @Nullable
     public MediaRoute2Info getRoute(@NonNull String routeId) {
@@ -161,14 +165,17 @@ public final class MediaRoute2ProviderInfo implements Parcelable {
                 return this;
             }
             mUniqueId = uniqueId;
-            final int count = mRoutes.size();
-            for (int i = 0; i < count; i++) {
-                MediaRoute2Info route = mRoutes.valueAt(i);
-                mRoutes.setValueAt(i, new MediaRoute2Info.Builder(route)
+
+            final ArrayMap<String, MediaRoute2Info> newRoutes = new ArrayMap<>();
+            for (Map.Entry<String, MediaRoute2Info> entry : mRoutes.entrySet()) {
+                MediaRoute2Info routeWithProviderId = new MediaRoute2Info.Builder(entry.getValue())
                         .setProviderId(mUniqueId)
-                        .build());
+                        .build();
+                newRoutes.put(routeWithProviderId.getOriginalId(), routeWithProviderId);
             }
 
+            mRoutes.clear();
+            mRoutes.putAll(newRoutes);
             return this;
         }
 
@@ -179,14 +186,14 @@ public final class MediaRoute2ProviderInfo implements Parcelable {
         public Builder addRoute(@NonNull MediaRoute2Info route) {
             Objects.requireNonNull(route, "route must not be null");
 
-            if (mRoutes.containsValue(route)) {
-                throw new IllegalArgumentException("route descriptor already added");
+            if (mRoutes.containsKey(route.getOriginalId())) {
+                throw new IllegalArgumentException("A route with the same id is already added");
             }
             if (mUniqueId != null) {
-                mRoutes.put(route.getId(),
+                mRoutes.put(route.getOriginalId(),
                         new MediaRoute2Info.Builder(route).setProviderId(mUniqueId).build());
             } else {
-                mRoutes.put(route.getId(), route);
+                mRoutes.put(route.getOriginalId(), route);
             }
             return this;
         }

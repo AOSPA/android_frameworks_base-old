@@ -56,6 +56,7 @@ import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.PowerUI;
 import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.recents.Recents;
+import com.android.systemui.screenrecord.RecordingController;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.DevicePolicyManagerWrapper;
@@ -88,6 +89,7 @@ import com.android.systemui.statusbar.phone.ManagedProfileController;
 import com.android.systemui.statusbar.phone.NavigationModeController;
 import com.android.systemui.statusbar.phone.NotificationGroupAlertTransferHelper;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
+import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
@@ -121,6 +123,7 @@ import com.android.systemui.util.leak.GarbageMonitor;
 import com.android.systemui.util.leak.LeakDetector;
 import com.android.systemui.util.leak.LeakReporter;
 import com.android.systemui.util.sensors.AsyncSensorManager;
+import com.android.systemui.wm.DisplayImeController;
 import com.android.systemui.wm.DisplayWindowController;
 import com.android.systemui.wm.SystemWindows;
 
@@ -236,7 +239,8 @@ public class Dependency {
     @Inject Lazy<LeakReporter> mLeakReporter;
     @Inject Lazy<GarbageMonitor> mGarbageMonitor;
     @Inject Lazy<TunerService> mTunerService;
-    @Inject Lazy<StatusBarWindowController> mStatusBarWindowController;
+    @Inject Lazy<NotificationShadeWindowController> mNotificationShadeWindowController;
+    @Inject Lazy<StatusBarWindowController> mTempStatusBarWindowController;
     @Inject Lazy<DarkIconDispatcher> mDarkIconDispatcher;
     @Inject Lazy<ConfigurationController> mConfigurationController;
     @Inject Lazy<StatusBarIconController> mStatusBarIconController;
@@ -321,6 +325,8 @@ public class Dependency {
     @Inject Lazy<StatusBar> mStatusBar;
     @Inject Lazy<DisplayWindowController> mDisplayWindowController;
     @Inject Lazy<SystemWindows> mSystemWindows;
+    @Inject Lazy<DisplayImeController> mDisplayImeController;
+    @Inject Lazy<RecordingController> mRecordingController;
 
     @Inject
     public Dependency() {
@@ -396,7 +402,10 @@ public class Dependency {
 
         mProviders.put(TunerService.class, mTunerService::get);
 
-        mProviders.put(StatusBarWindowController.class, mStatusBarWindowController::get);
+        mProviders.put(NotificationShadeWindowController.class,
+                mNotificationShadeWindowController::get);
+
+        mProviders.put(StatusBarWindowController.class, mTempStatusBarWindowController::get);
 
         mProviders.put(DarkIconDispatcher.class, mDarkIconDispatcher::get);
 
@@ -509,12 +518,15 @@ public class Dependency {
         mProviders.put(StatusBar.class, mStatusBar::get);
         mProviders.put(DisplayWindowController.class, mDisplayWindowController::get);
         mProviders.put(SystemWindows.class, mSystemWindows::get);
+        mProviders.put(DisplayImeController.class, mDisplayImeController::get);
 
         // TODO(b/118592525): to support multi-display , we start to add something which is
         //                    per-display, while others may be global. I think it's time to add
         //                    a new class maybe named DisplayDependency to solve per-display
         //                    Dependency problem.
         mProviders.put(AutoHideController.class, mAutoHideController::get);
+
+        mProviders.put(RecordingController.class, mRecordingController::get);
 
         sDependency = this;
     }

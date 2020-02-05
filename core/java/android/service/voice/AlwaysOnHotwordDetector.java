@@ -19,7 +19,7 @@ package android.service.voice;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
 import android.hardware.soundtrigger.IRecognitionStatusCallback;
@@ -119,7 +119,9 @@ public class AlwaysOnHotwordDetector {
     @IntDef(flag = true, prefix = { "RECOGNITION_FLAG_" }, value = {
             RECOGNITION_FLAG_NONE,
             RECOGNITION_FLAG_CAPTURE_TRIGGER_AUDIO,
-            RECOGNITION_FLAG_ALLOW_MULTIPLE_TRIGGERS
+            RECOGNITION_FLAG_ALLOW_MULTIPLE_TRIGGERS,
+            RECOGNITION_FLAG_ENABLE_AUDIO_ECHO_CANCELLATION,
+            RECOGNITION_FLAG_ENABLE_AUDIO_NOISE_SUPPRESSION,
     })
     public @interface RecognitionFlags {}
 
@@ -144,6 +146,26 @@ public class AlwaysOnHotwordDetector {
      */
     public static final int RECOGNITION_FLAG_ALLOW_MULTIPLE_TRIGGERS = 0x2;
 
+    /**
+     * Audio capabilities flag for {@link #startRecognition(int)} that indicates
+     * if the underlying recognition should use AEC.
+     * This capability may or may not be supported by the system, and support can be queried
+     * by calling {@link #getSupportedAudioCapabilities()}. The corresponding capabilities field for
+     * this flag is {@link #AUDIO_CAPABILITY_ECHO_CANCELLATION}. If this flag is passed without the
+     * audio capability supported, there will be no audio effect applied.
+     */
+    public static final int RECOGNITION_FLAG_ENABLE_AUDIO_ECHO_CANCELLATION = 0x4;
+
+    /**
+     * Audio capabilities flag for {@link #startRecognition(int)} that indicates
+     * if the underlying recognition should use noise suppression.
+     * This capability may or may not be supported by the system, and support can be queried
+     * by calling {@link #getSupportedAudioCapabilities()}. The corresponding capabilities field for
+     * this flag is {@link #AUDIO_CAPABILITY_NOISE_SUPPRESSION}. If this flag is passed without the
+     * audio capability supported, there will be no audio effect applied.
+     */
+    public static final int RECOGNITION_FLAG_ENABLE_AUDIO_NOISE_SUPPRESSION = 0x8;
+
     //---- Recognition mode flags. Return codes for getSupportedRecognitionModes() ----//
     // Must be kept in sync with the related attribute defined as searchKeyphraseRecognitionFlags.
 
@@ -167,6 +189,46 @@ public class AlwaysOnHotwordDetector {
      */
     public static final int RECOGNITION_MODE_USER_IDENTIFICATION
             = SoundTrigger.RECOGNITION_MODE_USER_IDENTIFICATION;
+
+    //-- Audio capabilities. Values in returned bit field for getSupportedAudioCapabilities() --//
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(flag = true, prefix = { "AUDIO_CAPABILITY_" }, value = {
+            AUDIO_CAPABILITY_ECHO_CANCELLATION,
+            AUDIO_CAPABILITY_NOISE_SUPPRESSION,
+    })
+    public @interface AudioCapabilities {}
+
+    /**
+     * If set the underlying module supports AEC.
+     * Returned by {@link #getSupportedAudioCapabilities()}
+     */
+    public static final int AUDIO_CAPABILITY_ECHO_CANCELLATION =
+            SoundTrigger.ModuleProperties.CAPABILITY_ECHO_CANCELLATION;
+
+    /**
+     * If set, the underlying module supports noise suppression.
+     * Returned by {@link #getSupportedAudioCapabilities()}
+     */
+    public static final int AUDIO_CAPABILITY_NOISE_SUPPRESSION =
+            SoundTrigger.ModuleProperties.CAPABILITY_NOISE_SUPPRESSION;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(flag = true, prefix = { "MODEL_PARAM_" }, value = {
+            MODEL_PARAM_THRESHOLD_FACTOR,
+    })
+    public @interface ModelParams {}
+
+    /**
+     * Controls the sensitivity threshold adjustment factor for a given model.
+     * Negative value corresponds to less sensitive model (high threshold) and
+     * a positive value corresponds to a more sensitive model (low threshold).
+     * Default value is 0.
+     */
+    public static final int MODEL_PARAM_THRESHOLD_FACTOR =
+            android.hardware.soundtrigger.ModelParams.THRESHOLD_FACTOR;
 
     static final String TAG = "AlwaysOnHotwordDetector";
     static final boolean DBG = false;
@@ -196,6 +258,53 @@ public class AlwaysOnHotwordDetector {
     private final Handler mHandler;
 
     private int mAvailability = STATE_NOT_READY;
+
+    /**
+     *  A ModelParamRange is a representation of supported parameter range for a
+     *  given loaded model.
+     */
+    public static final class ModelParamRange {
+        private final SoundTrigger.ModelParamRange mModelParamRange;
+
+        /** @hide */
+        ModelParamRange(SoundTrigger.ModelParamRange modelParamRange) {
+            mModelParamRange = modelParamRange;
+        }
+
+        /**
+         * The inclusive start of supported range.
+         *
+         * @return start of range
+         */
+        public int start() {
+            return mModelParamRange.start;
+        }
+
+        /**
+         * The inclusive end of supported range.
+         *
+         * @return end of range
+         */
+        public int end() {
+            return mModelParamRange.end;
+        }
+
+        @Override
+        @NonNull
+        public String toString() {
+            return mModelParamRange.toString();
+        }
+
+        @Override
+        public boolean equals(@Nullable Object obj) {
+            return mModelParamRange.equals(obj);
+        }
+
+        @Override
+        public int hashCode() {
+            return mModelParamRange.hashCode();
+        }
+    }
 
     /**
      * Additional payload for {@link Callback#onDetected}.
@@ -385,6 +494,37 @@ public class AlwaysOnHotwordDetector {
     }
 
     /**
+     * Get the audio capabilities supported by the platform which can be enabled when
+     * starting a recognition.
+     *
+     * @see #AUDIO_CAPABILITY_ECHO_CANCELLATION
+     * @see #AUDIO_CAPABILITY_NOISE_SUPPRESSION
+     *
+     * @return Bit field encoding of the AudioCapabilities supported.
+     */
+    @AudioCapabilities
+    public int getSupportedAudioCapabilities() {
+        if (DBG) Slog.d(TAG, "getSupportedAudioCapabilities()");
+        synchronized (mLock) {
+            return getSupportedAudioCapabilitiesLocked();
+        }
+    }
+
+    private int getSupportedAudioCapabilitiesLocked() {
+        try {
+            ModuleProperties properties =
+                    mModelManagementService.getDspModuleProperties(mVoiceInteractionService);
+            if (properties != null) {
+                return properties.audioCapabilities;
+            }
+
+            return 0;
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Starts recognition for the associated keyphrase.
      *
      * @see #RECOGNITION_FLAG_CAPTURE_TRIGGER_AUDIO
@@ -441,6 +581,83 @@ public class AlwaysOnHotwordDetector {
             }
 
             return stopRecognitionLocked() == STATUS_OK;
+        }
+    }
+
+    /**
+     * Set a model specific {@link ModelParams} with the given value. This
+     * parameter will keep its value for the duration the model is loaded regardless of starting and
+     * stopping recognition. Once the model is unloaded, the value will be lost.
+     * {@link AlwaysOnHotwordDetector#queryParameter} should be checked first before calling this
+     * method.
+     *
+     * @param modelParam   {@link ModelParams}
+     * @param value        Value to set
+     * @return - {@link SoundTrigger#STATUS_OK} in case of success
+     *         - {@link SoundTrigger#STATUS_NO_INIT} if the native service cannot be reached
+     *         - {@link SoundTrigger#STATUS_BAD_VALUE} invalid input parameter
+     *         - {@link SoundTrigger#STATUS_INVALID_OPERATION} if the call is out of sequence or
+     *           if API is not supported by HAL
+     */
+    public int setParameter(@ModelParams int modelParam, int value) {
+        if (DBG) {
+            Slog.d(TAG, "setParameter(" + modelParam + ", " + value + ")");
+        }
+
+        synchronized (mLock) {
+            if (mAvailability == STATE_INVALID) {
+                throw new IllegalStateException("setParameter called on an invalid detector");
+            }
+
+            return setParameterLocked(modelParam, value);
+        }
+    }
+
+    /**
+     * Get a model specific {@link ModelParams}. This parameter will keep its value
+     * for the duration the model is loaded regardless of starting and stopping recognition.
+     * Once the model is unloaded, the value will be lost. If the value is not set, a default
+     * value is returned. See {@link ModelParams} for parameter default values.
+     * {@link AlwaysOnHotwordDetector#queryParameter} should be checked first before
+     * calling this method.
+     *
+     * @param modelParam   {@link ModelParams}
+     * @return value of parameter
+     */
+    public int getParameter(@ModelParams int modelParam) {
+        if (DBG) {
+            Slog.d(TAG, "getParameter(" + modelParam + ")");
+        }
+
+        synchronized (mLock) {
+            if (mAvailability == STATE_INVALID) {
+                throw new IllegalStateException("getParameter called on an invalid detector");
+            }
+
+            return getParameterLocked(modelParam);
+        }
+    }
+
+    /**
+     * Determine if parameter control is supported for the given model handle.
+     * This method should be checked prior to calling {@link AlwaysOnHotwordDetector#setParameter}
+     * or {@link AlwaysOnHotwordDetector#getParameter}.
+     *
+     * @param modelParam {@link ModelParams}
+     * @return supported range of parameter, null if not supported
+     */
+    @Nullable
+    public ModelParamRange queryParameter(@ModelParams int modelParam) {
+        if (DBG) {
+            Slog.d(TAG, "queryParameter(" + modelParam + ")");
+        }
+
+        synchronized (mLock) {
+            if (mAvailability == STATE_INVALID) {
+                throw new IllegalStateException("queryParameter called on an invalid detector");
+            }
+
+            return queryParameterLocked(modelParam);
         }
     }
 
@@ -571,12 +788,21 @@ public class AlwaysOnHotwordDetector {
                 (recognitionFlags&RECOGNITION_FLAG_CAPTURE_TRIGGER_AUDIO) != 0;
         boolean allowMultipleTriggers =
                 (recognitionFlags&RECOGNITION_FLAG_ALLOW_MULTIPLE_TRIGGERS) != 0;
+
+        int audioCapabilities = 0;
+        if ((recognitionFlags & RECOGNITION_FLAG_ENABLE_AUDIO_ECHO_CANCELLATION) != 0) {
+            audioCapabilities |= AUDIO_CAPABILITY_ECHO_CANCELLATION;
+        }
+        if ((recognitionFlags & RECOGNITION_FLAG_ENABLE_AUDIO_NOISE_SUPPRESSION) != 0) {
+            audioCapabilities |= AUDIO_CAPABILITY_NOISE_SUPPRESSION;
+        }
+
         int code = STATUS_ERROR;
         try {
             code = mModelManagementService.startRecognition(mVoiceInteractionService,
                     mKeyphraseMetadata.id, mLocale.toLanguageTag(), mInternalCallback,
                     new RecognitionConfig(captureTriggerAudio, allowMultipleTriggers,
-                            recognitionExtra, null /* additional data */));
+                            recognitionExtra, null /* additional data */, audioCapabilities));
         } catch (RemoteException e) {
             Slog.w(TAG, "RemoteException in startRecognition!", e);
         }
@@ -599,6 +825,47 @@ public class AlwaysOnHotwordDetector {
             Slog.w(TAG, "stopRecognition() failed with error code " + code);
         }
         return code;
+    }
+
+    private int setParameterLocked(@ModelParams int modelParam, int value) {
+        try {
+            int code = mModelManagementService.setParameter(mVoiceInteractionService,
+                    mKeyphraseMetadata.id, modelParam, value);
+
+            if (code != STATUS_OK) {
+                Slog.w(TAG, "setParameter failed with error code " + code);
+            }
+
+            return code;
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    private int getParameterLocked(@ModelParams int modelParam) {
+        try {
+            return mModelManagementService.getParameter(mVoiceInteractionService,
+                    mKeyphraseMetadata.id, modelParam);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @Nullable
+    private ModelParamRange queryParameterLocked(@ModelParams int modelParam) {
+        try {
+            SoundTrigger.ModelParamRange modelParamRange =
+                    mModelManagementService.queryParameter(mVoiceInteractionService,
+                            mKeyphraseMetadata.id, modelParam);
+
+            if (modelParamRange == null) {
+                return null;
+            }
+
+            return new ModelParamRange(modelParamRange);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     private void notifyStateChangedLocked() {

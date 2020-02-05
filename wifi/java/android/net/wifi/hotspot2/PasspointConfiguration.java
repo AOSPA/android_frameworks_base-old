@@ -17,6 +17,7 @@
 package android.net.wifi.hotspot2;
 
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.net.wifi.hotspot2.pps.Credential;
 import android.net.wifi.hotspot2.pps.HomeSp;
 import android.net.wifi.hotspot2.pps.Policy;
@@ -423,6 +424,73 @@ public final class PasspointConfiguration implements Parcelable {
     }
 
     /**
+     * The auto-join configuration specifies whether or not the Passpoint Configuration is
+     * considered for auto-connection. If true then yes, if false then it isn't considered as part
+     * of auto-connection - but can still be manually connected to.
+     */
+    private boolean mIsAutoJoinEnabled = true;
+
+    /**
+     * The mac randomization setting specifies whether a randomized or device MAC address will
+     * be used to connect to the passpoint network. If true, a randomized MAC will be used.
+     * Otherwise, the device MAC address will be used.
+     */
+    private boolean mIsMacRandomizationEnabled = true;
+
+    /**
+     * Configures the auto-association status of this Passpoint configuration. A value of true
+     * indicates that the configuration will be considered for auto-connection, a value of false
+     * indicates that only manual connection will work - the framework will not auto-associate to
+     * this Passpoint network.
+     *
+     * @param autoJoinEnabled true to be considered for framework auto-connection, false otherwise.
+     * @hide
+     */
+    public void setAutoJoinEnabled(boolean autoJoinEnabled) {
+        mIsAutoJoinEnabled = autoJoinEnabled;
+    }
+
+    /**
+     * Configures the MAC randomization setting for this Passpoint configuration.
+     * If set to true, the framework will use a randomized MAC address to connect to this Passpoint
+     * network. Otherwise, the framework will use the device MAC address.
+     *
+     * @param enabled true to use randomized MAC address, false to use device MAC address.
+     * @hide
+     */
+    public void setMacRandomizationEnabled(boolean enabled) {
+        mIsMacRandomizationEnabled = enabled;
+    }
+
+    /**
+     * Indicates whether the Passpoint configuration may be auto-connected to by the framework. A
+     * value of true indicates that auto-connection can happen, a value of false indicates that it
+     * cannot. However, even when auto-connection is not possible manual connection by the user is
+     * possible.
+     *
+     * @return the auto-join configuration: true for auto-connection (or join) enabled, false
+     * otherwise.
+     * @hide
+     */
+    @SystemApi
+    public boolean isAutoJoinEnabled() {
+        return mIsAutoJoinEnabled;
+    }
+
+    /**
+     * Indicates whether a randomized MAC address or device MAC address will be used for
+     * connections to this Passpoint network. If true, a randomized MAC address will be used.
+     * Otherwise, the device MAC address will be used.
+     *
+     * @return true for MAC randomization enabled. False for disabled.
+     * @hide
+     */
+    @SystemApi
+    public boolean isMacRandomizationEnabled() {
+        return mIsMacRandomizationEnabled;
+    }
+
+    /**
      * Constructor for creating PasspointConfiguration with default values.
      */
     public PasspointConfiguration() {}
@@ -464,6 +532,8 @@ public final class PasspointConfiguration implements Parcelable {
         mServiceFriendlyNames = source.mServiceFriendlyNames;
         mAaaServerTrustedNames = source.mAaaServerTrustedNames;
         mCarrierId = source.mCarrierId;
+        mIsAutoJoinEnabled = source.mIsAutoJoinEnabled;
+        mIsMacRandomizationEnabled = source.mIsMacRandomizationEnabled;
     }
 
     @Override
@@ -493,6 +563,8 @@ public final class PasspointConfiguration implements Parcelable {
                 (HashMap<String, String>) mServiceFriendlyNames);
         dest.writeBundle(bundle);
         dest.writeInt(mCarrierId);
+        dest.writeBoolean(mIsAutoJoinEnabled);
+        dest.writeBoolean(mIsMacRandomizationEnabled);
     }
 
     @Override
@@ -523,6 +595,8 @@ public final class PasspointConfiguration implements Parcelable {
                 && mUsageLimitDataLimit == that.mUsageLimitDataLimit
                 && mUsageLimitTimeLimitInMinutes == that.mUsageLimitTimeLimitInMinutes
                 && mCarrierId == that.mCarrierId
+                && mIsAutoJoinEnabled == that.mIsAutoJoinEnabled
+                && mIsMacRandomizationEnabled == that.mIsMacRandomizationEnabled
                 && (mServiceFriendlyNames == null ? that.mServiceFriendlyNames == null
                 : mServiceFriendlyNames.equals(that.mServiceFriendlyNames));
     }
@@ -533,7 +607,7 @@ public final class PasspointConfiguration implements Parcelable {
                 mUpdateIdentifier, mCredentialPriority, mSubscriptionCreationTimeInMillis,
                 mSubscriptionExpirationTimeInMillis, mUsageLimitUsageTimePeriodInMinutes,
                 mUsageLimitStartTimeInMillis, mUsageLimitDataLimit, mUsageLimitTimeLimitInMinutes,
-                mServiceFriendlyNames, mCarrierId);
+                mServiceFriendlyNames, mCarrierId, mIsAutoJoinEnabled, mIsMacRandomizationEnabled);
     }
 
     @Override
@@ -587,6 +661,8 @@ public final class PasspointConfiguration implements Parcelable {
             builder.append("ServiceFriendlyNames: ").append(mServiceFriendlyNames);
         }
         builder.append("CarrierId:" + mCarrierId);
+        builder.append("IsAutoJoinEnabled:" + mIsAutoJoinEnabled);
+        builder.append("mIsMacRandomizationEnabled:" + mIsMacRandomizationEnabled);
         return builder.toString();
     }
 
@@ -692,6 +768,8 @@ public final class PasspointConfiguration implements Parcelable {
                         "serviceFriendlyNames");
                 config.setServiceFriendlyNames(friendlyNamesMap);
                 config.mCarrierId = in.readInt();
+                config.mIsAutoJoinEnabled = in.readBoolean();
+                config.mIsMacRandomizationEnabled = in.readBoolean();
                 return config;
             }
 

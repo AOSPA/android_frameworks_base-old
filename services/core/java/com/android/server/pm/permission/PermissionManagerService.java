@@ -55,7 +55,10 @@ import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ApplicationPackageManager;
 import android.app.IActivityManager;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledAfter;
 import android.content.Context;
+import android.content.PermissionChecker;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.PermissionGroupInfoFlags;
@@ -107,6 +110,7 @@ import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.compat.IPlatformCompat;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.os.RoSystemProperties;
@@ -224,6 +228,8 @@ public class PermissionManagerService extends IPermissionManager.Stub {
     private final Handler mHandler;
     private final Context mContext;
     private final MetricsLogger mMetricsLogger = new MetricsLogger();
+    private final IPlatformCompat mPlatformCompat = IPlatformCompat.Stub.asInterface(
+            ServiceManager.getService(Context.PLATFORM_COMPAT_SERVICE));
 
     /** Internal storage for permissions and related settings */
     @GuardedBy("mLock")
@@ -796,7 +802,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
     @Override
     public int checkPermission(String permName, String pkgName, int userId) {
-        // Not using Preconditions.checkNotNull() here for compatibility reasons.
+        // Not using Objects.requireNonNull() here for compatibility reasons.
         if (permName == null || pkgName == null) {
             return PackageManager.PERMISSION_DENIED;
         }
@@ -872,7 +878,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
     @Override
     public int checkUidPermission(String permName, int uid) {
-        // Not using Preconditions.checkNotNull() here for compatibility reasons.
+        // Not using Objects.requireNonNull() here for compatibility reasons.
         if (permName == null) {
             return PackageManager.PERMISSION_DENIED;
         }
@@ -955,7 +961,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
     @Override
     @Nullable public List<String> getWhitelistedRestrictedPermissions(@NonNull String packageName,
             @PermissionWhitelistFlags int flags, @UserIdInt int userId) {
-        Preconditions.checkNotNull(packageName);
+        Objects.requireNonNull(packageName);
         Preconditions.checkFlagsArgument(flags,
                 PackageManager.FLAG_PERMISSION_WHITELIST_UPGRADE
                         | PackageManager.FLAG_PERMISSION_WHITELIST_SYSTEM
@@ -1043,7 +1049,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             @NonNull String permName, @PermissionWhitelistFlags int flags,
             @UserIdInt int userId) {
         // Other argument checks are done in get/setWhitelistedRestrictedPermissions
-        Preconditions.checkNotNull(permName);
+        Objects.requireNonNull(permName);
 
         if (!checkExistsAndEnforceCannotModifyImmutablyRestrictedPermission(permName)) {
             return false;
@@ -1086,7 +1092,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             @NonNull String permName, @PermissionWhitelistFlags int flags,
             @UserIdInt int userId) {
         // Other argument checks are done in get/setWhitelistedRestrictedPermissions
-        Preconditions.checkNotNull(permName);
+        Objects.requireNonNull(permName);
 
         if (!checkExistsAndEnforceCannotModifyImmutablyRestrictedPermission(permName)) {
             return false;
@@ -1104,7 +1110,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
     private boolean setWhitelistedRestrictedPermissionsInternal(@NonNull String packageName,
             @Nullable List<String> permissions, @PermissionWhitelistFlags int flags,
             @UserIdInt int userId) {
-        Preconditions.checkNotNull(packageName);
+        Objects.requireNonNull(packageName);
         Preconditions.checkFlagsArgument(flags,
                 PackageManager.FLAG_PERMISSION_WHITELIST_UPGRADE
                         | PackageManager.FLAG_PERMISSION_WHITELIST_SYSTEM
@@ -1824,6 +1830,14 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         return true;
     }
 
+    /**
+     * This change makes it so that apps are told to show rationale for asking for background
+     * location access every time they request.
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
+    private static final long BACKGROUND_RATIONALE_CHANGE_ID = 147316723L;
+
     @Override
     public boolean shouldShowRequestPermissionRationale(String permName,
             String packageName, int userId) {
@@ -1860,6 +1874,16 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
         if ((flags & fixedFlags) != 0) {
             return false;
+        }
+
+        try {
+            if (permName.equals(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                    && mPlatformCompat.isChangeEnabledByPackageName(BACKGROUND_RATIONALE_CHANGE_ID,
+                    packageName, userId)) {
+                return true;
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "Unable to check if compatibility change is enabled.", e);
         }
 
         return (flags & PackageManager.FLAG_PERMISSION_USER_SET) != 0;
@@ -3028,7 +3052,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         mContext.enforceCallingPermission(Manifest.permission.MANAGE_ONE_TIME_PERMISSION_SESSIONS,
                 "Must hold " + Manifest.permission.MANAGE_ONE_TIME_PERMISSION_SESSIONS
                         + " to register permissions as one time.");
-        packageName = Preconditions.checkNotNull(packageName);
+        Objects.requireNonNull(packageName);
 
         long token = Binder.clearCallingIdentity();
         try {
@@ -3044,7 +3068,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         mContext.enforceCallingPermission(Manifest.permission.MANAGE_ONE_TIME_PERMISSION_SESSIONS,
                 "Must hold " + Manifest.permission.MANAGE_ONE_TIME_PERMISSION_SESSIONS
                         + " to remove permissions as one time.");
-        Preconditions.checkNotNull(packageName);
+        Objects.requireNonNull(packageName);
 
         long token = Binder.clearCallingIdentity();
         try {
@@ -4005,21 +4029,133 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             PackageManagerServiceUtils.enforceShellRestriction(mUserManagerInt,
                     UserManager.DISALLOW_DEBUGGING_FEATURES, callingUid, userId);
         }
-        if (!requirePermissionWhenSameUser && userId == UserHandle.getUserId(callingUid)) return;
-        if (callingUid != Process.SYSTEM_UID && callingUid != Process.ROOT_UID) {
-            if (requireFullPermission) {
-                mContext.enforceCallingOrSelfPermission(
-                        android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, message);
-            } else {
-                try {
-                    mContext.enforceCallingOrSelfPermission(
-                            android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, message);
-                } catch (SecurityException se) {
-                    mContext.enforceCallingOrSelfPermission(
-                            android.Manifest.permission.INTERACT_ACROSS_USERS, message);
-                }
-            }
+        final int callingUserId = UserHandle.getUserId(callingUid);
+        if (hasCrossUserPermission(
+                callingUid, callingUserId, userId, requireFullPermission,
+                requirePermissionWhenSameUser)) {
+            return;
         }
+        String errorMessage = buildInvalidCrossUserPermissionMessage(
+                message, requireFullPermission);
+        Slog.w(TAG, errorMessage);
+        throw new SecurityException(errorMessage);
+    }
+
+    /**
+     * Checks if the request is from the system or an app that has the appropriate cross-user
+     * permissions defined as follows:
+     * <ul>
+     * <li>INTERACT_ACROSS_USERS_FULL if {@code requireFullPermission} is true.</li>
+     * <li>INTERACT_ACROSS_USERS if the given {@userId} is in a different profile group
+     * to the caller.</li>
+     * <li>Otherwise, INTERACT_ACROSS_PROFILES if the given {@userId} is in the same profile group
+     * as the caller.</li>
+     * </ul>
+     *
+     * @param checkShell whether to prevent shell from access if there's a debugging restriction
+     * @param message the message to log on security exception
+     */
+    private void enforceCrossUserOrProfilePermission(int callingUid, int userId,
+            boolean requireFullPermission, boolean checkShell,
+            String message) {
+        if (userId < 0) {
+            throw new IllegalArgumentException("Invalid userId " + userId);
+        }
+        if (checkShell) {
+            PackageManagerServiceUtils.enforceShellRestriction(mUserManagerInt,
+                    UserManager.DISALLOW_DEBUGGING_FEATURES, callingUid, userId);
+        }
+        final int callingUserId = UserHandle.getUserId(callingUid);
+        if (hasCrossUserPermission(callingUid, callingUserId, userId, requireFullPermission,
+                /*requirePermissionWhenSameUser= */ false)) {
+            return;
+        }
+        final boolean isSameProfileGroup = isSameProfileGroup(callingUserId, userId);
+        if (isSameProfileGroup && PermissionChecker.checkPermissionForPreflight(
+                mContext,
+                android.Manifest.permission.INTERACT_ACROSS_PROFILES,
+                PermissionChecker.PID_UNKNOWN,
+                callingUid,
+                mPackageManagerInt.getPackage(callingUid).getPackageName())
+                == PermissionChecker.PERMISSION_GRANTED) {
+            return;
+        }
+        String errorMessage = buildInvalidCrossUserOrProfilePermissionMessage(
+                message, requireFullPermission, isSameProfileGroup);
+        Slog.w(TAG, errorMessage);
+        throw new SecurityException(errorMessage);
+    }
+
+    private boolean hasCrossUserPermission(
+            int callingUid, int callingUserId, int userId, boolean requireFullPermission,
+            boolean requirePermissionWhenSameUser) {
+        if (!requirePermissionWhenSameUser && userId == callingUserId) {
+            return true;
+        }
+        if (callingUid == Process.SYSTEM_UID || callingUid == Process.ROOT_UID) {
+            return true;
+        }
+        if (requireFullPermission) {
+            return hasPermission(Manifest.permission.INTERACT_ACROSS_USERS_FULL);
+        }
+        return hasPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
+                || hasPermission(Manifest.permission.INTERACT_ACROSS_USERS);
+    }
+
+    private boolean hasPermission(String permission) {
+        return mContext.checkCallingOrSelfPermission(permission)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean isSameProfileGroup(@UserIdInt int callerUserId, @UserIdInt int userId) {
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return UserManagerService.getInstance().isSameProfileGroup(callerUserId, userId);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    private static String buildInvalidCrossUserPermissionMessage(
+            String message, boolean requireFullPermission) {
+        StringBuilder builder = new StringBuilder();
+        if (message != null) {
+            builder.append(message);
+            builder.append(": ");
+        }
+        builder.append("Requires ");
+        builder.append(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL);
+        if (requireFullPermission) {
+            builder.append(".");
+            return builder.toString();
+        }
+        builder.append(" or ");
+        builder.append(android.Manifest.permission.INTERACT_ACROSS_USERS);
+        builder.append(".");
+        return builder.toString();
+    }
+
+    private static String buildInvalidCrossUserOrProfilePermissionMessage(
+            String message, boolean requireFullPermission, boolean isSameProfileGroup) {
+        StringBuilder builder = new StringBuilder();
+        if (message != null) {
+            builder.append(message);
+            builder.append(": ");
+        }
+        builder.append("Requires ");
+        builder.append(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL);
+        if (requireFullPermission) {
+            builder.append(".");
+            return builder.toString();
+        }
+        builder.append(" or ");
+        builder.append(android.Manifest.permission.INTERACT_ACROSS_USERS);
+        if (isSameProfileGroup) {
+            builder.append(" or ");
+            builder.append(android.Manifest.permission.INTERACT_ACROSS_PROFILES);
+        }
+        builder.append(".");
+        return builder.toString();
     }
 
     @GuardedBy({"mSettings.mLock", "mLock"})
@@ -4215,6 +4351,18 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             PermissionManagerService.this.enforceCrossUserPermission(callingUid, userId,
                     requireFullPermission, checkShell, requirePermissionWhenSameUser, message);
         }
+
+        @Override
+        public void enforceCrossUserOrProfilePermission(int callingUid, int userId,
+                boolean requireFullPermission, boolean checkShell, String message) {
+            PermissionManagerService.this.enforceCrossUserOrProfilePermission(
+                    callingUid,
+                    userId,
+                    requireFullPermission,
+                    checkShell,
+                    message);
+        }
+
         @Override
         public void enforceGrantRevokeRuntimePermissionPermissions(String message) {
             PermissionManagerService.this.enforceGrantRevokeRuntimePermissionPermissions(message);
@@ -4453,8 +4601,8 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
         @Override
         public void onNewUserCreated(int userId) {
+            mDefaultPermissionGrantPolicy.grantDefaultPermissions(userId);
             synchronized (mLock) {
-                mDefaultPermissionGrantPolicy.grantDefaultPermissions(userId);
                 // NOTE: This adds UPDATE_PERMISSIONS_REPLACE_PKG
                 PermissionManagerService.this.updateAllPermissions(
                         StorageManager.UUID_PRIVATE_INTERNAL, true, mDefaultPermissionCallback);

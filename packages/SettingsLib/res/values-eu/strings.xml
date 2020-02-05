@@ -203,9 +203,9 @@
     <string name="vpn_settings_not_available" msgid="2894137119965668920">"Erabiltzaile honek ezin ditu VPN ezarpenak atzitu"</string>
     <string name="tethering_settings_not_available" msgid="266821736434699780">"Erabiltzaile honek ezin ditu konexioa partekatzeko ezarpenak atzitu"</string>
     <string name="apn_settings_not_available" msgid="1147111671403342300">"Erabiltzaile honek ezin ditu APN ezarpenak atzitu"</string>
-    <string name="enable_adb" msgid="8072776357237289039">"USB arazketa"</string>
+    <string name="enable_adb" msgid="8072776357237289039">"USB bidezko arazketa"</string>
     <string name="enable_adb_summary" msgid="3711526030096574316">"Gaitu arazketa modua USBa konektatzean"</string>
-    <string name="clear_adb_keys" msgid="3010148733140369917">"Baliogabetu USB arazketarako baimenak"</string>
+    <string name="clear_adb_keys" msgid="3010148733140369917">"Baliogabetu USB bidezko arazketarako baimenak"</string>
     <string name="bugreport_in_power" msgid="8664089072534638709">"Akatsen txostenerako lasterbidea"</string>
     <string name="bugreport_in_power_summary" msgid="1885529649381831775">"Bateriaren menuan, erakutsi akatsen txostena sortzeko botoia"</string>
     <string name="keep_screen_on" msgid="1187161672348797558">"Mantendu aktibo"</string>
@@ -230,6 +230,8 @@
     <string name="bluetooth_enable_gabeldorsche" msgid="9131730396242883416">"Gaitu Gabeldorsche"</string>
     <string name="bluetooth_select_avrcp_version_string" msgid="1710571610177659127">"Bluetooth AVRCP bertsioa"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7846922290083709633">"Hautatu Bluetooth AVRCP bertsioa"</string>
+    <string name="bluetooth_select_map_version_string" msgid="526308145174175327">"Bluetooth MAParen bertsioa"</string>
+    <string name="bluetooth_select_map_version_dialog_title" msgid="7085934373987428460">"Hautatu Bluetooth MAParen bertsioa"</string>
     <string name="bluetooth_select_a2dp_codec_type" msgid="952001408455456494">"Bluetooth bidezko audioaren kodeka"</string>
     <string name="bluetooth_select_a2dp_codec_type_dialog_title" msgid="7510542404227225545">"Abiarazi Bluetooth bidezko audio-kodeka\nHautapena"</string>
     <string name="bluetooth_select_a2dp_codec_sample_rate" msgid="1638623076480928191">"Bluetooth bidezko audioaren lagin-abiadura"</string>
@@ -267,16 +269,16 @@
     <string name="debug_view_attributes" msgid="3539609843984208216">"Gaitu ikuspegiaren atributuak ikuskatzeko aukera"</string>
     <string name="mobile_data_always_on_summary" msgid="1112156365594371019">"Mantendu datu-konexioa beti aktibo, baita wifi-konexioa aktibo dagoenean ere (sare batetik bestera bizkor aldatu ahal izateko)."</string>
     <string name="tethering_hardware_offload_summary" msgid="7801345335142803029">"Erabilgarri badago, erabili konexioa partekatzeko hardwarearen azelerazioa"</string>
-    <string name="adb_warning_title" msgid="7708653449506485728">"USB arazketa onartu?"</string>
-    <string name="adb_warning_message" msgid="8145270656419669221">"USB arazketa garapen-xedeetarako soilik dago diseinatuta. Erabil ezazu ordenagailuaren eta gailuaren artean datuak kopiatzeko, aplikazioak gailuan jakinarazi gabe instalatzeko eta erregistro-datuak irakurtzeko."</string>
-    <string name="adb_keys_warning_message" msgid="2968555274488101220">"Aurretik baimendutako ordenagailu guztiei USB arazketarako sarbidea baliogabetu nahi diezu?"</string>
+    <string name="adb_warning_title" msgid="7708653449506485728">"USB bidezko arazketa onartu?"</string>
+    <string name="adb_warning_message" msgid="8145270656419669221">"USB bidezko arazketa garapen-xedeetarako soilik dago diseinatuta. Erabil ezazu ordenagailuaren eta gailuaren artean datuak kopiatzeko, aplikazioak gailuan jakinarazi gabe instalatzeko eta erregistro-datuak irakurtzeko."</string>
+    <string name="adb_keys_warning_message" msgid="2968555274488101220">"Aurretik baimendutako ordenagailu guztiei USB bidezko arazketarako sarbidea baliogabetu nahi diezu?"</string>
     <string name="dev_settings_warning_title" msgid="8251234890169074553">"Baimendu garapenerako ezarpenak?"</string>
     <string name="dev_settings_warning_message" msgid="37741686486073668">"Ezarpen hauek garapen-xedeetarako pentsatu dira soilik. Baliteke ezarpenen eraginez gailua matxuratzea edo funtzionamendu okerra izatea."</string>
     <string name="verify_apps_over_usb_title" msgid="6031809675604442636">"Egiaztatu USBko aplikazioak"</string>
     <string name="verify_apps_over_usb_summary" msgid="1317933737581167839">"Egiaztatu ADB/ADT bidez instalatutako aplikazioak portaera kaltegarriak atzemateko"</string>
     <string name="bluetooth_show_devices_without_names_summary" msgid="780964354377854507">"Bluetooth gailuak izenik gabe (MAC helbideak soilik) erakutsiko dira"</string>
     <string name="bluetooth_disable_absolute_volume_summary" msgid="2006309932135547681">"Bluetooth bidezko bolumen absolutuaren eginbidea desgaitu egiten du urruneko gailuetan arazoak hautematen badira; esaterako, bolumena ozenegia bada edo ezin bada kontrolatu"</string>
-    <string name="bluetooth_enable_gabeldorsche_summary" msgid="8472344901097607030">"Bluetooth Gabeldorsche eginbide sorta gaitzen du."</string>
+    <string name="bluetooth_enable_gabeldorsche_summary" msgid="2054730331770712629">"Bluetooth Gabeldorsche eginbide sorta gaitzen du."</string>
     <string name="enable_terminal_title" msgid="3834790541986303654">"Tokiko terminala"</string>
     <string name="enable_terminal_summary" msgid="2481074834856064500">"Gaitu tokiko shell-sarbidea duen terminal-aplikazioa"</string>
     <string name="hdcp_checking_title" msgid="3155692785074095986">"HDCP egiaztapena"</string>

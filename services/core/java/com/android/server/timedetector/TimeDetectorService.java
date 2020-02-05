@@ -20,6 +20,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.timedetector.ITimeDetectorService;
 import android.app.timedetector.ManualTimeSuggestion;
+import android.app.timedetector.NetworkTimeSuggestion;
 import android.app.timedetector.PhoneTimeSuggestion;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -105,6 +106,14 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub {
         mHandler.post(() -> mTimeDetectorStrategy.suggestManualTime(timeSignal));
     }
 
+    @Override
+    public void suggestNetworkTime(@NonNull NetworkTimeSuggestion timeSignal) {
+        enforceSuggestNetworkTimePermission();
+        Objects.requireNonNull(timeSignal);
+
+        mHandler.post(() -> mTimeDetectorStrategy.suggestNetworkTime(timeSignal));
+    }
+
     @VisibleForTesting
     public void handleAutoTimeDetectionToggle() {
         mHandler.post(mTimeDetectorStrategy::handleAutoTimeDetectionChanged);
@@ -119,10 +128,20 @@ public final class TimeDetectorService extends ITimeDetectorService.Stub {
     }
 
     private void enforceSuggestPhoneTimePermission() {
-        mContext.enforceCallingPermission(android.Manifest.permission.SET_TIME, "set time");
+        mContext.enforceCallingPermission(
+                android.Manifest.permission.SUGGEST_PHONE_TIME_AND_ZONE,
+                "suggest phone time and time zone");
     }
 
     private void enforceSuggestManualTimePermission() {
-        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.SET_TIME, "set time");
+        mContext.enforceCallingOrSelfPermission(
+                android.Manifest.permission.SUGGEST_MANUAL_TIME_AND_ZONE,
+                "suggest manual time and time zone");
+    }
+
+    private void enforceSuggestNetworkTimePermission() {
+        mContext.enforceCallingOrSelfPermission(
+                android.Manifest.permission.SET_TIME,
+                "set time");
     }
 }

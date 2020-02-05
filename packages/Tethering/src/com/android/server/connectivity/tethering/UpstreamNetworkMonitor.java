@@ -16,11 +16,15 @@
 
 package com.android.server.connectivity.tethering;
 
+import static android.net.ConnectivityManager.TYPE_BLUETOOTH;
+import static android.net.ConnectivityManager.TYPE_ETHERNET;
+import static android.net.ConnectivityManager.TYPE_MOBILE;
 import static android.net.ConnectivityManager.TYPE_MOBILE_DUN;
 import static android.net.ConnectivityManager.TYPE_MOBILE_HIPRI;
-import static android.net.ConnectivityManager.TYPE_NONE;
-import static android.net.ConnectivityManager.getNetworkTypeName;
+import static android.net.ConnectivityManager.TYPE_WIFI;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_DUN;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VPN;
 import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
 
@@ -35,10 +39,11 @@ import android.net.NetworkRequest;
 import android.net.util.PrefixUtils;
 import android.net.util.SharedLog;
 import android.os.Handler;
-import android.os.Process;
 import android.util.Log;
+import android.util.SparseIntArray;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.Preconditions;
 import com.android.internal.util.StateMachine;
 
 import java.util.HashMap;
@@ -79,10 +84,24 @@ public class UpstreamNetworkMonitor {
     public static final int EVENT_ON_LINKPROPERTIES = 2;
     public static final int EVENT_ON_LOST           = 3;
     public static final int NOTIFY_LOCAL_PREFIXES   = 10;
+    // This value is used by deprecated preferredUpstreamIfaceTypes selection which is default
+    // disabled.
+    @VisibleForTesting
+    public static final int TYPE_NONE = -1;
 
     private static final int CALLBACK_LISTEN_ALL = 1;
     private static final int CALLBACK_DEFAULT_INTERNET = 2;
     private static final int CALLBACK_MOBILE_REQUEST = 3;
+
+    private static final SparseIntArray sLegacyTypeToTransport = new SparseIntArray();
+    static {
+        sLegacyTypeToTransport.put(TYPE_MOBILE,       NetworkCapabilities.TRANSPORT_CELLULAR);
+        sLegacyTypeToTransport.put(TYPE_MOBILE_DUN,   NetworkCapabilities.TRANSPORT_CELLULAR);
+        sLegacyTypeToTransport.put(TYPE_MOBILE_HIPRI, NetworkCapabilities.TRANSPORT_CELLULAR);
+        sLegacyTypeToTransport.put(TYPE_WIFI,         NetworkCapabilities.TRANSPORT_WIFI);
+        sLegacyTypeToTransport.put(TYPE_BLUETOOTH,    NetworkCapabilities.TRANSPORT_BLUETOOTH);
+        sLegacyTypeToTransport.put(TYPE_ETHERNET,     NetworkCapabilities.TRANSPORT_ETHERNET);
+    }
 
     private final Context mContext;
     private final SharedLog mLog;
@@ -130,15 +149,15 @@ public class UpstreamNetworkMonitor {
      */
     public void startTrackDefaultNetwork(NetworkRequest defaultNetworkRequest,
             EntitlementManager entitle) {
-        // This is not really a "request", just a way of tracking the system default network.
-        // It's guaranteed not to actually bring up any networks because it's the same request
-        // as the ConnectivityService default request, and thus shares fate with it. We can't
-        // use registerDefaultNetworkCallback because it will not track the system default
-        // network if there is a VPN that applies to our UID.
+
+        // defaultNetworkRequest is not really a "request", just a way of tracking the system
+        // default network. It's guaranteed not to actually bring up any networks because it's
+        // the should be the same request as the ConnectivityService default request, and thus
+        // shares fate with it. We can't use registerDefaultNetworkCallback because it will not
+        // track the system default network if there is a VPN that applies to our UID.
         if (mDefaultNetworkCallback == null) {
-            final NetworkRequest trackDefaultRequest = new NetworkRequest(defaultNetworkRequest);
             mDefaultNetworkCallback = new UpstreamNetworkCallback(CALLBACK_DEFAULT_INTERNET);
-            cm().requestNetwork(trackDefaultRequest, mDefaultNetworkCallback, mHandler);
+            cm().requestNetwork(defaultNetworkRequest, mDefaultNetworkCallback, mHandler);
         }
         if (mEntitlementMgr == null) {
             mEntitlementMgr = entitle;
@@ -198,18 +217,27 @@ public class UpstreamNetworkMonitor {
             mLog.e("registerMobileNetworkRequest() already registered");
             return;
         }
-        // The following use of the legacy type system cannot be removed until
-        // after upstream selection no longer finds networks by legacy type.
-        // See also http://b/34364553 .
-        final int legacyType = mDunRequired ? TYPE_MOBILE_DUN : TYPE_MOBILE_HIPRI;
 
-        final NetworkRequest mobileUpstreamRequest = new NetworkRequest.Builder()
-                .setCapabilities(ConnectivityManager.networkCapabilitiesForType(legacyType))
-                .build();
+        final NetworkRequest mobileUpstreamRequest;
+        if (mDunRequired) {
+            mobileUpstreamRequest = new NetworkRequest.Builder()
+                    .addCapability(NET_CAPABILITY_DUN)
+                    .removeCapability(NET_CAPABILITY_NOT_RESTRICTED)
+                    .addTransportType(TRANSPORT_CELLULAR).build();
+        } else {
+            mobileUpstreamRequest = new NetworkRequest.Builder()
+                    .addCapability(NET_CAPABILITY_INTERNET)
+                    .addTransportType(TRANSPORT_CELLULAR).build();
+        }
 
         // The existing default network and DUN callbacks will be notified.
         // Therefore, to avoid duplicate notifications, we only register a no-op.
         mMobileNetworkCallback = new UpstreamNetworkCallback(CALLBACK_MOBILE_REQUEST);
+
+        // The following use of the legacy type system cannot be removed until
+        // upstream selection no longer finds networks by legacy type.
+        // See also http://b/34364553 .
+        final int legacyType = mDunRequired ? TYPE_MOBILE_DUN : TYPE_MOBILE_HIPRI;
 
         // TODO: Change the timeout from 0 (no onUnavailable callback) to some
         // moderate callback timeout. This might be useful for updating some UI.
@@ -239,7 +267,7 @@ public class UpstreamNetworkMonitor {
         final TypeStatePair typeStatePair = findFirstAvailableUpstreamByType(
                 mNetworkMap.values(), preferredTypes, isCellularUpstreamPermitted());
 
-        mLog.log("preferred upstream type: " + getNetworkTypeName(typeStatePair.type));
+        mLog.log("preferred upstream type: " + typeStatePair.type);
 
         switch (typeStatePair.type) {
             case TYPE_MOBILE_DUN:
@@ -328,13 +356,6 @@ public class UpstreamNetworkMonitor {
                     network, newNc));
         }
 
-        // Log changes in upstream network signal strength, if available.
-        if (network.equals(mTetheringUpstreamNetwork) && newNc.hasSignalStrength()) {
-            final int newSignal = newNc.getSignalStrength();
-            final String prevSignal = getSignalStrength(prev.networkCapabilities);
-            mLog.logf("upstream network signal strength: %s -> %s", prevSignal, newSignal);
-        }
-
         mNetworkMap.put(network, new UpstreamNetworkState(
                 prev.linkProperties, newNc, network));
         // TODO: If sufficient information is available to select a more
@@ -361,16 +382,6 @@ public class UpstreamNetworkMonitor {
         // TODO: If sufficient information is available to select a more
         // preferable upstream, do so now and notify the target.
         notifyTarget(EVENT_ON_LINKPROPERTIES, network);
-    }
-
-    private void handleSuspended(Network network) {
-        if (!network.equals(mTetheringUpstreamNetwork)) return;
-        mLog.log("SUSPENDED current upstream: " + network);
-    }
-
-    private void handleResumed(Network network) {
-        if (!network.equals(mTetheringUpstreamNetwork)) return;
-        mLog.log("RESUMED current upstream: " + network);
     }
 
     private void handleLost(Network network) {
@@ -462,20 +473,6 @@ public class UpstreamNetworkMonitor {
         }
 
         @Override
-        public void onNetworkSuspended(Network network) {
-            if (mCallbackType == CALLBACK_LISTEN_ALL) {
-                handleSuspended(network);
-            }
-        }
-
-        @Override
-        public void onNetworkResumed(Network network) {
-            if (mCallbackType == CALLBACK_LISTEN_ALL) {
-                handleResumed(network);
-            }
-        }
-
-        @Override
         public void onLost(Network network) {
             if (mCallbackType == CALLBACK_DEFAULT_INTERNET) {
                 mDefaultInternetNetwork = null;
@@ -519,17 +516,14 @@ public class UpstreamNetworkMonitor {
         for (int type : preferredTypes) {
             NetworkCapabilities nc;
             try {
-                nc = ConnectivityManager.networkCapabilitiesForType(type);
+                nc = networkCapabilitiesForType(type);
             } catch (IllegalArgumentException iae) {
-                Log.e(TAG, "No NetworkCapabilities mapping for legacy type: "
-                        + ConnectivityManager.getNetworkTypeName(type));
+                Log.e(TAG, "No NetworkCapabilities mapping for legacy type: " + type);
                 continue;
             }
             if (!isCellularUpstreamPermitted && isCellular(nc)) {
                 continue;
             }
-
-            nc.setSingleUid(Process.myUid());
 
             for (UpstreamNetworkState value : netStates) {
                 try {
@@ -566,11 +560,6 @@ public class UpstreamNetworkMonitor {
         return prefixSet;
     }
 
-    private static String getSignalStrength(NetworkCapabilities nc) {
-        if (nc == null || !nc.hasSignalStrength()) return "unknown";
-        return Integer.toString(nc.getSignalStrength());
-    }
-
     private static boolean isCellular(UpstreamNetworkState ns) {
         return (ns != null) && isCellular(ns.networkCapabilities);
     }
@@ -597,5 +586,29 @@ public class UpstreamNetworkMonitor {
         }
 
         return null;
+    }
+
+    /**
+     * Given a legacy type (TYPE_WIFI, ...) returns the corresponding NetworkCapabilities instance.
+     * This function is used for deprecated legacy type and be disabled by default.
+     */
+    @VisibleForTesting
+    public static NetworkCapabilities networkCapabilitiesForType(int type) {
+        final NetworkCapabilities nc = new NetworkCapabilities();
+
+        // Map from type to transports.
+        final int notFound = -1;
+        final int transport = sLegacyTypeToTransport.get(type, notFound);
+        Preconditions.checkArgument(transport != notFound, "unknown legacy type: " + type);
+        nc.addTransportType(transport);
+
+        if (type == TYPE_MOBILE_DUN) {
+            nc.addCapability(NetworkCapabilities.NET_CAPABILITY_DUN);
+            // DUN is restricted network, see NetworkCapabilities#FORCE_RESTRICTED_CAPABILITIES.
+            nc.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED);
+        } else {
+            nc.addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        }
+        return nc;
     }
 }

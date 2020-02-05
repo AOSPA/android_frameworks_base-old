@@ -27,6 +27,11 @@ import static com.android.server.integrity.model.ComponentBitSize.KEY_BITS;
 import static com.android.server.integrity.model.ComponentBitSize.OPERATOR_BITS;
 import static com.android.server.integrity.model.ComponentBitSize.SEPARATOR_BITS;
 import static com.android.server.integrity.model.ComponentBitSize.VALUE_SIZE_BITS;
+import static com.android.server.integrity.model.IndexingFileConstants.END_INDEXING_KEY;
+import static com.android.server.integrity.model.IndexingFileConstants.INDEXING_BLOCK_SIZE;
+import static com.android.server.integrity.model.IndexingFileConstants.START_INDEXING_KEY;
+import static com.android.server.integrity.serializer.RuleBinarySerializer.INDEXED_RULE_SIZE_LIMIT;
+import static com.android.server.integrity.serializer.RuleBinarySerializer.NONINDEXED_RULE_SIZE_LIMIT;
 import static com.android.server.integrity.utils.TestUtils.getBits;
 import static com.android.server.integrity.utils.TestUtils.getBytes;
 import static com.android.server.integrity.utils.TestUtils.getValueBits;
@@ -94,28 +99,56 @@ public class RuleBinarySerializerTest {
     private static final byte[] DEFAULT_FORMAT_VERSION_BYTES =
             getBytes(getBits(DEFAULT_FORMAT_VERSION, FORMAT_VERSION_BITS));
 
+    private static final String SERIALIZED_START_INDEXING_KEY =
+            IS_NOT_HASHED
+                    + getBits(START_INDEXING_KEY.length(), VALUE_SIZE_BITS)
+                    + getValueBits(START_INDEXING_KEY);
+    private static final String SERIALIZED_END_INDEXING_KEY =
+            IS_NOT_HASHED
+                    + getBits(END_INDEXING_KEY.length(), VALUE_SIZE_BITS)
+                    + getValueBits(END_INDEXING_KEY);
+
     @Test
     public void testBinaryString_serializeNullRules() {
         RuleSerializer binarySerializer = new RuleBinarySerializer();
 
         assertExpectException(
                 RuleSerializeException.class,
-                /* expectedExceptionMessageRegex= */ "Index buckets cannot be created for null"
-                        + " rule list.",
+                /* expectedExceptionMessageRegex= */ "Null rules cannot be serialized.",
                 () -> binarySerializer.serialize(null, /* formatVersion= */ Optional.empty()));
     }
 
     @Test
     public void testBinaryString_emptyRules() throws Exception {
-        ByteArrayOutputStream expectedArrayOutputStream = new ByteArrayOutputStream();
-        expectedArrayOutputStream.write(DEFAULT_FORMAT_VERSION_BYTES);
-
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        ByteArrayOutputStream ruleOutputStream = new ByteArrayOutputStream();
+        ByteArrayOutputStream indexingOutputStream = new ByteArrayOutputStream();
         RuleSerializer binarySerializer = new RuleBinarySerializer();
-        binarySerializer.serialize(
-                Collections.emptyList(), /* formatVersion= */ Optional.empty(), outputStream);
 
-        assertThat(outputStream.toByteArray()).isEqualTo(expectedArrayOutputStream.toByteArray());
+        binarySerializer.serialize(
+                Collections.emptyList(),
+                /* formatVersion= */ Optional.empty(),
+                ruleOutputStream,
+                indexingOutputStream);
+
+        ByteArrayOutputStream expectedRuleOutputStream = new ByteArrayOutputStream();
+        expectedRuleOutputStream.write(DEFAULT_FORMAT_VERSION_BYTES);
+        assertThat(ruleOutputStream.toByteArray())
+                .isEqualTo(expectedRuleOutputStream.toByteArray());
+
+        ByteArrayOutputStream expectedIndexingOutputStream = new ByteArrayOutputStream();
+        String serializedIndexingBytes =
+                SERIALIZED_START_INDEXING_KEY
+                        + getBits(DEFAULT_FORMAT_VERSION_BYTES.length, /* numOfBits= */ 32)
+                        + SERIALIZED_END_INDEXING_KEY
+                        + getBits(DEFAULT_FORMAT_VERSION_BYTES.length, /* numOfBits= */ 32);
+        byte[] expectedIndexingBytes =
+                getBytes(
+                        serializedIndexingBytes
+                                + serializedIndexingBytes
+                                + serializedIndexingBytes);
+        expectedIndexingOutputStream.write(expectedIndexingBytes);
+        assertThat(indexingOutputStream.toByteArray())
+                .isEqualTo(expectedIndexingOutputStream.toByteArray());
     }
 
     @Test
@@ -131,8 +164,16 @@ public class RuleBinarySerializerTest {
                                                 packageName,
                                                 /* isHashedValue= */ false))),
                         Rule.DENY);
+
+        ByteArrayOutputStream ruleOutputStream = new ByteArrayOutputStream();
+        ByteArrayOutputStream indexingOutputStream = new ByteArrayOutputStream();
         RuleSerializer binarySerializer = new RuleBinarySerializer();
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        binarySerializer.serialize(
+                Collections.singletonList(rule),
+                /* formatVersion= */ Optional.empty(),
+                ruleOutputStream,
+                indexingOutputStream);
+
         String expectedBits =
                 START_BIT
                         + COMPOUND_FORMULA_START_BITS
@@ -146,18 +187,33 @@ public class RuleBinarySerializerTest {
                         + COMPOUND_FORMULA_END_BITS
                         + DENY
                         + END_BIT;
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        byteArrayOutputStream.write(DEFAULT_FORMAT_VERSION_BYTES);
-        byteArrayOutputStream.write(getBytes(expectedBits));
-        byte[] expectedRules = byteArrayOutputStream.toByteArray();
+        ByteArrayOutputStream expectedRuleOutputStream = new ByteArrayOutputStream();
+        expectedRuleOutputStream.write(DEFAULT_FORMAT_VERSION_BYTES);
+        expectedRuleOutputStream.write(getBytes(expectedBits));
+        assertThat(ruleOutputStream.toByteArray())
+                .isEqualTo(expectedRuleOutputStream.toByteArray());
 
-        binarySerializer.serialize(
-                Collections.singletonList(rule),
-                /* formatVersion= */ Optional.empty(),
-                outputStream);
+        ByteArrayOutputStream expectedIndexingOutputStream = new ByteArrayOutputStream();
+        String expectedIndexingBitsForIndexed =
+                SERIALIZED_START_INDEXING_KEY
+                        + getBits(DEFAULT_FORMAT_VERSION_BYTES.length, /* numOfBits= */ 32)
+                        + SERIALIZED_END_INDEXING_KEY
+                        + getBits(DEFAULT_FORMAT_VERSION_BYTES.length, /* numOfBits= */ 32);
+        String expectedIndexingBitsForUnindexed =
+                SERIALIZED_START_INDEXING_KEY
+                        + getBits(DEFAULT_FORMAT_VERSION_BYTES.length, /* numOfBits= */ 32)
+                        + SERIALIZED_END_INDEXING_KEY
+                        + getBits(
+                        DEFAULT_FORMAT_VERSION_BYTES.length + getBytes(expectedBits).length,
+                        /* numOfBits= */ 32);
+        expectedIndexingOutputStream.write(
+                getBytes(
+                        expectedIndexingBitsForIndexed
+                                + expectedIndexingBitsForIndexed
+                                + expectedIndexingBitsForUnindexed));
 
-        byte[] actualRules = outputStream.toByteArray();
-        assertThat(actualRules).isEqualTo(expectedRules);
+        assertThat(indexingOutputStream.toByteArray())
+                .isEqualTo(expectedIndexingOutputStream.toByteArray());
     }
 
     @Test
@@ -453,91 +509,239 @@ public class RuleBinarySerializerTest {
     }
 
     @Test
-    public void testBinaryString_serializeComplexCompoundFormula_indexingOrderValid()
-            throws Exception {
-        String packageNameA = "aaa";
-        String packageNameB = "bbb";
-        String packageNameC = "ccc";
-        String appCert1 = "cert1";
-        String appCert2 = "cert2";
-        String appCert3 = "cert3";
-        Rule installerRule =
-                new Rule(
-                        new CompoundFormula(
-                                CompoundFormula.AND,
-                                Arrays.asList(
-                                        new AtomicFormula.StringAtomicFormula(
-                                                AtomicFormula.INSTALLER_NAME,
-                                                SAMPLE_INSTALLER_NAME,
-                                                /* isHashedValue= */ false),
-                                        new AtomicFormula.StringAtomicFormula(
-                                                AtomicFormula.INSTALLER_CERTIFICATE,
-                                                SAMPLE_INSTALLER_CERT,
-                                                /* isHashedValue= */ false))),
-                        Rule.DENY);
+    public void testBinaryString_verifyManyRulesAreIndexedCorrectly() throws Exception {
+        int ruleCount = 225;
+        String packagePrefix = "package.name.";
+        String appCertificatePrefix = "app.cert.";
+        String installerNamePrefix = "installer.";
 
-        RuleSerializer binarySerializer = new RuleBinarySerializer();
+        // Create the rule set with 225 package name based rules, 225 app certificate indexed rules,
+        // and 225 non-indexed rules..
         List<Rule> ruleList = new ArrayList();
-        ruleList.add(getRuleWithAppCertificateAndSampleInstallerName(appCert3));
-        ruleList.add(getRuleWithAppCertificateAndSampleInstallerName(appCert2));
-        ruleList.add(getRuleWithAppCertificateAndSampleInstallerName(appCert1));
-        ruleList.add(getRuleWithPackageNameAndSampleInstallerName(packageNameB));
-        ruleList.add(getRuleWithPackageNameAndSampleInstallerName(packageNameC));
-        ruleList.add(getRuleWithPackageNameAndSampleInstallerName(packageNameA));
-        ruleList.add(installerRule);
-        byte[] actualRules =
-                binarySerializer.serialize(ruleList, /* formatVersion= */ Optional.empty());
+        for (int count = 0; count < ruleCount; count++) {
+            ruleList.add(
+                    getRuleWithPackageNameAndSampleInstallerName(
+                            String.format("%s%04d", packagePrefix, count)));
+        }
+        for (int count = 0; count < ruleCount; count++) {
+            ruleList.add(
+                    getRuleWithAppCertificateAndSampleInstallerName(
+                            String.format("%s%04d", appCertificatePrefix, count)));
+        }
+        for (int count = 0; count < ruleCount; count++) {
+            ruleList.add(
+                    getNonIndexedRuleWithInstallerName(
+                            String.format("%s%04d", installerNamePrefix, count)));
+        }
 
-        // Note that ordering is important here and the test verifies that the rules are written
-        // in this sorted order.
-        ByteArrayOutputStream expectedArrayOutputStream = new ByteArrayOutputStream();
-        expectedArrayOutputStream.write(DEFAULT_FORMAT_VERSION_BYTES);
-        expectedArrayOutputStream.write(
-                getBytes(
-                        getSerializedCompoundRuleWithPackageNameAndSampleInstallerName(
-                                packageNameA)));
-        expectedArrayOutputStream.write(
-                getBytes(
-                        getSerializedCompoundRuleWithPackageNameAndSampleInstallerName(
-                                packageNameB)));
-        expectedArrayOutputStream.write(
-                getBytes(
-                        getSerializedCompoundRuleWithPackageNameAndSampleInstallerName(
-                                packageNameC)));
-        expectedArrayOutputStream.write(
-                getBytes(
-                        getSerializedCompoundRuleWithCertificateNameAndSampleInstallerName(
-                                appCert1)));
-        expectedArrayOutputStream.write(
-                getBytes(
-                        getSerializedCompoundRuleWithCertificateNameAndSampleInstallerName(
-                                appCert2)));
-        expectedArrayOutputStream.write(
-                getBytes(
-                        getSerializedCompoundRuleWithCertificateNameAndSampleInstallerName(
-                                appCert3)));
-        String expectedBitsForInstallerRule =
-                START_BIT
-                        + COMPOUND_FORMULA_START_BITS
-                        + AND
-                        + ATOMIC_FORMULA_START_BITS
-                        + INSTALLER_NAME
-                        + EQ
-                        + IS_NOT_HASHED
-                        + getBits(SAMPLE_INSTALLER_NAME.length(), VALUE_SIZE_BITS)
-                        + getValueBits(SAMPLE_INSTALLER_NAME)
-                        + ATOMIC_FORMULA_START_BITS
-                        + INSTALLER_CERTIFICATE
-                        + EQ
-                        + IS_NOT_HASHED
-                        + getBits(SAMPLE_INSTALLER_CERT.length(), VALUE_SIZE_BITS)
-                        + getValueBits(SAMPLE_INSTALLER_CERT)
-                        + COMPOUND_FORMULA_END_BITS
-                        + DENY
-                        + END_BIT;
-        expectedArrayOutputStream.write(getBytes(expectedBitsForInstallerRule));
+        // Serialize the rules.
+        ByteArrayOutputStream ruleOutputStream = new ByteArrayOutputStream();
+        ByteArrayOutputStream indexingOutputStream = new ByteArrayOutputStream();
+        RuleSerializer binarySerializer = new RuleBinarySerializer();
+        binarySerializer.serialize(
+                ruleList,
+                /* formatVersion= */ Optional.empty(),
+                ruleOutputStream,
+                indexingOutputStream);
 
-        assertThat(actualRules).isEqualTo(expectedArrayOutputStream.toByteArray());
+        // Verify the rules file and index files.
+        ByteArrayOutputStream expectedOrderedRuleOutputStream = new ByteArrayOutputStream();
+        ByteArrayOutputStream expectedIndexingOutputStream = new ByteArrayOutputStream();
+
+        expectedOrderedRuleOutputStream.write(DEFAULT_FORMAT_VERSION_BYTES);
+        int totalBytesWritten = DEFAULT_FORMAT_VERSION_BYTES.length;
+
+        String expectedIndexingBytesForPackageNameIndexed =
+                SERIALIZED_START_INDEXING_KEY + getBits(totalBytesWritten, /* numOfBits= */ 32);
+        for (int count = 0; count < ruleCount; count++) {
+            String packageName = String.format("%s%04d", packagePrefix, count);
+            if (count > 0 && count % INDEXING_BLOCK_SIZE == 0) {
+                expectedIndexingBytesForPackageNameIndexed +=
+                        IS_NOT_HASHED
+                                + getBits(packageName.length(), VALUE_SIZE_BITS)
+                                + getValueBits(packageName)
+                                + getBits(totalBytesWritten, /* numOfBits= */ 32);
+            }
+
+            byte[] bytesForPackage =
+                    getBytes(
+                            getSerializedCompoundRuleWithPackageNameAndSampleInstallerName(
+                                    packageName));
+            expectedOrderedRuleOutputStream.write(bytesForPackage);
+            totalBytesWritten += bytesForPackage.length;
+        }
+        expectedIndexingBytesForPackageNameIndexed +=
+                SERIALIZED_END_INDEXING_KEY + getBits(totalBytesWritten, /* numOfBits= */ 32);
+
+        String expectedIndexingBytesForAppCertificateIndexed =
+                SERIALIZED_START_INDEXING_KEY + getBits(totalBytesWritten, /* numOfBits= */ 32);
+        for (int count = 0; count < ruleCount; count++) {
+            String appCertificate = String.format("%s%04d", appCertificatePrefix, count);
+            if (count > 0 && count % INDEXING_BLOCK_SIZE == 0) {
+                expectedIndexingBytesForAppCertificateIndexed +=
+                        IS_NOT_HASHED
+                                + getBits(appCertificate.length(), VALUE_SIZE_BITS)
+                                + getValueBits(appCertificate)
+                                + getBits(totalBytesWritten, /* numOfBits= */ 32);
+            }
+
+            byte[] bytesForPackage =
+                    getBytes(
+                            getSerializedCompoundRuleWithCertificateNameAndSampleInstallerName(
+                                    appCertificate));
+            expectedOrderedRuleOutputStream.write(bytesForPackage);
+            totalBytesWritten += bytesForPackage.length;
+        }
+        expectedIndexingBytesForAppCertificateIndexed +=
+                SERIALIZED_END_INDEXING_KEY + getBits(totalBytesWritten, /* numOfBits= */ 32);
+
+        String expectedIndexingBytesForUnindexed =
+                SERIALIZED_START_INDEXING_KEY + getBits(totalBytesWritten, /* numOfBits= */ 32);
+        for (int count = 0; count < ruleCount; count++) {
+            byte[] bytesForPackage =
+                    getBytes(
+                            getSerializedCompoundRuleWithInstallerNameAndInstallerCert(
+                                    String.format("%s%04d", installerNamePrefix, count)));
+            expectedOrderedRuleOutputStream.write(bytesForPackage);
+            totalBytesWritten += bytesForPackage.length;
+        }
+        expectedIndexingBytesForUnindexed +=
+                SERIALIZED_END_INDEXING_KEY + getBits(totalBytesWritten, /* numOfBits= */ 32);
+        expectedIndexingOutputStream.write(
+                getBytes(
+                        expectedIndexingBytesForPackageNameIndexed
+                                + expectedIndexingBytesForAppCertificateIndexed
+                                + expectedIndexingBytesForUnindexed));
+
+        assertThat(ruleOutputStream.toByteArray())
+                .isEqualTo(expectedOrderedRuleOutputStream.toByteArray());
+        assertThat(indexingOutputStream.toByteArray())
+                .isEqualTo(expectedIndexingOutputStream.toByteArray());
+    }
+
+    @Test
+    public void testBinaryString_totalRuleSizeLimitReached() {
+        int ruleCount = INDEXED_RULE_SIZE_LIMIT - 1;
+        String packagePrefix = "package.name.";
+        String appCertificatePrefix = "app.cert.";
+        String installerNamePrefix = "installer.";
+
+        // Create the rule set with more rules than the system can handle in total.
+        List<Rule> ruleList = new ArrayList();
+        for (int count = 0; count < ruleCount; count++) {
+            ruleList.add(
+                    getRuleWithPackageNameAndSampleInstallerName(
+                            String.format("%s%04d", packagePrefix, count)));
+        }
+        for (int count = 0; count < ruleCount; count++) {
+            ruleList.add(
+                    getRuleWithAppCertificateAndSampleInstallerName(
+                            String.format("%s%04d", appCertificatePrefix, count)));
+        }
+        for (int count = 0; count < NONINDEXED_RULE_SIZE_LIMIT - 1; count++) {
+            ruleList.add(
+                    getNonIndexedRuleWithInstallerName(
+                            String.format("%s%04d", installerNamePrefix, count)));
+        }
+
+        // Serialize the rules.
+        ByteArrayOutputStream ruleOutputStream = new ByteArrayOutputStream();
+        ByteArrayOutputStream indexingOutputStream = new ByteArrayOutputStream();
+        RuleSerializer binarySerializer = new RuleBinarySerializer();
+
+        assertExpectException(
+                RuleSerializeException.class,
+                "Too many rules provided",
+                () ->
+                        binarySerializer.serialize(
+                                ruleList,
+                                /* formatVersion= */ Optional.empty(),
+                                ruleOutputStream,
+                                indexingOutputStream));
+    }
+
+    @Test
+    public void testBinaryString_tooManyPackageNameIndexedRules() {
+        String packagePrefix = "package.name.";
+
+        // Create a rule set with too many package name indexed rules.
+        List<Rule> ruleList = new ArrayList();
+        for (int count = 0; count < INDEXED_RULE_SIZE_LIMIT + 1; count++) {
+            ruleList.add(
+                    getRuleWithPackageNameAndSampleInstallerName(
+                            String.format("%s%04d", packagePrefix, count)));
+        }
+
+        // Serialize the rules.
+        ByteArrayOutputStream ruleOutputStream = new ByteArrayOutputStream();
+        ByteArrayOutputStream indexingOutputStream = new ByteArrayOutputStream();
+        RuleSerializer binarySerializer = new RuleBinarySerializer();
+
+        assertExpectException(
+                RuleSerializeException.class,
+                "Too many rules provided in the indexing group.",
+                () ->
+                        binarySerializer.serialize(
+                                ruleList,
+                                /* formatVersion= */ Optional.empty(),
+                                ruleOutputStream,
+                                indexingOutputStream));
+    }
+
+    @Test
+    public void testBinaryString_tooManyAppCertificateIndexedRules() {
+        String appCertificatePrefix = "app.cert.";
+
+        // Create a rule set with too many app certificate indexed rules.
+        List<Rule> ruleList = new ArrayList();
+        for (int count = 0; count < INDEXED_RULE_SIZE_LIMIT + 1; count++) {
+            ruleList.add(
+                    getRuleWithAppCertificateAndSampleInstallerName(
+                            String.format("%s%04d", appCertificatePrefix, count)));
+        }
+
+        // Serialize the rules.
+        ByteArrayOutputStream ruleOutputStream = new ByteArrayOutputStream();
+        ByteArrayOutputStream indexingOutputStream = new ByteArrayOutputStream();
+        RuleSerializer binarySerializer = new RuleBinarySerializer();
+
+        assertExpectException(
+                RuleSerializeException.class,
+                "Too many rules provided in the indexing group.",
+                () ->
+                        binarySerializer.serialize(
+                                ruleList,
+                                /* formatVersion= */ Optional.empty(),
+                                ruleOutputStream,
+                                indexingOutputStream));
+    }
+
+    @Test
+    public void testBinaryString_tooManyNonIndexedRules() {
+        String installerNamePrefix = "installer.";
+
+        // Create a rule set with too many unindexed rules.
+        List<Rule> ruleList = new ArrayList();
+        for (int count = 0; count < NONINDEXED_RULE_SIZE_LIMIT + 1; count++) {
+            ruleList.add(
+                    getNonIndexedRuleWithInstallerName(
+                            String.format("%s%04d", installerNamePrefix, count)));
+        }
+
+        // Serialize the rules.
+        ByteArrayOutputStream ruleOutputStream = new ByteArrayOutputStream();
+        ByteArrayOutputStream indexingOutputStream = new ByteArrayOutputStream();
+        RuleSerializer binarySerializer = new RuleBinarySerializer();
+
+        assertExpectException(
+                RuleSerializeException.class,
+                "Too many rules provided in the indexing group.",
+                () ->
+                        binarySerializer.serialize(
+                                ruleList,
+                                /* formatVersion= */ Optional.empty(),
+                                ruleOutputStream,
+                                indexingOutputStream));
     }
 
     private Rule getRuleWithPackageNameAndSampleInstallerName(String packageName) {
@@ -611,6 +815,44 @@ public class RuleBinarySerializerTest {
                 + IS_NOT_HASHED
                 + getBits(SAMPLE_INSTALLER_NAME.length(), VALUE_SIZE_BITS)
                 + getValueBits(SAMPLE_INSTALLER_NAME)
+                + COMPOUND_FORMULA_END_BITS
+                + DENY
+                + END_BIT;
+    }
+
+    private Rule getNonIndexedRuleWithInstallerName(String installerName) {
+        return new Rule(
+                new CompoundFormula(
+                        CompoundFormula.AND,
+                        Arrays.asList(
+                                new AtomicFormula.StringAtomicFormula(
+                                        AtomicFormula.INSTALLER_NAME,
+                                        installerName,
+                                        /* isHashedValue= */ false),
+                                new AtomicFormula.StringAtomicFormula(
+                                        AtomicFormula.INSTALLER_CERTIFICATE,
+                                        SAMPLE_INSTALLER_CERT,
+                                        /* isHashedValue= */ false))),
+                Rule.DENY);
+    }
+
+    private String getSerializedCompoundRuleWithInstallerNameAndInstallerCert(
+            String installerName) {
+        return START_BIT
+                + COMPOUND_FORMULA_START_BITS
+                + AND
+                + ATOMIC_FORMULA_START_BITS
+                + INSTALLER_NAME
+                + EQ
+                + IS_NOT_HASHED
+                + getBits(installerName.length(), VALUE_SIZE_BITS)
+                + getValueBits(installerName)
+                + ATOMIC_FORMULA_START_BITS
+                + INSTALLER_CERTIFICATE
+                + EQ
+                + IS_NOT_HASHED
+                + getBits(SAMPLE_INSTALLER_CERT.length(), VALUE_SIZE_BITS)
+                + getValueBits(SAMPLE_INSTALLER_CERT)
                 + COMPOUND_FORMULA_END_BITS
                 + DENY
                 + END_BIT;

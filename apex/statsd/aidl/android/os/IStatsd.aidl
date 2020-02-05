@@ -16,7 +16,7 @@
 
 package android.os;
 
-import android.os.IStatsPullerCallback;
+import android.os.IPendingIntentRef;
 import android.os.IPullAtomCallback;
 import android.os.ParcelFileDescriptor;
 
@@ -88,24 +88,24 @@ interface IStatsd {
      *
      * Requires Manifest.permission.DUMP.
      */
-    byte[] getData(in long key, in String packageName);
+    byte[] getData(in long key, int callingUid);
 
     /**
      * Fetches metadata across statsd. Returns byte array representing wire-encoded proto.
      *
      * Requires Manifest.permission.DUMP.
      */
-    byte[] getMetadata(in String packageName);
+    byte[] getMetadata();
 
     /**
-     * Sets a configuration with the specified config key and subscribes to updates for this
+     * Sets a configuration with the specified config id and subscribes to updates for this
      * configuration key. Broadcasts will be sent if this configuration needs to be collected.
      * The configuration must be a wire-encoded StatsdConfig. The receiver for this data is
      * registered in a separate function.
      *
      * Requires Manifest.permission.DUMP.
      */
-    void addConfiguration(in long configKey, in byte[] config, in String packageName);
+    void addConfiguration(in long configId, in byte[] config, in int callingUid);
 
     /**
      * Registers the given pending intent for this config key. This intent is invoked when the
@@ -114,14 +114,15 @@ interface IStatsd {
      *
      * Requires Manifest.permission.DUMP.
      */
-    void setDataFetchOperation(long configKey, in IBinder intentSender, in String packageName);
+    void setDataFetchOperation(long configId, in IPendingIntentRef pendingIntentRef,
+                               int callingUid);
 
     /**
      * Removes the data fetch operation for the specified configuration.
      *
      * Requires Manifest.permission.DUMP.
      */
-    void removeDataFetchOperation(long configKey, in String packageName);
+    void removeDataFetchOperation(long configId, int callingUid);
 
     /**
      * Registers the given pending intent for this packagename. This intent is invoked when the
@@ -131,68 +132,55 @@ interface IStatsd {
      *
      * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS.
      */
-    long[] setActiveConfigsChangedOperation(in IBinder intentSender, in String packageName);
+    long[] setActiveConfigsChangedOperation(in IPendingIntentRef pendingIntentRef, int callingUid);
 
     /**
      * Removes the active configs changed operation for the specified package name.
      *
      * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS.
      */
-    void removeActiveConfigsChangedOperation(in String packageName);
+    void removeActiveConfigsChangedOperation(int callingUid);
 
     /**
-     * Removes the configuration with the matching config key. No-op if this config key does not
+     * Removes the configuration with the matching config id. No-op if this config id does not
      * exist.
      *
      * Requires Manifest.permission.DUMP.
      */
-    void removeConfiguration(in long configKey, in String packageName);
+    void removeConfiguration(in long configId, in int callingUid);
 
     /**
-     * Set the IIntentSender (i.e. PendingIntent) to be used when broadcasting subscriber
+     * Set the PendingIntentRef to be used when broadcasting subscriber
      * information to the given subscriberId within the given config.
      *
-     * Suppose that the calling uid has added a config with key configKey, and that in this config
+     * Suppose that the calling uid has added a config with key configId, and that in this config
      * it is specified that when a particular anomaly is detected, a broadcast should be sent to
-     * a BroadcastSubscriber with id subscriberId. This function links the given intentSender with
-     * that subscriberId (for that config), so that this intentSender is used to send the broadcast
+     * a BroadcastSubscriber with id subscriberId. This function links the given pendingIntent with
+     * that subscriberId (for that config), so that this pendingIntent is used to send the broadcast
      * when the anomaly is detected.
      *
      * This function can only be called by the owner (uid) of the config. It must be called each
-     * time statsd starts. Later calls overwrite previous calls; only one intentSender is stored.
-     *
-     * intentSender must be convertible into an IntentSender using IntentSender(IBinder)
-     * and cannot be null.
+     * time statsd starts. Later calls overwrite previous calls; only one pendingIntent is stored.
      *
      * Requires Manifest.permission.DUMP.
      */
-    void setBroadcastSubscriber(long configKey, long subscriberId, in IBinder intentSender,
-                                in String packageName);
+    void setBroadcastSubscriber(long configId, long subscriberId, in IPendingIntentRef pir,
+                                int callingUid);
 
     /**
-     * Undoes setBroadcastSubscriber() for the (configKey, subscriberId) pair.
+     * Undoes setBroadcastSubscriber() for the (configId, subscriberId) pair.
      * Any broadcasts associated with subscriberId will henceforth not be sent.
-     * No-op if this (configKey, subsriberId) pair was not associated with an IntentSender.
+     * No-op if this (configKey, subscriberId) pair was not associated with an PendingIntentRef.
      *
      * Requires Manifest.permission.DUMP.
      */
-    void unsetBroadcastSubscriber(long configKey, long subscriberId, in String packageName);
+    void unsetBroadcastSubscriber(long configId, long subscriberId, int callingUid);
 
     /**
      * Apps can send an atom via this application breadcrumb with the specified label and state for
      * this label. This allows building custom metrics and predicates.
      */
     void sendAppBreadcrumbAtom(int label, int state);
-
-    /**
-     * Registers a puller callback function that, when invoked, pulls the data
-     * for the specified vendor atom tag.
-     *
-     * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS
-     * @deprecated please use registerPullAtomCallback.
-     */
-    oneway void registerPullerCallback(int atomTag, IStatsPullerCallback pullerCallback,
-                                       String packageName);
 
    /**
     * Registers a puller callback function that, when invoked, pulls the data
@@ -208,17 +196,15 @@ interface IStatsd {
     oneway void registerNativePullAtomCallback(int atomTag, long coolDownNs, long timeoutNs,
                            in int[] additiveFields, IPullAtomCallback pullerCallback);
 
-   /**
-    * Unregisters a puller callback function for the given vendor atom.
-    *
-    * Requires Manifest.permission.DUMP and Manifest.permission.PACKAGE_USAGE_STATS
-    */
-   oneway void unregisterPullerCallback(int atomTag, String packageName);
+    /**
+     * Unregisters any pullAtomCallback for the given uid/atom.
+     */
+    oneway void unregisterPullAtomCallback(int uid, int atomTag);
 
-  /**
-   * Unregisters any pullAtomCallback for the given uid/atom.
-   */
-   oneway void unregisterPullAtomCallback(int uid, int atomTag);
+    /**
+     * Unregisters any pullAtomCallback for the given atom.
+     */
+    oneway void unregisterNativePullAtomCallback(int atomTag);
 
     /**
      * The install requires staging.

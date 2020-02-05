@@ -75,16 +75,18 @@ class EnsureActivitiesVisibleHelper {
         // activities are actually behind other fullscreen activities, but still required
         // to be visible (such as performing Recents animation).
         final boolean resumeTopActivity = mTop != null && !mTop.mLaunchTaskBehind
-                && mContiner.isFocusable() && mContiner.isInStackLocked(starting) == null;
+                && mContiner.isTopActivityFocusable()
+                && mContiner.isInStackLocked(starting) == null;
 
         final PooledConsumer f = PooledLambda.obtainConsumer(
                 EnsureActivitiesVisibleHelper::setActivityVisibilityState, this,
-                PooledLambda.__(ActivityRecord.class), resumeTopActivity);
+                PooledLambda.__(ActivityRecord.class), starting, resumeTopActivity);
         mContiner.forAllActivities(f);
         f.recycle();
     }
 
-    private void setActivityVisibilityState(ActivityRecord r, final boolean resumeTopActivity) {
+    private void setActivityVisibilityState(ActivityRecord r, ActivityRecord starting,
+            final boolean resumeTopActivity) {
         final boolean isTop = r == mTop;
         if (mAboveTop && !isTop) {
             return;
@@ -129,7 +131,8 @@ class EnsureActivitiesVisibleHelper {
                         "Skipping: already visible at " + r);
 
                 if (r.mClientVisibilityDeferred && mNotifyClients) {
-                    r.makeClientVisible();
+                    r.makeActiveIfNeeded(r.mClientVisibilityDeferred ? null : starting);
+                    r.mClientVisibilityDeferred = false;
                 }
 
                 r.handleAlreadyVisible();
@@ -156,7 +159,8 @@ class EnsureActivitiesVisibleHelper {
             // determined individually unlike other stacks where the visibility or fullscreen
             // status of an activity in a previous task affects other.
             mBehindFullscreenActivity = !mContainerShouldBeVisible;
-        } else if (mContiner.isActivityTypeHome()) {
+        } else if (!mBehindFullscreenActivity && mContiner.isActivityTypeHome()
+                && r.isRootOfTask()) {
             if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY, "Home task: at " + mContiner
                     + " stackShouldBeVisible=" + mContainerShouldBeVisible
                     + " behindFullscreenActivity=" + mBehindFullscreenActivity);

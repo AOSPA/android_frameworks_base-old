@@ -22,8 +22,7 @@ import static android.net.wifi.WifiManager.TrafficStateCallback.DATA_ACTIVITY_IN
 import static android.net.wifi.WifiManager.TrafficStateCallback.DATA_ACTIVITY_NONE;
 import static android.net.wifi.WifiManager.TrafficStateCallback.DATA_ACTIVITY_OUT;
 import static android.telephony.PhoneStateListener.LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE;
-
-import static com.android.internal.telephony.PhoneConstants.MAX_PHONE_COUNT_DUAL_SIM;
+import static android.telephony.TelephonyManager.MODEM_COUNT_DUAL_MODEM;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -57,7 +56,6 @@ import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.settingslib.net.DataUsageController;
 import com.android.systemui.DemoMode;
@@ -322,16 +320,16 @@ public class NetworkControllerImpl extends BroadcastReceiver
         filter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
         filter.addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION);
         filter.addAction(TelephonyIntents.ACTION_SIM_STATE_CHANGED);
-        filter.addAction(TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED);
-        filter.addAction(TelephonyIntents.ACTION_DEFAULT_VOICE_SUBSCRIPTION_CHANGED);
-        filter.addAction(TelephonyIntents.ACTION_SERVICE_STATE_CHANGED);
+        filter.addAction(TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED);
+        filter.addAction(TelephonyManager.ACTION_DEFAULT_VOICE_SUBSCRIPTION_CHANGED);
+        filter.addAction(Intent.ACTION_SERVICE_STATE);
         filter.addAction(TelephonyIntents.SPN_STRINGS_UPDATED_ACTION);
         filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
         filter.addAction(ConnectivityManager.INET_CONDITION_ACTION);
         filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
         filter.addAction(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED);
         filter.addAction(TelephonyIntents.ACTION_ANY_DATA_CONNECTION_STATE_CHANGED);
-        mBroadcastDispatcher.registerReceiver(this, filter, mReceiverHandler);
+        mBroadcastDispatcher.registerReceiverWithHandler(this, filter, mReceiverHandler);
         mListening = true;
 
         updateMobileControllers();
@@ -518,11 +516,11 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 refreshLocale();
                 updateAirplaneMode(false);
                 break;
-            case TelephonyIntents.ACTION_DEFAULT_VOICE_SUBSCRIPTION_CHANGED:
+            case TelephonyManager.ACTION_DEFAULT_VOICE_SUBSCRIPTION_CHANGED:
                 // We are using different subs now, we might be able to make calls.
                 recalculateEmergency();
                 break;
-            case TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED:
+            case TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED:
                 // Notify every MobileSignalController so they can know whether they are the
                 // data sim or not.
                 for (int i = 0; i < mMobileSignalControllers.size(); i++) {
@@ -534,13 +532,13 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 break;
             case TelephonyIntents.ACTION_SIM_STATE_CHANGED:
                 // Avoid rebroadcast because SysUI is direct boot aware.
-                if (intent.getBooleanExtra(TelephonyIntents.EXTRA_REBROADCAST_ON_UNLOCK, false)) {
+                if (intent.getBooleanExtra(Intent.EXTRA_REBROADCAST_ON_UNLOCK, false)) {
                     break;
                 }
                 // Might have different subscriptions now.
                 updateMobileControllers();
                 break;
-            case TelephonyIntents.ACTION_SERVICE_STATE_CHANGED:
+            case Intent.ACTION_SERVICE_STATE:
                 mLastServiceState = ServiceState.newFromBundle(intent.getExtras());
                 if (mMobileSignalControllers.size() == 0) {
                     // If none of the subscriptions are active, we might need to recalculate
@@ -553,7 +551,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 mReceiverHandler.post(this::handleConfigurationChanged);
                 break;
             default:
-                int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY,
+                int subId = intent.getIntExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,
                         SubscriptionManager.INVALID_SUBSCRIPTION_ID);
                 if (SubscriptionManager.isValidSubscriptionId(subId)) {
                     if (mMobileSignalControllers.indexOfKey(subId) >= 0) {
@@ -588,7 +586,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
     }
 
     private void filterMobileSubscriptionInSameGroup(List<SubscriptionInfo> subscriptions) {
-        if (subscriptions.size() == MAX_PHONE_COUNT_DUAL_SIM) {
+        if (subscriptions.size() == MODEM_COUNT_DUAL_MODEM) {
             SubscriptionInfo info1 = subscriptions.get(0);
             SubscriptionInfo info2 = subscriptions.get(1);
             if (info1.getGroupUuid() != null && info1.getGroupUuid().equals(info2.getGroupUuid())) {

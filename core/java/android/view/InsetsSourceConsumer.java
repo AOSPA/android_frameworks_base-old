@@ -16,6 +16,8 @@
 
 package android.view;
 
+import static android.view.InsetsController.ANIMATION_TYPE_NONE;
+
 import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.view.InsetsState.InternalInsetsType;
@@ -53,7 +55,7 @@ public class InsetsSourceConsumer {
     }
 
     protected final InsetsController mController;
-    protected boolean mVisible;
+    protected boolean mRequestedVisible;
     private final Supplier<Transaction> mTransactionSupplier;
     private final @InternalInsetsType int mType;
     private final InsetsState mState;
@@ -66,7 +68,7 @@ public class InsetsSourceConsumer {
         mState = state;
         mTransactionSupplier = transactionSupplier;
         mController = controller;
-        mVisible = InsetsState.getDefaultVisibility(type);
+        mRequestedVisible = InsetsState.getDefaultVisibility(type);
     }
 
     public void setControl(@Nullable InsetsSourceControl control) {
@@ -94,12 +96,12 @@ public class InsetsSourceConsumer {
 
     @VisibleForTesting
     public void show() {
-        setVisible(true);
+        setRequestedVisible(true);
     }
 
     @VisibleForTesting
     public void hide() {
-        setVisible(false);
+        setRequestedVisible(false);
     }
 
     /**
@@ -121,21 +123,28 @@ public class InsetsSourceConsumer {
     }
 
     boolean applyLocalVisibilityOverride() {
+        final boolean isVisible = mState.getSource(mType).isVisible();
+        final boolean hasControl = mSourceControl != null;
+
+        // We still need to let the legacy app know the visibility change even if we don't have the
+        // control.
+        mController.updateCompatSysUiVisibility(
+                mType, hasControl ? mRequestedVisible : isVisible, hasControl);
 
         // If we don't have control, we are not able to change the visibility.
-        if (mSourceControl == null) {
+        if (!hasControl) {
             return false;
         }
-        if (mState.getSource(mType).isVisible() == mVisible) {
+        if (isVisible == mRequestedVisible) {
             return false;
         }
-        mState.getSource(mType).setVisible(mVisible);
+        mState.getSource(mType).setVisible(mRequestedVisible);
         return true;
     }
 
     @VisibleForTesting
-    public boolean isVisible() {
-        return mVisible;
+    public boolean isRequestedVisible() {
+        return mRequestedVisible;
     }
 
     /**
@@ -157,23 +166,27 @@ public class InsetsSourceConsumer {
         // no-op for types that always return ShowResult#SHOW_IMMEDIATELY.
     }
 
-    private void setVisible(boolean visible) {
-        if (mVisible == visible) {
+    /**
+     * Sets requested visibility from the client, regardless of whether we are able to control it at
+     * the moment.
+     */
+    private void setRequestedVisible(boolean requestedVisible) {
+        if (mRequestedVisible == requestedVisible) {
             return;
         }
-        mVisible = visible;
+        mRequestedVisible = requestedVisible;
         applyLocalVisibilityOverride();
         mController.notifyVisibilityChanged();
     }
 
     private void applyHiddenToControl() {
         if (mSourceControl == null || mSourceControl.getLeash() == null
-                || mController.isAnimating()) {
+                || mController.getAnimationType(mType) != ANIMATION_TYPE_NONE) {
             return;
         }
 
         final Transaction t = mTransactionSupplier.get();
-        if (mVisible) {
+        if (mRequestedVisible) {
             t.show(mSourceControl.getLeash());
         } else {
             t.hide(mSourceControl.getLeash());

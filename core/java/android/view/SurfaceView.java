@@ -42,6 +42,7 @@ import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.SurfaceControl.Transaction;
+import android.view.accessibility.AccessibilityNodeInfo;
 
 import com.android.internal.view.SurfaceCallbackHelper;
 
@@ -200,6 +201,9 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     private SurfaceControl.Transaction mRtTransaction = new SurfaceControl.Transaction();
     private SurfaceControl.Transaction mTmpTransaction = new SurfaceControl.Transaction();
     private int mParentSurfaceGenerationId;
+
+    // The token of embedded windowless view hierarchy.
+    private IBinder mEmbeddedViewHierarchy;
 
     public SurfaceView(Context context) {
         this(context, null);
@@ -379,7 +383,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                  * This gets called on a RenderThread worker thread, so members accessed here must
                  * be protected by a lock.
                  */
-                final boolean useBLAST = ViewRootImpl.USE_BLAST_BUFFERQUEUE;
+                final boolean useBLAST = WindowManagerGlobal.USE_BLAST_ADAPTER;
                 viewRoot.registerRtFrameCallback(frame -> {
                     try {
                         final SurfaceControl.Transaction t = useBLAST ?
@@ -1107,7 +1111,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
 
     private void applySurfaceTransforms(SurfaceControl surface, SurfaceControl.Transaction t,
             Rect position, long frameNumber) {
-        if (frameNumber > 0 && ViewRootImpl.USE_BLAST_BUFFERQUEUE == false) {
+        if (frameNumber > 0 && !WindowManagerGlobal.USE_BLAST_ADAPTER) {
             final ViewRootImpl viewRoot = getViewRootImpl();
 
             t.deferTransactionUntilSurface(surface, viewRoot.mSurface,
@@ -1125,7 +1129,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     }
 
     private void setParentSpaceRectangle(Rect position, long frameNumber) {
-        final boolean useBLAST = ViewRootImpl.USE_BLAST_BUFFERQUEUE;
+        final boolean useBLAST = WindowManagerGlobal.USE_BLAST_ADAPTER;
         final ViewRootImpl viewRoot = getViewRootImpl();
         final SurfaceControl.Transaction t = useBLAST ? viewRoot.getBLASTSyncTransaction() :
             mRtTransaction;
@@ -1186,7 +1190,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
 
         @Override
         public void positionLost(long frameNumber) {
-            boolean useBLAST = ViewRootImpl.USE_BLAST_BUFFERQUEUE;
+            boolean useBLAST = WindowManagerGlobal.USE_BLAST_ADAPTER;
             if (DEBUG) {
                 Log.d(TAG, String.format("%d windowPositionLost, frameNr = %d",
                         System.identityHashCode(this), frameNumber));
@@ -1524,11 +1528,34 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
     @Override
     public void invalidate(boolean invalidateCache) {
         super.invalidate(invalidateCache);
-        if (ViewRootImpl.USE_BLAST_BUFFERQUEUE == false) {
+        if (!WindowManagerGlobal.USE_BLAST_ADAPTER) {
             return;
         }
         final ViewRootImpl viewRoot = getViewRootImpl();
         if (viewRoot == null) return;
         viewRoot.setUseBLASTSyncTransaction();
+    }
+
+    /**
+     * Add the token of embedded view hierarchy. Set {@code null} to clear the embedded view
+     * hierarchy.
+     *
+     * @param token IBinder token.
+     * @hide
+     */
+    public void setEmbeddedViewHierarchy(IBinder token) {
+        mEmbeddedViewHierarchy = token;
+    }
+
+    /** @hide */
+    @Override
+    public void onInitializeAccessibilityNodeInfoInternal(AccessibilityNodeInfo info) {
+        super.onInitializeAccessibilityNodeInfoInternal(info);
+        if (mEmbeddedViewHierarchy == null) {
+            return;
+        }
+        // Add a leashed child when this SurfaceView embeds another view hierarchy. Getting this
+        // leashed child would return the root node in the embedded hierarchy
+        info.addChild(mEmbeddedViewHierarchy);
     }
 }

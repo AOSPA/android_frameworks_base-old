@@ -60,6 +60,7 @@ interface ITvInputManager {
     void createSession(in ITvInputClient client, in String inputId, boolean isRecordingSession,
             int seq, int userId);
     void releaseSession(in IBinder sessionToken, int userId);
+    int getClientPid(in String sessionId);
 
     void setMainSession(in IBinder sessionToken, int userId);
     void setSurface(in IBinder sessionToken, in Surface surface, int userId);
@@ -94,7 +95,7 @@ interface ITvInputManager {
     // For TV input hardware binding
     List<TvInputHardwareInfo> getHardwareList();
     ITvInputHardware acquireTvInputHardware(int deviceId, in ITvInputHardwareCallback callback,
-            in TvInputInfo info, int userId);
+            in TvInputInfo info, int userId, String tvInputSessionId, int priorityHint);
     void releaseTvInputHardware(int deviceId, in ITvInputHardware hardware, int userId);
 
     // For TV input capturing

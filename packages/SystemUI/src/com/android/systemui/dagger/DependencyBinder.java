@@ -20,10 +20,14 @@ import com.android.systemui.ActivityStarterDelegate;
 import com.android.systemui.appops.AppOpsController;
 import com.android.systemui.appops.AppOpsControllerImpl;
 import com.android.systemui.classifier.FalsingManagerProxy;
+import com.android.systemui.controls.dagger.ControlsModule;
 import com.android.systemui.doze.DozeHost;
+import com.android.systemui.globalactions.GlobalActionsComponent;
+import com.android.systemui.globalactions.GlobalActionsImpl;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.DarkIconDispatcher;
 import com.android.systemui.plugins.FalsingManager;
+import com.android.systemui.plugins.GlobalActions;
 import com.android.systemui.plugins.VolumeDialogController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.power.PowerNotificationWarnings;
@@ -82,7 +86,7 @@ import dagger.Module;
 /**
  * Maps interfaces to implementations for use with Dagger.
  */
-@Module
+@Module(includes = {ControlsModule.class})
 public abstract class DependencyBinder {
 
     /**
@@ -95,6 +99,17 @@ public abstract class DependencyBinder {
     @Binds
     public abstract BluetoothController provideBluetoothController(
             BluetoothControllerImpl controllerImpl);
+
+    /**
+     */
+    @Binds
+    public abstract GlobalActions provideGlobalActions(GlobalActionsImpl controllerImpl);
+
+    /**
+     */
+    @Binds
+    public abstract GlobalActions.GlobalActionsManager provideGlobalActionsManager(
+            GlobalActionsComponent controllerImpl);
 
     /**
      */

@@ -27,6 +27,9 @@ import static com.android.server.am.ActivityManagerService.MY_PID;
 
 import android.app.ActivityManager;
 import android.app.ApplicationErrorReport;
+import android.app.ApplicationExitInfo;
+import android.app.ApplicationExitInfo.Reason;
+import android.app.ApplicationExitInfo.SubReason;
 import android.app.Dialog;
 import android.app.IApplicationThread;
 import android.content.ComponentName;
@@ -63,9 +66,7 @@ import com.android.internal.app.procstats.ProcessStats;
 import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.os.Zygote;
-import com.android.server.LocalServices;
 import com.android.server.Watchdog;
-import com.android.server.wm.WindowManagerInternal;
 import com.android.server.wm.WindowProcessController;
 import com.android.server.wm.WindowProcessListener;
 
@@ -238,7 +239,7 @@ class ProcessRecord implements WindowProcessListener {
     long lastTopTime;           // The last time the process was in the TOP state or greater.
     boolean reportLowMemory;    // Set to true when waiting to report low mem
     boolean empty;              // Is this an empty background process?
-    boolean cached;             // Is this a cached process?
+    private volatile boolean mCached;    // Is this a cached process?
     String adjType;             // Debugging: primary thing impacting oom_adj.
     int adjTypeCode;            // Debugging: adj code to report to app.
     Object adjSource;           // Debugging: option dependent object.
@@ -411,7 +412,7 @@ class ProcessRecord implements WindowProcessListener {
                 pw.println();
         pw.print(prefix); pw.print("procStateMemTracker: ");
         procStateMemTracker.dumpLine(pw);
-        pw.print(prefix); pw.print("cached="); pw.print(cached);
+        pw.print(prefix); pw.print("cached="); pw.print(mCached);
                 pw.print(" empty="); pw.println(empty);
         if (serviceb) {
             pw.print(prefix); pw.print("serviceb="); pw.print(serviceb);
@@ -633,7 +634,7 @@ class ProcessRecord implements WindowProcessListener {
         String seempStr = "app_uid=" + uid
                             + ",app_pid=" + pid + ",oom_adj=" + curAdj
                             + ",setAdj=" + setAdj + ",hasShownUi=" + (hasShownUi ? 1 : 0)
-                            + ",cached=" + (cached ? 1 : 0)
+                            + ",cached=" + (mCached ? 1 : 0)
                             + ",fA=" + (mHasForegroundActivities ? 1 : 0)
                             + ",fS=" + (mHasForegroundServices ? 1 : 0)
                             + ",systemNoUi=" + (systemNoUi ? 1 : 0)
@@ -678,7 +679,7 @@ class ProcessRecord implements WindowProcessListener {
         String seempStr = "app_uid=" + uid
                             + ",app_pid=" + pid + ",oom_adj=" + curAdj
                             + ",setAdj=" + setAdj + ",hasShownUi=" + (hasShownUi ? 1 : 0)
-                            + ",cached=" + (cached ? 1 : 0)
+                            + ",cached=" + (mCached ? 1 : 0)
                             + ",fA=" + (mHasForegroundActivities ? 1 : 0)
                             + ",fS=" + (mHasForegroundServices ? 1 : 0)
                             + ",systemNoUi=" + (systemNoUi ? 1 : 0)
@@ -712,6 +713,18 @@ class ProcessRecord implements WindowProcessListener {
                 holder.state = null;
             }
         }
+    }
+
+    void setCached(boolean cached) {
+        if (mCached != cached) {
+            mCached = cached;
+            mWindowProcessController.onProcCachedStateChanged(cached);
+        }
+    }
+
+    @Override
+    public boolean isCached() {
+        return mCached;
     }
 
     boolean hasActivities() {
@@ -802,7 +815,8 @@ class ProcessRecord implements WindowProcessListener {
                 } catch (RemoteException e) {
                     // If it's already dead our work is done. If it's wedged just kill it.
                     // We won't get the crash dialog or the error reporting.
-                    kill("scheduleCrash for '" + message + "' failed", true);
+                    kill("scheduleCrash for '" + message + "' failed",
+                            ApplicationExitInfo.REASON_CRASH, true);
                 } finally {
                     Binder.restoreCallingIdentity(ident);
                 }
@@ -810,7 +824,11 @@ class ProcessRecord implements WindowProcessListener {
         }
     }
 
-    void kill(String reason, boolean noisy) {
+    void kill(String reason, @Reason int reasonCode, boolean noisy) {
+        kill(reason, reasonCode, ApplicationExitInfo.SUBREASON_UNKNOWN, noisy);
+    }
+
+    void kill(String reason, @Reason int reasonCode, @SubReason int subReason, boolean noisy) {
         if (!killedByAm) {
             Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "kill");
             BoostFramework ux_perf = new BoostFramework();
@@ -820,6 +838,7 @@ class ProcessRecord implements WindowProcessListener {
                         info.uid);
             }
             if (pid > 0) {
+                mService.mProcessList.noteAppKill(this, reasonCode, subReason, reason);
                 EventLog.writeEvent(EventLogTags.AM_KILL, userId, pid, processName, setAdj, reason);
                 Process.killProcessQuiet(pid);
                 ProcessList.killProcessGroup(uid, pid);
@@ -1407,9 +1426,9 @@ class ProcessRecord implements WindowProcessListener {
     }
 
     @Override
-    public void appDied() {
+    public void appDied(String reason) {
         synchronized (mService) {
-            mService.appDiedLocked(this);
+            mService.appDiedLocked(this, reason);
         }
     }
 
@@ -1474,7 +1493,8 @@ class ProcessRecord implements WindowProcessListener {
         ArrayList<Integer> firstPids = new ArrayList<>(5);
         SparseArray<Boolean> lastPids = new SparseArray<>(20);
 
-        mWindowProcessController.appEarlyNotResponding(annotation, () -> kill("anr", true));
+        mWindowProcessController.appEarlyNotResponding(annotation, () -> kill("anr",
+                  ApplicationExitInfo.REASON_ANR, true));
 
         long anrTime = SystemClock.uptimeMillis();
         if (isMonitorCpuUsage()) {
@@ -1623,7 +1643,8 @@ class ProcessRecord implements WindowProcessListener {
         mService.addErrorToDropBox("anr", this, processName, activityShortComponentName,
                 parentShortComponentName, parentPr, annotation, cpuInfo, tracesFile, null);
 
-        if (mWindowProcessController.appNotResponding(info.toString(), () -> kill("anr", true),
+        if (mWindowProcessController.appNotResponding(info.toString(), () -> kill("anr",
+                ApplicationExitInfo.REASON_ANR, true),
                 () -> {
                     synchronized (mService) {
                         mService.mServices.scheduleServiceTimeoutLocked(this);
@@ -1640,7 +1661,7 @@ class ProcessRecord implements WindowProcessListener {
             }
 
             if (isSilentAnr() && !isDebugging()) {
-                kill("bg anr", true);
+                kill("bg anr", ApplicationExitInfo.REASON_ANR, true);
                 return;
             }
 
@@ -1824,9 +1845,6 @@ class ProcessRecord implements WindowProcessListener {
         /** current wait for debugger dialog */
         private AppWaitingForDebuggerDialog mWaitDialog;
 
-        private final WindowManagerInternal mWmInternal =
-                LocalServices.getService(WindowManagerInternal.class);
-
         boolean hasCrashDialogs() {
             return mCrashDialogs != null;
         }
@@ -1952,7 +1970,9 @@ class ProcessRecord implements WindowProcessListener {
             }
             // If there is no foreground window display, fallback to last used display.
             if (displayContexts.isEmpty() || lastUsedOnly) {
-                displayContexts.add(mWmInternal.getTopFocusedDisplayUiContext());
+                displayContexts.add(mService.mWmInternal != null
+                        ? mService.mWmInternal.getTopFocusedDisplayUiContext()
+                        : mService.mUiContext);
             }
             return displayContexts;
         }

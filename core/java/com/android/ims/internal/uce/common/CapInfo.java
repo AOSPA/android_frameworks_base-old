@@ -16,10 +16,9 @@
 
 package com.android.ims.internal.uce.common;
 
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.util.Log;
 
 /** Class for capability discovery information.
  *  @hide */
@@ -408,7 +407,6 @@ public class CapInfo implements Parcelable {
     /**
      * Checks whether Geo Push via SMS is supported.
      */
-    @UnsupportedAppUsage
     public boolean isGeoSmsSupported() {
         return mGeoSmsSupported;
     }
@@ -416,7 +414,6 @@ public class CapInfo implements Parcelable {
     /**
      * Sets Geolocation Push via SMS as supported or not supported.
      */
-    @UnsupportedAppUsage
     public void setGeoSmsSupported(boolean geoSmsSupported) {
          this.mGeoSmsSupported = geoSmsSupported;
     }
@@ -424,7 +421,6 @@ public class CapInfo implements Parcelable {
     /**
      * Checks whether RCS call composer is supported.
      */
-    @UnsupportedAppUsage
     public boolean isCallComposerSupported() {
         return mCallComposerSupported;
     }
@@ -432,7 +428,6 @@ public class CapInfo implements Parcelable {
     /**
      * Sets call composer as supported or not supported.
      */
-    @UnsupportedAppUsage
     public void setCallComposerSupported(boolean callComposerSupported) {
         this.mCallComposerSupported = callComposerSupported;
     }
@@ -440,7 +435,6 @@ public class CapInfo implements Parcelable {
     /**
      * Checks whether post call is supported.
      */
-    @UnsupportedAppUsage
     public boolean isPostCallSupported(){
         return mPostCallSupported;
     }
@@ -448,7 +442,6 @@ public class CapInfo implements Parcelable {
     /**
      * Sets post call as supported or not supported.
      */
-     @UnsupportedAppUsage
      public void setPostCallSupported(boolean postCallSupported) {
          this.mPostCallSupported = postCallSupported;
      }
@@ -456,7 +449,6 @@ public class CapInfo implements Parcelable {
     /**
      * Checks whether shared map is supported.
      */
-    @UnsupportedAppUsage
     public boolean isSharedMapSupported() {
         return mSharedMapSupported;
     }
@@ -464,7 +456,6 @@ public class CapInfo implements Parcelable {
     /**
      * Sets shared map as supported or not supported.
      */
-    @UnsupportedAppUsage
     public void setSharedMapSupported(boolean sharedMapSupported) {
         this.mSharedMapSupported = sharedMapSupported;
     }
@@ -472,7 +463,6 @@ public class CapInfo implements Parcelable {
     /**
      * Checks whether shared sketch is supported.
      */
-    @UnsupportedAppUsage
     public boolean isSharedSketchSupported() {
         return mSharedSketchSupported;
     }
@@ -480,7 +470,6 @@ public class CapInfo implements Parcelable {
     /**
      * Sets shared sketch as supported or not supported.
      */
-    @UnsupportedAppUsage
     public void setSharedSketchSupported(boolean sharedSketchSupported) {
         this.mSharedSketchSupported = sharedSketchSupported;
     }
@@ -488,7 +477,6 @@ public class CapInfo implements Parcelable {
     /**
      * Checks whether chatbot communication is supported.
      */
-    @UnsupportedAppUsage
     public boolean isChatbotSupported() {
         return mChatbotSupported;
     }
@@ -496,7 +484,6 @@ public class CapInfo implements Parcelable {
     /**
      * Sets chatbot communication as supported or not supported.
      */
-    @UnsupportedAppUsage
     public void setChatbotSupported(boolean chatbotSupported) {
         this.mChatbotSupported = chatbotSupported;
     }
@@ -504,7 +491,6 @@ public class CapInfo implements Parcelable {
     /**
      * Checks whether chatbot role is supported.
      */
-    @UnsupportedAppUsage
     public boolean isChatbotRoleSupported() {
         return mChatbotRoleSupported;
     }
@@ -512,7 +498,6 @@ public class CapInfo implements Parcelable {
     /**
      * Sets chatbot role as supported or not supported.
      */
-    @UnsupportedAppUsage
     public void setChatbotRoleSupported(boolean chatbotRoleSupported) {
         this.mChatbotRoleSupported = chatbotRoleSupported;
     }

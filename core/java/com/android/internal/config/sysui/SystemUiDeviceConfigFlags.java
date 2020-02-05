@@ -350,7 +350,19 @@ public final class SystemUiDeviceConfigFlags {
      * (boolean) Whether screenshot flow going to the corner (instead of shown in a notification)
      * is enabled.
      */
-    public static final String SCREENSHOT_CORNER_FLOW = "screenshot_corner_flow";
+    public static final String SCREENSHOT_CORNER_FLOW = "enable_screenshot_corner_flow";
+
+    /**
+     * (boolean) Whether scrolling screenshots are enabled.
+     */
+    public static final String SCREENSHOT_SCROLLING_ENABLED = "enable_screenshot_scrolling";
+
+    // Flags related to Nav Bar
+
+    /**
+     * (boolean) Whether to force the Nav Bar handle to remain opaque.
+     */
+    public static final String NAV_BAR_HANDLE_FORCE_OPAQUE = "nav_bar_handle_force_opaque";
 
     private SystemUiDeviceConfigFlags() {
     }

@@ -16,6 +16,8 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
+import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
@@ -56,6 +58,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -120,28 +123,27 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testStackCleanupOnClearingTask() {
         mActivity.onParentChanged(null /*newParent*/, mActivity.getTask());
-        verify(mStack, times(1)).onActivityRemovedFromStack(any());
+        verify(mStack, times(1)).cleanUpActivityReferences(any());
     }
 
     @Test
     public void testStackCleanupOnActivityRemoval() {
         mTask.removeChild(mActivity);
-        verify(mStack, times(1)).onActivityRemovedFromStack(any());
+        verify(mStack, times(1)).cleanUpActivityReferences(any());
     }
 
     @Test
     public void testStackCleanupOnTaskRemoval() {
         mStack.removeChild(mTask, null /*reason*/);
         // Stack should be gone on task removal.
-        assertNull(mService.mRootWindowContainer.getStack(mStack.mStackId));
+        assertNull(mService.mRootWindowContainer.getStack(mStack.mTaskId));
     }
 
     @Test
     public void testNoCleanupMovingActivityInSameStack() {
-        final Task newTask = new TaskBuilder(mService.mStackSupervisor).setStack(mStack)
-                .build();
+        final Task newTask = new TaskBuilder(mService.mStackSupervisor).setStack(mStack).build();
         mActivity.reparent(newTask, 0, null /*reason*/);
-        verify(mStack, times(0)).onActivityRemovedFromStack(any());
+        verify(mStack, times(0)).cleanUpActivityReferences(any());
     }
 
     @Test
@@ -487,7 +489,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
         final ActivityStack stack = new StackBuilder(mRootWindowContainer).build();
         try {
-            doReturn(false).when(stack).isStackTranslucent(any());
+            doReturn(false).when(stack).isTranslucent(any());
             assertFalse(mStack.shouldBeVisible(null /* starting */));
 
             mActivity.setLastReportedConfiguration(new MergedConfiguration(new Configuration(),
@@ -521,11 +523,12 @@ public class ActivityRecordTests extends ActivityTestsBase {
     }
 
     @Test
-    public void testShouldPauseWhenMakeClientVisible() {
+    public void testShouldStartWhenMakeClientActive() {
         ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
         topActivity.setOccludesParent(false);
         mActivity.setState(ActivityStack.ActivityState.STOPPED, "Testing");
-        mActivity.makeClientVisible();
+        mActivity.setVisibility(true);
+        mActivity.makeActiveIfNeeded(null /* activeActivity */);
         assertEquals(STARTED, mActivity.getState());
     }
 
@@ -609,8 +612,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         // Sending 'null' for saved state can only happen due to timeout, so previously stored saved
         // states should not be overridden.
         mActivity.setState(STOPPING, "test");
-        mActivity.activityStopped(null /* savedState */, null /* persistentSavedState */,
-                "desc");
+        mActivity.activityStopped(null /* savedState */, null /* persistentSavedState */, "desc");
         assertTrue(mActivity.hasSavedState());
         assertEquals(savedState, mActivity.getSavedState());
         assertEquals(persistentSavedState, mActivity.getPersistentSavedState());
@@ -902,7 +904,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         topActivity.mVisibleRequested = false;
         topActivity.nowVisible = false;
         topActivity.finishing = true;
-        topActivity.setState(PAUSED, "true");
+        topActivity.setState(STOPPED, "true");
         // Mark the bottom activity as not visible, so that we would wait for it before removing
         // the top one.
         mActivity.mVisibleRequested = false;
@@ -1008,8 +1010,10 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testDestroyIfPossible_lastActivityAboveEmptyHomeStack() {
         // Empty the home stack.
-        final ActivityStack homeStack = mActivity.getDisplay().getHomeStack();
-        homeStack.forAllTasks((t) -> { homeStack.removeChild(t, "test"); });
+        final ActivityStack homeStack = mActivity.getDisplay().getRootHomeTask();
+        homeStack.forAllTasks((t) -> {
+            homeStack.removeChild(t, "test");
+        }, true /* traverseTopToBottom */, homeStack);
         mActivity.finishing = true;
         doReturn(false).when(mRootWindowContainer).resumeFocusedStacksTopActivities();
         spyOn(mStack);
@@ -1032,8 +1036,10 @@ public class ActivityRecordTests extends ActivityTestsBase {
     @Test
     public void testCompleteFinishing_lastActivityAboveEmptyHomeStack() {
         // Empty the home stack.
-        final ActivityStack homeStack = mActivity.getDisplay().getHomeStack();
-        homeStack.forAllTasks((t) -> { homeStack.removeChild(t, "test"); });
+        final ActivityStack homeStack = mActivity.getDisplay().getRootHomeTask();
+        homeStack.forAllTasks((t) -> {
+            homeStack.removeChild(t, "test");
+        }, true /* traverseTopToBottom */, homeStack);
         mActivity.finishing = true;
         spyOn(mStack);
 
@@ -1130,7 +1136,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
     @Test
     public void testRemoveFromHistory() {
-        final ActivityStack stack = mActivity.getActivityStack();
+        final ActivityStack stack = mActivity.getRootTask();
         final Task task = mActivity.getTask();
 
         mActivity.removeFromHistory("test");
@@ -1139,7 +1145,7 @@ public class ActivityRecordTests extends ActivityTestsBase {
         assertNull(mActivity.app);
         assertNull(mActivity.getTask());
         assertEquals(0, task.getChildCount());
-        assertNull(task.getStack());
+        assertEquals(task.getStack(), task);
         assertEquals(0, stack.getChildCount());
     }
 
@@ -1173,5 +1179,161 @@ public class ActivityRecordTests extends ActivityTestsBase {
         mActivity.destroyed("test");
 
         verify(mActivity).removeFromHistory(anyString());
+    }
+
+    @Test
+    public void testActivityOverridesProcessConfig() {
+        final WindowProcessController wpc = mActivity.app;
+        assertTrue(wpc.registeredForActivityConfigChanges());
+        assertFalse(wpc.registeredForDisplayConfigChanges());
+
+        final ActivityRecord secondaryDisplayActivity =
+                createActivityOnDisplay(false /* defaultDisplay */, null /* process */);
+
+        assertTrue(wpc.registeredForActivityConfigChanges());
+        assertEquals(0, mActivity.getMergedOverrideConfiguration()
+                .diff(wpc.getRequestedOverrideConfiguration()));
+        assertNotEquals(mActivity.getConfiguration(),
+                secondaryDisplayActivity.getConfiguration());
+    }
+
+    @Test
+    public void testActivityOverridesProcessConfig_TwoActivities() {
+        final WindowProcessController wpc = mActivity.app;
+        assertTrue(wpc.registeredForActivityConfigChanges());
+
+        final Task firstTaskRecord = mActivity.getTask();
+        final ActivityRecord secondActivityRecord =
+                new ActivityBuilder(mService).setTask(firstTaskRecord).setUseProcess(wpc).build();
+
+        assertTrue(wpc.registeredForActivityConfigChanges());
+        assertEquals(0, secondActivityRecord.getMergedOverrideConfiguration()
+                .diff(wpc.getRequestedOverrideConfiguration()));
+    }
+
+    @Test
+    public void testActivityOverridesProcessConfig_TwoActivities_SecondaryDisplay() {
+        final WindowProcessController wpc = mActivity.app;
+        assertTrue(wpc.registeredForActivityConfigChanges());
+
+        final ActivityRecord secondActivityRecord =
+                new ActivityBuilder(mService).setTask(mTask).setUseProcess(wpc).build();
+
+        assertTrue(wpc.registeredForActivityConfigChanges());
+        assertEquals(0, secondActivityRecord.getMergedOverrideConfiguration()
+                .diff(wpc.getRequestedOverrideConfiguration()));
+    }
+
+    @Test
+    public void testActivityOverridesProcessConfig_TwoActivities_DifferentTasks() {
+        final WindowProcessController wpc = mActivity.app;
+        assertTrue(wpc.registeredForActivityConfigChanges());
+
+        final ActivityRecord secondActivityRecord =
+                createActivityOnDisplay(true /* defaultDisplay */, wpc);
+
+        assertTrue(wpc.registeredForActivityConfigChanges());
+        assertEquals(0, secondActivityRecord.getMergedOverrideConfiguration()
+                .diff(wpc.getRequestedOverrideConfiguration()));
+    }
+
+    @Test
+    public void testActivityOnDifferentDisplayUpdatesProcessOverride() {
+        final ActivityRecord secondaryDisplayActivity =
+                createActivityOnDisplay(false /* defaultDisplay */, null /* process */);
+        final WindowProcessController wpc = secondaryDisplayActivity.app;
+        assertTrue(wpc.registeredForActivityConfigChanges());
+
+        final ActivityRecord secondActivityRecord =
+                createActivityOnDisplay(true /* defaultDisplay */, wpc);
+
+        assertTrue(wpc.registeredForActivityConfigChanges());
+        assertEquals(0, secondActivityRecord.getMergedOverrideConfiguration()
+                .diff(wpc.getRequestedOverrideConfiguration()));
+        assertFalse(wpc.registeredForDisplayConfigChanges());
+    }
+
+    @Test
+    public void testActivityReparentChangesProcessOverride() {
+        final WindowProcessController wpc = mActivity.app;
+        final Task initialTask = mActivity.getTask();
+        final Configuration initialConf =
+                new Configuration(mActivity.getMergedOverrideConfiguration());
+        assertEquals(0, mActivity.getMergedOverrideConfiguration()
+                .diff(wpc.getRequestedOverrideConfiguration()));
+        assertTrue(wpc.registeredForActivityConfigChanges());
+
+        // Create a new task with custom config to reparent the activity to.
+        final Task newTask =
+                new TaskBuilder(mSupervisor).setStack(initialTask.getStack()).build();
+        final Configuration newConfig = newTask.getConfiguration();
+        newConfig.densityDpi += 100;
+        newTask.onRequestedOverrideConfigurationChanged(newConfig);
+        assertEquals(newTask.getConfiguration().densityDpi, newConfig.densityDpi);
+
+        // Reparent the activity and verify that config override changed.
+        mActivity.reparent(newTask, 0 /* top */, "test");
+        assertEquals(mActivity.getConfiguration().densityDpi, newConfig.densityDpi);
+        assertEquals(mActivity.getMergedOverrideConfiguration().densityDpi, newConfig.densityDpi);
+
+        assertTrue(wpc.registeredForActivityConfigChanges());
+        assertNotEquals(initialConf, wpc.getRequestedOverrideConfiguration());
+        assertEquals(0, mActivity.getMergedOverrideConfiguration()
+                .diff(wpc.getRequestedOverrideConfiguration()));
+    }
+
+    @Test
+    public void testActivityReparentDoesntClearProcessOverride_TwoActivities() {
+        final WindowProcessController wpc = mActivity.app;
+        final Configuration initialConf =
+                new Configuration(mActivity.getMergedOverrideConfiguration());
+        final Task initialTask = mActivity.getTask();
+        final ActivityRecord secondActivity = new ActivityBuilder(mService).setTask(initialTask)
+                .setUseProcess(wpc).build();
+
+        assertTrue(wpc.registeredForActivityConfigChanges());
+        assertEquals(0, secondActivity.getMergedOverrideConfiguration()
+                .diff(wpc.getRequestedOverrideConfiguration()));
+
+        // Create a new task with custom config to reparent the second activity to.
+        final Task newTask =
+                new TaskBuilder(mSupervisor).setStack(initialTask.getStack()).build();
+        final Configuration newConfig = newTask.getConfiguration();
+        newConfig.densityDpi += 100;
+        newTask.onRequestedOverrideConfigurationChanged(newConfig);
+
+        // Reparent the activity and verify that config override changed.
+        secondActivity.reparent(newTask, 0 /* top */, "test");
+
+        assertTrue(wpc.registeredForActivityConfigChanges());
+        assertEquals(0, secondActivity.getMergedOverrideConfiguration()
+                .diff(wpc.getRequestedOverrideConfiguration()));
+        assertNotEquals(initialConf, wpc.getRequestedOverrideConfiguration());
+
+        // Reparent the first activity and verify that config override didn't change.
+        mActivity.reparent(newTask, 1 /* top */, "test");
+        assertTrue(wpc.registeredForActivityConfigChanges());
+        assertEquals(0, secondActivity.getMergedOverrideConfiguration()
+                .diff(wpc.getRequestedOverrideConfiguration()));
+        assertNotEquals(initialConf, wpc.getRequestedOverrideConfiguration());
+    }
+
+    /**
+     * Creates an activity on display. For non-default display request it will also create a new
+     * display with custom DisplayInfo.
+     */
+    private ActivityRecord createActivityOnDisplay(boolean defaultDisplay,
+            WindowProcessController process) {
+        final DisplayContent display;
+        if (defaultDisplay) {
+            display = mRootWindowContainer.getDefaultDisplay();
+        } else {
+            display = new TestDisplayContent.Builder(mService, 2000, 1000).setDensityDpi(300)
+                    .setPosition(DisplayContent.POSITION_TOP).build();
+        }
+        final ActivityStack stack = display.createStack(WINDOWING_MODE_UNDEFINED,
+                ACTIVITY_TYPE_STANDARD, true /* onTop */);
+        final Task task = new TaskBuilder(mSupervisor).setStack(stack).build();
+        return new ActivityBuilder(mService).setTask(task).setUseProcess(process).build();
     }
 }

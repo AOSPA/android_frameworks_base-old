@@ -16,6 +16,7 @@ java_library_static {
         "netd_aidl_interface-unstable-java",
         "netlink-client",
         "networkstack-client",
+        "net-utils-services-common",
     ],
 }
 
@@ -23,7 +24,6 @@ filegroup {
     name: "services-tethering-shared-srcs",
     srcs: [
         ":framework-annotations",
-        "java/android/net/util/NetdService.java",
         "java/android/net/util/NetworkConstants.java",
     ],
     visibility: ["//frameworks/base/packages/Tethering"],

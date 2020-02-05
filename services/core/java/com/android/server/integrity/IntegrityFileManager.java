@@ -24,7 +24,10 @@ import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.integrity.model.RuleMetadata;
+import com.android.server.integrity.parser.RandomAccessObject;
 import com.android.server.integrity.parser.RuleBinaryParser;
+import com.android.server.integrity.parser.RuleIndexRange;
+import com.android.server.integrity.parser.RuleIndexingController;
 import com.android.server.integrity.parser.RuleMetadataParser;
 import com.android.server.integrity.parser.RuleParseException;
 import com.android.server.integrity.parser.RuleParser;
@@ -37,6 +40,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,12 +48,9 @@ import java.util.Optional;
 public class IntegrityFileManager {
     private static final String TAG = "IntegrityFileManager";
 
-    // TODO: this is a prototype implementation of this class. Thus no tests are included.
-    //  Implementing rule indexing will likely overhaul this class and more tests should be included
-    //  then.
-
     private static final String METADATA_FILE = "metadata";
     private static final String RULES_FILE = "rules";
+    private static final String INDEXING_FILE = "indexing";
     private static final Object RULES_LOCK = new Object();
 
     private static IntegrityFileManager sInstance = null;
@@ -65,6 +66,7 @@ public class IntegrityFileManager {
     private final File mStagingDir;
 
     @Nullable private RuleMetadata mRuleMetadataCache;
+    @Nullable private RuleIndexingController mRuleIndexingController;
 
     /** Get the singleton instance of this class. */
     public static synchronized IntegrityFileManager getInstance() {
@@ -103,6 +105,8 @@ public class IntegrityFileManager {
                 Slog.e(TAG, "Error reading metadata file.", e);
             }
         }
+
+        updateRuleIndexingController();
     }
 
     /**
@@ -112,7 +116,8 @@ public class IntegrityFileManager {
      */
     public boolean initialized() {
         return new File(mRulesDir, RULES_FILE).exists()
-                && new File(mRulesDir, METADATA_FILE).exists();
+                && new File(mRulesDir, METADATA_FILE).exists()
+                && new File(mRulesDir, INDEXING_FILE).exists();
     }
 
     /** Write rules to persistent storage. */
@@ -125,12 +130,18 @@ public class IntegrityFileManager {
             // We don't consider this fatal so we continue execution.
         }
 
-        try (FileOutputStream fileOutputStream =
-                new FileOutputStream(new File(mStagingDir, RULES_FILE))) {
-            mRuleSerializer.serialize(rules, Optional.empty(), fileOutputStream);
+        try (FileOutputStream ruleFileOutputStream =
+                        new FileOutputStream(new File(mStagingDir, RULES_FILE));
+                FileOutputStream indexingFileOutputStream =
+                        new FileOutputStream(new File(mStagingDir, INDEXING_FILE))) {
+            mRuleSerializer.serialize(
+                    rules, Optional.empty(), ruleFileOutputStream, indexingFileOutputStream);
         }
 
         switchStagingRulesDir();
+
+        // Update object holding the indexing information.
+        updateRuleIndexingController();
     }
 
     /**
@@ -140,13 +151,22 @@ public class IntegrityFileManager {
      */
     public List<Rule> readRules(AppInstallMetadata appInstallMetadata)
             throws IOException, RuleParseException {
-        // TODO: select rules by index
         synchronized (RULES_LOCK) {
-            try (FileInputStream inputStream =
-                    new FileInputStream(new File(mRulesDir, RULES_FILE))) {
-                List<Rule> rules = mRuleParser.parse(inputStream);
-                return rules;
+            // Try to identify indexes from the index file.
+            List<RuleIndexRange> ruleReadingIndexes;
+            try {
+                ruleReadingIndexes =
+                        mRuleIndexingController.identifyRulesToEvaluate(appInstallMetadata);
+            } catch (Exception e) {
+                Slog.w(TAG, "Error identifying the rule indexes. Trying unindexed.", e);
+                ruleReadingIndexes = Collections.emptyList();
             }
+
+            // Read the rules based on the index information when available.
+            File ruleFile = new File(mRulesDir, RULES_FILE);
+            List<Rule> rules =
+                    mRuleParser.parse(RandomAccessObject.ofFile(ruleFile), ruleReadingIndexes);
+            return rules;
         }
     }
 
@@ -164,6 +184,21 @@ public class IntegrityFileManager {
                     && mStagingDir.renameTo(mRulesDir)
                     && tmpDir.renameTo(mStagingDir))) {
                 throw new IOException("Error switching staging/rules directory");
+            }
+
+            for (File file : mStagingDir.listFiles()) {
+                file.delete();
+            }
+        }
+    }
+
+    private void updateRuleIndexingController() {
+        File ruleIndexingFile = new File(mRulesDir, INDEXING_FILE);
+        if (ruleIndexingFile.exists()) {
+            try (FileInputStream inputStream = new FileInputStream(ruleIndexingFile)) {
+                mRuleIndexingController = new RuleIndexingController(inputStream);
+            } catch (Exception e) {
+                Slog.e(TAG, "Error parsing the rule indexing file.", e);
             }
         }
     }

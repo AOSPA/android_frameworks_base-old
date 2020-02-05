@@ -83,6 +83,7 @@ java_library_static {
         ":storaged_aidl",
         ":vold_aidl",
         ":platform-compat-config",
+        ":display-device-config",
         "java/com/android/server/EventLogTags.logtags",
         "java/com/android/server/am/EventLogTags.logtags",
         "java/com/android/server/wm/EventLogTags.logtags",
@@ -90,12 +91,13 @@ java_library_static {
     ],
 
     libs: [
+        "services-stubs",
         "services.net",
         "android.hardware.light-V2.0-java",
         "android.hardware.power-V1.0-java",
         "android.hardware.tv.cec-V1.0-java",
+        "android.hardware.vibrator-java",
         "app-compat-annotations",
-        "vintf-vibrator-java",
         "framework-tethering",
     ],
 
@@ -117,6 +119,7 @@ java_library_static {
         "android.hardware.oemlock-V1.0-java",
         "android.hardware.configstore-V1.0-java",
         "android.hardware.contexthub-V1.0-java",
+        "android.hardware.rebootescrow-java",
         "android.hardware.soundtrigger-V2.3-java",
         "android.hidl.manager-V1.2-java",
         "dnsresolver_aidl_interface-V2-java",
@@ -165,9 +168,3 @@ prebuilt_etc {
     name: "protolog.conf.json.gz",
     src: ":services.core.json.gz",
 }
-
-platform_compat_config {
-    name: "services-core-platform-compat-config",
-    src: ":services.core.unboosted",
-}
-

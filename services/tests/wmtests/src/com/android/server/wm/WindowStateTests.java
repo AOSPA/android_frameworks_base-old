@@ -92,7 +92,7 @@ import java.util.List;
  * Tests for the {@link WindowState} class.
  *
  * Build/Install/Run:
- *  atest FrameworksServicesTests:WindowStateTests
+ *  atest WmTests:WindowStateTests
  */
 @SmallTest
 @Presubmit
@@ -278,7 +278,7 @@ public class WindowStateTests extends WindowTestsBase {
         spyOn(stack);
         doReturn(true).when(controller).isMinimizedDock();
         doReturn(true).when(controller).isHomeStackResizable();
-        doReturn(stack).when(appWindow).getStack();
+        doReturn(stack).when(appWindow).getRootTask();
 
         // Make sure canBeImeTarget is false due to shouldIgnoreInput is true;
         assertFalse(appWindow.canBeImeTarget());
@@ -421,8 +421,10 @@ public class WindowStateTests extends WindowTestsBase {
                 .setWindow(statusBar, null /* frameProvider */);
         mDisplayContent.getInsetsStateController().onBarControlTargetChanged(
                 app, null /* fakeTopControlling */, app, null /* fakeNavControlling */);
+        final InsetsSource source = new InsetsSource(ITYPE_STATUS_BAR);
+        source.setVisible(false);
         mDisplayContent.getInsetsStateController().getSourceProvider(ITYPE_STATUS_BAR)
-                .onInsetsModified(app, new InsetsSource(ITYPE_STATUS_BAR));
+                .onInsetsModified(app, source);
         waitUntilHandlersIdle();
         assertFalse(statusBar.isVisible());
     }
@@ -522,7 +524,8 @@ public class WindowStateTests extends WindowTestsBase {
     public void testVisibilityChangeSwitchUser() {
         final WindowState window = createWindow(null, TYPE_APPLICATION, "app");
         window.mHasSurface = true;
-        window.setShowToOwnerOnlyLocked(true);
+        spyOn(window);
+        doReturn(false).when(window).showForAllUsers();
 
         mWm.mCurrentUserId = 1;
         window.switchUser(mWm.mCurrentUserId);
@@ -542,7 +545,7 @@ public class WindowStateTests extends WindowTestsBase {
         final WindowState startingWindow = createWindow(null /* parent */,
                 TYPE_APPLICATION_STARTING, startingApp.mToken, "starting");
         startingApp.mActivityRecord.startingWindow = startingWindow;
-        final WindowState keyguardHostWindow = mStatusBarWindow;
+        final WindowState keyguardHostWindow = mNotificationShadeWindow;
         final WindowState allDrawnApp = mAppWindow;
         allDrawnApp.mActivityRecord.allDrawn = true;
 

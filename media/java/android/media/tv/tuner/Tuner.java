@@ -16,24 +16,35 @@
 
 package android.media.tv.tuner;
 
+import android.annotation.BytesLong;
+import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.content.Context;
-import android.media.tv.tuner.TunerConstants.DemuxPidType;
-import android.media.tv.tuner.TunerConstants.FilterSubtype;
-import android.media.tv.tuner.TunerConstants.FilterType;
-import android.media.tv.tuner.TunerConstants.FrontendScanType;
-import android.media.tv.tuner.TunerConstants.LnbPosition;
-import android.media.tv.tuner.TunerConstants.LnbTone;
-import android.media.tv.tuner.TunerConstants.LnbVoltage;
+import android.media.tv.TvInputService;
 import android.media.tv.tuner.TunerConstants.Result;
+import android.media.tv.tuner.dvr.DvrPlayback;
+import android.media.tv.tuner.dvr.DvrRecorder;
+import android.media.tv.tuner.dvr.OnPlaybackStatusChangedListener;
+import android.media.tv.tuner.dvr.OnRecordStatusChangedListener;
+import android.media.tv.tuner.filter.Filter;
+import android.media.tv.tuner.filter.Filter.Subtype;
+import android.media.tv.tuner.filter.Filter.Type;
+import android.media.tv.tuner.filter.FilterCallback;
+import android.media.tv.tuner.filter.TimeFilter;
+import android.media.tv.tuner.frontend.FrontendInfo;
+import android.media.tv.tuner.frontend.FrontendSettings;
+import android.media.tv.tuner.frontend.FrontendStatus;
+import android.media.tv.tuner.frontend.OnTuneEventListener;
+import android.media.tv.tuner.frontend.ScanCallback;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 
 import java.util.List;
+import java.util.concurrent.Executor;
 
 /**
  * This class is used to interact with hardware tuners devices.
@@ -45,11 +56,10 @@ import java.util.List;
  * @hide
  */
 @SystemApi
-public final class Tuner implements AutoCloseable  {
+public class Tuner implements AutoCloseable  {
     private static final String TAG = "MediaTvTuner";
     private static final boolean DEBUG = false;
 
-    private static final int MSG_ON_FRONTEND_EVENT = 1;
     private static final int MSG_ON_FILTER_EVENT = 2;
     private static final int MSG_ON_FILTER_STATUS = 3;
     private static final int MSG_ON_LNB_EVENT = 4;
@@ -67,22 +77,48 @@ public final class Tuner implements AutoCloseable  {
 
     private List<Integer> mLnbIds;
     private Lnb mLnb;
+    @Nullable
+    private OnTuneEventListener mOnTuneEventListener;
+    @Nullable
+    private Executor mOnTunerEventExecutor;
+    @Nullable
+    private ScanCallback mScanCallback;
+    @Nullable
+    private Executor mScanCallbackExecutor;
 
     /**
      * Constructs a Tuner instance.
      *
-     * @param context context of the caller.
+     * @param context the context of the caller.
+     * @param tvInputSessionId the session ID of the TV input.
+     * @param useCase the use case of this Tuner instance.
      */
-    public Tuner(@NonNull Context context) {
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    public Tuner(@NonNull Context context, @NonNull String tvInputSessionId,
+            @TvInputService.PriorityHintUseCaseType int useCase,
+            @Nullable OnResourceLostListener listener) {
         mContext = context;
-        nativeSetup();
     }
+
+    /**
+     * Shares the frontend resource with another Tuner instance
+     *
+     * @param tuner the Tuner instance to share frontend resource with.
+     */
+    public void shareFrontendFromTuner(@NonNull Tuner tuner) {
+        // TODO: implementation.
+    }
+
 
     private long mNativeContext; // used by native jMediaTuner
 
-    /** @hide */
+    /**
+     * Releases the Tuner instance.
+     */
     @Override
-    public void close() {}
+    public void close() {
+        // TODO: implementation.
+    }
 
     /**
      * Native Initialization.
@@ -109,86 +145,38 @@ public final class Tuner implements AutoCloseable  {
     private native int nativeStopScan();
     private native int nativeSetLnb(int lnbId);
     private native int nativeSetLna(boolean enable);
-    private native FrontendStatus[] nativeGetFrontendStatus(int[] statusTypes);
-    private native Filter nativeOpenFilter(int type, int subType, int bufferSize);
+    private native FrontendStatus nativeGetFrontendStatus(int[] statusTypes);
+    private native int nativeGetAvSyncHwId(Filter filter);
+    private native long nativeGetAvSyncTime(int avSyncId);
+    private native int nativeConnectCiCam(int ciCamId);
+    private native int nativeDisconnectCiCam();
+    private native FrontendInfo nativeGetFrontendInfo(int id);
+    private native Filter nativeOpenFilter(int type, int subType, long bufferSize);
+    private native TimeFilter nativeOpenTimeFilter();
 
     private native List<Integer> nativeGetLnbIds();
     private native Lnb nativeOpenLnbById(int id);
 
     private native Descrambler nativeOpenDescrambler();
 
-    private native Dvr nativeOpenDvr(int type, int bufferSize);
+    private native DvrRecorder nativeOpenDvrRecorder(long bufferSize);
+    private native DvrPlayback nativeOpenDvrPlayback(long bufferSize);
+
+    private static native DemuxCapabilities nativeGetDemuxCapabilities();
+
 
     /**
-     * Frontend Callback.
+     * Listener for resource lost.
      *
-     * @hide
+     * <p>Resource is reclaimed and tuner instance is forced to close.
      */
-    public interface FrontendCallback {
-
+    public interface OnResourceLostListener {
         /**
-         * Invoked when there is a frontend event.
-         */
-        void onEvent(int frontendEventType);
-
-        /**
-         * Invoked when there is a scan message.
-         * @param msg
-         */
-        void onScanMessage(ScanMessage msg);
-    }
-
-    /**
-     * LNB Callback.
-     *
-     * @hide
-     */
-    public interface LnbCallback {
-        /**
-         * Invoked when there is a LNB event.
-         */
-        void onEvent(int lnbEventType);
-
-        /**
-         * Invoked when there is a new DiSEqC message.
+         * Invoked when resource lost.
          *
-         * @param diseqcMessage a byte array of data for DiSEqC (Digital Satellite
-         * Equipment Control) message which is specified by EUTELSAT Bus Functional
-         * Specification Version 4.2.
+         * @param tuner the tuner instance whose resource is being reclaimed.
          */
-        void onDiseqcMessage(byte[] diseqcMessage);
-    }
-
-    /**
-     * Frontend Callback.
-     *
-     * @hide
-     */
-    public interface FilterCallback {
-        /**
-         * Invoked when there are filter events.
-         */
-        void onFilterEvent(FilterEvent[] events);
-        /**
-         * Invoked when filter status changed.
-         */
-        void onFilterStatus(int status);
-    }
-
-    /**
-     * DVR Callback.
-     *
-     * @hide
-     */
-    public interface DvrCallback {
-        /**
-         * Invoked when record status changed.
-         */
-        void onRecordStatus(int status);
-        /**
-         * Invoked when playback status changed.
-         */
-        void onPlaybackStatus(int status);
+        void onResourceLost(@NonNull Tuner tuner);
     }
 
     @Nullable
@@ -210,22 +198,12 @@ public final class Tuner implements AutoCloseable  {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
-                case MSG_ON_FRONTEND_EVENT:
-                    if (mFrontend != null && mFrontend.mCallback != null) {
-                        mFrontend.mCallback.onEvent(msg.arg1);
-                    }
-                    break;
                 case MSG_ON_FILTER_STATUS: {
                     Filter filter = (Filter) msg.obj;
-                    if (filter.mCallback != null) {
-                        filter.mCallback.onFilterStatus(msg.arg1);
+                    if (filter.getCallback() != null) {
+                        filter.getCallback().onFilterStatusChanged(filter, msg.arg1);
                     }
                     break;
-                }
-                case MSG_ON_LNB_EVENT: {
-                    if (mLnb != null && mLnb.mCallback != null) {
-                        mLnb.mCallback.onEvent(msg.arg1);
-                    }
                 }
                 default:
                     // fall through
@@ -235,44 +213,66 @@ public final class Tuner implements AutoCloseable  {
 
     private class Frontend {
         private int mId;
-        private FrontendCallback mCallback;
 
         private Frontend(int id) {
             mId = id;
         }
-
-        public void setCallback(@Nullable FrontendCallback callback, @Nullable Handler handler) {
-            mCallback = callback;
-
-            if (mCallback == null) {
-                return;
-            }
-
-            if (handler == null) {
-                // use default looper if handler is null
-                if (mHandler == null) {
-                    mHandler = createEventHandler();
-                }
-                return;
-            }
-
-            Looper looper = handler.getLooper();
-            if (mHandler != null && mHandler.getLooper() == looper) {
-                // the same looper. reuse mHandler
-                return;
-            }
-            mHandler = new EventHandler(looper);
-        }
     }
 
     /**
-     * Tunes the frontend to the settings given.
+     * Listens for tune events.
      *
-     * @return result status of tune operation.
+     * <p>
+     * Tuner events are started when {@link #tune(FrontendSettings)} is called and end when {@link
+     * #stopTune()} is called.
+     *
+     * @param eventListener receives tune events.
      * @throws SecurityException if the caller does not have appropriate permissions.
-     * TODO: add result constants or throw exceptions.
+     * @see #tune(FrontendSettings)
      */
     @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    public void setOnTuneEventListener(@NonNull @CallbackExecutor Executor executor,
+            @NonNull OnTuneEventListener eventListener) {
+        TunerUtils.checkTunerPermission(mContext);
+        mOnTuneEventListener = eventListener;
+        mOnTunerEventExecutor = executor;
+    }
+
+    /**
+     * Clears the {@link OnTuneEventListener} and its associated {@link Executor}.
+     *
+     * @throws SecurityException if the caller does not have appropriate permissions.
+     * @see #setOnTuneEventListener(Executor, OnTuneEventListener)
+     */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    public void clearOnTuneEventListener() {
+        TunerUtils.checkTunerPermission(mContext);
+        mOnTuneEventListener = null;
+        mOnTunerEventExecutor = null;
+
+    }
+
+    /**
+     * Tunes the frontend to using the settings given.
+     *
+     * <p>
+     * This locks the frontend to a frequency by providing signal
+     * delivery information. If previous tuning isn't completed, this stop the previous tuning, and
+     * start a new tuning.
+     *
+     * <p>
+     * Tune is an async call, with {@link OnTuneEventListener#SIGNAL_LOCKED} and {@link
+     * OnTuneEventListener#SIGNAL_NO_SIGNAL} events sent to the {@link OnTuneEventListener}
+     * specified in {@link #setOnTuneEventListener(Executor, OnTuneEventListener)}.
+     *
+     * @param settings Signal delivery information the frontend uses to
+     *                 search and lock the signal.
+     * @return result status of tune operation.
+     * @throws SecurityException if the caller does not have appropriate permissions.
+     * @see #setOnTuneEventListener(Executor, OnTuneEventListener)
+     */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    @Result
     public int tune(@NonNull FrontendSettings settings) {
         TunerUtils.checkTunerPermission(mContext);
         return nativeTune(settings.getType(), settings);
@@ -281,74 +281,187 @@ public final class Tuner implements AutoCloseable  {
     /**
      * Stops a previous tuning.
      *
-     * If the method completes successfully the frontend is no longer tuned and no data
+     * <p>If the method completes successfully, the frontend is no longer tuned and no data
      * will be sent to attached filters.
      *
      * @return result status of the operation.
-     * @hide
      */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    @Result
     public int stopTune() {
+        TunerUtils.checkTunerPermission(mContext);
         return nativeStopTune();
     }
 
     /**
-     * Scan channels.
-     * @hide
+     * Scan for channels.
+     *
+     * <p>Details for channels found are returned via {@link ScanCallback}.
+     *
+     * @param settings A {@link FrontendSettings} to configure the frontend.
+     * @param scanType The scan type.
+     * @throws SecurityException     if the caller does not have appropriate permissions.
+     * @throws IllegalStateException if {@code scan} is called again before {@link #stopScan()} is
+     *                               called.
      */
-    public int scan(@NonNull FrontendSettings settings, @FrontendScanType int scanType) {
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    @Result
+    public int scan(@NonNull FrontendSettings settings, @TunerConstants.ScanType int scanType,
+            @NonNull @CallbackExecutor Executor executor, @NonNull ScanCallback scanCallback) {
+        TunerUtils.checkTunerPermission(mContext);
+        if (mScanCallback != null || mScanCallbackExecutor != null) {
+            throw new IllegalStateException(
+                    "Scan already in progress.  stopScan must be called before a new scan can be "
+                            + "started.");
+        }
+        mScanCallback = scanCallback;
+        mScanCallbackExecutor = executor;
         return nativeScan(settings.getType(), settings, scanType);
     }
 
     /**
      * Stops a previous scanning.
      *
-     * If the method completes successfully, the frontend stop previous scanning.
-     * @hide
+     * <p>
+     * The {@link ScanCallback} and it's {@link Executor} will be removed.
+     *
+     * <p>
+     * If the method completes successfully, the frontend stopped previous scanning.
+     *
+     * @throws SecurityException if the caller does not have appropriate permissions.
      */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    @Result
     public int stopScan() {
-        return nativeStopScan();
+        TunerUtils.checkTunerPermission(mContext);
+        int retVal = nativeStopScan();
+        mScanCallback = null;
+        mScanCallbackExecutor = null;
+        return retVal;
     }
 
     /**
      * Sets Low-Noise Block downconverter (LNB) for satellite frontend.
      *
-     * This assigns a hardware LNB resource to the satellite tuner. It can be
+     * <p>This assigns a hardware LNB resource to the satellite tuner. It can be
      * called multiple times to update LNB assignment.
      *
      * @param lnb the LNB instance.
      *
      * @return result status of the operation.
-     * @hide
      */
-    public int setLnb(@NonNull Lnb lnb) {
+    @Result
+    private int setLnb(@NonNull Lnb lnb) {
         return nativeSetLnb(lnb.mId);
     }
 
     /**
      * Enable or Disable Low Noise Amplifier (LNA).
      *
-     * @param enable true to activate LNA module; false to deactivate LNA
+     * @param enable {@code true} to activate LNA module; {@code false} to deactivate LNA.
      *
      * @return result status of the operation.
-     * @hide
      */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    @Result
     public int setLna(boolean enable) {
+        TunerUtils.checkTunerPermission(mContext);
         return nativeSetLna(enable);
     }
 
     /**
      * Gets the statuses of the frontend.
      *
-     * This retrieve the statuses of the frontend for given status types.
+     * <p>This retrieve the statuses of the frontend for given status types.
      *
-     * @param statusTypes an array of status type which the caller request.
-     *
-     * @return statuses an array of statuses which response the caller's
-     *         request.
-     * @hide
+     * @param statusTypes an array of status types which the caller requests.
+     * @return statuses which response the caller's requests.
      */
-    public FrontendStatus[] getFrontendStatus(int[] statusTypes) {
+    @Nullable
+    public FrontendStatus getFrontendStatus(@NonNull int[] statusTypes) {
         return nativeGetFrontendStatus(statusTypes);
+    }
+
+    /**
+     * Gets hardware sync ID for audio and video.
+     *
+     * @param filter the filter instance for the hardware sync ID.
+     * @return the id of hardware A/V sync.
+     */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    public int getAvSyncHwId(@NonNull Filter filter) {
+        TunerUtils.checkTunerPermission(mContext);
+        return nativeGetAvSyncHwId(filter);
+    }
+
+    /**
+     * Gets the current timestamp for Audio/Video sync
+     *
+     * <p>The timestamp is maintained by hardware. The timestamp based on 90KHz, and it's format is
+     * the same as PTS (Presentation Time Stamp).
+     *
+     * @param avSyncHwId the hardware id of A/V sync.
+     * @return the current timestamp of hardware A/V sync.
+     */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    public long getAvSyncTime(int avSyncHwId) {
+        TunerUtils.checkTunerPermission(mContext);
+        return nativeGetAvSyncTime(avSyncHwId);
+    }
+
+    /**
+     * Connects Conditional Access Modules (CAM) through Common Interface (CI)
+     *
+     * <p>The demux uses the output from the frontend as the input by default, and must change to
+     * use the output from CI-CAM as the input after this call.
+     *
+     * @param ciCamId specify CI-CAM Id to connect.
+     * @return result status of the operation.
+     */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    @Result
+    public int connectCiCam(int ciCamId) {
+        TunerUtils.checkTunerPermission(mContext);
+        return nativeConnectCiCam(ciCamId);
+    }
+
+    /**
+     * Disconnects Conditional Access Modules (CAM)
+     *
+     * <p>The demux will use the output from the frontend as the input after this call.
+     *
+     * @return result status of the operation.
+     */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    @Result
+    public int disconnectCiCam() {
+        TunerUtils.checkTunerPermission(mContext);
+        return nativeDisconnectCiCam();
+    }
+
+    /**
+     * Gets the frontend information.
+     *
+     * @return The frontend information. {@code null} if the operation failed.
+     */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    @Nullable
+    public FrontendInfo getFrontendInfo() {
+        TunerUtils.checkTunerPermission(mContext);
+        if (mFrontend == null) {
+            throw new IllegalStateException("frontend is not initialized");
+        }
+        return nativeGetFrontendInfo(mFrontend.mId);
+    }
+
+    /**
+     * Gets Demux capabilities.
+     */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    @Nullable
+    public static DemuxCapabilities getDemuxCapabilities(@NonNull Context context) {
+        TunerUtils.checkTunerPermission(context);
+        return nativeGetDemuxCapabilities();
     }
 
     private List<Integer> getFrontendIds() {
@@ -368,125 +481,33 @@ public final class Tuner implements AutoCloseable  {
     }
 
     private void onFrontendEvent(int eventType) {
-        if (mHandler != null) {
-            mHandler.sendMessage(mHandler.obtainMessage(MSG_ON_FRONTEND_EVENT, eventType, 0));
+        if (mOnTunerEventExecutor != null && mOnTuneEventListener != null) {
+            mOnTunerEventExecutor.execute(() -> mOnTuneEventListener.onTuneEvent(eventType));
         }
     }
 
-    /** @hide */
-    public class Filter {
-        private long mNativeContext;
-        private FilterCallback mCallback;
-        int mId;
-
-        private native int nativeConfigureFilter(int type, int subType, FilterSettings settings);
-        private native int nativeGetId();
-        private native int nativeSetDataSource(Filter source);
-        private native int nativeStartFilter();
-        private native int nativeStopFilter();
-        private native int nativeFlushFilter();
-        private native int nativeRead(byte[] buffer, int offset, int size);
-        private native int nativeClose();
-
-        private Filter(int id) {
-            mId = id;
-        }
-
-        private void onFilterStatus(int status) {
-            if (mHandler != null) {
-                mHandler.sendMessage(
-                        mHandler.obtainMessage(MSG_ON_FILTER_STATUS, status, 0, this));
-            }
-        }
-
-        /**
-         * Configures the filter.
-         *
-         * @param settings the settings of the filter.
-         * @return result status of the operation.
-         */
-        public int configure(FilterSettings settings) {
-            int subType = -1;
-            if (settings.mSettings != null) {
-                subType = settings.mSettings.getType();
-            }
-            return nativeConfigureFilter(settings.getType(), subType, settings);
-        }
-
-        /**
-         * Gets the filter Id.
-         *
-         * @return the hardware resource Id for the filter.
-         */
-        public int getId() {
-            return nativeGetId();
-        }
-
-        /**
-         * Sets the filter's data source.
-         *
-         * A filter uses demux as data source by default. If the data was packetized
-         * by multiple protocols, multiple filters may need to work together to
-         * extract all protocols' header. Then a filter's data source can be output
-         * from another filter.
-         *
-         * @param source the filter instance which provides data input. Switch to
-         * use demux as data source if the filter instance is NULL.
-         * @return result status of the operation.
-         */
-        public int setDataSource(@Nullable Filter source) {
-            return nativeSetDataSource(source);
-        }
-
-        /**
-         * Starts the filter.
-         *
-         * @return result status of the operation.
-         */
-        public int start() {
-            return nativeStartFilter();
-        }
-
-
-        /**
-         * Stops the filter.
-         *
-         * @return result status of the operation.
-         */
-        public int stop() {
-            return nativeStopFilter();
-        }
-
-        /**
-         * Flushes the filter.
-         *
-         * @return result status of the operation.
-         */
-        public int flush() {
-            return nativeFlushFilter();
-        }
-
-        public int read(@NonNull byte[] buffer, int offset, int size) {
-            size = Math.min(size, buffer.length - offset);
-            return nativeRead(buffer, offset, size);
-        }
-
-        /**
-         * Release the Filter instance.
-         *
-         * @return result status of the operation.
-         */
-        public int close() {
-            return nativeClose();
-        }
-    }
-
-    private Filter openFilter(@FilterType int mainType, @FilterSubtype int subType, int bufferSize,
-            FilterCallback cb) {
+    /**
+     * Opens a filter object based on the given types and buffer size.
+     *
+     * @param mainType the main type of the filter.
+     * @param subType the subtype of the filter.
+     * @param bufferSize the buffer size of the filter to be opened in bytes. The buffer holds the
+     * data output from the filter.
+     * @param executor the executor on which callback will be invoked. The default event handler
+     * executor is used if it's {@code null}.
+     * @param cb the callback to receive notifications from filter.
+     * @return the opened filter. {@code null} if the operation failed.
+     */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    @Nullable
+    public Filter openFilter(@Type int mainType, @Subtype int subType,
+            @BytesLong long bufferSize, @CallbackExecutor @Nullable Executor executor,
+            @Nullable FilterCallback cb) {
+        TunerUtils.checkTunerPermission(mContext);
         Filter filter = nativeOpenFilter(
                 mainType, TunerUtils.getFilterSubtype(mainType, subType), bufferSize);
         if (filter != null) {
-            filter.mCallback = cb;
+            filter.setCallback(cb);
             if (mHandler == null) {
                 mHandler = createEventHandler();
             }
@@ -494,88 +515,47 @@ public final class Tuner implements AutoCloseable  {
         return filter;
     }
 
-    /** @hide */
-    public class Lnb {
-        private int mId;
-        private LnbCallback mCallback;
+    /**
+     * Opens an LNB (low-noise block downconverter) object.
+     *
+     * @param executor the executor on which callback will be invoked. The default event handler
+     * executor is used if it's {@code null}.
+     * @param cb the callback to receive notifications from LNB.
+     * @return the opened LNB object. {@code null} if the operation failed.
+     */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    @Nullable
+    public Lnb openLnb(@CallbackExecutor @Nullable Executor executor, @Nullable LnbCallback cb) {
+        TunerUtils.checkTunerPermission(mContext);
+        return openLnbByName(null, executor, cb);
+    }
 
-        private native int nativeSetVoltage(int voltage);
-        private native int nativeSetTone(int tone);
-        private native int nativeSetSatellitePosition(int position);
-        private native int nativeSendDiseqcMessage(byte[] message);
-        private native int nativeClose();
+    /**
+     * Opens an LNB (low-noise block downconverter) object.
+     *
+     * @param name the LNB name.
+     * @param executor the executor on which callback will be invoked. The default event handler
+     * executor is used if it's {@code null}.
+     * @param cb the callback to receive notifications from LNB.
+     * @return the opened LNB object. {@code null} if the operation failed.
+     */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    @Nullable
+    public Lnb openLnbByName(@Nullable String name, @CallbackExecutor @Nullable Executor executor,
+            @NonNull LnbCallback cb) {
+        TunerUtils.checkTunerPermission(mContext);
+        // TODO: use resource manager to get LNB ID.
+        return new Lnb(0);
+    }
 
-        private Lnb(int id) {
-            mId = id;
-        }
-
-        public void setCallback(@Nullable LnbCallback callback) {
-            mCallback = callback;
-            if (mCallback == null) {
-                return;
-            }
-            if (mHandler == null) {
-                mHandler = createEventHandler();
-            }
-        }
-
-        /**
-         * Sets the LNB's power voltage.
-         *
-         * @param voltage the power voltage the Lnb to use.
-         * @return result status of the operation.
-         */
-        @Result
-        public int setVoltage(@LnbVoltage int voltage) {
-            return nativeSetVoltage(voltage);
-        }
-
-        /**
-         * Sets the LNB's tone mode.
-         *
-         * @param tone the tone mode the Lnb to use.
-         * @return result status of the operation.
-         */
-        @Result
-        public int setTone(@LnbTone int tone) {
-            return nativeSetTone(tone);
-        }
-
-        /**
-         * Selects the LNB's position.
-         *
-         * @param position the position the Lnb to use.
-         * @return result status of the operation.
-         */
-        @Result
-        public int setSatellitePosition(@LnbPosition int position) {
-            return nativeSetSatellitePosition(position);
-        }
-
-        /**
-         * Sends DiSEqC (Digital Satellite Equipment Control) message.
-         *
-         * The response message from the device comes back through callback onDiseqcMessage.
-         *
-         * @param message a byte array of data for DiSEqC message which is specified by EUTELSAT Bus
-         *         Functional Specification Version 4.2.
-         *
-         * @return result status of the operation.
-         */
-        @Result
-        public int sendDiseqcMessage(byte[] message) {
-            return nativeSendDiseqcMessage(message);
-        }
-
-        /**
-         * Releases the LNB instance
-         *
-         * @return result status of the operation.
-         */
-        @Result
-        public int close() {
-            return nativeClose();
-        }
+    /**
+     * Open a time filter object.
+     *
+     * @return the opened time filter object. {@code null} if the operation failed.
+     */
+    @Nullable
+    public TimeFilter openTimeFilter() {
+        return nativeOpenTimeFilter();
     }
 
     private List<Integer> getLnbIds() {
@@ -601,89 +581,6 @@ public final class Tuner implements AutoCloseable  {
     }
 
     /**
-     * This class is used to interact with descramblers.
-     *
-     * <p> Descrambler is a hardware component used to descramble data.
-     *
-     * <p> This class controls the TIS interaction with Tuner HAL.
-     * TODO: make it static and extends Closable.
-     */
-    public class Descrambler {
-        private long mNativeContext;
-
-        private native int nativeAddPid(int pidType, int pid, Filter filter);
-        private native int nativeRemovePid(int pidType, int pid, Filter filter);
-        private native int nativeSetKeyToken(byte[] keyToken);
-        private native int nativeClose();
-
-        private Descrambler() {}
-
-        /**
-         * Add packets' PID to the descrambler for descrambling.
-         *
-         * The descrambler will start descrambling packets with this PID. Multiple PIDs can be added
-         * into one descrambler instance because descambling can happen simultaneously on packets
-         * from different PIDs.
-         *
-         * If the Descrambler previously contained a filter for the PID, the old filter is replaced
-         * by the specified filter.
-         *
-         * @param pidType the type of the PID.
-         * @param pid the PID of packets to start to be descrambled.
-         * @param filter an optional filter instance to identify upper stream.
-         * @return result status of the operation.
-         *
-         * @hide
-         */
-        public int addPid(@DemuxPidType int pidType, int pid, @Nullable Filter filter) {
-            return nativeAddPid(pidType, pid, filter);
-        }
-
-        /**
-         * Remove packets' PID from the descrambler
-         *
-         * The descrambler will stop descrambling packets with this PID.
-         *
-         * @param pidType the type of the PID.
-         * @param pid the PID of packets to stop to be descrambled.
-         * @param filter an optional filter instance to identify upper stream.
-         * @return result status of the operation.
-         *
-         * @hide
-         */
-        public int removePid(@DemuxPidType int pidType, int pid, @Nullable Filter filter) {
-            return nativeRemovePid(pidType, pid, filter);
-        }
-
-        /**
-         * Set a key token to link descrambler to a key slot
-         *
-         * A descrambler instance can have only one key slot to link, but a key slot can hold a few
-         * keys for different purposes.
-         *
-         * @param keyToken the token to be used to link the key slot.
-         * @return result status of the operation.
-         *
-         * @hide
-         */
-        public int setKeyToken(byte[] keyToken) {
-            return nativeSetKeyToken(keyToken);
-        }
-
-        /**
-         * Release the descrambler instance.
-         *
-         * @return result status of the operation.
-         *
-         * @hide
-         */
-        public int close() {
-            return nativeClose();
-        }
-
-    }
-
-    /**
      * Opens a Descrambler in tuner.
      *
      * @return  a {@link Descrambler} object.
@@ -695,95 +592,45 @@ public final class Tuner implements AutoCloseable  {
         return nativeOpenDescrambler();
     }
 
-    // TODO: consider splitting Dvr to Playback and Recording
-    /** @hide */
-    public class Dvr {
-        private long mNativeContext;
-        private DvrCallback mCallback;
-
-        private native int nativeAttachFilter(Filter filter);
-        private native int nativeDetachFilter(Filter filter);
-        private native int nativeConfigureDvr(DvrSettings settings);
-        private native int nativeStartDvr();
-        private native int nativeStopDvr();
-        private native int nativeFlushDvr();
-        private native int nativeClose();
-
-        private Dvr() {}
-
-        /**
-         * Attaches a filter to DVR interface for recording.
-         *
-         * @param filter the filter to be attached.
-         * @return result status of the operation.
-         */
-        public int attachFilter(Filter filter) {
-            return nativeAttachFilter(filter);
-        }
-
-        /**
-         * Detaches a filter from DVR interface.
-         *
-         * @param filter the filter to be detached.
-         * @return result status of the operation.
-         */
-        public int detachFilter(Filter filter) {
-            return nativeDetachFilter(filter);
-        }
-
-        /**
-         * Configures the DVR.
-         *
-         * @param settings the settings of the DVR interface.
-         * @return result status of the operation.
-         */
-        public int configure(DvrSettings settings) {
-            return nativeConfigureDvr(settings);
-        }
-
-        /**
-         * Starts DVR.
-         *
-         * Starts consuming playback data or producing data for recording.
-         *
-         * @return result status of the operation.
-         */
-        public int start() {
-            return nativeStartDvr();
-        }
-
-        /**
-         * Stops DVR.
-         *
-         * Stops consuming playback data or producing data for recording.
-         *
-         * @return result status of the operation.
-         */
-        public int stop() {
-            return nativeStopDvr();
-        }
-
-        /**
-         * Flushed DVR data.
-         *
-         * @return result status of the operation.
-         */
-        public int flush() {
-            return nativeFlushDvr();
-        }
-
-        /**
-         * closes the DVR instance to release resources.
-         *
-         * @return result status of the operation.
-         */
-        public int close() {
-            return nativeClose();
-        }
+    /**
+     * Open a DVR (Digital Video Record) recorder instance.
+     *
+     * @param bufferSize the buffer size of the output in bytes. It's used to hold output data of
+     * the attached filters.
+     * @param executor the executor on which callback will be invoked. The default event handler
+     * executor is used if it's {@code null}.
+     * @param l the listener to receive notifications from DVR recorder.
+     * @return the opened DVR recorder object. {@code null} if the operation failed.
+     */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    @Nullable
+    public DvrRecorder openDvrRecorder(
+            @BytesLong long bufferSize,
+            @CallbackExecutor @Nullable Executor executor,
+            @Nullable OnRecordStatusChangedListener l) {
+        TunerUtils.checkTunerPermission(mContext);
+        DvrRecorder dvr = nativeOpenDvrRecorder(bufferSize);
+        return dvr;
     }
 
-    private Dvr openDvr(int type, int bufferSize) {
-        Dvr dvr = nativeOpenDvr(type, bufferSize);
+    /**
+     * Open a DVR (Digital Video Record) playback instance.
+     *
+     * @param bufferSize the buffer size of the output in bytes. It's used to hold output data of
+     * the attached filters.
+     * @param executor the executor on which callback will be invoked. The default event handler
+     * executor is used if it's {@code null}.
+     * @param l the listener to receive notifications from DVR recorder.
+     * @return the opened DVR playback object. {@code null} if the operation failed.
+     */
+    @RequiresPermission(android.Manifest.permission.ACCESS_TV_TUNER)
+    @Nullable
+    public DvrPlayback openDvrPlayback(
+            @BytesLong long bufferSize,
+            @CallbackExecutor @Nullable Executor executor,
+            @Nullable OnPlaybackStatusChangedListener l) {
+        TunerUtils.checkTunerPermission(mContext);
+        DvrPlayback dvr = nativeOpenDvrPlayback(bufferSize);
         return dvr;
     }
 }

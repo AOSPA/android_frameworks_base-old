@@ -20,12 +20,11 @@ import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 
 import com.android.internal.telecom.IVideoProvider;
@@ -582,6 +581,7 @@ public final class Call {
         private final Bundle mExtras;
         private final Bundle mIntentExtras;
         private final long mCreationTimeMillis;
+        private final String mContactDisplayName;
         private final @CallDirection int mCallDirection;
         private final @Connection.VerificationStatus int mCallerNumberVerificationStatus;
 
@@ -892,6 +892,17 @@ public final class Call {
         }
 
         /**
+         * Returns the name of the caller on the remote end, as derived from a
+         * {@link android.provider.ContactsContract} lookup of the call's handle.
+         * @return The name of the caller, or {@code null} if the lookup is not yet complete, if
+         *         there's no contacts entry for the caller, or if the {@link InCallService} does
+         *         not hold the {@link android.Manifest.permission#READ_CONTACTS} permission.
+         */
+        public @Nullable String getContactDisplayName() {
+            return mContactDisplayName;
+        }
+
+        /**
          * Indicates whether the call is an incoming or outgoing call.
          * @return The call's direction.
          */
@@ -929,6 +940,7 @@ public final class Call {
                         areBundlesEqual(mExtras, d.mExtras) &&
                         areBundlesEqual(mIntentExtras, d.mIntentExtras) &&
                         Objects.equals(mCreationTimeMillis, d.mCreationTimeMillis) &&
+                        Objects.equals(mContactDisplayName, d.mContactDisplayName) &&
                         Objects.equals(mCallDirection, d.mCallDirection) &&
                         Objects.equals(mCallerNumberVerificationStatus,
                                 d.mCallerNumberVerificationStatus);
@@ -953,6 +965,7 @@ public final class Call {
                             mExtras,
                             mIntentExtras,
                             mCreationTimeMillis,
+                            mContactDisplayName,
                             mCallDirection,
                             mCallerNumberVerificationStatus);
         }
@@ -975,6 +988,7 @@ public final class Call {
                 Bundle extras,
                 Bundle intentExtras,
                 long creationTimeMillis,
+                String contactDisplayName,
                 int callDirection,
                 int callerNumberVerificationStatus) {
             mTelecomCallId = telecomCallId;
@@ -993,6 +1007,7 @@ public final class Call {
             mExtras = extras;
             mIntentExtras = intentExtras;
             mCreationTimeMillis = creationTimeMillis;
+            mContactDisplayName = contactDisplayName;
             mCallDirection = callDirection;
             mCallerNumberVerificationStatus = callerNumberVerificationStatus;
         }
@@ -1016,6 +1031,7 @@ public final class Call {
                     parcelableCall.getExtras(),
                     parcelableCall.getIntentExtras(),
                     parcelableCall.getCreationTimeMillis(),
+                    parcelableCall.getContactDisplayName(),
                     parcelableCall.getCallDirection(),
                     parcelableCall.getCallerNumberVerificationStatus());
         }
@@ -1465,6 +1481,7 @@ public final class Call {
 
     private boolean mChildrenCached;
     private String mParentId = null;
+    private String mActiveGenericConferenceChild = null;
     private int mState;
     private List<String> mCannedTextResponses = null;
     private String mCallingPackage;
@@ -1963,6 +1980,20 @@ public final class Call {
     }
 
     /**
+     * Returns the child {@link Call} in a generic conference that is currently active.
+     * For calls that are not generic conferences, or when the generic conference has more than
+     * 2 children, returns {@code null}.
+     * @see Details#PROPERTY_GENERIC_CONFERENCE
+     * @return The active child call.
+     */
+    public @Nullable Call getGenericConferenceActiveChildCall() {
+        if (mActiveGenericConferenceChild != null) {
+            return mPhone.internalGetCallByTelecomId(mActiveGenericConferenceChild);
+        }
+        return null;
+    }
+
+    /**
      * Obtains a list of canned, pre-configured message responses to present to the user as
      * ways of rejecting this {@code Call} using via a text message.
      *
@@ -2210,6 +2241,13 @@ public final class Call {
             mChildrenCached = false;
         }
 
+        String activeChildCallId = parcelableCall.getActiveChildCallId();
+        boolean activeChildChanged = !Objects.equals(activeChildCallId,
+                mActiveGenericConferenceChild);
+        if (activeChildChanged) {
+            mActiveGenericConferenceChild = activeChildCallId;
+        }
+
         List<String> conferenceableCallIds = parcelableCall.getConferenceableCallIds();
         List<Call> conferenceableCalls = new ArrayList<Call>(conferenceableCallIds.size());
         for (String otherId : conferenceableCallIds) {
@@ -2269,7 +2307,7 @@ public final class Call {
         if (parentChanged) {
             fireParentChanged(getParent());
         }
-        if (childrenChanged) {
+        if (childrenChanged || activeChildChanged) {
             fireChildrenChanged(getChildren());
         }
         if (isRttChanged) {

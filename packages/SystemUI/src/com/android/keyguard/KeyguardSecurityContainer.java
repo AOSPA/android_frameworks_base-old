@@ -21,17 +21,20 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.admin.DevicePolicyManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Rect;
 import android.metrics.LogMaker;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.UserHandle;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.Slog;
-import android.util.StatsLog;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.SurfaceControl;
 import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -50,6 +53,7 @@ import com.android.settingslib.utils.ThreadUtils;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.SystemUIFactory;
+import com.android.systemui.shared.system.SysUiStatsLog;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.InjectionInflationController;
 
@@ -90,6 +94,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
     private AlertDialog mAlertDialog;
     private InjectionInflationController mInjectionInflationController;
     private boolean mSwipeUpToRetry;
+    private AdminSecondaryLockScreenController mSecondaryLockScreenController;
 
     private final ViewConfiguration mViewConfiguration;
     private final SpringAnimation mSpringAnimation;
@@ -137,6 +142,9 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
             SystemUIFactory.getInstance().getRootComponent());
         mViewConfiguration = ViewConfiguration.get(context);
         mKeyguardStateController = Dependency.get(KeyguardStateController.class);
+        mSecondaryLockScreenController = new AdminSecondaryLockScreenController(context, this,
+                mUpdateMonitor, mCallback, new Handler(Looper.myLooper()),
+                new SurfaceControl.Transaction());
     }
 
     public void setSecurityCallback(SecurityCallback callback) {
@@ -157,6 +165,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
             mAlertDialog.dismiss();
             mAlertDialog = null;
         }
+        mSecondaryLockScreenController.hide();
         if (mCurrentSecuritySelection != SecurityMode.None) {
             getSecurityView(mCurrentSecuritySelection).onPause();
         }
@@ -532,6 +541,15 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
                     break;
             }
         }
+        // Check for device admin specified additional security measures.
+        if (finish) {
+            Intent secondaryLockscreenIntent =
+                    mUpdateMonitor.getSecondaryLockscreenRequirement(targetUserId);
+            if (secondaryLockscreenIntent != null) {
+                mSecondaryLockScreenController.show(secondaryLockscreenIntent);
+                return false;
+            }
+        }
         if (eventSubtype != -1) {
             mMetricsLogger.write(new LogMaker(MetricsEvent.BOUNCER)
                     .setType(MetricsEvent.TYPE_DISMISS).setSubtype(eventSubtype));
@@ -615,8 +633,8 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
 
         public void reportUnlockAttempt(int userId, boolean success, int timeoutMs) {
             if (success) {
-                StatsLog.write(StatsLog.KEYGUARD_BOUNCER_PASSWORD_ENTERED,
-                    StatsLog.KEYGUARD_BOUNCER_PASSWORD_ENTERED__RESULT__SUCCESS);
+                SysUiStatsLog.write(SysUiStatsLog.KEYGUARD_BOUNCER_PASSWORD_ENTERED,
+                        SysUiStatsLog.KEYGUARD_BOUNCER_PASSWORD_ENTERED__RESULT__SUCCESS);
                 mLockPatternUtils.reportSuccessfulPasswordAttempt(userId);
                 // Force a garbage collection in an attempt to erase any lockscreen password left in
                 // memory. Do it asynchronously with a 5-sec delay to avoid making the keyguard
@@ -628,8 +646,8 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
                     Runtime.getRuntime().gc();
                 });
             } else {
-                StatsLog.write(StatsLog.KEYGUARD_BOUNCER_PASSWORD_ENTERED,
-                    StatsLog.KEYGUARD_BOUNCER_PASSWORD_ENTERED__RESULT__FAILURE);
+                SysUiStatsLog.write(SysUiStatsLog.KEYGUARD_BOUNCER_PASSWORD_ENTERED,
+                        SysUiStatsLog.KEYGUARD_BOUNCER_PASSWORD_ENTERED__RESULT__FAILURE);
                 KeyguardSecurityContainer.this.reportFailedUnlockAttempt(userId, timeoutMs);
             }
             mMetricsLogger.write(new LogMaker(MetricsEvent.BOUNCER)
@@ -751,6 +769,5 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
     public void showUsabilityHint() {
         mSecurityViewFlipper.showUsabilityHint();
     }
-
 }
 

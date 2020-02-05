@@ -91,6 +91,10 @@ class InsetsStateController {
         return state;
     }
 
+    InsetsState getRawInsetsState() {
+        return mState;
+    }
+
     @Nullable InsetsSourceControl[] getControlsForDispatch(InsetsControlTarget target) {
         ArrayList<Integer> controlled = mControlTargetTypeMap.get(target);
         if (controlled == null) {
@@ -144,7 +148,7 @@ class InsetsStateController {
         getImeSourceProvider().onPostInsetsDispatched();
     }
 
-    void onInsetsModified(WindowState windowState, InsetsState state) {
+    void onInsetsModified(InsetsControlTarget windowState, InsetsState state) {
         boolean changed = false;
         for (int i = state.getSourcesCount() - 1; i >= 0; i--) {
             final InsetsSource source = state.sourceAt(i);
@@ -199,7 +203,7 @@ class InsetsStateController {
         if (target == previous) {
             return;
         }
-        final InsetsSourceProvider provider = getSourceProvider(type);
+        final InsetsSourceProvider provider = mProviders.get(type);
         if (provider == null) {
             return;
         }
@@ -207,6 +211,7 @@ class InsetsStateController {
             return;
         }
         provider.updateControlForTarget(target, false /* force */);
+        target = provider.getControlTarget();
         if (previous != null) {
             removeFromControlMaps(previous, type, false /* fake */);
             mPendingControlChanged.add(previous);
@@ -296,6 +301,9 @@ class InsetsStateController {
 
     void notifyInsetsChanged() {
         mDisplayContent.forAllWindows(mDispatchInsetsChanged, true /* traverseTopToBottom */);
+        if (mDisplayContent.mRemoteInsetsControlTarget != null) {
+            mDisplayContent.mRemoteInsetsControlTarget.notifyInsetsChanged();
+        }
     }
 
     void dump(String prefix, PrintWriter pw) {

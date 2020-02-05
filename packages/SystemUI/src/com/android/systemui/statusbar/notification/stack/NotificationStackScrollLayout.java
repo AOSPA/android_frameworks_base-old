@@ -88,7 +88,6 @@ import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.SwipeHelper;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
-import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.MenuItem;
@@ -109,14 +108,12 @@ import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.FakeShadowView;
 import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
-import com.android.systemui.statusbar.notification.NotificationSectionsFeatureManager;
 import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.notification.ShadeViewRefactor;
 import com.android.systemui.statusbar.notification.ShadeViewRefactor.RefactorComponent;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
-import com.android.systemui.statusbar.notification.people.PeopleHubSectionFooterViewAdapter;
 import com.android.systemui.statusbar.notification.row.ActivatableNotificationView;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.ExpandableView;
@@ -134,7 +131,7 @@ import com.android.systemui.statusbar.phone.LockscreenGestureLogger;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.NotificationGroupManager.OnGroupChangeListener;
 import com.android.systemui.statusbar.phone.NotificationIconAreaController;
-import com.android.systemui.statusbar.phone.NotificationPanelView;
+import com.android.systemui.statusbar.phone.NotificationPanelViewController;
 import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.phone.StatusBar;
@@ -496,8 +493,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     protected boolean mClearAllEnabled;
 
     private Interpolator mHideXInterpolator = Interpolators.FAST_OUT_SLOW_IN;
-    private NotificationPanelView mNotificationPanel;
-    private final ShadeController mShadeController = Dependency.get(ShadeController.class);
+    private NotificationPanelViewController mNotificationPanelController;
 
     private final NotificationGutsManager mNotificationGutsManager;
     private final NotificationSectionsManager mSectionsManager;
@@ -513,17 +509,14 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
             @Named(ALLOW_NOTIFICATION_LONG_PRESS_NAME) boolean allowLongPress,
             NotificationRoundnessManager notificationRoundnessManager,
             DynamicPrivacyController dynamicPrivacyController,
-            ConfigurationController configurationController,
-            ActivityStarter activityStarter,
-            StatusBarStateController statusBarStateController,
+            SysuiStatusBarStateController statusBarStateController,
             HeadsUpManagerPhone headsUpManager,
             KeyguardBypassController keyguardBypassController,
             FalsingManager falsingManager,
             NotificationLockscreenUserManager notificationLockscreenUserManager,
             NotificationGutsManager notificationGutsManager,
-            NotificationSectionsFeatureManager sectionsFeatureManager,
-            PeopleHubSectionFooterViewAdapter peopleHubViewAdapter,
-            ZenModeController zenController) {
+            ZenModeController zenController,
+            NotificationSectionsManager notificationSectionsManager) {
         super(context, attrs, 0, 0);
         Resources res = getResources();
 
@@ -540,22 +533,14 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         mFalsingManager = falsingManager;
         mZenController = zenController;
 
-        int[] buckets = sectionsFeatureManager.getNotificationBuckets();
-        mSectionsManager =
-                new NotificationSectionsManager(
-                        this,
-                        activityStarter,
-                        statusBarStateController,
-                        configurationController,
-                        peopleHubViewAdapter,
-                        buckets.length);
-        mSectionsManager.initialize(LayoutInflater.from(context));
+        mSectionsManager = notificationSectionsManager;
+        mSectionsManager.initialize(this, LayoutInflater.from(context));
         mSectionsManager.setOnClearGentleNotifsClickListener(v -> {
             // Leave the shade open if there will be other notifs left over to clear
             final boolean closeShade = !hasActiveClearableNotifications(ROWS_HIGH_PRIORITY);
             clearNotifications(ROWS_GENTLE, closeShade);
         });
-        mSections = mSectionsManager.createSectionsForBuckets(buckets);
+        mSections = mSectionsManager.createSectionsForBuckets();
 
         mAmbientState = new AmbientState(context, mSectionsManager, mHeadsUpManager);
         mBgColor = context.getColor(R.color.notification_shade_background_color);
@@ -618,7 +603,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         });
         dynamicPrivacyController.addListener(this);
         mDynamicPrivacyController = dynamicPrivacyController;
-        mStatusbarStateController = (SysuiStatusBarStateController) statusBarStateController;
+        mStatusbarStateController = statusBarStateController;
     }
 
     private void updateDismissRtlSetting(boolean dismissRtl) {
@@ -5519,7 +5504,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
 
         if (viewsToRemove.isEmpty()) {
             if (closeShade) {
-                mShadeController.animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE);
+                Dependency.get(ShadeController.class).animateCollapsePanels(
+                        CommandQueue.FLAG_EXCLUDE_NONE);
             }
             return;
         }
@@ -5577,11 +5563,12 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
 
         final Runnable onSlideAwayAnimationComplete = () -> {
             if (closeShade) {
-                mShadeController.addPostCollapseAction(() -> {
+                Dependency.get(ShadeController.class).addPostCollapseAction(() -> {
                     setDismissAllInProgress(false);
                     onAnimationComplete.run();
                 });
-                mShadeController.animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE);
+                Dependency.get(ShadeController.class).animateCollapsePanels(
+                        CommandQueue.FLAG_EXCLUDE_NONE);
             } else {
                 setDismissAllInProgress(false);
                 onAnimationComplete.run();
@@ -5657,8 +5644,9 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
     }
 
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
-    public void setNotificationPanel(NotificationPanelView notificationPanelView) {
-        mNotificationPanel = notificationPanelView;
+    public void setNotificationPanelController(
+            NotificationPanelViewController notificationPanelViewController) {
+        mNotificationPanelController = notificationPanelViewController;
     }
 
     public void updateIconAreaViews() {
@@ -6205,6 +6193,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
         }
 
         @Override
+        public void onSnooze(StatusBarNotification sbn, int hours) {
+            mStatusBar.setNotificationSnoozed(sbn, hours);
+        }
+
+        @Override
         public boolean shouldDismissQuickly() {
             return NotificationStackScrollLayout.this.isExpanded() && mAmbientState.isFullyAwake();
         }
@@ -6402,7 +6395,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
 
                 if (!mAmbientState.isDozing() || startingChild != null) {
                     // We have notifications, go to locked shade.
-                    mShadeController.goToLockedShade(startingChild);
+                    Dependency.get(ShadeController.class).goToLockedShade(startingChild);
                     if (startingChild instanceof ExpandableNotificationRow) {
                         ExpandableNotificationRow row = (ExpandableNotificationRow) startingChild;
                         row.onExpandedByGesture(true /* drag down is always an open */);
@@ -6441,7 +6434,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements ScrollAd
 
         @Override
         public void setEmptyDragAmount(float amount) {
-            mNotificationPanel.setEmptyDragAmount(amount);
+            mNotificationPanelController.setEmptyDragAmount(amount);
         }
 
         @Override

@@ -228,7 +228,7 @@ public class BubbleDataTest extends SysuiTestCase {
     }
 
     @Test
-    public void sameUpdate_NotInShade_showFlyout() {
+    public void sameUpdate_NotInShade_NotVisuallyInterruptive_dontShowFlyout() {
         // Setup
         mBubbleData.setListener(mListener);
 
@@ -247,7 +247,7 @@ public class BubbleDataTest extends SysuiTestCase {
 
         // Verify
         BubbleData.Update update = mUpdateCaptor.getValue();
-        assertThat(update.updatedBubble.showFlyout()).isTrue();
+        assertThat(update.updatedBubble.showFlyout()).isFalse();
     }
 
     // COLLAPSED / ADD
@@ -952,9 +952,8 @@ public class BubbleDataTest extends SysuiTestCase {
             long postTime) {
         // BubbleMetadata
         Notification.BubbleMetadata bubbleMetadata = new Notification.BubbleMetadata.Builder()
-                .setIntent(mExpandIntent)
+                .createIntentBubble(mExpandIntent, Icon.createWithResource("", 0))
                 .setDeleteIntent(mDeleteIntent)
-                .setIcon(Icon.createWithResource("", 0))
                 .build();
         // Notification -> BubbleMetadata
         Notification notification = mNotificationTestHelper.createNotification(false,

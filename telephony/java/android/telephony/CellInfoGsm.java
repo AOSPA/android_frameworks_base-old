@@ -16,11 +16,12 @@
 
 package android.telephony;
 
+import com.android.telephony.Rlog;
+
 import android.annotation.NonNull;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.telephony.Rlog;
 
 /**
  * A {@link CellInfo} representing a GSM cell that provides identity and measurement info.

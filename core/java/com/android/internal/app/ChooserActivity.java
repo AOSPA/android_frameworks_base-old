@@ -26,7 +26,6 @@ import android.animation.ValueAnimator;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.UnsupportedAppUsage;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.prediction.AppPredictionContext;
@@ -34,6 +33,7 @@ import android.app.prediction.AppPredictionManager;
 import android.app.prediction.AppPredictor;
 import android.app.prediction.AppTarget;
 import android.app.prediction.AppTargetEvent;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.ComponentName;
@@ -71,6 +71,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
 import android.os.Parcelable;
+import android.os.PatternMatcher;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
@@ -1650,10 +1651,28 @@ public class ChooserActivity extends ResolverActivity implements
         try {
             final Intent intent = getTargetIntent();
             String dataString = intent.getDataString();
-            if (TextUtils.isEmpty(dataString)) {
-                dataString = intent.getType();
+            if (!TextUtils.isEmpty(dataString)) {
+                return new IntentFilter(intent.getAction(), dataString);
             }
-            return new IntentFilter(intent.getAction(), dataString);
+            IntentFilter intentFilter = new IntentFilter(intent.getAction(), intent.getType());
+            List<Uri> contentUris = new ArrayList<>();
+            if (Intent.ACTION_SEND.equals(intent.getAction())) {
+                Uri uri = (Uri) intent.getParcelableExtra(Intent.EXTRA_STREAM);
+                if (uri != null) {
+                    contentUris.add(uri);
+                }
+            } else {
+                List<Uri> uris = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+                if (uris != null) {
+                    contentUris.addAll(uris);
+                }
+            }
+            for (Uri uri : contentUris) {
+                intentFilter.addDataScheme(uri.getScheme());
+                intentFilter.addDataAuthority(uri.getAuthority(), null);
+                intentFilter.addDataPath(uri.getPath(), PatternMatcher.PATTERN_LITERAL);
+            }
+            return intentFilter;
         } catch (Exception e) {
             Log.e(TAG, "failed to get target intent filter " + e);
             return null;
@@ -2434,11 +2453,6 @@ public class ChooserActivity extends ResolverActivity implements
         FooterViewHolder(View itemView) {
             super(itemView);
         }
-
-        public void setHeight(int height) {
-            itemView.setLayoutParams(
-                    new RecyclerView.LayoutParams(LayoutParams.MATCH_PARENT, height));
-        }
     }
 
     /**
@@ -2471,7 +2485,7 @@ public class ChooserActivity extends ResolverActivity implements
 
         private boolean mLayoutRequested = false;
 
-        private FooterViewHolder mFooterViewHolder;
+        private int mFooterHeight = 0;
 
         private static final int VIEW_TYPE_DIRECT_SHARE = 0;
         private static final int VIEW_TYPE_NORMAL = 1;
@@ -2489,9 +2503,6 @@ public class ChooserActivity extends ResolverActivity implements
             super();
             mChooserListAdapter = wrappedAdapter;
             mLayoutInflater = LayoutInflater.from(ChooserActivity.this);
-
-            mFooterViewHolder = new FooterViewHolder(
-                    new Space(ChooserActivity.this.getApplicationContext()));
 
             mShowAzLabelIfPoss = getNumSheetExpansions() < NUM_EXPANSIONS_TO_HIDE_AZ_LABEL;
 
@@ -2511,7 +2522,7 @@ public class ChooserActivity extends ResolverActivity implements
         }
 
         public void setFooterHeight(int height) {
-            mFooterViewHolder.setHeight(height);
+            mFooterHeight = height;
         }
 
         /**
@@ -2614,7 +2625,10 @@ public class ChooserActivity extends ResolverActivity implements
                 case VIEW_TYPE_CALLER_AND_RANK:
                     return createItemGroupViewHolder(viewType, parent);
                 case VIEW_TYPE_FOOTER:
-                    return mFooterViewHolder;
+                    Space sp = new Space(parent.getContext());
+                    sp.setLayoutParams(new RecyclerView.LayoutParams(
+                            LayoutParams.MATCH_PARENT, mFooterHeight));
+                    return new FooterViewHolder(sp);
                 default:
                     // Since we catch all possible viewTypes above, no chance this is being called.
                     return null;

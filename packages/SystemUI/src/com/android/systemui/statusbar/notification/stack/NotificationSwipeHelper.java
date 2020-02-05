@@ -31,6 +31,7 @@ import com.android.systemui.SwipeHelper;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
+import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.ExpandableView;
 
 class NotificationSwipeHelper extends SwipeHelper implements NotificationSwipeActionHelper {
@@ -281,6 +282,11 @@ class NotificationSwipeHelper extends SwipeHelper implements NotificationSwipeAc
         mCallback.onSnooze(sbn, snoozeOption);
     }
 
+    @Override
+    public void snooze(StatusBarNotification sbn, int hours) {
+        mCallback.onSnooze(sbn, hours);
+    }
+
     @VisibleForTesting
     protected void handleMenuCoveredOrDismissed() {
         View exposedMenuView = getExposedMenuView();
@@ -298,8 +304,8 @@ class NotificationSwipeHelper extends SwipeHelper implements NotificationSwipeAc
     @Override
     public Animator getViewTranslationAnimator(View v, float target,
             ValueAnimator.AnimatorUpdateListener listener) {
-        if (v instanceof SwipeableView) {
-            return ((SwipeableView) v).getTranslateViewAnimator(target, listener);
+        if (v instanceof ExpandableNotificationRow) {
+            return ((ExpandableNotificationRow) v).getTranslateViewAnimator(target, listener);
         } else {
             return superGetViewTranslationAnimator(v, target, listener);
         }
@@ -445,6 +451,8 @@ class NotificationSwipeHelper extends SwipeHelper implements NotificationSwipeAc
         void handleChildViewDismissed(View view);
 
         void onSnooze(StatusBarNotification sbn, SnoozeOption snoozeOption);
+
+        void onSnooze(StatusBarNotification sbn, int hours);
 
         void onDismiss();
     }

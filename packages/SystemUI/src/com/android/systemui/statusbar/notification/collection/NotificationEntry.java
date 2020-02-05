@@ -59,6 +59,7 @@ import com.android.systemui.statusbar.StatusBarIconView;
 import com.android.systemui.statusbar.notification.InflationException;
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifFilter;
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.NotifPromoter;
+import com.android.systemui.statusbar.notification.collection.notifcollection.NotifLifetimeExtender;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.NotificationGuts;
 import com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.InflationFlag;
@@ -101,6 +102,9 @@ public final class NotificationEntry extends ListEntry {
 
     /** If this was a group child that was promoted to the top level, then who did the promoting. */
     @Nullable NotifPromoter mNotifPromoter;
+
+    /** If this notification had an issue with inflating. Only used with the NewNotifPipeline **/
+    private boolean mHasInflationError;
 
 
     /*
@@ -201,11 +205,8 @@ public final class NotificationEntry extends ListEntry {
                     + " doesn't match existing key " + mKey);
         }
 
-        if (!Objects.equals(mSbn, sbn)) {
-            mSbn = sbn;
-            mBubbleMetadata = mSbn.getNotification().getBubbleMetadata();
-            onSbnUpdated();
-        }
+        mSbn = sbn;
+        mBubbleMetadata = mSbn.getNotification().getBubbleMetadata();
     }
 
     /**
@@ -230,10 +231,7 @@ public final class NotificationEntry extends ListEntry {
                     + " doesn't match existing key " + mKey);
         }
 
-        if (!Objects.equals(mRanking, ranking)) {
-            mRanking = ranking;
-            onRankingUpdated();
-        }
+        mRanking = ranking;
     }
 
     /*
@@ -574,6 +572,18 @@ public final class NotificationEntry extends ListEntry {
     public void onRemoteInputInserted() {
         lastRemoteInputSent = NOT_LAUNCHED_YET;
         remoteInputTextWhenReset = null;
+    }
+
+    void setHasInflationError(boolean hasError) {
+        mHasInflationError = hasError;
+    }
+
+    /**
+     * Whether this notification had an error when attempting to inflate. This is only used in
+     * the NewNotifPipeline
+     */
+    public boolean hasInflationError() {
+        return mHasInflationError;
     }
 
     public void setHasSentReply() {

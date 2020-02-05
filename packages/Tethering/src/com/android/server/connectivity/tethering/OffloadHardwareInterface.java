@@ -16,7 +16,7 @@
 
 package com.android.server.connectivity.tethering;
 
-import static com.android.internal.util.BitUtils.uint16;
+import static android.net.util.TetheringUtils.uint16;
 
 import android.hardware.tetheroffload.control.V1_0.IOffloadControl;
 import android.hardware.tetheroffload.control.V1_0.ITetheringOffloadCallback;
@@ -24,9 +24,12 @@ import android.hardware.tetheroffload.control.V1_0.NatTimeoutUpdate;
 import android.hardware.tetheroffload.control.V1_0.NetworkProtocol;
 import android.hardware.tetheroffload.control.V1_0.OffloadCallbackEvent;
 import android.net.util.SharedLog;
+import android.net.util.TetheringUtils;
 import android.os.Handler;
 import android.os.RemoteException;
 import android.system.OsConstants;
+
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
 
@@ -46,8 +49,6 @@ public class OffloadHardwareInterface {
     private static final String NO_INTERFACE_NAME = "";
     private static final String NO_IPV4_ADDRESS = "";
     private static final String NO_IPV4_GATEWAY = "";
-
-    private static native boolean configOffload();
 
     private final Handler mHandler;
     private final SharedLog mLog;
@@ -92,6 +93,12 @@ public class OffloadHardwareInterface {
             txBytes = 0;
         }
 
+        @VisibleForTesting
+        public ForwardedStats(long rxBytes, long txBytes) {
+            this.rxBytes = rxBytes;
+            this.txBytes = txBytes;
+        }
+
         /** Add Tx/Rx bytes. */
         public void add(ForwardedStats other) {
             rxBytes += other.rxBytes;
@@ -107,8 +114,6 @@ public class OffloadHardwareInterface {
     public OffloadHardwareInterface(Handler h, SharedLog log) {
         mHandler = h;
         mLog = log.forSubComponent(TAG);
-
-        System.loadLibrary("tetheroffloadjni");
     }
 
     /** Get default value indicating whether offload is supported. */
@@ -118,7 +123,7 @@ public class OffloadHardwareInterface {
 
     /** Configure offload management process. */
     public boolean initOffloadConfig() {
-        return configOffload();
+        return TetheringUtils.configOffload();
     }
 
     /** Initialize the tethering offload HAL. */

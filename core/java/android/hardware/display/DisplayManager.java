@@ -23,9 +23,10 @@ import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.app.KeyguardManager;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.Point;
 import android.media.projection.MediaProjection;
 import android.os.Handler;
@@ -400,10 +401,10 @@ public final class DisplayManager {
         if (display == null) {
             // TODO: We cannot currently provide any override configurations for metrics on displays
             // other than the display the context is associated with.
-            final Context context = mContext.getDisplayId() == displayId
-                    ? mContext : mContext.getApplicationContext();
+            final Resources resources = mContext.getDisplayId() == displayId
+                    ? mContext.getResources() : null;
 
-            display = mGlobal.getCompatibleDisplay(displayId, context.getResources());
+            display = mGlobal.getCompatibleDisplay(displayId, resources);
             if (display != null) {
                 mDisplays.put(displayId, display);
             }
@@ -746,6 +747,17 @@ public final class DisplayManager {
     @Nullable
     public BrightnessConfiguration getDefaultBrightnessConfiguration() {
         return mGlobal.getDefaultBrightnessConfiguration();
+    }
+
+
+    /**
+     * Gets the last requested minimal post processing setting for the display with displayId.
+     *
+     * @hide
+     */
+    @TestApi
+    public boolean isMinimalPostProcessingRequested(int displayId) {
+        return mGlobal.isMinimalPostProcessingRequested(displayId);
     }
 
     /**

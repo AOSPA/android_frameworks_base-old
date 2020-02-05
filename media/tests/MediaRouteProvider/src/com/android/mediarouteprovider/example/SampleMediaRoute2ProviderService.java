@@ -16,14 +16,15 @@
 
 package com.android.mediarouteprovider.example;
 
-import static android.media.MediaRoute2Info.DEVICE_TYPE_SPEAKER;
-import static android.media.MediaRoute2Info.DEVICE_TYPE_TV;
+import static android.media.MediaRoute2Info.DEVICE_TYPE_REMOTE_SPEAKER;
+import static android.media.MediaRoute2Info.DEVICE_TYPE_REMOTE_TV;
 
+import android.annotation.Nullable;
 import android.content.Intent;
 import android.media.MediaRoute2Info;
-import android.media.MediaRoute2ProviderInfo;
 import android.media.MediaRoute2ProviderService;
-import android.media.RouteSessionInfo;
+import android.media.RoutingSessionInfo;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.text.TextUtils;
 
@@ -46,8 +47,8 @@ public class SampleMediaRoute2ProviderService extends MediaRoute2ProviderService
     public static final String ROUTE_ID5_TO_TRANSFER_TO = "route_id5_to_transfer_to";
     public static final String ROUTE_NAME5 = "Sample Route 5 - Route to transfer to";
 
-    public static final String ROUTE_ID_SPECIAL_CATEGORY = "route_special_category";
-    public static final String ROUTE_NAME_SPECIAL_CATEGORY = "Special Category Route";
+    public static final String ROUTE_ID_SPECIAL_FEATURE = "route_special_feature";
+    public static final String ROUTE_NAME_SPECIAL_FEATURE = "Special Feature Route";
 
     public static final int VOLUME_MAX = 100;
     public static final String ROUTE_ID_FIXED_VOLUME = "route_fixed_volume";
@@ -58,49 +59,49 @@ public class SampleMediaRoute2ProviderService extends MediaRoute2ProviderService
     public static final String ACTION_REMOVE_ROUTE =
             "com.android.mediarouteprovider.action_remove_route";
 
-    public static final String CATEGORY_SAMPLE =
-            "com.android.mediarouteprovider.CATEGORY_SAMPLE";
-    public static final String CATEGORY_SPECIAL =
-            "com.android.mediarouteprovider.CATEGORY_SPECIAL";
+    public static final String FEATURE_SAMPLE =
+            "com.android.mediarouteprovider.FEATURE_SAMPLE";
+    public static final String FEATURE_SPECIAL =
+            "com.android.mediarouteprovider.FEATURE_SPECIAL";
 
     Map<String, MediaRoute2Info> mRoutes = new HashMap<>();
-    Map<String, Integer> mRouteSessionMap = new HashMap<>();
+    Map<String, String> mRouteIdToSessionId = new HashMap<>();
     private int mNextSessionId = 1000;
 
     private void initializeRoutes() {
         MediaRoute2Info route1 = new MediaRoute2Info.Builder(ROUTE_ID1, ROUTE_NAME1)
-                .addSupportedCategory(CATEGORY_SAMPLE)
-                .setDeviceType(DEVICE_TYPE_TV)
+                .addFeature(FEATURE_SAMPLE)
+                .setDeviceType(DEVICE_TYPE_REMOTE_TV)
                 .build();
         MediaRoute2Info route2 = new MediaRoute2Info.Builder(ROUTE_ID2, ROUTE_NAME2)
-                .addSupportedCategory(CATEGORY_SAMPLE)
-                .setDeviceType(DEVICE_TYPE_SPEAKER)
+                .addFeature(FEATURE_SAMPLE)
+                .setDeviceType(DEVICE_TYPE_REMOTE_SPEAKER)
                 .build();
         MediaRoute2Info route3 = new MediaRoute2Info.Builder(
                 ROUTE_ID3_SESSION_CREATION_FAILED, ROUTE_NAME3)
-                .addSupportedCategory(CATEGORY_SAMPLE)
+                .addFeature(FEATURE_SAMPLE)
                 .build();
         MediaRoute2Info route4 = new MediaRoute2Info.Builder(
                 ROUTE_ID4_TO_SELECT_AND_DESELECT, ROUTE_NAME4)
-                .addSupportedCategory(CATEGORY_SAMPLE)
+                .addFeature(FEATURE_SAMPLE)
                 .build();
         MediaRoute2Info route5 = new MediaRoute2Info.Builder(
                 ROUTE_ID5_TO_TRANSFER_TO, ROUTE_NAME5)
-                .addSupportedCategory(CATEGORY_SAMPLE)
+                .addFeature(FEATURE_SAMPLE)
                 .build();
         MediaRoute2Info routeSpecial =
-                new MediaRoute2Info.Builder(ROUTE_ID_SPECIAL_CATEGORY, ROUTE_NAME_SPECIAL_CATEGORY)
-                        .addSupportedCategory(CATEGORY_SAMPLE)
-                        .addSupportedCategory(CATEGORY_SPECIAL)
+                new MediaRoute2Info.Builder(ROUTE_ID_SPECIAL_FEATURE, ROUTE_NAME_SPECIAL_FEATURE)
+                        .addFeature(FEATURE_SAMPLE)
+                        .addFeature(FEATURE_SPECIAL)
                         .build();
         MediaRoute2Info fixedVolumeRoute =
                 new MediaRoute2Info.Builder(ROUTE_ID_FIXED_VOLUME, ROUTE_NAME_FIXED_VOLUME)
-                        .addSupportedCategory(CATEGORY_SAMPLE)
+                        .addFeature(FEATURE_SAMPLE)
                         .setVolumeHandling(MediaRoute2Info.PLAYBACK_VOLUME_FIXED)
                         .build();
         MediaRoute2Info variableVolumeRoute =
                 new MediaRoute2Info.Builder(ROUTE_ID_VARIABLE_VOLUME, ROUTE_NAME_VARIABLE_VOLUME)
-                        .addSupportedCategory(CATEGORY_SAMPLE)
+                        .addFeature(FEATURE_SAMPLE)
                         .setVolumeHandling(MediaRoute2Info.PLAYBACK_VOLUME_VARIABLE)
                         .setVolumeMax(VOLUME_MAX)
                         .build();
@@ -154,6 +155,7 @@ public class SampleMediaRoute2ProviderService extends MediaRoute2ProviderService
 
     @Override
     public void onUpdateVolume(String routeId, int delta) {
+        android.util.Log.d(TAG, "onUpdateVolume routeId= " + routeId + "delta=" + delta);
         MediaRoute2Info route = mRoutes.get(routeId);
         if (route == null) {
             return;
@@ -167,38 +169,44 @@ public class SampleMediaRoute2ProviderService extends MediaRoute2ProviderService
     }
 
     @Override
-    public void onCreateSession(String packageName, String routeId, String controlCategory,
-            long requestId) {
+    public void onCreateSession(String packageName, String routeId, long requestId,
+            @Nullable Bundle sessionHints) {
         MediaRoute2Info route = mRoutes.get(routeId);
         if (route == null || TextUtils.equals(ROUTE_ID3_SESSION_CREATION_FAILED, routeId)) {
             // Tell the router that session cannot be created by passing null as sessionInfo.
-            notifySessionCreated(/* sessionInfo= */ null, requestId);
+            notifySessionCreationFailed(requestId);
             return;
         }
         maybeDeselectRoute(routeId);
 
-        final int sessionId = mNextSessionId;
+        final String sessionId = String.valueOf(mNextSessionId);
         mNextSessionId++;
 
         mRoutes.put(routeId, new MediaRoute2Info.Builder(route)
                 .setClientPackageName(packageName)
                 .build());
-        mRouteSessionMap.put(routeId, sessionId);
+        mRouteIdToSessionId.put(routeId, sessionId);
 
-        RouteSessionInfo sessionInfo = new RouteSessionInfo.Builder(
-                sessionId, packageName, controlCategory)
+        RoutingSessionInfo sessionInfo = new RoutingSessionInfo.Builder(sessionId, packageName)
                 .addSelectedRoute(routeId)
                 .addSelectableRoute(ROUTE_ID4_TO_SELECT_AND_DESELECT)
                 .addTransferrableRoute(ROUTE_ID5_TO_TRANSFER_TO)
+                // Set control hints with given sessionHints
+                .setControlHints(sessionHints)
                 .build();
         notifySessionCreated(sessionInfo, requestId);
         publishRoutes();
     }
 
     @Override
-    public void onDestroySession(int sessionId, RouteSessionInfo lastSessionInfo) {
-        for (String routeId : lastSessionInfo.getSelectedRoutes()) {
-            mRouteSessionMap.remove(routeId);
+    public void onReleaseSession(String sessionId) {
+        RoutingSessionInfo sessionInfo = getSessionInfo(sessionId);
+        if (sessionInfo == null) {
+            return;
+        }
+
+        for (String routeId : sessionInfo.getSelectedRoutes()) {
+            mRouteIdToSessionId.remove(routeId);
             MediaRoute2Info route = mRoutes.get(routeId);
             if (route != null) {
                 mRoutes.put(routeId, new MediaRoute2Info.Builder(route)
@@ -206,11 +214,13 @@ public class SampleMediaRoute2ProviderService extends MediaRoute2ProviderService
                         .build());
             }
         }
+        notifySessionReleased(sessionId);
+        publishRoutes();
     }
 
     @Override
-    public void onSelectRoute(int sessionId, String routeId) {
-        RouteSessionInfo sessionInfo = getSessionInfo(sessionId);
+    public void onSelectRoute(String sessionId, String routeId) {
+        RoutingSessionInfo sessionInfo = getSessionInfo(sessionId);
         MediaRoute2Info route = mRoutes.get(routeId);
         if (route == null || sessionInfo == null) {
             return;
@@ -218,67 +228,90 @@ public class SampleMediaRoute2ProviderService extends MediaRoute2ProviderService
         maybeDeselectRoute(routeId);
 
         mRoutes.put(routeId, new MediaRoute2Info.Builder(route)
-                .setClientPackageName(sessionInfo.getPackageName())
+                .setClientPackageName(sessionInfo.getClientPackageName())
                 .build());
-        mRouteSessionMap.put(routeId, sessionId);
+        mRouteIdToSessionId.put(routeId, sessionId);
 
-        RouteSessionInfo newSessionInfo = new RouteSessionInfo.Builder(sessionInfo)
+        RoutingSessionInfo newSessionInfo = new RoutingSessionInfo.Builder(sessionInfo)
                 .addSelectedRoute(routeId)
                 .removeSelectableRoute(routeId)
                 .addDeselectableRoute(routeId)
                 .build();
-        updateSessionInfo(newSessionInfo);
-        notifySessionInfoChanged(newSessionInfo);
+        notifySessionUpdated(newSessionInfo);
     }
 
     @Override
-    public void onDeselectRoute(int sessionId, String routeId) {
-        RouteSessionInfo sessionInfo = getSessionInfo(sessionId);
+    public void onDeselectRoute(String sessionId, String routeId) {
+        RoutingSessionInfo sessionInfo = getSessionInfo(sessionId);
         MediaRoute2Info route = mRoutes.get(routeId);
 
-        mRouteSessionMap.remove(routeId);
-        if (sessionInfo == null || route == null) {
+        if (sessionInfo == null || route == null
+                || !sessionInfo.getSelectedRoutes().contains(routeId)) {
             return;
         }
+
+        mRouteIdToSessionId.remove(routeId);
         mRoutes.put(routeId, new MediaRoute2Info.Builder(route)
                 .setClientPackageName(null)
                 .build());
 
-        RouteSessionInfo newSessionInfo = new RouteSessionInfo.Builder(sessionInfo)
+        if (sessionInfo.getSelectedRoutes().size() == 1) {
+            notifySessionReleased(sessionId);
+            return;
+        }
+
+        RoutingSessionInfo newSessionInfo = new RoutingSessionInfo.Builder(sessionInfo)
                 .removeSelectedRoute(routeId)
                 .addSelectableRoute(routeId)
                 .removeDeselectableRoute(routeId)
                 .build();
-        updateSessionInfo(newSessionInfo);
-        notifySessionInfoChanged(newSessionInfo);
+        notifySessionUpdated(newSessionInfo);
     }
 
     @Override
-    public void onTransferToRoute(int sessionId, String routeId) {
-        RouteSessionInfo sessionInfo = getSessionInfo(sessionId);
-        RouteSessionInfo newSessionInfo = new RouteSessionInfo.Builder(sessionInfo)
+    public void onTransferToRoute(String sessionId, String routeId) {
+        RoutingSessionInfo sessionInfo = getSessionInfo(sessionId);
+        MediaRoute2Info route = mRoutes.get(routeId);
+
+        if (sessionInfo == null || route == null) {
+            return;
+        }
+
+        for (String selectedRouteId : sessionInfo.getSelectedRoutes()) {
+            mRouteIdToSessionId.remove(selectedRouteId);
+            MediaRoute2Info selectedRoute = mRoutes.get(selectedRouteId);
+            if (selectedRoute != null) {
+                mRoutes.put(selectedRouteId, new MediaRoute2Info.Builder(selectedRoute)
+                        .setClientPackageName(null)
+                        .build());
+            }
+        }
+
+        mRoutes.put(routeId, new MediaRoute2Info.Builder(route)
+                .setClientPackageName(sessionInfo.getClientPackageName())
+                .build());
+        mRouteIdToSessionId.put(routeId, sessionId);
+
+        RoutingSessionInfo newSessionInfo = new RoutingSessionInfo.Builder(sessionInfo)
                 .clearSelectedRoutes()
                 .addSelectedRoute(routeId)
                 .removeDeselectableRoute(routeId)
                 .removeTransferrableRoute(routeId)
                 .build();
-        updateSessionInfo(newSessionInfo);
-        notifySessionInfoChanged(newSessionInfo);
+        notifySessionUpdated(newSessionInfo);
+        publishRoutes();
     }
 
     void maybeDeselectRoute(String routeId) {
-        if (!mRouteSessionMap.containsKey(routeId)) {
+        if (!mRouteIdToSessionId.containsKey(routeId)) {
             return;
         }
 
-        int sessionId = mRouteSessionMap.get(routeId);
+        String sessionId = mRouteIdToSessionId.get(routeId);
         onDeselectRoute(sessionId, routeId);
     }
 
     void publishRoutes() {
-        MediaRoute2ProviderInfo info = new MediaRoute2ProviderInfo.Builder()
-                .addRoutes(mRoutes.values())
-                .build();
-        updateProviderInfo(info);
+        notifyRoutes(mRoutes.values());
     }
 }

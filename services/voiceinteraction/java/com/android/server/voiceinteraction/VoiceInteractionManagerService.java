@@ -41,7 +41,9 @@ import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.hardware.soundtrigger.IRecognitionStatusCallback;
+import android.hardware.soundtrigger.ModelParams;
 import android.hardware.soundtrigger.SoundTrigger.KeyphraseSoundModel;
+import android.hardware.soundtrigger.SoundTrigger.ModelParamRange;
 import android.hardware.soundtrigger.SoundTrigger.ModuleProperties;
 import android.hardware.soundtrigger.SoundTrigger.RecognitionConfig;
 import android.os.Binder;
@@ -157,9 +159,13 @@ public class VoiceInteractionManagerService extends SystemService {
         }
     }
 
+    private boolean isSupported(UserInfo user) {
+        return user.isFull();
+    }
+
     @Override
-    public boolean isSupported(UserInfo userInfo) {
-        return userInfo.isFull();
+    public boolean isSupportedUser(TargetUser user) {
+        return isSupported(user.getUserInfo());
     }
 
     @Override
@@ -1084,6 +1090,55 @@ public class VoiceInteractionManagerService extends SystemService {
             }
         }
 
+        @Override
+        public int setParameter(IVoiceInteractionService service, int keyphraseId,
+                @ModelParams int modelParam, int value) {
+            // Allow the call if this is the current voice interaction service.
+            synchronized (this) {
+                enforceIsCurrentVoiceInteractionService(service);
+            }
+
+            final long caller = Binder.clearCallingIdentity();
+            try {
+                return mSoundTriggerInternal.setParameter(keyphraseId, modelParam, value);
+            } finally {
+                Binder.restoreCallingIdentity(caller);
+            }
+        }
+
+        @Override
+        public int getParameter(IVoiceInteractionService service, int keyphraseId,
+                @ModelParams int modelParam) {
+            // Allow the call if this is the current voice interaction service.
+            synchronized (this) {
+                enforceIsCurrentVoiceInteractionService(service);
+            }
+
+            final long caller = Binder.clearCallingIdentity();
+            try {
+                return mSoundTriggerInternal.getParameter(keyphraseId, modelParam);
+            } finally {
+                Binder.restoreCallingIdentity(caller);
+            }
+        }
+
+        @Override
+        @Nullable
+        public ModelParamRange queryParameter(IVoiceInteractionService service,
+                int keyphraseId, @ModelParams int modelParam) {
+            // Allow the call if this is the current voice interaction service.
+            synchronized (this) {
+                enforceIsCurrentVoiceInteractionService(service);
+            }
+
+            final long caller = Binder.clearCallingIdentity();
+            try {
+                return mSoundTriggerInternal.queryParameter(keyphraseId, modelParam);
+            } finally {
+                Binder.restoreCallingIdentity(caller);
+            }
+        }
+
         private synchronized void unloadAllKeyphraseModels() {
             for (int i = 0; i < mLoadedKeyphraseIds.size(); i++) {
                 final long caller = Binder.clearCallingIdentity();
@@ -1292,6 +1347,7 @@ public class VoiceInteractionManagerService extends SystemService {
                 pw.println("  mCurUserUnlocked: " + mCurUserUnlocked);
                 pw.println("  mCurUserSupported: " + mCurUserSupported);
                 dumpSupportedUsers(pw, "  ");
+                mDbHelper.dump(pw);
                 if (mImpl == null) {
                     pw.println("  (No active implementation)");
                     return;

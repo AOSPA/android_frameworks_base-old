@@ -27,6 +27,9 @@ import static com.android.server.integrity.model.ComponentBitSize.KEY_BITS;
 import static com.android.server.integrity.model.ComponentBitSize.OPERATOR_BITS;
 import static com.android.server.integrity.model.ComponentBitSize.SEPARATOR_BITS;
 import static com.android.server.integrity.model.ComponentBitSize.VALUE_SIZE_BITS;
+import static com.android.server.integrity.model.IndexingFileConstants.END_INDEXING_KEY;
+import static com.android.server.integrity.model.IndexingFileConstants.INDEXING_BLOCK_SIZE;
+import static com.android.server.integrity.model.IndexingFileConstants.START_INDEXING_KEY;
 import static com.android.server.integrity.serializer.RuleIndexingDetails.APP_CERTIFICATE_INDEXED;
 import static com.android.server.integrity.serializer.RuleIndexingDetails.NOT_INDEXED;
 import static com.android.server.integrity.serializer.RuleIndexingDetails.PACKAGE_NAME_INDEXED;
@@ -39,33 +42,32 @@ import android.content.integrity.Rule;
 import com.android.internal.util.Preconditions;
 import com.android.server.integrity.IntegrityUtils;
 import com.android.server.integrity.model.BitOutputStream;
+import com.android.server.integrity.model.ByteTrackedOutputStream;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 /** A helper class to serialize rules from the {@link Rule} model to Binary representation. */
 public class RuleBinarySerializer implements RuleSerializer {
-
-    // The parsing time seems acceptable for 100 rules based on the tests in go/ic-rule-file-format.
-    private static final int INDEXING_BLOCK_SIZE = 100;
-
-    private static final String START_INDEXING_KEY = "START_KEY";
-    private static final String END_INDEXING_KEY = "END_KEY";
+    static final int TOTAL_RULE_SIZE_LIMIT = 200000;
+    static final int INDEXED_RULE_SIZE_LIMIT = 100000;
+    static final int NONINDEXED_RULE_SIZE_LIMIT = 1000;
 
     // Get the byte representation for a list of rules.
     @Override
     public byte[] serialize(List<Rule> rules, Optional<Integer> formatVersion)
             throws RuleSerializeException {
         try {
-            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-            serialize(rules, formatVersion, byteArrayOutputStream);
-            return byteArrayOutputStream.toByteArray();
+            ByteArrayOutputStream rulesOutputStream = new ByteArrayOutputStream();
+            serialize(rules, formatVersion, rulesOutputStream, new ByteArrayOutputStream());
+            return rulesOutputStream.toByteArray();
         } catch (Exception e) {
             throw new RuleSerializeException(e.getMessage(), e);
         }
@@ -74,62 +76,99 @@ public class RuleBinarySerializer implements RuleSerializer {
     // Get the byte representation for a list of rules, and write them to an output stream.
     @Override
     public void serialize(
-            List<Rule> rules, Optional<Integer> formatVersion, OutputStream originalOutputStream)
+            List<Rule> rules,
+            Optional<Integer> formatVersion,
+            OutputStream rulesFileOutputStream,
+            OutputStream indexingFileOutputStream)
             throws RuleSerializeException {
         try {
+            if (rules == null) {
+                throw new IllegalArgumentException("Null rules cannot be serialized.");
+            }
+
+            if (rules.size() > TOTAL_RULE_SIZE_LIMIT) {
+                throw new IllegalArgumentException("Too many rules provided.");
+            }
+
             // Determine the indexing groups and the order of the rules within each indexed group.
-            Map<Integer, TreeMap<String, List<Rule>>> indexedRules =
+            Map<Integer, Map<String, List<Rule>>> indexedRules =
                     RuleIndexingDetailsIdentifier.splitRulesIntoIndexBuckets(rules);
 
-            ByteTrackedOutputStream outputStream =
-                    new ByteTrackedOutputStream(originalOutputStream);
+            // Validate the rule blocks are not larger than expected limits.
+            verifySize(indexedRules.get(PACKAGE_NAME_INDEXED), INDEXED_RULE_SIZE_LIMIT);
+            verifySize(indexedRules.get(APP_CERTIFICATE_INDEXED), INDEXED_RULE_SIZE_LIMIT);
+            verifySize(indexedRules.get(NOT_INDEXED), NONINDEXED_RULE_SIZE_LIMIT);
 
-            serializeRuleFileMetadata(formatVersion, outputStream);
+            // Serialize the rules.
+            ByteTrackedOutputStream ruleFileByteTrackedOutputStream =
+                    new ByteTrackedOutputStream(rulesFileOutputStream);
+            serializeRuleFileMetadata(formatVersion, ruleFileByteTrackedOutputStream);
+            LinkedHashMap<String, Integer> packageNameIndexes =
+                    serializeRuleList(
+                            indexedRules.get(PACKAGE_NAME_INDEXED),
+                            ruleFileByteTrackedOutputStream);
+            LinkedHashMap<String, Integer> appCertificateIndexes =
+                    serializeRuleList(
+                            indexedRules.get(APP_CERTIFICATE_INDEXED),
+                            ruleFileByteTrackedOutputStream);
+            LinkedHashMap<String, Integer> unindexedRulesIndexes =
+                    serializeRuleList(
+                            indexedRules.get(NOT_INDEXED), ruleFileByteTrackedOutputStream);
 
-            Map<String, Long> packageNameIndexes =
-                    serializeRuleList(indexedRules.get(PACKAGE_NAME_INDEXED), outputStream);
-            Map<String, Long> appCertificateIndexes =
-                    serializeRuleList(indexedRules.get(APP_CERTIFICATE_INDEXED), outputStream);
-            Map<String, Long> unindexedRulesIndex =
-                    serializeRuleList(indexedRules.get(NOT_INDEXED), outputStream);
-
-            // TODO(b/145493956): Write these indexes into a index file provided by integrity file
-            //  manager.
+            // Serialize their indexes.
+            BitOutputStream indexingBitOutputStream = new BitOutputStream(indexingFileOutputStream);
+            serializeIndexGroup(packageNameIndexes, indexingBitOutputStream, /* isIndexed= */ true);
+            serializeIndexGroup(
+                    appCertificateIndexes, indexingBitOutputStream, /* isIndexed= */ true);
+            serializeIndexGroup(
+                    unindexedRulesIndexes, indexingBitOutputStream, /* isIndexed= */ false);
+            indexingBitOutputStream.flush();
         } catch (Exception e) {
             throw new RuleSerializeException(e.getMessage(), e);
         }
     }
 
-    private void serializeRuleFileMetadata(Optional<Integer> formatVersion,
-            ByteTrackedOutputStream outputStream) throws IOException {
-        int formatVersionValue = formatVersion.orElse(DEFAULT_FORMAT_VERSION);
-
-        BitOutputStream bitOutputStream = new BitOutputStream();
-        bitOutputStream.setNext(FORMAT_VERSION_BITS, formatVersionValue);
-        outputStream.write(bitOutputStream.toByteArray());
+    private void verifySize(Map<String, List<Rule>> ruleListMap, int ruleSizeLimit) {
+        int totalRuleCount =
+                ruleListMap.values().stream()
+                        .map(list -> list.size())
+                        .collect(Collectors.summingInt(Integer::intValue));
+        if (totalRuleCount > ruleSizeLimit) {
+            throw new IllegalArgumentException("Too many rules provided in the indexing group.");
+        }
     }
 
-    private Map<String, Long> serializeRuleList(TreeMap<String, List<Rule>> rulesMap,
-            ByteTrackedOutputStream outputStream)
+    private void serializeRuleFileMetadata(
+            Optional<Integer> formatVersion, ByteTrackedOutputStream outputStream)
             throws IOException {
-        Preconditions.checkArgument(rulesMap != null,
-                "serializeRuleList should never be called with null rule list.");
+        int formatVersionValue = formatVersion.orElse(DEFAULT_FORMAT_VERSION);
 
-        BitOutputStream bitOutputStream = new BitOutputStream();
-        Map<String, Long> indexMapping = new TreeMap();
-        long indexTracker = 0;
+        BitOutputStream bitOutputStream = new BitOutputStream(outputStream);
+        bitOutputStream.setNext(FORMAT_VERSION_BITS, formatVersionValue);
+        bitOutputStream.flush();
+    }
 
+    private LinkedHashMap<String, Integer> serializeRuleList(
+            Map<String, List<Rule>> rulesMap, ByteTrackedOutputStream outputStream)
+            throws IOException {
+        Preconditions.checkArgument(
+                rulesMap != null, "serializeRuleList should never be called with null rule list.");
+
+        BitOutputStream bitOutputStream = new BitOutputStream(outputStream);
+        LinkedHashMap<String, Integer> indexMapping = new LinkedHashMap();
         indexMapping.put(START_INDEXING_KEY, outputStream.getWrittenBytesCount());
-        for (Map.Entry<String, List<Rule>> entry : rulesMap.entrySet()) {
+
+        List<String> sortedKeys = rulesMap.keySet().stream().sorted().collect(Collectors.toList());
+        int indexTracker = 0;
+        for (String key : sortedKeys) {
             if (indexTracker >= INDEXING_BLOCK_SIZE) {
-                indexMapping.put(entry.getKey(), outputStream.getWrittenBytesCount());
+                indexMapping.put(key, outputStream.getWrittenBytesCount());
                 indexTracker = 0;
             }
 
-            for (Rule rule : entry.getValue()) {
-                bitOutputStream.clear();
+            for (Rule rule : rulesMap.get(key)) {
                 serializeRule(rule, bitOutputStream);
-                outputStream.write(bitOutputStream.toByteArray());
+                bitOutputStream.flush();
                 indexTracker++;
             }
         }
@@ -138,7 +177,7 @@ public class RuleBinarySerializer implements RuleSerializer {
         return indexMapping;
     }
 
-    private void serializeRule(Rule rule, BitOutputStream bitOutputStream) {
+    private void serializeRule(Rule rule, BitOutputStream bitOutputStream) throws IOException {
         if (rule == null) {
             throw new IllegalArgumentException("Null rule can not be serialized");
         }
@@ -153,7 +192,8 @@ public class RuleBinarySerializer implements RuleSerializer {
         bitOutputStream.setNext();
     }
 
-    private void serializeFormula(Formula formula, BitOutputStream bitOutputStream) {
+    private void serializeFormula(Formula formula, BitOutputStream bitOutputStream)
+            throws IOException {
         if (formula instanceof AtomicFormula) {
             serializeAtomicFormula((AtomicFormula) formula, bitOutputStream);
         } else if (formula instanceof CompoundFormula) {
@@ -165,7 +205,7 @@ public class RuleBinarySerializer implements RuleSerializer {
     }
 
     private void serializeCompoundFormula(
-            CompoundFormula compoundFormula, BitOutputStream bitOutputStream) {
+            CompoundFormula compoundFormula, BitOutputStream bitOutputStream) throws IOException {
         if (compoundFormula == null) {
             throw new IllegalArgumentException("Null compound formula can not be serialized");
         }
@@ -179,7 +219,7 @@ public class RuleBinarySerializer implements RuleSerializer {
     }
 
     private void serializeAtomicFormula(
-            AtomicFormula atomicFormula, BitOutputStream bitOutputStream) {
+            AtomicFormula atomicFormula, BitOutputStream bitOutputStream) throws IOException {
         if (atomicFormula == null) {
             throw new IllegalArgumentException("Null atomic formula can not be serialized");
         }
@@ -210,8 +250,35 @@ public class RuleBinarySerializer implements RuleSerializer {
         }
     }
 
+    private void serializeIndexGroup(
+            LinkedHashMap<String, Integer> indexes,
+            BitOutputStream bitOutputStream,
+            boolean isIndexed)
+            throws IOException {
+        // Output the starting location of this indexing group.
+        serializeStringValue(START_INDEXING_KEY, /* isHashedValue= */ false, bitOutputStream);
+        serializeIntValue(indexes.get(START_INDEXING_KEY), bitOutputStream);
+
+        // If the group is indexed, output the locations of the indexes.
+        if (isIndexed) {
+            for (Map.Entry<String, Integer> entry : indexes.entrySet()) {
+                if (!entry.getKey().equals(START_INDEXING_KEY)
+                        && !entry.getKey().equals(END_INDEXING_KEY)) {
+                    serializeStringValue(
+                            entry.getKey(), /* isHashedValue= */ false, bitOutputStream);
+                    serializeIntValue(entry.getValue(), bitOutputStream);
+                }
+            }
+        }
+
+        // Output the end location of this indexing group.
+        serializeStringValue(END_INDEXING_KEY, /*isHashedValue= */ false, bitOutputStream);
+        serializeIntValue(indexes.get(END_INDEXING_KEY), bitOutputStream);
+    }
+
     private void serializeStringValue(
-            String value, boolean isHashedValue, BitOutputStream bitOutputStream) {
+            String value, boolean isHashedValue, BitOutputStream bitOutputStream)
+            throws IOException {
         if (value == null) {
             throw new IllegalArgumentException("String value can not be null.");
         }
@@ -224,11 +291,12 @@ public class RuleBinarySerializer implements RuleSerializer {
         }
     }
 
-    private void serializeIntValue(int value, BitOutputStream bitOutputStream) {
+    private void serializeIntValue(int value, BitOutputStream bitOutputStream) throws IOException {
         bitOutputStream.setNext(/* numOfBits= */ 32, value);
     }
 
-    private void serializeBooleanValue(boolean value, BitOutputStream bitOutputStream) {
+    private void serializeBooleanValue(boolean value, BitOutputStream bitOutputStream)
+            throws IOException {
         bitOutputStream.setNext(value);
     }
 

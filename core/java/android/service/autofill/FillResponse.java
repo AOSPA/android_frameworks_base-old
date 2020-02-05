@@ -25,7 +25,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
 import android.app.Activity;
-import android.app.slice.Slice;
 import android.content.IntentSender;
 import android.content.pm.ParceledListSlice;
 import android.os.Bundle;
@@ -87,7 +86,7 @@ public final class FillResponse implements Parcelable {
     private int mRequestId;
     private final @Nullable UserData mUserData;
     private final @Nullable int[] mCancelIds;
-    private final @Nullable ParceledListSlice<Slice> mInlineSuggestionSlices;
+    private final boolean mSupportsInlineSuggestions;
 
     private FillResponse(@NonNull Builder builder) {
         mDatasets = (builder.mDatasets != null) ? new ParceledListSlice<>(builder.mDatasets) : null;
@@ -105,8 +104,7 @@ public final class FillResponse implements Parcelable {
         mRequestId = INVALID_REQUEST_ID;
         mUserData = builder.mUserData;
         mCancelIds = builder.mCancelIds;
-        mInlineSuggestionSlices = (builder.mInlineSuggestionSlices != null)
-                ? new ParceledListSlice<>(builder.mInlineSuggestionSlices) : null;
+        mSupportsInlineSuggestions = builder.mSupportsInlineSuggestions;
     }
 
     /** @hide */
@@ -200,8 +198,8 @@ public final class FillResponse implements Parcelable {
     }
 
     /** @hide */
-    public List<Slice> getInlineSuggestionSlices() {
-        return (mInlineSuggestionSlices != null) ? mInlineSuggestionSlices.getList() : null;
+    public boolean supportsInlineSuggestions() {
+        return mSupportsInlineSuggestions;
     }
 
     /**
@@ -224,7 +222,7 @@ public final class FillResponse implements Parcelable {
         private boolean mDestroyed;
         private UserData mUserData;
         private int[] mCancelIds;
-        private ArrayList<Slice> mInlineSuggestionSlices;
+        private boolean mSupportsInlineSuggestions;
 
         /**
          * Triggers a custom UI before before autofilling the screen with any data set in this
@@ -561,8 +559,8 @@ public final class FillResponse implements Parcelable {
         }
 
         /**
-         * Sets targets with the resources IDs of the child view of
-         * {@link RemoteViews Presentation Template} which will cancel the session when clicked.
+         * Sets target resource IDs of the child view in {@link RemoteViews Presentation Template}
+         * which will cancel the session when clicked.
          * Those targets will be respectively applied to a child of the header, footer and
          * each {@link Dataset}.
          *
@@ -573,23 +571,9 @@ public final class FillResponse implements Parcelable {
          * @throws IllegalStateException if {@link #build()} was already called.
          */
         @NonNull
-        public Builder setCancelTargetIds(@Nullable int[] ids) {
+        public Builder setPresentationCancelIds(@Nullable int[] ids) {
             throwIfDestroyed();
             mCancelIds = ids;
-            return this;
-        }
-
-        /**
-         * TODO(b/137800469): add javadoc
-         */
-        @NonNull
-        public Builder addInlineSuggestionSlice(@NonNull Slice inlineSuggestionSlice) {
-            throwIfDestroyed();
-            throwIfAuthenticationCalled();
-            if (mInlineSuggestionSlices == null) {
-                mInlineSuggestionSlices = new ArrayList<>();
-            }
-            mInlineSuggestionSlices.add(inlineSuggestionSlice);
             return this;
         }
 
@@ -624,6 +608,16 @@ public final class FillResponse implements Parcelable {
                 throw new IllegalStateException(
                         "must add at least 1 dataset when using header or footer");
             }
+
+            if (mDatasets != null) {
+                for (final Dataset dataset : mDatasets) {
+                    if (dataset.getFieldInlinePresentation(0) != null) {
+                        mSupportsInlineSuggestions = true;
+                        break;
+                    }
+                }
+            }
+
             mDestroyed = true;
             return new FillResponse(this);
         }
@@ -694,9 +688,6 @@ public final class FillResponse implements Parcelable {
         if (mCancelIds != null) {
             builder.append(", mCancelIds=").append(mCancelIds.length);
         }
-        if (mInlineSuggestionSlices != null) {
-            builder.append(", inlinedSuggestions=").append(mInlineSuggestionSlices.getList());
-        }
         return builder.append("]").toString();
     }
 
@@ -725,7 +716,6 @@ public final class FillResponse implements Parcelable {
         parcel.writeParcelableArray(mFieldClassificationIds, flags);
         parcel.writeInt(mFlags);
         parcel.writeIntArray(mCancelIds);
-        parcel.writeParcelable(mInlineSuggestionSlices, flags);
         parcel.writeInt(mRequestId);
     }
 
@@ -779,17 +769,7 @@ public final class FillResponse implements Parcelable {
             }
             builder.setFlags(parcel.readInt());
             final int[] cancelIds = parcel.createIntArray();
-            builder.setCancelTargetIds(cancelIds);
-
-            final ParceledListSlice<Slice> parceledInlineSuggestionSlices =
-                    parcel.readParcelable(null);
-            if (parceledInlineSuggestionSlices != null) {
-                final List<Slice> inlineSuggestionSlices = parceledInlineSuggestionSlices.getList();
-                final int size = inlineSuggestionSlices.size();
-                for (int i = 0; i < size; i++) {
-                    builder.addInlineSuggestionSlice(inlineSuggestionSlices.get(i));
-                }
-            }
+            builder.setPresentationCancelIds(cancelIds);
 
             final FillResponse response = builder.build();
             response.setRequestId(parcel.readInt());

@@ -16,10 +16,12 @@
 
 package android.view;
 
+import static android.view.WindowInsets.Type.SIZE;
 import static android.view.WindowInsets.Type.ime;
 import static android.view.WindowInsets.Type.navigationBars;
 import static android.view.WindowInsets.Type.statusBars;
 
+import static android.view.WindowInsets.Type.systemBars;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -28,6 +30,7 @@ import android.graphics.Insets;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
 import android.view.WindowInsets.Builder;
+import android.view.WindowInsets.Type;
 
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
@@ -56,6 +59,18 @@ public class WindowInsetsTest {
         assertTrue(new WindowInsets((Rect) null).isConsumed());
     }
 
+    @Test
+    public void compatInsets_layoutStable() {
+        Insets[] insets = new Insets[SIZE];
+        Insets[] maxInsets = new Insets[SIZE];
+        boolean[] visible = new boolean[SIZE];
+        WindowInsets.assignCompatInsets(maxInsets, new Rect(0, 10, 0, 0));
+        WindowInsets.assignCompatInsets(insets, new Rect(0, 0, 0, 0));
+        WindowInsets windowInsets = new WindowInsets(insets, maxInsets, visible, false, false, null,
+                systemBars(), true /* compatIgnoreVisibility */);
+        assertEquals(Insets.of(0, 10, 0, 0), windowInsets.getSystemWindowInsets());
+    }
+
     // TODO: Move this to CTS once API made public
     @Test
     public void typeMap() {
@@ -63,7 +78,8 @@ public class WindowInsetsTest {
         b.setInsets(navigationBars(), Insets.of(0, 0, 0, 100));
         b.setInsets(ime(), Insets.of(0, 0, 0, 300));
         WindowInsets insets = b.build();
-        assertEquals(300, insets.getSystemWindowInsets().bottom);
+        assertEquals(100, insets.getSystemWindowInsets().bottom);
+        assertEquals(300, insets.getInsets(ime()).bottom);
     }
 
     // TODO: Move this to CTS once API made public

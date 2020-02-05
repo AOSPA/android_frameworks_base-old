@@ -17,11 +17,16 @@
 package android.view;
 
 import android.annotation.FloatRange;
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.graphics.Insets;
+import android.view.WindowInsets.Type;
 import android.view.WindowInsets.Type.InsetsType;
 import android.view.animation.Interpolator;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
  * Interface that allows the application to listen to animation events for windows that cause
@@ -30,14 +35,101 @@ import android.view.animation.Interpolator;
 public interface WindowInsetsAnimationCallback {
 
     /**
-     * Called when an inset animation gets started.
+     * Return value for {@link #getDispatchMode()}: Dispatching of animation events should
+     * stop at this level in the view hierarchy, and no animation events should be dispatch to the
+     * subtree of the view hierarchy.
+     */
+    int DISPATCH_MODE_STOP = 0;
+
+    /**
+     * Return value for {@link #getDispatchMode()}: Dispatching of animation events should
+     * continue in the view hierarchy.
+     */
+    int DISPATCH_MODE_CONTINUE_ON_SUBTREE = 1;
+
+    /** @hide */
+    @IntDef(prefix = { "DISPATCH_MODE_" }, value = {
+            DISPATCH_MODE_STOP,
+            DISPATCH_MODE_CONTINUE_ON_SUBTREE
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface DispatchMode {}
+
+    /**
+     * Retrieves the dispatch mode of this listener. Dispatch of the all animation events is
+     * hierarchical: It will starts at the root of the view hierarchy and then traverse it and
+     * invoke the callback of the specific {@link View} that is being traversed.
+     * The method may return either {@link #DISPATCH_MODE_CONTINUE_ON_SUBTREE} to indicate that
+     * animation events should be propagated to the subtree of the view hierarchy, or
+     * {@link #DISPATCH_MODE_STOP} to stop dispatching. In that case, all animation callbacks
+     * related to the animation passed in will be stopped from propagating to the subtree of the
+     * hierarchy.
+     * <p>
+     * Note that this method will only be invoked once when
+     * {@link View#setWindowInsetsAnimationCallback setting the listener} and then the framework
+     * will use the recorded result.
+     * <p>
+     * Also note that returning {@link #DISPATCH_MODE_STOP} here behaves the same way as returning
+     * {@link WindowInsets#CONSUMED} during the regular insets dispatch in
+     * {@link View#onApplyWindowInsets}.
+     *
+     * @return Either {@link #DISPATCH_MODE_CONTINUE_ON_SUBTREE} to indicate that dispatching of
+     *         animation events will continue to the subtree of the view hierarchy, or
+     *         {@link #DISPATCH_MODE_STOP} to indicate that animation events will stop dispatching.
+     */
+    @DispatchMode
+    int getDispatchMode();
+
+    /**
+     * Called when an insets animation is about to start and before the views have been laid out in
+     * the end state of the animation. The ordering of events during an insets animation is the
+     * following:
+     * <p>
+     * <ul>
+     *     <li>Application calls {@link WindowInsetsController#hideInputMethod()},
+     *     {@link WindowInsetsController#showInputMethod()},
+     *     {@link WindowInsetsController#controlInputMethodAnimation(long, WindowInsetsAnimationControlListener)}</li>
+     *     <li>onPrepare is called on the view hierarchy listeners</li>
+     *     <li>{@link View#onApplyWindowInsets} will be called with the end state of the
+     *     animation</li>
+     *     <li>View hierarchy gets laid out according to the changes the application has requested
+     *     due to the new insets being dispatched</li>
+     *     <li>{@link #onStart} is called <em>before</em> the view
+     *     hierarchy gets drawn in the new laid out state</li>
+     *     <li>{@link #onProgress} is called immediately after with the animation start state</li>
+     *     <li>The frame gets drawn.</li>
+     * </ul>
+     * <p>
+     * This ordering allows the application to inspect the end state after the animation has
+     * finished, and then revert to the starting state of the animation in the first
+     * {@link #onProgress} callback by using post-layout view properties like {@link View#setX} and
+     * related methods.
+     * <p>
+     * Note: If the animation is application controlled by using
+     * {@link WindowInsetsController#controlInputMethodAnimation}, the end state of the animation
+     * is undefined as the application may decide on the end state only by passing in the
+     * {@code shown} parameter when calling {@link WindowInsetsAnimationController#finish}. In this
+     * situation, the system will dispatch the insets in the opposite visibility state before the
+     * animation starts. Example: When controlling the input method with
+     * {@link WindowInsetsController#controlInputMethodAnimation} and the input method is currently
+     * showing, {@link View#onApplyWindowInsets} will receive a {@link WindowInsets} instance for
+     * which {@link WindowInsets#isVisible} will return {@code false} for {@link Type#ime}.
+     *
+     * @param animation The animation that is about to start.
+     */
+    default void onPrepare(@NonNull InsetsAnimation animation) {
+    }
+
+    /**
+     * Called when an insets animation gets started.
      * <p>
      * Note that, like {@link #onProgress}, dispatch of the animation start event is hierarchical:
      * It will starts at the root of the view hierarchy and then traverse it and invoke the callback
-     * of the specific {@link View} that is being traversed. The method my return a modified
+     * of the specific {@link View} that is being traversed. The method may return a modified
      * instance of the bounds by calling {@link AnimationBounds#inset} to indicate that a part of
      * the insets have been used to offset or clip its children, and the children shouldn't worry
-     * about that part anymore.
+     * about that part anymore. Furthermore, if {@link #getDispatchMode()} returns
+     * {@link #DISPATCH_MODE_STOP}, children of this view will not receive the callback anymore.
      *
      * @param animation The animation that is about to start.
      * @param bounds The bounds in which animation happens.
@@ -45,7 +137,7 @@ public interface WindowInsetsAnimationCallback {
      *         subtree of the hierarchy.
      */
     @NonNull
-    default AnimationBounds onStarted(
+    default AnimationBounds onStart(
             @NonNull InsetsAnimation animation, @NonNull AnimationBounds bounds) {
         return bounds;
     }
@@ -61,7 +153,9 @@ public interface WindowInsetsAnimationCallback {
      * The method may return a modified instance by calling
      * {@link WindowInsets#inset(int, int, int, int)} to indicate that a part of the insets have
      * been used to offset or clip its children, and the children shouldn't worry about that part
-     * anymore.
+     * anymore. Furthermore, if {@link #getDispatchMode()} returns
+     * {@link #DISPATCH_MODE_STOP}, children of this view will not receive the callback anymore.
+     *
      * TODO: Introduce a way to map (type -> InsetAnimation) so app developer can query animation
      *  for a given type e.g. callback.getAnimation(type) OR controller.getAnimation(type).
      *  Or on the controller directly?
@@ -72,12 +166,12 @@ public interface WindowInsetsAnimationCallback {
     WindowInsets onProgress(@NonNull WindowInsets insets);
 
     /**
-     * Called when an inset animation has finished.
+     * Called when an insets animation has finished.
      *
      * @param animation The animation that has finished running. This will be the same instance as
-     *                  passed into {@link #onStarted}
+     *                  passed into {@link #onStart}
      */
-    default void onFinished(@NonNull InsetsAnimation animation) {
+    default void onFinish(@NonNull InsetsAnimation animation) {
     }
 
     /**
@@ -196,6 +290,7 @@ public interface WindowInsetsAnimationCallback {
      * Class representing the range of an {@link InsetsAnimation}
      */
     final class AnimationBounds {
+
         private final Insets mLowerBound;
         private final Insets mUpperBound;
 
@@ -253,14 +348,14 @@ public interface WindowInsetsAnimationCallback {
 
         /**
          * Insets both the lower and upper bound by the specified insets. This is to be used in
-         * {@link WindowInsetsAnimationCallback#onStarted} to indicate that a part of the insets has
+         * {@link WindowInsetsAnimationCallback#onStart} to indicate that a part of the insets has
          * been used to offset or clip its children, and the children shouldn't worry about that
          * part anymore.
          *
          * @param insets The amount to inset.
          * @return A copy of this instance inset in the given directions.
          * @see WindowInsets#inset
-         * @see WindowInsetsAnimationCallback#onStarted
+         * @see WindowInsetsAnimationCallback#onStart
          */
         @NonNull
         public AnimationBounds inset(@NonNull Insets insets) {

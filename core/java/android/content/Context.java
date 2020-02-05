@@ -30,6 +30,7 @@ import android.annotation.StringDef;
 import android.annotation.StringRes;
 import android.annotation.StyleRes;
 import android.annotation.StyleableRes;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UserIdInt;
@@ -1825,8 +1826,9 @@ public abstract class Context {
      * @throws ActivityNotFoundException &nbsp;
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
+    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS)
     @SystemApi
+    @TestApi
     public void startActivityAsUser(@RequiresPermission @NonNull Intent intent,
             @NonNull UserHandle user) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
@@ -1873,7 +1875,7 @@ public abstract class Context {
      * @throws ActivityNotFoundException &nbsp;
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
+    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS)
     @UnsupportedAppUsage
     public void startActivityAsUser(@RequiresPermission Intent intent, @Nullable Bundle options,
             UserHandle userId) {
@@ -1979,7 +1981,7 @@ public abstract class Context {
      * @see #startActivities(Intent[])
      * @see PackageManager#resolveActivity
      */
-    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
+    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS)
     public int startActivitiesAsUser(Intent[] intents, Bundle options, UserHandle userHandle) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
@@ -3240,15 +3242,40 @@ public abstract class Context {
     }
 
     /**
-     * Same as {@link #bindService(Intent, ServiceConnection, int)}, but with an explicit userHandle
-     * argument for use by system server and other multi-user aware code.
-     * @hide
+     * Binds to a service in the given {@code user} in the same manner as
+     * {@link #bindService(Intent, ServiceConnection, int)}.
+     *
+     * <p>If the given {@code user} is in the same profile group and the target package is the
+     * same as the caller, {@code android.Manifest.permission.INTERACT_ACROSS_PROFILES} is
+     * sufficient. Otherwise, requires {@code android.Manifest.permission.INTERACT_ACROSS_USERS}
+     * for interacting with other users.
+     *
+     * @param service Identifies the service to connect to.  The Intent must
+     *      specify an explicit component name.
+     * @param conn Receives information as the service is started and stopped.
+     *      This must be a valid ServiceConnection object; it must not be null.
+     * @param flags Operation options for the binding.  May be 0,
+     *          {@link #BIND_AUTO_CREATE}, {@link #BIND_DEBUG_UNBIND},
+     *          {@link #BIND_NOT_FOREGROUND}, {@link #BIND_ABOVE_CLIENT},
+     *          {@link #BIND_ALLOW_OOM_MANAGEMENT}, {@link #BIND_WAIVE_PRIORITY}.
+     *          {@link #BIND_IMPORTANT}, or
+     *          {@link #BIND_ADJUST_WITH_ACTIVITY}.
+     * @return {@code true} if the system is in the process of bringing up a
+     *         service that your client has permission to bind to; {@code false}
+     *         if the system couldn't find the service. If this value is {@code true}, you
+     *         should later call {@link #unbindService} to release the
+     *         connection.
+     *
+     * @throws SecurityException if the client does not have the required permission to bind.
      */
-    @SystemApi
     @SuppressWarnings("unused")
-    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS)
-    public boolean bindServiceAsUser(@RequiresPermission Intent service, ServiceConnection conn,
-            int flags, UserHandle user) {
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.INTERACT_ACROSS_USERS,
+            android.Manifest.permission.INTERACT_ACROSS_PROFILES
+    })
+    public boolean bindServiceAsUser(
+            @NonNull @RequiresPermission Intent service, @NonNull ServiceConnection conn, int flags,
+            @NonNull UserHandle user) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 
@@ -3391,6 +3418,7 @@ public abstract class Context {
             TELEPHONY_SUBSCRIPTION_SERVICE,
             CARRIER_CONFIG_SERVICE,
             EUICC_SERVICE,
+            MMS_SERVICE,
             TELECOM_SERVICE,
             CLIPBOARD_SERVICE,
             INPUT_METHOD_SERVICE,
@@ -3587,6 +3615,8 @@ public abstract class Context {
      * @see android.telephony.CarrierConfigManager
      * @see #EUICC_SERVICE
      * @see android.telephony.euicc.EuiccManager
+     * @see #MMS_SERVICE
+     * @see android.telephony.MmsManager
      * @see #INPUT_METHOD_SERVICE
      * @see android.view.inputmethod.InputMethodManager
      * @see #UI_MODE_SERVICE
@@ -3901,6 +3931,7 @@ public abstract class Context {
      */
     @SystemApi
     @TestApi
+    @SuppressLint("ServiceName")
     public static final String STATUS_BAR_SERVICE = "statusbar";
 
     /**
@@ -3925,10 +3956,12 @@ public abstract class Context {
 
     /**
      * Use with {@link android.os.ServiceManager.getService()} to retrieve a
-     * {@link NetworkStackClient} IBinder for communicating with the network stack
+     * {@link INetworkStackConnector} IBinder for communicating with the network stack
      * @hide
      * @see NetworkStackClient
      */
+    @SystemApi
+    @TestApi
     public static final String NETWORK_STACK_SERVICE = "network_stack";
 
     /**
@@ -3992,6 +4025,8 @@ public abstract class Context {
      */
     public static final String NETWORK_STATS_SERVICE = "netstats";
     /** {@hide} */
+    @SystemApi
+    @SuppressLint("ServiceName")
     public static final String NETWORK_POLICY_SERVICE = "netpolicy";
     /** {@hide} */
     public static final String NETWORK_WATCHLIST_SERVICE = "network_watchlist";
@@ -4015,6 +4050,8 @@ public abstract class Context {
      * @see android.net.wifi.WifiCondManager
      * @hide
      */
+    @SystemApi
+    @SuppressLint("ServiceName")
     public static final String WIFI_COND_SERVICE = "wificond";
 
     /**
@@ -4261,6 +4298,15 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.telephony.MmsManager} to send/receive MMS messages.
+     *
+     * @see #getSystemService(String)
+     * @see android.telephony.MmsManager
+     */
+    public static final String MMS_SERVICE = "mms";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.content.ClipboardManager} for accessing and modifying
      * the contents of the global clipboard.
      *
@@ -4337,6 +4383,7 @@ public abstract class Context {
      * @see #getSystemService(String)
      */
     @TestApi
+    @SuppressLint("ServiceName")  // TODO: This should be renamed to CONTENT_CAPTURE_SERVICE
     public static final String CONTENT_CAPTURE_MANAGER_SERVICE = "content_capture";
 
     /**
@@ -4432,6 +4479,7 @@ public abstract class Context {
      * @hide
      */
     @TestApi
+    @SuppressLint("ServiceName")  // TODO: This should be renamed to DEVICE_IDLE_SERVICE
     public static final String DEVICE_IDLE_CONTROLLER = "deviceidle";
 
     /**
@@ -4441,6 +4489,7 @@ public abstract class Context {
      * @hide
      */
     @TestApi
+    @SuppressLint("ServiceName")  // TODO: This should be renamed to POWER_WHITELIST_SERVICE
     public static final String POWER_WHITELIST_MANAGER = "power_whitelist";
 
     /**
@@ -4971,6 +5020,14 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve an
+     * {@link android.os.SystemConfigManager}.
+     * @hide
+     */
+    @SystemApi
+    public static final String SYSTEM_CONFIG_SERVICE = "system_config";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve an
      * {@link android.telephony.ims.RcsMessageManager}.
      * @hide
      */
@@ -5011,6 +5068,7 @@ public abstract class Context {
      * @hide
      */
     @SystemApi
+    @SuppressLint("ServiceName")
     public static final String BATTERY_STATS_SERVICE = "batterystats";
 
     /**

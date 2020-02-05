@@ -111,6 +111,7 @@ import android.view.WindowManager.LayoutParams;
 import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
 import android.view.autofill.AutofillId;
 import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InlineSuggestionsRequest;
 import android.view.inputmethod.InputBinding;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputConnectionInspector;
@@ -142,6 +143,7 @@ import com.android.internal.os.TransferPipe;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.view.IInlineSuggestionsRequestCallback;
+import com.android.internal.view.IInlineSuggestionsResponseCallback;
 import com.android.internal.view.IInputContext;
 import com.android.internal.view.IInputMethod;
 import com.android.internal.view.IInputMethodClient;
@@ -756,6 +758,14 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     private final WeakHashMap<IBinder, IBinder> mImeTargetWindowMap = new WeakHashMap<>();
 
     /**
+     * Map of generated token to windowToken that is requesting
+     * {@link InputMethodManager#showSoftInput(View, int)}.
+     * This map tracks origin of showSoftInput requests.
+     */
+    @GuardedBy("mMethodMap")
+    private final WeakHashMap<IBinder, IBinder> mShowRequestWindowMap = new WeakHashMap<>();
+
+    /**
      * A ring buffer to store the history of {@link StartInputInfo}.
      */
     private static final class StartInputHistory {
@@ -972,7 +982,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                         hideCurrentInputLocked(0, null);
                         mShowRequested = showRequested;
                     } else if (mShowRequested) {
-                        showCurrentInputLocked(InputMethodManager.SHOW_IMPLICIT, null);
+                        showCurrentInputLocked(
+                                mCurFocusedWindow, InputMethodManager.SHOW_IMPLICIT, null);
                     }
                 } else {
                     boolean enabledChanged = false;
@@ -1790,20 +1801,59 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @GuardedBy("mMethodMap")
-    private void onCreateInlineSuggestionsRequestLocked(ComponentName componentName,
-            AutofillId autofillId, IInlineSuggestionsRequestCallback callback) {
-
+    private void onCreateInlineSuggestionsRequestLocked(@UserIdInt int userId,
+            ComponentName componentName, AutofillId autofillId,
+            IInlineSuggestionsRequestCallback callback) {
         final InputMethodInfo imi = mMethodMap.get(mCurMethodId);
         try {
-            if (imi != null && imi.isInlineSuggestionsEnabled() && mCurMethod != null) {
+            if (userId == mSettings.getCurrentUserId() && imi != null
+                    && imi.isInlineSuggestionsEnabled() && mCurMethod != null) {
                 executeOrSendMessage(mCurMethod,
                         mCaller.obtainMessageOOOO(MSG_INLINE_SUGGESTIONS_REQUEST, mCurMethod,
-                                componentName, autofillId, callback));
+                                componentName, autofillId,
+                                new InlineSuggestionsRequestCallbackDecorator(callback,
+                                        imi.getPackageName())));
             } else {
                 callback.onInlineSuggestionsUnsupported();
             }
         } catch (RemoteException e) {
             Slog.w(TAG, "RemoteException calling onCreateInlineSuggestionsRequest(): " + e);
+        }
+    }
+
+    /**
+     * The decorator which validates the host package name in the
+     * {@link InlineSuggestionsRequest} argument to make sure it matches the IME package name.
+     */
+    private static final class InlineSuggestionsRequestCallbackDecorator
+            extends IInlineSuggestionsRequestCallback.Stub {
+        @NonNull
+        private final IInlineSuggestionsRequestCallback mCallback;
+        @NonNull
+        private final String mImePackageName;
+
+        InlineSuggestionsRequestCallbackDecorator(
+                @NonNull IInlineSuggestionsRequestCallback callback,
+                @NonNull String imePackageName) {
+            mCallback = callback;
+            mImePackageName = imePackageName;
+        }
+
+        @Override
+        public void onInlineSuggestionsUnsupported() throws RemoteException {
+            mCallback.onInlineSuggestionsUnsupported();
+        }
+
+        @Override
+        public void onInlineSuggestionsRequest(InlineSuggestionsRequest request,
+                IInlineSuggestionsResponseCallback callback) throws RemoteException {
+            if (!mImePackageName.equals(request.getHostPackageName())) {
+                throw new SecurityException(
+                        "Host package name in the provide request=[" + request.getHostPackageName()
+                                + "] doesn't match the IME package name=[" + mImePackageName
+                                + "].");
+            }
+            mCallback.onInlineSuggestionsRequest(request, callback);
         }
     }
 
@@ -2034,7 +2084,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 startInputToken, session, mCurInputContext, mCurAttribute));
         if (mShowRequested) {
             if (DEBUG) Slog.v(TAG, "Attach new input asks to show input");
-            showCurrentInputLocked(getAppShowFlags(), null);
+            showCurrentInputLocked(mCurFocusedWindow, getAppShowFlags(), null);
         }
         return new InputBindResult(InputBindResult.ResultCode.SUCCESS_WITH_IME_SESSION,
                 session.session, (session.channel != null ? session.channel.dup() : null),
@@ -2748,7 +2798,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @Override
-    public boolean showSoftInput(IInputMethodClient client, int flags,
+    public boolean showSoftInput(IInputMethodClient client, IBinder windowToken, int flags,
             ResultReceiver resultReceiver) {
         int uid = Binder.getCallingUid();
         synchronized (mMethodMap) {
@@ -2773,7 +2823,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                     }
                 }
                 if (DEBUG) Slog.v(TAG, "Client requesting input be shown");
-                return showCurrentInputLocked(flags, resultReceiver);
+                return showCurrentInputLocked(windowToken, flags, resultReceiver);
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
@@ -2781,7 +2831,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @GuardedBy("mMethodMap")
-    boolean showCurrentInputLocked(int flags, ResultReceiver resultReceiver) {
+    boolean showCurrentInputLocked(IBinder windowToken, int flags, ResultReceiver resultReceiver) {
         mShowRequested = true;
         if (mAccessibilityRequestingNoSoftKeyboard) {
             return false;
@@ -2801,9 +2851,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         boolean res = false;
         if (mCurMethod != null) {
             if (DEBUG) Slog.d(TAG, "showCurrentInputLocked: mCurToken=" + mCurToken);
-            executeOrSendMessage(mCurMethod, mCaller.obtainMessageIOO(
+            // create a dummy token for IMS so that IMS cannot inject windows into client app.
+            Binder showInputToken = new Binder();
+            mShowRequestWindowMap.put(showInputToken, windowToken);
+            executeOrSendMessage(mCurMethod, mCaller.obtainMessageIOOO(
                     MSG_SHOW_SOFT_INPUT, getImeShowFlags(), mCurMethod,
-                    resultReceiver));
+                    resultReceiver, showInputToken));
             mInputShown = true;
             if (mHaveConnection && !mVisibleBound) {
                 bindCurrentInputMethodServiceLocked(
@@ -3104,7 +3157,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                                 attribute, startInputFlags, startInputReason);
                         didStart = true;
                     }
-                    showCurrentInputLocked(InputMethodManager.SHOW_IMPLICIT, null);
+                    showCurrentInputLocked(windowToken, InputMethodManager.SHOW_IMPLICIT, null);
                 }
                 break;
             case LayoutParams.SOFT_INPUT_STATE_UNCHANGED:
@@ -3130,7 +3183,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                                     attribute, startInputFlags, startInputReason);
                             didStart = true;
                         }
-                        showCurrentInputLocked(InputMethodManager.SHOW_IMPLICIT, null);
+                        showCurrentInputLocked(windowToken, InputMethodManager.SHOW_IMPLICIT, null);
                     } else {
                         Slog.e(TAG, "SOFT_INPUT_STATE_VISIBLE is ignored because"
                                 + " there is no focused view that also returns true from"
@@ -3147,7 +3200,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                                 attribute, startInputFlags, startInputReason);
                         didStart = true;
                     }
-                    showCurrentInputLocked(InputMethodManager.SHOW_IMPLICIT, null);
+                    showCurrentInputLocked(windowToken, InputMethodManager.SHOW_IMPLICIT, null);
                 } else {
                     Slog.e(TAG, "SOFT_INPUT_STATE_ALWAYS_VISIBLE is ignored because"
                             + " there is no focused view that also returns true from"
@@ -3586,7 +3639,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @BinderThread
-    private void applyImeVisibility(IBinder token, boolean setVisible) {
+    private void applyImeVisibility(IBinder token, IBinder windowToken, boolean setVisible) {
         synchronized (mMethodMap) {
             if (!calledWithValidTokenLocked(token)) {
                 return;
@@ -3603,7 +3656,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 }
             } else {
                 // Send to window manager to show IME after IME layout finishes.
-                mWindowManagerInternal.showImePostLayout(mLastImeTargetWindow);
+                mWindowManagerInternal.showImePostLayout(mShowRequestWindowMap.get(windowToken));
             }
         }
     }
@@ -3654,7 +3707,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             }
             long ident = Binder.clearCallingIdentity();
             try {
-                showCurrentInputLocked(flags, null);
+                showCurrentInputLocked(mLastImeTargetWindow, flags, null);
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
@@ -3739,7 +3792,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 try {
                     if (DEBUG) Slog.v(TAG, "Calling " + args.arg1 + ".showSoftInput("
                             + msg.arg1 + ", " + args.arg2 + ")");
-                    ((IInputMethod)args.arg1).showSoftInput(msg.arg1, (ResultReceiver)args.arg2);
+                    ((IInputMethod) args.arg1).showSoftInput(
+                            (IBinder) args.arg3, msg.arg1, (ResultReceiver) args.arg2);
                 } catch (RemoteException e) {
                 }
                 args.recycle();
@@ -4471,10 +4525,43 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
     }
 
-    private void onCreateInlineSuggestionsRequest(ComponentName componentName,
-            AutofillId autofillId, IInlineSuggestionsRequestCallback callback) {
+    private void onCreateInlineSuggestionsRequest(@UserIdInt int userId,
+            ComponentName componentName, AutofillId autofillId,
+            IInlineSuggestionsRequestCallback callback) {
         synchronized (mMethodMap) {
-            onCreateInlineSuggestionsRequestLocked(componentName, autofillId, callback);
+            onCreateInlineSuggestionsRequestLocked(userId, componentName, autofillId, callback);
+        }
+    }
+
+    private boolean switchToInputMethod(String imeId, @UserIdInt int userId) {
+        synchronized (mMethodMap) {
+            if (userId == mSettings.getCurrentUserId()) {
+                if (!mMethodMap.containsKey(imeId)
+                        || !mSettings.getEnabledInputMethodListLocked()
+                                .contains(mMethodMap.get(imeId))) {
+                    return false; // IME is not is found or not enabled.
+                }
+                setInputMethodLocked(imeId, NOT_A_SUBTYPE_ID);
+                return true;
+            }
+            final ArrayMap<String, InputMethodInfo> methodMap = new ArrayMap<>();
+            final ArrayList<InputMethodInfo> methodList = new ArrayList<>();
+            final ArrayMap<String, List<InputMethodSubtype>> additionalSubtypeMap =
+                    new ArrayMap<>();
+            AdditionalSubtypeUtils.load(additionalSubtypeMap, userId);
+            queryInputMethodServicesInternal(mContext, userId, additionalSubtypeMap,
+                    methodMap, methodList);
+            final InputMethodSettings settings = new InputMethodSettings(
+                    mContext.getResources(), mContext.getContentResolver(), methodMap,
+                    userId, false);
+            if (!methodMap.containsKey(imeId)
+                    || !settings.getEnabledInputMethodListLocked()
+                            .contains(methodMap.get(imeId))) {
+                return false; // IME is not is found or not enabled.
+            }
+            settings.putSelectedInputMethod(imeId);
+            settings.putSelectedSubtype(NOT_A_SUBTYPE_ID);
+            return true;
         }
     }
 
@@ -4510,9 +4597,14 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
 
         @Override
-        public void onCreateInlineSuggestionsRequest(ComponentName componentName,
+        public void onCreateInlineSuggestionsRequest(int userId, ComponentName componentName,
                 AutofillId autofillId, IInlineSuggestionsRequestCallback cb) {
-            mService.onCreateInlineSuggestionsRequest(componentName, autofillId, cb);
+            mService.onCreateInlineSuggestionsRequest(userId, componentName, autofillId, cb);
+        }
+
+        @Override
+        public boolean switchToInputMethod(String imeId, int userId) {
+            return mService.switchToInputMethod(imeId, userId);
         }
     }
 
@@ -5065,31 +5157,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 if (!userHasDebugPriv(userId, shellCommand)) {
                     continue;
                 }
-                boolean failedToSelectUnknownIme = false;
-                if (userId == mSettings.getCurrentUserId()) {
-                    if (mMethodMap.containsKey(imeId)) {
-                        setInputMethodLocked(imeId, NOT_A_SUBTYPE_ID);
-                    } else {
-                        failedToSelectUnknownIme = true;
-                    }
-                } else {
-                    final ArrayMap<String, InputMethodInfo> methodMap = new ArrayMap<>();
-                    final ArrayList<InputMethodInfo> methodList = new ArrayList<>();
-                    final ArrayMap<String, List<InputMethodSubtype>> additionalSubtypeMap =
-                            new ArrayMap<>();
-                    AdditionalSubtypeUtils.load(additionalSubtypeMap, userId);
-                    queryInputMethodServicesInternal(mContext, userId, additionalSubtypeMap,
-                            methodMap, methodList);
-                    final InputMethodSettings settings = new InputMethodSettings(
-                            mContext.getResources(), mContext.getContentResolver(), methodMap,
-                            userId, false);
-                    if (methodMap.containsKey(imeId)) {
-                        settings.putSelectedInputMethod(imeId);
-                        settings.putSelectedSubtype(NOT_A_SUBTYPE_ID);
-                    } else {
-                        failedToSelectUnknownIme = true;
-                    }
-                }
+                boolean failedToSelectUnknownIme = !switchToInputMethod(imeId, userId);
                 if (failedToSelectUnknownIme) {
                     error.print("Unknown input method ");
                     error.print(imeId);
@@ -5291,8 +5359,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
         @BinderThread
         @Override
-        public void applyImeVisibility(boolean setVisible) {
-            mImms.applyImeVisibility(mToken, setVisible);
+        public void applyImeVisibility(IBinder windowToken, boolean setVisible) {
+            mImms.applyImeVisibility(mToken, windowToken, setVisible);
         }
     }
 }

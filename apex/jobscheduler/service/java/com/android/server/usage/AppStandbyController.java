@@ -17,11 +17,13 @@
 package com.android.server.usage;
 
 import static android.app.usage.UsageStatsManager.REASON_MAIN_DEFAULT;
-import static android.app.usage.UsageStatsManager.REASON_MAIN_FORCED;
+import static android.app.usage.UsageStatsManager.REASON_MAIN_FORCED_BY_SYSTEM;
+import static android.app.usage.UsageStatsManager.REASON_MAIN_FORCED_BY_USER;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_MASK;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_PREDICTED;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_TIMEOUT;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_USAGE;
+import static android.app.usage.UsageStatsManager.REASON_SUB_MASK;
 import static android.app.usage.UsageStatsManager.REASON_SUB_PREDICTED_RESTORED;
 import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_ACTIVE_TIMEOUT;
 import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_EXEMPTED_SYNC_SCHEDULED_DOZE;
@@ -43,10 +45,12 @@ import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_EXEMPTED;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_FREQUENT;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_NEVER;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_RARE;
+import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_RESTRICTED;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_WORKING_SET;
 
 import static com.android.server.SystemService.PHASE_SYSTEM_SERVICES_READY;
 
+import android.annotation.NonNull;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.AppGlobals;
@@ -71,6 +75,7 @@ import android.net.Network;
 import android.net.NetworkRequest;
 import android.net.NetworkScoreManager;
 import android.os.BatteryStats;
+import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.IDeviceIdleController;
@@ -91,7 +96,9 @@ import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.TimeUtils;
 import android.view.Display;
+import android.widget.Toast;
 
+import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IBatteryStats;
@@ -101,7 +108,6 @@ import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.LocalServices;
 import com.android.server.usage.AppIdleHistory.AppUsageHistory;
-import com.android.server.usage.AppStandbyInternal.AppIdleStateChangeListener;
 
 import java.io.File;
 import java.io.PrintWriter;
@@ -109,6 +115,7 @@ import java.time.Duration;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -122,7 +129,7 @@ import java.util.concurrent.CountDownLatch;
 public class AppStandbyController implements AppStandbyInternal {
 
     private static final String TAG = "AppStandbyController";
-    static final boolean DEBUG = false;
+    static final boolean DEBUG = true;
 
     static final boolean COMPRESS_TIME = false;
     private static final long ONE_MINUTE = 60 * 1000;
@@ -564,7 +571,7 @@ public class AppStandbyController implements AppStandbyInternal {
 
                 // If the bucket was forced by the user/developer, leave it alone.
                 // A usage event will be the only way to bring it out of this forced state
-                if (oldMainReason == REASON_MAIN_FORCED) {
+                if (oldMainReason == REASON_MAIN_FORCED_BY_USER) {
                     return;
                 }
                 final int oldBucket = app.currentBucket;
@@ -611,6 +618,16 @@ public class AppStandbyController implements AppStandbyInternal {
                             : REASON_MAIN_USAGE | REASON_SUB_USAGE_ACTIVE_TIMEOUT;
                     if (DEBUG) {
                         Slog.d(TAG, "    Keeping at WORKING_SET due to min timeout");
+                    }
+                }
+
+                if (app.lastRestrictAttemptElapsedTime > app.lastUsedByUserElapsedTime
+                        && elapsedTimeAdjusted - app.lastUsedByUserElapsedTime
+                        >= mInjector.getRestrictedBucketDelayMs()) {
+                    newBucket = STANDBY_BUCKET_RESTRICTED;
+                    reason = app.lastRestrictReason;
+                    if (DEBUG) {
+                        Slog.d(TAG, "Bringing down to RESTRICTED due to timeout");
                     }
                 }
                 if (DEBUG) {
@@ -731,15 +748,16 @@ public class AppStandbyController implements AppStandbyInternal {
                             elapsedRealtime, elapsedRealtime + mStrongUsageTimeoutMillis);
                     nextCheckTime = mStrongUsageTimeoutMillis;
                 }
-                mHandler.sendMessageDelayed(mHandler.obtainMessage
-                        (MSG_CHECK_PACKAGE_IDLE_STATE, userId, -1, pkg),
-                        nextCheckTime);
-                final boolean userStartedInteracting =
-                        appHistory.currentBucket == STANDBY_BUCKET_ACTIVE &&
-                        prevBucket != appHistory.currentBucket &&
-                        (prevBucketReason & REASON_MAIN_MASK) != REASON_MAIN_USAGE;
-                maybeInformListeners(pkg, userId, elapsedRealtime,
-                        appHistory.currentBucket, reason, userStartedInteracting);
+                if (appHistory.currentBucket != prevBucket) {
+                    mHandler.sendMessageDelayed(
+                            mHandler.obtainMessage(MSG_CHECK_PACKAGE_IDLE_STATE, userId, -1, pkg),
+                            nextCheckTime);
+                    final boolean userStartedInteracting =
+                            appHistory.currentBucket == STANDBY_BUCKET_ACTIVE
+                                    && (prevBucketReason & REASON_MAIN_MASK) != REASON_MAIN_USAGE;
+                    maybeInformListeners(pkg, userId, elapsedRealtime,
+                            appHistory.currentBucket, reason, userStartedInteracting);
+                }
 
                 if (previouslyIdle) {
                     notifyBatteryStats(pkg, userId, false);
@@ -782,7 +800,7 @@ public class AppStandbyController implements AppStandbyInternal {
         // Inform listeners if necessary
         if (previouslyIdle != stillIdle) {
             maybeInformListeners(packageName, userId, elapsedRealtime, standbyBucket,
-                    REASON_MAIN_FORCED, false);
+                    REASON_MAIN_FORCED_BY_USER, false);
             if (!stillIdle) {
                 notifyBatteryStats(packageName, userId, idle);
             }
@@ -921,6 +939,15 @@ public class AppStandbyController implements AppStandbyInternal {
         }
     }
 
+    static boolean isUserUsage(int reason) {
+        if ((reason & REASON_MAIN_MASK) == REASON_MAIN_USAGE) {
+            final int subReason = reason & REASON_SUB_MASK;
+            return subReason == REASON_SUB_USAGE_USER_INTERACTION
+                    || subReason == REASON_SUB_USAGE_MOVE_TO_FOREGROUND;
+        }
+        return false;
+    }
+
     @Override
     public int[] getIdleUidsForUser(int userId) {
         if (!mAppIdleEnabled) {
@@ -1014,18 +1041,85 @@ public class AppStandbyController implements AppStandbyInternal {
         }
     }
 
-    @VisibleForTesting
-    void setAppStandbyBucket(String packageName, int userId, @StandbyBuckets int newBucket,
-            int reason, long elapsedRealtime) {
-        setAppStandbyBucket(packageName, userId, newBucket, reason, elapsedRealtime, false);
+    @Override
+    public void restrictApp(@NonNull String packageName, int userId, int restrictReason) {
+        // If the package is not installed, don't allow the bucket to be set.
+        if (!mInjector.isPackageInstalled(packageName, 0, userId)) {
+            Slog.e(TAG, "Tried to restrict uninstalled app: " + packageName);
+            return;
+        }
+
+        final int reason = REASON_MAIN_FORCED_BY_SYSTEM | (REASON_SUB_MASK & restrictReason);
+        final long nowElapsed = mInjector.elapsedRealtime();
+        setAppStandbyBucket(packageName, userId, STANDBY_BUCKET_RESTRICTED, reason,
+                nowElapsed, false);
     }
 
     @Override
-    public void setAppStandbyBucket(String packageName, int userId, @StandbyBuckets int newBucket,
+    public void setAppStandbyBucket(@NonNull String packageName, int bucket, int userId,
+            int callingUid, int callingPid) {
+        setAppStandbyBuckets(
+                Collections.singletonList(new AppStandbyInfo(packageName, bucket)),
+                userId, callingUid, callingPid);
+    }
+
+    @Override
+    public void setAppStandbyBuckets(@NonNull List<AppStandbyInfo> appBuckets, int userId,
+            int callingUid, int callingPid) {
+        userId = ActivityManager.handleIncomingUser(
+                callingPid, callingUid, userId, false, true, "setAppStandbyBucket", null);
+        final boolean shellCaller = callingUid == Process.ROOT_UID
+                || callingUid == Process.SHELL_UID;
+        final int reason;
+        // The Settings app runs in the system UID but in a separate process. Assume
+        // things coming from other processes are due to the user.
+        if ((UserHandle.isSameApp(callingUid, Process.SYSTEM_UID) && callingPid != Process.myPid())
+                || shellCaller) {
+            reason = REASON_MAIN_FORCED_BY_USER;
+        } else if (UserHandle.isCore(callingUid)) {
+            reason = REASON_MAIN_FORCED_BY_SYSTEM;
+        } else {
+            reason = REASON_MAIN_PREDICTED;
+        }
+        final int packageFlags = PackageManager.MATCH_ANY_USER
+                | PackageManager.MATCH_DIRECT_BOOT_UNAWARE
+                | PackageManager.MATCH_DIRECT_BOOT_AWARE;
+        final int numApps = appBuckets.size();
+        final long elapsedRealtime = mInjector.elapsedRealtime();
+        for (int i = 0; i < numApps; ++i) {
+            final AppStandbyInfo bucketInfo = appBuckets.get(i);
+            final String packageName = bucketInfo.mPackageName;
+            final int bucket = bucketInfo.mStandbyBucket;
+            if (bucket < STANDBY_BUCKET_ACTIVE || bucket > STANDBY_BUCKET_NEVER) {
+                throw new IllegalArgumentException("Cannot set the standby bucket to " + bucket);
+            }
+            final int packageUid = mInjector.getPackageManagerInternal()
+                    .getPackageUid(packageName, packageFlags, userId);
+            // Caller cannot set their own standby state
+            if (packageUid == callingUid) {
+                throw new IllegalArgumentException("Cannot set your own standby bucket");
+            }
+            if (packageUid < 0) {
+                throw new IllegalArgumentException(
+                        "Cannot set standby bucket for non existent package (" + packageName + ")");
+            }
+            setAppStandbyBucket(packageName, userId, bucket, reason, elapsedRealtime, shellCaller);
+        }
+    }
+
+    @VisibleForTesting
+    void setAppStandbyBucket(String packageName, int userId, @StandbyBuckets int newBucket,
+            int reason) {
+        setAppStandbyBucket(
+                packageName, userId, newBucket, reason, mInjector.elapsedRealtime(), false);
+    }
+
+    private void setAppStandbyBucket(String packageName, int userId, @StandbyBuckets int newBucket,
             int reason, long elapsedRealtime, boolean resetTimeout) {
         synchronized (mAppIdleLock) {
             // If the package is not installed, don't allow the bucket to be set.
             if (!mInjector.isPackageInstalled(packageName, 0, userId)) {
+                Slog.e(TAG, "Tried to set bucket of uninstalled app: " + packageName);
                 return;
             }
             AppIdleHistory.AppUsageHistory app = mAppIdleHistory.getAppUsageHistory(packageName,
@@ -1035,15 +1129,64 @@ public class AppStandbyController implements AppStandbyInternal {
             // Don't allow changing bucket if higher than ACTIVE
             if (app.currentBucket < STANDBY_BUCKET_ACTIVE) return;
 
-            // Don't allow prediction to change from/to NEVER
+            // Don't allow prediction to change from/to NEVER or from RESTRICTED.
             if ((app.currentBucket == STANDBY_BUCKET_NEVER
+                    || app.currentBucket == STANDBY_BUCKET_RESTRICTED
                     || newBucket == STANDBY_BUCKET_NEVER)
                     && predicted) {
                 return;
             }
 
             // If the bucket was forced, don't allow prediction to override
-            if ((app.bucketingReason & REASON_MAIN_MASK) == REASON_MAIN_FORCED && predicted) return;
+            if (predicted
+                    && ((app.bucketingReason & REASON_MAIN_MASK) == REASON_MAIN_FORCED_BY_USER
+                    || (app.bucketingReason & REASON_MAIN_MASK) == REASON_MAIN_FORCED_BY_SYSTEM)) {
+                return;
+            }
+
+            final boolean isForcedByUser =
+                    (reason & REASON_MAIN_MASK) == REASON_MAIN_FORCED_BY_USER;
+
+            // If the current bucket is RESTRICTED, only user force or usage should bring it out.
+            if (app.currentBucket == STANDBY_BUCKET_RESTRICTED && !isUserUsage(reason)
+                    && !isForcedByUser) {
+                return;
+            }
+
+            if (newBucket == STANDBY_BUCKET_RESTRICTED) {
+                mAppIdleHistory
+                        .noteRestrictionAttempt(packageName, userId, elapsedRealtime, reason);
+
+                if (isForcedByUser) {
+                    // Only user force can bypass the delay restriction. If the user forced the
+                    // app into the RESTRICTED bucket, then a toast confirming the action
+                    // shouldn't be surprising.
+                    if (Build.IS_DEBUGGABLE) {
+                        Toast.makeText(mContext,
+                                // Since AppStandbyController sits low in the lock hierarchy,
+                                // make sure not to call out with the lock held.
+                                mHandler.getLooper(),
+                                mContext.getResources().getString(
+                                        R.string.as_app_forced_to_restricted_bucket, packageName),
+                                Toast.LENGTH_SHORT)
+                                .show();
+                    } else {
+                        Slog.i(TAG, packageName + " restricted by user");
+                    }
+                } else {
+                    final long timeUntilRestrictPossibleMs = app.lastUsedByUserElapsedTime
+                            + mInjector.getRestrictedBucketDelayMs() - elapsedRealtime;
+                    if (timeUntilRestrictPossibleMs > 0) {
+                        Slog.w(TAG, "Tried to restrict recently used app: " + packageName
+                                + " due to " + reason);
+                        mHandler.sendMessageDelayed(
+                                mHandler.obtainMessage(
+                                        MSG_CHECK_PACKAGE_IDLE_STATE, userId, -1, packageName),
+                                timeUntilRestrictPossibleMs);
+                        return;
+                    }
+                }
+            }
 
             // If the bucket is required to stay in a higher state for a specified duration, don't
             // override unless the duration has passed
@@ -1377,6 +1520,12 @@ public class AppStandbyController implements AppStandbyInternal {
         private DisplayManager mDisplayManager;
         private PowerManager mPowerManager;
         int mBootPhase;
+        /**
+         * The minimum amount of time required since the last user interaction before an app can be
+         * placed in the RESTRICTED bucket.
+         */
+        // TODO: make configurable via DeviceConfig
+        private long mRestrictedBucketDelayMs = ONE_DAY;
 
         Injector(Context context, Looper looper) {
             mContext = context;
@@ -1401,6 +1550,12 @@ public class AppStandbyController implements AppStandbyInternal {
                 mDisplayManager = (DisplayManager) mContext.getSystemService(
                         Context.DISPLAY_SERVICE);
                 mPowerManager = mContext.getSystemService(PowerManager.class);
+
+                final ActivityManager activityManager =
+                        (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
+                if (activityManager.isLowRamDevice() || ActivityManager.isSmallBatteryDevice()) {
+                    mRestrictedBucketDelayMs = 12 * ONE_HOUR;
+                }
             }
             mBootPhase = phase;
         }
@@ -1440,8 +1595,16 @@ public class AppStandbyController implements AppStandbyInternal {
             return Environment.getDataSystemDirectory();
         }
 
+        long getRestrictedBucketDelayMs() {
+            return mRestrictedBucketDelayMs;
+        }
+
         void noteEvent(int event, String packageName, int uid) throws RemoteException {
             mBatteryStats.noteEvent(event, packageName, uid);
+        }
+
+        PackageManagerInternal getPackageManagerInternal() {
+            return mPackageManagerInternal;
         }
 
         boolean isPackageEphemeral(int userId, String packageName) {

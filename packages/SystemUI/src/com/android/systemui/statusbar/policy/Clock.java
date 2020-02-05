@@ -188,7 +188,7 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
             // NOTE: This receiver could run before this method returns, as it's not dispatching
             // on the main thread and BroadcastDispatcher may not need to register with Context.
             // The receiver will return immediately if the view does not have a Handler yet.
-            mBroadcastDispatcher.registerReceiver(mIntentReceiver, filter,
+            mBroadcastDispatcher.registerReceiverWithHandler(mIntentReceiver, filter,
                     Dependency.get(Dependency.TIME_TICK_HANDLER), UserHandle.ALL);
             Dependency.get(TunerService.class).addTunable(this, CLOCK_SECONDS,
                     StatusBarIconController.ICON_BLACKLIST);
@@ -298,7 +298,7 @@ public class Clock extends TextView implements DemoMode, Tunable, CommandQueue.C
             mShowSeconds = TunerService.parseIntegerSwitch(newValue, false);
             updateShowSeconds();
         } else {
-            setClockVisibleByUser(!StatusBarIconController.getIconBlacklist(newValue)
+            setClockVisibleByUser(!StatusBarIconController.getIconBlacklist(getContext(), newValue)
                     .contains("clock"));
             updateClockVisibility();
         }

@@ -15,6 +15,7 @@
  */
 package com.android.server.devicepolicy;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -27,6 +28,7 @@ import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.app.ActivityManagerInternal;
 import android.app.AlarmManager;
+import android.app.AppOpsManager;
 import android.app.IActivityManager;
 import android.app.IActivityTaskManager;
 import android.app.NotificationManager;
@@ -40,6 +42,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.CrossProfileApps;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
@@ -68,6 +71,7 @@ import android.view.IWindowManager;
 import com.android.internal.util.test.FakeSettingsProvider;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.internal.widget.LockSettingsInternal;
+import com.android.server.PersistentDataBlockManagerInternal;
 import com.android.server.net.NetworkPolicyManagerInternal;
 import com.android.server.wm.ActivityTaskManagerInternal;
 
@@ -117,6 +121,9 @@ public class MockSystemServices {
     public final TimeDetector timeDetector;
     public final TimeZoneDetector timeZoneDetector;
     public final KeyChain.KeyChainConnection keyChainConnection;
+    public final CrossProfileApps crossProfileApps;
+    public final PersistentDataBlockManagerInternal persistentDataBlockManagerInternal;
+    public final AppOpsManager appOpsManager;
     /** Note this is a partial mock, not a real mock. */
     public final PackageManager packageManager;
     public final BuildMock buildMock = new BuildMock();
@@ -160,6 +167,9 @@ public class MockSystemServices {
         timeDetector = mock(TimeDetector.class);
         timeZoneDetector = mock(TimeZoneDetector.class);
         keyChainConnection = mock(KeyChain.KeyChainConnection.class, RETURNS_DEEP_STUBS);
+        crossProfileApps = mock(CrossProfileApps.class);
+        persistentDataBlockManagerInternal = mock(PersistentDataBlockManagerInternal.class);
+        appOpsManager = mock(AppOpsManager.class);
 
         // Package manager is huge, so we use a partial mock instead.
         packageManager = spy(realContext.getPackageManager());
@@ -231,6 +241,13 @@ public class MockSystemServices {
                     final int userId1 = (int) invocation.getArguments()[0];
                     final UserInfo ui = getUserInfo(userId1);
                     return ui == null ? null : getUserInfo(ui.profileGroupId);
+                }
+        );
+        when(userManager.getProfileParent(any(UserHandle.class))).thenAnswer(
+                invocation -> {
+                    final UserHandle userHandle = (UserHandle) invocation.getArguments()[0];
+                    final UserInfo ui = getUserInfo(userHandle.getIdentifier());
+                    return ui == null ? UserHandle.USER_NULL : UserHandle.of(ui.profileGroupId);
                 }
         );
         when(userManager.getProfiles(anyInt())).thenAnswer(

@@ -46,6 +46,7 @@ import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.os.WorkSource;
 import android.provider.Settings;
+import android.telephony.TelephonyManager;
 import android.util.EventLog;
 import android.util.Slog;
 import android.util.StatsLog;
@@ -671,6 +672,8 @@ public class Notifier {
             }
             mUserActivityPending = false;
         }
+        TelephonyManager tm = mContext.getSystemService(TelephonyManager.class);
+        tm.notifyUserActivity();
         mPolicy.userActivity();
     }
 
@@ -678,9 +681,20 @@ public class Notifier {
         final int powerState;
         synchronized (mLock) {
             if (mBroadcastedInteractiveState == INTERACTIVE_STATE_UNKNOWN) {
-                // Broadcasted power state is unknown.  Send wake up.
-                mPendingWakeUpBroadcast = false;
-                mBroadcastedInteractiveState = INTERACTIVE_STATE_AWAKE;
+                // Broadcasted power state is unknown.
+                // Send wake up or go to sleep.
+                switch (mPendingInteractiveState) {
+                    case INTERACTIVE_STATE_ASLEEP:
+                        mPendingGoToSleepBroadcast = false;
+                        mBroadcastedInteractiveState = INTERACTIVE_STATE_ASLEEP;
+                        break;
+
+                    case INTERACTIVE_STATE_AWAKE:
+                    default:
+                        mPendingWakeUpBroadcast = false;
+                        mBroadcastedInteractiveState = INTERACTIVE_STATE_AWAKE;
+                        break;
+                }
             } else if (mBroadcastedInteractiveState == INTERACTIVE_STATE_AWAKE) {
                 // Broadcasted power state is awake.  Send asleep if needed.
                 if (mPendingWakeUpBroadcast || mPendingGoToSleepBroadcast

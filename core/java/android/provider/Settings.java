@@ -26,7 +26,6 @@ import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
 import android.annotation.UserIdInt;
 import android.app.ActivityThread;
 import android.app.AppOpsManager;
@@ -36,6 +35,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.SearchManager;
 import android.app.WallpaperManager;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.ContentValues;
@@ -68,7 +68,6 @@ import android.os.ResultReceiver;
 import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.speech.tts.TextToSpeech;
-import android.telephony.SubscriptionManager;
 import android.text.TextUtils;
 import android.util.AndroidException;
 import android.util.ArrayMap;
@@ -96,6 +95,7 @@ import java.util.Set;
  * The Settings provider contains global system-level device preferences.
  */
 public final class Settings {
+    private static final boolean DEFAULT_OVERRIDEABLE_BY_RESTORE = false;
 
     // Intent actions for Settings
 
@@ -219,7 +219,9 @@ public final class Settings {
      * @hide
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
-    public static final String ACTION_TETHER_PROVISIONING =
+    @SystemApi
+    @TestApi
+    public static final String ACTION_TETHER_PROVISIONING_UI =
             "android.settings.TETHER_PROVISIONING_UI";
 
     /**
@@ -251,6 +253,9 @@ public final class Settings {
 
     /** @hide */
     public static final String EXTRA_NETWORK_TEMPLATE = "network_template";
+
+    /** @hide */
+    public static final String KEY_CONFIG_SET_RETURN = "config_set_return";
 
     /**
      * An int extra specifying a subscription ID.
@@ -385,6 +390,21 @@ public final class Settings {
             "android.settings.MANAGE_UNKNOWN_APP_SOURCES";
 
     /**
+     * Activity Action: Show settings to allow configuration of cross-profile access for apps
+     *
+     * Input: Optionally, the Intent's data URI can specify the application package name to
+     * directly invoke the management GUI specific to the package name. For example
+     * "package:com.my.app".
+     * <p>
+     * Output: Nothing.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_MANAGE_CROSS_PROFILE_ACCESS =
+            "android.settings.MANAGE_CROSS_PROFILE_ACCESS";
+
+    /**
      * Activity Action: Show the "Open by Default" page in a particular application's details page.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you safeguard against this.
@@ -491,28 +511,33 @@ public final class Settings {
             "android.settings.WIFI_IP_SETTINGS";
 
     /**
-     * Activity Action: Show setting page to process an Easy Connect (Wi-Fi DPP) QR code and start
+     * Activity Action: Show setting page to process a Wi-Fi Easy Connect (aka DPP) URI and start
      * configuration. This intent should be used when you want to use this device to take on the
-     * configurator role for an IoT/other device. When provided with a valid DPP URI string Settings
-     * will open a wifi selection screen for the user to indicate which network they would like to
-     * configure the device specified in the DPP URI string for and carry them through the rest of
-     * the flow for provisioning the device.
+     * configurator role for an IoT/other device. When provided with a valid DPP URI
+     * string, Settings will open a Wi-Fi selection screen for the user to indicate which network
+     * they would like to configure the device specified in the DPP URI string and
+     * carry them through the rest of the flow for provisioning the device.
      * <p>
-     * In some cases, a matching Activity may not exist, so ensure you safeguard against this by
-     * checking WifiManager.isEasyConnectSupported();
+     * In some cases, a matching Activity may not exist, so ensure to safeguard against this by
+     * checking {@link WifiManager#isEasyConnectSupported()}.
      * <p>
      * Input: The Intent's data URI specifies bootstrapping information for authenticating and
-     * provisioning the peer, with the "DPP" scheme.
+     * provisioning the peer, and uses a "DPP" scheme. The URI should be attached to the intent
+     * using {@link Intent#setData(Uri)}. The calling app can obtain a DPP URI in any
+     * way, e.g. by scanning a QR code or other out-of-band methods. The calling app may also
+     * attach the {@link #EXTRA_EASY_CONNECT_BAND_LIST} extra to provide information
+     * about the bands supported by the enrollee device.
      * <p>
-     * Output: After {@code startActivityForResult}, the callback {@code onActivityResult} will have
-     * resultCode {@link android.app.Activity#RESULT_OK} if Wi-Fi Easy Connect configuration succeeded
-     * and the user tapped 'Done' button, or {@link android.app.Activity#RESULT_CANCELED} if operation
-     * failed and user tapped 'Cancel'. In case the operation has failed, a status code from {@link
-     * android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode} will be returned as
-     * Extra {@link #EXTRA_EASY_CONNECT_ERROR_CODE}. Easy Connect R2 Enrollees report additional
-     * details about the error they encountered, which will be provided in the {@link
-     * #EXTRA_EASY_CONNECT_ATTEMPTED_SSID}, {@link #EXTRA_EASY_CONNECT_CHANNEL_LIST}, and {@link
-     * #EXTRA_EASY_CONNECT_BAND_LIST}.
+     * Output: After calling {@link android.app.Activity#startActivityForResult}, the callback
+     * {@code onActivityResult} will have resultCode {@link android.app.Activity#RESULT_OK} if
+     * the Wi-Fi Easy Connect configuration succeeded and the user tapped the 'Done' button, or
+     * {@link android.app.Activity#RESULT_CANCELED} if the operation failed and user tapped the
+     * 'Cancel' button. In case the operation has failed, a status code from
+     * {@link android.net.wifi.EasyConnectStatusCallback} {@code EASY_CONNECT_EVENT_FAILURE_*} will
+     * be returned as an Extra {@link #EXTRA_EASY_CONNECT_ERROR_CODE}. Easy Connect R2
+     * Enrollees report additional details about the error they encountered, which will be
+     * provided in the {@link #EXTRA_EASY_CONNECT_ATTEMPTED_SSID},
+     * {@link #EXTRA_EASY_CONNECT_CHANNEL_LIST}, and {@link #EXTRA_EASY_CONNECT_BAND_LIST}.
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_PROCESS_WIFI_EASY_CONNECT_URI =
@@ -521,12 +546,15 @@ public final class Settings {
     /**
      * Activity Extra: The Easy Connect operation error code
      * <p>
-     * An extra returned on the result intent received when using the {@link
-     * #ACTION_PROCESS_WIFI_EASY_CONNECT_URI} intent to launch the Easy Connect Operation. This
-     * extra contains the error code of the operation - one of
-     * {@link android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode}.
-     * If there is no error, i.e. if the operation returns {@link android.app.Activity#RESULT_OK},
+     * An extra returned on the result intent received when using the
+     * {@link #ACTION_PROCESS_WIFI_EASY_CONNECT_URI} intent to launch the Easy Connect Operation.
+     * This extra contains the integer error code of the operation - one of
+     * {@link android.net.wifi.EasyConnectStatusCallback} {@code EASY_CONNECT_EVENT_FAILURE_*}. If
+     * there is no error, i.e. if the operation returns {@link android.app.Activity#RESULT_OK},
      * then this extra is not attached to the result intent.
+     * <p>
+     * Use the {@link Intent#hasExtra(String)} to determine whether the extra is attached and
+     * {@link Intent#getIntExtra(String, int)} to obtain the error code data.
      */
     public static final String EXTRA_EASY_CONNECT_ERROR_CODE =
             "android.provider.extra.EASY_CONNECT_ERROR_CODE";
@@ -538,11 +566,13 @@ public final class Settings {
      * #ACTION_PROCESS_WIFI_EASY_CONNECT_URI} intent to launch the Easy Connect Operation. This
      * extra contains the SSID of the Access Point that the remote Enrollee tried to connect to.
      * This value is populated only by remote R2 devices, and only for the following error codes:
-     * {@link android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode#EASY_CONNECT_EVENT_FAILURE_CANNOT_FIND_NETWORK}
-     * {@link android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode#EASY_CONNECT_EVENT_FAILURE_ENROLLEE_AUTHENTICATION}.
+     * {@link android.net.wifi.EasyConnectStatusCallback#EASY_CONNECT_EVENT_FAILURE_CANNOT_FIND_NETWORK}
+     * {@link android.net.wifi.EasyConnectStatusCallback#EASY_CONNECT_EVENT_FAILURE_ENROLLEE_AUTHENTICATION}.
      * Therefore, always check if this extra is available using {@link Intent#hasExtra(String)}. If
      * there is no error, i.e. if the operation returns {@link android.app.Activity#RESULT_OK}, then
      * this extra is not attached to the result intent.
+     * <p>
+     * Use the {@link Intent#getStringExtra(String)} to obtain the SSID.
      */
     public static final String EXTRA_EASY_CONNECT_ATTEMPTED_SSID =
             "android.provider.extra.EASY_CONNECT_ATTEMPTED_SSID";
@@ -552,13 +582,15 @@ public final class Settings {
      * <p>
      * An extra returned on the result intent received when using the {@link
      * #ACTION_PROCESS_WIFI_EASY_CONNECT_URI} intent to launch the Easy Connect Operation. This
-     * extra contains the list channels the Enrollee used to scan for a network. This value is
+     * extra contains the channel list that the Enrollee scanned for a network. This value is
      * populated only by remote R2 devices, and only for the following error code: {@link
-     * android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode#EASY_CONNECT_EVENT_FAILURE_CANNOT_FIND_NETWORK}.
+     * android.net.wifi.EasyConnectStatusCallback#EASY_CONNECT_EVENT_FAILURE_CANNOT_FIND_NETWORK}.
      * Therefore, always check if this extra is available using {@link Intent#hasExtra(String)}. If
      * there is no error, i.e. if the operation returns {@link android.app.Activity#RESULT_OK}, then
      * this extra is not attached to the result intent. The list is JSON formatted, as an array
      * (Wi-Fi global operating classes) of arrays (Wi-Fi channels).
+     * <p>
+     * Use the {@link Intent#getStringExtra(String)} to obtain the list.
      */
     public static final String EXTRA_EASY_CONNECT_CHANNEL_LIST =
             "android.provider.extra.EASY_CONNECT_CHANNEL_LIST";
@@ -566,17 +598,31 @@ public final class Settings {
     /**
      * Activity Extra: The Band List that the Enrollee supports.
      * <p>
-     * An extra returned on the result intent received when using the {@link
-     * #ACTION_PROCESS_WIFI_EASY_CONNECT_URI} intent to launch the Easy Connect Operation. This
-     * extra contains the bands the Enrollee supports, expressed as the Global Operating Class,
-     * see Table E-4 in IEEE Std 802.11-2016 -Global operating classes. This value is populated only
-     * by remote R2 devices, and only for the following error codes: {@link
-     * android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode#EASY_CONNECT_EVENT_FAILURE_CANNOT_FIND_NETWORK}
-     * {@link android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode#EASY_CONNECT_EVENT_FAILURE_ENROLLEE_AUTHENTICATION}
-     * {@link android.net.wifi.EasyConnectStatusCallback.EasyConnectFailureStatusCode#EASY_CONNECT_EVENT_FAILURE_ENROLLEE_REJECTED_CONFIGURATION}.
-     * Therefore, always check if this extra is available using {@link Intent#hasExtra(String)}. If
-     * there is no error, i.e. if the operation returns {@link android.app.Activity#RESULT_OK}, then
-     * this extra is not attached to the result intent.
+     * This extra contains the bands the Enrollee supports, expressed as the Global Operating
+     * Class, see Table E-4 in IEEE Std 802.11-2016 Global operating classes. It is used both as
+     * input, to configure the Easy Connect operation and as output of the operation.
+     * <p>
+     * As input: an optional extra to be attached to the
+     * {@link #ACTION_PROCESS_WIFI_EASY_CONNECT_URI}. If attached, it indicates the bands which
+     * the remote device (enrollee, device-to-be-configured) supports. The Settings operation
+     * may take this into account when presenting the user with list of networks configurations
+     * to be used. The calling app may obtain this information in any out-of-band method. The
+     * information should be attached as an array of raw integers - using the
+     * {@link Intent#putExtra(String, int[])}.
+     * <p>
+     * As output: an extra returned on the result intent received when using the
+     * {@link #ACTION_PROCESS_WIFI_EASY_CONNECT_URI} intent to launch the Easy Connect Operation
+     * . This value is populated only by remote R2 devices, and only for the following error
+     * codes:
+     * {@link android.net.wifi.EasyConnectStatusCallback#EASY_CONNECT_EVENT_FAILURE_CANNOT_FIND_NETWORK},
+     * {@link android.net.wifi.EasyConnectStatusCallback#EASY_CONNECT_EVENT_FAILURE_ENROLLEE_AUTHENTICATION},
+     * or
+     * {@link android.net.wifi.EasyConnectStatusCallback#EASY_CONNECT_EVENT_FAILURE_ENROLLEE_REJECTED_CONFIGURATION}.
+     * Therefore, always check if this extra is available using {@link Intent#hasExtra(String)}.
+     * If there is no error, i.e. if the operation returns {@link android.app.Activity#RESULT_OK}
+     * , then this extra is not attached to the result intent.
+     * <p>
+     * Use the {@link Intent#getIntArrayExtra(String)} to obtain the list.
      */
     public static final String EXTRA_EASY_CONNECT_BAND_LIST =
             "android.provider.extra.EASY_CONNECT_BAND_LIST";
@@ -1923,6 +1969,21 @@ public final class Settings {
             "android.settings.REQUEST_SET_AUTOFILL_SERVICE";
 
     /**
+     * Activity Action: Show screen for controlling the Quick Access Wallet.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: The Intent's data URI specifies the application package name
+     * to be shown, with the "package" scheme.  That is "package:com.my.app".
+     * <p>
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_QUICK_ACCESS_WALLET_SETTINGS =
+            "android.settings.QUICK_ACCESS_WALLET_SETTINGS";
+
+    /**
      * Activity Action: Show screen for controlling which apps have access on volume directories.
      * <p>
      * Input: Nothing.
@@ -2103,6 +2164,11 @@ public final class Settings {
      * @hide - String argument extra to the fast-path call()-based requests
      */
     public static final String CALL_METHOD_FLAGS_KEY = "_flags";
+
+    /**
+     * @hide - String argument extra to the fast-path call()-based requests
+     */
+    public static final String CALL_METHOD_OVERRIDEABLE_BY_RESTORE_KEY = "_overrideable_by_restore";
 
     /** @hide - Private call() method to write to 'system' table */
     public static final String CALL_METHOD_PUT_SYSTEM = "PUT_system";
@@ -2472,7 +2538,8 @@ public final class Settings {
         }
 
         public boolean putStringForUser(ContentResolver cr, String name, String value,
-                String tag, boolean makeDefault, final int userHandle) {
+                String tag, boolean makeDefault, final int userHandle,
+                boolean overrideableByRestore) {
             try {
                 Bundle arg = new Bundle();
                 arg.putString(Settings.NameValueTable.VALUE, value);
@@ -2482,6 +2549,9 @@ public final class Settings {
                 }
                 if (makeDefault) {
                     arg.putBoolean(CALL_METHOD_MAKE_DEFAULT_KEY, true);
+                }
+                if (overrideableByRestore) {
+                    arg.putBoolean(CALL_METHOD_OVERRIDEABLE_BY_RESTORE_KEY, true);
                 }
                 IContentProvider cp = mProviderHolder.getProvider(cr);
                 cp.call(cr.getPackageName(), cr.getFeatureId(),
@@ -2504,13 +2574,14 @@ public final class Settings {
                 args.putString(CALL_METHOD_PREFIX_KEY, prefix);
                 args.putSerializable(CALL_METHOD_FLAGS_KEY, keyValues);
                 IContentProvider cp = mProviderHolder.getProvider(cr);
-                cp.call(cr.getPackageName(), cr.getFeatureId(), mProviderHolder.mUri.getAuthority(),
+                Bundle bundle = cp.call(cr.getPackageName(), cr.getFeatureId(),
+                        mProviderHolder.mUri.getAuthority(),
                         mCallSetAllCommand, null, args);
+                return bundle.getBoolean(KEY_CONFIG_SET_RETURN);
             } catch (RemoteException e) {
                 // Not supported by the remote side
                 return false;
             }
-            return true;
         }
 
         @UnsupportedAppUsage
@@ -2690,6 +2761,8 @@ public final class Settings {
 
         public ArrayMap<String, String> getStringsForPrefix(ContentResolver cr, String prefix,
                 List<String> names) {
+            String namespace = prefix.substring(0, prefix.length() - 1);
+            DeviceConfig.enforceReadPermission(ActivityThread.currentApplication(), namespace);
             ArrayMap<String, String> keyValues = new ArrayMap<>();
             int currentGeneration = -1;
 
@@ -3033,10 +3106,36 @@ public final class Settings {
             return putStringForUser(resolver, name, value, resolver.getUserId());
         }
 
+        /**
+         * Store a name/value pair into the database. Values written by this method will be
+         * overridden if a restore happens in the future.
+         *
+         * @param resolver to access the database with
+         * @param name to store
+         * @param value to associate with the name
+         *
+         * @return true if the value was set, false on database errors
+         *
+         * @hide
+         */
+        @RequiresPermission(Manifest.permission.MODIFY_SETTINGS_OVERRIDEABLE_BY_RESTORE)
+        @SystemApi
+        public static boolean putString(@NonNull ContentResolver resolver,
+                @NonNull String name, @Nullable String value, boolean overrideableByRestore) {
+            return putStringForUser(resolver, name, value, resolver.getUserId(),
+                   overrideableByRestore);
+        }
+
         /** @hide */
         @UnsupportedAppUsage
         public static boolean putStringForUser(ContentResolver resolver, String name, String value,
                 int userHandle) {
+            return putStringForUser(resolver, name, value, userHandle,
+                    DEFAULT_OVERRIDEABLE_BY_RESTORE);
+        }
+
+        private static boolean putStringForUser(ContentResolver resolver, String name, String value,
+                int userHandle, boolean overrideableByRestore) {
             android.util.SeempLog.record(android.util.SeempLog.getSeempPutApiIdFromValue(name));
             if (MOVED_TO_SECURE.contains(name)) {
                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.System"
@@ -3048,7 +3147,8 @@ public final class Settings {
                         + " to android.provider.Settings.Global, value is unchanged.");
                 return false;
             }
-            return sNameValueCache.putStringForUser(resolver, name, value, null, false, userHandle);
+            return sNameValueCache.putStringForUser(resolver, name, value, null, false, userHandle,
+                    overrideableByRestore);
         }
 
         /**
@@ -3372,7 +3472,7 @@ public final class Settings {
                     // need to store the adjusted configuration as the initial settings.
                     Settings.System.putStringForUser(
                             cr, SYSTEM_LOCALES, outConfig.getLocales().toLanguageTags(),
-                            userHandle);
+                            userHandle, DEFAULT_OVERRIDEABLE_BY_RESTORE);
                 }
             }
         }
@@ -3405,7 +3505,8 @@ public final class Settings {
                 int userHandle) {
             return Settings.System.putFloatForUser(cr, FONT_SCALE, config.fontScale, userHandle) &&
                     Settings.System.putStringForUser(
-                            cr, SYSTEM_LOCALES, config.getLocales().toLanguageTags(), userHandle);
+                            cr, SYSTEM_LOCALES, config.getLocales().toLanguageTags(), userHandle,
+                            DEFAULT_OVERRIDEABLE_BY_RESTORE);
         }
 
         /** @hide */
@@ -5094,7 +5195,6 @@ public final class Settings {
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_P2P_DEVICE_NAME);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_SAVED_STATE);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_SUPPLICANT_SCAN_INTERVAL_MS);
-            MOVED_TO_GLOBAL.add(Settings.Global.WIFI_SUSPEND_OPTIMIZATIONS_ENABLED);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_COVERAGE_EXTEND_FEATURE_ENABLED);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_VERBOSE_LOGGING_ENABLED);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_ENHANCED_AUTO_JOIN);
@@ -5210,6 +5310,24 @@ public final class Settings {
         }
 
         /**
+         * Store a name/value pair into the database. Values written by this method will be
+         * overridden if a restore happens in the future.
+         *
+         * @param resolver to access the database with
+         * @param name to store
+         * @param value to associate with the name
+         * @return true if the value was set, false on database errors
+         *
+         * @hide
+         */
+        @RequiresPermission(Manifest.permission.MODIFY_SETTINGS_OVERRIDEABLE_BY_RESTORE)
+        public static boolean putString(ContentResolver resolver, String name,
+                String value, boolean overrideableByRestore) {
+            return putStringForUser(resolver, name, value, /* tag */ null, /* makeDefault */ false,
+                    resolver.getUserId(), overrideableByRestore);
+        }
+
+        /**
          * Store a name/value pair into the database.
          * @param resolver to access the database with
          * @param name to store
@@ -5224,22 +5342,23 @@ public final class Settings {
         @UnsupportedAppUsage
         public static boolean putStringForUser(ContentResolver resolver, String name, String value,
                 int userHandle) {
-            return putStringForUser(resolver, name, value, null, false, userHandle);
+            return putStringForUser(resolver, name, value, null, false, userHandle,
+                    DEFAULT_OVERRIDEABLE_BY_RESTORE);
         }
 
         /** @hide */
         @UnsupportedAppUsage
         public static boolean putStringForUser(@NonNull ContentResolver resolver,
                 @NonNull String name, @Nullable String value, @Nullable String tag,
-                boolean makeDefault, @UserIdInt int userHandle) {
+                boolean makeDefault, @UserIdInt int userHandle, boolean overrideableByRestore) {
             if (MOVED_TO_GLOBAL.contains(name)) {
                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Secure"
                         + " to android.provider.Settings.Global");
                 return Global.putStringForUser(resolver, name, value,
-                        tag, makeDefault, userHandle);
+                        tag, makeDefault, userHandle, DEFAULT_OVERRIDEABLE_BY_RESTORE);
             }
             return sNameValueCache.putStringForUser(resolver, name, value, tag,
-                    makeDefault, userHandle);
+                    makeDefault, userHandle, overrideableByRestore);
         }
 
         /**
@@ -5288,7 +5407,7 @@ public final class Settings {
                 @NonNull String name, @Nullable String value, @Nullable String tag,
                 boolean makeDefault) {
             return putStringForUser(resolver, name, value, tag, makeDefault,
-                    resolver.getUserId());
+                    resolver.getUserId(), DEFAULT_OVERRIDEABLE_BY_RESTORE);
         }
 
         /**
@@ -5783,6 +5902,22 @@ public final class Settings {
                 "dark_mode_dialog_seen";
 
         /**
+         * Custom time when Dark theme is scheduled to activate.
+         * Represented as milliseconds from midnight (e.g. 79200000 == 10pm).
+         * @hide
+         */
+        public static final String DARK_THEME_CUSTOM_START_TIME =
+                "dark_theme_custom_start_time";
+
+        /**
+         * Custom time when Dark theme is scheduled to deactivate.
+         * Represented as milliseconds from midnight (e.g. 79200000 == 10pm).
+         * @hide
+         */
+        public static final String DARK_THEME_CUSTOM_END_TIME =
+                "dark_theme_custom_end_time";
+
+        /**
          * Defines value returned by {@link android.service.autofill.UserData#getMaxUserDataSize()}.
          *
          * @hide
@@ -6092,6 +6227,7 @@ public final class Settings {
          * Setting to configure Wifi disconnect delay duration in seconds.
          * @hide
          **/
+        @SystemApi
         public static final String WIFI_DISCONNECT_DELAY_DURATION =
                 "wifi_disconnect_delay_duration";
 
@@ -6383,6 +6519,15 @@ public final class Settings {
          */
         public static final String ACCESSIBILITY_BUTTON_TARGET_COMPONENT =
                 "accessibility_button_target_component";
+
+        /**
+         * The system class name of magnification controller which is a target to be toggled via
+         * accessibility shortcut or accessibility button.
+         *
+         * @hide
+         */
+        public static final String ACCESSIBILITY_SHORTCUT_TARGET_MAGNIFICATION_CONTROLLER =
+                "com.android.server.accessibility.MagnificationController";
 
         /**
          * If touch exploration is enabled.
@@ -7386,6 +7531,21 @@ public final class Settings {
         public static final String INCALL_POWER_BUTTON_BEHAVIOR = "incall_power_button_behavior";
 
         /**
+         * Whether the user allows minimal post processing or not.
+         *
+         * <p>Values:
+         * 0 - Not allowed. Any preferences set through the Window.setPreferMinimalPostProcessing
+         *     API will be ignored.
+         * 1 - Allowed. Any preferences set through the Window.setPreferMinimalPostProcessing API
+         *     will be respected and the appropriate signals will be sent to display.
+         *     (Default behaviour)
+         *
+         * @hide
+         */
+        public static final String MINIMAL_POST_PROCESSING_ALLOWED =
+                "minimal_post_processing_allowed";
+
+        /**
          * INCALL_POWER_BUTTON_BEHAVIOR value for "turn off screen".
          * @hide
          */
@@ -7496,6 +7656,12 @@ public final class Settings {
         public static final String DOZE_WAKE_DISPLAY_GESTURE = "doze_wake_display_gesture";
 
         /**
+         * Whether the device should suppress the current doze configuration and disable dozing.
+         * @hide
+         */
+        public static final String SUPPRESS_DOZE = "suppress_doze";
+
+        /**
          * Gesture that skips media.
          * @hide
          */
@@ -7581,6 +7747,14 @@ public final class Settings {
          * @hide
          */
         public static final String UI_NIGHT_MODE = "ui_night_mode";
+
+        /**
+         * The current night mode that has been overrided by the system.  Owned
+         * and controlled by UiModeManagerService.  Constants are as per
+         * UiModeManager.
+         * @hide
+         */
+        public static final String UI_NIGHT_MODE_OVERRIDE = "ui_night_mode_override";
 
         /**
          * Whether screensavers are enabled.
@@ -8776,9 +8950,9 @@ public final class Settings {
          * added to both AIRPLANE_MODE_RADIOS and AIRPLANE_MODE_TOGGLEABLE_RADIOS, then Wifi
          * will be turned off when entering airplane mode, but the user will be able to reenable
          * Wifi in the Settings app.
-         *
-         * {@hide}
+         * @hide
          */
+        @SystemApi
         public static final String AIRPLANE_MODE_TOGGLEABLE_RADIOS = "airplane_mode_toggleable_radios";
 
         /**
@@ -9707,6 +9881,8 @@ public final class Settings {
          * is interpreted as |false|.
          * @hide
          */
+        @SystemApi
+        @TestApi
         public static final String TETHER_OFFLOAD_DISABLED = "tether_offload_disabled";
 
         /**
@@ -9950,17 +10126,9 @@ public final class Settings {
         * Setting to allow scans to be enabled even wifi is turned off for connectivity.
         * @hide
         */
+       @SystemApi
        public static final String WIFI_SCAN_ALWAYS_AVAILABLE =
                 "wifi_scan_always_enabled";
-
-        /**
-         * The interval in milliseconds at which wifi rtt ranging requests will be throttled when
-         * they are coming from the background.
-         *
-         * @hide
-         */
-        public static final String WIFI_RTT_BACKGROUND_EXEC_GAP_MS =
-                "wifi_rtt_background_exec_gap_ms";
 
         /**
          * Indicate whether factory reset request is pending.
@@ -9968,6 +10136,7 @@ public final class Settings {
          * Type: int (0 for false, 1 for true)
          * @hide
          */
+        @SystemApi
         public static final String WIFI_P2P_PENDING_FACTORY_RESET =
                 "wifi_p2p_pending_factory_reset";
 
@@ -9977,6 +10146,7 @@ public final class Settings {
          * Type: int (0 for false, 1 for true)
          * @hide
          */
+        @SystemApi
         public static final String SOFT_AP_TIMEOUT_ENABLED = "soft_ap_timeout_enabled";
 
         /**
@@ -10020,9 +10190,9 @@ public final class Settings {
          * enabled state.
          * @hide
          */
+        @SystemApi
         public static final String NETWORK_RECOMMENDATIONS_ENABLED =
                 "network_recommendations_enabled";
-
 
         /**
          * Which package name to use for network recommendations. If null, network recommendations
@@ -10048,17 +10218,6 @@ public final class Settings {
         public static final String USE_OPEN_WIFI_PACKAGE = "use_open_wifi_package";
 
         /**
-         * The number of milliseconds the {@link com.android.server.NetworkScoreService}
-         * will give a recommendation request to complete before returning a default response.
-         *
-         * Type: long
-         * @hide
-         * @deprecated to be removed
-         */
-        public static final String NETWORK_RECOMMENDATION_REQUEST_TIMEOUT_MS =
-                "network_recommendation_request_timeout_ms";
-
-        /**
          * The expiration time in milliseconds for the {@link android.net.WifiKey} request cache in
          * {@link com.android.server.wifi.RecommendedNetworkEvaluator}.
          *
@@ -10076,6 +10235,7 @@ public final class Settings {
          * Type: int (0 for false, 1 for true)
          * @hide
          */
+        @SystemApi
         public static final String WIFI_SCAN_THROTTLE_ENABLED = "wifi_scan_throttle_enabled";
 
         /**
@@ -10184,18 +10344,11 @@ public final class Settings {
                "wifi_watchdog_poor_network_test_enabled";
 
        /**
-        * Setting to turn on suspend optimizations at screen off on Wi-Fi. Enabled by default and
-        * needs to be set to 0 to disable it.
-        * @hide
-        */
-       public static final String WIFI_SUSPEND_OPTIMIZATIONS_ENABLED =
-               "wifi_suspend_optimizations_enabled";
-
-       /**
         * Setting to enable verbose logging in Wi-Fi; disabled by default, and setting to 1
         * will enable it. In the future, additional values may be supported.
         * @hide
         */
+       @SystemApi
        public static final String WIFI_VERBOSE_LOGGING_ENABLED =
                "wifi_verbose_logging_enabled";
 
@@ -10204,6 +10357,7 @@ public final class Settings {
         * will enable it.
         * @hide
         */
+       @SystemApi
        public static final String WIFI_COVERAGE_EXTEND_FEATURE_ENABLED =
                "wifi_coverage_extend_feature_enabled";
 
@@ -10229,68 +10383,9 @@ public final class Settings {
          * Errors in the parameters will cause the entire setting to be ignored.
          * @hide
          */
+        @SystemApi
         public static final String WIFI_SCORE_PARAMS =
                 "wifi_score_params";
-
-        /**
-         * Setting to enable logging WifiIsUnusableEvent in metrics
-         * which gets triggered when wifi becomes unusable.
-         * Disabled by default, and setting it to 1 will enable it.
-         * @hide
-         */
-        public static final String WIFI_IS_UNUSABLE_EVENT_METRICS_ENABLED =
-                "wifi_is_unusable_event_metrics_enabled";
-
-        /**
-         * The minimum number of txBad the framework has to observe
-         * to trigger a wifi data stall.
-         * @hide
-         */
-        public static final String WIFI_DATA_STALL_MIN_TX_BAD =
-                "wifi_data_stall_min_tx_bad";
-
-        /**
-         * The minimum number of txSuccess the framework has to observe
-         * to trigger a wifi data stall when rxSuccess is 0.
-         * @hide
-         */
-        public static final String WIFI_DATA_STALL_MIN_TX_SUCCESS_WITHOUT_RX =
-                "wifi_data_stall_min_tx_success_without_rx";
-
-        /**
-         * Setting to enable logging Wifi LinkSpeedCounts in metrics.
-         * Disabled by default, and setting it to 1 will enable it.
-         * @hide
-         */
-        public static final String WIFI_LINK_SPEED_METRICS_ENABLED =
-                "wifi_link_speed_metrics_enabled";
-
-        /**
-         * Setting to enable the PNO frequency culling optimization.
-         * Disabled by default, and setting it to 1 will enable it.
-         * The value is boolean (0 or 1).
-         * @hide
-         */
-        public static final String WIFI_PNO_FREQUENCY_CULLING_ENABLED =
-                "wifi_pno_frequency_culling_enabled";
-
-        /**
-         * Setting to enable including recency information when determining pno network priorities.
-         * Disabled by default, and setting it to 1 will enable it.
-         * The value is boolean (0 or 1).
-         * @hide
-         */
-        public static final String WIFI_PNO_RECENCY_SORTING_ENABLED =
-                "wifi_pno_recency_sorting_enabled";
-
-        /**
-         * Setting to enable the Wi-Fi link probing.
-         * Enabled by default, and setting it to 0 will disable it.
-         * The value is boolean (0 or 1).
-         * @hide
-         */
-        public static final String WIFI_LINK_PROBING_ENABLED =
-                "wifi_link_probing_enabled";
 
        /**
         * The maximum number of times we will retry a connection to an access
@@ -10331,6 +10426,7 @@ public final class Settings {
         * The Wi-Fi peer-to-peer device name
         * @hide
         */
+       @SystemApi
        public static final String WIFI_P2P_DEVICE_NAME = "wifi_p2p_device_name";
 
        /**
@@ -12476,16 +12572,17 @@ public final class Settings {
 
         /**
          * Whether the Volte is enabled. If this setting is not set then we use the Carrier Config
-         * value {@link CarrierConfigManager#KEY_ENHANCED_4G_LTE_ON_BY_DEFAULT_BOOL}.
+         * value
+         * {@link android.telephony.CarrierConfigManager#KEY_ENHANCED_4G_LTE_ON_BY_DEFAULT_BOOL}.
          * <p>
          * Type: int (0 for false, 1 for true)
          * @hide
-         * @deprecated Use {@link android.telephony.SubscriptionManager#ENHANCED_4G_MODE_ENABLED}
+         * @deprecated Use {@link android.provider.Telephony.SimInfo#ENHANCED_4G_MODE_ENABLED}
          * instead.
          */
         @Deprecated
         public static final String ENHANCED_4G_MODE_ENABLED =
-                SubscriptionManager.ENHANCED_4G_MODE_ENABLED;
+                Telephony.SimInfo.ENHANCED_4G_MODE_ENABLED;
 
         /**
          * Whether VT (Video Telephony over IMS) is enabled
@@ -12493,10 +12590,10 @@ public final class Settings {
          * Type: int (0 for false, 1 for true)
          *
          * @hide
-         * @deprecated Use {@link android.telephony.SubscriptionManager#VT_IMS_ENABLED} instead.
+         * @deprecated Use {@link android.provider.Telephony.SimInfo#VT_IMS_ENABLED} instead.
          */
         @Deprecated
-        public static final String VT_IMS_ENABLED = SubscriptionManager.VT_IMS_ENABLED;
+        public static final String VT_IMS_ENABLED = Telephony.SimInfo.VT_IMS_ENABLED;
 
         /**
          * Whether WFC is enabled
@@ -12504,10 +12601,10 @@ public final class Settings {
          * Type: int (0 for false, 1 for true)
          *
          * @hide
-         * @deprecated Use {@link android.telephony.SubscriptionManager#WFC_IMS_ENABLED} instead.
+         * @deprecated Use {@link android.provider.Telephony.SimInfo#WFC_IMS_ENABLED} instead.
          */
         @Deprecated
-        public static final String WFC_IMS_ENABLED = SubscriptionManager.WFC_IMS_ENABLED;
+        public static final String WFC_IMS_ENABLED = Telephony.SimInfo.WFC_IMS_ENABLED;
 
         /**
          * WFC mode on home/non-roaming network.
@@ -12515,10 +12612,10 @@ public final class Settings {
          * Type: int - 2=Wi-Fi preferred, 1=Cellular preferred, 0=Wi-Fi only
          *
          * @hide
-         * @deprecated Use {@link android.telephony.SubscriptionManager#WFC_IMS_MODE} instead.
+         * @deprecated Use {@link android.provider.Telephony.SimInfo#WFC_IMS_MODE} instead.
          */
         @Deprecated
-        public static final String WFC_IMS_MODE = SubscriptionManager.WFC_IMS_MODE;
+        public static final String WFC_IMS_MODE = Telephony.SimInfo.WFC_IMS_MODE;
 
         /**
          * WFC mode on roaming network.
@@ -12526,11 +12623,11 @@ public final class Settings {
          * Type: int - see {@link #WFC_IMS_MODE} for values
          *
          * @hide
-         * @deprecated Use {@link android.telephony.SubscriptionManager#WFC_IMS_ROAMING_MODE}
+         * @deprecated Use {@link android.provider.Telephony.SimInfo#WFC_IMS_ROAMING_MODE}
          * instead.
          */
         @Deprecated
-        public static final String WFC_IMS_ROAMING_MODE = SubscriptionManager.WFC_IMS_ROAMING_MODE;
+        public static final String WFC_IMS_ROAMING_MODE = Telephony.SimInfo.WFC_IMS_ROAMING_MODE;
 
         /**
          * Whether WFC roaming is enabled
@@ -12538,12 +12635,12 @@ public final class Settings {
          * Type: int (0 for false, 1 for true)
          *
          * @hide
-         * @deprecated Use {@link android.telephony.SubscriptionManager#WFC_IMS_ROAMING_ENABLED}
+         * @deprecated Use {@link android.provider.Telephony.SimInfo#WFC_IMS_ROAMING_ENABLED}
          * instead
          */
         @Deprecated
         public static final String WFC_IMS_ROAMING_ENABLED =
-                SubscriptionManager.WFC_IMS_ROAMING_ENABLED;
+                Telephony.SimInfo.WFC_IMS_ROAMING_ENABLED;
 
         /**
          * Whether user can enable/disable LTE as a preferred network. A carrier might control
@@ -12985,7 +13082,29 @@ public final class Settings {
          */
         public static boolean putString(ContentResolver resolver,
                 String name, String value) {
-            return putStringForUser(resolver, name, value, null, false, resolver.getUserId());
+            return putStringForUser(resolver, name, value, null, false, resolver.getUserId(),
+                    DEFAULT_OVERRIDEABLE_BY_RESTORE);
+        }
+
+        /**
+         * Store a name/value pair into the database.
+         *
+         * @param resolver to access the database with
+         * @param name to store
+         * @param value to associate with the name
+         * @param tag to associated with the setting.
+         * @param makeDefault whether to make the value the default one.
+         * @param overrideableByRestore whether restore can override this value
+         * @return true if the value was set, false on database errors
+         *
+         * @hide
+         */
+        @RequiresPermission(Manifest.permission.MODIFY_SETTINGS_OVERRIDEABLE_BY_RESTORE)
+        public static boolean putString(@NonNull ContentResolver resolver,
+                @NonNull String name, @Nullable String value, @Nullable String tag,
+                boolean makeDefault, boolean overrideableByRestore) {
+            return putStringForUser(resolver, name, value, tag, makeDefault,
+                    resolver.getUserId(), overrideableByRestore);
         }
 
         /**
@@ -13034,7 +13153,7 @@ public final class Settings {
                 @NonNull String name, @Nullable String value, @Nullable String tag,
                 boolean makeDefault) {
             return putStringForUser(resolver, name, value, tag, makeDefault,
-                    resolver.getUserId());
+                    resolver.getUserId(), DEFAULT_OVERRIDEABLE_BY_RESTORE);
         }
 
         /**
@@ -13096,13 +13215,14 @@ public final class Settings {
         @UnsupportedAppUsage
         public static boolean putStringForUser(ContentResolver resolver,
                 String name, String value, int userHandle) {
-            return putStringForUser(resolver, name, value, null, false, userHandle);
+            return putStringForUser(resolver, name, value, null, false, userHandle,
+                    DEFAULT_OVERRIDEABLE_BY_RESTORE);
         }
 
         /** @hide */
         public static boolean putStringForUser(@NonNull ContentResolver resolver,
                 @NonNull String name, @Nullable String value, @Nullable String tag,
-                boolean makeDefault, @UserIdInt int userHandle) {
+                boolean makeDefault, @UserIdInt int userHandle, boolean overrideableByRestore) {
             if (LOCAL_LOGV) {
                 Log.v(TAG, "Global.putString(name=" + name + ", value=" + value
                         + " for " + userHandle);
@@ -13112,10 +13232,10 @@ public final class Settings {
                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.Global"
                         + " to android.provider.Settings.Secure, value is unchanged.");
                 return Secure.putStringForUser(resolver, name, value, tag,
-                        makeDefault, userHandle);
+                        makeDefault, userHandle, overrideableByRestore);
             }
             return sNameValueCache.putStringForUser(resolver, name, value, tag,
-                    makeDefault, userHandle);
+                    makeDefault, userHandle, overrideableByRestore);
         }
 
         /**
@@ -13730,14 +13850,6 @@ public final class Settings {
                 "backup_agent_timeout_parameters";
 
         /**
-         * Whether the backup system service supports multiple users (0 = disabled, 1 = enabled). If
-         * disabled, the service will only be active for the system user.
-         *
-         * @hide
-         */
-        public static final String BACKUP_MULTI_USER_ENABLED = "backup_multi_user_enabled";
-
-        /**
          * Blacklist of GNSS satellites.
          *
          * This is a list of integers separated by commas to represent pairs of (constellation,
@@ -13900,6 +14012,19 @@ public final class Settings {
          */
         public static final String POWER_BUTTON_SUPPRESSION_DELAY_AFTER_GESTURE_WAKE =
                 "power_button_suppression_delay_after_gesture_wake";
+
+        /**
+         * An integer indicating whether the device is in Common Criteria mode. When enabled,
+         * certain device functionalities are tuned to meet the higher security level required
+         * by Common Criteria certification. Examples include:
+         *   Bluetooth long term key material is additionally integrity-protected with AES-GCM.
+         *   WiFi configuration store is additionally integrity-protected with AES-GCM.
+         * A value of 0 means Common Criteria mode is not enabled (default), a value of non-zero
+         * means Common Criteria mode is enabled.
+         * @hide
+         */
+        @SystemApi(client = SystemApi.Client.MODULE_APPS)
+        public static final String COMMON_CRITERIA_MODE = "common_criteria_mode";
     }
 
     /**
@@ -13990,7 +14115,8 @@ public final class Settings {
         static boolean putString(@NonNull ContentResolver resolver, @NonNull String namespace,
                 @NonNull String name, @Nullable String value, boolean makeDefault) {
             return sNameValueCache.putStringForUser(resolver, createCompositeName(namespace, name),
-                    value, null, makeDefault, resolver.getUserId());
+                    value, null, makeDefault, resolver.getUserId(),
+                    DEFAULT_OVERRIDEABLE_BY_RESTORE);
         }
 
         /**
@@ -14006,14 +14132,18 @@ public final class Settings {
          */
         @RequiresPermission(Manifest.permission.WRITE_DEVICE_CONFIG)
         static boolean setStrings(@NonNull ContentResolver resolver, @NonNull String namespace,
-                @NonNull Map<String, String> keyValues) {
+                @NonNull Map<String, String> keyValues) throws DeviceConfig.BadConfigException {
             HashMap<String, String> compositeKeyValueMap = new HashMap<>(keyValues.keySet().size());
             for (Map.Entry<String, String> entry : keyValues.entrySet()) {
                 compositeKeyValueMap.put(
                         createCompositeName(namespace, entry.getKey()), entry.getValue());
             }
-            return sNameValueCache.setStringsForPrefix(resolver, createPrefix(namespace),
-                    compositeKeyValueMap);
+            // If can't set given configuration that means it's bad
+            if (!sNameValueCache.setStringsForPrefix(resolver, createPrefix(namespace),
+                    compositeKeyValueMap)) {
+                throw new DeviceConfig.BadConfigException();
+            }
+            return true;
         }
 
         /**
@@ -14326,46 +14456,74 @@ public final class Settings {
 
     /**
      * Activity Action: Show setting page to process the addition of Wi-Fi networks to the user's
-     * saved network list. The app should send a new intent with an extra that holds a maximum of
-     * five {@link android.net.wifi.WifiConfiguration} that specify credentials for the networks to
-     * be added to the user's database. The Intent should be sent via the {@link
-     * android.app.Activity#startActivityForResult(Intent, int)} API.
+     * saved network list. The app should send a new intent with an extra that holds a maximum
+     * of five {@link android.net.wifi.WifiNetworkSuggestion} that specify credentials for the
+     * networks to be added to the user's database. The Intent should be sent via the
+     * {@link android.app.Activity#startActivityForResult(Intent, int)} API.
      * <p>
      * Note: The app sending the Intent to add the credentials doesn't get any ownership over the
      * newly added network(s). For the Wi-Fi stack, these networks will look like the user
      * manually added them from the Settings UI.
      * <p>
-     * Input: The app should put parcelable array list to
-     * {@link android.net.wifi.WifiConfiguration} into the
-     * {@link #EXTRA_WIFI_CONFIGURATION_LIST} extra.
+     * Input: The app should put parcelable array list of
+     * {@link android.net.wifi.WifiNetworkSuggestion} into the {@link #EXTRA_WIFI_NETWORK_LIST}
+     * extra.
      * <p>
      * Output: After {@link android.app.Activity#startActivityForResult(Intent, int)}, the
      * callback {@link android.app.Activity#onActivityResult(int, int, Intent)} will have a
      * result code {@link android.app.Activity#RESULT_OK} to indicate user pressed the save
      * button to save the networks or {@link android.app.Activity#RESULT_CANCELED} to indicate
      * that the user rejected the request. Additionally, an integer array list, stored in
-     * {@link #EXTRA_WIFI_CONFIGURATION_RESULT_LIST}, will indicate the process result of
-     * each network.
+     * {@link #EXTRA_WIFI_NETWORK_RESULT_LIST}, will indicate the process result of each network.
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_WIFI_ADD_NETWORKS =
             "android.settings.WIFI_ADD_NETWORKS";
 
     /**
-     * A bundle extra of {@link #ACTION_WIFI_ADD_NETWORKS} intent action that indicates all the
-     * {@link android.net.wifi.WifiConfiguration} that would be saved.
+     * A bundle extra of {@link #ACTION_WIFI_ADD_NETWORKS} intent action that indicates the list
+     * of the {@link android.net.wifi.WifiNetworkSuggestion} elements. The maximum count of the
+     * {@link android.net.wifi.WifiNetworkSuggestion} elements in the list will be five.
+     * <p>
+     * For example:
+     * To provide credentials for one open and one WPA2 networks:
+     *
+     * <pre>{@code
+     * final WifiNetworkSuggestion suggestion1 =
+     *       new WifiNetworkSuggestion.Builder()
+     *       .setSsid("test111111")
+     *       .build();
+     * final WifiNetworkSuggestion suggestion2 =
+     *       new WifiNetworkSuggestion.Builder()
+     *       .setSsid("test222222")
+     *       .setWpa2Passphrase("test123456")
+     *       .build();
+     * final List<WifiNetworkSuggestion> suggestionsList = new ArrayList<>;
+     * suggestionsList.add(suggestion1);
+     * suggestionsList.add(suggestion2);
+     * Bundle bundle = new Bundle();
+     * bundle.putParcelableArrayList(Settings.EXTRA_WIFI_NETWORK_LIST,(ArrayList<? extends
+     * Parcelable>) suggestionsList);
+     * final Intent intent = new Intent(Settings.ACTION_WIFI_ADD_NETWORKS);
+     * intent.putExtras(bundle);
+     * startActivityForResult(intent, 0);
+     * }</pre>
      */
-    public static final String EXTRA_WIFI_CONFIGURATION_LIST =
-            "android.provider.extra.WIFI_CONFIGURATION_LIST";
+    public static final String EXTRA_WIFI_NETWORK_LIST =
+            "android.provider.extra.WIFI_NETWORK_LIST";
 
     /**
      * A bundle extra of the result of {@link #ACTION_WIFI_ADD_NETWORKS} intent action that
-     * indicates the action result of the saved {@link android.net.wifi.WifiConfiguration}. It's
-     * value of AddWifiResult interface, and will be 1:1 mapping to the element in {@link
-     * #EXTRA_WIFI_CONFIGURATION_LIST}.
+     * indicates the action result of the saved {@link android.net.wifi.WifiNetworkSuggestion}.
+     * Its value is a list of integers, and all the elements will be 1:1 mapping to the elements
+     * in {@link #EXTRA_WIFI_NETWORK_LIST}, if user press cancel to cancel the add networks
+     * request, then its value will be null.
+     * <p>
+     * Note: The integer value will be one of the {@link #ADD_WIFI_RESULT_SUCCESS},
+     * {@link #ADD_WIFI_RESULT_ADD_OR_UPDATE_FAILED}, or {@link #ADD_WIFI_RESULT_ALREADY_EXISTS}}.
      */
-    public static final String EXTRA_WIFI_CONFIGURATION_RESULT_LIST =
-            "android.provider.extra.WIFI_CONFIGURATION_RESULT_LIST";
+    public static final String EXTRA_WIFI_NETWORK_RESULT_LIST =
+            "android.provider.extra.WIFI_NETWORK_RESULT_LIST";
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -14421,6 +14579,42 @@ public final class Settings {
     };
 
     /**
+     * Activity Action: Show screen for controlling which apps have access to manage external
+     * storage.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you safeguard against this.
+     * <p>
+     * If you want to control a specific app's access to manage external storage, use
+     * {@link #ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION} instead.
+     * <p>
+     * Output: Nothing.
+     * @see #ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION =
+            "android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION";
+
+    /**
+     * Activity Action: Show screen for controlling if the app specified in the data URI of the
+     * intent can manage external storage.
+     * <p>
+     * Launching the corresponding activity requires the permission
+     * {@link Manifest.permission#MANAGE_EXTERNAL_STORAGE}.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you safeguard against this.
+     * <p>
+     * Input: The Intent's data URI MUST specify the application package name whose ability of
+     * managing external storage you want to control.
+     * For example "package:com.my.app".
+     * <p>
+     * Output: Nothing.
+     * @see #ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION =
+            "android.settings.MANAGE_APP_ALL_FILES_ACCESS_PERMISSION";
+
+    /**
      * Performs a strict and comprehensive check of whether a calling package is allowed to
      * write/modify system settings, as the condition differs for pre-M, M+, and
      * privileged/preinstalled apps. If the provided uid does not match the
@@ -14446,8 +14640,9 @@ public final class Settings {
      * current time.
      * @hide
      */
-    public static boolean checkAndNoteWriteSettingsOperation(Context context, int uid,
-            String callingPackage, boolean throwException) {
+    @SystemApi
+    public static boolean checkAndNoteWriteSettingsOperation(@NonNull Context context, int uid,
+            @NonNull String callingPackage, boolean throwException) {
         return isCallingPackageAllowedToPerformAppOpsProtectedOperation(context, uid,
                 callingPackage, throwException, AppOpsManager.OP_WRITE_SETTINGS,
                 PM_WRITE_SETTINGS, true);

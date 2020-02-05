@@ -16,13 +16,12 @@
 
 package android.hardware.camera2.impl;
 
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.graphics.ImageFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraMetadata;
-import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.marshal.MarshalQueryable;
@@ -54,7 +53,6 @@ import android.hardware.camera2.params.Face;
 import android.hardware.camera2.params.HighSpeedVideoConfiguration;
 import android.hardware.camera2.params.LensShadingMap;
 import android.hardware.camera2.params.MandatoryStreamCombination;
-import android.hardware.camera2.params.MandatoryStreamCombination.MandatoryStreamInformation;
 import android.hardware.camera2.params.OisSample;
 import android.hardware.camera2.params.RecommendedStreamConfiguration;
 import android.hardware.camera2.params.RecommendedStreamConfigurationMap;
@@ -73,14 +71,13 @@ import android.util.Log;
 import android.util.Range;
 import android.util.Size;
 
-import com.android.internal.util.Preconditions;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Implementation of camera metadata marshal/unmarshal across Binder to
@@ -432,7 +429,7 @@ public class CameraMetadataNative implements Parcelable {
      * @return the field corresponding to the {@code key}, or {@code null} if no value was set
      */
     public <T> T get(Key<T> key) {
-        Preconditions.checkNotNull(key, "key must not be null");
+        Objects.requireNonNull(key, "key must not be null");
 
         // Check if key has been overridden to use a wrapper class on the java side.
         GetCommand g = sGetCommandMap.get(key);
@@ -1704,6 +1701,15 @@ public class CameraMetadataNative implements Parcelable {
         return nativeIsEmpty();
     }
 
+
+    /**
+     * Retrieves the pointer to the native CameraMetadata as a Java long.
+     *
+     * @hide
+     */
+    public long getMetadataPtr() {
+        return mMetadataPtr;
+    }
 
     /**
      * Return a list containing keys of the given key class for all defined vendor tags.

@@ -16,11 +16,11 @@
 
 java_defaults {
     name: "TetheringAndroidLibraryDefaults",
-    platform_apis: true,
+    sdk_version: "system_current",
     srcs: [
         "src/**/*.java",
         ":framework-tethering-shared-srcs",
-        ":net-module-utils-srcs",
+        ":tethering-module-utils-srcs",
         ":services-tethering-shared-srcs",
     ],
     static_libs: [
@@ -29,11 +29,13 @@ java_defaults {
         "netlink-client",
         "networkstack-aidl-interfaces-unstable-java",
         "android.hardware.tetheroffload.control-V1.0-java",
+        "net-utils-framework-common",
     ],
     libs: [
         "framework-tethering",
+        "unsupportedappusage",
     ],
-
+    plugins: ["java_api_finder"],
     manifest: "AndroidManifestBase.xml",
 }
 
@@ -45,9 +47,9 @@ android_library {
 
 // Due to b/143733063, APK can't access a jni lib that is in APEX (but not in the APK).
 cc_library {
-    name: "libtetheroffloadjni",
+    name: "libtetherutilsjni",
     srcs: [
-        "jni/com_android_server_connectivity_tethering_OffloadHardwareInterface.cpp",
+        "jni/android_net_util_TetheringUtils.cpp",
     ],
     shared_libs: [
         "libcgrouprc",
@@ -79,7 +81,7 @@ cc_library {
 // Common defaults for compiling the actual APK.
 java_defaults {
     name: "TetheringAppDefaults",
-    platform_apis: true,
+    sdk_version: "system_current",
     privileged: true,
     // Build system doesn't track transitive dependeicies for jni_libs, list all the dependencies
     // explicitly.
@@ -87,7 +89,7 @@ java_defaults {
         "libcgrouprc",
         "libnativehelper_compat_libc++",
         "libvndksupport",
-        "libtetheroffloadjni",
+        "libtetherutilsjni",
     ],
     resource_dirs: [
         "res",
@@ -122,4 +124,5 @@ android_app {
     use_embedded_native_libs: true,
     // The permission configuration *must* be included to ensure security of the device
     required: ["NetworkPermissionConfig"],
+    apex_available: ["com.android.tethering"],
 }

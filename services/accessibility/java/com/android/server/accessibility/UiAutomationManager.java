@@ -25,6 +25,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.IBinder.DeathRecipient;
+import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.util.Slog;
 import android.view.Display;
@@ -297,6 +298,11 @@ class UiAutomationManager {
         }
 
         @Override
+        public boolean switchToInputMethod(String imeId) {
+            return false;
+        }
+
+        @Override
         public boolean isAccessibilityButtonAvailable() {
             return false;
         }
@@ -320,5 +326,8 @@ class UiAutomationManager {
 
         @Override
         public void onFingerprintGesture(int gesture) {}
+
+        @Override
+        public void takeScreenshotWithCallback(int displayId, RemoteCallback callback) {}
     }
 }

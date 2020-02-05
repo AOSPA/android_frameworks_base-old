@@ -1,6 +1,8 @@
 cc_library_shared {
     name: "libmedia_jni",
 
+    defaults: ["libcodec2-internal-defaults"],
+
     srcs: [
         "android_media_ImageWriter.cpp",
         "android_media_ImageReader.cpp",
@@ -19,6 +21,7 @@ cc_library_shared {
         "android_media_MediaProfiles.cpp",
         "android_media_MediaRecorder.cpp",
         "android_media_MediaSync.cpp",
+        "android_media_MediaTranscodeManager.cpp",
         "android_media_ResampleInputStream.cpp",
         "android_media_Streams.cpp",
         "android_media_SyncParams.cpp",
@@ -139,7 +142,12 @@ cc_library_shared {
         "libfmq",
         "libhidlbase",
         "liblog",
+        "libnativehelper",
         "libutils",
+    ],
+
+    header_libs: [
+        "libstagefright_foundation_headers",
     ],
 
     export_include_dirs: ["."],

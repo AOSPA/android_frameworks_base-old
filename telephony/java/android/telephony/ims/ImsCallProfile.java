@@ -18,9 +18,10 @@ package android.telephony.ims;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -40,10 +41,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Parcelable object to handle IMS call profile.
- * It is created from GSMA IR.92/IR.94, 3GPP TS 24.229/TS 26.114/TS26.111.
- * It provides the service and call type, the additional information related to the call.
- *
+ * A Parcelable object to handle the IMS call profile, which provides the service, call type, and
+ * additional information related to the call.
+ * <p>
+ * See the following specifications for more information about this class: GSMA IR.92/IR.94,
+ * 3GPP TS 24.229/TS 26.114/TS26.111.
  * @hide
  */
 @SystemApi
@@ -156,12 +158,13 @@ public final class ImsCallProfile implements Parcelable {
      */
     public static final String EXTRA_CONFERENCE_AVAIL = "conference_avail";
 
-    // Extra string for internal use only. OEMs should not use
-    // this for packing extras.
     /**
+     * Extra key used to store a Bundle containing proprietary extras to send to the ImsService.
+     * Use {@link #getProprietaryCallExtras()} instead.
      * @hide
      */
-    public static final String EXTRA_OEM_EXTRAS = "OemCallExtras";
+    @TestApi
+    public static final String EXTRA_OEM_EXTRAS = "android.telephony.ims.extra.OEM_EXTRAS";
 
     /**
      * Rule for originating identity (number) presentation, MO/MT.
@@ -284,6 +287,14 @@ public final class ImsCallProfile implements Parcelable {
                                   "android.telephony.ims.extra.ADDITIONAL_SIP_INVITE_FIELDS";
 
     /**
+     * CallDisconnectCause: Specify call disconnect cause. This extra should be a code
+     * corresponding to ImsReasonInfo and should only be populated in the case that the
+     * call has already been missed
+     */
+    public static final String EXTRA_CALL_DISCONNECT_CAUSE =
+                                 "android.telephony.ims.extra.CALL_DISCONNECT_CAUSE";
+
+    /**
      * Extra key which the RIL can use to indicate the radio technology used for a call.
      * Valid values are:
      * {@link android.telephony.ServiceState#RIL_RADIO_TECHNOLOGY_LTE},
@@ -296,15 +307,30 @@ public final class ImsCallProfile implements Parcelable {
      *      updateImsCallRatFromExtras(Bundle)} to determine whether to set the
      * {@link android.telecom.TelecomManager#EXTRA_CALL_NETWORK_TYPE} extra value and
      * {@link android.telecom.Connection#PROPERTY_WIFI} property on a connection.
+     * @deprecated the constants associated with this extra are hidden, instead use
+     * {@link #EXTRA_CALL_NETWORK_TYPE}.
      */
+    @Deprecated
     public static final String EXTRA_CALL_RAT_TYPE = "CallRadioTech";
+
+    /**
+     * Extra key with an {@code int} value which can be set in {@link #setCallExtraInt(String, int)}
+     * to indicate the network type used for a call.
+     * <p>
+     * Valid values are defined by {@code TelephonyManager.NETWORK_TYPE_*} constants. An example may
+     * be {@link android.telephony.TelephonyManager#NETWORK_TYPE_LTE}.
+     */
+    public static final String EXTRA_CALL_NETWORK_TYPE =
+            "android.telephony.ims.extra.CALL_NETWORK_TYPE";
 
     /**
      * Similar to {@link #EXTRA_CALL_RAT_TYPE}, except with a lowercase 'c'.  Used to ensure
      * compatibility with modems that are non-compliant with the {@link #EXTRA_CALL_RAT_TYPE}
      * extra key.  Should be removed when the non-compliant modems are fixed.
      * @hide
+     * @deprecated Use {@link #EXTRA_CALL_NETWORK_TYPE} instead.
      */
+    @Deprecated
     public static final String EXTRA_CALL_RAT_TYPE_ALT = "callRadioTech";
 
     /** @hide */
@@ -682,6 +708,18 @@ public final class ImsCallProfile implements Parcelable {
 
     public Bundle getCallExtras() {
         return mCallExtras;
+    }
+
+    /**
+     * Get the proprietary extras set for this ImsCallProfile.
+     * @return A {@link Bundle} containing proprietary call extras that were not set by the
+     * platform.
+     */
+    public @Nullable Bundle getProprietaryCallExtras() {
+        if (mCallExtras == null) {
+            return null;
+        }
+        return mCallExtras.getBundle(EXTRA_OEM_EXTRAS);
     }
 
     public ImsStreamMediaProfile getMediaProfile() {

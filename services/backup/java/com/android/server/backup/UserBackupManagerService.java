@@ -18,7 +18,6 @@ package com.android.server.backup;
 
 import static android.content.pm.ApplicationInfo.PRIVATE_FLAG_BACKUP_IN_FOREGROUND;
 
-import static com.android.internal.util.Preconditions.checkNotNull;
 import static com.android.server.backup.BackupManagerService.DEBUG;
 import static com.android.server.backup.BackupManagerService.DEBUG_SCHEDULING;
 import static com.android.server.backup.BackupManagerService.MORE_DEBUG;
@@ -32,6 +31,7 @@ import static com.android.server.backup.internal.BackupHandler.MSG_RESTORE_SESSI
 import static com.android.server.backup.internal.BackupHandler.MSG_RETRY_CLEAR;
 import static com.android.server.backup.internal.BackupHandler.MSG_RUN_ADB_BACKUP;
 import static com.android.server.backup.internal.BackupHandler.MSG_RUN_ADB_RESTORE;
+import static com.android.server.backup.internal.BackupHandler.MSG_RUN_BACKUP;
 import static com.android.server.backup.internal.BackupHandler.MSG_RUN_CLEAR;
 import static com.android.server.backup.internal.BackupHandler.MSG_RUN_RESTORE;
 import static com.android.server.backup.internal.BackupHandler.MSG_SCHEDULE_BACKUP_PACKAGE;
@@ -112,7 +112,6 @@ import com.android.server.backup.internal.ClearDataObserver;
 import com.android.server.backup.internal.OnTaskFinishedListener;
 import com.android.server.backup.internal.Operation;
 import com.android.server.backup.internal.PerformInitializeTask;
-import com.android.server.backup.internal.RunBackupReceiver;
 import com.android.server.backup.internal.RunInitializeReceiver;
 import com.android.server.backup.internal.SetupObserver;
 import com.android.server.backup.keyvalue.BackupRequest;
@@ -159,6 +158,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.Random;
 import java.util.Set;
@@ -257,7 +257,6 @@ public class UserBackupManagerService {
     // Retry interval for clear/init when the transport is unavailable
     private static final long TRANSPORT_RETRY_INTERVAL = 1 * AlarmManager.INTERVAL_HOUR;
 
-    public static final String RUN_BACKUP_ACTION = "android.app.backup.intent.RUN";
     public static final String RUN_INITIALIZE_ACTION = "android.app.backup.intent.INIT";
     private static final String BACKUP_FINISHED_ACTION = "android.intent.action.BACKUP_FINISHED";
     private static final String BACKUP_FINISHED_PACKAGE_EXTRA = "packageName";
@@ -319,7 +318,6 @@ public class UserBackupManagerService {
     private boolean mSetupComplete;
     private boolean mAutoRestore;
 
-    private final PendingIntent mRunBackupIntent;
     private final PendingIntent mRunInitIntent;
 
     private final ArraySet<String> mPendingInits = new ArraySet<>();  // transport names
@@ -417,7 +415,6 @@ public class UserBackupManagerService {
     @Nullable private File mAncestralSerialNumberFile;
 
     private final ContentObserver mSetupObserver;
-    private final BroadcastReceiver mRunBackupReceiver;
     private final BroadcastReceiver mRunInitReceiver;
 
     /**
@@ -518,7 +515,7 @@ public class UserBackupManagerService {
             File dataDir,
             TransportManager transportManager) {
         mUserId = userId;
-        mContext = checkNotNull(context, "context cannot be null");
+        mContext = Objects.requireNonNull(context, "context cannot be null");
         mPackageManager = context.getPackageManager();
         mPackageManagerBinder = AppGlobals.getPackageManager();
         mActivityManager = ActivityManager.getService();
@@ -528,14 +525,14 @@ public class UserBackupManagerService {
         mPowerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         mStorageManager = IStorageManager.Stub.asInterface(ServiceManager.getService("mount"));
 
-        checkNotNull(parent, "parent cannot be null");
+        Objects.requireNonNull(parent, "parent cannot be null");
         mBackupManagerBinder = BackupManagerService.asInterface(parent.asBinder());
 
         mAgentTimeoutParameters = new
                 BackupAgentTimeoutParameters(Handler.getMain(), mContext.getContentResolver());
         mAgentTimeoutParameters.start();
 
-        checkNotNull(userBackupThread, "userBackupThread cannot be null");
+        Objects.requireNonNull(userBackupThread, "userBackupThread cannot be null");
         mBackupHandler = new BackupHandler(this, userBackupThread);
 
         // Set up our bookkeeping
@@ -551,7 +548,7 @@ public class UserBackupManagerService {
                 mSetupObserver,
                 mUserId);
 
-        mBaseStateDir = checkNotNull(baseStateDir, "baseStateDir cannot be null");
+        mBaseStateDir = Objects.requireNonNull(baseStateDir, "baseStateDir cannot be null");
         // TODO (b/120424138): Remove once the system user is migrated to use the per-user CE
         // directory. Per-user CE directories are managed by vold.
         if (userId == UserHandle.USER_SYSTEM) {
@@ -563,22 +560,12 @@ public class UserBackupManagerService {
 
         // TODO (b/120424138): The system user currently uses the cache which is managed by init.rc
         // Initialization and restorecon is managed by vold for per-user CE directories.
-        mDataDir = checkNotNull(dataDir, "dataDir cannot be null");
+        mDataDir = Objects.requireNonNull(dataDir, "dataDir cannot be null");
         mBackupPasswordManager = new BackupPasswordManager(mContext, mBaseStateDir, mRng);
 
-        // Receivers for scheduled backups and transport initialization operations.
-        mRunBackupReceiver = new RunBackupReceiver(this);
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(RUN_BACKUP_ACTION);
-        context.registerReceiverAsUser(
-                mRunBackupReceiver,
-                UserHandle.of(userId),
-                filter,
-                android.Manifest.permission.BACKUP,
-                /* scheduler */ null);
-
+        // Receiver for transport initialization.
         mRunInitReceiver = new RunInitializeReceiver(this);
-        filter = new IntentFilter();
+        IntentFilter filter = new IntentFilter();
         filter.addAction(RUN_INITIALIZE_ACTION);
         context.registerReceiverAsUser(
                 mRunInitReceiver,
@@ -586,16 +573,6 @@ public class UserBackupManagerService {
                 filter,
                 android.Manifest.permission.BACKUP,
                 /* scheduler */ null);
-
-        Intent backupIntent = new Intent(RUN_BACKUP_ACTION);
-        backupIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
-        mRunBackupIntent =
-                PendingIntent.getBroadcastAsUser(
-                        context,
-                        /* requestCode */ 0,
-                        backupIntent,
-                        /* flags */ 0,
-                        UserHandle.of(userId));
 
         Intent initIntent = new Intent(RUN_INITIALIZE_ACTION);
         initIntent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
@@ -625,7 +602,7 @@ public class UserBackupManagerService {
             addPackageParticipantsLocked(null);
         }
 
-        mTransportManager = checkNotNull(transportManager, "transportManager cannot be null");
+        mTransportManager = Objects.requireNonNull(transportManager, "transportManager cannot be null");
         mTransportManager.setOnTransportRegisteredListener(this::onTransportRegistered);
         mRegisterTransportsRequestedTime = SystemClock.elapsedRealtime();
         mBackupHandler.postDelayed(
@@ -659,7 +636,6 @@ public class UserBackupManagerService {
         mAgentTimeoutParameters.stop();
         mConstants.stop();
         mContext.getContentResolver().unregisterContentObserver(mSetupObserver);
-        mContext.unregisterReceiver(mRunBackupReceiver);
         mContext.unregisterReceiver(mRunInitReceiver);
         mContext.unregisterReceiver(mPackageTrackingReceiver);
         mBackupHandler.stop();
@@ -2538,18 +2514,38 @@ public class UserBackupManagerService {
                 KeyValueBackupJob.schedule(mUserId, mContext, mConstants);
             } else {
                 if (DEBUG) Slog.v(TAG, "Scheduling immediate backup pass");
-                synchronized (mQueueLock) {
-                    // Fire the intent that kicks off the whole shebang...
-                    try {
-                        mRunBackupIntent.send();
-                    } catch (PendingIntent.CanceledException e) {
-                        // should never happen
-                        Slog.e(TAG, "run-backup intent cancelled!");
-                    }
 
-                    // ...and cancel any pending scheduled job, because we've just superseded it
-                    KeyValueBackupJob.cancel(mUserId, mContext);
+                synchronized (getQueueLock()) {
+                    if (getPendingInits().size() > 0) {
+                        // If there are pending init operations, we process those and then settle
+                        // into the usual periodic backup schedule.
+                        if (MORE_DEBUG) {
+                            Slog.v(TAG, "Init pending at scheduled backup");
+                        }
+                        try {
+                            getAlarmManager().cancel(mRunInitIntent);
+                            mRunInitIntent.send();
+                        } catch (PendingIntent.CanceledException ce) {
+                            Slog.w(TAG, "Run init intent cancelled");
+                        }
+                        return;
+                    }
                 }
+
+                // Don't run backups if we're disabled or not yet set up.
+                if (!isEnabled() || !isSetupComplete()) {
+                    Slog.w(
+                            TAG,
+                            "Backup pass but enabled="  + isEnabled()
+                                    + " setupComplete=" + isSetupComplete());
+                    return;
+                }
+
+                // Fire the msg that kicks off the whole shebang...
+                Message message = mBackupHandler.obtainMessage(MSG_RUN_BACKUP);
+                mBackupHandler.sendMessage(message);
+                // ...and cancel any pending scheduled job, because we've just superseded it
+                KeyValueBackupJob.cancel(mUserId, mContext);
             }
         } finally {
             Binder.restoreCallingIdentity(oldId);
@@ -3047,9 +3043,9 @@ public class UserBackupManagerService {
         mContext.enforceCallingOrSelfPermission(
                 android.Manifest.permission.BACKUP, "updateTransportAttributes");
 
-        Preconditions.checkNotNull(transportComponent, "transportComponent can't be null");
-        Preconditions.checkNotNull(name, "name can't be null");
-        Preconditions.checkNotNull(
+        Objects.requireNonNull(transportComponent, "transportComponent can't be null");
+        Objects.requireNonNull(name, "name can't be null");
+        Objects.requireNonNull(
                 currentDestinationString, "currentDestinationString can't be null");
         Preconditions.checkArgument(
                 (dataManagementIntent == null) == (dataManagementLabel == null),
@@ -3545,14 +3541,7 @@ public class UserBackupManagerService {
         try {
             if (args != null) {
                 for (String arg : args) {
-                    if ("-h".equals(arg)) {
-                        pw.println("'dumpsys backup' optional arguments:");
-                        pw.println("  -h       : this help text");
-                        pw.println("  a[gents] : dump information about defined backup agents");
-                        pw.println("  users    : dump the list of users for which backup service "
-                                + "is running");
-                        return;
-                    } else if ("agents".startsWith(arg)) {
+                    if ("agents".startsWith(arg)) {
                         dumpAgents(pw);
                         return;
                     } else if ("transportclients".equals(arg.toLowerCase())) {
@@ -3583,8 +3572,10 @@ public class UserBackupManagerService {
     }
 
     private void dumpInternal(PrintWriter pw) {
+        // Add prefix for only non-system users so that system user dumpsys is the same as before
+        String userPrefix = mUserId == UserHandle.USER_SYSTEM ? "" : "User " + mUserId + ":";
         synchronized (mQueueLock) {
-            pw.println("Backup Manager is " + (mEnabled ? "enabled" : "disabled")
+            pw.println(userPrefix + "Backup Manager is " + (mEnabled ? "enabled" : "disabled")
                     + " / " + (!mSetupComplete ? "not " : "") + "setup complete / "
                     + (this.mPendingInits.size() == 0 ? "not " : "") + "pending init");
             pw.println("Auto-restore is " + (mAutoRestore ? "enabled" : "disabled"));
@@ -3594,13 +3585,13 @@ public class UserBackupManagerService {
                     + " (now = " + System.currentTimeMillis() + ')');
             pw.println("  next scheduled: " + KeyValueBackupJob.nextScheduled(mUserId));
 
-            pw.println("Transport whitelist:");
+            pw.println(userPrefix + "Transport whitelist:");
             for (ComponentName transport : mTransportManager.getTransportWhitelist()) {
                 pw.print("    ");
                 pw.println(transport.flattenToShortString());
             }
 
-            pw.println("Available transports:");
+            pw.println(userPrefix + "Available transports:");
             final String[] transports = listAllTransports();
             if (transports != null) {
                 for (String t : transports) {
@@ -3626,18 +3617,18 @@ public class UserBackupManagerService {
 
             mTransportManager.dumpTransportClients(pw);
 
-            pw.println("Pending init: " + mPendingInits.size());
+            pw.println(userPrefix + "Pending init: " + mPendingInits.size());
             for (String s : mPendingInits) {
                 pw.println("    " + s);
             }
 
-            pw.print("Ancestral: ");
+            pw.print(userPrefix + "Ancestral: ");
             pw.println(Long.toHexString(mAncestralToken));
-            pw.print("Current:   ");
+            pw.print(userPrefix + "Current:   ");
             pw.println(Long.toHexString(mCurrentToken));
 
             int numPackages = mBackupParticipants.size();
-            pw.println("Participants:");
+            pw.println(userPrefix + "Participants:");
             for (int i = 0; i < numPackages; i++) {
                 int uid = mBackupParticipants.keyAt(i);
                 pw.print("  uid: ");
@@ -3648,7 +3639,7 @@ public class UserBackupManagerService {
                 }
             }
 
-            pw.println("Ancestral packages: "
+            pw.println(userPrefix + "Ancestral packages: "
                     + (mAncestralPackages == null ? "none" : mAncestralPackages.size()));
             if (mAncestralPackages != null) {
                 for (String pkg : mAncestralPackages) {
@@ -3657,17 +3648,17 @@ public class UserBackupManagerService {
             }
 
             Set<String> processedPackages = mProcessedPackagesJournal.getPackagesCopy();
-            pw.println("Ever backed up: " + processedPackages.size());
+            pw.println(userPrefix + "Ever backed up: " + processedPackages.size());
             for (String pkg : processedPackages) {
                 pw.println("    " + pkg);
             }
 
-            pw.println("Pending key/value backup: " + mPendingBackups.size());
+            pw.println(userPrefix + "Pending key/value backup: " + mPendingBackups.size());
             for (BackupRequest req : mPendingBackups.values()) {
                 pw.println("    " + req);
             }
 
-            pw.println("Full backup queue:" + mFullBackupQueue.size());
+            pw.println(userPrefix + "Full backup queue:" + mFullBackupQueue.size());
             for (FullBackupEntry entry : mFullBackupQueue) {
                 pw.print("    ");
                 pw.print(entry.lastBackup);

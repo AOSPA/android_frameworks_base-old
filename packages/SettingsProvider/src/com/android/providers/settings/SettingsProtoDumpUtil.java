@@ -266,9 +266,6 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.BACKUP_AGENT_TIMEOUT_PARAMETERS,
                 GlobalSettingsProto.Backup.BACKUP_AGENT_TIMEOUT_PARAMETERS);
-        dumpSetting(s, p,
-                Settings.Global.BACKUP_MULTI_USER_ENABLED,
-                GlobalSettingsProto.Backup.BACKUP_MULTI_USER_ENABLED);
         p.end(backupToken);
 
         final long batteryToken = p.start(GlobalSettingsProto.BATTERY);
@@ -1073,9 +1070,6 @@ class SettingsProtoDumpUtil {
                 Settings.Global.NETWORK_RECOMMENDATIONS_PACKAGE,
                 GlobalSettingsProto.Network.RECOMMENDATIONS_PACKAGE);
         dumpSetting(s, p,
-                Settings.Global.NETWORK_RECOMMENDATION_REQUEST_TIMEOUT_MS,
-                GlobalSettingsProto.Network.RECOMMENDATION_REQUEST_TIMEOUT_MS);
-        dumpSetting(s, p,
                 Settings.Global.NETWORK_WATCHLIST_ENABLED,
                 GlobalSettingsProto.Network.WATCHLIST_ENABLED);
         dumpSetting(s, p,
@@ -1593,9 +1587,6 @@ class SettingsProtoDumpUtil {
                 Settings.Global.WIFI_WATCHDOG_POOR_NETWORK_TEST_ENABLED,
                 GlobalSettingsProto.Wifi.WATCHDOG_POOR_NETWORK_TEST_ENABLED);
         dumpSetting(s, p,
-                Settings.Global.WIFI_SUSPEND_OPTIMIZATIONS_ENABLED,
-                GlobalSettingsProto.Wifi.SUSPEND_OPTIMIZATIONS_ENABLED);
-        dumpSetting(s, p,
                 Settings.Global.WIFI_VERBOSE_LOGGING_ENABLED,
                 GlobalSettingsProto.Wifi.VERBOSE_LOGGING_ENABLED);
         dumpSetting(s, p,
@@ -2011,6 +2002,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.DOZE_TAP_SCREEN_GESTURE,
                 SecureSettingsProto.Doze.PULSE_ON_TAP);
+        dumpSetting(s, p,
+                Settings.Secure.SUPPRESS_DOZE,
+                SecureSettingsProto.Doze.SUPPRESS);
         p.end(dozeToken);
 
         dumpSetting(s, p,

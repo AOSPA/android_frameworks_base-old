@@ -28,11 +28,11 @@ import static org.junit.Assert.assertTrue;
 
 import android.platform.test.annotations.Presubmit;
 
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -40,10 +40,11 @@ import org.mockito.MockitoAnnotations;
  * Tests for the {@link ActivityStack} class.
  *
  * Build/Install/Run:
- *  atest FrameworksServicesTests:AnimatingActivityRegistryTest
+ *  atest WmTests:AnimatingActivityRegistryTest
  */
 @SmallTest
 @Presubmit
+@RunWith(WindowTestRunner.class)
 public class AnimatingActivityRegistryTest extends WindowTestsBase {
 
     @Mock
@@ -60,7 +61,6 @@ public class AnimatingActivityRegistryTest extends WindowTestsBase {
     }
 
     @Test
-    @FlakyTest(bugId = 144611135)
     public void testDeferring() {
         final ActivityRecord activity1 = createActivityRecord(mDisplayContent,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);
@@ -83,7 +83,6 @@ public class AnimatingActivityRegistryTest extends WindowTestsBase {
     }
 
     @Test
-    @FlakyTest(bugId = 131005232)
     public void testContainerRemoved() {
         final ActivityRecord window1 = createActivityRecord(mDisplayContent,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);

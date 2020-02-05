@@ -18,6 +18,7 @@ package android.telephony.data;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.hardware.radio.V1_5.ApnTypes;
@@ -28,12 +29,13 @@ import android.provider.Telephony;
 import android.provider.Telephony.Carriers;
 import android.telephony.Annotation.ApnType;
 import android.telephony.Annotation.NetworkType;
-import android.telephony.Rlog;
 import android.telephony.ServiceState;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
+
+import com.android.telephony.Rlog;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -123,6 +125,122 @@ public class ApnSetting implements Parcelable {
     /** Authentication type for PAP or CHAP. */
     public static final int AUTH_TYPE_PAP_OR_CHAP = 3;
 
+    /**
+     * APN types for data connections.  These are usage categories for an APN
+     * entry.  One APN entry may support multiple APN types, eg, a single APN
+     * may service regular internet traffic ("default") as well as MMS-specific
+     * connections.<br/>
+     * APN_TYPE_ALL is a special type to indicate that this APN entry can
+     * service all data connections.
+     * <p>
+     * Note: The goal is to deprecate this.  Due to the Carrier Table being used
+     * directly, this isn't feasible right now.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String TYPE_ALL_STRING = "*";
+
+    /**
+     * APN type for default data traffic
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String TYPE_DEFAULT_STRING = "default";
+
+
+    /**
+     * APN type for MMS traffic
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String TYPE_MMS_STRING = "mms";
+
+
+    /**
+     * APN type for SUPL assisted GPS
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String TYPE_SUPL_STRING = "supl";
+
+    /**
+     * APN type for DUN traffic
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String TYPE_DUN_STRING = "dun";
+
+    /**
+     * APN type for HiPri traffic
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String TYPE_HIPRI_STRING = "hipri";
+
+    /**
+     * APN type for FOTA
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String TYPE_FOTA_STRING = "fota";
+
+    /**
+     * APN type for IMS
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String TYPE_IMS_STRING = "ims";
+
+    /**
+     * APN type for CBS
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String TYPE_CBS_STRING = "cbs";
+
+    /**
+     * APN type for IA Initial Attach APN
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String TYPE_IA_STRING = "ia";
+
+    /**
+     * APN type for Emergency PDN. This is not an IA apn, but is used
+     * for access to carrier services in an emergency call situation.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String TYPE_EMERGENCY_STRING = "emergency";
+
+    /**
+     * APN type for Mission Critical Services
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String TYPE_MCX_STRING = "mcx";
+
+    /**
+     * APN type for XCAP
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String TYPE_XCAP_STRING = "xcap";
+
+
     /** @hide */
     @IntDef(prefix = { "AUTH_TYPE_" }, value = {
         AUTH_TYPE_NONE,
@@ -187,42 +305,44 @@ public class ApnSetting implements Parcelable {
     private static final Map<Integer, String> MVNO_TYPE_INT_MAP;
 
     static {
-        APN_TYPE_STRING_MAP = new ArrayMap<String, Integer>();
-        APN_TYPE_STRING_MAP.put("*", TYPE_ALL);
-        APN_TYPE_STRING_MAP.put("default", TYPE_DEFAULT);
-        APN_TYPE_STRING_MAP.put("mms", TYPE_MMS);
-        APN_TYPE_STRING_MAP.put("supl", TYPE_SUPL);
-        APN_TYPE_STRING_MAP.put("dun", TYPE_DUN);
-        APN_TYPE_STRING_MAP.put("hipri", TYPE_HIPRI);
-        APN_TYPE_STRING_MAP.put("fota", TYPE_FOTA);
-        APN_TYPE_STRING_MAP.put("ims", TYPE_IMS);
-        APN_TYPE_STRING_MAP.put("cbs", TYPE_CBS);
-        APN_TYPE_STRING_MAP.put("ia", TYPE_IA);
-        APN_TYPE_STRING_MAP.put("emergency", TYPE_EMERGENCY);
-        APN_TYPE_STRING_MAP.put("mcx", TYPE_MCX);
-        APN_TYPE_STRING_MAP.put("xcap", TYPE_XCAP);
-        APN_TYPE_INT_MAP = new ArrayMap<Integer, String>();
-        APN_TYPE_INT_MAP.put(TYPE_DEFAULT, "default");
-        APN_TYPE_INT_MAP.put(TYPE_MMS, "mms");
-        APN_TYPE_INT_MAP.put(TYPE_SUPL, "supl");
-        APN_TYPE_INT_MAP.put(TYPE_DUN, "dun");
-        APN_TYPE_INT_MAP.put(TYPE_HIPRI, "hipri");
-        APN_TYPE_INT_MAP.put(TYPE_FOTA, "fota");
-        APN_TYPE_INT_MAP.put(TYPE_IMS, "ims");
-        APN_TYPE_INT_MAP.put(TYPE_CBS, "cbs");
-        APN_TYPE_INT_MAP.put(TYPE_IA, "ia");
-        APN_TYPE_INT_MAP.put(TYPE_EMERGENCY, "emergency");
-        APN_TYPE_INT_MAP.put(TYPE_MCX, "mcx");
-        APN_TYPE_INT_MAP.put(TYPE_XCAP, "xcap");
+        APN_TYPE_STRING_MAP = new ArrayMap<>();
+        APN_TYPE_STRING_MAP.put(TYPE_ALL_STRING, TYPE_ALL);
+        APN_TYPE_STRING_MAP.put(TYPE_DEFAULT_STRING, TYPE_DEFAULT);
+        APN_TYPE_STRING_MAP.put(TYPE_MMS_STRING, TYPE_MMS);
+        APN_TYPE_STRING_MAP.put(TYPE_SUPL_STRING, TYPE_SUPL);
+        APN_TYPE_STRING_MAP.put(TYPE_DUN_STRING, TYPE_DUN);
+        APN_TYPE_STRING_MAP.put(TYPE_HIPRI_STRING, TYPE_HIPRI);
+        APN_TYPE_STRING_MAP.put(TYPE_FOTA_STRING, TYPE_FOTA);
+        APN_TYPE_STRING_MAP.put(TYPE_IMS_STRING, TYPE_IMS);
+        APN_TYPE_STRING_MAP.put(TYPE_CBS_STRING, TYPE_CBS);
+        APN_TYPE_STRING_MAP.put(TYPE_IA_STRING, TYPE_IA);
+        APN_TYPE_STRING_MAP.put(TYPE_EMERGENCY_STRING, TYPE_EMERGENCY);
+        APN_TYPE_STRING_MAP.put(TYPE_MCX_STRING, TYPE_MCX);
+        APN_TYPE_STRING_MAP.put(TYPE_XCAP_STRING, TYPE_XCAP);
 
-        PROTOCOL_STRING_MAP = new ArrayMap<String, Integer>();
+        APN_TYPE_INT_MAP = new ArrayMap<>();
+        APN_TYPE_INT_MAP.put(TYPE_DEFAULT, TYPE_DEFAULT_STRING);
+        APN_TYPE_INT_MAP.put(TYPE_MMS, TYPE_MMS_STRING);
+        APN_TYPE_INT_MAP.put(TYPE_SUPL, TYPE_SUPL_STRING);
+        APN_TYPE_INT_MAP.put(TYPE_DUN, TYPE_DUN_STRING);
+        APN_TYPE_INT_MAP.put(TYPE_HIPRI, TYPE_HIPRI_STRING);
+        APN_TYPE_INT_MAP.put(TYPE_FOTA, TYPE_FOTA_STRING);
+        APN_TYPE_INT_MAP.put(TYPE_IMS, TYPE_IMS_STRING);
+        APN_TYPE_INT_MAP.put(TYPE_CBS, TYPE_CBS_STRING);
+        APN_TYPE_INT_MAP.put(TYPE_IA, TYPE_IA_STRING);
+        APN_TYPE_INT_MAP.put(TYPE_EMERGENCY, TYPE_EMERGENCY_STRING);
+        APN_TYPE_INT_MAP.put(TYPE_MCX, TYPE_MCX_STRING);
+        APN_TYPE_INT_MAP.put(TYPE_XCAP, TYPE_XCAP_STRING);
+
+        PROTOCOL_STRING_MAP = new ArrayMap<>();
         PROTOCOL_STRING_MAP.put("IP", PROTOCOL_IP);
         PROTOCOL_STRING_MAP.put("IPV6", PROTOCOL_IPV6);
         PROTOCOL_STRING_MAP.put("IPV4V6", PROTOCOL_IPV4V6);
         PROTOCOL_STRING_MAP.put("PPP", PROTOCOL_PPP);
         PROTOCOL_STRING_MAP.put("NON-IP", PROTOCOL_NON_IP);
         PROTOCOL_STRING_MAP.put("UNSTRUCTURED", PROTOCOL_UNSTRUCTURED);
-        PROTOCOL_INT_MAP = new ArrayMap<Integer, String>();
+
+        PROTOCOL_INT_MAP = new ArrayMap<>();
         PROTOCOL_INT_MAP.put(PROTOCOL_IP, "IP");
         PROTOCOL_INT_MAP.put(PROTOCOL_IPV6, "IPV6");
         PROTOCOL_INT_MAP.put(PROTOCOL_IPV4V6, "IPV4V6");
@@ -230,12 +350,13 @@ public class ApnSetting implements Parcelable {
         PROTOCOL_INT_MAP.put(PROTOCOL_NON_IP, "NON-IP");
         PROTOCOL_INT_MAP.put(PROTOCOL_UNSTRUCTURED, "UNSTRUCTURED");
 
-        MVNO_TYPE_STRING_MAP = new ArrayMap<String, Integer>();
+        MVNO_TYPE_STRING_MAP = new ArrayMap<>();
         MVNO_TYPE_STRING_MAP.put("spn", MVNO_TYPE_SPN);
         MVNO_TYPE_STRING_MAP.put("imsi", MVNO_TYPE_IMSI);
         MVNO_TYPE_STRING_MAP.put("gid", MVNO_TYPE_GID);
         MVNO_TYPE_STRING_MAP.put("iccid", MVNO_TYPE_ICCID);
-        MVNO_TYPE_INT_MAP = new ArrayMap<Integer, String>();
+
+        MVNO_TYPE_INT_MAP = new ArrayMap<>();
         MVNO_TYPE_INT_MAP.put(MVNO_TYPE_SPN, "spn");
         MVNO_TYPE_INT_MAP.put(MVNO_TYPE_IMSI, "imsi");
         MVNO_TYPE_INT_MAP.put(MVNO_TYPE_GID, "gid");
@@ -1056,6 +1177,11 @@ public class ApnSetting implements Parcelable {
     }
 
     /** @hide */
+    public boolean isEmergencyApn() {
+        return hasApnType(TYPE_EMERGENCY);
+    }
+
+    /** @hide */
     public boolean canHandleType(@ApnType int type) {
         if (!mCarrierEnabled) {
             return false;
@@ -1284,10 +1410,13 @@ public class ApnSetting implements Parcelable {
     }
 
     /**
+     * Converts the integer value of an APN type to the string version.
      * @param apnTypeBitmask bitmask of APN types.
      * @return comma delimited list of APN types.
      * @hide
      */
+    @SystemApi
+    @NonNull
     public static String getApnTypesStringFromBitmask(int apnTypeBitmask) {
         List<String> types = new ArrayList<>();
         for (Integer type : APN_TYPE_INT_MAP.keySet()) {

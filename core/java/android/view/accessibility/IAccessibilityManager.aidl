@@ -16,6 +16,7 @@
 
 package android.view.accessibility;
 
+import android.app.RemoteAction;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.accessibilityservice.IAccessibilityServiceConnection;
 import android.accessibilityservice.IAccessibilityServiceClient;
@@ -24,6 +25,7 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.IAccessibilityInteractionConnection;
 import android.view.accessibility.IAccessibilityManagerClient;
+import android.view.accessibility.IWindowMagnificationConnection;
 import android.view.IWindow;
 
 /**
@@ -65,12 +67,12 @@ interface IAccessibilityManager {
     // Used by UiAutomation
     IBinder getWindowToken(int windowId, int userId);
 
-    void notifyAccessibilityButtonClicked(int displayId);
+    void notifyAccessibilityButtonClicked(int displayId, String targetName);
 
     void notifyAccessibilityButtonVisibilityChanged(boolean available);
 
     // Requires Manifest.permission.MANAGE_ACCESSIBILITY
-    void performAccessibilityShortcut();
+    void performAccessibilityShortcut(String targetName);
 
     // Requires Manifest.permission.MANAGE_ACCESSIBILITY
     List<String> getAccessibilityShortcutTargets(int shortcutType);
@@ -82,4 +84,8 @@ interface IAccessibilityManager {
     int getAccessibilityWindowId(IBinder windowToken);
 
     long getRecommendedTimeoutMillis();
+
+    oneway void registerSystemAction(in RemoteAction action, int actionId);
+    oneway void unregisterSystemAction(int actionId);
+    oneway void setWindowMagnificationConnection(in IWindowMagnificationConnection connection);
 }

@@ -16,13 +16,21 @@
 
 package android.view;
 
+import static android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
 import static android.view.ViewRootImpl.NEW_INSETS_MODE_FULL;
 import static android.view.ViewRootImpl.NEW_INSETS_MODE_IME;
 import static android.view.ViewRootImpl.NEW_INSETS_MODE_NONE;
+import static android.view.ViewRootImpl.sNewInsetsMode;
+import static android.view.WindowInsets.Type.IME;
 import static android.view.WindowInsets.Type.MANDATORY_SYSTEM_GESTURES;
 import static android.view.WindowInsets.Type.SIZE;
 import static android.view.WindowInsets.Type.SYSTEM_GESTURES;
+import static android.view.WindowInsets.Type.ime;
 import static android.view.WindowInsets.Type.indexOf;
+import static android.view.WindowInsets.Type.isVisibleInsetsType;
+import static android.view.WindowInsets.Type.systemBars;
+import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
+import static android.view.WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST;
 
 import android.annotation.IntDef;
 import android.annotation.Nullable;
@@ -36,6 +44,7 @@ import android.util.SparseIntArray;
 import android.view.WindowInsets.Type;
 import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowManager.LayoutParams;
+import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
 
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
@@ -135,7 +144,8 @@ public class InsetsState implements Parcelable {
     public WindowInsets calculateInsets(Rect frame, boolean isScreenRound,
             boolean alwaysConsumeSystemBars, DisplayCutout cutout,
             @Nullable Rect legacyContentInsets, @Nullable Rect legacyStableInsets,
-            int legacySoftInputMode, @Nullable @InternalInsetsSide SparseIntArray typeSideMap) {
+            int legacySoftInputMode, int legacySystemUiFlags,
+            @Nullable @InternalInsetsSide SparseIntArray typeSideMap) {
         Insets[] typeInsetsMap = new Insets[Type.SIZE];
         Insets[] typeMaxInsetsMap = new Insets[Type.SIZE];
         boolean[] typeVisibilityMap = new boolean[SIZE];
@@ -156,11 +166,10 @@ public class InsetsState implements Parcelable {
                     && source.getType() != ITYPE_IME;
             boolean skipSystemBars = ViewRootImpl.sNewInsetsMode != NEW_INSETS_MODE_FULL
                     && (type == ITYPE_STATUS_BAR || type == ITYPE_NAVIGATION_BAR);
-            boolean skipIme = source.getType() == ITYPE_IME
-                    && (legacySoftInputMode & LayoutParams.SOFT_INPUT_ADJUST_RESIZE) == 0;
             boolean skipLegacyTypes = ViewRootImpl.sNewInsetsMode == NEW_INSETS_MODE_NONE
-                    && (toPublicType(type) & Type.compatSystemInsets()) != 0;
-            if (skipSystemBars || skipIme || skipLegacyTypes || skipNonImeInImeMode) {
+                    && (type == ITYPE_STATUS_BAR || type == ITYPE_NAVIGATION_BAR
+                            || type == ITYPE_IME);
+            if (skipSystemBars || skipLegacyTypes || skipNonImeInImeMode) {
                 typeVisibilityMap[indexOf(toPublicType(type))] = source.isVisible();
                 continue;
             }
@@ -175,8 +184,39 @@ public class InsetsState implements Parcelable {
                         typeMaxInsetsMap, null /* typeSideMap */, null /* typeVisibilityMap */);
             }
         }
+        final int softInputAdjustMode = legacySoftInputMode & SOFT_INPUT_MASK_ADJUST;
         return new WindowInsets(typeInsetsMap, typeMaxInsetsMap, typeVisibilityMap, isScreenRound,
-                alwaysConsumeSystemBars, cutout);
+                alwaysConsumeSystemBars, cutout, softInputAdjustMode == SOFT_INPUT_ADJUST_RESIZE
+                        ? systemBars() | ime()
+                        : systemBars(),
+                sNewInsetsMode == NEW_INSETS_MODE_FULL
+                        && (legacySystemUiFlags & SYSTEM_UI_FLAG_LAYOUT_STABLE) != 0);
+    }
+
+    public Rect calculateVisibleInsets(Rect frame, Rect legacyVisibleInsets,
+            @SoftInputModeFlags int softInputMode) {
+        if (sNewInsetsMode == NEW_INSETS_MODE_NONE) {
+            return legacyVisibleInsets;
+        }
+
+        Insets insets = Insets.NONE;
+        for (int type = FIRST_TYPE; type <= LAST_TYPE; type++) {
+            InsetsSource source = mSources.get(type);
+            if (source == null) {
+                continue;
+            }
+            if (sNewInsetsMode != NEW_INSETS_MODE_FULL && type != ITYPE_IME) {
+                continue;
+            }
+
+            // Ignore everything that's not a system bar or IME.
+            int publicType = InsetsState.toPublicType(type);
+            if (!isVisibleInsetsType(publicType, softInputMode)) {
+                continue;
+            }
+            insets = Insets.max(source.calculateVisibleInsets(frame), insets);
+        }
+        return insets.toRect();
     }
 
     private void processSource(InsetsSource source, Rect relativeFrame, boolean ignoreVisibility,

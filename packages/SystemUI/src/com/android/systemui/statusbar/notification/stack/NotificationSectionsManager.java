@@ -33,18 +33,22 @@ import com.android.systemui.R;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.StatusBarState;
+import com.android.systemui.statusbar.notification.NotificationSectionsFeatureManager;
 import com.android.systemui.statusbar.notification.people.DataListener;
 import com.android.systemui.statusbar.notification.people.PeopleHubSectionFooterViewAdapter;
 import com.android.systemui.statusbar.notification.people.PeopleHubSectionFooterViewBoundary;
 import com.android.systemui.statusbar.notification.people.PersonViewModel;
 import com.android.systemui.statusbar.notification.row.ActivatableNotificationView;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.notification.row.dagger.NotificationRowComponent;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.ConfigurationController.ConfigurationListener;
 
 import java.lang.annotation.Retention;
 import java.util.ArrayList;
 import java.util.List;
+
+import javax.inject.Inject;
 
 import kotlin.sequences.Sequence;
 
@@ -59,11 +63,13 @@ public class NotificationSectionsManager implements StackScrollAlgorithm.Section
     private static final String TAG = "NotifSectionsManager";
     private static final boolean DEBUG = false;
 
-    private final NotificationStackScrollLayout mParent;
+    private NotificationStackScrollLayout mParent;
     private final ActivityStarter mActivityStarter;
     private final StatusBarStateController mStatusBarStateController;
     private final ConfigurationController mConfigurationController;
     private final int mNumberOfSections;
+    private final NotificationSectionsFeatureManager mSectionsFeatureManager;
+    private final NotificationRowComponent.Builder mNotificationRowComponentBuilder;
     private boolean mInitialized = false;
 
     private SectionHeaderView mGentleHeader;
@@ -99,22 +105,25 @@ public class NotificationSectionsManager implements StackScrollAlgorithm.Section
 
     @Nullable private View.OnClickListener mOnClearGentleNotifsClickListener;
 
+    @Inject
     NotificationSectionsManager(
-            NotificationStackScrollLayout parent,
             ActivityStarter activityStarter,
             StatusBarStateController statusBarStateController,
             ConfigurationController configurationController,
             PeopleHubSectionFooterViewAdapter peopleHubViewAdapter,
-            int numberOfSections) {
-        mParent = parent;
+            NotificationSectionsFeatureManager sectionsFeatureManager,
+            NotificationRowComponent.Builder notificationRowComponentBuilder) {
         mActivityStarter = activityStarter;
         mStatusBarStateController = statusBarStateController;
         mConfigurationController = configurationController;
         mPeopleHubViewAdapter = peopleHubViewAdapter;
-        mNumberOfSections = numberOfSections;
+        mSectionsFeatureManager = sectionsFeatureManager;
+        mNumberOfSections = mSectionsFeatureManager.getNumberOfBuckets();
+        mNotificationRowComponentBuilder = notificationRowComponentBuilder;
     }
 
-    NotificationSection[] createSectionsForBuckets(int[] buckets) {
+    NotificationSection[] createSectionsForBuckets() {
+        int[] buckets = mSectionsFeatureManager.getNotificationBuckets();
         NotificationSection[] sections = new NotificationSection[buckets.length];
         for (int i = 0; i < buckets.length; i++) {
             sections[i] = new NotificationSection(mParent, buckets[i] /* bucket */);
@@ -124,11 +133,13 @@ public class NotificationSectionsManager implements StackScrollAlgorithm.Section
     }
 
     /** Must be called before use. */
-    void initialize(LayoutInflater layoutInflater) {
+    void initialize(
+            NotificationStackScrollLayout parent, LayoutInflater layoutInflater) {
         if (mInitialized) {
             throw new IllegalStateException("NotificationSectionsManager already initialized");
         }
         mInitialized = true;
+        mParent = parent;
         reinflateViews(layoutInflater);
         mPeopleHubViewAdapter.bindView(mPeopleHubViewBoundary);
         mConfigurationController.addCallback(mConfigurationListener);
@@ -159,6 +170,11 @@ public class NotificationSectionsManager implements StackScrollAlgorithm.Section
 
         mGentleHeader = (SectionHeaderView) layoutInflater.inflate(
                 R.layout.status_bar_notification_section_header, mParent, false);
+        NotificationRowComponent sectionHeaderComponent = mNotificationRowComponentBuilder
+                .activatableNotificationView(mGentleHeader)
+                .build();
+        sectionHeaderComponent.getActivatableNotificationViewController().init();
+
         mGentleHeader.setOnHeaderClickListener(this::onGentleHeaderClick);
         mGentleHeader.setOnClearAllClickListener(this::onClearGentleNotifsClick);
 
@@ -168,6 +184,11 @@ public class NotificationSectionsManager implements StackScrollAlgorithm.Section
 
         mPeopleHubView = (PeopleHubView) layoutInflater.inflate(
                 R.layout.people_strip, mParent, false);
+
+        NotificationRowComponent notificationRowComponent = mNotificationRowComponentBuilder
+                .activatableNotificationView(mPeopleHubView)
+                .build();
+        notificationRowComponent.getActivatableNotificationViewController().init();
 
         if (oldPeopleHubPos != -1) {
             mParent.addView(mPeopleHubView, oldPeopleHubPos);
@@ -187,18 +208,18 @@ public class NotificationSectionsManager implements StackScrollAlgorithm.Section
     @Override
     public boolean beginsSection(@NonNull View view, @Nullable View previous) {
         boolean begin = false;
-        if (view instanceof ExpandableNotificationRow) {
-            if (previous instanceof ExpandableNotificationRow) {
+        if (view instanceof ActivatableNotificationView) {
+            if (previous instanceof ActivatableNotificationView) {
                 // If we're drawing the first non-person notification, break out a section
-                ExpandableNotificationRow curr = (ExpandableNotificationRow) view;
-                ExpandableNotificationRow prev = (ExpandableNotificationRow) previous;
+                ActivatableNotificationView curr = (ActivatableNotificationView) view;
+                ActivatableNotificationView prev = (ActivatableNotificationView) previous;
 
-                begin =  curr.getEntry().getBucket() != prev.getEntry().getBucket();
+                begin = getBucket(curr) != getBucket(prev);
             }
         }
 
         if (!begin) {
-            begin = view == mGentleHeader || previous == mPeopleHubView;
+            begin = view == mGentleHeader || view == mPeopleHubView;
         }
 
         return begin;
@@ -230,29 +251,42 @@ public class NotificationSectionsManager implements StackScrollAlgorithm.Section
             return;
         }
 
-        int lastPersonIndex = -1;
-        int firstGentleNotifIndex = -1;
+        boolean peopleNotificationsPresent = false;
+        int firstNonHeadsUpIndex = -1;
+        int firstGentleIndex = -1;
+        int notifCount = 0;
 
         final int n = mParent.getChildCount();
         for (int i = 0; i < n; i++) {
             View child = mParent.getChildAt(i);
-            if (child instanceof ExpandableNotificationRow
-                    && child.getVisibility() != View.GONE) {
+            if (child instanceof ExpandableNotificationRow && child.getVisibility() != View.GONE) {
+                notifCount++;
                 ExpandableNotificationRow row = (ExpandableNotificationRow) child;
+                if (firstNonHeadsUpIndex == -1 && !row.isHeadsUp()) {
+                    firstNonHeadsUpIndex = i;
+                }
                 if (row.getEntry().getBucket() == BUCKET_PEOPLE) {
-                    lastPersonIndex = i;
+                    peopleNotificationsPresent = true;
                 }
                 if (row.getEntry().getBucket() == BUCKET_SILENT) {
-                    firstGentleNotifIndex = i;
+                    firstGentleIndex = i;
                     break;
                 }
             }
         }
 
-        // make room for peopleHub
-        firstGentleNotifIndex += adjustPeopleHubVisibilityAndPosition(lastPersonIndex);
+        if (firstNonHeadsUpIndex == -1) {
+            firstNonHeadsUpIndex = firstGentleIndex != -1 ? firstGentleIndex : notifCount;
+        }
 
-        adjustGentleHeaderVisibilityAndPosition(firstGentleNotifIndex);
+        // make room for peopleHub
+        int offset = adjustPeopleHubVisibilityAndPosition(
+                firstNonHeadsUpIndex, peopleNotificationsPresent);
+        if (firstGentleIndex != -1) {
+            firstGentleIndex += offset;
+        }
+
+        adjustGentleHeaderVisibilityAndPosition(firstGentleIndex);
 
         mGentleHeader.setAreThereDismissableGentleNotifs(
                 mParent.hasActiveClearableNotifications(ROWS_GENTLE));
@@ -294,13 +328,15 @@ public class NotificationSectionsManager implements StackScrollAlgorithm.Section
         }
     }
 
-    private int adjustPeopleHubVisibilityAndPosition(int lastPersonIndex) {
-        final boolean showPeopleHeader = mPeopleHubVisible
-                && mNumberOfSections > 2
-                && mStatusBarStateController.getState() != StatusBarState.KEYGUARD;
+    private int adjustPeopleHubVisibilityAndPosition(
+            int targetIndex, boolean peopleNotificationsPresent) {
+        final boolean showPeopleHeader = mNumberOfSections > 2
+                && mStatusBarStateController.getState() != StatusBarState.KEYGUARD
+                && (peopleNotificationsPresent || mPeopleHubVisible);
         final int currentHubIndex = mParent.indexOfChild(mPeopleHubView);
         final boolean currentlyVisible = currentHubIndex >= 0;
-        int targetIndex = lastPersonIndex + 1;
+
+        mPeopleHubView.setCanSwipe(showPeopleHeader && !peopleNotificationsPresent);
 
         if (!showPeopleHeader) {
             if (currentlyVisible) {

@@ -18,13 +18,17 @@ package android.accessibilityservice;
 
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.pm.ParceledListSlice;
+import android.graphics.Bitmap;
 import android.graphics.Region;
 import android.os.Bundle;
+import android.os.RemoteCallback;
 import android.view.MagnificationSpec;
 import android.view.MotionEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 import android.view.accessibility.IAccessibilityInteractionConnectionCallback;
 import android.view.accessibility.AccessibilityWindowInfo;
+import java.util.List;
 
 /**
  * Interface given to an AccessibilitySerivce to talk to the AccessibilityManagerService.
@@ -65,6 +69,7 @@ interface IAccessibilityServiceConnection {
     AccessibilityServiceInfo getServiceInfo();
 
     boolean performGlobalAction(int action);
+    List<AccessibilityNodeInfo.AccessibilityAction> getSystemActions();
 
     void disableSelf();
 
@@ -91,6 +96,8 @@ interface IAccessibilityServiceConnection {
 
     void setSoftKeyboardCallbackEnabled(boolean enabled);
 
+    boolean switchToInputMethod(String imeId);
+
     boolean isAccessibilityButtonAvailable();
 
     void sendGesture(int sequence, in ParceledListSlice gestureSteps);
@@ -100,4 +107,10 @@ interface IAccessibilityServiceConnection {
     boolean isFingerprintGestureDetectionAvailable();
 
     IBinder getOverlayWindowToken(int displayid);
+
+    int getWindowIdForLeashToken(IBinder token);
+
+    Bitmap takeScreenshot(int displayId);
+
+    void takeScreenshotWithCallback(int displayId, in RemoteCallback callback);
 }

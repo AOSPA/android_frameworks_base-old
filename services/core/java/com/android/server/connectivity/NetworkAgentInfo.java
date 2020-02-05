@@ -27,9 +27,9 @@ import android.net.INetd;
 import android.net.INetworkMonitor;
 import android.net.LinkProperties;
 import android.net.Network;
+import android.net.NetworkAgentConfig;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
-import android.net.NetworkMisc;
 import android.net.NetworkMonitorManager;
 import android.net.NetworkRequest;
 import android.net.NetworkScore;
@@ -131,7 +131,7 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
     // This should only be modified by ConnectivityService, via setNetworkCapabilities().
     // TODO: make this private with a getter.
     public NetworkCapabilities networkCapabilities;
-    public final NetworkMisc networkMisc;
+    public final NetworkAgentConfig networkAgentConfig;
     // Indicates if netd has been told to create this Network. From this point on the appropriate
     // routing rules are setup and routes are added so packets can begin flowing over the Network.
     // This is a sticky bit; once set it is never cleared.
@@ -265,7 +265,7 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
 
     public NetworkAgentInfo(Messenger messenger, AsyncChannel ac, Network net, NetworkInfo info,
             LinkProperties lp, NetworkCapabilities nc, @NonNull NetworkScore ns, Context context,
-            Handler handler, NetworkMisc misc, ConnectivityService connService, INetd netd,
+            Handler handler, NetworkAgentConfig config, ConnectivityService connService, INetd netd,
             IDnsResolver dnsResolver, INetworkManagementService nms, int factorySerialNumber) {
         this.messenger = messenger;
         asyncChannel = ac;
@@ -278,7 +278,7 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
         mConnService = connService;
         mContext = context;
         mHandler = handler;
-        networkMisc = misc;
+        networkAgentConfig = config;
         this.factorySerialNumber = factorySerialNumber;
     }
 
@@ -313,8 +313,8 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
         return mConnService;
     }
 
-    public NetworkMisc netMisc() {
-        return networkMisc;
+    public NetworkAgentConfig netAgentConfig() {
+        return networkAgentConfig;
     }
 
     public Handler handler() {
@@ -455,15 +455,6 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
                 && !isLingering();
     }
 
-    /**
-     * Returns whether this network is currently suspended. A network is suspended if it is still
-     * connected but data temporarily fails to transfer. See {@link NetworkInfo.State#SUSPENDED}
-     * and {@link NetworkCapabilities#NET_CAPABILITY_NOT_SUSPENDED}.
-     */
-    public boolean isSuspended() {
-        return networkInfo.getState() == NetworkInfo.State.SUSPENDED;
-    }
-
     // Does this network satisfy request?
     public boolean satisfies(NetworkRequest request) {
         return created &&
@@ -491,7 +482,8 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
         // selected and we're trying to see what its score could be. This ensures that we don't tear
         // down an explicitly selected network before the user gets a chance to prefer it when
         // a higher-scoring network (e.g., Ethernet) is available.
-        if (networkMisc.explicitlySelected && (networkMisc.acceptUnvalidated || pretendValidated)) {
+        if (networkAgentConfig.explicitlySelected
+                && (networkAgentConfig.acceptUnvalidated || pretendValidated)) {
             return ConnectivityConstants.EXPLICITLY_SELECTED_NETWORK_SCORE;
         }
 
@@ -537,7 +529,8 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
         synchronized (this) {
             // Network objects are outwardly immutable so there is no point in duplicating.
             // Duplicating also precludes sharing socket factories and connection pools.
-            final String subscriberId = (networkMisc != null) ? networkMisc.subscriberId : null;
+            final String subscriberId = (networkAgentConfig != null)
+                    ? networkAgentConfig.subscriberId : null;
             return new NetworkState(new NetworkInfo(networkInfo),
                     new LinkProperties(linkProperties),
                     new NetworkCapabilities(networkCapabilities), network, subscriberId, null);
@@ -645,13 +638,13 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
                 + "nc{" + networkCapabilities + "}  Score{" + getCurrentScore() + "}  "
                 + "everValidated{" + everValidated + "}  lastValidated{" + lastValidated + "}  "
                 + "created{" + created + "} lingering{" + isLingering() + "} "
-                + "explicitlySelected{" + networkMisc.explicitlySelected + "} "
-                + "acceptUnvalidated{" + networkMisc.acceptUnvalidated + "} "
+                + "explicitlySelected{" + networkAgentConfig.explicitlySelected + "} "
+                + "acceptUnvalidated{" + networkAgentConfig.acceptUnvalidated + "} "
                 + "everCaptivePortalDetected{" + everCaptivePortalDetected + "} "
                 + "lastCaptivePortalDetected{" + lastCaptivePortalDetected + "} "
                 + "captivePortalValidationPending{" + captivePortalValidationPending + "} "
                 + "partialConnectivity{" + partialConnectivity + "} "
-                + "acceptPartialConnectivity{" + networkMisc.acceptPartialConnectivity + "} "
+                + "acceptPartialConnectivity{" + networkAgentConfig.acceptPartialConnectivity + "} "
                 + "clat{" + clatd + "} "
                 + "}";
     }

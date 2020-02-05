@@ -24,7 +24,7 @@ import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.net.NetworkInfo;
 import android.net.wifi.WpsInfo;
@@ -1702,9 +1702,10 @@ public class WifiP2pManager {
     }
 
     /** @hide */
+    @SystemApi
     public void setWFDR2Info(
-            Channel c, WifiP2pWfdInfo wfdInfo,
-            ActionListener listener) {
+            @NonNull Channel c, @NonNull WifiP2pWfdInfo wfdInfo,
+            @Nullable ActionListener listener) {
         checkChannel(c);
         try {
             mService.checkConfigureWifiDisplayPermission();

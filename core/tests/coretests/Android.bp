@@ -8,6 +8,7 @@ android_test {
         "EnabledTestApp/src/**/*.java",
         "BinderProxyCountingTestApp/src/**/*.java",
         "BinderProxyCountingTestService/src/**/*.java",
+        "BinderDeathRecipientHelperApp/src/**/*.java",
         "aidl/**/I*.aidl",
     ],
 
@@ -59,7 +60,11 @@ android_test {
     resource_dirs: ["res"],
     resource_zips: [":FrameworksCoreTests_apks_as_resources"],
 
-    data: [":BstatsTestApp"],
+    data: [
+        ":BstatsTestApp",
+        ":BinderDeathRecipientHelperApp1",
+        ":BinderDeathRecipientHelperApp2",
+    ],
 }
 
 // Rules to copy all the test apks to the intermediate raw resource directory
@@ -79,6 +84,11 @@ java_genrule {
         ":FrameworksCoreTests_install_split_feature_a",
         ":FrameworksCoreTests_install_use_perm_good",
         ":FrameworksCoreTests_install_uses_feature",
+        ":FrameworksCoreTests_install_uses_sdk_0",
+        ":FrameworksCoreTests_install_uses_sdk_q0",
+        ":FrameworksCoreTests_install_uses_sdk_r",
+        ":FrameworksCoreTests_install_uses_sdk_r0",
+        ":FrameworksCoreTests_install_uses_sdk_r5",
         ":FrameworksCoreTests_install_verifier_bad",
         ":FrameworksCoreTests_install_verifier_good",
         ":FrameworksCoreTests_keyset_permdef_sa_unone",

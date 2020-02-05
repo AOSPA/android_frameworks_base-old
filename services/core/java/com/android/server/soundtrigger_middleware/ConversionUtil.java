@@ -21,8 +21,10 @@ import android.annotation.Nullable;
 import android.hardware.audio.common.V2_0.Uuid;
 import android.hardware.soundtrigger.V2_1.ISoundTriggerHwCallback;
 import android.hardware.soundtrigger.V2_3.ISoundTriggerHw;
+import android.hardware.soundtrigger.V2_3.Properties;
 import android.media.audio.common.AudioConfig;
 import android.media.audio.common.AudioOffloadInfo;
+import android.media.soundtrigger_middleware.AudioCapabilities;
 import android.media.soundtrigger_middleware.ConfidenceLevel;
 import android.media.soundtrigger_middleware.ModelParameter;
 import android.media.soundtrigger_middleware.ModelParameterRange;
@@ -40,7 +42,6 @@ import android.media.soundtrigger_middleware.SoundTriggerModuleProperties;
 import android.os.HidlMemoryUtil;
 
 import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Utilities for type conversion between SoundTrigger HAL types and SoundTriggerMiddleware service
@@ -60,12 +61,22 @@ class ConversionUtil {
         aidlProperties.maxSoundModels = hidlProperties.maxSoundModels;
         aidlProperties.maxKeyPhrases = hidlProperties.maxKeyPhrases;
         aidlProperties.maxUsers = hidlProperties.maxUsers;
-        aidlProperties.recognitionModes = hidlProperties.recognitionModes;
+        aidlProperties.recognitionModes =
+                hidl2aidlRecognitionModes(hidlProperties.recognitionModes);
         aidlProperties.captureTransition = hidlProperties.captureTransition;
         aidlProperties.maxBufferMs = hidlProperties.maxBufferMs;
         aidlProperties.concurrentCapture = hidlProperties.concurrentCapture;
         aidlProperties.triggerInEvent = hidlProperties.triggerInEvent;
         aidlProperties.powerConsumptionMw = hidlProperties.powerConsumptionMw;
+        return aidlProperties;
+    }
+
+    static @NonNull SoundTriggerModuleProperties hidl2aidlProperties(
+            @NonNull Properties hidlProperties) {
+        SoundTriggerModuleProperties aidlProperties = hidl2aidlProperties(hidlProperties.base);
+        aidlProperties.supportedModelArch = hidlProperties.supportedModelArch;
+        aidlProperties.audioCapabilities =
+                hidl2aidlAudioCapabilities(hidlProperties.audioCapabilities);
         return aidlProperties;
     }
 
@@ -201,16 +212,17 @@ class ConversionUtil {
         return hidlModel;
     }
 
-    static @NonNull
-    ISoundTriggerHw.RecognitionConfig aidl2hidlRecognitionConfig(
+    static @NonNull android.hardware.soundtrigger.V2_3.RecognitionConfig aidl2hidlRecognitionConfig(
             @NonNull RecognitionConfig aidlConfig) {
-        ISoundTriggerHw.RecognitionConfig hidlConfig = new ISoundTriggerHw.RecognitionConfig();
-        hidlConfig.header.captureRequested = aidlConfig.captureRequested;
+        android.hardware.soundtrigger.V2_3.RecognitionConfig hidlConfig =
+                new android.hardware.soundtrigger.V2_3.RecognitionConfig();
+        hidlConfig.base.header.captureRequested = aidlConfig.captureRequested;
         for (PhraseRecognitionExtra aidlPhraseExtra : aidlConfig.phraseRecognitionExtras) {
-            hidlConfig.header.phrases.add(aidl2hidlPhraseRecognitionExtra(aidlPhraseExtra));
+            hidlConfig.base.header.phrases.add(aidl2hidlPhraseRecognitionExtra(aidlPhraseExtra));
         }
-        hidlConfig.data = HidlMemoryUtil.byteArrayToHidlMemory(aidlConfig.data,
+        hidlConfig.base.data = HidlMemoryUtil.byteArrayToHidlMemory(aidlConfig.data,
                 "SoundTrigger RecognitionConfig");
+        hidlConfig.audioCapabilities = aidlConfig.audioCapabilities;
         return hidlConfig;
     }
 
@@ -386,5 +398,18 @@ class ConversionUtil {
             default:
                 return android.hardware.soundtrigger.V2_3.ModelParameter.INVALID;
         }
+    }
+
+    static int hidl2aidlAudioCapabilities(int hidlCapabilities) {
+        int aidlCapabilities = 0;
+        if ((hidlCapabilities
+                & android.hardware.soundtrigger.V2_3.AudioCapabilities.ECHO_CANCELLATION) != 0) {
+            aidlCapabilities |= AudioCapabilities.ECHO_CANCELLATION;
+        }
+        if ((hidlCapabilities
+                & android.hardware.soundtrigger.V2_3.AudioCapabilities.NOISE_SUPPRESSION) != 0) {
+            aidlCapabilities |= AudioCapabilities.NOISE_SUPPRESSION;
+        }
+        return aidlCapabilities;
     }
 }

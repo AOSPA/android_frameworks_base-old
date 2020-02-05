@@ -79,14 +79,14 @@ public class DozeServiceHostTest extends SysuiTestCase {
     @Mock private DozeLog mDozeLog;
     @Mock private PulseExpansionHandler mPulseExpansionHandler;
     @Mock private NotificationWakeUpCoordinator mNotificationWakeUpCoordinator;
-    @Mock private StatusBarWindowController mStatusBarWindowController;
+    @Mock private NotificationShadeWindowController mNotificationShadeWindowController;
     @Mock private PowerManager mPowerManager;
     @Mock private WakefulnessLifecycle mWakefullnessLifecycle;
     @Mock private StatusBar mStatusBar;
     @Mock private NotificationIconAreaController mNotificationIconAreaController;
-    @Mock private StatusBarWindowViewController mStatusBarWindowViewController;
+    @Mock private NotificationShadeWindowViewController mNotificationShadeWindowViewController;
     @Mock private StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
-    @Mock private NotificationPanelView mNotificationPanel;
+    @Mock private NotificationPanelViewController mNotificationPanel;
     @Mock private View mAmbientIndicationContainer;
     @Mock private BiometricUnlockController mBiometricUnlockController;
     @Mock private LockscreenLockIconController mLockscreenLockIconController;
@@ -99,12 +99,12 @@ public class DozeServiceHostTest extends SysuiTestCase {
                 mBatteryController, mScrimController, () -> mBiometricUnlockController,
                 mKeyguardViewMediator, () -> mAssistManager, mDozeScrimController,
                 mKeyguardUpdateMonitor, mVisualStabilityManager, mPulseExpansionHandler,
-                mStatusBarWindowController, mNotificationWakeUpCoordinator,
+                mNotificationShadeWindowController, mNotificationWakeUpCoordinator,
                 mLockscreenLockIconController);
 
         mDozeServiceHost.initialize(mStatusBar, mNotificationIconAreaController,
-                mStatusBarKeyguardViewManager, mStatusBarWindowViewController, mNotificationPanel,
-                mAmbientIndicationContainer);
+                mStatusBarKeyguardViewManager, mNotificationShadeWindowViewController,
+                mNotificationPanel, mAmbientIndicationContainer);
     }
 
     @Test

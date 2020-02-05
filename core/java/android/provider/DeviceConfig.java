@@ -333,6 +333,15 @@ public final class DeviceConfig {
     public static final String NAMESPACE_WINDOW_MANAGER = "window_manager";
 
     /**
+     * Namespace for window manager features accessible by native code and
+     * loaded once per boot.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_WINDOW_MANAGER_NATIVE_BOOT = "window_manager_native_boot";
+
+    /**
      * List of namespaces which can be read without READ_DEVICE_CONFIG permission
      *
      * @hide
@@ -424,6 +433,7 @@ public final class DeviceConfig {
      * @hide
      */
     @SystemApi
+    @TestApi
     @NonNull
     @RequiresPermission(READ_DEVICE_CONFIG)
     public static Properties getProperties(@NonNull String namespace, @NonNull String ... names) {
@@ -593,6 +603,7 @@ public final class DeviceConfig {
      * @hide
      */
     @SystemApi
+    @TestApi
     @RequiresPermission(WRITE_DEVICE_CONFIG)
     public static boolean setProperties(@NonNull Properties properties) throws BadConfigException {
         ContentResolver contentResolver = ActivityThread.currentApplication().getContentResolver();
@@ -817,6 +828,7 @@ public final class DeviceConfig {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static class BadConfigException extends Exception {}
 
     /**

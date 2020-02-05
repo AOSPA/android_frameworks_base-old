@@ -35,7 +35,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 /** A helper class to serialize rules from the {@link Rule} model to Xml representation. */
 public class RuleXmlSerializer implements RuleSerializer {
@@ -56,12 +56,17 @@ public class RuleXmlSerializer implements RuleSerializer {
 
     @Override
     public void serialize(
-            List<Rule> rules, Optional<Integer> formatVersion, OutputStream outputStream)
+            List<Rule> rules,
+            Optional<Integer> formatVersion,
+            OutputStream outputStream,
+            OutputStream indexingOutputStream)
             throws RuleSerializeException {
         try {
             XmlSerializer xmlSerializer = Xml.newSerializer();
             xmlSerializer.setOutput(outputStream, StandardCharsets.UTF_8.name());
             serializeRules(rules, xmlSerializer);
+
+            // TODO(b/145493956): Implement the indexing logic.
         } catch (Exception e) {
             throw new RuleSerializeException(e.getMessage(), e);
         }
@@ -85,7 +90,7 @@ public class RuleXmlSerializer implements RuleSerializer {
             throws RuleSerializeException {
         try {
             // Determine the indexing groups and the order of the rules within each indexed group.
-            Map<Integer, TreeMap<String, List<Rule>>> indexedRules =
+            Map<Integer, Map<String, List<Rule>>> indexedRules =
                     RuleIndexingDetailsIdentifier.splitRulesIntoIndexBuckets(rules);
 
             // Write the XML formatted rules in order.
@@ -102,11 +107,12 @@ public class RuleXmlSerializer implements RuleSerializer {
         }
     }
 
-    private void serializeRuleList(TreeMap<String, List<Rule>> rulesMap,
-            XmlSerializer xmlSerializer)
+    private void serializeRuleList(Map<String, List<Rule>> rulesMap, XmlSerializer xmlSerializer)
             throws IOException {
-        for (Map.Entry<String, List<Rule>> entry : rulesMap.entrySet()) {
-            for (Rule rule : entry.getValue()) {
+        List<String> sortedKeyList =
+                rulesMap.keySet().stream().sorted().collect(Collectors.toList());
+        for (String key : sortedKeyList) {
+            for (Rule rule : rulesMap.get(key)) {
                 serializeRule(rule, xmlSerializer);
             }
         }

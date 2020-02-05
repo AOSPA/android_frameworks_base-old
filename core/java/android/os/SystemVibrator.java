@@ -70,13 +70,15 @@ public class SystemVibrator extends Vibrator {
     }
 
     @Override
-    public boolean setAlwaysOnEffect(int id, VibrationEffect effect, AudioAttributes attributes) {
+    public boolean setAlwaysOnEffect(int uid, String opPkg, int alwaysOnId, VibrationEffect effect,
+            AudioAttributes attributes) {
         if (mService == null) {
             Log.w(TAG, "Failed to set always-on effect; no vibrator service.");
             return false;
         }
         try {
-            return mService.setAlwaysOnEffect(id, effect, attributes);
+            VibrationAttributes atr = new VibrationAttributes.Builder(attributes, effect).build();
+            return mService.setAlwaysOnEffect(uid, opPkg, alwaysOnId, effect, atr);
         } catch (RemoteException e) {
             Log.w(TAG, "Failed to set always-on effect.", e);
         }
@@ -91,7 +93,11 @@ public class SystemVibrator extends Vibrator {
             return;
         }
         try {
-            mService.vibrate(uid, opPkg, effect, attributes, reason, mToken);
+            if (attributes == null) {
+                attributes = new AudioAttributes.Builder().build();
+            }
+            VibrationAttributes atr = new VibrationAttributes.Builder(attributes, effect).build();
+            mService.vibrate(uid, opPkg, effect, atr, reason, mToken);
         } catch (RemoteException e) {
             Log.w(TAG, "Failed to vibrate.", e);
         }

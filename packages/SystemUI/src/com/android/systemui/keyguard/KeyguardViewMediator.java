@@ -22,6 +22,7 @@ import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.SOM
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_DPM_LOCK_NOW;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_LOCKOUT;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_TIMEOUT;
+import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_FOR_UNATTENDED_UPDATE;
 import static com.android.systemui.DejankUtils.whitelistIpcs;
 
 import android.app.ActivityManager;
@@ -86,10 +87,10 @@ import com.android.systemui.dagger.qualifiers.UiBackground;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.statusbar.phone.BiometricUnlockController;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
-import com.android.systemui.statusbar.phone.NotificationPanelView;
+import com.android.systemui.statusbar.phone.NotificationPanelViewController;
+import com.android.systemui.statusbar.phone.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
-import com.android.systemui.statusbar.phone.StatusBarWindowController;
 import com.android.systemui.util.InjectionInflationController;
 
 import java.io.FileDescriptor;
@@ -211,7 +212,7 @@ public class KeyguardViewMediator extends SystemUI {
     private AlarmManager mAlarmManager;
     private AudioManager mAudioManager;
     private StatusBarManager mStatusBarManager;
-    private final StatusBarWindowController mStatusBarWindowController;
+    private final NotificationShadeWindowController mNotificationShadeWindowController;
     private final Executor mUiBgExecutor;
 
     private boolean mSystemReady;
@@ -670,6 +671,8 @@ public class KeyguardViewMediator extends SystemUI {
                 return KeyguardSecurityView.PROMPT_REASON_USER_REQUEST;
             } else if (any && (strongAuth & STRONG_AUTH_REQUIRED_AFTER_LOCKOUT) != 0) {
                 return KeyguardSecurityView.PROMPT_REASON_AFTER_LOCKOUT;
+            } else if (any && (strongAuth & STRONG_AUTH_REQUIRED_FOR_UNATTENDED_UPDATE) != 0) {
+                return KeyguardSecurityView.PROMPT_REASON_PREPARE_FOR_UPDATE;
             }
             return KeyguardSecurityView.PROMPT_REASON_NONE;
         }
@@ -688,7 +691,7 @@ public class KeyguardViewMediator extends SystemUI {
             FalsingManager falsingManager,
             LockPatternUtils lockPatternUtils,
             BroadcastDispatcher broadcastDispatcher,
-            StatusBarWindowController statusBarWindowController,
+            NotificationShadeWindowController notificationShadeWindowController,
             Lazy<StatusBarKeyguardViewManager> statusBarKeyguardViewManagerLazy,
             DismissCallbackRegistry dismissCallbackRegistry,
             @UiBackground Executor uiBgExecutor) {
@@ -696,7 +699,7 @@ public class KeyguardViewMediator extends SystemUI {
         mFalsingManager = falsingManager;
         mLockPatternUtils = lockPatternUtils;
         mBroadcastDispatcher = broadcastDispatcher;
-        mStatusBarWindowController = statusBarWindowController;
+        mNotificationShadeWindowController = notificationShadeWindowController;
         mStatusBarKeyguardViewManagerLazy = statusBarKeyguardViewManagerLazy;
         mDismissCallbackRegistry = dismissCallbackRegistry;
         mUiBgExecutor = uiBgExecutor;
@@ -1817,7 +1820,7 @@ public class KeyguardViewMediator extends SystemUI {
             adjustStatusBarLocked();
             userActivity();
             mUpdateMonitor.setKeyguardGoingAway(false);
-            mStatusBarWindowController.setKeyguardGoingAway(false);
+            mNotificationShadeWindowController.setKeyguardGoingAway(false);
             mShowKeyguardWakeLock.release();
         }
         mKeyguardDisplayManager.show();
@@ -1850,7 +1853,7 @@ public class KeyguardViewMediator extends SystemUI {
             }
 
             mUpdateMonitor.setKeyguardGoingAway(true);
-            mStatusBarWindowController.setKeyguardGoingAway(true);
+            mNotificationShadeWindowController.setKeyguardGoingAway(true);
 
             // Don't actually hide the Keyguard at the moment, wait for window
             // manager until it tells us it's safe to do so with
@@ -2103,7 +2106,7 @@ public class KeyguardViewMediator extends SystemUI {
     }
 
     public StatusBarKeyguardViewManager registerStatusBar(StatusBar statusBar,
-            ViewGroup container, NotificationPanelView panelView,
+            ViewGroup container, NotificationPanelViewController panelView,
             BiometricUnlockController biometricUnlockController, ViewGroup lockIconContainer,
             View notificationContainer, KeyguardBypassController bypassController) {
         mStatusBarKeyguardViewManagerLazy.get().registerStatusBar(statusBar, container, panelView,

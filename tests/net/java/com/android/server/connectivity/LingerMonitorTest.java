@@ -36,9 +36,8 @@ import android.net.IDnsResolver;
 import android.net.INetd;
 import android.net.Network;
 import android.net.NetworkCapabilities;
-import android.net.NetworkFactory;
 import android.net.NetworkInfo;
-import android.net.NetworkMisc;
+import android.net.NetworkProvider;
 import android.net.NetworkScore;
 import android.os.INetworkManagementService;
 import android.text.format.DateUtils;
@@ -75,7 +74,6 @@ public class LingerMonitorTest {
     @Mock INetd mNetd;
     @Mock INetworkManagementService mNMS;
     @Mock Context mCtx;
-    @Mock NetworkMisc mMisc;
     @Mock NetworkNotificationManager mNotifier;
     @Mock Resources mResources;
 
@@ -358,8 +356,8 @@ public class LingerMonitorTest {
         NetworkScore ns = new NetworkScore();
         ns.putIntExtension(NetworkScore.LEGACY_SCORE, 50);
         NetworkAgentInfo nai = new NetworkAgentInfo(null, null, new Network(netId), info, null,
-                caps, ns, mCtx, null, mMisc, mConnService, mNetd, mDnsResolver, mNMS,
-                NetworkFactory.SerialNumber.NONE);
+                caps, ns, mCtx, null, null /* config */, mConnService, mNetd, mDnsResolver, mNMS,
+                NetworkProvider.ID_NONE);
         nai.everValidated = true;
         return nai;
     }

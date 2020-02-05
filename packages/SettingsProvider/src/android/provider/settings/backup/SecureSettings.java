@@ -16,7 +16,7 @@
 
 package android.provider.settings.backup;
 
-import android.annotation.UnsupportedAppUsage;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.provider.Settings;
 
 /** Information relating to the Secure settings which should be backed up */
@@ -86,6 +86,7 @@ public class SecureSettings {
         Settings.Secure.TTY_MODE_ENABLED,
         Settings.Secure.RTT_CALLING_MODE,
         Settings.Secure.INCALL_POWER_BUTTON_BEHAVIOR,
+        Settings.Secure.MINIMAL_POST_PROCESSING_ALLOWED,
         Settings.Secure.NIGHT_DISPLAY_CUSTOM_START_TIME,
         Settings.Secure.NIGHT_DISPLAY_CUSTOM_END_TIME,
         Settings.Secure.NIGHT_DISPLAY_COLOR_TEMPERATURE,

@@ -16,6 +16,8 @@
 
 package android.view;
 
+import static android.view.InsetsController.LAYOUT_INSETS_DURING_ANIMATION_HIDDEN;
+import static android.view.InsetsController.LAYOUT_INSETS_DURING_ANIMATION_SHOWN;
 import static android.view.InsetsState.ISIDE_BOTTOM;
 import static android.view.InsetsState.ISIDE_FLOATING;
 import static android.view.InsetsState.ISIDE_LEFT;
@@ -30,7 +32,9 @@ import android.util.ArraySet;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.SparseSetArray;
+import android.view.InsetsController.LayoutInsetsDuringAnimation;
 import android.view.InsetsState.InternalInsetsSide;
+import android.view.InsetsState.InternalInsetsType;
 import android.view.SyncRtSurfaceTransactionApplier.SurfaceParams;
 import android.view.WindowInsets.Type.InsetsType;
 import android.view.WindowInsetsAnimationCallback.AnimationBounds;
@@ -80,7 +84,8 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
     public InsetsAnimationControlImpl(SparseArray<InsetsSourceControl> controls, Rect frame,
             InsetsState state, WindowInsetsAnimationControlListener listener,
             @InsetsType int types,
-            InsetsAnimationControlCallbacks controller, long durationMs, boolean fade) {
+            InsetsAnimationControlCallbacks controller, long durationMs, boolean fade,
+            @LayoutInsetsDuringAnimation int layoutInsetsDuringAnimation) {
         mControls = controls;
         mListener = listener;
         mTypes = types;
@@ -88,6 +93,7 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         mController = controller;
         mInitialInsetsState = new InsetsState(state, true /* copySources */);
         mCurrentInsets = getInsetsFromState(mInitialInsetsState, frame, null /* typeSideMap */);
+        mPendingInsets = mCurrentInsets;
         mHiddenInsets = calculateInsets(mInitialInsetsState, frame, controls, false /* shown */,
                 null /* typeSideMap */);
         mShownInsets = calculateInsets(mInitialInsetsState, frame, controls, true /* shown */,
@@ -95,14 +101,11 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         mFrame = new Rect(frame);
         buildTypeSourcesMap(mTypeSideMap, mSideSourceMap, mControls);
 
-        // TODO: Check for controllability first and wait for IME if needed.
-        listener.onReady(this, types);
-
         mAnimation = new WindowInsetsAnimationCallback.InsetsAnimation(mTypes,
                 InsetsController.INTERPOLATOR, durationMs);
         mAnimation.setAlpha(getCurrentAlpha());
-        mController.dispatchAnimationStarted(mAnimation,
-                new AnimationBounds(mHiddenInsets, mShownInsets));
+        mController.startAnimation(this, listener, types, mAnimation,
+                new AnimationBounds(mHiddenInsets, mShownInsets), layoutInsetsDuringAnimation);
     }
 
     @Override
@@ -128,6 +131,10 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
     @Override
     @InsetsType public int getTypes() {
         return mTypes;
+    }
+
+    boolean controlsInternalType(@InternalInsetsType int type) {
+        return InsetsState.toInternalType(mTypes).contains(type);
     }
 
     @Override
@@ -232,7 +239,8 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         return state.calculateInsets(frame, false /* isScreenRound */,
                 false /* alwaysConsumeSystemBars */, null /* displayCutout */,
                 null /* legacyContentInsets */, null /* legacyStableInsets */,
-                LayoutParams.SOFT_INPUT_ADJUST_RESIZE /* legacySoftInputMode*/, typeSideMap)
+                LayoutParams.SOFT_INPUT_ADJUST_RESIZE /* legacySoftInputMode*/,
+                0 /* legacySystemUiFlags */, typeSideMap)
                .getInsets(mTypes);
     }
 
@@ -257,10 +265,6 @@ public class InsetsAnimationControlImpl implements WindowInsetsAnimationControll
         for (int i = items.size() - 1; i >= 0; i--) {
             final InsetsSourceControl control = items.valueAt(i);
             final InsetsSource source = mInitialInsetsState.getSource(control.getType());
-            if (control == null) {
-                // TODO: remove this check when we ensure the elements will not be null.
-                continue;
-            }
             final SurfaceControl leash = control.getLeash();
 
             mTmpMatrix.setTranslate(control.getSurfacePosition().x, control.getSurfacePosition().y);

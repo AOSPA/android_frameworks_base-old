@@ -111,7 +111,10 @@ public class BubbleData {
     }
 
     private final Context mContext;
+    /** Bubbles that are actively in the stack. */
     private final List<Bubble> mBubbles;
+    /** Bubbles that are being loaded but haven't been added to the stack just yet. */
+    private final List<Bubble> mPendingBubbles;
     private Bubble mSelectedBubble;
     private boolean mExpanded;
     private final int mMaxBubbles;
@@ -143,6 +146,7 @@ public class BubbleData {
     public BubbleData(Context context) {
         mContext = context;
         mBubbles = new ArrayList<>();
+        mPendingBubbles = new ArrayList<>();
         mStateChange = new Update(mBubbles);
         mMaxBubbles = mContext.getResources().getInteger(R.integer.bubbles_max_rendered);
     }
@@ -188,7 +192,15 @@ public class BubbleData {
     Bubble getOrCreateBubble(NotificationEntry entry) {
         Bubble bubble = getBubbleWithKey(entry.getKey());
         if (bubble == null) {
+            // Check for it in pending
+            for (int i = 0; i < mPendingBubbles.size(); i++) {
+                Bubble b = mPendingBubbles.get(i);
+                if (b.getKey().equals(entry.getKey())) {
+                    return b;
+                }
+            }
             bubble = new Bubble(entry);
+            mPendingBubbles.add(bubble);
         } else {
             bubble.setEntry(entry);
         }
@@ -204,9 +216,9 @@ public class BubbleData {
         if (DEBUG_BUBBLE_DATA) {
             Log.d(TAG, "notificationEntryUpdated: " + bubble);
         }
-
+        mPendingBubbles.remove(bubble); // No longer pending once we're here
         Bubble prevBubble = getBubbleWithKey(bubble.getKey());
-        suppressFlyout |= !shouldShowFlyout(bubble.getEntry());
+        suppressFlyout |= !bubble.getEntry().getRanking().visuallyInterruptive();
 
         if (prevBubble == null) {
             // Create a new bubble
@@ -317,14 +329,6 @@ public class BubbleData {
         return bubbleChildren;
     }
 
-    private boolean shouldShowFlyout(NotificationEntry notif) {
-        if (notif.getRanking().visuallyInterruptive()) {
-            return true;
-        }
-        return hasBubbleWithKey(notif.getKey())
-                && !getBubbleWithKey(notif.getKey()).showInShade();
-    }
-
     private void doAdd(Bubble bubble) {
         if (DEBUG_BUBBLE_DATA) {
             Log.d(TAG, "doAdd: " + bubble);
@@ -377,6 +381,12 @@ public class BubbleData {
     }
 
     private void doRemove(String key, @DismissReason int reason) {
+        //  If it was pending remove it
+        for (int i = 0; i < mPendingBubbles.size(); i++) {
+            if (mPendingBubbles.get(i).getKey().equals(key)) {
+                mPendingBubbles.remove(mPendingBubbles.get(i));
+            }
+        }
         int indexToRemove = indexForKey(key);
         if (indexToRemove == -1) {
             return;

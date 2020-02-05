@@ -266,7 +266,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_USER_SWITCHED);
-        mBroadcastDispatcher.registerReceiver(mIntentReceiver, filter, mHandler);
+        mBroadcastDispatcher.registerReceiverWithHandler(mIntentReceiver, filter, mHandler);
 
         mOverlay.addOnLayoutChangeListener(new OnLayoutChangeListener() {
             @Override
@@ -455,16 +455,24 @@ public class ScreenDecorations extends SystemUI implements Tunable {
     private void setupStatusBarPadding(int padding) {
         // Add some padding to all the content near the edge of the screen.
         StatusBar statusBar = mStatusBarLazy.get();
-        View statusBarWindow = statusBar.getStatusBarWindow();
-        if (statusBarWindow != null) {
-            TunablePadding.addTunablePadding(statusBarWindow.findViewById(R.id.keyguard_header),
+        final View notificationShadeWindowView = statusBar.getNotificationShadeWindowView();
+        if (notificationShadeWindowView != null) {
+            TunablePadding.addTunablePadding(
+                    notificationShadeWindowView.findViewById(R.id.keyguard_header),
                     PADDING, padding, FLAG_END);
 
-            FragmentHostManager fragmentHostManager = FragmentHostManager.get(statusBarWindow);
-            fragmentHostManager.addTagListener(CollapsedStatusBarFragment.TAG,
-                    new TunablePaddingTagListener(padding, R.id.status_bar));
+            final FragmentHostManager fragmentHostManager =
+                    FragmentHostManager.get(notificationShadeWindowView);
             fragmentHostManager.addTagListener(QS.TAG,
                     new TunablePaddingTagListener(padding, R.id.header));
+        }
+
+        final View statusBarWindow = statusBar.getStatusBarWindow();
+        if (statusBarWindow != null) {
+            final FragmentHostManager fragmentHostManager =
+                    FragmentHostManager.get(statusBarWindow);
+            fragmentHostManager.addTagListener(CollapsedStatusBarFragment.TAG,
+                    new TunablePaddingTagListener(padding, R.id.status_bar));
         }
     }
 

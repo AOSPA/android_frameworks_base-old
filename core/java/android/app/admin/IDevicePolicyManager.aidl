@@ -24,6 +24,7 @@ import android.app.admin.StartInstallingUpdateCallback;
 import android.app.admin.SystemUpdateInfo;
 import android.app.admin.SystemUpdatePolicy;
 import android.app.admin.PasswordMetrics;
+import android.app.admin.FactoryResetProtectionPolicy;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -104,6 +105,9 @@ interface IDevicePolicyManager {
 
     void wipeDataWithReason(int flags, String wipeReasonForUser, boolean parent);
 
+    void setFactoryResetProtectionPolicy(in ComponentName who, in FactoryResetProtectionPolicy policy);
+    FactoryResetProtectionPolicy getFactoryResetProtectionPolicy(in ComponentName who);
+
     ComponentName setGlobalProxy(in ComponentName admin, String proxySpec, String exclusionList);
     ComponentName getGlobalProxyAdmin(int userHandle);
     void setRecommendedGlobalProxy(in ComponentName admin, in ProxyInfo proxyInfo);
@@ -156,6 +160,7 @@ interface IDevicePolicyManager {
     void setProfileName(in ComponentName who, String profileName);
     void clearProfileOwner(in ComponentName who);
     boolean hasUserSetupCompleted();
+    boolean isOrganizationOwnedDeviceWithManagedProfile();
 
     boolean checkDeviceIdentifierAccess(in String packageName, int pid, int uid);
 
@@ -247,6 +252,9 @@ interface IDevicePolicyManager {
     String[] getAccountTypesWithManagementDisabled();
     String[] getAccountTypesWithManagementDisabledAsUser(int userId);
 
+    void setSecondaryLockscreenEnabled(in ComponentName who, boolean enabled);
+    boolean isSecondaryLockscreenEnabled(int userId);
+
     void setLockTaskPackages(in ComponentName who, in String[] packages);
     String[] getLockTaskPackages(in ComponentName who);
     boolean isLockTaskPermitted(in String pkg);
@@ -257,6 +265,9 @@ interface IDevicePolicyManager {
     void setGlobalSetting(in ComponentName who, in String setting, in String value);
     void setSystemSetting(in ComponentName who, in String setting, in String value);
     void setSecureSetting(in ComponentName who, in String setting, in String value);
+
+    void setLockdownAdminConfiguredNetworks(in ComponentName who, boolean lockdown);
+    boolean isLockdownAdminConfiguredNetworks(in ComponentName who);
 
     void setLocationEnabled(in ComponentName who, boolean locationEnabled);
 
@@ -444,10 +455,19 @@ interface IDevicePolicyManager {
     void setCrossProfilePackages(in ComponentName admin, in List<String> packageNames);
     List<String> getCrossProfilePackages(in ComponentName admin);
 
+    List<String> getAllCrossProfilePackages();
+
     boolean isManagedKiosk();
     boolean isUnattendedManagedKiosk();
 
     boolean startViewCalendarEventInManagedProfile(String packageName, long eventId, long start, long end, boolean allDay, int flags);
 
     boolean setKeyGrantForApp(in ComponentName admin, String callerPackage, String alias, String packageName, boolean hasGrant);
+
+    void setProtectedPackages(in ComponentName admin, in List<String> packages);
+
+    List<String> getProtectedPackages(in ComponentName admin);
+
+    void setCommonCriteriaModeEnabled(in ComponentName admin, boolean enabled);
+    boolean isCommonCriteriaModeEnabled(in ComponentName admin);
 }

@@ -59,7 +59,6 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
-import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.view.InputChannel;
@@ -192,15 +191,21 @@ public final class MultiClientInputMethodManagerService {
                         }
 
                         @Override
-                        public void onCreateInlineSuggestionsRequest(ComponentName componentName,
-                                AutofillId autofillId, IInlineSuggestionsRequestCallback cb) {
+                        public void onCreateInlineSuggestionsRequest(int userId,
+                                ComponentName componentName, AutofillId autofillId,
+                                IInlineSuggestionsRequestCallback cb) {
                             try {
                                 //TODO(b/137800469): support multi client IMEs.
                                 cb.onInlineSuggestionsUnsupported();
                             } catch (RemoteException e) {
-                                Log.w("MultiClientIMManager", "RemoteException calling"
-                                        + " onInlineSuggestionsUnsupported: " + e);
+                                Slog.w(TAG, "Failed to call onInlineSuggestionsUnsupported.", e);
                             }
+                        }
+
+                        @Override
+                        public boolean switchToInputMethod(String imeId, @UserIdInt int userId) {
+                            reportNotSupported();
+                            return false;
                         }
                     });
         }
@@ -1444,7 +1449,8 @@ public final class MultiClientInputMethodManagerService {
         @BinderThread
         @Override
         public boolean showSoftInput(
-                IInputMethodClient client, int flags, ResultReceiver resultReceiver) {
+                IInputMethodClient client, IBinder token, int flags,
+                ResultReceiver resultReceiver) {
             final int callingUid = Binder.getCallingUid();
             final int callingPid = Binder.getCallingPid();
             final int userId = UserHandle.getUserId(callingUid);

@@ -45,6 +45,7 @@ import android.os.BatteryStats;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.Looper;
 import android.os.Message;
 import android.os.PersistableBundle;
@@ -76,7 +77,6 @@ import com.android.internal.location.GpsNetInitiatedHandler.GpsNiNotification;
 import com.android.internal.location.ProviderProperties;
 import com.android.internal.location.ProviderRequest;
 import com.android.internal.location.gnssmetrics.GnssMetrics;
-import com.android.internal.telephony.TelephonyIntents;
 import com.android.server.DeviceIdleInternal;
 import com.android.server.LocalServices;
 import com.android.server.location.GnssSatelliteBlacklistHelper.GnssSatelliteBlacklistCallback;
@@ -116,8 +116,15 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     private static final boolean VERBOSE = Log.isLoggable(TAG, Log.VERBOSE);
 
     private static final ProviderProperties PROPERTIES = new ProviderProperties(
-            true, true, false, false, true, true, true,
-            Criteria.POWER_HIGH, Criteria.ACCURACY_FINE);
+            /* requiresNetwork = */false,
+            /* requiresSatellite = */true,
+            /* requiresCell = */false,
+            /* hasMonetaryCost = */false,
+            /* supportAltitude = */true,
+            /* supportsSpeed = */true,
+            /* supportsBearing = */true,
+            Criteria.POWER_HIGH,
+            Criteria.ACCURACY_FINE);
 
     // these need to match GnssPositionMode enum in IGnss.hal
     private static final int GPS_POSITION_MODE_STANDALONE = 0;
@@ -510,7 +517,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                     mHandler.sendEmptyMessage(UPDATE_LOW_POWER_MODE);
                     break;
                 case CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED:
-                case TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED:
+                case TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED:
                     subscriptionOrCarrierConfigChanged();
                     break;
             }
@@ -619,13 +626,12 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         }
     }
 
-    public GnssLocationProvider(Context context, LocationProviderManager locationProviderManager,
-            Looper looper) {
-        super(context, locationProviderManager);
+    public GnssLocationProvider(Context context, Handler handler) {
+        super(context, new HandlerExecutor(handler));
 
         ensureInitialized();
 
-        mLooper = looper;
+        mLooper = handler.getLooper();
 
         // Create a wake lock
         mPowerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
@@ -641,7 +647,6 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         mWakeupIntent = PendingIntent.getBroadcast(mContext, 0, new Intent(ALARM_WAKEUP), 0);
         mTimeoutIntent = PendingIntent.getBroadcast(mContext, 0, new Intent(ALARM_TIMEOUT), 0);
 
-
         // App ops service to keep track of who is accessing the GPS
         mAppOps = mContext.getSystemService(AppOpsManager.class);
 
@@ -650,7 +655,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 BatteryStats.SERVICE_NAME));
 
         // Construct internal handler
-        mHandler = new ProviderHandler(looper);
+        mHandler = new ProviderHandler(mLooper);
 
         // Load GPS configuration and register listeners in the background:
         // some operations, such as opening files and registering broadcast receivers, can take a
@@ -664,7 +669,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
                 mNetInitiatedListener,
                 mSuplEsEnabled);
         mNetworkConnectivityHandler = new GnssNetworkConnectivityHandler(context,
-                GnssLocationProvider.this::onNetworkAvailable, looper, mNIHandler);
+                GnssLocationProvider.this::onNetworkAvailable, mLooper, mNIHandler);
 
         sendMessage(INITIALIZE_HANDLER, 0, null);
 
@@ -697,10 +702,10 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         };
 
         mGnssMetrics = new GnssMetrics(mBatteryStats);
-        mNtpTimeHelper = new NtpTimeHelper(mContext, looper, this);
+        mNtpTimeHelper = new NtpTimeHelper(mContext, mLooper, this);
         GnssSatelliteBlacklistHelper gnssSatelliteBlacklistHelper =
                 new GnssSatelliteBlacklistHelper(mContext,
-                        looper, this);
+                        mLooper, this);
         mHandler.post(gnssSatelliteBlacklistHelper::updateSatelliteBlacklist);
         mGnssBatchingProvider = new GnssBatchingProvider();
         mGnssGeofenceProvider = new GnssGeofenceProvider();
@@ -1051,8 +1056,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     }
 
     @Override
-    public void onSetRequest(ProviderRequest request, WorkSource source) {
-        sendMessage(SET_REQUEST, 0, new GpsRequest(request, source));
+    public void onSetRequest(ProviderRequest request) {
+        sendMessage(SET_REQUEST, 0, new GpsRequest(request, request.workSource));
     }
 
     private void handleSetRequest(ProviderRequest request, WorkSource source) {
@@ -1189,7 +1194,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
     }
 
     @Override
-    public void onSendExtraCommand(int uid, int pid, String command, Bundle extras) {
+    public void onExtraCommand(int uid, int pid, String command, Bundle extras) {
 
         long identity = Binder.clearCallingIdentity();
         try {
@@ -2068,10 +2073,8 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
         }
 
         /**
-         * This method is bound to {@link #GnssLocationProvider(Context, LocationProviderManager,
-         * Looper)}.
-         * It is in charge of loading properties and registering for events that will be posted to
-         * this handler.
+         * This method is bound to the constructor. It is in charge of loading properties and
+         * registering for events that will be posted to this handler.
          */
         private void handleInitialize() {
             // class_init_native() already initializes the GNSS service handle during class loading.
@@ -2094,7 +2097,7 @@ public class GnssLocationProvider extends AbstractLocationProvider implements
             intentFilter.addAction(Intent.ACTION_SCREEN_OFF);
             intentFilter.addAction(Intent.ACTION_SCREEN_ON);
             intentFilter.addAction(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED);
-            intentFilter.addAction(TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED);
+            intentFilter.addAction(TelephonyManager.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED);
             mContext.registerReceiver(mBroadcastReceiver, intentFilter, null, this);
 
             mNetworkConnectivityHandler.registerNetworkCallbacks();

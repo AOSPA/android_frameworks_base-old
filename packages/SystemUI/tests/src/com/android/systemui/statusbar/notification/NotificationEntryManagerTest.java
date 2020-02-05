@@ -45,7 +45,6 @@ import android.app.PendingIntent;
 import android.content.Intent;
 import android.graphics.drawable.Icon;
 import android.os.Handler;
-import android.os.Looper;
 import android.os.UserHandle;
 import android.service.notification.NotificationListenerService.Ranking;
 import android.service.notification.NotificationListenerService.RankingMap;
@@ -58,15 +57,13 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.test.filters.SmallTest;
 
-import com.android.internal.logging.MetricsLogger;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.systemui.Dependency;
-import com.android.systemui.ForegroundServiceController;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.NotificationLifetimeExtender;
-import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationPresenter;
@@ -80,22 +77,27 @@ import com.android.systemui.statusbar.notification.NotificationEntryManager.Keyg
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.NotificationEntryBuilder;
 import com.android.systemui.statusbar.notification.collection.NotificationRankingManager;
-import com.android.systemui.statusbar.notification.collection.NotificationRowBinder;
-import com.android.systemui.statusbar.notification.collection.NotificationRowBinderImpl;
+import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl;
+import com.android.systemui.statusbar.notification.collection.provider.HighPriorityProvider;
 import com.android.systemui.statusbar.notification.logging.NotifLog;
 import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier;
+import com.android.systemui.statusbar.notification.row.ActivatableNotificationViewController;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.notification.row.NotifRemoteViewCache;
+import com.android.systemui.statusbar.notification.row.NotificationContentInflater;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.notification.row.RowInflaterTask;
+import com.android.systemui.statusbar.notification.row.dagger.NotificationRowComponent;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
-import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.util.Assert;
+import com.android.systemui.util.leak.LeakDetector;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -128,21 +130,18 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
     @Mock private HeadsUpManager mHeadsUpManager;
     @Mock private RankingMap mRankingMap;
     @Mock private RemoteInputController mRemoteInputController;
-
-    // Dependency mocks:
-    @Mock private ForegroundServiceController mForegroundServiceController;
+    @Mock private NotificationInterruptionStateProvider mNotificationInterruptionStateProvider;
     @Mock private NotificationLockscreenUserManager mLockscreenUserManager;
     @Mock private NotificationGroupManager mGroupManager;
     @Mock private NotificationGutsManager mGutsManager;
     @Mock private NotificationRemoteInputManager mRemoteInputManager;
-    @Mock private NotificationListener mNotificationListener;
     @Mock private DeviceProvisionedController mDeviceProvisionedController;
-    @Mock private VisualStabilityManager mVisualStabilityManager;
-    @Mock private MetricsLogger mMetricsLogger;
-    @Mock private SmartReplyController mSmartReplyController;
     @Mock private RowInflaterTask mAsyncInflationTask;
-    @Mock private NotificationRowBinder mMockedRowBinder;
     @Mock private NotifLog mNotifLog;
+    @Mock private FeatureFlags mFeatureFlags;
+    @Mock private LeakDetector mLeakDetector;
+    @Mock private ActivatableNotificationViewController mActivatableNotificationViewController;
+    @Mock private NotificationRowComponent.Builder mNotificationRowComponentBuilder;
 
     private int mId;
     private NotificationEntry mEntry;
@@ -162,7 +161,8 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
                     0,
                     IMPORTANCE_DEFAULT,
                     null, null,
-                    null, null, null, true, sentiment, false, -1, false, null, null, false, false);
+                    null, null, null, true, sentiment, false, -1, false, null, null, false, false,
+                    false);
             return true;
         }).when(mRankingMap).getRanking(eq(key), any(Ranking.class));
     }
@@ -181,7 +181,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
                     null, null,
                     null, null, null, true,
                     Ranking.USER_SENTIMENT_NEUTRAL, false, -1,
-                    false, smartActions, null, false, false);
+                    false, smartActions, null, false, false, false);
             return true;
         }).when(mRankingMap).getRanking(eq(key), any(Ranking.class));
     }
@@ -189,27 +189,14 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
-        mDependency.injectMockDependency(ShadeController.class);
-        mDependency.injectTestDependency(ForegroundServiceController.class,
-                mForegroundServiceController);
-        mDependency.injectTestDependency(NotificationLockscreenUserManager.class,
-                mLockscreenUserManager);
-        mDependency.injectTestDependency(NotificationGroupManager.class, mGroupManager);
-        mDependency.injectTestDependency(NotificationGutsManager.class, mGutsManager);
-        mDependency.injectTestDependency(NotificationRemoteInputManager.class, mRemoteInputManager);
-        mDependency.injectTestDependency(NotificationListener.class, mNotificationListener);
-        mDependency.injectTestDependency(DeviceProvisionedController.class,
-                mDeviceProvisionedController);
-        mDependency.injectTestDependency(VisualStabilityManager.class, mVisualStabilityManager);
-        mDependency.injectTestDependency(MetricsLogger.class, mMetricsLogger);
-        mDependency.injectTestDependency(SmartReplyController.class, mSmartReplyController);
-        mDependency.injectTestDependency(KeyguardEnvironment.class, mEnvironment);
+        mDependency.injectMockDependency(SmartReplyController.class);
         mDependency.injectMockDependency(NotificationMediaManager.class);
 
         mCountDownLatch = new CountDownLatch(1);
 
+        Assert.sMainLooper = TestableLooper.get(this).getLooper();
         mDependency.injectTestDependency(Dependency.MAIN_HANDLER,
-                Handler.createAsync(Looper.myLooper()));
+                Handler.createAsync(TestableLooper.get(this).getLooper()));
         when(mRemoteInputManager.getController()).thenReturn(mRemoteInputController);
         when(mListContainer.getViewParentForNotification(any())).thenReturn(
                 new FrameLayout(mContext));
@@ -219,6 +206,31 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
         mEntry.expandedIcon = mock(StatusBarIconView.class);
 
+        NotificationContentInflater contentBinder = new NotificationContentInflater(
+                mock(NotifRemoteViewCache.class),
+                mRemoteInputManager);
+        contentBinder.setInflateSynchronously(true);
+
+        when(mNotificationRowComponentBuilder.activatableNotificationView(any()))
+                .thenReturn(mNotificationRowComponentBuilder);
+        when(mNotificationRowComponentBuilder.build()).thenReturn(
+                () -> mActivatableNotificationViewController);
+        NotificationRowBinderImpl notificationRowBinder =
+                new NotificationRowBinderImpl(mContext,
+                        mRemoteInputManager,
+                        mLockscreenUserManager,
+                        contentBinder,
+                        true, /* allowLongPress */
+                        mock(KeyguardBypassController.class),
+                        mock(StatusBarStateController.class),
+                        mGroupManager,
+                        mGutsManager,
+                        mNotificationInterruptionStateProvider,
+                        () -> new RowInflaterTask(mNotificationRowComponentBuilder),
+                        mock(NotificationLogger.class));
+
+        when(mFeatureFlags.isNewNotifPipelineEnabled()).thenReturn(false);
+        when(mFeatureFlags.isNewNotifPipelineRenderingEnabled()).thenReturn(false);
         mEntryManager = new TestableNotificationEntryManager(
                 mNotifLog,
                 mGroupManager,
@@ -229,25 +241,31 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
                         mock(NotificationFilter.class),
                         mNotifLog,
                         mock(NotificationSectionsFeatureManager.class),
-                        mock(PeopleNotificationIdentifier.class)),
-                mEnvironment
+                        mock(PeopleNotificationIdentifier.class),
+                        mock(HighPriorityProvider.class)),
+                mEnvironment,
+                mFeatureFlags,
+                () -> notificationRowBinder,
+                () -> mRemoteInputManager,
+                mLeakDetector
         );
         mEntryManager.setUpWithPresenter(mPresenter, mListContainer, mHeadsUpManager);
         mEntryManager.addNotificationEntryListener(mEntryListener);
         mEntryManager.setNotificationRemoveInterceptor(mRemoveInterceptor);
 
-        NotificationRowBinderImpl notificationRowBinder =
-                new NotificationRowBinderImpl(mContext, true, /* allowLongPress */
-                        mock(KeyguardBypassController.class),
-                        mock(StatusBarStateController.class),
-                        mock(NotificationLogger.class));
         notificationRowBinder.setUpWithPresenter(
-                mPresenter, mListContainer, mHeadsUpManager, mEntryManager, mBindCallback);
+                mPresenter, mListContainer, mHeadsUpManager, mBindCallback);
+        notificationRowBinder.setInflationCallback(mEntryManager);
         notificationRowBinder.setNotificationClicker(mock(NotificationClicker.class));
-        mEntryManager.setRowBinder(notificationRowBinder);
 
         setUserSentiment(
                 mEntry.getKey(), Ranking.USER_SENTIMENT_NEUTRAL);
+    }
+
+    @After
+    public void tearDown() {
+        // CLEAN UP inflation tasks so they don't callback in a future test
+        mEntry.abortTask();
     }
 
     @Test
@@ -335,9 +353,6 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
     @Test
     public void testRemoveNotification() {
-        // Row inflation happens off thread, so pretend that this test looper is main
-        Assert.sMainLooper = TestableLooper.get(this).getLooper();
-
         mEntry.setRow(mRow);
         mEntryManager.addActiveNotificationForTest(mEntry);
 
@@ -364,9 +379,6 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
     @Test
     public void testRemoveNotification_whilePending() {
-
-        mEntryManager.setRowBinder(mMockedRowBinder);
-
         mEntryManager.addNotification(mSbn, mRankingMap);
         mEntryManager.removeNotification(mSbn.getKey(), mRankingMap, UNDEFINED_DISMISS_REASON);
 
@@ -439,7 +451,6 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
     @Test
     public void testLifetimeExtenders_ifNotificationIsRetainedItIsntRemoved() {
         // GIVEN an entry manager with a notification
-        mEntryManager.setRowBinder(mMockedRowBinder);
         mEntryManager.addActiveNotificationForTest(mEntry);
 
         // GIVEN a lifetime extender that always tries to extend lifetime
@@ -459,11 +470,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
     @Test
     public void testLifetimeExtenders_whenRetentionEndsNotificationIsRemoved() {
-        // Row inflation happens off thread, so pretend that this test looper is main
-        Assert.sMainLooper = TestableLooper.get(this).getLooper();
-
         // GIVEN an entry manager with a notification whose life has been extended
-        mEntryManager.setRowBinder(mMockedRowBinder);
         mEntryManager.addActiveNotificationForTest(mEntry);
         final FakeNotificationLifetimeExtender extender = new FakeNotificationLifetimeExtender();
         mEntryManager.addNotificationLifetimeExtender(extender);
@@ -482,7 +489,6 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
     @Test
     public void testLifetimeExtenders_whenNotificationUpdatedRetainersAreCanceled() {
         // GIVEN an entry manager with a notification whose life has been extended
-        mEntryManager.setRowBinder(mMockedRowBinder);
         mEntryManager.addActiveNotificationForTest(mEntry);
         NotificationLifetimeExtender extender = mock(NotificationLifetimeExtender.class);
         when(extender.shouldExtendLifetime(mEntry)).thenReturn(true);
@@ -499,7 +505,6 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
     @Test
     public void testLifetimeExtenders_whenNewExtenderTakesPrecedenceOldExtenderIsCanceled() {
         // GIVEN an entry manager with a notification
-        mEntryManager.setRowBinder(mMockedRowBinder);
         mEntryManager.addActiveNotificationForTest(mEntry);
 
         // GIVEN two lifetime extenders, the first which never extends and the second which
@@ -538,7 +543,6 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
     @Test
     public void testRemoveInterceptor_interceptsDontGetRemoved() throws InterruptedException {
         // GIVEN an entry manager with a notification
-        mEntryManager.setRowBinder(mMockedRowBinder);
         mEntryManager.addActiveNotificationForTest(mEntry);
 
         // GIVEN interceptor that intercepts that entry
@@ -556,11 +560,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
     @Test
     public void testRemoveInterceptor_notInterceptedGetsRemoved() {
-        // Row inflation happens off thread, so pretend that this test looper is main
-        Assert.sMainLooper = TestableLooper.get(this).getLooper();
-
         // GIVEN an entry manager with a notification
-        mEntryManager.setRowBinder(mMockedRowBinder);
         mEntryManager.addActiveNotificationForTest(mEntry);
 
         // GIVEN interceptor that doesn't intercept
@@ -577,7 +577,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
     }
 
     private NotificationEntry createNotification() {
-        Notification.Builder n = new Notification.Builder(mContext, "")
+        Notification.Builder n = new Notification.Builder(mContext, "id")
                 .setSmallIcon(R.drawable.ic_person)
                 .setContentTitle("Title")
                 .setContentText("Text");
@@ -588,6 +588,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
                 .setUid(TEST_UID)
                 .setId(mId++)
                 .setNotification(n.build())
+                .setChannel(new NotificationChannel("id", "", IMPORTANCE_DEFAULT))
                 .setUser(new UserHandle(ActivityManager.getCurrentUser()))
                 .build();
     }
@@ -621,8 +622,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
 
     @Test
     public void testGetNotificationsForCurrentUser_shouldFilterNonCurrentUserNotifications() {
-        Assert.sMainLooper = TestableLooper.get(this).getLooper();
-        Notification.Builder n = new Notification.Builder(mContext, "")
+        Notification.Builder n = new Notification.Builder(mContext, "di")
                 .setSmallIcon(R.drawable.ic_person)
                 .setContentTitle("Title")
                 .setContentText("Text");
@@ -634,6 +634,7 @@ public class NotificationEntryManagerTest extends SysuiTestCase {
                 .setId(mId++)
                 .setNotification(n.build())
                 .setUser(new UserHandle(ActivityManager.getCurrentUser()))
+                .setChannel(new NotificationChannel("id", "", IMPORTANCE_DEFAULT))
                 .build();
 
         mEntryManager.addActiveNotificationForTest(mEntry);

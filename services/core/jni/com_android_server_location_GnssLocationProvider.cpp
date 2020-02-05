@@ -129,7 +129,6 @@ using android::hardware::hidl_vec;
 using android::hardware::hidl_string;
 using android::hardware::hidl_death_recipient;
 
-using android::hardware::gnss::V1_0::GnssConstellationType;
 using android::hardware::gnss::V1_0::GnssLocationFlags;
 using android::hardware::gnss::V1_0::IAGnssRilCallback;
 using android::hardware::gnss::V1_0::IGnssGeofenceCallback;
@@ -149,6 +148,8 @@ using android::hardware::gnss::measurement_corrections::V1_0::ReflectingPlane;
 
 using android::hidl::base::V1_0::IBase;
 
+using GnssConstellationType_V1_0 = android::hardware::gnss::V1_0::GnssConstellationType;
+using GnssConstellationType_V2_0 = android::hardware::gnss::V2_0::GnssConstellationType;
 using GnssLocation_V1_0 = android::hardware::gnss::V1_0::GnssLocation;
 using GnssLocation_V2_0 = android::hardware::gnss::V2_0::GnssLocation;
 using IGnss_V1_0 = android::hardware::gnss::V1_0::IGnss;
@@ -161,6 +162,7 @@ using IGnssCallback_V2_1 = android::hardware::gnss::V2_1::IGnssCallback;
 using IGnssConfiguration_V1_0 = android::hardware::gnss::V1_0::IGnssConfiguration;
 using IGnssConfiguration_V1_1 = android::hardware::gnss::V1_1::IGnssConfiguration;
 using IGnssConfiguration_V2_0 = android::hardware::gnss::V2_0::IGnssConfiguration;
+using IGnssConfiguration_V2_1 = android::hardware::gnss::V2_1::IGnssConfiguration;
 using IGnssDebug_V1_0 = android::hardware::gnss::V1_0::IGnssDebug;
 using IGnssDebug_V2_0 = android::hardware::gnss::V2_0::IGnssDebug;
 using IGnssMeasurement_V1_0 = android::hardware::gnss::V1_0::IGnssMeasurement;
@@ -202,6 +204,7 @@ struct GnssDeathRecipient : virtual public hidl_death_recipient
 
 // Must match the value from GnssMeasurement.java
 static const uint32_t ADR_STATE_HALF_CYCLE_REPORTED = (1<<4);
+static const uint32_t SVID_FLAGS_HAS_BASEBAND_CN0 = (1<<4);
 
 sp<GnssDeathRecipient> gnssHalDeathRecipient = nullptr;
 sp<IGnss_V1_0> gnssHal = nullptr;
@@ -221,6 +224,7 @@ sp<IGnssDebug_V2_0> gnssDebugIface_V2_0 = nullptr;
 sp<IGnssConfiguration_V1_0> gnssConfigurationIface = nullptr;
 sp<IGnssConfiguration_V1_1> gnssConfigurationIface_V1_1 = nullptr;
 sp<IGnssConfiguration_V2_0> gnssConfigurationIface_V2_0 = nullptr;
+sp<IGnssConfiguration_V2_1> gnssConfigurationIface_V2_1 = nullptr;
 sp<IGnssNi> gnssNiIface = nullptr;
 sp<IGnssMeasurement_V1_0> gnssMeasurementIface = nullptr;
 sp<IGnssMeasurement_V1_1> gnssMeasurementIface_V1_1 = nullptr;
@@ -631,6 +635,16 @@ private:
     template<class T>
     Return<void> gnssSvStatusCbImpl(const T& svStatus);
 
+    template<class T>
+    uint32_t getHasBasebandCn0DbHzFlag(const T& svStatus) {
+        return 0;
+    }
+
+    template<class T>
+    double getBasebandCn0DbHz(const T& svStatus, size_t i) {
+        return 0.0;
+    }
+
     uint32_t getGnssSvInfoListSize(const IGnssCallback_V1_0::GnssSvStatus& svStatus) {
         return svStatus.numSvs;
     }
@@ -655,8 +669,6 @@ private:
 
     const IGnssCallback_V1_0::GnssSvInfo& getGnssSvInfoOfIndex(
             const hidl_vec<IGnssCallback_V2_1::GnssSvInfo>& svInfoList, size_t i) {
-        // TODO(b/144850155): fill baseband CN0 after it's available in Java object.
-        ALOGD("getGnssSvInfoOfIndex %d: baseband C/N0: %f", (int) i, svInfoList[i].basebandCN0DbHz);
         return svInfoList[i].v2_0.v1_0;
     }
 
@@ -718,6 +730,18 @@ Return<void> GnssCallback::gnssStatusCb(const IGnssCallback_V2_0::GnssStatusValu
     return Void();
 }
 
+template<>
+uint32_t GnssCallback::getHasBasebandCn0DbHzFlag(const hidl_vec<IGnssCallback_V2_1::GnssSvInfo>&
+        svStatus) {
+    return SVID_FLAGS_HAS_BASEBAND_CN0;
+}
+
+template<>
+double GnssCallback::getBasebandCn0DbHz(const hidl_vec<IGnssCallback_V2_1::GnssSvInfo>& svInfoList,
+        size_t i) {
+    return svInfoList[i].basebandCN0DbHz;
+}
+
 template<class T>
 Return<void> GnssCallback::gnssSvStatusCbImpl(const T& svStatus) {
     JNIEnv* env = getJniEnv();
@@ -755,8 +779,8 @@ Return<void> GnssCallback::gnssSvStatusCbImpl(const T& svStatus) {
         elev[i] = info.elevationDegrees;
         azim[i] = info.azimuthDegrees;
         carrierFreq[i] = info.carrierFrequencyHz;
-        // TODO(b/144850155): fill svidWithFlags with hasBasebandCn0DbHz based on HAL versions
-        basebandCn0s[i] = 0.0;
+        svidWithFlags[i] |= getHasBasebandCn0DbHzFlag(svStatus);
+        basebandCn0s[i] = getBasebandCn0DbHz(svStatus, i);
     }
 
     env->ReleaseIntArrayElements(svidWithFlagArray, svidWithFlags, 0);
@@ -1182,8 +1206,8 @@ void GnssMeasurementCallback::translateSingleGnssMeasurement
         const IGnssMeasurementCallback_V2_1::GnssMeasurement* measurement_V2_1,
         JavaObject& object) {
     translateSingleGnssMeasurement(&(measurement_V2_1->v2_0), object);
-    // TODO(b/144850155): fill baseband CN0 after it's available in Java object
-    ALOGD("baseband CN0DbHz = %f\n", measurement_V2_1->basebandCN0DbHz);
+
+    SET(BasebandCn0DbHz, measurement_V2_1->basebandCN0DbHz);
 }
 
 template<class T>
@@ -1888,7 +1912,17 @@ static void android_location_GnssLocationProvider_init_once(JNIEnv* env, jclass 
         gnssNiIface = gnssNi;
     }
 
-    if (gnssHal_V2_0 != nullptr) {
+    if (gnssHal_V2_1 != nullptr) {
+        auto gnssConfiguration = gnssHal_V2_1->getExtensionGnssConfiguration_2_1();
+        if (!gnssConfiguration.isOk()) {
+            ALOGD("Unable to get a handle to GnssConfiguration_V2_1");
+        } else {
+            gnssConfigurationIface_V2_1 = gnssConfiguration;
+            gnssConfigurationIface_V2_0 = gnssConfigurationIface_V2_1;
+            gnssConfigurationIface_V1_1 = gnssConfigurationIface_V2_1;
+            gnssConfigurationIface = gnssConfigurationIface_V2_1;
+        }
+    } else if (gnssHal_V2_0 != nullptr) {
         auto gnssConfiguration = gnssHal_V2_0->getExtensionGnssConfiguration_2_0();
         if (!gnssConfiguration.isOk()) {
             ALOGD("Unable to get a handle to GnssConfiguration_V2_0");
@@ -1962,7 +1996,11 @@ static jboolean android_location_GnssNetworkConnectivityHandler_is_agps_ril_supp
 static jobject android_location_GnssConfiguration_get_gnss_configuration_version(
         JNIEnv* env, jclass /* jclazz */) {
     jint major, minor;
-    if (gnssConfigurationIface_V2_0 != nullptr) {
+    if (gnssConfigurationIface_V2_1 != nullptr) {
+        major = 2;
+        minor = 1;
+    }
+    else if (gnssConfigurationIface_V2_0 != nullptr) {
         major = 2;
         minor = 0;
     } else if (gnssConfigurationIface_V1_1 != nullptr) {
@@ -2768,7 +2806,7 @@ static jboolean
 
         SingleSatCorrection singleSatCorrection = {
             .singleSatCorrectionFlags = corrFlags,
-            .constellation = static_cast<GnssConstellationType>(constType),
+            .constellation = static_cast<GnssConstellationType_V1_0>(constType),
             .svid = static_cast<uint16_t>(satId),
             .carrierFrequencyHz = carrierFreqHz,
             .probSatIsLos = probSatIsLos,
@@ -2863,8 +2901,8 @@ static jboolean android_location_GnssConfiguration_set_supl_version(JNIEnv*,
 static jboolean android_location_GnssConfiguration_set_supl_es(JNIEnv*,
                                                                jobject,
                                                                jint suplEs) {
-    if (gnssConfigurationIface_V2_0 != nullptr) {
-        ALOGI("Config parameter SUPL_ES is deprecated in IGnssConfiguration.hal version 2.0.");
+    if (gnssConfigurationIface_V2_0 != nullptr || gnssConfigurationIface_V2_1 != nullptr) {
+        ALOGI("Config parameter SUPL_ES is deprecated in IGnssConfiguration.hal version 2.0 and higher.");
         return JNI_FALSE;
     }
 
@@ -2892,7 +2930,7 @@ static jboolean android_location_GnssConfiguration_set_supl_mode(JNIEnv*,
 static jboolean android_location_GnssConfiguration_set_gps_lock(JNIEnv*,
                                                                 jobject,
                                                                 jint gpsLock) {
-    if (gnssConfigurationIface_V2_0 != nullptr) {
+    if (gnssConfigurationIface_V2_0 != nullptr || gnssConfigurationIface_V2_1 != nullptr) {
         ALOGI("Config parameter GPS_LOCK is deprecated in IGnssConfiguration.hal version 2.0.");
         return JNI_FALSE;
     }
@@ -2932,7 +2970,7 @@ static jboolean android_location_GnssConfiguration_set_gnss_pos_protocol_select(
 
 static jboolean android_location_GnssConfiguration_set_satellite_blacklist(
         JNIEnv* env, jobject, jintArray constellations, jintArray sv_ids) {
-    if (gnssConfigurationIface_V1_1 == nullptr) {
+    if (gnssConfigurationIface_V1_1 == nullptr && gnssConfigurationIface_V2_1 == nullptr) {
         ALOGI("IGnssConfiguration interface does not support satellite blacklist.");
         return JNI_FALSE;
     }
@@ -2955,11 +2993,24 @@ static jboolean android_location_GnssConfiguration_set_satellite_blacklist(
         return JNI_FALSE;
     }
 
+    if (gnssConfigurationIface_V2_1 != nullptr) {
+        hidl_vec<IGnssConfiguration_V2_1::BlacklistedSource> sources;
+        sources.resize(length);
+
+        for (int i = 0; i < length; i++) {
+            sources[i].constellation = static_cast<GnssConstellationType_V2_0>(constellation_array[i]);
+            sources[i].svid = sv_id_array[i];
+        }
+
+        auto result = gnssConfigurationIface_V2_1->setBlacklist_2_1(sources);
+        return checkHidlReturn(result, "IGnssConfiguration_V2_1 setBlacklist_2_1() failed.");
+    }
+
     hidl_vec<IGnssConfiguration_V1_1::BlacklistedSource> sources;
     sources.resize(length);
 
     for (int i = 0; i < length; i++) {
-        sources[i].constellation = static_cast<GnssConstellationType>(constellation_array[i]);
+        sources[i].constellation = static_cast<GnssConstellationType_V1_0>(constellation_array[i]);
         sources[i].svid = sv_id_array[i];
     }
 

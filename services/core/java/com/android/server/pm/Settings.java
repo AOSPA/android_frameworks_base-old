@@ -92,6 +92,8 @@ import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.JournaledFile;
 import com.android.internal.util.XmlUtils;
+import com.android.permission.persistence.RuntimePermissionsPersistence;
+import com.android.permission.persistence.RuntimePermissionsState;
 import com.android.server.LocalServices;
 import com.android.server.pm.Installer.InstallerException;
 import com.android.server.pm.permission.BasePermission;
@@ -280,8 +282,11 @@ public final class Settings {
     /** Map from package name to settings */
     final ArrayMap<String, PackageSetting> mPackages = new ArrayMap<>();
 
-    /** List of packages that installed other packages */
-    final ArraySet<String> mInstallerPackages = new ArraySet<>();
+    /**
+     * List of packages that were involved in installing other packages, i.e. are listed
+     * in at least one app's InstallSource.
+     */
+    private final ArraySet<String> mInstallerPackages = new ArraySet<>();
 
     /** Map from package name to appId and excluded userids */
     private final ArrayMap<String, KernelPackageState> mKernelMapping = new ArrayMap<>();
@@ -439,16 +444,6 @@ public final class Settings {
 
     public boolean canPropagatePermissionToInstantApp(String permName) {
         return mPermissions.canPropagatePermissionToInstantApp(permName);
-    }
-
-    void setInstallerPackageName(String pkgName, String installerPkgName) {
-        PackageSetting p = mPackages.get(pkgName);
-        if (p != null) {
-            p.setInstallerPackageName(installerPkgName);
-            if (installerPkgName != null) {
-                mInstallerPackages.add(installerPkgName);
-            }
-        }
     }
 
     /** Gets and optionally creates a new shared user id. */
@@ -2826,6 +2821,9 @@ public final class Settings {
         if (installSource.initiatingPackageName != null) {
             serializer.attribute(null, "installInitiator", installSource.initiatingPackageName);
         }
+        if (installSource.isInitiatingPackageUninstalled) {
+            serializer.attribute(null, "installInitiatorUninstalled", "true");
+        }
         if (installSource.originatingPackageName != null) {
             serializer.attribute(null, "installOriginator", installSource.originatingPackageName);
         }
@@ -2842,6 +2840,11 @@ public final class Settings {
         writeUsesStaticLibLPw(serializer, pkg.usesStaticLibraries, pkg.usesStaticLibrariesVersions);
 
         pkg.signatures.writeXml(serializer, "sigs", mPastSignatures);
+
+        if (installSource.initiatingPackageSignatures != null) {
+            installSource.initiatingPackageSignatures.writeXml(
+                    serializer, "install-initiator-sigs", mPastSignatures);
+        }
 
         writePermissionsLPr(serializer, pkg.getPermissionsState().getInstallPermissionStates());
 
@@ -3122,6 +3125,10 @@ public final class Settings {
         writeKernelMappingLPr();
 
         return true;
+    }
+
+    void readPermissionStateForUserSyncLPr(@UserIdInt int userId) {
+        mRuntimePermissionsPersistence.readStateForUserSyncLPr(userId);
     }
 
     void applyDefaultPreferredAppsLPw(int userId) {
@@ -3578,6 +3585,7 @@ public final class Settings {
         String isOrphaned = null;
         String installOriginatingPackageName = null;
         String installInitiatingPackageName = null;
+        String installInitiatorUninstalled = null;
         String volumeUuid = null;
         String categoryHintString = null;
         String updateAvailable = null;
@@ -3623,6 +3631,8 @@ public final class Settings {
             isOrphaned = parser.getAttributeValue(null, "isOrphaned");
             installInitiatingPackageName = parser.getAttributeValue(null, "installInitiator");
             installOriginatingPackageName = parser.getAttributeValue(null, "installOriginator");
+            installInitiatorUninstalled = parser.getAttributeValue(null,
+                    "installInitiatorUninstalled");
             volumeUuid = parser.getAttributeValue(null, "volumeUuid");
             categoryHintString = parser.getAttributeValue(null, "categoryHint");
             if (categoryHintString != null) {
@@ -3777,9 +3787,11 @@ public final class Settings {
         }
         if (packageSetting != null) {
             packageSetting.uidError = "true".equals(uidError);
-            packageSetting.installSource = InstallSource.create(
+            InstallSource installSource = InstallSource.create(
                     installInitiatingPackageName, installOriginatingPackageName,
-                    installerPackageName, "true".equals(isOrphaned));
+                    installerPackageName, "true".equals(isOrphaned),
+                    "true".equals(installInitiatorUninstalled));
+            packageSetting.installSource = installSource;
             packageSetting.volumeUuid = volumeUuid;
             packageSetting.categoryHint = categoryHint;
             packageSetting.legacyNativeLibraryPathString = legacyNativeLibraryPathStr;
@@ -3809,9 +3821,7 @@ public final class Settings {
                 packageSetting.setEnabled(COMPONENT_ENABLED_STATE_DEFAULT, 0, null);
             }
 
-            if (installerPackageName != null) {
-                mInstallerPackages.add(installerPackageName);
-            }
+            addInstallerPackageNames(installSource);
 
             int outerDepth = parser.getDepth();
             int type;
@@ -3857,6 +3867,11 @@ public final class Settings {
                         mKeySetRefs.put(id, 1);
                     }
                     packageSetting.keySetData.addDefinedKeySet(id, alias);
+                } else if (tagName.equals("install-initiator-sigs")) {
+                    final PackageSignatures signatures = new PackageSignatures();
+                    signatures.readXml(parser, mPastSignatures);
+                    packageSetting.installSource =
+                            packageSetting.installSource.setInitiatingPackageSignatures(signatures);
                 } else if (tagName.equals(TAG_DOMAIN_VERIFICATION)) {
                     readDomainVerificationLPw(parser, packageSetting);
                 } else {
@@ -3867,6 +3882,18 @@ public final class Settings {
             }
         } else {
             XmlUtils.skipCurrentTag(parser);
+        }
+    }
+
+    void addInstallerPackageNames(InstallSource installSource) {
+        if (installSource.installerPackageName != null) {
+            mInstallerPackages.add(installSource.installerPackageName);
+        }
+        if (installSource.initiatingPackageName != null) {
+            mInstallerPackages.add(installSource.initiatingPackageName);
+        }
+        if (installSource.originatingPackageName != null) {
+            mInstallerPackages.add(installSource.originatingPackageName);
         }
     }
 
@@ -4721,6 +4748,22 @@ public final class Settings {
                 }
             }
 
+            Map<String, String[]> sharedLibraryOverlayPaths =
+                    ps.getOverlayPathsForLibrary(user.id);
+            if (sharedLibraryOverlayPaths != null) {
+                for (Map.Entry<String, String[]> libOverlayPaths :
+                        sharedLibraryOverlayPaths.entrySet()) {
+                    if (libOverlayPaths.getValue() == null) {
+                        continue;
+                    }
+                    pw.print(prefix); pw.print("  ");
+                    pw.print(libOverlayPaths.getKey()); pw.println(" overlay paths:");
+                    for (String path : libOverlayPaths.getValue()) {
+                        pw.print(prefix); pw.print("    "); pw.println(path);
+                    }
+                }
+            }
+
             String lastDisabledAppCaller = ps.getLastDisabledAppCaller(user.id);
             if (lastDisabledAppCaller != null) {
                 pw.print(prefix); pw.print("    lastDisabledCaller: ");
@@ -5055,6 +5098,9 @@ public final class Settings {
         private static final int UPGRADE_VERSION = -1;
         private static final int INITIAL_VERSION = 0;
 
+        private final RuntimePermissionsPersistence mPersistence =
+                RuntimePermissionsPersistence.createInstance();
+
         private final Handler mHandler = new MyHandler();
 
         private final Object mPersistenceLock;
@@ -5144,98 +5190,72 @@ public final class Settings {
         }
 
         private void writePermissionsSync(int userId) {
-            AtomicFile destination = new AtomicFile(getUserRuntimePermissionsFile(userId),
-                    "package-perms-" + userId);
-
-            ArrayMap<String, List<PermissionState>> permissionsForPackage = new ArrayMap<>();
-            ArrayMap<String, List<PermissionState>> permissionsForSharedUser = new ArrayMap<>();
-
+            RuntimePermissionsState runtimePermissions;
             synchronized (mPersistenceLock) {
                 mWriteScheduled.delete(userId);
 
-                final int packageCount = mPackages.size();
-                for (int i = 0; i < packageCount; i++) {
+                int version = mVersions.get(userId, INITIAL_VERSION);
+
+                String fingerprint = mFingerprints.get(userId);
+
+                Map<String, List<RuntimePermissionsState.PermissionState>> packagePermissions =
+                        new ArrayMap<>();
+                int packagesSize = mPackages.size();
+                for (int i = 0; i < packagesSize; i++) {
                     String packageName = mPackages.keyAt(i);
                     PackageSetting packageSetting = mPackages.valueAt(i);
                     if (packageSetting.sharedUser == null) {
-                        PermissionsState permissionsState = packageSetting.getPermissionsState();
-                        List<PermissionState> permissionsStates = permissionsState
-                                .getRuntimePermissionStates(userId);
-                        if (!permissionsStates.isEmpty()) {
-                            permissionsForPackage.put(packageName, permissionsStates);
+                        List<RuntimePermissionsState.PermissionState> permissions =
+                                getPermissionsFromPermissionsState(
+                                        packageSetting.getPermissionsState(), userId);
+                        if (permissions != null) {
+                            packagePermissions.put(packageName, permissions);
                         }
                     }
                 }
 
-                final int sharedUserCount = mSharedUsers.size();
-                for (int i = 0; i < sharedUserCount; i++) {
+                Map<String, List<RuntimePermissionsState.PermissionState>> sharedUserPermissions =
+                        new ArrayMap<>();
+                final int sharedUsersSize = mSharedUsers.size();
+                for (int i = 0; i < sharedUsersSize; i++) {
                     String sharedUserName = mSharedUsers.keyAt(i);
-                    SharedUserSetting sharedUser = mSharedUsers.valueAt(i);
-                    PermissionsState permissionsState = sharedUser.getPermissionsState();
-                    List<PermissionState> permissionsStates = permissionsState
-                            .getRuntimePermissionStates(userId);
-                    if (!permissionsStates.isEmpty()) {
-                        permissionsForSharedUser.put(sharedUserName, permissionsStates);
+                    SharedUserSetting sharedUserSetting = mSharedUsers.valueAt(i);
+                    List<RuntimePermissionsState.PermissionState> permissions =
+                            getPermissionsFromPermissionsState(
+                                    sharedUserSetting.getPermissionsState(), userId);
+                    if (permissions != null) {
+                        sharedUserPermissions.put(sharedUserName, permissions);
                     }
                 }
+
+                runtimePermissions = new RuntimePermissionsState(version, fingerprint,
+                        packagePermissions, sharedUserPermissions);
             }
 
-            FileOutputStream out = null;
-            try {
-                out = destination.startWrite();
+            mPersistence.write(runtimePermissions, UserHandle.of(userId));
+        }
 
-                XmlSerializer serializer = Xml.newSerializer();
-                serializer.setOutput(out, StandardCharsets.UTF_8.name());
-                serializer.setFeature(
-                        "http://xmlpull.org/v1/doc/features.html#indent-output", true);
-                serializer.startDocument(null, true);
-
-                serializer.startTag(null, TAG_RUNTIME_PERMISSIONS);
-
-                final int version = mVersions.get(userId, INITIAL_VERSION);
-                serializer.attribute(null, ATTR_VERSION, Integer.toString(version));
-
-                String fingerprint = mFingerprints.get(userId);
-                if (fingerprint != null) {
-                    serializer.attribute(null, ATTR_FINGERPRINT, fingerprint);
-                }
-
-                final int packageCount = permissionsForPackage.size();
-                for (int i = 0; i < packageCount; i++) {
-                    String packageName = permissionsForPackage.keyAt(i);
-                    List<PermissionState> permissionStates = permissionsForPackage.valueAt(i);
-                    serializer.startTag(null, TAG_PACKAGE);
-                    serializer.attribute(null, ATTR_NAME, packageName);
-                    writePermissions(serializer, permissionStates);
-                    serializer.endTag(null, TAG_PACKAGE);
-                }
-
-                final int sharedUserCount = permissionsForSharedUser.size();
-                for (int i = 0; i < sharedUserCount; i++) {
-                    String packageName = permissionsForSharedUser.keyAt(i);
-                    List<PermissionState> permissionStates = permissionsForSharedUser.valueAt(i);
-                    serializer.startTag(null, TAG_SHARED_USER);
-                    serializer.attribute(null, ATTR_NAME, packageName);
-                    writePermissions(serializer, permissionStates);
-                    serializer.endTag(null, TAG_SHARED_USER);
-                }
-
-                serializer.endTag(null, TAG_RUNTIME_PERMISSIONS);
-
-                serializer.endDocument();
-                destination.finishWrite(out);
-
-                if (Build.FINGERPRINT.equals(fingerprint)) {
-                    mDefaultPermissionsGranted.put(userId, true);
-                }
-            // Any error while writing is fatal.
-            } catch (Throwable t) {
-                Slog.wtf(PackageManagerService.TAG,
-                        "Failed to write settings, restoring backup", t);
-                destination.failWrite(out);
-            } finally {
-                IoUtils.closeQuietly(out);
+        @Nullable
+        private List<RuntimePermissionsState.PermissionState> getPermissionsFromPermissionsState(
+                @NonNull PermissionsState permissionsState, @UserIdInt int userId) {
+            List<PermissionState> permissionStates = permissionsState.getRuntimePermissionStates(
+                    userId);
+            if (permissionStates.isEmpty()) {
+                return null;
             }
+
+            List<RuntimePermissionsState.PermissionState> permissions =
+                    new ArrayList<>();
+            int permissionStatesSize = permissionStates.size();
+            for (int i = 0; i < permissionStatesSize; i++) {
+                PermissionState permissionState = permissionStates.get(i);
+
+                RuntimePermissionsState.PermissionState permission =
+                        new RuntimePermissionsState.PermissionState(permissionState.getName(),
+                                permissionState.isGranted(), permissionState.getFlags());
+                permissions.add(permission);
+            }
+            return permissions;
         }
 
         @GuardedBy("Settings.this.mLock")
@@ -5270,11 +5290,88 @@ public final class Settings {
         }
 
         public void deleteUserRuntimePermissionsFile(int userId) {
-            getUserRuntimePermissionsFile(userId).delete();
+            mPersistence.delete(UserHandle.of(userId));
         }
 
         @GuardedBy("Settings.this.mLock")
         public void readStateForUserSyncLPr(int userId) {
+            RuntimePermissionsState runtimePermissions = mPersistence.read(UserHandle.of(userId));
+            if (runtimePermissions == null) {
+                readLegacyStateForUserSyncLPr(userId);
+                writePermissionsForUserAsyncLPr(userId);
+                return;
+            }
+
+            // If the runtime permissions file exists but the version is not set this is
+            // an upgrade from P->Q. Hence mark it with the special UPGRADE_VERSION.
+            int version = runtimePermissions.getVersion();
+            if (version == RuntimePermissionsState.NO_VERSION) {
+                version = UPGRADE_VERSION;
+            }
+            mVersions.put(userId, version);
+
+            String fingerprint = runtimePermissions.getFingerprint();
+            mFingerprints.put(userId, fingerprint);
+            boolean defaultPermissionsGranted = Build.FINGERPRINT.equals(fingerprint);
+            mDefaultPermissionsGranted.put(userId, defaultPermissionsGranted);
+
+            for (Map.Entry<String, List<RuntimePermissionsState.PermissionState>> entry
+                    : runtimePermissions.getPackagePermissions().entrySet()) {
+                String packageName = entry.getKey();
+                List<RuntimePermissionsState.PermissionState> permissions = entry.getValue();
+
+                PackageSetting packageSetting = mPackages.get(packageName);
+                if (packageSetting == null) {
+                    Slog.w(PackageManagerService.TAG, "Unknown package:" + packageName);
+                    continue;
+                }
+                readPermissionsStateLpr(permissions, packageSetting.getPermissionsState(), userId);
+            }
+
+            for (Map.Entry<String, List<RuntimePermissionsState.PermissionState>> entry
+                    : runtimePermissions.getSharedUserPermissions().entrySet()) {
+                String sharedUserName = entry.getKey();
+                List<RuntimePermissionsState.PermissionState> permissions = entry.getValue();
+
+                SharedUserSetting sharedUserSetting = mSharedUsers.get(sharedUserName);
+                if (sharedUserSetting == null) {
+                    Slog.w(PackageManagerService.TAG, "Unknown shared user:" + sharedUserName);
+                    continue;
+                }
+                readPermissionsStateLpr(permissions, sharedUserSetting.getPermissionsState(),
+                        userId);
+            }
+        }
+
+        private void readPermissionsStateLpr(
+                @NonNull List<RuntimePermissionsState.PermissionState> permissions,
+                @NonNull PermissionsState permissionsState, @UserIdInt int userId) {
+            int permissionsSize = permissions.size();
+            for (int i = 0; i < permissionsSize; i++) {
+                RuntimePermissionsState.PermissionState permission = permissions.get(i);
+
+                String name = permission.getName();
+                BasePermission basePermission = mPermissions.getPermission(name);
+                if (basePermission == null) {
+                    Slog.w(PackageManagerService.TAG, "Unknown permission:" + name);
+                    continue;
+                }
+                boolean granted = permission.isGranted();
+                int flags = permission.getFlags();
+
+                if (granted) {
+                    permissionsState.grantRuntimePermission(basePermission, userId);
+                    permissionsState.updatePermissionFlags(basePermission, userId,
+                            PackageManager.MASK_PERMISSION_FLAGS_ALL, flags);
+                } else {
+                    permissionsState.updatePermissionFlags(basePermission, userId,
+                            PackageManager.MASK_PERMISSION_FLAGS_ALL, flags);
+                }
+            }
+        }
+
+        @GuardedBy("Settings.this.mLock")
+        private void readLegacyStateForUserSyncLPr(int userId) {
             File permissionsFile = getUserRuntimePermissionsFile(userId);
             if (!permissionsFile.exists()) {
                 return;
@@ -5391,19 +5488,6 @@ public final class Settings {
 
                     } break;
                 }
-            }
-        }
-
-        private void writePermissions(XmlSerializer serializer,
-                List<PermissionState> permissionStates) throws IOException {
-            for (PermissionState permissionState : permissionStates) {
-                serializer.startTag(null, TAG_ITEM);
-                serializer.attribute(null, ATTR_NAME,permissionState.getName());
-                serializer.attribute(null, ATTR_GRANTED,
-                        String.valueOf(permissionState.isGranted()));
-                serializer.attribute(null, ATTR_FLAGS,
-                        Integer.toHexString(permissionState.getFlags()));
-                serializer.endTag(null, TAG_ITEM);
             }
         }
 
