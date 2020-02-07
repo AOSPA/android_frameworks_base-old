@@ -587,7 +587,7 @@ public class LocationManagerService extends ILocationManager.Stub {
             }
         }
 
-        mComboNlpPackageName = resources.getString(
+        mComboNlpPackageName = mContext.getResources().getString(
             com.android.internal.R.string.config_comboNetworkLocationProvider);
         if (mComboNlpPackageName != null) {
             mComboNlpReadyMarker = mComboNlpPackageName + ".nlp:ready";
