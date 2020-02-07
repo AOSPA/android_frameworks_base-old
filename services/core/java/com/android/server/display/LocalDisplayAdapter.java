@@ -536,7 +536,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                         mInfo.flags |= DisplayDeviceInfo.FLAG_OWN_CONTENT_ONLY;
                     }
 
-                    mInfo.setAssumedDensityForExternalDisplay(phys.width, phys.height);
+                    mInfo.setAssumedDensityForExternalDisplay(config.width, config.height);
                 } else {
                     mInfo.displayCutout = null;
                     mInfo.type = Display.TYPE_HDMI;
