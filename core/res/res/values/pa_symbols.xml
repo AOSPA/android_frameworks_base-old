@@ -111,6 +111,6 @@
     <java-symbol type="string" name="popup_camera_dialog_no" />
     <java-symbol type="string" name="popup_camera_dialog_raise" />
 
-    <!-- Ambient Pulse Light -->
+    <!-- Horizon Light -->
     <java-symbol type="integer" name="config_AmbientPulseLightColor" />
 </resources>
