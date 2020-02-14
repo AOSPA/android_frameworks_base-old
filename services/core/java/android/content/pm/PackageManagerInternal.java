@@ -67,6 +67,7 @@ public abstract class PackageManagerInternal {
     public static final int PACKAGE_TELEPHONY = 12;
     public static final int PACKAGE_WIFI = 13;
     public static final int PACKAGE_COMPANION = 14;
+    public static final int PACKAGE_RETAIL_DEMO = 15;
 
     @IntDef(value = {
             INTEGRITY_VERIFICATION_ALLOW,
@@ -105,6 +106,7 @@ public abstract class PackageManagerInternal {
         PACKAGE_TELEPHONY,
         PACKAGE_WIFI,
         PACKAGE_COMPANION,
+        PACKAGE_RETAIL_DEMO,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface KnownPackage {}
@@ -394,6 +396,7 @@ public abstract class PackageManagerInternal {
      * @param origIntent The original intent that triggered ephemeral resolution
      * @param resolvedType The resolved type of the intent
      * @param callingPkg The app requesting the ephemeral application
+     * @param callingFeatureId The feature in the package
      * @param isRequesterInstantApp Whether or not the app requesting the ephemeral application
      *                              is an instant app
      * @param verificationBundle Optional bundle to pass to the installer for additional
@@ -402,7 +405,8 @@ public abstract class PackageManagerInternal {
      */
     public abstract void requestInstantAppResolutionPhaseTwo(AuxiliaryResolveInfo responseObj,
             Intent origIntent, String resolvedType, String callingPkg,
-            boolean isRequesterInstantApp, Bundle verificationBundle, int userId);
+            @Nullable String callingFeatureId, boolean isRequesterInstantApp,
+            Bundle verificationBundle, int userId);
 
     /**
      * Grants implicit access based on an interaction between two apps. This grants the target app

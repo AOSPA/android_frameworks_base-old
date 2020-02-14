@@ -18,8 +18,6 @@ package android.timezone;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.SuppressLint;
-import android.annotation.SystemApi;
 import android.icu.util.TimeZone;
 
 import java.util.ArrayList;
@@ -32,7 +30,6 @@ import java.util.Objects;
  *
  * @hide
  */
-@SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
 public final class CountryTimeZones {
 
     /**
@@ -40,7 +37,6 @@ public final class CountryTimeZones {
      *
      * @hide
      */
-    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public static final class TimeZoneMapping {
 
         @NonNull
@@ -51,8 +47,10 @@ public final class CountryTimeZones {
         }
 
         /**
-         * Returns the ID for this mapping. See also {@link #getTimeZone()} which handles when the
-         * ID is unrecognized.
+         * Returns the ID for this mapping. The ID is a tzdb time zone identifier like
+         * "America/Los_Angeles" that can be used with methods such as {@link
+         * TimeZone#getFrozenTimeZone(String)}. See {@link #getTimeZone()} which returns a frozen
+         * {@link TimeZone} object.
          */
         @NonNull
         public String getTimeZoneId() {
@@ -60,10 +58,9 @@ public final class CountryTimeZones {
         }
 
         /**
-         * Returns a {@link TimeZone} object for this mapping, or {@code null} if the ID is
-         * unrecognized.
+         * Returns a frozen {@link TimeZone} object for this mapping.
          */
-        @Nullable
+        @NonNull
         public TimeZone getTimeZone() {
             return mDelegate.getTimeZone();
         }
@@ -96,7 +93,6 @@ public final class CountryTimeZones {
      *
      * @hide
      */
-    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public static final class OffsetResult {
 
         private final TimeZone mTimeZone;
@@ -158,9 +154,10 @@ public final class CountryTimeZones {
     }
 
     /**
-     * Returns true if the ISO code for the country is a match for the one specified.
+     * Returns true if the ISO code for the country is a case-insensitive match for the one
+     * supplied.
      */
-    public boolean isForCountryCode(@NonNull String countryIso) {
+    public boolean matchesCountryCode(@NonNull String countryIso) {
         return mDelegate.isForCountryCode(countryIso);
     }
 
@@ -183,42 +180,72 @@ public final class CountryTimeZones {
     }
 
     /**
-     * Qualifier for a country's default time zone. {@code true} indicates whether the default
-     * would be a good choice <em>generally</em> when there's no other information available.
+     * Qualifier for a country's default time zone. {@code true} indicates that the country's
+     * default time zone would be a good choice <em>generally</em> when there's no UTC offset
+     * information available. This will only be {@code true} in countries with multiple zones where
+     * a large majority of the population is covered by only one of them.
      */
     public boolean isDefaultTimeZoneBoosted() {
         return mDelegate.isDefaultTimeZoneBoosted();
     }
 
     /**
-     * Returns true if the country has at least one zone that is the same as UTC at the given time.
+     * Returns {@code true} if the country has at least one time zone that uses UTC at the given
+     * time. This is an efficient check when trying to validate received UTC offset information.
+     * For example, there are situations when a detected zero UTC offset cannot be distinguished
+     * from "no information available" or a corrupted signal. This method is useful because checking
+     * offset information for large countries is relatively expensive but it is generally only the
+     * countries close to the prime meridian that use UTC at <em>any</em> time of the year.
+     *
+     * @param whenMillis the time the offset information is for in milliseconds since the beginning
+     *     of the Unix epoch
      */
     public boolean hasUtcZone(long whenMillis) {
         return mDelegate.hasUtcZone(whenMillis);
     }
 
     /**
-     * Returns a time zone for the country, if there is one, that matches the desired properties. If
-     * there are multiple matches and the {@code bias} is one of them then it is returned, otherwise
-     * an arbitrary match is returned based on the {@link #getEffectiveTimeZoneMappingsAt(long)}
-     * ordering.
+     * Returns a time zone for the country, if there is one, that matches the supplied properties.
+     * If there are multiple matches and the {@code bias} is one of them then it is returned,
+     * otherwise an arbitrary match is returned based on the {@link
+     * #getEffectiveTimeZoneMappingsAt(long)} ordering.
      *
+     * @param whenMillis the UTC time to match against
+     * @param bias the time zone to prefer, can be {@code null} to indicate there is no preference
      * @param totalOffsetMillis the offset from UTC at {@code whenMillis}
      * @param isDst the Daylight Savings Time state at {@code whenMillis}. {@code true} means DST,
-     *     {@code false} means not DST, {@code null} means unknown
-     * @param dstOffsetMillis the part of {@code totalOffsetMillis} contributed by DST, only used if
-     *     {@code isDst} is {@code true}. The value can be {@code null} if the DST offset is
-     *     unknown
-     * @param whenMillis the UTC time to match against
-     * @param bias the time zone to prefer, can be {@code null}
+     *     {@code false} means not DST
+     * @return an {@link OffsetResult} with information about a matching zone, or {@code null} if
+     *     there is no match
      */
     @Nullable
-    public OffsetResult lookupByOffsetWithBias(int totalOffsetMillis, @Nullable Boolean isDst,
-            @SuppressLint("AutoBoxing") @Nullable Integer dstOffsetMillis, long whenMillis,
-            @Nullable TimeZone bias) {
+    public OffsetResult lookupByOffsetWithBias(long whenMillis, @Nullable TimeZone bias,
+            int totalOffsetMillis, boolean isDst) {
         libcore.timezone.CountryTimeZones.OffsetResult delegateOffsetResult =
                 mDelegate.lookupByOffsetWithBias(
-                        totalOffsetMillis, isDst, dstOffsetMillis, whenMillis, bias);
+                        whenMillis, bias, totalOffsetMillis, isDst);
+        return delegateOffsetResult == null ? null :
+                new OffsetResult(
+                        delegateOffsetResult.getTimeZone(), delegateOffsetResult.isOnlyMatch());
+    }
+
+    /**
+     * Returns a time zone for the country, if there is one, that matches the supplied properties.
+     * If there are multiple matches and the {@code bias} is one of them then it is returned,
+     * otherwise an arbitrary match is returned based on the {@link
+     * #getEffectiveTimeZoneMappingsAt(long)} ordering.
+     *
+     * @param whenMillis the UTC time to match against
+     * @param bias the time zone to prefer, can be {@code null} to indicate there is no preference
+     * @param totalOffsetMillis the offset from UTC at {@code whenMillis}
+     * @return an {@link OffsetResult} with information about a matching zone, or {@code null} if
+     *     there is no match
+     */
+    @Nullable
+    public OffsetResult lookupByOffsetWithBias(long whenMillis, @Nullable TimeZone bias,
+            int totalOffsetMillis) {
+        libcore.timezone.CountryTimeZones.OffsetResult delegateOffsetResult =
+                mDelegate.lookupByOffsetWithBias(whenMillis, bias, totalOffsetMillis);
         return delegateOffsetResult == null ? null :
                 new OffsetResult(
                         delegateOffsetResult.getTimeZone(), delegateOffsetResult.isOnlyMatch());

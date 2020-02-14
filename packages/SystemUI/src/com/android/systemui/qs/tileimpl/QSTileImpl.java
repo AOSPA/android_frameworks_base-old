@@ -26,8 +26,9 @@ import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.FIELD_STATUS_BAR_STATE;
 import static com.android.internal.logging.nano.MetricsProto.MetricsEvent.TYPE_ACTION;
 import static com.android.settingslib.RestrictedLockUtils.EnforcedAdmin;
-import static com.android.systemui.qs.QSColorControllerKt.colorIcon;
 
+import android.annotation.CallSuper;
+import android.annotation.NonNull;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
@@ -42,7 +43,6 @@ import android.util.ArraySet;
 import android.util.Log;
 import android.util.SparseArray;
 
-import androidx.annotation.NonNull;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LifecycleRegistry;
@@ -55,7 +55,6 @@ import com.android.settingslib.Utils;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.Prefs;
-import com.android.systemui.R;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.qs.DetailAdapter;
 import com.android.systemui.plugins.qs.QSIconView;
@@ -65,6 +64,7 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.PagedTileLayout.TilePage;
 import com.android.systemui.qs.QSHost;
 import com.android.systemui.qs.QuickStatusBarHeader;
+import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tiles.QSSettingsControllerKt;
 import com.android.systemui.qs.tiles.QSSettingsPanel;
 
@@ -97,6 +97,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
     private final MetricsLogger mMetricsLogger = Dependency.get(MetricsLogger.class);
     private final StatusBarStateController
             mStatusBarStateController = Dependency.get(StatusBarStateController.class);
+    private final QSLogger mQSLogger;
 
     private final ArrayList<Callback> mCallbacks = new ArrayList<>();
     private final Object mStaleListener = new Object();
@@ -111,10 +112,31 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
 
     private final LifecycleRegistry mLifecycle = new LifecycleRegistry(this);
 
+    /**
+     * Provides a new {@link TState} of the appropriate type to use between this tile and the
+     * corresponding view.
+     *
+     * @return new state to use by the tile.
+     */
     public abstract TState newTileState();
 
+    /**
+     * Handles clicks by the user.
+     *
+     * Calls to the controller should be made here to set the new state of the device.
+     */
     abstract protected void handleClick();
 
+    /**
+     * Update state of the tile based on device state
+     *
+     * Called whenever the state of the tile needs to be updated, either after user
+     * interaction or from callbacks from the controller. It populates {@code state} with the
+     * information to display to the user.
+     *
+     * @param state {@link TState} to populate with information to display
+     * @param arg additional arguments needed to populate {@code state}
+     */
     abstract protected void handleUpdateState(TState state, Object arg);
 
     /**
@@ -137,6 +159,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         mState = newTileState();
         mTmpState = newTileState();
         mQSSettingsPanelOption = QSSettingsControllerKt.getQSSettingsPanelOption();
+        mQSLogger = host.getQSLogger();
     }
 
     protected final void resetStates() {
@@ -179,6 +202,12 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         return mHost;
     }
 
+    /**
+     * Return the {@link QSIconView} to be used by this tile's view.
+     *
+     * @param context view context for the view
+     * @return icon view for this tile
+     */
     public QSIconView createTileView(Context context) {
         return new QSIconViewImpl(context);
     }
@@ -218,6 +247,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         mMetricsLogger.write(populate(new LogMaker(ACTION_QS_CLICK).setType(TYPE_ACTION)
                 .addTaggedData(FIELD_STATUS_BAR_STATE,
                         mStatusBarStateController.getState())));
+        mQSLogger.logTileClick(mTileSpec, mStatusBarStateController.getState(), mState.state);
         mHandler.sendEmptyMessage(H.CLICK);
     }
 
@@ -225,6 +255,8 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         mMetricsLogger.write(populate(new LogMaker(ACTION_QS_SECONDARY_CLICK).setType(TYPE_ACTION)
                 .addTaggedData(FIELD_STATUS_BAR_STATE,
                         mStatusBarStateController.getState())));
+        mQSLogger.logTileSecondaryClick(mTileSpec, mStatusBarStateController.getState(),
+                mState.state);
         mHandler.sendEmptyMessage(H.SECONDARY_CLICK);
     }
 
@@ -232,6 +264,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         mMetricsLogger.write(populate(new LogMaker(ACTION_QS_LONG_PRESS).setType(TYPE_ACTION)
                 .addTaggedData(FIELD_STATUS_BAR_STATE,
                         mStatusBarStateController.getState())));
+        mQSLogger.logTileLongClick(mTileSpec, mStatusBarStateController.getState(), mState.state);
         mHandler.sendEmptyMessage(H.LONG_CLICK);
 
         Prefs.putInt(
@@ -300,11 +333,20 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         mCallbacks.clear();
     }
 
+    /**
+     * Handles secondary click on the tile.
+     *
+     * Defaults to {@link QSTileImpl#handleClick}
+     */
     protected void handleSecondaryClick() {
         // Default to normal click.
         handleClick();
     }
 
+    /**
+     * Handles long click on the tile by launching the {@link Intent} defined in
+     * {@link QSTileImpl#getLongClickIntent}
+     */
     protected void handleLongClick() {
         if (mQSSettingsPanelOption == QSSettingsPanel.USE_DETAIL) {
             showDetail(true);
@@ -314,12 +356,18 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
                 getLongClickIntent(), 0);
     }
 
+    /**
+     * Returns an intent to be launched when the tile is long pressed.
+     *
+     * @return the intent to launch
+     */
     public abstract Intent getLongClickIntent();
 
     protected void handleRefreshState(Object arg) {
         handleUpdateState(mTmpState, arg);
         final boolean changed = mTmpState.copyTo(mState);
         if (changed) {
+            mQSLogger.logTileUpdated(mTileSpec, mState);
             handleStateChanged();
         }
         mHandler.removeMessages(H.STALE);
@@ -406,9 +454,15 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         mIsFullQs = 0;
     }
 
-    protected abstract void handleSetListening(boolean listening);
+    @CallSuper
+    protected void handleSetListening(boolean listening) {
+        if (mTileSpec != null) {
+            mQSLogger.logTileChangeListening(mTileSpec, listening);
+        }
+    }
 
     protected void handleDestroy() {
+        mQSLogger.logTileDestroyed(mTileSpec, "Handle destroy");
         if (mListeners.size() != 0) {
             handleSetListening(false);
         }
@@ -429,13 +483,13 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         }
     }
 
+    /**
+     * Provides a default label for the tile.
+     * @return default label for the tile.
+     */
     public abstract CharSequence getTileLabel();
 
     public static int getColorForState(Context context, int state) {
-        return getColorForState(context, state, -1);
-    }
-
-    public static int getColorForState(Context context, int state, int colorActive) {
         switch (state) {
             case Tile.STATE_UNAVAILABLE:
                 return Utils.getDisabled(context,
@@ -443,22 +497,10 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
             case Tile.STATE_INACTIVE:
                 return Utils.getColorAttrDefaultColor(context, android.R.attr.textColorSecondary);
             case Tile.STATE_ACTIVE:
-                return getActiveColor(context, colorActive);
+                return Utils.getColorAttrDefaultColor(context, android.R.attr.colorPrimary);
             default:
                 Log.e("QSTile", "Invalid state " + state);
                 return 0;
-        }
-    }
-
-    private static int getActiveColor(Context context, int colorActive) {
-        if (colorIcon()) {
-            if (colorActive == -1) {
-                return Utils.getColorAccentDefaultColor(context);
-            } else {
-                return colorActive;
-            }
-        } else {
-            return Utils.getColorAttrDefaultColor(context, android.R.attr.colorPrimary);
         }
     }
 
@@ -565,6 +607,12 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         public Drawable getInvisibleDrawable(Context context) {
             return mInvisibleDrawable;
         }
+
+        @Override
+        @NonNull
+        public String toString() {
+            return "DrawableIcon";
+        }
     }
 
     public static class DrawableIconWithRes extends DrawableIcon {
@@ -578,6 +626,12 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         @Override
         public boolean equals(Object o) {
             return o instanceof DrawableIconWithRes && ((DrawableIconWithRes) o).mId == mId;
+        }
+
+        @Override
+        @NonNull
+        public String toString() {
+            return String.format("DrawableIconWithRes[resId=0x%08x]", mId);
         }
     }
 
@@ -615,6 +669,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
         }
 
         @Override
+        @NonNull
         public String toString() {
             return String.format("ResourceIcon[resId=0x%08x]", mResId);
         }
@@ -633,6 +688,12 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
             // workaround: get a clean state for every new AVD
             return context.getDrawable(mAnimatedResId).getConstantState().newDrawable();
         }
+
+        @Override
+        @NonNull
+        public String toString() {
+            return String.format("AnimationIcon[resId=0x%08x]", mResId);
+        }
     }
 
     /**
@@ -644,28 +705,5 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println(this.getClass().getSimpleName() + ":");
         pw.print("    "); pw.println(getState().toString());
-    }
-
-    @Override
-    public void setColor(@ColorTile int color) {
-        int resId;
-        switch(color) {
-            case COLOR_TILE_RED:
-                resId = R.color.GM2_red_500;
-                break;
-            case COLOR_TILE_BLUE:
-                resId = R.color.GM2_blue_500;
-                break;
-            case COLOR_TILE_GREEN:
-                resId = R.color.GM2_green_500;
-                break;
-            case COLOR_TILE_YELLOW:
-                resId = R.color.GM2_yellow_500;
-                break;
-            default:
-                resId = -1;
-        }
-        mTmpState.colorActive = resId == -1 ? -1 : mContext.getColor(resId);
-        refreshState();
     }
 }

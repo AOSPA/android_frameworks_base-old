@@ -244,7 +244,7 @@
          correctly use them when installed on your device.  Otherwise, keep this disabled
          so that applications can still use their own mechanisms. -->
     <bool name="config_enableAutoPowerModes">false</bool>
-
+ 
     <!-- Whether (if true) this is a kind of device that can be moved around (eg. phone/laptop),
          or (if false) something for which movement is either not measurable or should not count
          toward power states (eg. tv/soundbar). -->
@@ -268,6 +268,11 @@
     <!-- The duration (in milliseconds) that the radio will scan for a signal
          when there's no network connection. If the scan doesn't timeout, use zero -->
     <integer name="config_radioScanningTimeout">0</integer>
+
+    <!-- When true, Android uses the PAC implementation included in WebView to handle
+         networks with PAC scripts.
+         When false, Android's own implementation of libpac is used.-->
+    <bool name ="config_useWebViewPacProcessor">false</bool>
 
     <!-- XXXXX NOTE THE FOLLOWING RESOURCES USE THE WRONG NAMING CONVENTION.
          Please don't copy them, copy anything else. -->
@@ -1258,32 +1263,63 @@
     -->
     <integer name="config_doubleTapOnHomeBehavior">0</integer>
 
-    <!-- Minimum screen brightness setting allowed by the power manager.
-         The user is forbidden from setting the brightness below this level. -->
+    <!-- Note: This setting is deprecated, please use
+    config_screenBrightnessSettingMinimumFloat instead -->
     <integer name="config_screenBrightnessSettingMinimum">10</integer>
 
-    <!-- Maximum screen brightness allowed by the power manager.
-         The user is forbidden from setting the brightness above this level. -->
+    <!-- Note: This setting is deprecated, please use
+    config_screenBrightnessSettingMaximumFloat instead -->
     <integer name="config_screenBrightnessSettingMaximum">255</integer>
 
-    <!-- Default screen brightness setting.
-         Must be in the range specified by minimum and maximum. -->
+    <!-- Note: This setting is deprecated, please use
+    config_screenBrightnessSettingDefaultFloat instead -->
     <integer name="config_screenBrightnessSettingDefault">102</integer>
 
-    <!-- Default screen brightness for VR setting. -->
+    <!-- Minimum screen brightness setting allowed by power manager.
+        The user is forbidden from setting the brightness below this level.
+        Equivalent to 10/255. -->
+    <item name="config_screenBrightnessSettingMinimumFloat" format="float" type="dimen">0.035433073</item>
+
+    <!-- Maximum screen brightness allowed by the power manager.
+         The user is forbidden from setting the brightness above this level.
+         This value is a fraction between 3.5% and 100%. -->
+    <item name="config_screenBrightnessSettingMaximumFloat" format="float" type="dimen">1.0</item>
+
+    <!-- Default screen brightness setting.
+         Must be in the range specified by minimum and maximum.
+         This value is a fraction between 3.5% and 100%.
+         Equivalent to 102/255 (default for this device)    -->
+    <item name="config_screenBrightnessSettingDefaultFloat" format="float" type="dimen">0.397637795276</item>
+
+    <!-- Note: This setting is deprecated, please use
+    config_screenBrightnessSettingForVrDefaultFloat instead -->
     <integer name="config_screenBrightnessForVrSettingDefault">86</integer>
 
-    <!-- Minimum screen brightness setting allowed for VR. Device panels start increasing pulse
-         width as brightness decreases below this theshold. -->
+    <!-- Note: This setting is deprecated, please use
+    config_screenBrightnessSettingForVrMinimumFloat instead -->
     <integer name="config_screenBrightnessForVrSettingMinimum">79</integer>
 
-    <!-- Maximum screen brightness setting allowed for VR. -->
+    <!-- Note: This setting is deprecated, please use
+    config_screenBrightnessSettingForVrMaximumFloat instead -->
     <integer name="config_screenBrightnessForVrSettingMaximum">255</integer>
+
+    <!-- Default screen brightness for VR setting as a float.
+    Equivalent to 86/255-->
+    <item name="config_screenBrightnessSettingForVrDefaultFloat" format="float" type="dimen">0.33464</item>
+
+    <!-- Minimum screen brightness setting allowed for VR. Device panels start increasing pulse
+     width as brightness decreases below this threshold as float.
+     Equivalent to 79/255 -->
+    <item name="config_screenBrightnessSettingForVrMinimumFloat" format="float" type="dimen">0.307087</item>
+
+    <!-- Maximum screen brightness setting allowed for VR as float. -->
+    <item name="config_screenBrightnessSettingForVrMaximumFloat" format="float" type="dimen">1.0</item>
 
     <!-- Screen brightness used to dim the screen while dozing in a very low power state.
          May be less than the minimum allowed brightness setting
          that can be set by the user. -->
     <integer name="config_screenBrightnessDoze">1</integer>
+    <item name="config_screenBrightnessDozeFloat" format="float" type="dimen">0.0</item>
 
     <!-- Delay that allows some content to arrive at the display before switching
          from DOZE to ON. -->
@@ -1339,6 +1375,7 @@
          timeout expires.  May be less than the minimum allowed brightness setting
          that can be set by the user. -->
     <integer name="config_screenBrightnessDim">10</integer>
+    <item name="config_screenBrightnessDimFloat" format="float" type="dimen">0.05</item>
 
     <!-- Minimum allowable screen brightness to use in a very dark room.
          This value sets the floor for the darkest possible auto-brightness
@@ -2354,7 +2391,7 @@
          type. These are flags and can be freely combined.
          0  - disable whitelist (install all system packages; no logging)
          1  - enforce (only install system packages if they are whitelisted)
-         2  - log (log when a non-whitelisted package is run)
+         2  - log (log non-whitelisted packages)
          4  - any package not mentioned in the whitelist file is implicitly whitelisted on all users
          8  - same as 4, but just for the SYSTEM user
          16 - ignore OTAs (don't install system packages during OTAs)
@@ -2568,7 +2605,11 @@
     <string name="config_usbResolverActivity" translatable="false"
             >com.android.systemui/com.android.systemui.usb.UsbResolverActivity</string>
 
-    <!-- Name of the dialog that is used to request the user's consent to VPN connection -->
+    <!-- Name of the dialog that is used to request the user's consent for a Platform VPN -->
+    <string name="config_platformVpnConfirmDialogComponent" translatable="false"
+            >com.android.vpndialogs/com.android.vpndialogs.PlatformVpnConfirmDialog</string>
+
+    <!-- Name of the dialog that is used to request the user's consent for a VpnService VPN -->
     <string name="config_customVpnConfirmDialogComponent" translatable="false"
             >com.android.vpndialogs/com.android.vpndialogs.ConfirmDialog</string>
 
@@ -3404,8 +3445,8 @@
     <!-- True if assistant app should be pinned via Pinner Service -->
     <bool name="config_pinnerAssistantApp">false</bool>
 
-    <!-- List of files pinned by the Pinner Service with the apex boot image b/119800099 -->
-    <string-array translatable="false" name="config_apexBootImagePinnerServiceFiles">
+    <!-- List of files pinned by the Pinner Service with the JIT Zygote boot image b/119800099 -->
+    <string-array translatable="false" name="config_jitzygoteBootImagePinnerServiceFiles">
     </string-array>
 
     <!-- Number of days preloaded file cache should be preserved on a device before it can be
@@ -3562,25 +3603,16 @@
     -->
     <string name="config_defaultAutofillService" translatable="false"></string>
 
-    <!-- The package name for the default system textclassifier service.
+    <!-- The package name for the OEM custom system textclassifier service.
          This service must be trusted, as it can be activated without explicit consent of the user.
          Example: "com.android.textclassifier"
-         If no textclassifier service with the specified name exists on the device (or if this is
-         set to empty string), a default textclassifier will be loaded in the calling app's process.
+         If this is empty, the default textclassifier service (i.e. config_servicesExtensionPackage)
+         will be used.
+
          See android.view.textclassifier.TextClassificationManager.
     -->
-    <!-- TODO(b/144896755) remove the config -->
     <string name="config_defaultTextClassifierPackage" translatable="false"></string>
 
-    <!-- A list of supported system textClassifier service package names. Only one of the packages
-         will be activated. The first package in the list is the default system textClassifier
-         service. OS only tries to bind and grant permissions to the first trusted service and the
-         others can be selected via device config. These services must be trusted, as they can be
-         activated without explicit consent of the user. Example: "com.android.textclassifier"
-    -->
-    <string-array name="config_defaultTextClassifierPackages" translatable="false">
-        <item>android.ext.services</item>
-    </string-array>
 
     <!-- The package name for the system companion device manager service.
          This service must be trusted, as it can be activated without explicit consent of the user.
@@ -3595,7 +3627,6 @@
          Example: "com.android.wellbeing"
      -->
     <string name="config_defaultWellbeingPackage" translatable="false"></string>
-
 
     <!-- The package name for the system telephony apps.
          This package must be trusted, as it will be granted with permissions with special telephony
@@ -3663,6 +3694,19 @@
          Example: "com.android.contentsuggestions/.ContentSuggestionsService"
     -->
     <string name="config_defaultContentSuggestionsService" translatable="false"></string>
+
+    <!-- The package name for the default retail demo app.
+         This package must be trusted, as it has the permissions to query the usage stats on the
+         device.
+         Example: "com.google.android.retaildemo"
+     -->
+    <string name="config_retailDemoPackage" translatable="false"></string>
+
+    <!-- The package signature hash for the default retail demo app.
+         This package must be trusted, as it has the permissions to query the usage stats on the
+         device.
+     -->
+    <string name="config_retailDemoPackageSignature" translatable="false"></string>
 
     <!-- Whether the device uses the default focus highlight when focus state isn't specified. -->
     <bool name="config_useDefaultFocusHighlight">true</bool>
@@ -3790,6 +3834,10 @@
     <!-- Class name of the device specific implementation to replace the AudioService
          or empty if the default should be used. -->
     <string translatable="false" name="config_deviceSpecificAudioService"></string>
+
+    <!-- Class name of the device specific implementation of DisplayAreaPolicy.Provider
+         or empty if the default should be used. -->
+    <string translatable="false" name="config_deviceSpecificDisplayAreaPolicyProvider"></string>
 
     <!-- Component name of media projection permission dialog -->
     <string name="config_mediaProjectionPermissionDialogComponent" translatable="false">com.android.systemui/com.android.systemui.media.MediaProjectionPermissionActivity</string>
@@ -4350,6 +4398,14 @@
     <!-- Boolean indicating whether frameworks needs to reset cell broadcast geo-fencing
          check after reboot or airplane mode toggling -->
     <bool translatable="false" name="reset_geo_fencing_check_after_boot_or_apm">false</bool>
+
+    <!-- Screen Wake Keys
+         Determines whether the specified key groups can be used to wake up the device. -->
+    <bool name="config_wakeOnDpadKeyPress">true</bool>
+    <bool name="config_wakeOnAssistKeyPress">true</bool>
+
+    <!-- Whether to default to an expanded list of users on the lock screen user switcher. -->
+    <bool name="config_expandLockScreenUserSwitcher">false</bool>
 
     <!-- pdp data retry for cause 29, 33 and 55-->
     <bool name="config_pdp_retry_for_29_33_55_enabled">false</bool>

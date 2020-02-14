@@ -16,7 +16,9 @@
 
 package com.android.systemui.biometrics;
 
+import android.annotation.NonNull;
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.hardware.biometrics.BiometricPrompt;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -28,8 +30,11 @@ import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.accessibility.AccessibilityManager;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import androidx.annotation.Nullable;
 
 import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.Interpolators;
@@ -56,6 +61,7 @@ public abstract class AuthCredentialView extends LinearLayout {
     private TextView mTitleView;
     private TextView mSubtitleView;
     private TextView mDescriptionView;
+    private ImageView mIconView;
     protected TextView mErrorView;
 
     protected @Utils.CredentialType int mCredentialType;
@@ -123,18 +129,18 @@ public abstract class AuthCredentialView extends LinearLayout {
         mHandler.postDelayed(mClearErrorRunnable, ERROR_DURATION_MS);
     }
 
-    private void setTextOrHide(TextView view, String string) {
-        if (TextUtils.isEmpty(string)) {
+    private void setTextOrHide(TextView view, CharSequence text) {
+        if (TextUtils.isEmpty(text)) {
             view.setVisibility(View.GONE);
         } else {
-            view.setText(string);
+            view.setText(text);
         }
 
         Utils.notifyAccessibilityContentChanged(mAccessibilityManager, this);
     }
 
-    private void setText(TextView view, String string) {
-        view.setText(string);
+    private void setText(TextView view, CharSequence text) {
+        view.setText(text);
     }
 
     void setEffectiveUserId(int effectiveUserId) {
@@ -170,11 +176,19 @@ public abstract class AuthCredentialView extends LinearLayout {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
 
-        setText(mTitleView, mBiometricPromptBundle.getString(BiometricPrompt.KEY_TITLE));
-        setTextOrHide(mSubtitleView,
-                mBiometricPromptBundle.getString(BiometricPrompt.KEY_SUBTITLE));
-        setTextOrHide(mDescriptionView,
-                mBiometricPromptBundle.getString(BiometricPrompt.KEY_DESCRIPTION));
+        setText(mTitleView, getTitle(mBiometricPromptBundle));
+        setTextOrHide(mSubtitleView, getSubtitle(mBiometricPromptBundle));
+        setTextOrHide(mDescriptionView, getDescription(mBiometricPromptBundle));
+
+        final boolean isManagedProfile = Utils.isManagedProfile(mContext, mEffectiveUserId);
+        final Drawable image;
+        if (isManagedProfile) {
+            image = getResources().getDrawable(R.drawable.auth_dialog_enterprise,
+                    mContext.getTheme());
+        } else {
+            image = getResources().getDrawable(R.drawable.auth_dialog_lock, mContext.getTheme());
+        }
+        mIconView.setImageDrawable(image);
 
         // Only animate this if we're transitioning from a biometric view.
         if (mShouldAnimateContents) {
@@ -207,6 +221,7 @@ public abstract class AuthCredentialView extends LinearLayout {
         mTitleView = findViewById(R.id.title);
         mSubtitleView = findViewById(R.id.subtitle);
         mDescriptionView = findViewById(R.id.description);
+        mIconView = findViewById(R.id.icon);
         mErrorView = findViewById(R.id.error);
     }
 
@@ -264,5 +279,29 @@ public abstract class AuthCredentialView extends LinearLayout {
                 showError(getResources().getString(error));
             }
         }
+    }
+
+    @Nullable
+    private static CharSequence getTitle(@NonNull Bundle bundle) {
+        final CharSequence credentialTitle =
+                bundle.getCharSequence(BiometricPrompt.KEY_DEVICE_CREDENTIAL_TITLE);
+        return credentialTitle != null ? credentialTitle
+                : bundle.getCharSequence(BiometricPrompt.KEY_TITLE);
+    }
+
+    @Nullable
+    private static CharSequence getSubtitle(@NonNull Bundle bundle) {
+        final CharSequence credentialSubtitle =
+                bundle.getCharSequence(BiometricPrompt.KEY_DEVICE_CREDENTIAL_SUBTITLE);
+        return credentialSubtitle != null ? credentialSubtitle
+                : bundle.getCharSequence(BiometricPrompt.KEY_SUBTITLE);
+    }
+
+    @Nullable
+    private static CharSequence getDescription(@NonNull Bundle bundle) {
+        final CharSequence credentialDescription =
+                bundle.getCharSequence(BiometricPrompt.KEY_DEVICE_CREDENTIAL_DESCRIPTION);
+        return credentialDescription != null ? credentialDescription
+                : bundle.getCharSequence(BiometricPrompt.KEY_DESCRIPTION);
     }
 }

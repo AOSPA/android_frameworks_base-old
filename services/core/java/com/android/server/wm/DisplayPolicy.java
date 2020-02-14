@@ -59,8 +59,8 @@ import static android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATIO
 import static android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS;
 import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
+import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
-import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_DRAW_BAR_BACKGROUNDS;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_SHOW_STATUS_BAR;
@@ -149,7 +149,6 @@ import android.util.PrintWriterPrinter;
 import android.util.Slog;
 import android.view.DisplayCutout;
 import android.view.Gravity;
-import android.view.IApplicationToken;
 import android.view.InputChannel;
 import android.view.InputDevice;
 import android.view.InputEvent;
@@ -348,8 +347,6 @@ public class DisplayPolicy {
     // The windows we were told about in focusChanged.
     private WindowState mFocusedWindow;
     private WindowState mLastFocusedWindow;
-
-    IApplicationToken mFocusedApp;
 
     // The states of decor windows from the last layout. These are used to generate another display
     // layout in different bounds but with the same states.
@@ -1000,7 +997,7 @@ public class DisplayPolicy {
             case TYPE_WALLPAPER:
                 // Dreams and wallpapers don't have an app window token and can thus not be
                 // letterboxed. Hence always let them extend under the cutout.
-                attrs.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                attrs.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
                 break;
             case TYPE_NOTIFICATION_SHADE:
                 // If the Keyguard is in a hidden state (occluded by another window), we force to
@@ -1656,15 +1653,16 @@ public class DisplayPolicy {
         // nav bar and ensure the application doesn't see the event.
         if (navVisible || navAllowedHidden) {
             if (mInputConsumer != null) {
+                mInputConsumer.dismiss();
                 mHandler.sendMessage(
                         mHandler.obtainMessage(MSG_DISPOSE_INPUT_CONSUMER, mInputConsumer));
                 mInputConsumer = null;
             }
         } else if (mInputConsumer == null && mStatusBar != null && canHideNavigationBar()) {
-            mInputConsumer = mService.createInputConsumer(mHandler.getLooper(),
+            mInputConsumer = mDisplayContent.getInputMonitor().createInputConsumer(
+                    mHandler.getLooper(),
                     INPUT_CONSUMER_NAVIGATION,
-                    HideNavInputEventReceiver::new,
-                    displayFrames.mDisplayId);
+                    HideNavInputEventReceiver::new);
             // As long as mInputConsumer is active, hover events are not dispatched to the app
             // and the pointer icon is likely to become stale. Hide it to avoid confusion.
             InputManager.getInstance().setPointerIconType(PointerIcon.TYPE_NULL);
@@ -2443,15 +2441,24 @@ public class DisplayPolicy {
         // cropped / shifted to the displayFrame in WindowState.
         final boolean floatingInScreenWindow = !attrs.isFullscreen() && layoutInScreen
                 && type != TYPE_BASE_APPLICATION;
-
         // Ensure that windows with a DEFAULT or NEVER display cutout mode are laid out in
         // the cutout safe zone.
-        if (cutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
-                || cutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER) {
+        if (cutoutMode != LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS) {
             final Rect displayCutoutSafeExceptMaybeBars = sTmpDisplayCutoutSafeExceptMaybeBarsRect;
             displayCutoutSafeExceptMaybeBars.set(displayFrames.mDisplayCutoutSafe);
+            if (cutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES) {
+                if (displayFrames.mDisplayWidth < displayFrames.mDisplayHeight) {
+                    displayCutoutSafeExceptMaybeBars.top = Integer.MIN_VALUE;
+                    displayCutoutSafeExceptMaybeBars.bottom = Integer.MAX_VALUE;
+                } else {
+                    displayCutoutSafeExceptMaybeBars.left = Integer.MIN_VALUE;
+                    displayCutoutSafeExceptMaybeBars.right = Integer.MAX_VALUE;
+                }
+            }
+
             if (layoutInScreen && layoutInsetDecor && !requestedFullscreen
-                    && cutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT) {
+                    && (cutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+                    || cutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES)) {
                 // At the top we have the status bar, so apps that are
                 // LAYOUT_IN_SCREEN | LAYOUT_INSET_DECOR but not FULLSCREEN
                 // already expect that there's an inset there and we don't need to exclude
@@ -2459,7 +2466,8 @@ public class DisplayPolicy {
                 displayCutoutSafeExceptMaybeBars.top = Integer.MIN_VALUE;
             }
             if (layoutInScreen && layoutInsetDecor && !requestedHideNavigation
-                    && cutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT) {
+                    && (cutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+                    || cutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES)) {
                 // Same for the navigation bar.
                 switch (mNavigationBarPosition) {
                     case NAV_BAR_BOTTOM:
@@ -3318,7 +3326,7 @@ public class DisplayPolicy {
 
     private void disposeInputConsumer(InputConsumer inputConsumer) {
         if (inputConsumer != null) {
-            inputConsumer.dismiss();
+            inputConsumer.dispose();
         }
     }
 
@@ -3421,7 +3429,6 @@ public class DisplayPolicy {
                 && mLastBehavior == behavior
                 && mLastFocusIsFullscreen == isFullscreen
                 && mLastFocusIsImmersive == isImmersive
-                && mFocusedApp == win.getAppToken()
                 && mLastNonDockedStackBounds.equals(mNonDockedStackBounds)
                 && mLastDockedStackBounds.equals(mDockedStackBounds)) {
             return 0;
@@ -3438,7 +3445,6 @@ public class DisplayPolicy {
         mLastBehavior = behavior;
         mLastFocusIsFullscreen = isFullscreen;
         mLastFocusIsImmersive = isImmersive;
-        mFocusedApp = win.getAppToken();
         mLastNonDockedStackBounds.set(mNonDockedStackBounds);
         mLastDockedStackBounds.set(mDockedStackBounds);
         final Rect fullscreenStackBounds = new Rect(mNonDockedStackBounds);
@@ -3936,9 +3942,6 @@ public class DisplayPolicy {
         }
         if (mFocusedWindow != null) {
             pw.print(prefix); pw.print("mFocusedWindow="); pw.println(mFocusedWindow);
-        }
-        if (mFocusedApp != null) {
-            pw.print(prefix); pw.print("mFocusedApp="); pw.println(mFocusedApp);
         }
         if (mTopFullscreenOpaqueWindowState != null) {
             pw.print(prefix); pw.print("mTopFullscreenOpaqueWindowState=");

@@ -32,7 +32,10 @@ import android.os.ShellCallback;
 import android.os.incremental.IIncrementalManager;
 import android.util.Slog;
 
+import com.android.internal.util.DumpUtils;
+
 import java.io.FileDescriptor;
+import java.io.PrintWriter;
 
 /**
  * This service has the following purposes:
@@ -69,6 +72,13 @@ public class IncrementalManagerService extends IIncrementalManager.Stub  {
         ServiceManager.addService(BINDER_SERVICE_NAME, this);
         // Starts and register IIncrementalManagerNative service
         mNativeInstance = nativeStartService();
+    }
+
+    @SuppressWarnings("resource")
+    @Override
+    protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        if (!DumpUtils.checkDumpAndUsageStatsPermission(mContext, TAG, pw)) return;
+        nativeDump(mNativeInstance, fd.getInt$());
     }
 
     /**
@@ -132,16 +142,6 @@ public class IncrementalManagerService extends IIncrementalManager.Stub  {
         }
     }
 
-    // TODO: remove this
-    @Override
-    public void newFileForDataLoader(int mountId, byte[] fileId, byte[] metadata) {
-        IDataLoader dataLoader = mDataLoaderManager.getDataLoader(mountId);
-        if (dataLoader == null) {
-            Slog.e(TAG, "Failed to retrieve data loader for ID=" + mountId);
-            return;
-        }
-    }
-
     @Override
     public void showHealthBlockedUI(int mountId) {
         // TODO(b/136132412): implement this
@@ -158,4 +158,6 @@ public class IncrementalManagerService extends IIncrementalManager.Stub  {
     private static native long nativeStartService();
 
     private static native void nativeSystemReady(long nativeInstance);
+
+    private static native void nativeDump(long nativeInstance, int fd);
 }

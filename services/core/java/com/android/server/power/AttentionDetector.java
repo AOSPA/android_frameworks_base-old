@@ -17,7 +17,7 @@
 package com.android.server.power;
 
 import static android.provider.DeviceConfig.NAMESPACE_ATTENTION_MANAGER_SERVICE;
-import static android.provider.Settings.System.ADAPTIVE_SLEEP;
+import static android.provider.Settings.Secure.ADAPTIVE_SLEEP;
 
 import android.Manifest;
 import android.app.ActivityManager;
@@ -38,9 +38,9 @@ import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.service.attention.AttentionService;
 import android.util.Slog;
-import android.util.StatsLog;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.LocalServices;
 import com.android.server.wm.WindowManagerInternal;
 
@@ -152,8 +152,8 @@ public class AttentionDetector {
 
     @VisibleForTesting
     void updateEnabledFromSettings(Context context) {
-        mIsSettingEnabled = Settings.System.getIntForUser(context.getContentResolver(),
-                Settings.System.ADAPTIVE_SLEEP, 0, UserHandle.USER_CURRENT) == 1;
+        mIsSettingEnabled = Settings.Secure.getIntForUser(context.getContentResolver(),
+                Settings.Secure.ADAPTIVE_SLEEP, 0, UserHandle.USER_CURRENT) == 1;
     }
 
     public void systemReady(Context context) {
@@ -173,8 +173,8 @@ public class AttentionDetector {
             // Shouldn't happen since in-process.
         }
 
-        context.getContentResolver().registerContentObserver(Settings.System.getUriFor(
-                Settings.System.ADAPTIVE_SLEEP),
+        context.getContentResolver().registerContentObserver(Settings.Secure.getUriFor(
+                Settings.Secure.ADAPTIVE_SLEEP),
                 false, new ContentObserver(new Handler(context.getMainLooper())) {
                     @Override
                     public void onChange(boolean selfChange) {
@@ -194,7 +194,7 @@ public class AttentionDetector {
         if (!isAttentionServiceSupported() || !serviceHasSufficientPermissions()) {
             // Turns off adaptive sleep in settings for all users if attention service is not
             // available. The setting itself should also be grayed out in this case.
-            Settings.System.putInt(mContentResolver, ADAPTIVE_SLEEP, 0);
+            Settings.Secure.putInt(mContentResolver, ADAPTIVE_SLEEP, 0);
             return nextScreenDimming;
         }
 
@@ -285,7 +285,8 @@ public class AttentionDetector {
     private void resetConsecutiveExtensionCount() {
         final long previousCount = mConsecutiveTimeoutExtendedCount.getAndSet(0);
         if (previousCount > 0) {
-            StatsLog.write(StatsLog.SCREEN_TIMEOUT_EXTENSION_REPORTED, previousCount);
+            FrameworkStatsLog.write(FrameworkStatsLog.SCREEN_TIMEOUT_EXTENSION_REPORTED,
+                    previousCount);
         }
     }
 

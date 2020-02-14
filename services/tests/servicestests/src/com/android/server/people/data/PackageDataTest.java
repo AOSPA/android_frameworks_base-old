@@ -16,20 +16,23 @@
 
 package com.android.server.people.data;
 
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import android.content.Context;
 import android.content.LocusId;
 import android.content.pm.ShortcutInfo;
 import android.net.Uri;
+
+import androidx.test.InstrumentationRegistry;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+import java.io.File;
 import java.util.List;
 
 @RunWith(JUnit4.class)
@@ -46,12 +49,19 @@ public final class PackageDataTest {
     private Event mE2;
     private Event mE3;
     private Event mE4;
+    private boolean mIsDefaultDialer;
+    private boolean mIsDefaultSmsApp;
 
     private PackageData mPackageData;
 
     @Before
     public void setUp() {
-        mPackageData = new PackageData(PACKAGE_NAME, USER_ID);
+        Context ctx = InstrumentationRegistry.getContext();
+        File testDir = new File(ctx.getCacheDir(), "testdir");
+        testDir.mkdir();
+        mPackageData = new PackageData(
+                PACKAGE_NAME, USER_ID, pkg -> mIsDefaultDialer, pkg -> mIsDefaultSmsApp,
+                new MockScheduledExecutorService(), testDir, new ContactsQueryHelper(ctx));
         ConversationInfo conversationInfo = new ConversationInfo.Builder()
                 .setShortcutId(SHORTCUT_ID)
                 .setLocusId(LOCUS_ID)
@@ -83,8 +93,8 @@ public final class PackageDataTest {
 
     @Test
     public void testGetEventHistoryDefaultDialerAndSmsApp() {
-        mPackageData.setIsDefaultDialer(true);
-        mPackageData.setIsDefaultSmsApp(true);
+        mIsDefaultDialer = true;
+        mIsDefaultSmsApp = true;
         EventStore eventStore = mPackageData.getEventStore();
         eventStore.getOrCreateShortcutEventHistory(SHORTCUT_ID).addEvent(mE1);
         eventStore.getOrCreateCallEventHistory(PHONE_NUMBER).addEvent(mE3);

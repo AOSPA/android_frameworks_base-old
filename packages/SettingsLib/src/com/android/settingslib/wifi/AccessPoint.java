@@ -16,6 +16,9 @@
 
 package com.android.settingslib.wifi;
 
+import static android.net.wifi.WifiConfiguration.NetworkSelectionStatus.NETWORK_SELECTION_ENABLED;
+import static android.net.wifi.WifiConfiguration.NetworkSelectionStatus.NETWORK_SELECTION_PERMANENTLY_DISABLED;
+
 import android.annotation.IntDef;
 import android.annotation.MainThread;
 import android.annotation.Nullable;
@@ -188,6 +191,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
     static final String KEY_SCANRESULTS = "key_scanresults";
     static final String KEY_SCOREDNETWORKCACHE = "key_scorednetworkcache";
     static final String KEY_CONFIG = "key_config";
+    static final String KEY_PASSPOINT_UNIQUE_ID = "key_passpoint_unique_id";
     static final String KEY_FQDN = "key_fqdn";
     static final String KEY_PROVIDER_FRIENDLY_NAME = "key_provider_friendly_name";
     static final String KEY_EAPTYPE = "eap_psktype";
@@ -236,7 +240,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
     public static final int UNREACHABLE_RSSI = Integer.MIN_VALUE;
 
     public static final String KEY_PREFIX_AP = "AP:";
-    public static final String KEY_PREFIX_FQDN = "FQDN:";
+    public static final String KEY_PREFIX_PASSPOINT_UNIQUE_ID = "PASSPOINT:";
     public static final String KEY_PREFIX_OSU = "OSU:";
 
     private final Context mContext;
@@ -273,6 +277,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
      * Information associated with the {@link PasspointConfiguration}.  Only maintaining
      * the relevant info to preserve spaces.
      */
+    private String mPasspointUniqueId;
     private String mFqdn;
     private String mProviderFriendlyName;
     private boolean mIsRoaming = false;
@@ -331,6 +336,9 @@ public class AccessPoint implements Comparable<AccessPoint> {
                 mScoredNetworkCache.put(timedScore.getScore().networkKey.wifiKey.bssid, timedScore);
             }
         }
+        if (savedState.containsKey(KEY_PASSPOINT_UNIQUE_ID)) {
+            mPasspointUniqueId = savedState.getString(KEY_PASSPOINT_UNIQUE_ID);
+        }
         if (savedState.containsKey(KEY_FQDN)) {
             mFqdn = savedState.getString(KEY_FQDN);
         }
@@ -375,6 +383,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
      */
     public AccessPoint(Context context, PasspointConfiguration config) {
         mContext = context;
+        mPasspointUniqueId = config.getUniqueId();
         mFqdn = config.getHomeSp().getFqdn();
         mProviderFriendlyName = config.getHomeSp().getFriendlyName();
         mSubscriptionExpirationTimeInMillis = config.getSubscriptionExpirationTimeInMillis();
@@ -395,6 +404,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         mContext = context;
         networkId = config.networkId;
         mConfig = config;
+        mPasspointUniqueId = config.getKey();
         mFqdn = config.FQDN;
         setScanResultsPasspoint(homeScans, roamingScans);
         updateKey();
@@ -431,7 +441,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         if (isPasspoint()) {
             mKey = getKey(mConfig);
         } else if (isPasspointConfig()) {
-            mKey = getKey(mFqdn);
+            mKey = getKey(mPasspointUniqueId);
         } else if (isOsuProvider()) {
             mKey = getKey(mOsuProvider);
         } else { // Non-Passpoint AP
@@ -701,19 +711,19 @@ public class AccessPoint implements Comparable<AccessPoint> {
      */
     public static String getKey(WifiConfiguration config) {
         if (config.isPasspoint()) {
-            return getKey(config.FQDN);
+            return getKey(config.getKey());
         } else {
             return getKey(removeDoubleQuotes(config.SSID), config.BSSID, getSecurity(config));
         }
     }
 
     /**
-     * Returns the AccessPoint key corresponding to a Passpoint network by its FQDN.
+     * Returns the AccessPoint key corresponding to a Passpoint network by its unique identifier.
      */
-    public static String getKey(String fqdn) {
+    public static String getKey(String passpointUniqueId) {
         return new StringBuilder()
-                .append(KEY_PREFIX_FQDN)
-                .append(fqdn).toString();
+                .append(KEY_PREFIX_PASSPOINT_UNIQUE_ID)
+                .append(passpointUniqueId).toString();
     }
 
     /**
@@ -790,7 +800,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
 
     public boolean matches(WifiConfiguration config) {
         if (config.isPasspoint()) {
-            return (isPasspoint() && config.FQDN.equals(mConfig.FQDN));
+            return (isPasspoint() && config.getKey().equals(mConfig.getKey()));
         }
 
         if (!ssid.equals(removeDoubleQuotes(config.SSID))
@@ -1194,7 +1204,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
     public String getConfigName() {
         if (mConfig != null && mConfig.isPasspoint()) {
             return mConfig.providerFriendlyName;
-        } else if (mFqdn != null) {
+        } else if (mPasspointUniqueId != null) {
             return mProviderFriendlyName;
         } else {
             return ssid;
@@ -1289,11 +1299,15 @@ public class AccessPoint implements Comparable<AccessPoint> {
                     mInfo != null ? mInfo.getRequestingPackageName() : null));
         } else { // not active
             if (mConfig != null && mConfig.hasNoInternetAccess()) {
-                int messageID = mConfig.getNetworkSelectionStatus().isNetworkPermanentlyDisabled()
+                int messageID =
+                        mConfig.getNetworkSelectionStatus().getNetworkSelectionStatus()
+                                == NETWORK_SELECTION_PERMANENTLY_DISABLED
                         ? R.string.wifi_no_internet_no_reconnect
                         : R.string.wifi_no_internet;
                 summary.append(mContext.getString(messageID));
-            } else if (mConfig != null && !mConfig.getNetworkSelectionStatus().isNetworkEnabled()) {
+            } else if (mConfig != null
+                    && (mConfig.getNetworkSelectionStatus().getNetworkSelectionStatus()
+                            != NETWORK_SELECTION_ENABLED)) {
                 WifiConfiguration.NetworkSelectionStatus networkStatus =
                         mConfig.getNetworkSelectionStatus();
                 switch (networkStatus.getNetworkSelectionDisableReason()) {
@@ -1392,7 +1406,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
      * Return true if this AccessPoint represents a Passpoint provider configuration.
      */
     public boolean isPasspointConfig() {
-        return mFqdn != null && mConfig == null;
+        return mPasspointUniqueId != null && mConfig == null;
     }
 
     /**
@@ -1448,8 +1462,12 @@ public class AccessPoint implements Comparable<AccessPoint> {
         if (info.isOsuAp() || mOsuStatus != null) {
             return (info.isOsuAp() && mOsuStatus != null);
         } else if (info.isPasspointAp() || isPasspoint()) {
+            // TODO: Use TextUtils.equals(info.getPasspointUniqueId(), mConfig.getKey()) when API
+            //  is available
             return (info.isPasspointAp() && isPasspoint()
-                    && TextUtils.equals(info.getPasspointFqdn(), mConfig.FQDN));
+                    && TextUtils.equals(info.getPasspointFqdn(), mConfig.FQDN)
+                    && TextUtils.equals(info.getPasspointProviderFriendlyName(),
+                    mConfig.providerFriendlyName));
         }
 
         if (networkId != WifiConfiguration.INVALID_NETWORK_ID) {
@@ -1514,6 +1532,9 @@ public class AccessPoint implements Comparable<AccessPoint> {
                 new ArrayList<>(mScoredNetworkCache.values()));
         if (mNetworkInfo != null) {
             savedState.putParcelable(KEY_NETWORKINFO, mNetworkInfo);
+        }
+        if (mPasspointUniqueId != null) {
+            savedState.putString(KEY_PASSPOINT_UNIQUE_ID, mPasspointUniqueId);
         }
         if (mFqdn != null) {
             savedState.putString(KEY_FQDN, mFqdn);
@@ -2105,11 +2126,11 @@ public class AccessPoint implements Comparable<AccessPoint> {
                 return;
             }
 
-            String fqdn = passpointConfig.getHomeSp().getFqdn();
+            String uniqueId = passpointConfig.getUniqueId();
             for (Pair<WifiConfiguration, Map<Integer, List<ScanResult>>> pairing :
                     wifiManager.getAllMatchingWifiConfigs(wifiManager.getScanResults())) {
                 WifiConfiguration config = pairing.first;
-                if (TextUtils.equals(config.FQDN, fqdn)) {
+                if (TextUtils.equals(config.getKey(), uniqueId)) {
                     List<ScanResult> homeScans =
                             pairing.second.get(WifiManager.PASSPOINT_HOME_NETWORK);
                     List<ScanResult> roamingScans =

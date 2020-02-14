@@ -224,21 +224,43 @@ public class RollbackUnitTest {
     }
 
     @Test
-    public void snapshotThenDelete() {
+    public void snapshotThenDeleteNoApex() {
         Rollback rollback = new Rollback(123, new File("/test/testing"), -1, USER, INSTALLER);
         PackageRollbackInfo pkgInfo1 = newPkgInfoFor(PKG_1, 12, 10, false);
-        PackageRollbackInfo pkgInfo2 = newPkgInfoFor(PKG_2, 18, 12, true);
+        PackageRollbackInfo pkgInfo2 = newPkgInfoFor(PKG_2, 18, 12, false);
         rollback.info.getPackages().addAll(Arrays.asList(pkgInfo1, pkgInfo2));
 
-        int[] userIds = {12, 18};
+        int[] userIds = {111, 222};
         rollback.snapshotUserData(PKG_2, userIds, mMockDataHelper);
 
         verify(mMockDataHelper).snapshotAppData(eq(123), pkgRollbackInfoFor(PKG_2), eq(userIds));
 
         rollback.delete(mMockDataHelper);
 
-        verify(mMockDataHelper).destroyAppDataSnapshot(eq(123), pkgRollbackInfoFor(PKG_2), eq(12));
-        verify(mMockDataHelper).destroyAppDataSnapshot(eq(123), pkgRollbackInfoFor(PKG_2), eq(18));
+        verify(mMockDataHelper).destroyAppDataSnapshot(eq(123), pkgRollbackInfoFor(PKG_2), eq(111));
+        verify(mMockDataHelper).destroyAppDataSnapshot(eq(123), pkgRollbackInfoFor(PKG_2), eq(222));
+        verify(mMockDataHelper, never()).destroyApexDeSnapshots(anyInt());
+
+        assertThat(rollback.isDeleted()).isTrue();
+    }
+
+    @Test
+    public void snapshotThenDeleteWithApex() {
+        Rollback rollback = new Rollback(123, new File("/test/testing"), -1, USER, INSTALLER);
+        PackageRollbackInfo pkgInfo1 = newPkgInfoFor(PKG_1, 12, 10, false);
+        PackageRollbackInfo pkgInfo2 = newPkgInfoFor(PKG_2, 18, 12, true);
+        rollback.info.getPackages().addAll(Arrays.asList(pkgInfo1, pkgInfo2));
+
+        int[] userIds = {111, 222};
+        rollback.snapshotUserData(PKG_2, userIds, mMockDataHelper);
+
+        verify(mMockDataHelper).snapshotAppData(eq(123), pkgRollbackInfoFor(PKG_2), eq(userIds));
+
+        rollback.delete(mMockDataHelper);
+
+        verify(mMockDataHelper, never())
+                .destroyAppDataSnapshot(anyInt(), pkgRollbackInfoFor(PKG_2), anyInt());
+        verify(mMockDataHelper).destroyApexDeSnapshots(123);
 
         assertThat(rollback.isDeleted()).isTrue();
     }
@@ -291,11 +313,52 @@ public class RollbackUnitTest {
         verify(mMockDataHelper).restoreAppData(123, pkgInfo1, 7, 333, "blah");
     }
 
+    @Test
+    public void notifySessionWithSuccess() {
+        int[] sessionIds = new int[]{ 7777, 8888 };
+        Rollback rollback = new Rollback(123, new File("/test/testing"), -1, USER, INSTALLER,
+                sessionIds);
+        // The 1st invocation returns false because not all child sessions are notified.
+        assertThat(rollback.notifySessionWithSuccess()).isFalse();
+        // The 2nd invocation returns true because now all child sessions are notified.
+        assertThat(rollback.notifySessionWithSuccess()).isTrue();
+    }
+
+    @Test
+    public void allPackagesEnabled() {
+        int[] sessionIds = new int[]{ 7777, 8888 };
+        Rollback rollback = new Rollback(123, new File("/test/testing"), -1, USER, INSTALLER,
+                sessionIds);
+        // #allPackagesEnabled returns false when 1 out of 2 packages is enabled.
+        rollback.info.getPackages().add(newPkgInfoFor(PKG_1, 12, 10, false));
+        assertThat(rollback.allPackagesEnabled()).isFalse();
+        // #allPackagesEnabled returns false for ApkInApex doesn't count.
+        rollback.info.getPackages().add(newPkgInfoForApkInApex(PKG_3, 157, 156));
+        assertThat(rollback.allPackagesEnabled()).isFalse();
+        // #allPackagesEnabled returns true when 2 out of 2 packages are enabled.
+        rollback.info.getPackages().add(newPkgInfoFor(PKG_2, 18, 12, true));
+        assertThat(rollback.allPackagesEnabled()).isTrue();
+    }
+
     private static PackageRollbackInfo newPkgInfoFor(
             String packageName, long fromVersion, long toVersion, boolean isApex) {
         return new PackageRollbackInfo(new VersionedPackage(packageName, fromVersion),
                 new VersionedPackage(packageName, toVersion),
                 new IntArray(), new ArrayList<>(), isApex, false, new IntArray(),
+                new SparseLongArray());
+    }
+
+    /**
+     * TODO: merge newPkgInfoFor and newPkgInfoForApkInApex by using enums to specify
+     * 1. IS_APK
+     * 2. IS_APEX
+     * 3. IS_APK_IN_APEX
+     */
+    private static PackageRollbackInfo newPkgInfoForApkInApex(
+            String packageName, long fromVersion, long toVersion) {
+        return new PackageRollbackInfo(new VersionedPackage(packageName, fromVersion),
+                new VersionedPackage(packageName, toVersion),
+                new IntArray(), new ArrayList<>(), false, true, new IntArray(),
                 new SparseLongArray());
     }
 

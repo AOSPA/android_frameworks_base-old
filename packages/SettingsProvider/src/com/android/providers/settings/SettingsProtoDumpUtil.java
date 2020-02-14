@@ -1816,6 +1816,12 @@ class SettingsProtoDumpUtil {
                 SecureSettingsProto.Accessibility.ACCESSIBILITY_MAGNIFICATION_MODE);
         p.end(accessibilityToken);
 
+        final long adaptiveSleepToken = p.start(SecureSettingsProto.ADAPTIVE_SLEEP);
+        dumpSetting(s, p,
+                Settings.Secure.ADAPTIVE_SLEEP,
+                SecureSettingsProto.AdaptiveSleep.ENABLED);
+        p.end(adaptiveSleepToken);
+
         dumpSetting(s, p,
                 Settings.Secure.ALLOWED_GEOLOCATION_ORIGINS,
                 SecureSettingsProto.ALLOWED_GEOLOCATION_ORIGINS);
@@ -2188,13 +2194,14 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.NAVIGATION_MODE,
                 SecureSettingsProto.NAVIGATION_MODE);
 
+        final long gestureNavToken = p.start(SecureSettingsProto.GESTURE_NAVIGATION);
         dumpSetting(s, p,
                 Settings.Secure.BACK_GESTURE_INSET_SCALE_LEFT,
                 SecureSettingsProto.GestureNavigation.BACK_GESTURE_INSET_SCALE_LEFT);
-
         dumpSetting(s, p,
                 Settings.Secure.BACK_GESTURE_INSET_SCALE_RIGHT,
                 SecureSettingsProto.GestureNavigation.BACK_GESTURE_INSET_SCALE_RIGHT);
+        p.end(gestureNavToken);
 
         final long nfcPaymentToken = p.start(SecureSettingsProto.NFC_PAYMENT);
         dumpSetting(s, p,
@@ -2729,6 +2736,12 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ,
                 SystemSettingsProto.Screen.AUTO_BRIGHTNESS_ADJ);
+        dumpSetting(s, p,
+                Settings.System.SCREEN_BRIGHTNESS_FLOAT,
+                SystemSettingsProto.Screen.BRIGHTNESS_FLOAT);
+        dumpSetting(s, p,
+                Settings.System.SCREEN_BRIGHTNESS_FOR_VR_FLOAT,
+                SystemSettingsProto.Screen.BRIGHTNESS_FOR_VR_FLOAT);
         p.end(screenToken);
 
         dumpSetting(s, p,

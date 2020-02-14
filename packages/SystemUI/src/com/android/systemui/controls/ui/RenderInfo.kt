@@ -50,7 +50,7 @@ data class RenderInfo(val iconResourceId: Int, val foreground: Int, val backgrou
 private const val BUCKET_SIZE = 1000
 private const val THERMOSTAT_RANGE = DeviceTypes.TYPE_THERMOSTAT * BUCKET_SIZE
 
-public val deviceColorMap = mapOf<Int, Pair<Int, Int>>(
+private val deviceColorMap = mapOf<Int, Pair<Int, Int>>(
     (THERMOSTAT_RANGE + TemperatureControlTemplate.MODE_HEAT) to
         Pair(R.color.thermo_heat_foreground, R.color.thermo_heat_background),
     (THERMOSTAT_RANGE + TemperatureControlTemplate.MODE_COOL) to
@@ -60,7 +60,7 @@ public val deviceColorMap = mapOf<Int, Pair<Int, Int>>(
         Pair(R.color.control_foreground, R.color.control_background)
 }
 
-public val deviceIconMap = mapOf<Int, IconState>(
+private val deviceIconMap = mapOf<Int, IconState>(
     THERMOSTAT_RANGE to IconState(
         R.drawable.ic_device_thermostat_gm2_24px,
         R.drawable.ic_device_thermostat_gm2_24px
@@ -108,10 +108,18 @@ public val deviceIconMap = mapOf<Int, IconState>(
     DeviceTypes.TYPE_OUTLET to IconState(
         R.drawable.ic_power_off_gm2_24px,
         R.drawable.ic_power_gm2_24px
+    ),
+    DeviceTypes.TYPE_VACUUM to IconState(
+        R.drawable.ic_vacuum_gm2_24px,
+        R.drawable.ic_vacuum_gm2_24px
+    ),
+    DeviceTypes.TYPE_MOP to IconState(
+        R.drawable.ic_vacuum_gm2_24px,
+        R.drawable.ic_vacuum_gm2_24px
     )
 ).withDefault {
     IconState(
-        R.drawable.ic_light_off_gm2_24px,
-        R.drawable.ic_lightbulb_outline_gm2_24px
+        R.drawable.ic_device_unknown_gm2_24px,
+        R.drawable.ic_device_unknown_gm2_24px
     )
 }

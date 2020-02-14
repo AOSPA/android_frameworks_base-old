@@ -18,8 +18,8 @@
 
 #include <android-base/strings.h>
 #include <android-base/unique_fd.h>
-#include <android/os/incremental/IIncrementalManager.h>
 #include <android/content/pm/DataLoaderParamsParcel.h>
+#include <android/os/incremental/IIncrementalManager.h>
 #include <binder/IServiceManager.h>
 #include <utils/String16.h>
 #include <utils/StrongPointer.h>
@@ -59,6 +59,8 @@ using Clock = std::chrono::steady_clock;
 using TimePoint = std::chrono::time_point<Clock>;
 using Seconds = std::chrono::seconds;
 
+using DataLoaderStatusListener = ::android::sp<::android::content::pm::IDataLoaderStatusListener>;
+
 class IncrementalService final {
 public:
     explicit IncrementalService(ServiceManagerWrapper&& sm, std::string_view rootDir);
@@ -90,10 +92,13 @@ public:
         return idFromMetadata({(const uint8_t*)metadata.data(), metadata.size()});
     }
 
+    void onDump(int fd);
+
     std::optional<std::future<void>> onSystemReady();
 
     StorageId createStorage(std::string_view mountPoint,
                             DataLoaderParamsParcel&& dataLoaderParams,
+                            const DataLoaderStatusListener& dataLoaderStatusListener,
                             CreateOptions options = CreateOptions::Default);
     StorageId createLinkedStorage(std::string_view mountPoint, StorageId linkedStorage,
                                   CreateOptions options = CreateOptions::Default);
@@ -109,8 +114,8 @@ public:
 
     int makeFile(StorageId storage, std::string_view path, int mode, FileId id,
                  incfs::NewFileParams params);
-    int makeDir(StorageId storage, std::string_view path, int mode = 0555);
-    int makeDirs(StorageId storage, std::string_view path, int mode = 0555);
+    int makeDir(StorageId storage, std::string_view path, int mode = 0755);
+    int makeDirs(StorageId storage, std::string_view path, int mode = 0755);
 
     int link(StorageId sourceStorageId, std::string_view oldPath, StorageId destStorageId,
              std::string_view newPath);
@@ -121,20 +126,21 @@ public:
     }
 
     RawMetadata getMetadata(StorageId storage, FileId node) const;
-    std::string getSignatureData(StorageId storage, FileId node) const;
 
     std::vector<std::string> listFiles(StorageId storage) const;
     bool startLoading(StorageId storage) const;
-
+    bool configureNativeBinaries(StorageId storage, std::string_view apkFullPath,
+                                 std::string_view libDirRelativePath, std::string_view abi);
     class IncrementalDataLoaderListener : public android::content::pm::BnDataLoaderStatusListener {
     public:
-        IncrementalDataLoaderListener(IncrementalService& incrementalService)
-              : incrementalService(incrementalService) {}
+        IncrementalDataLoaderListener(IncrementalService& incrementalService, DataLoaderStatusListener externalListener)
+              : incrementalService(incrementalService), externalListener(externalListener) {}
         // Callbacks interface
         binder::Status onStatusChanged(MountId mount, int newStatus) override;
 
     private:
         IncrementalService& incrementalService;
+        DataLoaderStatusListener externalListener;
     };
 
 private:
@@ -200,13 +206,15 @@ private:
                            std::string&& source, std::string&& target, BindKind kind,
                            std::unique_lock<std::mutex>& mainLock);
 
-    bool prepareDataLoader(IncFsMount& ifs, DataLoaderParamsParcel* params);
+    bool prepareDataLoader(IncFsMount& ifs, DataLoaderParamsParcel* params = nullptr, const DataLoaderStatusListener* externalListener = nullptr);
     BindPathMap::const_iterator findStorageLocked(std::string_view path) const;
     StorageId findStorageId(std::string_view path) const;
 
     void deleteStorage(IncFsMount& ifs);
     void deleteStorageLocked(IncFsMount& ifs, std::unique_lock<std::mutex>&& ifsLock);
     MountMap::iterator getStorageSlotLocked();
+    std::string normalizePathToStorage(const IfsMountPtr incfs, StorageId storage,
+                                       std::string_view path);
 
     // Member variables
     std::unique_ptr<VoldServiceWrapper> mVold;

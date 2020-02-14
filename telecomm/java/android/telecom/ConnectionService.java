@@ -18,7 +18,6 @@ package android.telecom;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SystemApi;
 import android.app.Service;
@@ -142,6 +141,7 @@ public abstract class ConnectionService extends Service {
     private static final String SESSION_SPLIT_CONFERENCE = "CS.sFC";
     private static final String SESSION_MERGE_CONFERENCE = "CS.mC";
     private static final String SESSION_SWAP_CONFERENCE = "CS.sC";
+    private static final String SESSION_ADD_PARTICIPANT = "CS.aP";
     private static final String SESSION_POST_DIAL_CONT = "CS.oPDC";
     private static final String SESSION_PULL_EXTERNAL_CALL = "CS.pEC";
     private static final String SESSION_SEND_CALL_EVENT = "CS.sCE";
@@ -195,6 +195,7 @@ public abstract class ConnectionService extends Service {
     private static final int MSG_CREATE_CONFERENCE_COMPLETE = 36;
     private static final int MSG_CREATE_CONFERENCE_FAILED = 37;
     private static final int MSG_REJECT_WITH_REASON = 38;
+    private static final int MSG_ADD_PARTICIPANT = 39;
     //Proprietary values starts after this.
     private static final int MSG_ADD_PARTICIPANT_WITH_CONFERENCE = 40;
 
@@ -631,6 +632,21 @@ public abstract class ConnectionService extends Service {
                 args.arg1 = callId;
                 args.arg2 = Log.createSubsession();
                 mHandler.obtainMessage(MSG_SWAP_CONFERENCE, args).sendToTarget();
+            } finally {
+                Log.endSession();
+            }
+        }
+
+        @Override
+        public void addConferenceParticipants(String callId, List<Uri> participants,
+                Session.Info sessionInfo) {
+            Log.startSession(sessionInfo, SESSION_ADD_PARTICIPANT);
+            try {
+                SomeArgs args = SomeArgs.obtain();
+                args.arg1 = callId;
+                args.arg2 = participants;
+                args.arg3 = Log.createSubsession();
+                mHandler.obtainMessage(MSG_ADD_PARTICIPANT, args).sendToTarget();
             } finally {
                 Log.endSession();
             }
@@ -1245,6 +1261,19 @@ public abstract class ConnectionService extends Service {
                     }
                     break;
                 }
+                case MSG_ADD_PARTICIPANT: {
+                    SomeArgs args = (SomeArgs) msg.obj;
+                    try {
+                        Log.continueSession((Session) args.arg3,
+                                SESSION_HANDLER + SESSION_ADD_PARTICIPANT);
+                        addConferenceParticipants((String) args.arg1, (List<Uri>)args.arg2);
+                    } finally {
+                        args.recycle();
+                        Log.endSession();
+                    }
+                    break;
+                }
+
                 case MSG_ON_POST_DIAL_CONTINUE: {
                     SomeArgs args = (SomeArgs) msg.obj;
                     try {
@@ -1799,7 +1828,7 @@ public abstract class ConnectionService extends Service {
                         null : conference.getVideoProvider().getInterface(),
                 conference.getVideoState(),
                 conference.getConnectTimeMillis(),
-                conference.getConnectionStartElapsedRealTime(),
+                conference.getConnectionStartElapsedRealtimeMillis(),
                 conference.getStatusHints(),
                 conference.getExtras(),
                 conference.getAddress(),
@@ -1905,7 +1934,7 @@ public abstract class ConnectionService extends Service {
                         connection.isRingbackRequested(),
                         connection.getAudioModeIsVoip(),
                         connection.getConnectTimeMillis(),
-                        connection.getConnectElapsedTimeMillis(),
+                        connection.getConnectionStartElapsedRealtimeMillis(),
                         connection.getStatusHints(),
                         connection.getDisconnectCause(),
                         createIdList(connection.getConferenceables()),
@@ -2184,6 +2213,17 @@ public abstract class ConnectionService extends Service {
         }
     }
 
+    private void addConferenceParticipants(String callId, List<Uri> participants) {
+        Log.d(this, "addConferenceParticipants(%s)", callId);
+        if (mConnectionById.containsKey(callId)) {
+            findConnectionForAction(callId, "addConferenceParticipants")
+                    .onAddConferenceParticipants(participants);
+        } else {
+            findConferenceForAction(callId, "addConferenceParticipants")
+                    .onAddConferenceParticipants(participants);
+        }
+    }
+
     /**
      * Notifies a {@link Connection} of a request to pull an external call.
      *
@@ -2406,7 +2446,7 @@ public abstract class ConnectionService extends Service {
                             null : conference.getVideoProvider().getInterface(),
                     conference.getVideoState(),
                     conference.getConnectTimeMillis(),
-                    conference.getConnectionStartElapsedRealTime(),
+                    conference.getConnectionStartElapsedRealtimeMillis(),
                     conference.getStatusHints(),
                     conference.getExtras(),
                     conference.getAddress(),
@@ -2497,7 +2537,7 @@ public abstract class ConnectionService extends Service {
                     connection.isRingbackRequested(),
                     connection.getAudioModeIsVoip(),
                     connection.getConnectTimeMillis(),
-                    connection.getConnectElapsedTimeMillis(),
+                    connection.getConnectionStartElapsedRealtimeMillis(),
                     connection.getStatusHints(),
                     connection.getDisconnectCause(),
                     emptyList,

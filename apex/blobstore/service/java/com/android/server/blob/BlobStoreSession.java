@@ -21,11 +21,13 @@ import static android.app.blob.XmlTags.ATTR_PACKAGE;
 import static android.app.blob.XmlTags.ATTR_UID;
 import static android.app.blob.XmlTags.TAG_ACCESS_MODE;
 import static android.app.blob.XmlTags.TAG_BLOB_HANDLE;
+import static android.os.Trace.TRACE_TAG_SYSTEM_SERVER;
 import static android.system.OsConstants.O_CREAT;
 import static android.system.OsConstants.O_RDONLY;
 import static android.system.OsConstants.O_RDWR;
 import static android.system.OsConstants.SEEK_SET;
 
+import static com.android.server.blob.BlobStoreConfig.LOGV;
 import static com.android.server.blob.BlobStoreConfig.TAG;
 
 import android.annotation.BytesLong;
@@ -40,6 +42,7 @@ import android.os.FileUtils;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.RevocableFileDescriptor;
+import android.os.Trace;
 import android.os.storage.StorageManager;
 import android.system.ErrnoException;
 import android.system.Os;
@@ -381,15 +384,22 @@ class BlobStoreSession extends IBlobStoreSession.Stub {
     void verifyBlobData() {
         byte[] actualDigest = null;
         try {
+            Trace.traceBegin(TRACE_TAG_SYSTEM_SERVER,
+                    "computeBlobDigest-i" + mSessionId + "-l" + getSessionFile().length());
             actualDigest = FileUtils.digest(getSessionFile(), mBlobHandle.algorithm);
         } catch (IOException | NoSuchAlgorithmException e) {
             Slog.e(TAG, "Error computing the digest", e);
+        } finally {
+            Trace.traceEnd(TRACE_TAG_SYSTEM_SERVER);
         }
         synchronized (mSessionLock) {
             if (actualDigest != null && Arrays.equals(actualDigest, mBlobHandle.digest)) {
                 mState = STATE_VERIFIED_VALID;
                 // Commit callback will be sent once the data is persisted.
             } else {
+                if (LOGV) {
+                    Slog.v(TAG, "Digest of the data didn't match the given BlobHandle.digest");
+                }
                 mState = STATE_VERIFIED_INVALID;
                 sendCommitCallbackResult(COMMIT_RESULT_ERROR);
             }
@@ -447,6 +457,16 @@ class BlobStoreSession extends IBlobStoreSession.Stub {
         }
     }
 
+    @Override
+    public String toString() {
+        return "BlobStoreSession {"
+                + "id:" + mSessionId
+                + ",handle:" + mBlobHandle
+                + ",uid:" + mOwnerUid
+                + ",pkg:" + mOwnerPackageName
+                + "}";
+    }
+
     private void assertCallerIsOwner() {
         final int callingUid = Binder.getCallingUid();
         if (callingUid != mOwnerUid) {
@@ -491,7 +511,7 @@ class BlobStoreSession extends IBlobStoreSession.Stub {
     }
 
     @Nullable
-    static BlobStoreSession createFromXml(@NonNull XmlPullParser in,
+    static BlobStoreSession createFromXml(@NonNull XmlPullParser in, int version,
             @NonNull Context context, @NonNull SessionStateChangeListener stateChangeListener)
             throws IOException, XmlPullParserException {
         final int sessionId = XmlUtils.readIntAttribute(in, ATTR_ID);

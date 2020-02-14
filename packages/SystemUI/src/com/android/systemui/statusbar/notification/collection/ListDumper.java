@@ -16,6 +16,9 @@
 
 package com.android.systemui.statusbar.notification.collection;
 
+import static com.android.systemui.statusbar.notification.collection.NotifCollection.REASON_NOT_CANCELED;
+import static com.android.systemui.statusbar.notification.collection.NotificationEntry.DismissState.NOT_DISMISSED;
+
 import java.util.Arrays;
 import java.util.List;
 
@@ -120,6 +123,16 @@ public class ListDumper {
                         .append(" ");
             }
 
+            if (!notifEntry.mDismissInterceptors.isEmpty()) {
+                String[] interceptorsNames = new String[notifEntry.mDismissInterceptors.size()];
+                for (int i = 0; i < interceptorsNames.length; i++) {
+                    interceptorsNames[i] = notifEntry.mDismissInterceptors.get(i).getName();
+                }
+                rksb.append("dismissInterceptors=")
+                        .append(Arrays.toString(interceptorsNames))
+                        .append(" ");
+            }
+
             if (notifEntry.mExcludingFilter != null) {
                 rksb.append("filter=")
                         .append(notifEntry.mExcludingFilter)
@@ -132,8 +145,16 @@ public class ListDumper {
                         .append(" ");
             }
 
-            if (notifEntry.hasInflationError()) {
-                rksb.append("hasInflationError ");
+            if (notifEntry.mCancellationReason != REASON_NOT_CANCELED) {
+                rksb.append("cancellationReason=")
+                        .append(notifEntry.mCancellationReason)
+                        .append(" ");
+            }
+
+            if (notifEntry.getDismissState() != NOT_DISMISSED) {
+                rksb.append("dismissState=")
+                        .append(notifEntry.getDismissState())
+                        .append(" ");
             }
 
             String rkString = rksb.toString();

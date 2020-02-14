@@ -30,6 +30,7 @@ filegroup {
         ":services.usb-sources",
         ":services.voiceinteraction-sources",
         ":service-permission-sources",
+        ":service-statsd-sources",
     ],
     visibility: ["//visibility:private"],
 }
@@ -75,7 +76,7 @@ java_library {
 
     libs: [
         "android.hidl.manager-V1.0-java",
-        "framework-tethering"
+        "framework-tethering-stubs",
     ],
 
     plugins: [
@@ -114,7 +115,7 @@ droidstubs {
     srcs: [":services-all-sources"],
     installable: false,
     // TODO: remove the --hide options below
-    args: " --show-annotation android.annotation.SystemApi\\(client=android.annotation.SystemApi.Client.MODULE_LIBRARIES,process=android.annotation.SystemApi.Process.SYSTEM_SERVER\\)" +
+    args: " --show-annotation android.annotation.SystemApi\\(client=android.annotation.SystemApi.Client.SYSTEM_SERVER\\)" +
         " --hide-annotation android.annotation.Hide" +
         " --hide-package com.google.android.startop.iorap" +
         " --hide ReferencesHidden" +

@@ -46,13 +46,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Base class for media route provider services.
  * <p>
+ * Media route provider services are used to publish {@link MediaRoute2Info media routes} such as
+ * speakers, TVs, etc. The routes are published by calling {@link #notifyRoutes(Collection)}.
+ * Media apps which use {@link MediaRouter2} can request to play their media on the routes.
+ * </p><p>
+ * When {@link MediaRouter2 media router} wants to play media on a route,
+ * {@link #onCreateSession(String, String, long, Bundle)} will be called to handle the request.
+ * A session can be considered as a group of currently selected routes for each connection.
+ * Create and manage the sessions by yourself, and notify the {@link RoutingSessionInfo
+ * session infos} when there are any changes.
+ * </p><p>
  * The system media router service will bind to media route provider services when a
  * {@link RouteDiscoveryPreference discovery preference} is registered via
- * a {@link MediaRouter2 media router} by an application.
- * </p><p>
- * To implement your own media route provider service, extend this class and
- * override {@link #onDiscoveryPreferenceChanged(RouteDiscoveryPreference)} to publish
- * {@link MediaRoute2Info routes}.
+ * a {@link MediaRouter2 media router} by an application. See
+ * {@link #onDiscoveryPreferenceChanged(RouteDiscoveryPreference)} for the details.
  * </p>
  */
 public abstract class MediaRoute2ProviderService extends Service {
@@ -115,23 +122,25 @@ public abstract class MediaRoute2ProviderService extends Service {
      * @hide
      */
     //TODO: Discuss what to use for request (e.g., Intent? Request class?)
-    public abstract void onControlRequest(@NonNull String routeId, @NonNull Intent request);
+    public void onControlRequest(@NonNull String routeId, @NonNull Intent request) {}
 
     /**
-     * Called when requestSetVolume is called on a route of the provider
+     * Called when a volume setting is requested on a route of the provider
      *
      * @param routeId the id of the route
      * @param volume the target volume
+     * @see MediaRoute2Info#getVolumeMax()
      */
-    public abstract void onSetVolume(@NonNull String routeId, int volume);
+    public abstract void onSetRouteVolume(@NonNull String routeId, int volume);
 
     /**
-     * Called when requestUpdateVolume is called on a route of the provider
+     * Called when {@link MediaRouter2.RoutingController#setVolume(int)} is called on
+     * a routing session of the provider
      *
-     * @param routeId id of the route
-     * @param delta the delta to add to the current volume
+     * @param sessionId the id of the routing session
+     * @param volume the target volume
      */
-    public abstract void onUpdateVolume(@NonNull String routeId, int delta);
+    public abstract void onSetSessionVolume(@NonNull String sessionId, int volume);
 
     /**
      * Gets information of the session with the given id.
@@ -370,7 +379,6 @@ public abstract class MediaRoute2ProviderService extends Service {
      *
      * @param preference the new discovery preference
      */
-    // TODO: This method needs tests.
     public void onDiscoveryPreferenceChanged(@NonNull RouteDiscoveryPreference preference) {}
 
     /**
@@ -456,6 +464,16 @@ public abstract class MediaRoute2ProviderService extends Service {
         }
 
         @Override
+        public void updateDiscoveryPreference(RouteDiscoveryPreference discoveryPreference) {
+            if (!checkCallerisSystem()) {
+                return;
+            }
+            mHandler.sendMessage(obtainMessage(
+                    MediaRoute2ProviderService::onDiscoveryPreferenceChanged,
+                    MediaRoute2ProviderService.this, discoveryPreference));
+        }
+
+        @Override
         public void selectRoute(@NonNull String sessionId, String routeId) {
             if (!checkCallerisSystem()) {
                 return;
@@ -504,21 +522,21 @@ public abstract class MediaRoute2ProviderService extends Service {
         }
 
         @Override
-        public void requestSetVolume(String routeId, int volume) {
+        public void setRouteVolume(String routeId, int volume) {
             if (!checkCallerisSystem()) {
                 return;
             }
-            mHandler.sendMessage(obtainMessage(MediaRoute2ProviderService::onSetVolume,
+            mHandler.sendMessage(obtainMessage(MediaRoute2ProviderService::onSetRouteVolume,
                     MediaRoute2ProviderService.this, routeId, volume));
         }
 
         @Override
-        public void requestUpdateVolume(String routeId, int delta) {
+        public void setSessionVolume(String sessionId, int volume) {
             if (!checkCallerisSystem()) {
                 return;
             }
-            mHandler.sendMessage(obtainMessage(MediaRoute2ProviderService::onUpdateVolume,
-                    MediaRoute2ProviderService.this, routeId, delta));
+            mHandler.sendMessage(obtainMessage(MediaRoute2ProviderService::onSetSessionVolume,
+                    MediaRoute2ProviderService.this, sessionId, volume));
         }
     }
 }

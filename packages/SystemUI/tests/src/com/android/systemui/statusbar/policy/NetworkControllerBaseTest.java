@@ -414,7 +414,8 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
                     anyInt(),
                     typeIconArg.capture(), dataInArg.capture(), dataOutArg.capture(),
                     ArgumentCaptor.forClass(Integer.class).capture(),
-                    anyString(), anyString(), anyBoolean(), anyInt(), anyBoolean());
+                    any(CharSequence.class), any(CharSequence.class), any(CharSequence.class),
+                    anyBoolean(), anyInt(), anyBoolean());
         IconState iconState = iconArg.getValue();
         int state = SignalDrawable.getState(icon, CellSignalStrength.getNumSignalStrengthLevels(),
                 false);
@@ -448,8 +449,8 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
                 typeIconArg.capture(),
                 anyInt(), anyBoolean(), anyBoolean(),
                 ArgumentCaptor.forClass(Integer.class).capture(),
-                anyString(), anyString(), anyBoolean(),
-                anyInt(), eq(roaming));
+                any(CharSequence.class), any(CharSequence.class), any(CharSequence.class),
+                anyBoolean(), anyInt(), eq(roaming));
         IconState iconState = iconArg.getValue();
 
         int state = icon == -1 ? 0
@@ -471,19 +472,23 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
             boolean cutOut) {
         verifyLastMobileDataIndicators(
                 visible, icon, typeIcon, qsVisible, qsIcon, qsTypeIcon, dataIn, dataOut, cutOut,
-                null);
+                null, null);
     }
 
     protected void verifyLastMobileDataIndicators(boolean visible, int icon, int typeIcon,
             boolean qsVisible, int qsIcon, int qsTypeIcon, boolean dataIn, boolean dataOut,
-            boolean cutOut, String typeContentDescription) {
+            boolean cutOut, CharSequence typeContentDescription,
+            CharSequence typeContentDescriptionHtml) {
         ArgumentCaptor<IconState> iconArg = ArgumentCaptor.forClass(IconState.class);
         ArgumentCaptor<Integer> typeIconArg = ArgumentCaptor.forClass(Integer.class);
         ArgumentCaptor<IconState> qsIconArg = ArgumentCaptor.forClass(IconState.class);
         ArgumentCaptor<Integer> qsTypeIconArg = ArgumentCaptor.forClass(Integer.class);
         ArgumentCaptor<Boolean> dataInArg = ArgumentCaptor.forClass(Boolean.class);
         ArgumentCaptor<Boolean> dataOutArg = ArgumentCaptor.forClass(Boolean.class);
-        ArgumentCaptor<String> typeContentDescriptionArg = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<CharSequence> typeContentDescriptionArg =
+                ArgumentCaptor.forClass(CharSequence.class);
+        ArgumentCaptor<CharSequence> typeContentDescriptionHtmlArg =
+                ArgumentCaptor.forClass(CharSequence.class);
 
         Mockito.verify(mCallbackHandler, Mockito.atLeastOnce()).setMobileDataIndicators(
                 iconArg.capture(),
@@ -494,6 +499,7 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
                 dataOutArg.capture(),
                 ArgumentCaptor.forClass(Integer.class).capture(),
                 typeContentDescriptionArg.capture(),
+                typeContentDescriptionHtmlArg.capture(),
                 anyString(), anyBoolean(), anyInt(), anyBoolean());
 
         IconState iconState = iconArg.getValue();
@@ -519,6 +525,10 @@ public class NetworkControllerBaseTest extends SysuiTestCase {
         if (typeContentDescription != null) { // Only check if it was provided
             assertEquals("Type content description", typeContentDescription,
                     typeContentDescriptionArg.getValue());
+        }
+        if (typeContentDescriptionHtml != null) { // Only check if it was provided
+            assertEquals("Type content description (html)", typeContentDescriptionHtml,
+                    typeContentDescriptionHtmlArg.getValue());
         }
     }
 

@@ -18,22 +18,17 @@ package com.android.server.media;
 
 import static android.os.UserHandle.USER_ALL;
 
-import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.INotificationManager;
 import android.app.KeyguardManager;
 import android.app.PendingIntent;
-import android.app.PendingIntent.CanceledException;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ParceledListSlice;
-import android.content.pm.ServiceInfo;
 import android.content.pm.UserInfo;
 import android.database.ContentObserver;
 import android.media.AudioManager;
@@ -99,7 +94,7 @@ public class MediaSessionService extends SystemService implements Monitor {
     private static final String TAG = "MediaSessionService";
     static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
     // Leave log for key event always.
-    private static final boolean DEBUG_KEY_EVENT = true;
+    static final boolean DEBUG_KEY_EVENT = true;
 
     private static final int WAKELOCK_TIMEOUT = 5000;
     private static final int MEDIA_KEY_LISTENER_TIMEOUT = 1000;
@@ -141,6 +136,9 @@ public class MediaSessionService extends SystemService implements Monitor {
     final RemoteCallbackList<IRemoteVolumeController> mRemoteVolumeControllers =
             new RemoteCallbackList<>();
 
+    private SessionPolicyProvider mCustomSessionPolicyProvider;
+    private MediaKeyDispatcher mCustomMediaKeyDispatcher;
+
     public MediaSessionService(Context context) {
         super(context);
         mContext = context;
@@ -179,6 +177,9 @@ public class MediaSessionService extends SystemService implements Monitor {
         mSettingsObserver.observe();
         mHasFeatureLeanback = mContext.getPackageManager().hasSystemFeature(
                 PackageManager.FEATURE_LEANBACK);
+
+        // TODO: (jinpark) check if config value for custom MediaKeyDispatcher and
+        //  SessionPolicyProvider have been overlayed and instantiate using reflection.
         updateUser();
     }
 
@@ -428,9 +429,14 @@ public class MediaSessionService extends SystemService implements Monitor {
         if (DEBUG) {
             Log.d(TAG, "Destroying " + session);
         }
+        if (session.isClosed()) {
+            Log.w(TAG, "Destroying already destroyed session. Ignoring.");
+            return;
+        }
+
         FullUserRecord user = getFullUserRecordLocked(session.getUserId());
 
-        if (user != null) {
+        if (user != null && session instanceof MediaSessionRecord) {
             final int uid = session.getUid();
             final int sessionCount = user.mUidToSessionCount.get(uid, 0);
             if (sessionCount <= 0) {
@@ -555,20 +561,13 @@ public class MediaSessionService extends SystemService implements Monitor {
      * 4. It needs to be added to the relevant user record.
      */
     private MediaSessionRecord createSessionInternal(int callerPid, int callerUid, int userId,
-            String callerPackageName, ISessionCallback cb, String tag, Bundle sessionInfo) {
+            String callerPackageName, ISessionCallback cb, String tag, Bundle sessionInfo,
+            int policies) {
         synchronized (mLock) {
             FullUserRecord user = getFullUserRecordLocked(userId);
             if (user == null) {
                 Log.w(TAG, "Request from invalid user: " +  userId + ", pkg=" + callerPackageName);
                 throw new RuntimeException("Session request from invalid user.");
-            }
-
-            final MediaSessionRecord session;
-            try {
-                session = new MediaSessionRecord(callerPid, callerUid, userId,
-                        callerPackageName, cb, tag, sessionInfo, this, mHandler.getLooper());
-            } catch (RemoteException e) {
-                throw new RuntimeException("Media Session owner died prematurely.", e);
             }
 
             final int sessionCount = user.mUidToSessionCount.get(callerUid, 0);
@@ -577,6 +576,16 @@ public class MediaSessionService extends SystemService implements Monitor {
                 throw new RuntimeException("Created too many sessions. count="
                         + sessionCount + ")");
             }
+
+            final MediaSessionRecord session;
+            try {
+                session = new MediaSessionRecord(callerPid, callerUid, userId,
+                        callerPackageName, cb, tag, sessionInfo, this, mHandler.getLooper(),
+                        policies);
+            } catch (RemoteException e) {
+                throw new RuntimeException("Media Session owner died prematurely.", e);
+            }
+
             user.mUidToSessionCount.put(callerUid, sessionCount + 1);
 
             user.mPriorityStack.addSession(session);
@@ -746,12 +755,6 @@ public class MediaSessionService extends SystemService implements Monitor {
      * <p>The contents of this object is guarded by {@link #mLock}.
      */
     final class FullUserRecord implements MediaSessionStack.OnMediaButtonSessionChangedListener {
-        public static final int COMPONENT_TYPE_INVALID = 0;
-        public static final int COMPONENT_TYPE_BROADCAST = 1;
-        public static final int COMPONENT_TYPE_ACTIVITY = 2;
-        public static final int COMPONENT_TYPE_SERVICE = 3;
-        private static final String COMPONENT_NAME_USER_ID_DELIM = ",";
-
         private final int mFullUserId;
         private final MediaSessionStack mPriorityStack;
         private final HashMap<IBinder, OnMediaKeyEventDispatchedListenerRecord>
@@ -760,10 +763,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                 mOnMediaKeyEventSessionChangedListeners = new HashMap<>();
         private final SparseIntArray mUidToSessionCount = new SparseIntArray();
 
-        private PendingIntent mLastMediaButtonReceiver;
-        private ComponentName mRestoredMediaButtonReceiver;
-        private int mRestoredMediaButtonReceiverComponentType;
-        private int mRestoredMediaButtonReceiverUserId;
+        private MediaButtonReceiverHolder mLastMediaButtonReceiverHolder;
 
         private IOnVolumeKeyLongPressListener mOnVolumeKeyLongPressListener;
         private int mOnVolumeKeyLongPressListenerUid;
@@ -780,21 +780,9 @@ public class MediaSessionService extends SystemService implements Monitor {
             // Restore the remembered media button receiver before the boot.
             String mediaButtonReceiverInfo = Settings.Secure.getStringForUser(mContentResolver,
                     Settings.System.MEDIA_BUTTON_RECEIVER, mFullUserId);
-            if (mediaButtonReceiverInfo == null) {
-                return;
-            }
-            String[] tokens = mediaButtonReceiverInfo.split(COMPONENT_NAME_USER_ID_DELIM);
-            if (tokens == null || (tokens.length != 2 && tokens.length != 3)) {
-                return;
-            }
-            mRestoredMediaButtonReceiver = ComponentName.unflattenFromString(tokens[0]);
-            mRestoredMediaButtonReceiverUserId = Integer.parseInt(tokens[1]);
-            if (tokens.length == 3) {
-                mRestoredMediaButtonReceiverComponentType = Integer.parseInt(tokens[2]);
-            } else {
-                mRestoredMediaButtonReceiverComponentType =
-                        getComponentType(mRestoredMediaButtonReceiver);
-            }
+            mLastMediaButtonReceiverHolder =
+                    MediaButtonReceiverHolder.unflattenFromString(
+                            mContext, mediaButtonReceiverInfo);
         }
 
         public void destroySessionsForUserLocked(int userId) {
@@ -878,10 +866,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                     : mOnMediaKeyEventSessionChangedListeners.values()) {
                 pw.println(indent + "  from " + getCallingPackageName(cr.uid));
             }
-            pw.println(indent + "Last MediaButtonReceiver: " + mLastMediaButtonReceiver);
-            pw.println(indent + "Restored MediaButtonReceiver: " + mRestoredMediaButtonReceiver);
-            pw.println(indent + "Restored MediaButtonReceiverComponentType: "
-                    + mRestoredMediaButtonReceiverComponentType);
+            pw.println(indent + "Last MediaButtonReceiver: " + mLastMediaButtonReceiverHolder);
             mPriorityStack.dump(pw, indent);
         }
 
@@ -910,25 +895,12 @@ public class MediaSessionService extends SystemService implements Monitor {
                 return;
             }
             MediaSessionRecord sessionRecord = (MediaSessionRecord) record;
-            PendingIntent receiver = sessionRecord.getMediaButtonReceiver();
-            mLastMediaButtonReceiver = receiver;
-            mRestoredMediaButtonReceiver = null;
-            mRestoredMediaButtonReceiverComponentType = COMPONENT_TYPE_INVALID;
-
-            String mediaButtonReceiverInfo = "";
-            if (receiver != null) {
-                ComponentName component = receiver.getIntent().getComponent();
-                if (component != null
-                        && record.getPackageName().equals(component.getPackageName())) {
-                    String componentName = component.flattenToString();
-                    int componentType = getComponentType(component);
-                    mediaButtonReceiverInfo = String.join(COMPONENT_NAME_USER_ID_DELIM,
-                            componentName, String.valueOf(record.getUserId()),
-                            String.valueOf(componentType));
-                }
-            }
+            mLastMediaButtonReceiverHolder = sessionRecord.getMediaButtonReceiver();
+            String mediaButtonReceiverInfo = (mLastMediaButtonReceiverHolder == null)
+                    ? "" : mLastMediaButtonReceiverHolder.flattenToString();
             Settings.Secure.putStringForUser(mContentResolver,
-                    Settings.System.MEDIA_BUTTON_RECEIVER, mediaButtonReceiverInfo,
+                    Settings.System.MEDIA_BUTTON_RECEIVER,
+                    mediaButtonReceiverInfo,
                     mFullUserId);
         }
 
@@ -944,15 +916,9 @@ public class MediaSessionService extends SystemService implements Monitor {
                     } else {
                         // TODO(jaewan): Implement
                     }
-                } else if (mCurrentFullUserRecord.mLastMediaButtonReceiver != null) {
-                    callback.onMediaKeyEventSessionChanged(
-                            mCurrentFullUserRecord.mLastMediaButtonReceiver
-                                    .getIntent().getComponent().getPackageName(),
-                            null);
-                } else if (mCurrentFullUserRecord.mRestoredMediaButtonReceiver != null) {
-                    callback.onMediaKeyEventSessionChanged(
-                            mCurrentFullUserRecord.mRestoredMediaButtonReceiver.getPackageName(),
-                            null);
+                } else if (mCurrentFullUserRecord.mLastMediaButtonReceiverHolder != null) {
+                    String packageName = mLastMediaButtonReceiverHolder.getPackageName();
+                    callback.onMediaKeyEventSessionChanged(packageName, null);
                 }
             } catch (RemoteException e) {
                 Log.w(TAG, "Failed to pushAddressedPlayerChangedLocked", e);
@@ -969,35 +935,6 @@ public class MediaSessionService extends SystemService implements Monitor {
         private MediaSessionRecordImpl getMediaButtonSessionLocked() {
             return isGlobalPriorityActiveLocked()
                     ? mGlobalPrioritySession : mPriorityStack.getMediaButtonSession();
-        }
-
-        private int getComponentType(@Nullable ComponentName componentName) {
-            if (componentName == null) {
-                return COMPONENT_TYPE_INVALID;
-            }
-            PackageManager pm = mContext.getPackageManager();
-            try {
-                ActivityInfo activityInfo = pm.getActivityInfo(componentName,
-                        PackageManager.MATCH_DIRECT_BOOT_AWARE
-                                | PackageManager.MATCH_DIRECT_BOOT_UNAWARE
-                                | PackageManager.GET_ACTIVITIES);
-                if (activityInfo != null) {
-                    return COMPONENT_TYPE_ACTIVITY;
-                }
-            } catch (NameNotFoundException e) {
-            }
-            try {
-                ServiceInfo serviceInfo = pm.getServiceInfo(componentName,
-                        PackageManager.MATCH_DIRECT_BOOT_AWARE
-                                | PackageManager.MATCH_DIRECT_BOOT_UNAWARE
-                                | PackageManager.GET_SERVICES);
-                if (serviceInfo != null) {
-                    return COMPONENT_TYPE_SERVICE;
-                }
-            } catch (NameNotFoundException e) {
-            }
-            // Pick legacy behavior for BroadcastReceiver or unknown.
-            return COMPONENT_TYPE_BROADCAST;
         }
 
         final class OnMediaKeyEventDispatchedListenerRecord implements IBinder.DeathRecipient {
@@ -1127,8 +1064,11 @@ public class MediaSessionService extends SystemService implements Monitor {
                 if (cb == null) {
                     throw new IllegalArgumentException("Controller callback cannot be null");
                 }
+                int policies = (mCustomSessionPolicyProvider != null)
+                        ? mCustomSessionPolicyProvider.getSessionPoliciesForApplication(
+                                uid, packageName) : 0;
                 return createSessionInternal(pid, uid, resolvedUserId, packageName, cb, tag,
-                        sessionInfo).getSessionBinder();
+                        sessionInfo, policies).getSessionBinder();
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -1148,7 +1088,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                             + " but actually=" + sessionToken.getUid());
                 }
                 MediaSession2Record record = new MediaSession2Record(
-                        sessionToken, MediaSessionService.this, mHandler.getLooper());
+                        sessionToken, MediaSessionService.this, mHandler.getLooper(), 0);
                 synchronized (mLock) {
                     FullUserRecord user = getFullUserRecordLocked(record.getUserId());
                     user.mPriorityStack.addSession(record);
@@ -1308,12 +1248,11 @@ public class MediaSessionService extends SystemService implements Monitor {
          * ACTION_MEDIA_BUTTON intent to the rest of the system.
          *
          * @param packageName The caller package
-         * @param asSystemService {@code true} if the event sent to the session as if it was come
-         *          from the system service instead of the app process. This helps sessions to
-         *          distinguish between the key injection by the app and key events from the
-         *          hardware devices. Should be used only when the volume key events aren't handled
-         *          by foreground activity. {@code false} otherwise to tell session about the real
-         *          caller.
+         * @param asSystemService {@code true} if the event sent to the session came from the
+         *          service instead of the app process. This helps sessions to distinguish between
+         *          the key injection by the app and key events from the hardware devices. Should be
+         *          used only when the hardware key events aren't handled by foreground activity.
+         *          {@code false} otherwise to tell session about the real caller.
          * @param keyEvent a non-null KeyEvent whose key code is one of the
          *            supported media buttons
          * @param needWakeLock true if a PARTIAL_WAKE_LOCK needs to be held
@@ -2115,14 +2054,27 @@ public class MediaSessionService extends SystemService implements Monitor {
                 // TODO(jaewan): Implement
                 return;
             }
-            MediaSessionRecord session =
-                    (MediaSessionRecord) mCurrentFullUserRecord.getMediaButtonSessionLocked();
+            MediaSessionRecord session = null;
+
+            // Retrieve custom session for key event if it exists.
+            if (mCustomMediaKeyDispatcher != null) {
+                MediaSession.Token token =
+                        mCustomMediaKeyDispatcher.getSessionForKeyEvent(keyEvent, asSystemService);
+                if (token != null) {
+                    session = getMediaSessionRecordLocked(token);
+                }
+            }
+
+            if (session == null) {
+                session = (MediaSessionRecord) mCurrentFullUserRecord.getMediaButtonSessionLocked();
+            }
+
             if (session != null) {
                 if (DEBUG_KEY_EVENT) {
                     Log.d(TAG, "Sending " + keyEvent + " to " + session);
                 }
                 if (needWakeLock) {
-                    mKeyEventReceiver.aquireWakeLockLocked();
+                    mKeyEventReceiver.acquireWakeLockLocked();
                 }
                 // If we don't need a wakelock use -1 as the id so we won't release it later.
                 session.sendMediaButton(packageName, pid, uid, asSystemService, keyEvent,
@@ -2137,79 +2089,31 @@ public class MediaSessionService extends SystemService implements Monitor {
                 } catch (RemoteException e) {
                     Log.w(TAG, "Failed to send callback", e);
                 }
-            } else if (mCurrentFullUserRecord.mLastMediaButtonReceiver != null
-                    || mCurrentFullUserRecord.mRestoredMediaButtonReceiver != null) {
+            } else if (mCurrentFullUserRecord.mLastMediaButtonReceiverHolder != null) {
                 if (needWakeLock) {
-                    mKeyEventReceiver.aquireWakeLockLocked();
+                    mKeyEventReceiver.acquireWakeLockLocked();
                 }
-                Intent mediaButtonIntent = new Intent(Intent.ACTION_MEDIA_BUTTON);
-                mediaButtonIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
-                mediaButtonIntent.putExtra(Intent.EXTRA_KEY_EVENT, keyEvent);
-                // TODO: Find a way to also send PID/UID in secure way.
-                String callerPackageName =
+                String callingPackageName =
                         (asSystemService) ? mContext.getPackageName() : packageName;
-                mediaButtonIntent.putExtra(Intent.EXTRA_PACKAGE_NAME, callerPackageName);
-                try {
-                    if (mCurrentFullUserRecord.mLastMediaButtonReceiver != null) {
-                        PendingIntent receiver = mCurrentFullUserRecord.mLastMediaButtonReceiver;
-                        if (DEBUG_KEY_EVENT) {
-                            Log.d(TAG, "Sending " + keyEvent
-                                    + " to the last known PendingIntent " + receiver);
-                        }
-                        receiver.send(mContext,
-                                needWakeLock ? mKeyEventReceiver.mLastTimeoutId : -1,
-                                mediaButtonIntent, mKeyEventReceiver, mHandler);
-                        ComponentName componentName = mCurrentFullUserRecord
-                                .mLastMediaButtonReceiver.getIntent().getComponent();
-                        if (componentName != null) {
-                            for (FullUserRecord.OnMediaKeyEventDispatchedListenerRecord cr
-                                    : mCurrentFullUserRecord
-                                    .mOnMediaKeyEventDispatchedListeners.values()) {
-                                cr.callback.onMediaKeyEventDispatched(keyEvent,
-                                        componentName.getPackageName(), null);
-                            }
-                        }
-                    } else {
-                        ComponentName receiver =
-                                mCurrentFullUserRecord.mRestoredMediaButtonReceiver;
-                        int componentType = mCurrentFullUserRecord
-                                .mRestoredMediaButtonReceiverComponentType;
-                        UserHandle userHandle = UserHandle.of(mCurrentFullUserRecord
-                                .mRestoredMediaButtonReceiverUserId);
-                        if (DEBUG_KEY_EVENT) {
-                            Log.d(TAG, "Sending " + keyEvent + " to the restored intent "
-                                    + receiver + ", type=" + componentType);
-                        }
-                        mediaButtonIntent.setComponent(receiver);
+
+                MediaButtonReceiverHolder mediaButtonReceiverHolder =
+                        mCurrentFullUserRecord.mLastMediaButtonReceiverHolder;
+
+                boolean sent = mediaButtonReceiverHolder.send(
+                        mContext, keyEvent, callingPackageName,
+                        needWakeLock ? mKeyEventReceiver.mLastTimeoutId : -1, mKeyEventReceiver,
+                        mHandler);
+                if (sent) {
+                    String pkgName = mediaButtonReceiverHolder.getPackageName();
+                    for (FullUserRecord.OnMediaKeyEventDispatchedListenerRecord cr
+                            : mCurrentFullUserRecord
+                            .mOnMediaKeyEventDispatchedListeners.values()) {
                         try {
-                            switch (componentType) {
-                                case FullUserRecord.COMPONENT_TYPE_ACTIVITY:
-                                    mContext.startActivityAsUser(mediaButtonIntent, userHandle);
-                                    break;
-                                case FullUserRecord.COMPONENT_TYPE_SERVICE:
-                                    mContext.startForegroundServiceAsUser(mediaButtonIntent,
-                                            userHandle);
-                                    break;
-                                default:
-                                    // Legacy behavior for other cases.
-                                    mContext.sendBroadcastAsUser(mediaButtonIntent, userHandle);
-                            }
-                        } catch (Exception e) {
-                            Log.w(TAG, "Error sending media button to the restored intent "
-                                    + receiver + ", type=" + componentType, e);
-                        }
-                        for (FullUserRecord.OnMediaKeyEventDispatchedListenerRecord cr
-                                : mCurrentFullUserRecord
-                                .mOnMediaKeyEventDispatchedListeners.values()) {
-                            cr.callback.onMediaKeyEventDispatched(keyEvent,
-                                    receiver.getPackageName(), null);
+                            cr.callback.onMediaKeyEventDispatched(keyEvent, pkgName, null);
+                        } catch (RemoteException e) {
+                            Log.w(TAG, "Failed notify key event dispatch, uid=" + cr.uid, e);
                         }
                     }
-                } catch (CanceledException e) {
-                    Log.i(TAG, "Error sending key event to media button receiver "
-                            + mCurrentFullUserRecord.mLastMediaButtonReceiver, e);
-                } catch (RemoteException e) {
-                    Log.w(TAG, "Failed to send callback", e);
                 }
             }
         }
@@ -2349,7 +2253,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                 }
             }
 
-            public void aquireWakeLockLocked() {
+            public void acquireWakeLockLocked() {
                 if (mRefCount == 0) {
                     mMediaEventWakeLock.acquire();
                 }

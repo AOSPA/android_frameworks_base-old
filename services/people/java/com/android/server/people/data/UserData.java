@@ -19,10 +19,13 @@ package com.android.server.people.data;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
+import android.os.Environment;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 
+import java.io.File;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
 
 /** The data associated with a user profile. */
@@ -30,12 +33,28 @@ class UserData {
 
     private final @UserIdInt int mUserId;
 
+    private final File mPerUserPeopleDataDir;
+
+    private final ScheduledExecutorService mScheduledExecutorService;
+
+    private final ContactsQueryHelper mHelper;
+
     private boolean mIsUnlocked;
 
     private Map<String, PackageData> mPackageDataMap = new ArrayMap<>();
 
-    UserData(@UserIdInt int userId) {
+    @Nullable
+    private String mDefaultDialer;
+
+    @Nullable
+    private String mDefaultSmsApp;
+
+    UserData(@UserIdInt int userId, @NonNull ScheduledExecutorService scheduledExecutorService,
+            ContactsQueryHelper helper) {
         mUserId = userId;
+        mPerUserPeopleDataDir = new File(Environment.getDataSystemCeDirectory(mUserId), "people");
+        mScheduledExecutorService = scheduledExecutorService;
+        mHelper = helper;
     }
 
     @UserIdInt int getUserId() {
@@ -50,6 +69,13 @@ class UserData {
 
     void setUserUnlocked() {
         mIsUnlocked = true;
+
+        // Ensures per user root directory for people data is present, and attempt to load
+        // data from disk.
+        mPerUserPeopleDataDir.mkdirs();
+        for (PackageData packageData : mPackageDataMap.values()) {
+            packageData.loadFromDisk();
+        }
     }
 
     void setUserStopped() {
@@ -66,8 +92,7 @@ class UserData {
      */
     @NonNull
     PackageData getOrCreatePackageData(String packageName) {
-        return mPackageDataMap.computeIfAbsent(
-                packageName, key -> new PackageData(packageName, mUserId));
+        return mPackageDataMap.computeIfAbsent(packageName, key -> createPackageData(packageName));
     }
 
     /**
@@ -80,24 +105,33 @@ class UserData {
     }
 
     void setDefaultDialer(@Nullable String packageName) {
-        for (PackageData packageData : mPackageDataMap.values()) {
-            if (packageData.isDefaultDialer()) {
-                packageData.setIsDefaultDialer(false);
-            }
-            if (TextUtils.equals(packageName, packageData.getPackageName())) {
-                packageData.setIsDefaultDialer(true);
-            }
-        }
+        mDefaultDialer = packageName;
+    }
+
+    @Nullable
+    PackageData getDefaultDialer() {
+        return mDefaultDialer != null ? getPackageData(mDefaultDialer) : null;
     }
 
     void setDefaultSmsApp(@Nullable String packageName) {
-        for (PackageData packageData : mPackageDataMap.values()) {
-            if (packageData.isDefaultSmsApp()) {
-                packageData.setIsDefaultSmsApp(false);
-            }
-            if (TextUtils.equals(packageName, packageData.getPackageName())) {
-                packageData.setIsDefaultSmsApp(true);
-            }
-        }
+        mDefaultSmsApp = packageName;
+    }
+
+    @Nullable
+    PackageData getDefaultSmsApp() {
+        return mDefaultSmsApp != null ? getPackageData(mDefaultSmsApp) : null;
+    }
+
+    private PackageData createPackageData(String packageName) {
+        return new PackageData(packageName, mUserId, this::isDefaultDialer, this::isDefaultSmsApp,
+                mScheduledExecutorService, mPerUserPeopleDataDir, mHelper);
+    }
+
+    private boolean isDefaultDialer(String packageName) {
+        return TextUtils.equals(mDefaultDialer, packageName);
+    }
+
+    private boolean isDefaultSmsApp(String packageName) {
+        return TextUtils.equals(mDefaultSmsApp, packageName);
     }
 }

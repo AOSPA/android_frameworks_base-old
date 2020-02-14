@@ -38,7 +38,7 @@ import android.app.PackageInstallObserver;
 import android.app.admin.DevicePolicyManager;
 import android.app.usage.StorageStatsManager;
 import android.compat.annotation.ChangeId;
-import android.compat.annotation.Disabled;
+import android.compat.annotation.EnabledAfter;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
@@ -60,6 +60,7 @@ import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.os.incremental.IncrementalManager;
 import android.os.storage.StorageManager;
 import android.os.storage.VolumeInfo;
 import android.util.AndroidException;
@@ -596,6 +597,7 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
+    @TestApi
     public static final int MODULE_APEX_NAME = 0x00000001;
 
     /** @hide */
@@ -1505,6 +1507,15 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int INSTALL_FAILED_WRONG_INSTALLED_VERSION = -121;
+
+    /**
+     * Installation return code: this is passed in the {@link PackageInstaller#EXTRA_LEGACY_STATUS}
+     * if the new package failed because it contains a request to use a process that was not
+     * explicitly defined as part of its &lt;processes&gt; tag.
+     *
+     * @hide
+     */
+    public static final int INSTALL_FAILED_PROCESS_NOT_DEFINED = -122;
 
     /** @hide */
     @IntDef(flag = true, prefix = { "DELETE_" }, value = {
@@ -2988,6 +2999,18 @@ public abstract class PackageManager {
     public static final String FEATURE_REBOOT_ESCROW = "android.hardware.reboot_escrow";
 
     /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device has
+     * the requisite kernel support to support incremental delivery aka Incremental FileSystem.
+     *
+     * @see IncrementalManager#isEnabled
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_INCREMENTAL_DELIVERY =
+            "android.software.incremental_delivery";
+
+    /**
      * Extra field name for the URI to a verification file. Passed to a package
      * verifier.
      *
@@ -3345,6 +3368,23 @@ public abstract class PackageManager {
     public static final int FLAG_PERMISSION_ONE_TIME = 1 << 16;
 
     /**
+     * Permission flag: The permission is whitelisted to not be auto-revoked when app goes unused.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int FLAG_PERMISSION_AUTO_REVOKE_IF_UNUSED = 1 << 17;
+
+    /**
+     * Permission flag: Whether {@link #FLAG_PERMISSION_AUTO_REVOKE_IF_UNUSED} state was set by
+     * user.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int FLAG_PERMISSION_AUTO_REVOKE_USER_SET = 1 << 18;
+
+    /**
      * Permission flags: Reserved for use by the permission controller.
      *
      * @hide
@@ -3395,7 +3435,9 @@ public abstract class PackageManager {
             | FLAG_PERMISSION_APPLY_RESTRICTION
             | FLAG_PERMISSION_GRANTED_BY_ROLE
             | FLAG_PERMISSION_REVOKED_COMPAT
-            | FLAG_PERMISSION_ONE_TIME;
+            | FLAG_PERMISSION_ONE_TIME
+            | FLAG_PERMISSION_AUTO_REVOKE_IF_UNUSED
+            | FLAG_PERMISSION_AUTO_REVOKE_USER_SET;
 
     /**
      * Injected activity in app that forwards user to setting activity of that app.
@@ -3539,7 +3581,7 @@ public abstract class PackageManager {
      * @hide
      */
     @ChangeId
-    @Disabled
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.Q)
     public static final long FILTER_APPLICATION_QUERY = 135549675L;
 
     /** {@hide} */
@@ -4218,7 +4260,9 @@ public abstract class PackageManager {
             FLAG_PERMISSION_APPLY_RESTRICTION,
             FLAG_PERMISSION_GRANTED_BY_ROLE,
             FLAG_PERMISSION_REVOKED_COMPAT,
-            FLAG_PERMISSION_ONE_TIME
+            FLAG_PERMISSION_ONE_TIME,
+            FLAG_PERMISSION_AUTO_REVOKE_IF_UNUSED,
+            FLAG_PERMISSION_AUTO_REVOKE_USER_SET
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface PermissionFlags {}
@@ -7237,6 +7281,7 @@ public abstract class PackageManager {
             case INSTALL_FAILED_MISSING_SPLIT: return "INSTALL_FAILED_MISSING_SPLIT";
             case INSTALL_FAILED_BAD_SIGNATURE: return "INSTALL_FAILED_BAD_SIGNATURE";
             case INSTALL_FAILED_WRONG_INSTALLED_VERSION: return "INSTALL_FAILED_WRONG_INSTALLED_VERSION";
+            case INSTALL_FAILED_PROCESS_NOT_DEFINED: return "INSTALL_FAILED_PROCESS_NOT_DEFINED";
             default: return Integer.toString(status);
         }
     }
@@ -7354,6 +7399,8 @@ public abstract class PackageManager {
             case FLAG_PERMISSION_GRANTED_BY_ROLE: return "GRANTED_BY_ROLE";
             case FLAG_PERMISSION_REVOKED_COMPAT: return "REVOKED_COMPAT";
             case FLAG_PERMISSION_ONE_TIME: return "ONE_TIME";
+            case FLAG_PERMISSION_AUTO_REVOKE_IF_UNUSED: return "AUTO_REVOKE_IF_UNUSED";
+            case FLAG_PERMISSION_AUTO_REVOKE_USER_SET: return "AUTO_REVOKE_USER_SET";
             default: return Integer.toString(flag);
         }
     }
@@ -7592,14 +7639,15 @@ public abstract class PackageManager {
     }
 
     /**
-     * @return the system defined text classifier package name, or null if there's none.
+     * @return the default text classifier package name, or null if there's none.
      *
      * @hide
      */
     @Nullable
-    public String getSystemTextClassifierPackageName() {
+    @TestApi
+    public String getDefaultTextClassifierPackageName() {
         throw new UnsupportedOperationException(
-                "getSystemTextClassifierPackageName not implemented in subclass");
+                "getDefaultTextClassifierPackageName not implemented in subclass");
     }
 
     /**
@@ -7607,10 +7655,11 @@ public abstract class PackageManager {
      *
      * @hide
      */
-    @NonNull
-    public String[] getSystemTextClassifierPackages() {
+    @Nullable
+    @TestApi
+    public String getSystemTextClassifierPackageName() {
         throw new UnsupportedOperationException(
-                "getSystemTextClassifierPackages not implemented in subclass");
+                "getSystemTextClassifierPackageName not implemented in subclass");
     }
 
     /**

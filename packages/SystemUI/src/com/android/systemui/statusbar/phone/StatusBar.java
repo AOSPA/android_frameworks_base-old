@@ -1353,6 +1353,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                 .statusBarWindowView(mNotificationShadeWindowView).build();
         mNotificationShadeWindowViewController = statusBarComponent
                 .getNotificationShadeWindowViewController();
+        mNotificationShadeWindowController.setNotificationShadeView(mNotificationShadeWindowView);
         mNotificationShadeWindowViewController.setupExpandedStatusBar();
         mStatusBarWindowController = statusBarComponent.getStatusBarWindowController();
         mPhoneStatusBarWindow = mSuperStatusBarViewFactory.getStatusBarWindowView();
@@ -2466,10 +2467,6 @@ public class StatusBar extends SystemUI implements DemoMode,
             pw.println("  mHeadsUpManager: null");
         }
 
-        if (mBubbleController != null) {
-            mBubbleController.dump(fd, pw, args);
-        }
-
         if (mLightBarController != null) {
             mLightBarController.dump(fd, pw, args);
         }
@@ -2571,7 +2568,7 @@ public class StatusBar extends SystemUI implements DemoMode,
             }
             try {
                 result = ActivityTaskManager.getService().startActivityAsUser(
-                        null, mContext.getBasePackageName(),
+                        null, mContext.getBasePackageName(), mContext.getFeatureId(),
                         intent,
                         intent.resolveTypeIfNeeded(mContext.getContentResolver()),
                         null, null, 0, Intent.FLAG_ACTIVITY_NEW_TASK, null,

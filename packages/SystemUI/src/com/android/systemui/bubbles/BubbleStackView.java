@@ -115,7 +115,6 @@ public class BubbleStackView extends FrameLayout {
     /** How long to wait, in milliseconds, before hiding the flyout. */
     @VisibleForTesting
     static final int FLYOUT_HIDE_AFTER = 5000;
-    private BubbleController.BubbleScreenshotListener mBubbleScreenshotListener;
 
     /**
      * Interface to synchronize {@link View} state and the screen.
@@ -169,7 +168,6 @@ public class BubbleStackView extends FrameLayout {
     private ExpandedAnimationController mExpandedAnimationController;
 
     private FrameLayout mExpandedViewContainer;
-    @Nullable private BubbleMenuView mBubbleMenuView;
 
     private BubbleFlyoutView mFlyout;
     /** Runnable that fades out the flyout and then sets it to GONE. */
@@ -516,9 +514,6 @@ public class BubbleStackView extends FrameLayout {
             mDesaturateAndDarkenPaint.setColorFilter(new ColorMatrixColorFilter(animatedMatrix));
             mDesaturateAndDarkenTargetView.setLayerPaint(mDesaturateAndDarkenPaint);
         });
-
-        mInflater.inflate(R.layout.bubble_menu_view, this);
-        mBubbleMenuView = findViewById(R.id.bubble_menu_container);
     }
 
     private void setUpOverflow() {
@@ -533,10 +528,12 @@ public class BubbleStackView extends FrameLayout {
         mBubbleContainer.addView(mOverflowBtn, 0,
                 new FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT));
 
-        mOverflowBtn.setOnClickListener(v -> {
-            setSelectedBubble(null);
-        });
+        setOverflowBtnTheme();
+        mOverflowBtn.setVisibility(GONE);
+    }
 
+    // TODO(b/149146374) Propagate theme change to bubbles in overflow.
+    private void setOverflowBtnTheme() {
         TypedArray ta = mContext.obtainStyledAttributes(
                 new int[]{android.R.attr.colorBackgroundFloating});
         int bgColor = ta.getColor(0, Color.WHITE /* default */);
@@ -546,8 +543,6 @@ public class BubbleStackView extends FrameLayout {
         ColorDrawable bg = new ColorDrawable(bgColor);
         AdaptiveIconDrawable adaptiveIcon = new AdaptiveIconDrawable(bg, fg);
         mOverflowBtn.setImageDrawable(adaptiveIcon);
-
-        mOverflowBtn.setVisibility(GONE);
     }
 
     void showExpandedViewContents(int displayId) {
@@ -577,6 +572,9 @@ public class BubbleStackView extends FrameLayout {
      */
     public void onThemeChanged() {
         setUpFlyout();
+        if (BubbleExperimentConfig.allowBubbleOverflow(mContext)) {
+            setOverflowBtnTheme();
+        }
     }
 
     /** Respond to the phone being rotated by repositioning the stack and hiding any flyouts. */
@@ -742,13 +740,6 @@ public class BubbleStackView extends FrameLayout {
     }
 
     /**
-     * Sets the screenshot listener.
-     */
-    public void setBubbleScreenshotListener(BubbleController.BubbleScreenshotListener listener) {
-        mBubbleScreenshotListener = listener;
-    }
-
-    /**
      * Whether the stack of bubbles is expanded or not.
      */
     public boolean isExpanded() {
@@ -811,6 +802,7 @@ public class BubbleStackView extends FrameLayout {
         if (removedIndex >= 0) {
             mBubbleContainer.removeViewAt(removedIndex);
             bubble.cleanupExpandedState();
+            bubble.setInflated(false);
             logBubbleEvent(bubble, SysUiStatsLog.BUBBLE_UICHANGED__ACTION__DISMISSED);
         } else {
             Log.d(TAG, "was asked to remove Bubble, but didn't find the view! " + bubble);
@@ -854,6 +846,10 @@ public class BubbleStackView extends FrameLayout {
         }
 
         updateBubbleZOrdersAndDotPosition(false /* animate */);
+    }
+
+    void showOverflow() {
+        setSelectedBubble(null);
     }
 
     /**
@@ -942,14 +938,12 @@ public class BubbleStackView extends FrameLayout {
     public View getTargetView(MotionEvent event) {
         float x = event.getRawX();
         float y = event.getRawY();
-        if (mBubbleMenuView.isShowing()) {
-            if (isIntersecting(mBubbleMenuView.getMenuView(), x, y)) {
-                return mBubbleMenuView;
-            }
-            return null;
-        }
         if (mIsExpanded) {
             if (isIntersecting(mBubbleContainer, x, y)) {
+                if (BubbleExperimentConfig.allowBubbleOverflow(mContext)
+                        && isIntersecting(mOverflowBtn, x, y)) {
+                    return mOverflowBtn;
+                }
                 // Could be tapping or dragging a bubble while expanded
                 for (int i = 0; i < getBubbleCount(); i++) {
                     BadgedImageView view = (BadgedImageView) mBubbleContainer.getChildAt(i);
@@ -1164,7 +1158,6 @@ public class BubbleStackView extends FrameLayout {
             }
             return;
         }
-        hideBubbleMenu();
         mStackAnimationController.cancelStackPositionAnimations();
         mBubbleContainer.setActiveController(mStackAnimationController);
         hideFlyoutImmediate();
@@ -1566,10 +1559,6 @@ public class BubbleStackView extends FrameLayout {
     @Override
     public void getBoundsOnScreen(Rect outRect) {
         // If the bubble menu is open, the entire screen should capture touch events.
-        if (mBubbleMenuView.isShowing()) {
-            outRect.set(0, 0, getWidth(), getHeight());
-            return;
-        }
         if (!mIsExpanded) {
             if (getBubbleCount() > 0) {
                 mBubbleContainer.getChildAt(0).getBoundsOnScreen(outRect);
@@ -1803,51 +1792,5 @@ public class BubbleStackView extends FrameLayout {
             }
         }
         return bubbles;
-    }
-
-    /**
-     * Show the bubble menu, positioned relative to the stack.
-     */
-    public void showBubbleMenu() {
-        PointF currentPos = mStackAnimationController.getStackPosition();
-        mBubbleMenuView.setVisibility(View.INVISIBLE);
-        post(() -> {
-            float yPos = currentPos.y;
-            float xPos = currentPos.x;
-            if (mStackAnimationController.isStackOnLeftSide()) {
-                xPos += mBubbleSize;
-            } else {
-                xPos -= mBubbleMenuView.getMenuView().getWidth();
-            }
-
-            mBubbleMenuView.show(xPos, yPos);
-        });
-    }
-
-    /**
-     * Hide the bubble menu.
-     */
-    public void hideBubbleMenu() {
-        mBubbleMenuView.hide();
-    }
-
-    /**
-     * Determines whether the bubble menu is currently showing.
-     */
-    public boolean isShowingBubbleMenu() {
-        return mBubbleMenuView.isShowing();
-    }
-
-    /**
-     * Take a screenshot and send it to the specified bubble.
-     */
-    public void sendScreenshotToBubble(Bubble bubble) {
-        hideBubbleMenu();
-        // delay allows the bubble menu to disappear before the screenshot
-        // done here because we already have a Handler to delay with.
-        // TODO: Hide bubble + menu UI from screenshots entirely instead of just delaying.
-        postDelayed(() -> {
-            mBubbleScreenshotListener.onBubbleScreenshot(bubble);
-        }, BubbleMenuView.SCREENSHOT_DELAY);
     }
 }

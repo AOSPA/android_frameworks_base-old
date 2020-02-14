@@ -286,6 +286,7 @@
   <java-symbol type="bool" name="config_duplicate_port_omadm_wappush" />
   <java-symbol type="bool" name="config_disableTransitionAnimation" />
   <java-symbol type="bool" name="config_enableAutoPowerModes" />
+  <java-symbol type="bool" name="config_useWebViewPacProcessor" />
   <java-symbol type="integer" name="config_autoPowerModeThresholdAngle" />
   <java-symbol type="integer" name="config_autoPowerModeAnyMotionSensor" />
   <java-symbol type="bool" name="config_autoPowerModePreferWristTilt" />
@@ -1214,6 +1215,8 @@
   <java-symbol type="string" name="device_ownership_relinquished" />
   <java-symbol type="string" name="network_logging_notification_title" />
   <java-symbol type="string" name="network_logging_notification_text" />
+  <java-symbol type="string" name="location_changed_notification_title" />
+  <java-symbol type="string" name="location_changed_notification_text" />
   <java-symbol type="string" name="personal_apps_suspended_notification_title" />
   <java-symbol type="string" name="personal_apps_suspended_notification_text" />
   <java-symbol type="string" name="factory_reset_warning" />
@@ -1574,6 +1577,7 @@
   <java-symbol type="layout" name="notification_material_media_seekbar" />
   <java-symbol type="layout" name="resolver_list_per_profile" />
   <java-symbol type="layout" name="chooser_list_per_profile" />
+  <java-symbol type="layout" name="resolver_empty_states" />
 
   <java-symbol type="anim" name="slide_in_child_bottom" />
   <java-symbol type="anim" name="slide_in_right" />
@@ -1994,6 +1998,14 @@
   <java-symbol type="integer" name="config_screenBrightnessForVrSettingDefault" />
   <java-symbol type="integer" name="config_screenBrightnessForVrSettingMaximum" />
   <java-symbol type="integer" name="config_screenBrightnessForVrSettingMinimum" />
+  <java-symbol type="dimen" name="config_screenBrightnessSettingForVrMinimumFloat" />
+  <java-symbol type="dimen" name="config_screenBrightnessSettingForVrMaximumFloat" />
+  <java-symbol type="dimen" name="config_screenBrightnessSettingForVrDefaultFloat" />
+  <java-symbol type="dimen" name="config_screenBrightnessSettingMinimumFloat" />
+  <java-symbol type="dimen" name="config_screenBrightnessSettingMaximumFloat" />
+  <java-symbol type="dimen" name="config_screenBrightnessSettingDefaultFloat" />
+  <java-symbol type="dimen" name="config_screenBrightnessDozeFloat" />
+  <java-symbol type="dimen" name="config_screenBrightnessDimFloat" />
   <java-symbol type="integer" name="config_screenBrightnessDark" />
   <java-symbol type="integer" name="config_screenBrightnessDim" />
   <java-symbol type="integer" name="config_screenBrightnessDoze" />
@@ -2160,6 +2172,7 @@
   <java-symbol type="string" name="config_customAdbPublicKeyConfirmationSecondaryUserComponent" />
   <java-symbol type="string" name="config_customVpnConfirmDialogComponent" />
   <java-symbol type="string" name="config_customVpnAlwaysOnDisconnectedDialogComponent" />
+  <java-symbol type="string" name="config_platformVpnConfirmDialogComponent" />
   <java-symbol type="string" name="config_carrierAppInstallDialogComponent" />
   <java-symbol type="string" name="config_defaultNetworkScorerPackageName" />
   <java-symbol type="string" name="config_persistentDataPackageName" />
@@ -2463,6 +2476,7 @@
   <java-symbol type="string" name="fingerprint_authenticated" />
   <java-symbol type="string" name="fingerprint_error_no_fingerprints" />
   <java-symbol type="string" name="fingerprint_error_hw_not_present" />
+  <java-symbol type="string" name="fingerprint_error_security_update_required" />
 
   <!-- Fingerprint config -->
   <java-symbol type="integer" name="config_fingerprintMaxTemplatesPerUser"/>
@@ -2507,6 +2521,7 @@
   <java-symbol type="string" name="face_name_template" />
   <java-symbol type="string" name="face_authenticated_no_confirmation_required" />
   <java-symbol type="string" name="face_authenticated_confirmation_required" />
+  <java-symbol type="string" name="face_error_security_update_required" />
 
   <java-symbol type="array" name="config_biometric_sensors" />
 
@@ -3045,12 +3060,16 @@
   <java-symbol type="id" name="notification_action_list_margin_target" />
   <java-symbol type="dimen" name="notification_action_disabled_alpha" />
 
+  <!-- Override Wake Key Behavior When Screen is Off -->
+  <java-symbol type="bool" name="config_wakeOnDpadKeyPress" />
+  <java-symbol type="bool" name="config_wakeOnAssistKeyPress" />
+
   <!-- Pinner Service -->
   <java-symbol type="array" name="config_defaultPinnerServiceFiles" />
   <java-symbol type="bool" name="config_pinnerCameraApp" />
   <java-symbol type="bool" name="config_pinnerHomeApp" />
   <java-symbol type="bool" name="config_pinnerAssistantApp" />
-  <java-symbol type="array" name="config_apexBootImagePinnerServiceFiles" />
+  <java-symbol type="array" name="config_jitzygoteBootImagePinnerServiceFiles" />
 
   <java-symbol type="string" name="config_doubleTouchGestureEnableFile" />
 
@@ -3060,6 +3079,9 @@
   <java-symbol type="string" name="app_suspended_more_details" />
   <java-symbol type="string" name="app_suspended_unsuspend_message" />
   <java-symbol type="string" name="app_suspended_default_message" />
+
+  <java-symbol type="string" name="app_blocked_title" />
+  <java-symbol type="string" name="app_blocked_message" />
 
   <!-- Used internally for assistant to launch activity transitions -->
   <java-symbol type="id" name="cross_task_transition" />
@@ -3244,7 +3266,6 @@
   <java-symbol type="drawable" name="ic_accessibility_magnification" />
 
   <java-symbol type="drawable" name="ic_delete_item" />
-  <java-symbol type="drawable" name="ic_open_in_new" />
 
   <!-- com.android.internal.widget.RecyclerView -->
   <java-symbol type="id" name="item_touch_helper_previous_elevation"/>
@@ -3404,7 +3425,6 @@
   <java-symbol type="string" name="notification_channel_do_not_disturb" />
   <java-symbol type="string" name="config_defaultAutofillService" />
   <java-symbol type="string" name="config_defaultTextClassifierPackage" />
-  <java-symbol type="array" name="config_defaultTextClassifierPackages" />
   <java-symbol type="string" name="config_defaultWellbeingPackage" />
   <java-symbol type="string" name="config_telephonyPackages" />
   <java-symbol type="string" name="config_defaultContentCaptureService" />
@@ -3414,6 +3434,8 @@
   <java-symbol type="string" name="config_defaultAttentionService" />
   <java-symbol type="string" name="config_defaultSystemCaptionsService" />
   <java-symbol type="string" name="config_defaultSystemCaptionsManagerService" />
+  <java-symbol type="string" name="config_retailDemoPackage" />
+  <java-symbol type="string" name="config_retailDemoPackageSignature" />
 
   <java-symbol type="string" name="notification_channel_foreground_service" />
   <java-symbol type="string" name="foreground_service_app_in_background" />
@@ -3881,9 +3903,34 @@
   <java-symbol type="string" name="resolver_personal_tab" />
   <java-symbol type="string" name="resolver_work_tab" />
   <java-symbol type="id" name="stub" />
+  <java-symbol type="id" name="resolver_empty_state" />
+  <java-symbol type="id" name="resolver_empty_state_icon" />
+  <java-symbol type="id" name="resolver_empty_state_title" />
+  <java-symbol type="id" name="resolver_empty_state_subtitle" />
+  <java-symbol type="id" name="resolver_empty_state_button" />
+  <java-symbol type="string" name="resolver_cant_share_with_work_apps" />
+  <java-symbol type="string" name="resolver_cant_share_with_personal_apps" />
+  <java-symbol type="string" name="resolver_cant_share_cross_profile_explanation" />
+  <java-symbol type="string" name="resolver_turn_on_work_apps" />
+  <java-symbol type="string" name="resolver_turn_on_work_apps_explanation" />
+  <java-symbol type="string" name="resolver_no_apps_available" />
+  <java-symbol type="string" name="resolver_no_apps_available_explanation" />
+  <java-symbol type="string" name="resolver_no_apps_available_explanation" />
+  <java-symbol type="string" name="resolver_switch_on_work" />
+  <java-symbol type="drawable" name="ic_work_apps_off" />
+  <java-symbol type="drawable" name="ic_sharing_disabled" />
+  <java-symbol type="drawable" name="ic_no_apps" />
+  <java-symbol type="dimen" name="resolver_empty_state_height" />
+  <java-symbol type="dimen" name="resolver_empty_state_height_with_tabs" />
+  <java-symbol type="bool" name="sharesheet_show_content_preview" />
 
   <!-- Toast message for background started foreground service while-in-use permission restriction feature -->
   <java-symbol type="string" name="allow_while_in_use_permission_in_fgs" />
+
+  <java-symbol type="string" name="config_deviceSpecificDisplayAreaPolicyProvider" />
+
+  <!-- Whether to expand the lock screen user switcher by default -->
+  <java-symbol type="bool" name="config_expandLockScreenUserSwitcher" />
 
   <!-- For Pdn throttle feature -->
   <java-symbol type="bool" name="config_pdp_retry_for_29_33_55_enabled" />

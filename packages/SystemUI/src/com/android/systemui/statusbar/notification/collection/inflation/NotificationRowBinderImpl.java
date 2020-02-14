@@ -17,7 +17,6 @@
 package com.android.systemui.statusbar.notification.collection.inflation;
 
 import static com.android.systemui.Dependency.ALLOW_NOTIFICATION_LONG_PRESS_NAME;
-import static com.android.systemui.statusbar.NotificationRemoteInputManager.ENABLE_REMOTE_INPUT;
 import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_HEADS_UP;
 
 import android.annotation.Nullable;
@@ -40,16 +39,19 @@ import com.android.systemui.statusbar.notification.InflationException;
 import com.android.systemui.statusbar.notification.NotificationClicker;
 import com.android.systemui.statusbar.notification.NotificationInterruptionStateProvider;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
-import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.notification.row.ExpandableNotificationRowController;
+import com.android.systemui.statusbar.notification.row.NotifBindPipeline;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.notification.row.NotificationRowContentBinder;
+import com.android.systemui.statusbar.notification.row.RowContentBindParams;
+import com.android.systemui.statusbar.notification.row.RowContentBindStage;
 import com.android.systemui.statusbar.notification.row.RowInflaterTask;
+import com.android.systemui.statusbar.notification.row.dagger.ExpandableNotificationRowComponent;
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.StatusBar;
-import com.android.systemui.statusbar.policy.HeadsUpManager;
 
 import java.util.Objects;
 
@@ -64,36 +66,32 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
 
     private static final String TAG = "NotificationViewManager";
 
-    private final NotificationGroupManager mGroupManager;
-    private final NotificationGutsManager mGutsManager;
     private final NotificationInterruptionStateProvider mNotificationInterruptionStateProvider;
+
     private final Context mContext;
-    private final NotificationRowContentBinder mRowContentBinder;
+    private final NotifBindPipeline mNotifBindPipeline;
+    private final RowContentBindStage mRowContentBindStage;
     private final NotificationMessagingUtil mMessagingUtil;
-    private final ExpandableNotificationRow.ExpansionLogger mExpansionLogger =
-            this::logNotificationExpansion;
     private final NotificationRemoteInputManager mNotificationRemoteInputManager;
     private final NotificationLockscreenUserManager mNotificationLockscreenUserManager;
-    private final boolean mAllowLongPress;
-    private final KeyguardBypassController mKeyguardBypassController;
-    private final StatusBarStateController mStatusBarStateController;
 
     private NotificationPresenter mPresenter;
     private NotificationListContainer mListContainer;
-    private HeadsUpManager mHeadsUpManager;
     private NotificationRowContentBinder.InflationCallback mInflationCallback;
-    private ExpandableNotificationRow.OnAppOpsClickListener mOnAppOpsClickListener;
     private BindRowCallback mBindRowCallback;
     private NotificationClicker mNotificationClicker;
     private final Provider<RowInflaterTask> mRowInflaterTaskProvider;
-    private final NotificationLogger mNotificationLogger;
+    private final ExpandableNotificationRowComponent.Builder
+            mExpandableNotificationRowComponentBuilder;
 
     @Inject
     public NotificationRowBinderImpl(
             Context context,
+            NotificationMessagingUtil notificationMessagingUtil,
             NotificationRemoteInputManager notificationRemoteInputManager,
             NotificationLockscreenUserManager notificationLockscreenUserManager,
-            NotificationRowContentBinder rowContentBinder,
+            NotifBindPipeline notifBindPipeline,
+            RowContentBindStage rowContentBindStage,
             @Named(ALLOW_NOTIFICATION_LONG_PRESS_NAME) boolean allowLongPress,
             KeyguardBypassController keyguardBypassController,
             StatusBarStateController statusBarStateController,
@@ -101,20 +99,16 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
             NotificationGutsManager notificationGutsManager,
             NotificationInterruptionStateProvider notificationInterruptionStateProvider,
             Provider<RowInflaterTask> rowInflaterTaskProvider,
-            NotificationLogger logger) {
+            ExpandableNotificationRowComponent.Builder expandableNotificationRowComponentBuilder) {
         mContext = context;
-        mRowContentBinder = rowContentBinder;
-        mMessagingUtil = new NotificationMessagingUtil(context);
+        mNotifBindPipeline = notifBindPipeline;
+        mRowContentBindStage = rowContentBindStage;
+        mMessagingUtil = notificationMessagingUtil;
         mNotificationRemoteInputManager = notificationRemoteInputManager;
         mNotificationLockscreenUserManager = notificationLockscreenUserManager;
-        mAllowLongPress = allowLongPress;
-        mKeyguardBypassController = keyguardBypassController;
-        mStatusBarStateController = statusBarStateController;
-        mGroupManager = notificationGroupManager;
-        mGutsManager = notificationGutsManager;
         mNotificationInterruptionStateProvider = notificationInterruptionStateProvider;
         mRowInflaterTaskProvider = rowInflaterTaskProvider;
-        mNotificationLogger = logger;
+        mExpandableNotificationRowComponentBuilder = expandableNotificationRowComponentBuilder;
     }
 
     /**
@@ -122,13 +116,10 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
      */
     public void setUpWithPresenter(NotificationPresenter presenter,
             NotificationListContainer listContainer,
-            HeadsUpManager headsUpManager,
             BindRowCallback bindRowCallback) {
         mPresenter = presenter;
         mListContainer = listContainer;
-        mHeadsUpManager = headsUpManager;
         mBindRowCallback = bindRowCallback;
-        mOnAppOpsClickListener = mGutsManager::openGuts;
     }
 
     public void setInflationCallback(NotificationRowContentBinder.InflationCallback callback) {
@@ -143,9 +134,7 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
      * Inflates the views for the given entry (possibly asynchronously).
      */
     @Override
-    public void inflateViews(
-            NotificationEntry entry,
-            Runnable onDismissRunnable)
+    public void inflateViews(NotificationEntry entry, Runnable onDismissRunnable)
             throws InflationException {
         ViewGroup parent = mListContainer.getViewParentForNotification(entry);
         PackageManager pmUser = StatusBar.getPackageManagerForUser(mContext,
@@ -156,64 +145,39 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
             entry.updateIcons(mContext, sbn);
             entry.reset();
             updateNotification(entry, pmUser, sbn, entry.getRow());
-            entry.getRow().setOnDismissRunnable(onDismissRunnable);
+            entry.getRowController().setOnDismissRunnable(onDismissRunnable);
         } else {
             entry.createIcons(mContext, sbn);
             mRowInflaterTaskProvider.get().inflate(mContext, parent, entry,
                     row -> {
-                        bindRow(entry, pmUser, sbn, row, onDismissRunnable);
+                        // Setup the controller for the view.
+                        ExpandableNotificationRowComponent component =
+                                mExpandableNotificationRowComponentBuilder
+                                        .expandableNotificationRow(row)
+                                        .notificationEntry(entry)
+                                        .onDismissRunnable(onDismissRunnable)
+                                        .inflationCallback(mInflationCallback)
+                                        .rowContentBindStage(mRowContentBindStage)
+                                        .onExpandClickListener(mPresenter)
+                                        .build();
+                        ExpandableNotificationRowController rowController =
+                                component.getExpandableNotificationRowController();
+                        rowController.init();
+                        entry.setRowController(rowController);
+                        bindRow(entry, pmUser, sbn, row);
                         updateNotification(entry, pmUser, sbn, row);
                     });
         }
     }
 
+    //TODO: This method associates a row with an entry, but eventually needs to not do that
     private void bindRow(NotificationEntry entry, PackageManager pmUser,
-            StatusBarNotification sbn, ExpandableNotificationRow row,
-            Runnable onDismissRunnable) {
-        // Get the app name.
-        // Note that Notification.Builder#bindHeaderAppName has similar logic
-        // but since this field is used in the guts, it must be accurate.
-        // Therefore we will only show the application label, or, failing that, the
-        // package name. No substitutions.
-        final String pkg = sbn.getPackageName();
-        String appname = pkg;
-        try {
-            final ApplicationInfo info = pmUser.getApplicationInfo(pkg,
-                    PackageManager.MATCH_UNINSTALLED_PACKAGES
-                            | PackageManager.MATCH_DISABLED_COMPONENTS);
-            if (info != null) {
-                appname = String.valueOf(pmUser.getApplicationLabel(info));
-            }
-        } catch (PackageManager.NameNotFoundException e) {
-            // Do nothing
-        }
-
-        row.initialize(
-                appname,
-                sbn.getKey(),
-                mExpansionLogger,
-                mKeyguardBypassController,
-                mGroupManager,
-                mHeadsUpManager,
-                mRowContentBinder,
-                mPresenter);
-
-        // TODO: Either move these into ExpandableNotificationRow#initialize or out of row entirely
-        row.setStatusBarStateController(mStatusBarStateController);
-        row.setInflationCallback(mInflationCallback);
-        row.setAppOpsOnClickListener(mOnAppOpsClickListener);
-        if (mAllowLongPress) {
-            row.setLongPressListener(mGutsManager::openGuts);
-        }
+            StatusBarNotification sbn, ExpandableNotificationRow row) {
         mListContainer.bindRow(row);
         mNotificationRemoteInputManager.bindRow(row);
-
-        row.setOnDismissRunnable(onDismissRunnable);
-        row.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
-        if (ENABLE_REMOTE_INPUT) {
-            row.setDescendantFocusability(ViewGroup.FOCUS_BEFORE_DESCENDANTS);
-        }
-
+        entry.setRow(row);
+        row.setEntry(entry);
+        mNotifBindPipeline.manageRow(entry, row);
         mBindRowCallback.onBindRow(entry, pmUser, sbn, row);
     }
 
@@ -247,13 +211,11 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
         }
     }
 
-    //TODO: This method associates a row with an entry, but eventually needs to not do that
     private void updateNotification(
             NotificationEntry entry,
             PackageManager pmUser,
             StatusBarNotification sbn,
             ExpandableNotificationRow row) {
-        row.setIsLowPriority(entry.isAmbient());
 
         // Extract target SDK version.
         try {
@@ -268,29 +230,34 @@ public class NotificationRowBinderImpl implements NotificationRowBinder {
         // TODO: should updates to the entry be happening somewhere else?
         entry.setIconTag(R.id.icon_is_pre_L, entry.targetSdk < Build.VERSION_CODES.LOLLIPOP);
 
-        entry.setRow(row);
         row.setOnActivatedListener(mPresenter);
 
-        boolean useIncreasedCollapsedHeight =
+        final boolean useIncreasedCollapsedHeight =
                 mMessagingUtil.isImportantMessaging(sbn, entry.getImportance());
-        boolean useIncreasedHeadsUp = useIncreasedCollapsedHeight
+        final boolean useIncreasedHeadsUp = useIncreasedCollapsedHeight
                 && !mPresenter.isPresenterFullyCollapsed();
-        row.setUseIncreasedCollapsedHeight(useIncreasedCollapsedHeight);
-        row.setUseIncreasedHeadsUpHeight(useIncreasedHeadsUp);
-        row.setEntry(entry);
+        final boolean isLowPriority = entry.isAmbient();
+
+        RowContentBindParams params = mRowContentBindStage.getStageParams(entry);
+        params.setUseIncreasedCollapsedHeight(useIncreasedCollapsedHeight);
+        params.setUseIncreasedHeadsUpHeight(useIncreasedHeadsUp);
+        params.setUseLowPriority(entry.isAmbient());
 
         if (mNotificationInterruptionStateProvider.shouldHeadsUp(entry)) {
-            row.setInflationFlags(FLAG_CONTENT_VIEW_HEADS_UP);
+            params.requireContentViews(FLAG_CONTENT_VIEW_HEADS_UP);
         }
+        //TODO: Replace this API with RowContentBindParams directly
         row.setNeedsRedaction(mNotificationLockscreenUserManager.needsRedaction(entry));
-        row.inflateViews();
+        params.rebindAllContentViews();
+        mRowContentBindStage.requestRebind(entry, en -> {
+            row.setUsesIncreasedCollapsedHeight(useIncreasedCollapsedHeight);
+            row.setUsesIncreasedHeadsUpHeight(useIncreasedHeadsUp);
+            row.setIsLowPriority(isLowPriority);
+            mInflationCallback.onAsyncInflationFinished(en);
+        });
 
         // bind the click event to the content area
         Objects.requireNonNull(mNotificationClicker).register(row, sbn);
-    }
-
-    private void logNotificationExpansion(String key, boolean userAction, boolean expanded) {
-        mNotificationLogger.onExpansionChanged(key, userAction, expanded);
     }
 
     /** Callback for when a row is bound to an entry. */

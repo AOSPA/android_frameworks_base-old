@@ -301,6 +301,9 @@
         <!-- Additional flag from base permission type: this permission can be automatically
             granted to the system companion device manager service -->
         <flag name="companion" value="0x800000" />
+        <!-- Additional flag from base permission type: this permission will be granted to the
+             retail demo app, as defined by the OEM. -->
+        <flag name="retailDemo" value="0x1000000" />
     </attr>
 
     <!-- Flags indicating more context for a permission group. -->
@@ -2053,6 +2056,9 @@
         <attr name="name" />
     </declare-styleable>
     <declare-styleable name="AndroidManifestQueriesIntent" parent="AndroidManifestQueries" />
+    <declare-styleable name="AndroidManifestQueriesProvider" parent="AndroidManifestQueries" >
+        <attr name="authorities" />
+    </declare-styleable>
 
 
     <!-- The <code>static-library</code> tag declares that this apk is providing itself

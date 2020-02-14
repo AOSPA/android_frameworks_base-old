@@ -49,6 +49,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import android.os.SystemProperties;
 
 
@@ -241,7 +242,7 @@ public class LocalBluetoothProfileManager {
     }
 
     private final Collection<ServiceListener> mServiceListeners =
-            new ArrayList<ServiceListener>();
+            new CopyOnWriteArrayList<ServiceListener>();
 
     private void addProfile(LocalBluetoothProfile profile,
             String profileName, String stateChangedAction) {
@@ -375,14 +376,18 @@ public class LocalBluetoothProfileManager {
 
     // not synchronized: use only from UI thread! (TODO: verify)
     void callServiceConnectedListeners() {
-        for (ServiceListener l : mServiceListeners) {
+        final Collection<ServiceListener> listeners = new ArrayList<>(mServiceListeners);
+
+        for (ServiceListener l : listeners) {
             l.onServiceConnected();
         }
     }
 
     // not synchronized: use only from UI thread! (TODO: verify)
     void callServiceDisconnectedListeners() {
-        for (ServiceListener listener : mServiceListeners) {
+        final Collection<ServiceListener> listeners = new ArrayList<>(mServiceListeners);
+
+        for (ServiceListener listener : listeners) {
             listener.onServiceDisconnected();
         }
     }
@@ -545,14 +550,14 @@ public class LocalBluetoothProfileManager {
             (mMapProfile.getConnectionStatus(device) == BluetoothProfile.STATE_CONNECTED)) {
             profiles.add(mMapProfile);
             removedProfiles.remove(mMapProfile);
-            mMapProfile.setPreferred(device, true);
+            mMapProfile.setEnabled(device, true);
         }
 
         if ((mPbapProfile != null) &&
             (mPbapProfile.getConnectionStatus(device) == BluetoothProfile.STATE_CONNECTED)) {
             profiles.add(mPbapProfile);
             removedProfiles.remove(mPbapProfile);
-            mPbapProfile.setPreferred(device, true);
+            mPbapProfile.setEnabled(device, true);
         }
 
         if (mMapClientProfile != null) {

@@ -187,6 +187,7 @@ import android.os.SystemService;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.WorkSource;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.service.vr.IVrManager;
 import android.service.vr.IVrStateCallbacks;
@@ -230,7 +231,6 @@ import android.view.InputApplicationHandle;
 import android.view.InputChannel;
 import android.view.InputDevice;
 import android.view.InputEvent;
-import android.view.InputEventReceiver;
 import android.view.InputWindowHandle;
 import android.view.InsetsState;
 import android.view.KeyEvent;
@@ -309,6 +309,8 @@ import java.util.function.Supplier;
 public class WindowManagerService extends IWindowManager.Stub
         implements Watchdog.Monitor, WindowManagerPolicy.WindowManagerFuncs {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "WindowManagerService" : TAG_WM;
+
+    private static final String WM_USE_BLAST_ADAPTER_FLAG = "wm_use_blast_adapter";
 
     static final int LAYOUT_REPEAT_THRESHOLD = 4;
 
@@ -414,6 +416,8 @@ public class WindowManagerService extends IWindowManager.Stub
     final WindowManagerConstants mConstants;
 
     final WindowTracing mWindowTracing;
+
+    final DisplayAreaPolicy.Provider mDisplayAreaPolicyProvider;
 
     private BoostFramework mPerf = null;
 
@@ -626,6 +630,9 @@ public class WindowManagerService extends IWindowManager.Stub
 
     // The root of the device window hierarchy.
     RootWindowContainer mRoot;
+
+    // Whether the system should use BLAST for ViewRootImpl
+    final boolean mUseBLAST;
 
     int mDockedStackCreateMode = SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
     Rect mDockedStackCreateBounds;
@@ -1141,6 +1148,10 @@ public class WindowManagerService extends IWindowManager.Stub
         mAnimator = new WindowAnimator(this);
         mRoot = new RootWindowContainer(this);
 
+        mUseBLAST = DeviceConfig.getBoolean(
+                    DeviceConfig.NAMESPACE_WINDOW_MANAGER_NATIVE_BOOT,
+                    WM_USE_BLAST_ADAPTER_FLAG, false);
+
         mWindowPlacerLocked = new WindowSurfacePlacer(this);
         mTaskSnapshotController = new TaskSnapshotController(this);
 
@@ -1259,6 +1270,10 @@ public class WindowManagerService extends IWindowManager.Stub
 
         LocalServices.addService(WindowManagerInternal.class, new LocalService());
         mEmbeddedWindowController = new EmbeddedWindowController(mGlobalLock);
+
+        mDisplayAreaPolicyProvider = DisplayAreaPolicy.Provider.fromResources(
+                mContext.getResources());
+
         setGlobalShadowSettings();
     }
 
@@ -2509,7 +2524,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 WindowState win = windowForClientLocked(session, client, false);
                 ProtoLog.d(WM_DEBUG_ADD_REMOVE, "finishDrawingWindow: %s mDrawState=%s",
                         win, (win != null ? win.mWinAnimator.drawStateToString() : "null"));
-                if (win != null && win.mWinAnimator.finishDrawingLocked(postDrawTransaction)) {
+                if (win != null && win.finishDrawing(postDrawTransaction)) {
                     if ((win.mAttrs.flags & FLAG_SHOW_WALLPAPER) != 0) {
                         win.getDisplayContent().pendingLayoutChanges |=
                                 WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
@@ -5071,6 +5086,11 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
+    public boolean useBLAST() {
+        return mUseBLAST;
+    }
+
+    @Override
     public void getInitialDisplaySize(int displayId, Point size) {
         synchronized (mGlobalLock) {
             final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
@@ -5716,6 +5736,12 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public void setForceShowSystemBars(boolean show) {
+        boolean isAutomotive = mContext.getPackageManager().hasSystemFeature(
+                PackageManager.FEATURE_AUTOMOTIVE);
+        if (!isAutomotive) {
+            throw new UnsupportedOperationException("Force showing system bars is only supported"
+                    + "for Automotive use cases.");
+        }
         if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.STATUS_BAR)
                 != PackageManager.PERMISSION_GRANTED) {
             throw new SecurityException("Caller does not hold permission "
@@ -5761,20 +5787,6 @@ public class WindowManagerService extends IWindowManager.Stub
             displayContent.performLayout(false /* initial */,
                     false /* updateInputWindows */);
             return displayContent.getDisplayPolicy().getNavBarPosition();
-        }
-    }
-
-    @Override
-    public WindowManagerPolicy.InputConsumer createInputConsumer(Looper looper, String name,
-            InputEventReceiver.Factory inputEventReceiverFactory, int displayId) {
-        synchronized (mGlobalLock) {
-            DisplayContent displayContent = mRoot.getDisplayContent(displayId);
-            if (displayContent != null) {
-                return displayContent.getInputMonitor().createInputConsumer(looper, name,
-                        inputEventReceiverFactory);
-            } else {
-                return null;
-            }
         }
     }
 
@@ -7587,6 +7599,29 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
             }
         }
+
+        @Override
+        public boolean transferTouchFocusToImeWindow(@NonNull IBinder sourceInputToken,
+                int displayId) {
+            final IBinder destinationInputToken;
+
+            synchronized (mGlobalLock) {
+                final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+                if (displayContent == null) {
+                    return false;
+                }
+                final WindowState imeWindow = displayContent.mInputMethodWindow;
+                if (imeWindow == null) {
+                    return false;
+                }
+                if (imeWindow.mInputChannel == null) {
+                    return false;
+                }
+                destinationInputToken = imeWindow.mInputChannel.getToken();
+            }
+
+            return mInputManager.transferTouchFocus(sourceInputToken, destinationInputToken);
+        }
     }
 
     void registerAppFreezeListener(AppFreezeListener listener) {
@@ -7843,40 +7878,52 @@ public class WindowManagerService extends IWindowManager.Stub
      * views.
      */
     void grantInputChannel(int callingUid, int callingPid, int displayId, SurfaceControl surface,
-            IWindow window, IBinder hostInputToken, InputChannel outInputChannel) {
-        InputApplicationHandle applicationHandle = null;
+            IWindow window, IBinder hostInputToken, int flags, InputChannel outInputChannel) {
+        final InputApplicationHandle applicationHandle;
         final String name;
         final InputChannel[] inputChannels;
         final InputChannel clientChannel;
         final InputChannel serverChannel;
         synchronized (mGlobalLock) {
-            final WindowState hostWindow = mInputToWindowMap.get(hostInputToken);
-            final String hostWindowName = (hostWindow != null)
-                    ? hostWindow.getWindowTag().toString() : "Internal";
-            name = "EmbeddedWindow{ u" + UserHandle.getUserId(callingUid)
-                    + " " + hostWindowName + "}";
+            EmbeddedWindowController.EmbeddedWindow win =
+                    new EmbeddedWindowController.EmbeddedWindow(window,
+                            mInputToWindowMap.get(hostInputToken), callingUid, callingPid);
+            name = win.getName();
 
             inputChannels = InputChannel.openInputChannelPair(name);
             serverChannel = inputChannels[0];
             clientChannel = inputChannels[1];
             mInputManager.registerInputChannel(serverChannel);
-            mEmbeddedWindowController.add(serverChannel.getToken(), window, hostWindow, callingUid,
-                    callingPid);
-
-            if (hostWindow != null
-                    && hostWindow.mInputWindowHandle.inputApplicationHandle != null) {
-                applicationHandle = new InputApplicationHandle(
-                        hostWindow.mInputWindowHandle.inputApplicationHandle);
+            mEmbeddedWindowController.add(clientChannel.getToken(), win);
+            if (serverChannel.getToken() != clientChannel.getToken()) {
+                throw new IllegalStateException("Client and Server channel are expected to"
+                        + "be the same");
             }
+
+            applicationHandle = win.getApplicationHandle();
         }
+
+        updateInputChannel(clientChannel.getToken(), callingUid, callingPid, displayId, surface,
+                name, applicationHandle, flags);
 
         clientChannel.transferTo(outInputChannel);
         clientChannel.dispose();
+        // Prevent the java finalizer from breaking the input channel. But we won't
+        // do any further management so we just release the java ref and let the
+        // InputDispatcher hold the last ref.
+        serverChannel.release();
+    }
 
+    private void updateInputChannel(IBinder channelToken, int callingUid, int callingPid,
+            int displayId, SurfaceControl surface, String name,
+            InputApplicationHandle applicationHandle, int flags) {
         InputWindowHandle h = new InputWindowHandle(applicationHandle, displayId);
-        h.token = serverChannel.getToken();
+        h.token = channelToken;
         h.name = name;
-        h.layoutParamsFlags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+
+        final int sanitizedFlags = flags & (LayoutParams.FLAG_NOT_TOUCHABLE
+                | LayoutParams.FLAG_SLIPPERY);
+        h.layoutParamsFlags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | sanitizedFlags;
         h.layoutParamsType = 0;
         h.dispatchingTimeoutNanos = -1;
         h.canReceiveKeys = false;
@@ -7891,15 +7938,34 @@ public class WindowManagerService extends IWindowManager.Stub
 
         h.replaceTouchableRegionWithCrop(null);
 
-        SurfaceSession s = new SurfaceSession();
         SurfaceControl.Transaction t = mTransactionFactory.get();
         t.setInputWindowInfo(surface, h);
         t.apply();
+        t.close();
+    }
 
-        // Prevent the java finalizer from breaking the input channel. But we won't
-        // do any further management so we just release the java ref and let the
-        // InputDispatcher hold the last ref.
-        serverChannel.release();
+    /**
+     * Updates the flags on an existing surface's input channel. This assumes the surface provided
+     * is the one associated with the provided input-channel. If this isn't the case, behavior
+     * is undefined.
+     */
+    void updateInputChannel(IBinder channelToken, int displayId, SurfaceControl surface,
+            int flags) {
+        final InputApplicationHandle applicationHandle;
+        final String name;
+        final EmbeddedWindowController.EmbeddedWindow win;
+        synchronized (mGlobalLock) {
+            win = mEmbeddedWindowController.get(channelToken);
+            if (win == null) {
+                Slog.e(TAG, "Couldn't find window for provided channelToken.");
+                return;
+            }
+            name = win.getName();
+            applicationHandle = win.getApplicationHandle();
+        }
+
+        updateInputChannel(channelToken, win.mOwnerUid, win.mOwnerPid, displayId, surface, name,
+                applicationHandle, flags);
     }
 
     /** Return whether layer tracing is enabled */
@@ -7990,7 +8056,11 @@ public class WindowManagerService extends IWindowManager.Stub
             int displayId, Rect outContentInsets, Rect outStableInsets,
             DisplayCutout.ParcelableWrapper displayCutout) {
         synchronized (mGlobalLock) {
-            final DisplayContent dc = mRoot.getDisplayContent(displayId);
+            final DisplayContent dc = mRoot.getDisplayContentOrCreate(displayId);
+            if (dc == null) {
+                throw new WindowManager.InvalidDisplayException("Display#" + displayId
+                        + "could not be found!");
+            }
             final WindowToken windowToken = dc.getWindowToken(attrs.token);
             final ActivityRecord activity;
             if (windowToken != null && windowToken.asActivityRecord() != null) {

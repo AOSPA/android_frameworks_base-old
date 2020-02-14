@@ -131,6 +131,7 @@ import com.android.server.pm.dex.DexManager;
 import com.android.server.security.VerityUtils;
 
 import libcore.io.IoUtils;
+import libcore.util.EmptyArray;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -214,7 +215,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     private static final String ATTR_SIGNATURE = "signature";
 
     private static final String PROPERTY_NAME_INHERIT_NATIVE = "pi.inherit_native_on_dont_kill";
-    private static final int[] EMPTY_CHILD_SESSION_ARRAY = {};
+    private static final int[] EMPTY_CHILD_SESSION_ARRAY = EmptyArray.INT;
+    private static final InstallationFile[] EMPTY_INSTALLATION_FILE_ARRAY = {};
 
     private static final String SYSTEM_DATA_LOADER_PACKAGE = "android";
 
@@ -316,33 +318,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     @GuardedBy("mLock")
     private int mParentSessionId;
 
-    static class FileInfo {
-        public final int location;
-        public final String name;
-        public final Long lengthBytes;
-        public final byte[] metadata;
-        public final byte[] signature;
-
-        public static FileInfo added(int location, String name, Long lengthBytes, byte[] metadata,
-                byte[] signature) {
-            return new FileInfo(location, name, lengthBytes, metadata, signature);
-        }
-
-        public static FileInfo removed(int location, String name) {
-            return new FileInfo(location, name, -1L, null, null);
-        }
-
-        FileInfo(int location, String name, Long lengthBytes, byte[] metadata, byte[] signature) {
-            this.location = location;
-            this.name = name;
-            this.lengthBytes = lengthBytes;
-            this.metadata = metadata;
-            this.signature = signature;
-        }
-    }
-
     @GuardedBy("mLock")
-    private ArrayList<FileInfo> mFiles = new ArrayList<>();
+    private ArrayList<InstallationFile> mFiles = new ArrayList<>();
 
     @GuardedBy("mLock")
     private boolean mStagedSessionApplied;
@@ -383,8 +360,6 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     // TODO(b/146080380): merge file list with Callback installation.
     private IncrementalFileStorages mIncrementalFileStorages;
-
-    private static final String[] EMPTY_STRING_ARRAY = new String[]{};
 
     private static final FileFilter sAddedApkFilter = new FileFilter() {
         @Override
@@ -517,7 +492,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             PackageSessionProvider sessionProvider, Looper looper, StagingManager stagingManager,
             int sessionId, int userId, int installerUid, @NonNull InstallSource installSource,
             SessionParams params, long createdMillis,
-            File stageDir, String stageCid, FileInfo[] files, boolean prepared,
+            File stageDir, String stageCid, InstallationFile[] files, boolean prepared,
             boolean committed, boolean sealed,
             @Nullable int[] childSessionIds, int parentSessionId, boolean isReady,
             boolean isFailed, boolean isApplied, int stagedSessionErrorCode,
@@ -548,7 +523,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         this.mParentSessionId = parentSessionId;
 
         if (files != null) {
-            for (FileInfo file : files) {
+            for (InstallationFile file : files) {
                 mFiles.add(file);
             }
         }
@@ -567,21 +542,25 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         mStagedSessionErrorMessage =
                 stagedSessionErrorMessage != null ? stagedSessionErrorMessage : "";
 
-        // TODO(b/136132412): sanity check if session should not be incremental
-        if (!params.isStaged && isIncrementalInstallation()) {
-            IncrementalManager incrementalManager = (IncrementalManager) mContext.getSystemService(
-                    Context.INCREMENTAL_SERVICE);
-            if (incrementalManager != null) {
-                mIncrementalFileStorages =
-                        new IncrementalFileStorages(mPackageName, stageDir, incrementalManager,
-                                params.dataLoaderParams);
+        if (isDataLoaderInstallation()) {
+            if (isApexInstallation()) {
+                throw new IllegalArgumentException(
+                        "DataLoader installation of APEX modules is not allowed.");
+            }
+            if (this.params.dataLoaderParams.getComponentName().getPackageName()
+                    == SYSTEM_DATA_LOADER_PACKAGE) {
+                assertShellOrSystemCalling("System data loaders");
             }
         }
 
-        if (isStreamingInstallation()
-                && this.params.dataLoaderParams.getComponentName().getPackageName()
-                == SYSTEM_DATA_LOADER_PACKAGE) {
-            assertShellOrSystemCalling("System data loaders");
+        if (isIncrementalInstallation()) {
+            if (!IncrementalManager.isAllowed()) {
+                throw new IllegalArgumentException("Incremental installation not allowed.");
+            }
+            if (!isIncrementalInstallationAllowed(mPackageName)) {
+                throw new IllegalArgumentException(
+                        "Incremental installation of this package is not allowed.");
+            }
         }
     }
 
@@ -739,14 +718,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         if (!isDataLoaderInstallation()) {
             String[] result = stageDir.list();
             if (result == null) {
-                result = EMPTY_STRING_ARRAY;
+                result = EmptyArray.STRING;
             }
             return result;
         }
 
         String[] result = new String[mFiles.size()];
         for (int i = 0, size = mFiles.size(); i < size; ++i) {
-            result[i] = mFiles.get(i).name;
+            result[i] = mFiles.get(i).getName();
         }
         return result;
     }
@@ -1060,10 +1039,6 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             }
         }
 
-        if (mIncrementalFileStorages != null) {
-            mIncrementalFileStorages.finishSetUp();
-        }
-
         dispatchStreamValidateAndCommit();
     }
 
@@ -1072,11 +1047,6 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     private void handleStreamValidateAndCommit() {
-        // TODO(b/136132412): update with new APIs
-        if (mIncrementalFileStorages != null) {
-            mIncrementalFileStorages.startLoading();
-        }
-
         boolean success = streamValidateAndCommit();
 
         if (isMultiPackage()) {
@@ -1212,6 +1182,19 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         // require caller to hold the INSTALL_PACKAGES permission
         return context.checkCallingOrSelfPermission(Manifest.permission.INSTALL_PACKAGES)
                 == PackageManager.PERMISSION_GRANTED;
+    }
+
+    /**
+     * Checks if the package can be installed on IncFs.
+     */
+    private static boolean isIncrementalInstallationAllowed(String packageName) {
+        final PackageManagerInternal pmi = LocalServices.getService(PackageManagerInternal.class);
+        final AndroidPackage existingPackage = pmi.getPackage(packageName);
+        if (existingPackage == null) {
+            return true;
+        }
+
+        return !PackageManagerService.isSystemApp(existingPackage);
     }
 
     /**
@@ -1403,14 +1386,10 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     return false;
                 }
 
-                final PackageInfo pkgInfo = mPm.getPackageInfo(
-                        params.appPackageName, PackageManager.GET_SIGNATURES
-                                | PackageManager.MATCH_STATIC_SHARED_LIBRARIES /*flags*/, userId);
-
                 if (isApexInstallation()) {
                     validateApexInstallLocked();
                 } else {
-                    validateApkInstallLocked(pkgInfo);
+                    validateApkInstallLocked();
                 }
             }
 
@@ -1701,10 +1680,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 mInternalProgress = 0.5f;
                 computeProgressLocked(true);
 
-                // Unpack native libraries for non-incremental installation
-                if (!isIncrementalInstallation()) {
-                    extractNativeLibraries(stageDir, params.abiOverride, mayInheritNativeLibs());
-                }
+                extractNativeLibraries(stageDir, params.abiOverride, mayInheritNativeLibs());
             }
 
             // We've reached point of no return; call into PMS to install the stage.
@@ -1827,8 +1803,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
      * {@link PackageManagerService}.
      */
     @GuardedBy("mLock")
-    private void validateApkInstallLocked(@Nullable PackageInfo pkgInfo)
-            throws PackageManagerException {
+    private void validateApkInstallLocked() throws PackageManagerException {
         ApkLite baseApk = null;
         mPackageName = null;
         mVersionCode = -1;
@@ -1837,6 +1812,10 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         mResolvedBaseFile = null;
         mResolvedStagedFiles.clear();
         mResolvedInheritedFiles.clear();
+
+        final PackageInfo pkgInfo = mPm.getPackageInfo(
+                params.appPackageName, PackageManager.GET_SIGNATURES
+                        | PackageManager.MATCH_STATIC_SHARED_LIBRARIES /*flags*/, userId);
 
         // Partial installs must be consistent with existing install
         if (params.mode == SessionParams.MODE_INHERIT_EXISTING
@@ -2277,7 +2256,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         Slog.d(TAG, "Copied " + fromFiles.size() + " files into " + toDir);
     }
 
-    private static void extractNativeLibraries(File packageDir, String abiOverride, boolean inherit)
+    private void extractNativeLibraries(File packageDir, String abiOverride, boolean inherit)
             throws PackageManagerException {
         final File libDir = new File(packageDir, NativeLibraryHelper.LIB_DIR_NAME);
         if (!inherit) {
@@ -2289,7 +2268,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         try {
             handle = NativeLibraryHelper.Handle.create(packageDir);
             final int res = NativeLibraryHelper.copyNativeBinariesWithOverride(handle, libDir,
-                    abiOverride);
+                    abiOverride, isIncrementalInstallation());
             if (res != PackageManager.INSTALL_SUCCEEDED) {
                 throw new PackageManagerException(res,
                         "Failed to extract native libraries, res=" + res);
@@ -2434,11 +2413,15 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             throw new IllegalStateException(
                     "Cannot add files to non-data loader installation session.");
         }
-        if (!isIncrementalInstallation()) {
+        if (isStreamingInstallation()) {
             if (location != LOCATION_DATA_APP) {
                 throw new IllegalArgumentException(
                         "Non-incremental installation only supports /data/app placement: " + name);
             }
+        }
+        if (metadata == null) {
+            throw new IllegalArgumentException(
+                    "DataLoader installation requires valid metadata: " + name);
         }
         // Use installer provided name for now; we always rename later
         if (!FileUtils.isValidExtFilename(name)) {
@@ -2449,7 +2432,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             assertCallerIsOwnerOrRootLocked();
             assertPreparedAndNotSealedLocked("addFile");
 
-            mFiles.add(FileInfo.added(location, name, lengthBytes, metadata, signature));
+            mFiles.add(new InstallationFile(location, name, lengthBytes, metadata, signature));
         }
     }
 
@@ -2467,7 +2450,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             assertCallerIsOwnerOrRootLocked();
             assertPreparedAndNotSealedLocked("removeFile");
 
-            mFiles.add(FileInfo.removed(location, getRemoveMarkerName(name)));
+            mFiles.add(new InstallationFile(location, getRemoveMarkerName(name), -1, null, null));
         }
     }
 
@@ -2485,32 +2468,18 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
 
         final List<InstallationFile> addedFiles = new ArrayList<>(mFiles.size());
-        for (FileInfo file : mFiles) {
-            if (sAddedFilter.accept(new File(this.stageDir, file.name))) {
-                addedFiles.add(new InstallationFile(
-                        file.name, file.lengthBytes, file.metadata));
+        for (InstallationFile file : mFiles) {
+            if (sAddedFilter.accept(new File(this.stageDir, file.getName()))) {
+                addedFiles.add(file);
             }
         }
         final List<String> removedFiles = new ArrayList<>(mFiles.size());
-        for (FileInfo file : mFiles) {
-            if (sRemovedFilter.accept(new File(this.stageDir, file.name))) {
-                String name = file.name.substring(
-                        0, file.name.length() - REMOVE_MARKER_EXTENSION.length());
+        for (InstallationFile file : mFiles) {
+            if (sRemovedFilter.accept(new File(this.stageDir, file.getName()))) {
+                String name = file.getName().substring(
+                        0, file.getName().length() - REMOVE_MARKER_EXTENSION.length());
                 removedFiles.add(name);
             }
-        }
-
-        if (mIncrementalFileStorages != null) {
-            for (InstallationFile file : addedFiles) {
-                try {
-                    mIncrementalFileStorages.addFile(file);
-                } catch (IOException ex) {
-                    // TODO(b/146080380): add incremental-specific error code
-                    throw new PackageManagerException(INSTALL_FAILED_INTERNAL_ERROR,
-                            "Failed to add and configure Incremental File: " + file.getName(), ex);
-                }
-            }
-            return true;
         }
 
         final DataLoaderManager dataLoaderManager = mContext.getSystemService(
@@ -2520,6 +2489,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     "Failed to find data loader manager service");
         }
 
+        final boolean manualStartAndDestroy = !isIncrementalInstallation();
         IDataLoaderStatusListener listener = new IDataLoaderStatusListener.Stub() {
             @Override
             public void onStatusChanged(int dataLoaderId, int status) {
@@ -2539,7 +2509,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
                     switch (status) {
                         case IDataLoaderStatusListener.DATA_LOADER_CREATED: {
-                            dataLoader.start();
+                            if (manualStartAndDestroy) {
+                                // IncrementalFileStorages will call start after all files are
+                                // created in IncFS.
+                                dataLoader.start();
+                            }
                             break;
                         }
                         case IDataLoaderStatusListener.DATA_LOADER_STARTED: {
@@ -2554,7 +2528,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                             } else {
                                 dispatchStreamValidateAndCommit();
                             }
-                            dataLoader.destroy();
+                            if (manualStartAndDestroy) {
+                                dataLoader.destroy();
+                            }
                             break;
                         }
                         case IDataLoaderStatusListener.DATA_LOADER_IMAGE_NOT_READY: {
@@ -2562,7 +2538,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                             onSessionVerificationFailure(
                                     new PackageManagerException(INSTALL_FAILED_MEDIA_UNAVAILABLE,
                                             "Failed to prepare image."));
-                            dataLoader.destroy();
+                            if (manualStartAndDestroy) {
+                                dataLoader.destroy();
+                            }
                             break;
                         }
                     }
@@ -2575,6 +2553,17 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 }
             }
         };
+
+        if (!manualStartAndDestroy) {
+            try {
+                mIncrementalFileStorages = IncrementalFileStorages.initialize(mContext,
+                        stageDir, params.dataLoaderParams, listener, addedFiles);
+                return false;
+            } catch (IOException e) {
+                throw new PackageManagerException(INSTALL_FAILED_MEDIA_UNAVAILABLE, e.getMessage(),
+                        e.getCause());
+            }
+        }
 
         final FileSystemConnector connector = new FileSystemConnector(addedFiles);
         final FileSystemControlParcel control = new FileSystemControlParcel();
@@ -2785,13 +2774,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 bridge.forceClose();
             }
         }
+        if (mIncrementalFileStorages != null) {
+            mIncrementalFileStorages.cleanUp();
+            mIncrementalFileStorages = null;
+        }
         // For staged sessions, we don't delete the directory where the packages have been copied,
         // since these packages are supposed to be read on reboot.
         // Those dirs are deleted when the staged session has reached a final state.
         if (stageDir != null && !params.isStaged) {
-            if (mIncrementalFileStorages != null) {
-                mIncrementalFileStorages.cleanUp();
-            }
             try {
                 mPm.mInstaller.rmPackageDir(stageDir.getAbsolutePath());
             } catch (InstallerException ignored) {
@@ -2807,6 +2797,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         } else {
             if (mIncrementalFileStorages != null) {
                 mIncrementalFileStorages.cleanUp();
+                mIncrementalFileStorages = null;
             }
             try {
                 mPm.mInstaller.rmPackageDir(stageDir.getAbsolutePath());
@@ -2994,13 +2985,13 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 writeIntAttribute(out, ATTR_SESSION_ID, childSessionId);
                 out.endTag(null, TAG_CHILD_SESSION);
             }
-            for (FileInfo fileInfo : mFiles) {
+            for (InstallationFile file : mFiles) {
                 out.startTag(null, TAG_SESSION_FILE);
-                writeIntAttribute(out, ATTR_LOCATION, fileInfo.location);
-                writeStringAttribute(out, ATTR_NAME, fileInfo.name);
-                writeLongAttribute(out, ATTR_LENGTH_BYTES, fileInfo.lengthBytes);
-                writeByteArrayAttribute(out, ATTR_METADATA, fileInfo.metadata);
-                writeByteArrayAttribute(out, ATTR_SIGNATURE, fileInfo.signature);
+                writeIntAttribute(out, ATTR_LOCATION, file.getLocation());
+                writeStringAttribute(out, ATTR_NAME, file.getName());
+                writeLongAttribute(out, ATTR_LENGTH_BYTES, file.getLengthBytes());
+                writeByteArrayAttribute(out, ATTR_METADATA, file.getMetadata());
+                writeByteArrayAttribute(out, ATTR_SIGNATURE, file.getSignature());
                 out.endTag(null, TAG_SESSION_FILE);
             }
         }
@@ -3112,7 +3103,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         List<String> grantedRuntimePermissions = new ArrayList<>();
         List<String> whitelistedRestrictedPermissions = new ArrayList<>();
         List<Integer> childSessionIds = new ArrayList<>();
-        List<FileInfo> files = new ArrayList<>();
+        List<InstallationFile> files = new ArrayList<>();
         int outerDepth = in.getDepth();
         int type;
         while ((type = in.next()) != XmlPullParser.END_DOCUMENT
@@ -3131,7 +3122,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 childSessionIds.add(readIntAttribute(in, ATTR_SESSION_ID, SessionInfo.INVALID_ID));
             }
             if (TAG_SESSION_FILE.equals(in.getName())) {
-                files.add(new FileInfo(
+                files.add(new InstallationFile(
                         readIntAttribute(in, ATTR_LOCATION, 0),
                         readStringAttribute(in, ATTR_NAME),
                         readLongAttribute(in, ATTR_LENGTH_BYTES, -1),
@@ -3141,7 +3132,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
 
         if (grantedRuntimePermissions.size() > 0) {
-            params.grantedRuntimePermissions = (String[]) grantedRuntimePermissions.toArray();
+            params.grantedRuntimePermissions =
+                    grantedRuntimePermissions.toArray(EmptyArray.STRING);
         }
 
         if (whitelistedRestrictedPermissions.size() > 0) {
@@ -3158,16 +3150,16 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             childSessionIdsArray = EMPTY_CHILD_SESSION_ARRAY;
         }
 
-        FileInfo[] fileInfosArray = null;
+        InstallationFile[] fileArray = null;
         if (!files.isEmpty()) {
-            fileInfosArray = (FileInfo[]) files.toArray();
+            fileArray = files.toArray(EMPTY_INSTALLATION_FILE_ARRAY);
         }
 
         InstallSource installSource = InstallSource.create(installInitiatingPackageName,
                 installOriginatingPackageName, installerPackageName);
         return new PackageInstallerSession(callback, context, pm, sessionProvider,
                 installerThread, stagingManager, sessionId, userId, installerUid,
-                installSource, params, createdMillis, stageDir, stageCid, fileInfosArray,
+                installSource, params, createdMillis, stageDir, stageCid, fileArray,
                 prepared, committed, sealed, childSessionIdsArray, parentSessionId,
                 isReady, isFailed, isApplied, stagedSessionErrorCode, stagedSessionErrorMessage);
     }

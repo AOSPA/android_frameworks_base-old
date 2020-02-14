@@ -296,5 +296,15 @@ interface IWifiManager
      */
     Map getMatchingScanResults(in List<WifiNetworkSuggestion> networkSuggestions, in List<ScanResult> scanResults, String callingPackage, String callingFeatureId);
 
+    void setScanThrottleEnabled(boolean enable);
+
+    boolean isScanThrottleEnabled();
+
+    Map getAllMatchingPasspointProfilesForScanResults(in List<ScanResult> scanResult);
+
+    void setAutoWakeupEnabled(boolean enable);
+
+    boolean isAutoWakeupEnabled();
+
     int getSoftApWifiGeneration();
 }

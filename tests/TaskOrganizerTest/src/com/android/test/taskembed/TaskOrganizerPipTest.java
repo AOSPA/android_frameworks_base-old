@@ -45,7 +45,7 @@ public class TaskOrganizerPipTest extends Service {
             final WindowContainerTransaction wct = new WindowContainerTransaction();
             wct.scheduleFinishEnterPip(ti.token, new Rect(0, 0, PIP_WIDTH, PIP_HEIGHT));
             try {
-                ActivityTaskManager.getTaskOrganizerController().applyContainerTransaction(wct);
+                ActivityTaskManager.getTaskOrganizerController().applyContainerTransaction(wct, null);
             } catch (Exception e) {
             }
         }
@@ -67,6 +67,13 @@ public class TaskOrganizerPipTest extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+
+        try {
+            ActivityTaskManager.getTaskOrganizerController().registerTaskOrganizer(mOrganizer,
+                    WINDOWING_MODE_PINNED);
+
+        } catch (Exception e) {
+        }
 
         final WindowManager.LayoutParams wlp = new WindowManager.LayoutParams();
         wlp.setTitle("TaskOrganizerPipTest");

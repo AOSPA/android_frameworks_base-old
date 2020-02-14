@@ -1577,9 +1577,24 @@ public final class ProcessList {
         if (userGid != UserHandle.ERR_GID) {
             gidList.add(userGid);
         }
-        if (mountExternal == Zygote.MOUNT_EXTERNAL_ANDROID_WRITABLE) {
+        if (mountExternal == Zygote.MOUNT_EXTERNAL_ANDROID_WRITABLE
+                || mountExternal == Zygote.MOUNT_EXTERNAL_PASS_THROUGH) {
             // For DownloadProviders and MTP: To grant access to /sdcard/Android/
+            // And a special case for the FUSE daemon since it runs an MTP server and should have
+            // access to Android/
+            // Note that we must add in the user id, because sdcardfs synthesizes this permission
+            // based on the user
             gidList.add(UserHandle.getUid(UserHandle.getUserId(uid), Process.SDCARD_RW_GID));
+
+            // For devices without sdcardfs, these GIDs are needed instead; note that we
+            // consciously don't add the user_id in the GID, since these apps are anyway
+            // isolated to only their own user
+            gidList.add(Process.EXT_DATA_RW_GID);
+            gidList.add(Process.EXT_OBB_RW_GID);
+        }
+        if (mountExternal == Zygote.MOUNT_EXTERNAL_INSTALLER) {
+            // For devices without sdcardfs, this GID is needed to allow installers access to OBBs
+            gidList.add(Process.EXT_OBB_RW_GID);
         }
         if (mountExternal == Zygote.MOUNT_EXTERNAL_PASS_THROUGH) {
             // For the FUSE daemon: To grant access to the lower filesystem.
@@ -3280,6 +3295,9 @@ public final class ProcessList {
     }
 
     final ProcessRecord getLRURecordForAppLocked(IApplicationThread thread) {
+        if (thread == null) {
+            return null;
+        }
         final IBinder threadBinder = thread.asBinder();
         // Find the application record.
         for (int i = mLruProcesses.size() - 1; i >= 0; i--) {

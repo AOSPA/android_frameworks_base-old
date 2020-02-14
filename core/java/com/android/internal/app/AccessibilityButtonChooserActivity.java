@@ -30,15 +30,19 @@ import static com.android.internal.app.AccessibilityButtonChooserActivity.WhiteL
 import static com.android.internal.util.Preconditions.checkArgument;
 
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.accessibilityservice.AccessibilityShortcutInfo;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.res.TypedArray;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
@@ -74,6 +78,8 @@ import java.util.StringJoiner;
  */
 public class AccessibilityButtonChooserActivity extends Activity {
     private static final char SERVICES_SEPARATOR = ':';
+    private static final float DISABLED_ALPHA = 0.5f;
+    private static final float ENABLED_ALPHA = 1.0f;
     private static final TextUtils.SimpleStringSplitter sStringColonSplitter =
             new TextUtils.SimpleStringSplitter(SERVICES_SEPARATOR);
     @ShortcutType
@@ -261,10 +267,10 @@ public class AccessibilityButtonChooserActivity extends Activity {
             @ShortcutType int shortcutType) {
         final List<AccessibilityButtonTarget> targets = new ArrayList<>();
         targets.addAll(getAccessibilityServiceTargets(context));
+        targets.addAll(getAccessibilityActivityTargets(context));
         targets.addAll(getWhiteListingServiceTargets(context));
 
-        final AccessibilityManager ams = (AccessibilityManager) context.getSystemService(
-                Context.ACCESSIBILITY_SERVICE);
+        final AccessibilityManager ams = context.getSystemService(AccessibilityManager.class);
         final List<String> requiredTargets = ams.getAccessibilityShortcutTargets(shortcutType);
         targets.removeIf(target -> !requiredTargets.contains(target.getId()));
 
@@ -273,8 +279,7 @@ public class AccessibilityButtonChooserActivity extends Activity {
 
     private static List<AccessibilityButtonTarget> getAccessibilityServiceTargets(
             @NonNull Context context) {
-        final AccessibilityManager ams = (AccessibilityManager) context.getSystemService(
-                Context.ACCESSIBILITY_SERVICE);
+        final AccessibilityManager ams = context.getSystemService(AccessibilityManager.class);
         final List<AccessibilityServiceInfo> installedServices =
                 ams.getInstalledAccessibilityServiceList();
         if (installedServices == null) {
@@ -283,6 +288,24 @@ public class AccessibilityButtonChooserActivity extends Activity {
 
         final List<AccessibilityButtonTarget> targets = new ArrayList<>(installedServices.size());
         for (AccessibilityServiceInfo info : installedServices) {
+            targets.add(new AccessibilityButtonTarget(context, info));
+        }
+
+        return targets;
+    }
+
+    private static List<AccessibilityButtonTarget> getAccessibilityActivityTargets(
+            @NonNull Context context) {
+        final AccessibilityManager ams = context.getSystemService(AccessibilityManager.class);
+        final List<AccessibilityShortcutInfo> installedServices =
+                ams.getInstalledAccessibilityShortcutListAsUser(context,
+                        ActivityManager.getCurrentUser());
+        if (installedServices == null) {
+            return Collections.emptyList();
+        }
+
+        final List<AccessibilityButtonTarget> targets = new ArrayList<>(installedServices.size());
+        for (AccessibilityShortcutInfo info : installedServices) {
             targets.add(new AccessibilityButtonTarget(context, info));
         }
 
@@ -350,10 +373,11 @@ public class AccessibilityButtonChooserActivity extends Activity {
     }
 
     private static class ViewHolder {
+        View mItemView;
         ImageView mIconView;
         TextView mLabelView;
         FrameLayout mItemContainer;
-        ImageView mViewItem;
+        ImageView mActionViewItem;
         Switch mSwitchItem;
     }
 
@@ -403,12 +427,13 @@ public class AccessibilityButtonChooserActivity extends Activity {
                         R.layout.accessibility_button_chooser_item, parent, /* attachToRoot= */
                         false);
                 holder = new ViewHolder();
+                holder.mItemView = convertView;
                 holder.mIconView = convertView.findViewById(R.id.accessibility_button_target_icon);
                 holder.mLabelView = convertView.findViewById(
                         R.id.accessibility_button_target_label);
                 holder.mItemContainer = convertView.findViewById(
                         R.id.accessibility_button_target_item_container);
-                holder.mViewItem = convertView.findViewById(
+                holder.mActionViewItem = convertView.findViewById(
                         R.id.accessibility_button_target_view_item);
                 holder.mSwitchItem = convertView.findViewById(
                         R.id.accessibility_button_target_switch_item);
@@ -452,23 +477,37 @@ public class AccessibilityButtonChooserActivity extends Activity {
             final boolean isLaunchMenuMode = (mShortcutMenuMode == ShortcutMenuMode.LAUNCH);
             final boolean isHardwareButtonTriggered =
                     (mShortcutButtonType == ACCESSIBILITY_SHORTCUT_KEY);
+            final boolean enabledState = (isLaunchMenuMode || isHardwareButtonTriggered);
+            final ColorMatrix grayScaleMatrix = new ColorMatrix();
+            grayScaleMatrix.setSaturation(/* grayScale */0);
 
-            holder.mLabelView.setEnabled(isLaunchMenuMode || isHardwareButtonTriggered);
-            holder.mViewItem.setEnabled(isLaunchMenuMode || isHardwareButtonTriggered);
-            holder.mViewItem.setImageDrawable(context.getDrawable(R.drawable.ic_delete_item));
-            holder.mViewItem.setVisibility(View.VISIBLE);
+            holder.mIconView.setColorFilter(enabledState
+                    ? null : new ColorMatrixColorFilter(grayScaleMatrix));
+            holder.mIconView.setAlpha(enabledState
+                    ? ENABLED_ALPHA : DISABLED_ALPHA);
+            holder.mLabelView.setEnabled(enabledState);
+            holder.mActionViewItem.setEnabled(enabledState);
+            holder.mActionViewItem.setImageDrawable(context.getDrawable(R.drawable.ic_delete_item));
+            holder.mActionViewItem.setVisibility(View.VISIBLE);
             holder.mSwitchItem.setVisibility(View.GONE);
             holder.mItemContainer.setVisibility(isLaunchMenuMode ? View.GONE : View.VISIBLE);
+            holder.mItemView.setEnabled(enabledState);
+            holder.mItemView.setClickable(!enabledState);
         }
 
         private void updateInvisibleActionItemVisibility(@NonNull Context context,
                 @NonNull ViewHolder holder) {
-            final boolean isEditMenuMode = (mShortcutMenuMode == ShortcutMenuMode.EDIT);
-
-            holder.mViewItem.setImageDrawable(context.getDrawable(R.drawable.ic_delete_item));
-            holder.mViewItem.setVisibility(View.VISIBLE);
+            holder.mIconView.setColorFilter(null);
+            holder.mIconView.setAlpha(ENABLED_ALPHA);
+            holder.mLabelView.setEnabled(true);
+            holder.mActionViewItem.setEnabled(true);
+            holder.mActionViewItem.setImageDrawable(context.getDrawable(R.drawable.ic_delete_item));
+            holder.mActionViewItem.setVisibility(View.VISIBLE);
             holder.mSwitchItem.setVisibility(View.GONE);
-            holder.mItemContainer.setVisibility(isEditMenuMode ? View.VISIBLE : View.GONE);
+            holder.mItemContainer.setVisibility((mShortcutMenuMode == ShortcutMenuMode.EDIT)
+                    ? View.VISIBLE : View.GONE);
+            holder.mItemView.setEnabled(true);
+            holder.mItemView.setClickable(false);
         }
 
         private void updateIntuitiveActionItemVisibility(@NonNull Context context,
@@ -478,23 +517,32 @@ public class AccessibilityButtonChooserActivity extends Activity {
                     ? isWhiteListingServiceEnabled(context, target)
                     : isAccessibilityServiceEnabled(context, target);
 
-            holder.mViewItem.setImageDrawable(context.getDrawable(R.drawable.ic_delete_item));
-            holder.mViewItem.setVisibility(isEditMenuMode ? View.VISIBLE : View.GONE);
+            holder.mIconView.setColorFilter(null);
+            holder.mIconView.setAlpha(ENABLED_ALPHA);
+            holder.mLabelView.setEnabled(true);
+            holder.mActionViewItem.setEnabled(true);
+            holder.mActionViewItem.setImageDrawable(context.getDrawable(R.drawable.ic_delete_item));
+            holder.mActionViewItem.setVisibility(isEditMenuMode ? View.VISIBLE : View.GONE);
             holder.mSwitchItem.setVisibility(isEditMenuMode ? View.GONE : View.VISIBLE);
             holder.mSwitchItem.setChecked(!isEditMenuMode && isServiceEnabled);
             holder.mItemContainer.setVisibility(View.VISIBLE);
+            holder.mItemView.setEnabled(true);
+            holder.mItemView.setClickable(false);
         }
 
         private void updateBounceActionItemVisibility(@NonNull Context context,
                 @NonNull ViewHolder holder) {
-            final boolean isEditMenuMode = (mShortcutMenuMode == ShortcutMenuMode.EDIT);
-
-            holder.mViewItem.setImageDrawable(
-                    isEditMenuMode ? context.getDrawable(R.drawable.ic_delete_item)
-                            : context.getDrawable(R.drawable.ic_open_in_new));
-            holder.mViewItem.setVisibility(isEditMenuMode ? View.VISIBLE : View.GONE);
+            holder.mIconView.setColorFilter(null);
+            holder.mIconView.setAlpha(ENABLED_ALPHA);
+            holder.mLabelView.setEnabled(true);
+            holder.mActionViewItem.setEnabled(true);
+            holder.mActionViewItem.setImageDrawable(context.getDrawable(R.drawable.ic_delete_item));
+            holder.mActionViewItem.setVisibility((mShortcutMenuMode == ShortcutMenuMode.EDIT)
+                    ? View.VISIBLE : View.GONE);
             holder.mSwitchItem.setVisibility(View.GONE);
             holder.mItemContainer.setVisibility(View.VISIBLE);
+            holder.mItemView.setEnabled(true);
+            holder.mItemView.setClickable(false);
         }
     }
 
@@ -511,6 +559,14 @@ public class AccessibilityButtonChooserActivity extends Activity {
             this.mLabel = serviceInfo.getResolveInfo().loadLabel(context.getPackageManager());
             this.mDrawable = serviceInfo.getResolveInfo().loadIcon(context.getPackageManager());
             this.mFragmentType = getAccessibilityServiceFragmentType(serviceInfo);
+        }
+
+        AccessibilityButtonTarget(@NonNull Context context,
+                @NonNull AccessibilityShortcutInfo shortcutInfo) {
+            this.mId = shortcutInfo.getComponentName().flattenToString();
+            this.mLabel = shortcutInfo.getActivityInfo().loadLabel(context.getPackageManager());
+            this.mDrawable = shortcutInfo.getActivityInfo().loadIcon(context.getPackageManager());
+            this.mFragmentType = AccessibilityServiceFragmentType.BOUNCE;
         }
 
         AccessibilityButtonTarget(Context context, @NonNull String id, int labelResId,
@@ -540,8 +596,7 @@ public class AccessibilityButtonChooserActivity extends Activity {
 
     private static boolean isAccessibilityServiceEnabled(@NonNull Context context,
             AccessibilityButtonTarget target) {
-        final AccessibilityManager ams = (AccessibilityManager) context.getSystemService(
-                Context.ACCESSIBILITY_SERVICE);
+        final AccessibilityManager ams = context.getSystemService(AccessibilityManager.class);
         final List<AccessibilityServiceInfo> enabledServices =
                 ams.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK);
 
@@ -568,7 +623,7 @@ public class AccessibilityButtonChooserActivity extends Activity {
                 onIntuitiveTargetSelected(target);
                 break;
             case AccessibilityServiceFragmentType.BOUNCE:
-                // Do nothing
+                onBounceTargetSelected(target);
                 break;
             default:
                 throw new IllegalStateException("Unexpected fragment type");
@@ -579,8 +634,7 @@ public class AccessibilityButtonChooserActivity extends Activity {
 
     private void onLegacyTargetSelected(AccessibilityButtonTarget target) {
         if (mShortcutType == ACCESSIBILITY_BUTTON) {
-            final AccessibilityManager ams = (AccessibilityManager) getSystemService(
-                    Context.ACCESSIBILITY_SERVICE);
+            final AccessibilityManager ams = getSystemService(AccessibilityManager.class);
             ams.notifyAccessibilityButtonClicked(getDisplayId(), target.getId());
         } else if (mShortcutType == ACCESSIBILITY_SHORTCUT_KEY) {
             switchServiceState(target);
@@ -588,13 +642,25 @@ public class AccessibilityButtonChooserActivity extends Activity {
     }
 
     private void onInvisibleTargetSelected(AccessibilityButtonTarget target) {
-        final AccessibilityManager ams = (AccessibilityManager) getSystemService(
-                Context.ACCESSIBILITY_SERVICE);
-        ams.notifyAccessibilityButtonClicked(getDisplayId(), target.getId());
+        final AccessibilityManager ams = getSystemService(AccessibilityManager.class);
+        if (mShortcutType == ACCESSIBILITY_BUTTON) {
+            ams.notifyAccessibilityButtonClicked(getDisplayId(), target.getId());
+        } else if (mShortcutType == ACCESSIBILITY_SHORTCUT_KEY) {
+            ams.performAccessibilityShortcut(target.getId());
+        }
     }
 
     private void onIntuitiveTargetSelected(AccessibilityButtonTarget target) {
         switchServiceState(target);
+    }
+
+    private void onBounceTargetSelected(AccessibilityButtonTarget target) {
+        final AccessibilityManager ams = getSystemService(AccessibilityManager.class);
+        if (mShortcutType == ACCESSIBILITY_BUTTON) {
+            ams.notifyAccessibilityButtonClicked(getDisplayId(), target.getId());
+        } else if (mShortcutType == ACCESSIBILITY_SHORTCUT_KEY) {
+            ams.performAccessibilityShortcut(target.getId());
+        }
     }
 
     private void switchServiceState(AccessibilityButtonTarget target) {
@@ -628,7 +694,7 @@ public class AccessibilityButtonChooserActivity extends Activity {
                 onIntuitiveTargetDeleted(position, componentId);
                 break;
             case AccessibilityServiceFragmentType.BOUNCE:
-                // Do nothing
+                onBounceTargetDeleted(position, componentId);
                 break;
             default:
                 throw new IllegalStateException("Unexpected fragment type");
@@ -661,6 +727,12 @@ public class AccessibilityButtonChooserActivity extends Activity {
     }
 
     private void onIntuitiveTargetDeleted(int position, String componentId) {
+        optOutValueFromSettings(this, mShortcutUserType, componentId);
+        mTargets.remove(position);
+        mTargetAdapter.notifyDataSetChanged();
+    }
+
+    private void onBounceTargetDeleted(int position, String componentId) {
         optOutValueFromSettings(this, mShortcutUserType, componentId);
         mTargets.remove(position);
         mTargetAdapter.notifyDataSetChanged();

@@ -363,6 +363,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private static final String TAG_PERSISTABLEBUNDLE = "persistable_bundle";
     private static final String ATTR_LAUNCHEDFROMUID = "launched_from_uid";
     private static final String ATTR_LAUNCHEDFROMPACKAGE = "launched_from_package";
+    private static final String ATTR_LAUNCHEDFROMFEATURE = "launched_from_feature";
     private static final String ATTR_RESOLVEDTYPE = "resolved_type";
     private static final String ATTR_COMPONENTSPECIFIED = "component_specified";
     static final String ACTIVITY_ICON_SUFFIX = "_activity_icon_";
@@ -423,6 +424,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     final int launchedFromPid; // always the pid who started the activity.
     final int launchedFromUid; // always the uid who started the activity.
     final String launchedFromPackage; // always the package who started the activity.
+    final @Nullable String launchedFromFeatureId; // always the feature in launchedFromPackage
     final Intent intent;    // the original intent that generated us
     final String shortComponentName; // the short component name of the intent
     final String resolvedType; // as per original caller;
@@ -779,6 +781,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 pw.print(" processName="); pw.println(processName);
         pw.print(prefix); pw.print("launchedFromUid="); pw.print(launchedFromUid);
                 pw.print(" launchedFromPackage="); pw.print(launchedFromPackage);
+                pw.print(" launchedFromFeature="); pw.print(launchedFromFeatureId);
                 pw.print(" userId="); pw.println(mUserId);
         pw.print(prefix); pw.print("app="); pw.println(app);
         pw.print(prefix); pw.println(intent.toInsecureString());
@@ -1489,9 +1492,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     ActivityRecord(ActivityTaskManagerService _service, WindowProcessController _caller,
-            int _launchedFromPid, int _launchedFromUid, String _launchedFromPackage, Intent _intent,
-            String _resolvedType, ActivityInfo aInfo, Configuration _configuration,
-            ActivityRecord _resultTo, String _resultWho, int _reqCode, boolean _componentSpecified,
+            int _launchedFromPid, int _launchedFromUid, String _launchedFromPackage,
+            @Nullable String _launchedFromFeature, Intent _intent, String _resolvedType,
+            ActivityInfo aInfo, Configuration _configuration, ActivityRecord _resultTo,
+            String _resultWho, int _reqCode, boolean _componentSpecified,
             boolean _rootVoiceInteraction, ActivityStackSupervisor supervisor,
             ActivityOptions options, ActivityRecord sourceRecord) {
         super(_service.mWindowManager, new Token(_intent).asBinder(), TYPE_APPLICATION, true,
@@ -1570,6 +1574,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         launchedFromPid = _launchedFromPid;
         launchedFromUid = _launchedFromUid;
         launchedFromPackage = _launchedFromPackage;
+        launchedFromFeatureId = _launchedFromFeature;
         shortComponentName = _intent.getComponent().flattenToShortString();
         resolvedType = _resolvedType;
         componentSpecified = _componentSpecified;
@@ -1635,12 +1640,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         requestedVrComponent = (aInfo.requestedVrComponent == null) ?
                 null : ComponentName.unflattenFromString(aInfo.requestedVrComponent);
 
-        lockTaskLaunchMode = aInfo.lockTaskLaunchMode;
-        if (info.applicationInfo.isPrivilegedApp()
-                && (lockTaskLaunchMode == LOCK_TASK_LAUNCH_MODE_ALWAYS
-                || lockTaskLaunchMode == LOCK_TASK_LAUNCH_MODE_NEVER)) {
-            lockTaskLaunchMode = LOCK_TASK_LAUNCH_MODE_DEFAULT;
-        }
+        lockTaskLaunchMode = getLockTaskLaunchMode(aInfo, options);
 
         if (options != null) {
             pendingOptions = options;
@@ -1648,16 +1648,28 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             if (usageReport != null) {
                 appTimeTracker = new AppTimeTracker(usageReport);
             }
-            final boolean useLockTask = pendingOptions.getLockTaskMode();
-            if (useLockTask && lockTaskLaunchMode == LOCK_TASK_LAUNCH_MODE_DEFAULT) {
-                lockTaskLaunchMode = LOCK_TASK_LAUNCH_MODE_IF_WHITELISTED;
-            }
             // Gets launch display id from options. It returns INVALID_DISPLAY if not set.
             mHandoverLaunchDisplayId = options.getLaunchDisplayId();
         }
 
         if (mPerf == null)
             mPerf = new BoostFramework();
+    }
+
+    static int getLockTaskLaunchMode(ActivityInfo aInfo, @Nullable ActivityOptions options) {
+        int lockTaskLaunchMode = aInfo.lockTaskLaunchMode;
+        if (aInfo.applicationInfo.isPrivilegedApp()
+                && (lockTaskLaunchMode == LOCK_TASK_LAUNCH_MODE_ALWAYS
+                || lockTaskLaunchMode == LOCK_TASK_LAUNCH_MODE_NEVER)) {
+            lockTaskLaunchMode = LOCK_TASK_LAUNCH_MODE_DEFAULT;
+        }
+        if (options != null) {
+            final boolean useLockTask = options.getLockTaskMode();
+            if (useLockTask && lockTaskLaunchMode == LOCK_TASK_LAUNCH_MODE_DEFAULT) {
+                lockTaskLaunchMode = LOCK_TASK_LAUNCH_MODE_IF_WHITELISTED;
+            }
+        }
+        return lockTaskLaunchMode;
     }
 
     @Override
@@ -2286,7 +2298,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      * @return Whether AppOps allows this package to enter picture-in-picture.
      */
     private boolean checkEnterPictureInPictureAppOpsState() {
-        return mAtmService.getAppOpsService().checkOperation(
+        return mAtmService.getAppOpsManager().checkOpNoThrow(
                 OP_PICTURE_IN_PICTURE, info.applicationInfo.uid, packageName) == MODE_ALLOWED;
     }
 
@@ -3046,6 +3058,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
         // Throw away any services that have been bound by this activity.
         mServiceConnectionsHolder.disconnectActivityFromServices();
+        // This activity record is removing, make sure not to disconnect twice.
+        mServiceConnectionsHolder = null;
     }
 
     @Override
@@ -7300,6 +7314,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (launchedFromPackage != null) {
             out.attribute(null, ATTR_LAUNCHEDFROMPACKAGE, launchedFromPackage);
         }
+        if (launchedFromFeatureId != null) {
+            out.attribute(null, ATTR_LAUNCHEDFROMFEATURE, launchedFromFeatureId);
+        }
         if (resolvedType != null) {
             out.attribute(null, ATTR_RESOLVEDTYPE, resolvedType);
         }
@@ -7327,6 +7344,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         PersistableBundle persistentState = null;
         int launchedFromUid = 0;
         String launchedFromPackage = null;
+        String launchedFromFeature = null;
         String resolvedType = null;
         boolean componentSpecified = false;
         int userId = 0;
@@ -7345,6 +7363,8 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 launchedFromUid = Integer.parseInt(attrValue);
             } else if (ATTR_LAUNCHEDFROMPACKAGE.equals(attrName)) {
                 launchedFromPackage = attrValue;
+            } else if (ATTR_LAUNCHEDFROMFEATURE.equals(attrName)) {
+                launchedFromFeature = attrValue;
             } else if (ATTR_RESOLVEDTYPE.equals(attrName)) {
                 resolvedType = attrValue;
             } else if (ATTR_COMPONENTSPECIFIED.equals(attrName)) {
@@ -7392,10 +7412,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     " resolvedType=" + resolvedType);
         }
         final ActivityRecord r = new ActivityRecord(service, null /* caller */,
-                0 /* launchedFromPid */, launchedFromUid, launchedFromPackage, intent, resolvedType,
-                aInfo, service.getConfiguration(), null /* resultTo */, null /* resultWho */,
-                0 /* reqCode */, componentSpecified, false /* rootVoiceInteraction */,
-                stackSupervisor, null /* options */, null /* sourceRecord */);
+                0 /* launchedFromPid */, launchedFromUid, launchedFromPackage, launchedFromFeature,
+                intent, resolvedType, aInfo, service.getConfiguration(), null /* resultTo */,
+                null /* resultWho */, 0 /* reqCode */, componentSpecified,
+                false /* rootVoiceInteraction */, stackSupervisor, null /* options */,
+                null /* sourceRecord */);
 
         r.mPersistentState = persistentState;
         r.taskDescription = taskDescription;
@@ -7692,7 +7713,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         mainWindow.getContentInsets(insets);
         InsetUtils.addInsets(insets, getLetterboxInsets());
         return new RemoteAnimationTarget(task.mTaskId, record.getMode(),
-                record.mAdapter.mCapturedLeash, !task.fillsParent(),
+                record.mAdapter.mCapturedLeash, !fillsParent(),
                 mainWindow.mWinAnimator.mLastClipRect, insets,
                 getPrefixOrderIndex(), record.mAdapter.mPosition,
                 record.mAdapter.mStackBounds, task.getWindowConfiguration(),
@@ -7709,5 +7730,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             return;
         }
         win.getAnimationFrames(outFrame, outInsets, outStableInsets, outSurfaceInsets);
+    }
+
+    void setPictureInPictureParams(PictureInPictureParams p) {
+        pictureInPictureArgs.copyOnlySet(p);
+        getTask().getRootTask().setPictureInPictureParams(p);
     }
 }

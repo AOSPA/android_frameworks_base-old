@@ -802,11 +802,7 @@ public final class SmsManager {
                     "Invalid pdu format. format must be either 3gpp or 3gpp2");
         }
         try {
-            ISms iSms = ISms.Stub.asInterface(
-                    TelephonyFrameworkInitializer
-                            .getTelephonyServiceManager()
-                            .getSmsServiceRegisterer()
-                            .get());
+            ISms iSms = TelephonyManager.getSmsService();
             if (iSms != null) {
                 iSms.injectSmsPduForSubscriber(
                         getSubscriptionId(), pdu, format, receivedIntent);
@@ -1644,7 +1640,7 @@ public final class SmsManager {
      * the service does not exist.
      */
     private static ISms getISmsServiceOrThrow() {
-        ISms iSms = getISmsService();
+        ISms iSms = TelephonyManager.getSmsService();
         if (iSms == null) {
             throw new UnsupportedOperationException("Sms is not supported");
         }
@@ -1652,11 +1648,7 @@ public final class SmsManager {
     }
 
     private static ISms getISmsService() {
-        return ISms.Stub.asInterface(
-                TelephonyFrameworkInitializer
-                        .getTelephonyServiceManager()
-                        .getSmsServiceRegisterer()
-                        .get());
+        return TelephonyManager.getSmsService();
     }
 
     /**
@@ -2096,11 +2088,7 @@ public final class SmsManager {
     public boolean isSMSPromptEnabled() {
         ISms iSms = null;
         try {
-            iSms = ISms.Stub.asInterface(
-                    TelephonyFrameworkInitializer
-                            .getTelephonyServiceManager()
-                            .getSmsServiceRegisterer()
-                            .get());
+            iSms = TelephonyManager.getSmsService();
             return iSms.isSMSPromptEnabled();
         } catch (RemoteException ex) {
             return false;

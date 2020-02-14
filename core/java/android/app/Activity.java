@@ -2880,13 +2880,14 @@ public class Activity extends ContextThemeWrapper
      * {@link #enterPictureInPictureMode(PictureInPictureParams)} at this time. For example, the
      * system will call this method when the activity is being put into the background, so the app
      * developer might want to switch an activity into PIP mode instead.</p>
+     *
+     * @return {@code true} if the activity received this callback regardless of if it acts on it
+     * or not. If {@code false}, the framework will assume the app hasn't been updated to leverage
+     * this callback and will in turn send a legacy callback of {@link #onUserLeaveHint()} for the
+     * app to enter picture-in-picture mode.
      */
-    public void onPictureInPictureRequested() {
-        // Previous recommendation was for apps to enter picture-in-picture in onUserLeaveHint()
-        // which is sent after onPause(). This new method allows the system to request the app to
-        // go into picture-in-picture decoupling it from life cycle events. For backwards
-        // compatibility we schedule the life cycle events if the app didn't override this method.
-        mMainThread.schedulePauseAndReturnToCurrentState(mToken);
+    public boolean onPictureInPictureRequested() {
+        return false;
     }
 
     void dispatchMovedToDisplay(int displayId, Configuration config) {
@@ -5809,9 +5810,9 @@ public class Activity extends ContextThemeWrapper
                 intent.prepareToLeaveProcess(this);
                 result = ActivityTaskManager.getService()
                     .startActivity(mMainThread.getApplicationThread(), getBasePackageName(),
-                            intent, intent.resolveTypeIfNeeded(getContentResolver()), mToken,
-                            mEmbeddedID, requestCode, ActivityManager.START_FLAG_ONLY_IF_NEEDED,
-                            null, options);
+                            getFeatureId(), intent,
+                            intent.resolveTypeIfNeeded(getContentResolver()), mToken, mEmbeddedID,
+                            requestCode, ActivityManager.START_FLAG_ONLY_IF_NEEDED, null, options);
             } catch (RemoteException e) {
                 // Empty
             }
@@ -6605,8 +6606,8 @@ public class Activity extends ContextThemeWrapper
         try {
             data.prepareToLeaveProcess(this);
             IIntentSender target =
-                ActivityManager.getService().getIntentSender(
-                        ActivityManager.INTENT_SENDER_ACTIVITY_RESULT, packageName,
+                ActivityManager.getService().getIntentSenderWithFeature(
+                        ActivityManager.INTENT_SENDER_ACTIVITY_RESULT, packageName, getFeatureId(),
                         mParent == null ? mToken : mParent.mToken,
                         mEmbeddedID, requestCode, new Intent[] { data }, null, flags, null,
                         getUserId());

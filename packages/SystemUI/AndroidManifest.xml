@@ -644,19 +644,19 @@
 
         <activity android:name=".controls.management.ControlsProviderSelectorActivity"
                   android:label="Controls Providers"
-                  android:theme="@style/Theme.SystemUI"
-                  android:exported="true"
+                  android:theme="@style/Theme.ControlsManagement"
                   android:showForAllUsers="true"
+                  android:clearTaskOnLaunch="true"
                   android:excludeFromRecents="true"
                   android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
                   android:visibleToInstantApps="true">
         </activity>
 
         <activity android:name=".controls.management.ControlsFavoritingActivity"
-                  android:parentActivityName=".controls.management.ControlsProviderSelectorActivity"
-                  android:theme="@style/Theme.SystemUI"
+                  android:theme="@style/Theme.ControlsManagement"
                   android:excludeFromRecents="true"
                   android:showForAllUsers="true"
+                  android:finishOnTaskLaunch="true"
                   android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
                   android:visibleToInstantApps="true">
         </activity>

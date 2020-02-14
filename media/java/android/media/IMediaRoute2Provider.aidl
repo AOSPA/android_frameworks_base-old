@@ -18,6 +18,7 @@ package android.media;
 
 import android.content.Intent;
 import android.media.IMediaRoute2ProviderClient;
+import android.media.RouteDiscoveryPreference;
 import android.os.Bundle;
 
 /**
@@ -28,12 +29,13 @@ oneway interface IMediaRoute2Provider {
     void requestCreateSession(String packageName, String routeId, long requestId,
             in @nullable Bundle sessionHints);
     void releaseSession(String sessionId);
+    void updateDiscoveryPreference(in RouteDiscoveryPreference discoveryPreference);
 
     void selectRoute(String sessionId, String routeId);
     void deselectRoute(String sessionId, String routeId);
     void transferToRoute(String sessionId, String routeId);
 
     void notifyControlRequestSent(String id, in Intent request);
-    void requestSetVolume(String id, int volume);
-    void requestUpdateVolume(String id, int delta);
+    void setRouteVolume(String routeId, int volume);
+    void setSessionVolume(String sessionId, int volume);
 }

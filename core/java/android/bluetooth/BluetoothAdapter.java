@@ -26,6 +26,7 @@ import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.app.ActivityThread;
+import android.app.PropertyInvalidatedCache;
 import android.bluetooth.BluetoothProfile.ConnectionPolicy;
 import android.bluetooth.le.BluetoothLeAdvertiser;
 import android.bluetooth.le.BluetoothLeScanner;
@@ -996,6 +997,37 @@ public final class BluetoothAdapter {
         return false;
     }
 
+    private static final String BLUETOOTH_GET_STATE_CACHE_PROPERTY = "cache_key.bluetooth.get_state";
+
+    private final PropertyInvalidatedCache<Void, Integer> mBluetoothGetStateCache =
+            new PropertyInvalidatedCache<Void, Integer>(
+                8, BLUETOOTH_GET_STATE_CACHE_PROPERTY) {
+                @Override
+                protected Integer recompute(Void query) {
+                    try {
+                        mServiceLock.readLock().lock();
+                        if (mService != null) {
+                            return mService.getState();
+                        }
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "", e);
+                    } finally {
+                        mServiceLock.readLock().unlock();
+                    }
+                    return BluetoothAdapter.STATE_OFF;
+                }
+            };
+
+    /** @hide */
+    public void disableBluetoothGetStateCache() {
+        mBluetoothGetStateCache.disableLocal();
+    }
+
+    /** @hide */
+    public static void invalidateBluetoothGetStateCache() {
+        PropertyInvalidatedCache.invalidateCache(BLUETOOTH_GET_STATE_CACHE_PROPERTY);
+    }
+
     /**
      * Get the current state of the local Bluetooth adapter.
      * <p>Possible return values are
@@ -1010,18 +1042,7 @@ public final class BluetoothAdapter {
     @AdapterState
     public int getState() {
         android.util.SeempLog.record(63);
-        int state = BluetoothAdapter.STATE_OFF;
-
-        try {
-            mServiceLock.readLock().lock();
-            if (mService != null) {
-                state = mService.getState();
-            }
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        } finally {
-            mServiceLock.readLock().unlock();
-        }
+        int state = mBluetoothGetStateCache.query(null);
 
         // Consider all internal states as OFF
         if (state == BluetoothAdapter.STATE_BLE_ON || state == BluetoothAdapter.STATE_BLE_TURNING_ON
@@ -1059,18 +1080,7 @@ public final class BluetoothAdapter {
     @UnsupportedAppUsage(publicAlternatives = "Use {@link #getState()} instead to determine "
             + "whether you can use BLE & BT classic.")
     public int getLeState() {
-        int state = BluetoothAdapter.STATE_OFF;
-
-        try {
-            mServiceLock.readLock().lock();
-            if (mService != null) {
-                state = mService.getState();
-            }
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        } finally {
-            mServiceLock.readLock().unlock();
-        }
+        int state = mBluetoothGetStateCache.query(null);
 
         if (VDBG) {
             Log.d(TAG, "getLeState() returning " + BluetoothAdapter.nameForState(state));
@@ -1491,9 +1501,8 @@ public final class BluetoothAdapter {
      * <p>The Bluetooth scan mode determines if the local adapter is
      * connectable and/or discoverable from remote Bluetooth devices.
      * <p>For privacy reasons, discoverable mode is automatically turned off
-     * after <code>duration</code> seconds. For example, 120 seconds should be
-     * enough for a remote device to initiate and complete its discovery
-     * process.
+     * after <code>durationMillis</code> milliseconds. For example, 120000 milliseconds should be
+     * enough for a remote device to initiate and complete its discovery process.
      * <p>Valid scan mode values are:
      * {@link #SCAN_MODE_NONE},
      * {@link #SCAN_MODE_CONNECTABLE},
@@ -1508,24 +1517,29 @@ public final class BluetoothAdapter {
      * </code>instead.
      *
      * @param mode valid scan mode
-     * @param duration time in seconds to apply scan mode, only used for {@link
+     * @param durationMillis time in milliseconds to apply scan mode, only used for {@link
      * #SCAN_MODE_CONNECTABLE_DISCOVERABLE}
      * @return true if the scan mode was set, false otherwise
      * @hide
      */
     @SystemApi
-    @RequiresPermission(Manifest.permission.BLUETOOTH)
-    public boolean setScanMode(@ScanMode int mode, int duration) {
+    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
+    public boolean setScanMode(@ScanMode int mode, long durationMillis) {
         if (getState() != STATE_ON) {
             return false;
         }
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
-                return mService.setScanMode(mode, duration);
+                int durationSeconds = Math.toIntExact(durationMillis / 1000);
+                return mService.setScanMode(mode, durationSeconds);
             }
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
+        } catch (ArithmeticException ex) {
+            Log.e(TAG, "setScanMode: Duration in seconds outside of the bounds of an int");
+            throw new IllegalArgumentException("Duration not in bounds. In seconds, the "
+                    + "durationMillis must be in the range of an int");
         } finally {
             mServiceLock.readLock().unlock();
         }
@@ -1558,13 +1572,22 @@ public final class BluetoothAdapter {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(Manifest.permission.BLUETOOTH)
+    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
     public boolean setScanMode(@ScanMode int mode) {
         if (getState() != STATE_ON) {
             return false;
         }
-        /* getDiscoverableTimeout() to use the latest from NV than use 0 */
-        return setScanMode(mode, getDiscoverableTimeout());
+        try {
+            mServiceLock.readLock().lock();
+            if (mService != null) {
+                return mService.setScanMode(mode, getDiscoverableTimeout());
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "", e);
+        } finally {
+            mServiceLock.readLock().unlock();
+        }
+        return false;
     }
 
     /** @hide */
@@ -1855,15 +1878,19 @@ public final class BluetoothAdapter {
     }
 
     /**
-     * Connects all enabled and supported bluetooth profiles between the local and remote device
+     * Connects all enabled and supported bluetooth profiles between the local and remote device.
+     * Connection is asynchronous and you should listen to each profile's broadcast intent
+     * ACTION_CONNECTION_STATE_CHANGED to verify whether connection was successful. For example,
+     * to verify a2dp is connected, you would listen for
+     * {@link BluetoothA2dp#ACTION_CONNECTION_STATE_CHANGED}
      *
      * @param device is the remote device with which to connect these profiles
-     * @return true if all profiles successfully connected, false if an error occurred
+     * @return true if message sent to try to connect all profiles, false if an error occurred
      *
      * @hide
      */
     @SystemApi
-    @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
+    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
     public boolean connectAllEnabledProfiles(@NonNull BluetoothDevice device) {
         try {
             mServiceLock.readLock().lock();
@@ -1880,15 +1907,19 @@ public final class BluetoothAdapter {
     }
 
     /**
-     * Disconnects all enabled and supported bluetooth profiles between the local and remote device
+     * Disconnects all enabled and supported bluetooth profiles between the local and remote device.
+     * Disconnection is asynchronous and you should listen to each profile's broadcast intent
+     * ACTION_CONNECTION_STATE_CHANGED to verify whether disconnection was successful. For example,
+     * to verify a2dp is disconnected, you would listen for
+     * {@link BluetoothA2dp#ACTION_CONNECTION_STATE_CHANGED}
      *
      * @param device is the remote device with which to disconnect these profiles
-     * @return true if all profiles successfully disconnected, false if an error occurred
+     * @return true if message sent to try to disconnect all profiles, false if an error occurred
      *
      * @hide
      */
     @SystemApi
-    @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
+    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
     public boolean disconnectAllEnabledProfiles(@NonNull BluetoothDevice device) {
         try {
             mServiceLock.readLock().lock();
@@ -1946,6 +1977,38 @@ public final class BluetoothAdapter {
         }
     }
 
+    private static final String BLUETOOTH_FILTERING_CACHE_PROPERTY =
+            "cache_key.bluetooth.is_offloaded_filtering_supported";
+    private final PropertyInvalidatedCache<Void, Boolean> mBluetoothFilteringCache =
+            new PropertyInvalidatedCache<Void, Boolean>(
+                8, BLUETOOTH_FILTERING_CACHE_PROPERTY) {
+                @Override
+                protected Boolean recompute(Void query) {
+                    try {
+                        mServiceLock.readLock().lock();
+                        if (mService != null) {
+                            return mService.isOffloadedFilteringSupported();
+                        }
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "failed to get isOffloadedFilteringSupported, error: ", e);
+                    } finally {
+                        mServiceLock.readLock().unlock();
+                    }
+                    return false;
+
+                }
+            };
+
+    /** @hide */
+    public void disableIsOffloadedFilteringSupportedCache() {
+        mBluetoothFilteringCache.disableLocal();
+    }
+
+    /** @hide */
+    public static void invalidateIsOffloadedFilteringSupportedCache() {
+        PropertyInvalidatedCache.invalidateCache(BLUETOOTH_FILTERING_CACHE_PROPERTY);
+    }
+
     /**
      * Return true if offloaded filters are supported
      *
@@ -1955,17 +2018,7 @@ public final class BluetoothAdapter {
         if (!getLeAccess()) {
             return false;
         }
-        try {
-            mServiceLock.readLock().lock();
-            if (mService != null) {
-                return mService.isOffloadedFilteringSupported();
-            }
-        } catch (RemoteException e) {
-            Log.e(TAG, "failed to get isOffloadedFilteringSupported, error: ", e);
-        } finally {
-            mServiceLock.readLock().unlock();
-        }
-        return false;
+        return mBluetoothFilteringCache.query(null);
     }
 
     /**
@@ -2338,6 +2391,43 @@ public final class BluetoothAdapter {
         return BluetoothAdapter.STATE_DISCONNECTED;
     }
 
+    private static final String BLUETOOTH_PROFILE_CACHE_PROPERTY =
+            "cache_key.bluetooth.get_profile_connection_state";
+    private final PropertyInvalidatedCache<Integer, Integer>
+            mGetProfileConnectionStateCache =
+            new PropertyInvalidatedCache<Integer, Integer>(
+                8, BLUETOOTH_PROFILE_CACHE_PROPERTY) {
+                @Override
+                protected Integer recompute(Integer query) {
+                    try {
+                        mServiceLock.readLock().lock();
+                        if (mService != null) {
+                            return mService.getProfileConnectionState(query);
+                        }
+                    } catch (RemoteException e) {
+                        Log.e(TAG, "getProfileConnectionState:", e);
+                    } finally {
+                        mServiceLock.readLock().unlock();
+                    }
+                    return BluetoothProfile.STATE_DISCONNECTED;
+                }
+                @Override
+                public String queryToString(Integer query) {
+                    return String.format("getProfileConnectionState(profile=\"%d\")",
+                                         query);
+                }
+            };
+
+    /** @hide */
+    public void disableGetProfileConnectionStateCache() {
+        mGetProfileConnectionStateCache.disableLocal();
+    }
+
+    /** @hide */
+    public static void invalidateGetProfileConnectionStateCache() {
+        PropertyInvalidatedCache.invalidateCache(BLUETOOTH_PROFILE_CACHE_PROPERTY);
+    }
+
     /**
      * Get the current connection state of a profile.
      * This function can be used to check whether the local Bluetooth adapter
@@ -2356,17 +2446,7 @@ public final class BluetoothAdapter {
         if (getState() != STATE_ON) {
             return BluetoothProfile.STATE_DISCONNECTED;
         }
-        try {
-            mServiceLock.readLock().lock();
-            if (mService != null) {
-                return mService.getProfileConnectionState(profile);
-            }
-        } catch (RemoteException e) {
-            Log.e(TAG, "getProfileConnectionState:", e);
-        } finally {
-            mServiceLock.readLock().unlock();
-        }
-        return BluetoothProfile.STATE_DISCONNECTED;
+        return mGetProfileConnectionStateCache.query(new Integer(profile));
     }
 
     /**

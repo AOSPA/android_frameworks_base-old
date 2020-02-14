@@ -253,6 +253,13 @@ public final class SystemUiDeviceConfigFlags {
     public static final String NOTIFICATIONS_USE_PEOPLE_FILTERING =
             "notifications_use_people_filtering";
 
+    /**
+     * (boolean) Whether or not to enable user dismissing of foreground service notifications
+     * into a new section at the bottom of the notification shade.
+     */
+    public static final String NOTIFICATIONS_ALLOW_FGS_DISMISSAL =
+            "notifications_allow_fgs_dismissal";
+
     // Flags related to brightline falsing
 
     /**
@@ -369,6 +376,11 @@ public final class SystemUiDeviceConfigFlags {
      */
     public static final String NAV_BAR_HANDLE_SHOW_OVER_LOCKSCREEN =
             "nav_bar_handle_show_over_lockscreen";
+
+    /**
+     * (boolean) Whether to enable user-drag resizing for PIP.
+     */
+    public static final String PIP_USER_RESIZE = "pip_user_resize";
 
     private SystemUiDeviceConfigFlags() {
     }

@@ -22,7 +22,10 @@ import android.annotation.UserIdInt;
 import android.content.LocusId;
 import android.text.TextUtils;
 
+import java.io.File;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /** The data associated with a package. */
 public class PackageData {
@@ -38,15 +41,38 @@ public class PackageData {
     @NonNull
     private final EventStore mEventStore;
 
-    private boolean mIsDefaultDialer;
+    private final Predicate<String> mIsDefaultDialerPredicate;
 
-    private boolean mIsDefaultSmsApp;
+    private final Predicate<String> mIsDefaultSmsAppPredicate;
 
-    PackageData(@NonNull String packageName, @UserIdInt int userId) {
+    private final File mPackageDataDir;
+
+    PackageData(@NonNull String packageName, @UserIdInt int userId,
+            @NonNull Predicate<String> isDefaultDialerPredicate,
+            @NonNull Predicate<String> isDefaultSmsAppPredicate,
+            @NonNull ScheduledExecutorService scheduledExecutorService,
+            @NonNull File perUserPeopleDataDir,
+            @NonNull ContactsQueryHelper helper) {
         mPackageName = packageName;
         mUserId = userId;
-        mConversationStore = new ConversationStore();
+
+        mPackageDataDir = new File(perUserPeopleDataDir, mPackageName);
+        mConversationStore = new ConversationStore(mPackageDataDir, scheduledExecutorService,
+                helper);
         mEventStore = new EventStore();
+        mIsDefaultDialerPredicate = isDefaultDialerPredicate;
+        mIsDefaultSmsAppPredicate = isDefaultSmsAppPredicate;
+    }
+
+    /** Called when user is unlocked. */
+    void loadFromDisk() {
+        mPackageDataDir.mkdirs();
+        mConversationStore.loadConversationsFromDisk();
+    }
+
+    /** Called when device is shutting down. */
+    void saveToDisk() {
+        mConversationStore.saveConversationsToDisk();
     }
 
     @NonNull
@@ -124,11 +150,11 @@ public class PackageData {
     }
 
     public boolean isDefaultDialer() {
-        return mIsDefaultDialer;
+        return mIsDefaultDialerPredicate.test(mPackageName);
     }
 
     public boolean isDefaultSmsApp() {
-        return mIsDefaultSmsApp;
+        return mIsDefaultSmsAppPredicate.test(mPackageName);
     }
 
     @NonNull
@@ -139,14 +165,6 @@ public class PackageData {
     @NonNull
     EventStore getEventStore() {
         return mEventStore;
-    }
-
-    void setIsDefaultDialer(boolean value) {
-        mIsDefaultDialer = value;
-    }
-
-    void setIsDefaultSmsApp(boolean value) {
-        mIsDefaultSmsApp = value;
     }
 
     void onDestroy() {
